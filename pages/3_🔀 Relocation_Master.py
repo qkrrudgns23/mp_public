@@ -13,9 +13,31 @@ import os
 import sys
 from utils.masterplan import MasterplanInput
 
+# region agent log helper
+def _agent_debug_log(hypothesis_id, location, message, data, run_id="initial"):
+    """Lightweight NDJSON logger for debug mode (do not remove until debugging is complete)."""
+    try:
+        import time as _time
+        payload = {
+            "id": f"log_{int(_time.time()*1000)}",
+            "timestamp": int(_time.time()*1000),
+            "location": location,
+            "message": message,
+            "data": data,
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+        }
+        debug_log_path = "c:\\Users\\qkrru\\Desktop\\바탕 화면\\creative_code\\DMK_레포지토리\\simulation_module\\yeah_construction - 20250118\\.cursor\\debug.log"
+        with open(debug_log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        # Logging failures must never break the app
+        pass
+# endregion
+
 
 st.set_page_config(
-    page_title="Relocation Module",
+    page_title="Relocation Master",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -330,64 +352,62 @@ def calculate_statistics(df, time_column="SHOW", unit_min=15):
     return stats
 
 def make_count_df(df, start_date, end_date, time_col, group, buffer_day=True, freq_min=1):
-    """show_profile과 동일한 방식으로 시간별 집계 DataFrame 생성 (날짜 고려, 빈값 포함)"""
-    
-    # 날짜 범위 설정
+    """시간 단위(freq_min 분)로 SHOW를 집계하는 함수 (빈 슬롯 포함)."""
+    df_copied = df.copy()
+
+    # 전체 타임라인 생성 (freq_min 분 간격)
     if buffer_day:
-        start_date = start_date - pd.Timedelta(days=1)
-        end_date = end_date + pd.Timedelta(days=1)
-    
-    # 날짜 필터링
-    df = df[(df[time_col].dt.date >= start_date.date()) & (df[time_col].dt.date <= end_date.date())]
-    
-    if len(df) == 0:
-        return pd.DataFrame(), []
-    
-    # 날짜와 시간 단위로 그룹화
-    df['date'] = df[time_col].dt.date
-    df['hour'] = df[time_col].dt.hour
-    df['minute'] = df[time_col].dt.minute
-    df['n_min'] = round(df['hour'] + (df['minute']//freq_min) * (freq_min/60), 2)
-    
-    # 날짜와 시간대별 집계
-    count_df = df.groupby(['date', 'n_min', group]).size().reset_index(name='index')
-    
-    # Time 컬럼 생성 (날짜 + 시간)
-    count_df['Time'] = pd.to_datetime(count_df['date']) + pd.to_timedelta(count_df['n_min'], unit='h')
-    
-    # 전체 시간대 생성 (빈값 포함)
-    all_dates = pd.date_range(start_date.date(), end_date.date(), freq='D')
-    all_hours = np.arange(0, 24, freq_min/60)
-    
-    # 모든 가능한 시간대 조합 생성
-    complete_time_index = []
-    for date in all_dates:
-        for hour in all_hours:
-            complete_time_index.append(pd.to_datetime(date) + pd.to_timedelta(hour, unit='h'))
-    
-    # 전체 시간대를 기준으로 피벗 테이블 생성 (빈값은 0으로 채움)
-    pivot_df = count_df.pivot_table(
-        index='Time', 
-        columns=group, 
-        values='index', 
-        fill_value=0,
-        aggfunc='sum'
-    )
-    
-    # 전체 시간대 인덱스와 맞추기
-    complete_index = pd.DatetimeIndex(complete_time_index)
-    pivot_df = pivot_df.reindex(complete_index, fill_value=0)
-    
-    # 다시 long format으로 변환
-    count_df_complete = pivot_df.reset_index().melt(
-        id_vars='index', 
-        var_name=group, 
-        value_name='count'
-    ).rename(columns={'index': 'Time', 'count': 'index'})
-    
+        time_range = pd.date_range(
+            start=start_date - pd.to_timedelta(1, unit="d"),
+            end=end_date + pd.to_timedelta(2, unit="d"),
+            freq=f"{freq_min}T",
+        )
+    else:
+        time_range = pd.date_range(
+            start=start_date,
+            end=end_date + pd.Timedelta(days=1),
+            freq=f"{freq_min}T",
+        )[:-1]
+
+    time_range_df = pd.DataFrame(time_range, columns=["Time"])
+
+    # SHOW(or time_col)을 freq_min 분 단위로 절단
+    df_copied[time_col] = df_copied[time_col].dt.floor(f"{freq_min}T")
+
+    # 그룹별 카운트
+    count_df = df_copied.groupby([time_col, group]).size().reset_index(name="index")
+    count_df.columns = ["Time", group, "index"]
+
+    # 전체 타임라인과 매칭 (없는 슬롯은 0으로 채움)
+    count_df = pd.merge(time_range_df, count_df, on="Time", how="left")
+    count_df["index"] = count_df["index"].fillna(0)
+    count_df[group] = count_df[group].fillna("")
+
     # 그룹별 순위 계산
-    ranking_order = count_df_complete.groupby(group)['index'].sum().sort_values(ascending=False).index.tolist()
-    
+    ranking_df = count_df.groupby(group)["index"].sum().sort_values(ascending=False)
+    ranking_order = ranking_df.index.tolist()
+
+    count_df_complete = count_df
+
+    # region agent log
+    try:
+        sample_minutes = {}
+        for m in [0, 20, 40]:
+            mask_m = count_df_complete["Time"].dt.minute == m
+            sample_minutes[str(m)] = int(count_df_complete.loc[mask_m, "index"].sum())
+        _agent_debug_log(
+            hypothesis_id="H3",
+            location="make_count_df",
+            message="Aggregated counts by Time minute",
+            data={
+                "freq_min": freq_min,
+                "sample_minutes_sum": sample_minutes,
+            },
+        )
+    except Exception:
+        pass
+    # endregion
+
     return count_df_complete, ranking_order
 
 def show_bar(df, ranking_order, group, capa_df=None, max_y=None):
@@ -451,14 +471,15 @@ class RelocationSetting:
     
     def render_relocation_settings_tab(self):
         """Relocation Settings 탭 렌더링"""
-        date_method_col, custom_group_col, setting_col = st.columns([0.2,0.6,0.2])
+        filter_col, puff_group_col, setting_col = st.columns([0.2,0.6,0.2])
         
-        with date_method_col:
+        with filter_col:
             self._render_date_method()
-        
-        with custom_group_col:
+
+        with puff_group_col:
+            _render_puffing(self)
             self._render_custom_group()
-        
+
         with setting_col:
             self._render_relocation_settings()
     
@@ -482,11 +503,53 @@ class RelocationSetting:
             self.start_date = pd.to_datetime(date_range)
             self.end_date = self.start_date
         
-        self.df_filtered = self.df_orig[
+        # 기본 날짜 필터
+        df_filtered = self.df_orig[
             (self.df_orig["scheduled_gate_local"].dt.date >= self.start_date.date()) & 
             (self.df_orig["scheduled_gate_local"].dt.date <= self.end_date.date())
         ]
-        
+
+        # 추가 필터 UI (Select Date Range 바로 아래)
+        with st.expander("🔍 Additional Filters", expanded=False):
+            filter_cols = st.multiselect(
+                "Filter columns",
+                options=list(df_filtered.columns),
+                default=[c for c in ["terminal", "operating_carrier_iata", "International/Domestic"] if c in df_filtered.columns],
+                help="Choose columns to filter by (only selected values will be kept).",
+                key="date_method_filter_cols",
+            )
+
+            for col in filter_cols:
+                uniques = sorted(df_filtered[col].dropna().unique().tolist())
+                selected = st.multiselect(
+                    f"Values for `{col}`",
+                    options=uniques,
+                    default=uniques,
+                    key=f"date_method_filter_{col}",
+                )
+                if len(selected) > 0:
+                    df_filtered = df_filtered[df_filtered[col].isin(selected)]
+
+        self.df_filtered = df_filtered
+
+        # region agent log
+        try:
+            minute_counts_orig = self.df_orig["scheduled_gate_local"].dt.minute.value_counts().to_dict()
+            minute_counts_filt = self.df_filtered["scheduled_gate_local"].dt.minute.value_counts().to_dict()
+            _agent_debug_log(
+                hypothesis_id="H1",
+                location="RelocationSetting._render_date_method",
+                message="scheduled_gate_local minute distribution (orig vs filtered)",
+                data={
+                    "unit_min": self.unit_min,
+                    "minute_counts_orig": {k: minute_counts_orig.get(k, 0) for k in [0, 20, 40]},
+                    "minute_counts_filtered": {k: minute_counts_filt.get(k, 0) for k in [0, 20, 40]},
+                },
+            )
+        except Exception:
+            pass
+        # endregion
+
         # Create Custom Group column with default value "Others"
         if "Custom Group" not in self.df_filtered.columns:
             self.df_filtered["Custom Group"] = "Others"
@@ -644,8 +707,8 @@ class RelocationSetting:
         
         self.max_sample_count = st.number_input(
             "**Max Sample Count**", 
-            value=50, 
-            min_value=10, 
+            value=5, 
+            min_value=1, 
             max_value=50000, 
             step=50,
             key="max_sample_count_mnl",
@@ -668,7 +731,7 @@ class RelocationSetting:
         )
         self.selected_metrics = set("Total" if m == "Total" else m for m in selected_metrics_labels)
         
-        self.loc_count = int(st.number_input("Number of locations", min_value=2, max_value=8, value=4, step=1, key="loc_count"))
+        self.loc_count = int(st.number_input("Number of locations", min_value=1, max_value=8, value=1, step=1, key="loc_count"))
     
     def render_assign_units_tab(self):
         """Assign Units 탭 렌더링"""
@@ -944,7 +1007,24 @@ class RunAnalysis:
         )
         df_filtered["SHOW"] = df_filtered["scheduled_gate_local"] + pd.to_timedelta(df_filtered["SHOW(min)"], unit="m")
         df_filtered = df_filtered.drop(columns=[f"scheduled_gate_local(min)", "SHOW(min)"])
-        
+
+        # region agent log
+        try:
+            show_minute_counts = df_filtered["SHOW"].dt.minute.value_counts().to_dict()
+            _agent_debug_log(
+                hypothesis_id="H2",
+                location="RunAnalysis.process_passenger_data",
+                message="SHOW minute distribution after processing",
+                data={
+                    "category": category,
+                    "unit_min": getattr(self, "unit_min", None),
+                    "show_minute_counts": {k: show_minute_counts.get(k, 0) for k in [0, 20, 40]},
+                },
+            )
+        except Exception:
+            pass
+        # endregion
+
         return df_filtered
     
     def run_scenario(self, loc_map: dict) -> dict:
@@ -1934,77 +2014,11 @@ class RunAnalysis:
         # 시간별 합계 계산
         time_series = count_df.groupby("Time")["index"].sum().sort_index()
 
-        sorted_values_tab, time_series_tab, = st.tabs(["Sorted Values", "Time Series"])
+        time_series_tab, sorted_values_tab = st.tabs(["Time Series", "Sorted Values"])
 
-        
-        with sorted_values_tab:
-            # 두 번째 그래프: 내림차순 정렬 그래프 (Max가 가장 왼쪽에)
-            st.markdown(f"#### 📊 Sorted Values: {selected_terminal} - {selected_io}")
-            sorted_values = time_series.values.copy()
-            # 내림차순으로 정렬하여 Max가 가장 왼쪽(인덱스 0)에 오도록
-            sorted_values = np.sort(sorted_values)[::-1]
-            
-            # 통계값 계산 (원본 데이터 기준)
-            original_values = time_series.values.copy()
-            max_val = original_values.max()
-            p975 = np.percentile(original_values, 97.5)
-            p95 = np.percentile(original_values, 95)
-            p90 = np.percentile(original_values, 90)
-            median_val = np.median(original_values)
-            mean_val = original_values.mean()
-            
-            fig2 = go.Figure()
-            # x축을 0부터 시작하여 왼쪽에서 오른쪽으로 그려지도록
-            x_values = np.arange(len(sorted_values))
-            
-            fig2.add_trace(go.Scatter(
-                x=x_values,
-                y=sorted_values,
-                mode='lines+markers',
-                name='Sorted Values',
-                line=dict(width=2, color='blue'),
-                marker=dict(size=3)
-            ))
-            
-            # 통계값 표시 (Max는 항상 인덱스 0에 있음)
-            stats_y = [max_val, p975, p95, p90, median_val, mean_val]
-            stats_labels = ['Max', '97.5%', '95%', '90%', 'Median', 'Mean']
-            stats_colors = ['red', 'orange', 'yellow', 'green', 'purple', 'cyan']
-            
-            for stat_val, stat_label, stat_color in zip(stats_y, stats_labels, stats_colors):
-                # Max는 항상 인덱스 0에 있음
-                if stat_label == 'Max':
-                    stat_idx = 0
-                else:
-                    # 내림차순 정렬된 배열에서 해당 값의 인덱스 찾기
-                    stat_idx = np.argmin(np.abs(sorted_values - stat_val))
-                # 라벨과 값을 함께 표시
-                fig2.add_trace(go.Scatter(
-                    x=[stat_idx],
-                    y=[stat_val],
-                    mode='markers+text',
-                    marker=dict(size=12, color=stat_color, symbol='diamond'),
-                    text=[f'{stat_label}: {stat_val:.1f}'],
-                    textposition='top center',
-                    name=stat_label,
-                    showlegend=True
-                ))
-            
-            fig2.update_layout(
-                title=f'Sorted Values with Statistics: {selected_terminal} - {selected_io}',
-                xaxis_title='Index (Sorted, Descending)',
-                yaxis_title=f'{self.selected_agg_col.replace("_", " ").title()}',
-                height=500,
-                hovermode='x unified',
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                hoverlabel=dict(align='right', bgcolor='white', bordercolor='black', font_size=12)
-            )
-            st.plotly_chart(fig2, use_container_width=True)
+
 
         with time_series_tab:
-            # 요일별 시간대별 테이블 및 그래프를 나란히 배치
-            st.markdown("#### 📋 요일별 시간대별 데이터 테이블 & 그래프")
-            
             # Capacity 입력창
             capacity = st.number_input(
                 "**Capacity**",
@@ -2049,7 +2063,7 @@ class RunAnalysis:
                     return 'background-color: #ffcccc'  # 연한 빨간색
                 return ''
             
-            styled_df = daily_hourly_pivot.style.applymap(highlight_capacity)
+            styled_df = daily_hourly_pivot.style.applymap(highlight_capacity).format("{:.0f}")
             
             # 두 개의 컬럼으로 나란히 배치
             col1, col2 = st.columns(2)
@@ -2245,6 +2259,72 @@ class RunAnalysis:
             st.markdown("#### 📊 Time Series Data")
             st.write(stacked_pivot)
 
+        
+        with sorted_values_tab:
+            # 두 번째 그래프: 내림차순 정렬 그래프 (Max가 가장 왼쪽에)
+            st.markdown(f"#### 📊 Sorted Values: {selected_terminal} - {selected_io}")
+            sorted_values = time_series.values.copy()
+            # 내림차순으로 정렬하여 Max가 가장 왼쪽(인덱스 0)에 오도록
+            sorted_values = np.sort(sorted_values)[::-1]
+            
+            # 통계값 계산 (원본 데이터 기준)
+            original_values = time_series.values.copy()
+            max_val = original_values.max()
+            p975 = np.percentile(original_values, 97.5)
+            p95 = np.percentile(original_values, 95)
+            p90 = np.percentile(original_values, 90)
+            median_val = np.median(original_values)
+            mean_val = original_values.mean()
+            
+            fig2 = go.Figure()
+            # x축을 0부터 시작하여 왼쪽에서 오른쪽으로 그려지도록
+            x_values = np.arange(len(sorted_values))
+            
+            fig2.add_trace(go.Scatter(
+                x=x_values,
+                y=sorted_values,
+                mode='lines+markers',
+                name='Sorted Values',
+                line=dict(width=2, color='blue'),
+                marker=dict(size=3)
+            ))
+            
+            # 통계값 표시 (Max는 항상 인덱스 0에 있음)
+            stats_y = [max_val, p975, p95, p90, median_val, mean_val]
+            stats_labels = ['Max', '97.5%', '95%', '90%', 'Median', 'Mean']
+            stats_colors = ['red', 'orange', 'yellow', 'green', 'purple', 'cyan']
+            
+            for stat_val, stat_label, stat_color in zip(stats_y, stats_labels, stats_colors):
+                # Max는 항상 인덱스 0에 있음
+                if stat_label == 'Max':
+                    stat_idx = 0
+                else:
+                    # 내림차순 정렬된 배열에서 해당 값의 인덱스 찾기
+                    stat_idx = np.argmin(np.abs(sorted_values - stat_val))
+                # 라벨과 값을 함께 표시
+                fig2.add_trace(go.Scatter(
+                    x=[stat_idx],
+                    y=[stat_val],
+                    mode='markers+text',
+                    marker=dict(size=12, color=stat_color, symbol='diamond'),
+                    text=[f'{stat_label}: {stat_val:.1f}'],
+                    textposition='top center',
+                    name=stat_label,
+                    showlegend=True
+                ))
+            
+            fig2.update_layout(
+                title=f'Sorted Values with Statistics: {selected_terminal} - {selected_io}',
+                xaxis_title='Index (Sorted, Descending)',
+                yaxis_title=f'{self.selected_agg_col.replace("_", " ").title()}',
+                height=500,
+                hovermode='x unified',
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                hoverlabel=dict(align='right', bgcolor='white', bordercolor='black', font_size=12)
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+
+
 def format_scenario_id(x):
     """시나리오 ID를 "Scenario_XXX" 형식으로 변환 (001부터 시작)"""
     x_str = str(x)
@@ -2414,8 +2494,123 @@ def processing_data():
         
     return df_orig
 
+def _render_puff_editor(self):
+    """Helper to render puff factor editor and return puffed df based on current df_filtered."""
+    df = (self.df_filtered if self.df_filtered is not None else self.df_orig).copy()
+
+    # 기준이 될 그룹 컬럼 선택 (stacked bar 색상도 동일 컬럼 사용)
+    candidate_group_cols = [
+        c
+        for c in [
+            "terminal_carrier_int/dom",
+            "terminal_iata_int/dom_dest",
+            "terminal_carrier",
+            "terminal",
+            "operating_carrier_iata",
+            "International/Domestic",
+        ]
+        if c in df.columns
+    ]
+    if not candidate_group_cols:
+        st.info("No suitable group column found for puffing.")
+        return df
+
+    group_col = st.selectbox(
+        "Group column (for puff & color)",
+        options=candidate_group_cols,
+        index=0,
+        help="Rows will be puffed per unique value of this column, and stacked bar color will use the same groups.",
+        key="puff_group_col",
+    )
+
+    groups = sorted(df[group_col].dropna().unique().tolist())
+    if len(groups) == 0:
+        st.info("No groups available to puff for the selected column.")
+        return df
+
+    puff_df = pd.DataFrame({"group": groups, "puff_factor": [1 for _ in groups]})
+
+    st.caption("Edit `puff_factor` to virtually multiply each group's rows (1 = no change).")
+    edited = st.data_editor(
+        puff_df,
+        num_rows="fixed",
+        column_config={
+            "group": st.column_config.TextColumn("Group", disabled=True, width="large"),
+            "puff_factor": st.column_config.NumberColumn(
+                "Puff factor",
+                min_value=0,
+                max_value=100,
+                step=1,
+                help="0 = remove group, 1 = original, 2 = double, ...",
+            ),
+        },
+        hide_index=True,
+        key="puff_factor_editor",
+    )
+
+    factor_map = (
+        edited.set_index("group")["puff_factor"].fillna(1).astype(int).to_dict()
+        if len(edited) > 0
+        else {}
+    )
+
+    if len(factor_map) == 0:
+        df_puffed = df
+    else:
+        df["__puff_factor__"] = df[group_col].map(factor_map).fillna(1).astype(int)
+        # factor == 0 인 그룹은 제거
+        df = df[df["__puff_factor__"] > 0]
+        df_puffed = df.loc[df.index.repeat(df["__puff_factor__"])].copy()
+        df_puffed.drop(columns=["__puff_factor__"], inplace=True, errors="ignore")
+
+    return df_puffed, group_col
 
 
+def _render_puffing(self):
+    """Puffing 탭 UI 및 1시간 단위 Stacked Bar 시각화."""
+    st.markdown("<div class='card'><h4>🎈 Puffing</h4>", unsafe_allow_html=True)
+
+    if self.df_filtered is None or len(self.df_filtered) == 0:
+        st.info("No filtered data available. Please configure Date & Method first.")
+        return
+
+    with st.expander("Edit puff groups & preview chart", expanded=False):
+        df_puffed, group_col = _render_puff_editor(self)
+
+        # 시간 축 선택 및 집계 (항상 1시간 단위)
+        time_candidates = [c for c in ["SHOW", "scheduled_gate_local"] if c in df_puffed.columns]
+        if len(time_candidates) > 0:
+            time_col = time_candidates[0]
+            df_puffed[time_col] = pd.to_datetime(df_puffed[time_col])
+            # 1시간 단위로 절단해서 집계
+            df_puffed["Time_Hour"] = df_puffed[time_col].dt.floor("H")
+            agg_df = (
+                df_puffed.groupby(["Time_Hour", group_col])
+                .size()
+                .reset_index(name="count")
+                .sort_values("Time_Hour")
+            )
+
+            st.markdown("#### 📊 Puff 결과 – Stacked Bar (1-hour bins)")
+            fig = px.bar(
+                agg_df,
+                x="Time_Hour",
+                y="count",
+                color=group_col,
+                barmode="stack",
+            )
+            fig.update_layout(
+                xaxis_title="Time (hourly)",
+                yaxis_title="Count",
+                hovermode="x unified",
+                height=400,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Time column (`SHOW` or `scheduled_gate_local`) not found – stacked bar is skipped.")
+
+        # Puff 후 df_filtered에 반영하여 이후 분석에 사용되도록 함
+        self.df_filtered = df_puffed
 
 @st.fragment
 def show_result(analysis=None):
@@ -2489,4 +2684,9 @@ if __name__ == "__main__":
     ms=MasterplanInput()
     # ms.select_airport_block()
     df_orig = processing_data()
+    st.write(df_orig.head(100))
+
+
+
+    
     main(df_orig)
