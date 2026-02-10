@@ -1,0 +1,11 @@
+[theme]
+base="light"
+primaryColor="#007aff"
+font="pretendard"
+
+[server]
+# port = 8080
+maxMessageSize = 3000
+maxUploadSize = 3000
+enableXsrfProtection = false
+enableCORS = false
