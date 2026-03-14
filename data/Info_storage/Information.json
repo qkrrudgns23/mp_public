@@ -1,0 +1,130 @@
+{
+  "version": "1.0",
+  "tiers": {
+    "runway": {
+      "description": "Runway separation standards, ROT defaults, category labels",
+      "standards": {
+        "ICAO": {
+          "categories": ["J", "H", "M", "L"],
+          "categoryLabels": {
+            "J": "Super",
+            "H": "Heavy",
+            "M": "Medium",
+            "L": "Light"
+          },
+          "separationDefaults": {
+            "ARR→ARR": {
+              "J": { "J": 90, "H": 120, "M": 180, "L": 240 },
+              "H": { "J": 90, "H": 90, "M": 120, "L": 180 },
+              "M": { "J": 90, "H": 90, "M": 90, "L": 180 },
+              "L": { "J": 90, "H": 90, "M": 90, "L": 90 }
+            },
+            "DEP→DEP": {
+              "J": { "J": 90, "H": 120, "M": 180, "L": 180 },
+              "H": { "J": 90, "H": 90, "M": 120, "L": 120 },
+              "M": { "J": 90, "H": 90, "M": 90, "L": 90 },
+              "L": { "J": 90, "H": 90, "M": 90, "L": 90 }
+            },
+            "ARR→DEP": { "J": 90, "H": 80, "M": 65, "L": 50 },
+            "DEP→ARR": { "J": 60, "H": 60, "M": 70, "L": 90 }
+          },
+          "ROT": { "J": 70, "H": 65, "M": 55, "L": 40 }
+        },
+        "RECAT-EU": {
+          "categories": ["A", "B", "C", "D", "E", "F"],
+          "categoryLabels": {
+            "A": "Super-Heavy",
+            "B": "Upper-Heavy",
+            "C": "Lower-Heavy",
+            "D": "Medium",
+            "E": "Light",
+            "F": "Very-Light"
+          },
+          "separationDefaults": {
+            "ARR→ARR": {
+              "A": { "A": 80, "B": 100, "C": 120, "D": 140, "E": 160, "F": 180 },
+              "B": { "A": 80, "B": 80, "C": 100, "D": 120, "E": 120, "F": 140 },
+              "C": { "A": 80, "B": 80, "C": 80, "D": 100, "E": 100, "F": 120 },
+              "D": { "A": 80, "B": 80, "C": 80, "D": 80, "E": 80, "F": 100 },
+              "E": { "A": 80, "B": 80, "C": 80, "D": 80, "E": 80, "F": 100 },
+              "F": { "A": 80, "B": 80, "C": 80, "D": 80, "E": 80, "F": 80 }
+            },
+            "DEP→DEP": {
+              "A": { "A": 80, "B": 100, "C": 120, "D": 120, "E": 120, "F": 140 },
+              "B": { "A": 80, "B": 80, "C": 100, "D": 100, "E": 100, "F": 120 },
+              "C": { "A": 80, "B": 80, "C": 80, "D": 80, "E": 80, "F": 100 },
+              "D": { "A": 80, "B": 80, "C": 80, "D": 80, "E": 80, "F": 80 },
+              "E": { "A": 80, "B": 80, "C": 80, "D": 80, "E": 80, "F": 80 },
+              "F": { "A": 80, "B": 80, "C": 80, "D": 80, "E": 80, "F": 80 }
+            },
+            "ARR→DEP": { "A": 80, "B": 70, "C": 60, "D": 55, "E": 50, "F": 45 },
+            "DEP→ARR": { "A": 55, "B": 55, "C": 60, "D": 65, "E": 70, "F": 80 }
+          },
+          "ROT": { "A": 65, "B": 60, "C": 55, "D": 50, "E": 45, "F": 40 }
+        }
+      },
+      "seqMeta": {
+        "ARR→ARR": {
+          "driver": "Wake of leading arrival aircraft",
+          "refPoint": "Touchdown / final approach point of the leading arrival",
+          "input": "Lead (arrival) × Trail (arrival) matrix input"
+        },
+        "DEP→DEP": {
+          "driver": "Wake of leading departure aircraft",
+          "refPoint": "Take-off / runway entry point of the leading departure",
+          "input": "Lead (departure) × Trail (departure) matrix input"
+        },
+        "ARR→DEP": {
+          "driver": "Runway occupancy time (ROT) of leading arrival",
+          "refPoint": "Runway vacation / ROT end of the leading arrival",
+          "input": "Lead (arrival category) 1‑D input"
+        },
+        "DEP→ARR": {
+          "driver": "Wake / ROT of leading departure",
+          "refPoint": "Runway vacation / ROT end of the leading departure",
+          "input": "Trail (arrival category) 1‑D input"
+        }
+      }
+    },
+    "aircraft": {
+      "description": "Aircraft types with wake category mappings",
+      "types": [
+        {"id": "A380", "name": "Airbus A380", "icao": "F", "icaoJHL": "J", "recatEu": "A", "mtow_kg": 575000, "wingspan_m": 79.75, "length_m": 72.73, "engines": 4, "engine_type": "Turbofan", "typical_seats": 555, "max_range_km": 15200, "cruise_speed_ktas": 490, "touchdown_zone_avg_m": 2000, "touchdown_speed_avg_ms": 75, "deceleration_avg_ms2": 2.5, "notes": "세계 최대 여객기, 2층 구조"},
+        {"id": "A350", "name": "Airbus A350", "icao": "E", "icaoJHL": "H", "recatEu": "B", "mtow_kg": 316000, "wingspan_m": 64.75, "length_m": 66.8, "engines": 2, "engine_type": "Turbofan", "typical_seats": 369, "max_range_km": 15000, "cruise_speed_ktas": 488, "touchdown_zone_avg_m": 1800, "touchdown_speed_avg_ms": 72, "deceleration_avg_ms2": 2.5, "notes": "A350-900 기준; -1000은 MTOW 316,000kg"},
+        {"id": "A340", "name": "Airbus A340", "icao": "E", "icaoJHL": "H", "recatEu": "B", "mtow_kg": 380000, "wingspan_m": 63.45, "length_m": 75.36, "engines": 4, "engine_type": "Turbofan", "typical_seats": 375, "max_range_km": 16020, "cruise_speed_ktas": 476, "touchdown_zone_avg_m": 1800, "touchdown_speed_avg_ms": 72, "deceleration_avg_ms2": 2.5, "notes": "A340-600 기준; 생산 종료"},
+        {"id": "A330", "name": "Airbus A330", "icao": "E", "icaoJHL": "H", "recatEu": "B", "mtow_kg": 242000, "wingspan_m": 60.3, "length_m": 63.69, "engines": 2, "engine_type": "Turbofan", "typical_seats": 277, "max_range_km": 13430, "cruise_speed_ktas": 472, "touchdown_zone_avg_m": 1700, "touchdown_speed_avg_ms": 70, "deceleration_avg_ms2": 2.5, "notes": "A330-300 기준"},
+        {"id": "A321", "name": "Airbus A321", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 97000, "wingspan_m": 35.8, "length_m": 44.51, "engines": 2, "engine_type": "Turbofan", "typical_seats": 220, "max_range_km": 7400, "cruise_speed_ktas": 450, "touchdown_zone_avg_m": 900, "touchdown_speed_avg_ms": 70, "deceleration_avg_ms2": 2.5, "notes": "A321XLR MTOW 101,000kg, 최대 8,700km"},
+        {"id": "A320", "name": "Airbus A320", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 78000, "wingspan_m": 35.8, "length_m": 37.57, "engines": 2, "engine_type": "Turbofan", "typical_seats": 180, "max_range_km": 6150, "cruise_speed_ktas": 450, "touchdown_zone_avg_m": 900, "touchdown_speed_avg_ms": 68, "deceleration_avg_ms2": 2.5, "notes": "A320neo 기준"},
+        {"id": "A319", "name": "Airbus A319", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 75500, "wingspan_m": 35.8, "length_m": 33.84, "engines": 2, "engine_type": "Turbofan", "typical_seats": 140, "max_range_km": 6850, "cruise_speed_ktas": 450, "touchdown_zone_avg_m": 850, "touchdown_speed_avg_ms": 68, "deceleration_avg_ms2": 2.5, "notes": "A319neo 기준"},
+        {"id": "A318", "name": "Airbus A318", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 68000, "wingspan_m": 34.1, "length_m": 31.45, "engines": 2, "engine_type": "Turbofan", "typical_seats": 107, "max_range_km": 6000, "cruise_speed_ktas": 447, "touchdown_zone_avg_m": 800, "touchdown_speed_avg_ms": 66, "deceleration_avg_ms2": 2.5, "notes": "A320 패밀리 최소형; 생산 종료"},
+        {"id": "A220", "name": "Airbus A220", "icao": "C", "icaoJHL": "M", "recatEu": "E", "mtow_kg": 70900, "wingspan_m": 35.1, "length_m": 38.71, "engines": 2, "engine_type": "Turbofan", "typical_seats": 130, "max_range_km": 6300, "cruise_speed_ktas": 450, "touchdown_zone_avg_m": 850, "touchdown_speed_avg_ms": 67, "deceleration_avg_ms2": 2.5, "notes": "A220-300 기준 (구 Bombardier CS300); RECAT-EU E로 수정"},
+        {"id": "B787", "name": "Boeing 787", "icao": "E", "icaoJHL": "H", "recatEu": "B", "mtow_kg": 254011, "wingspan_m": 60.12, "length_m": 68.28, "engines": 2, "engine_type": "Turbofan", "typical_seats": 296, "max_range_km": 14140, "cruise_speed_ktas": 488, "touchdown_zone_avg_m": 1800, "touchdown_speed_avg_ms": 72, "deceleration_avg_ms2": 2.5, "notes": "B787-9 기준"},
+        {"id": "B777", "name": "Boeing 777", "icao": "E", "icaoJHL": "H", "recatEu": "B", "mtow_kg": 352400, "wingspan_m": 64.8, "length_m": 73.86, "engines": 2, "engine_type": "Turbofan", "typical_seats": 396, "max_range_km": 13650, "cruise_speed_ktas": 476, "touchdown_zone_avg_m": 1900, "touchdown_speed_avg_ms": 73, "deceleration_avg_ms2": 2.5, "notes": "B777-300ER 기준"},
+        {"id": "B767", "name": "Boeing 767", "icao": "D", "icaoJHL": "H", "recatEu": "C", "mtow_kg": 187700, "wingspan_m": 51.92, "length_m": 61.37, "engines": 2, "engine_type": "Turbofan", "typical_seats": 218, "max_range_km": 11090, "cruise_speed_ktas": 459, "touchdown_zone_avg_m": 1600, "touchdown_speed_avg_ms": 70, "deceleration_avg_ms2": 2.5, "notes": "B767-300ER 기준; 날개폭 47–52m로 ICAO D(36–52m)→ 실제 D 경계, RECAT-EU C로 수정"},
+        {"id": "B757", "name": "Boeing 757", "icao": "C", "icaoJHL": "M", "recatEu": "C", "mtow_kg": 123600, "wingspan_m": 38.05, "length_m": 54.43, "engines": 2, "engine_type": "Turbofan", "typical_seats": 200, "max_range_km": 7250, "cruise_speed_ktas": 460, "touchdown_zone_avg_m": 1400, "touchdown_speed_avg_ms": 70, "deceleration_avg_ms2": 2.5, "notes": "B757-200 기준; wake turbulence 특수 취급(Heavy 준용); RECAT-EU C로 수정"},
+        {"id": "B747", "name": "Boeing 747", "icao": "F", "icaoJHL": "H", "recatEu": "B", "mtow_kg": 412775, "wingspan_m": 68.4, "length_m": 76.25, "engines": 4, "engine_type": "Turbofan", "typical_seats": 467, "max_range_km": 14815, "cruise_speed_ktas": 476, "touchdown_zone_avg_m": 2000, "touchdown_speed_avg_ms": 75, "deceleration_avg_ms2": 2.5, "notes": "B747-400 기준; 날개폭 68m로 ICAO F(65m↑) 해당"},
+        {"id": "B737", "name": "Boeing 737", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 79016, "wingspan_m": 35.79, "length_m": 39.47, "engines": 2, "engine_type": "Turbofan", "typical_seats": 162, "max_range_km": 5765, "cruise_speed_ktas": 447, "touchdown_zone_avg_m": 900, "touchdown_speed_avg_ms": 68, "deceleration_avg_ms2": 2.5, "notes": "B737-800 기준"},
+        {"id": "B737MAX", "name": "Boeing 737 MAX", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 82191, "wingspan_m": 35.9, "length_m": 39.52, "engines": 2, "engine_type": "Turbofan", "typical_seats": 178, "max_range_km": 6570, "cruise_speed_ktas": 453, "touchdown_zone_avg_m": 950, "touchdown_speed_avg_ms": 69, "deceleration_avg_ms2": 2.5, "notes": "B737 MAX 8 기준"},
+        {"id": "B717", "name": "Boeing 717", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 54885, "wingspan_m": 28.45, "length_m": 37.81, "engines": 2, "engine_type": "Turbofan", "typical_seats": 110, "max_range_km": 3815, "cruise_speed_ktas": 440, "touchdown_zone_avg_m": 850, "touchdown_speed_avg_ms": 66, "deceleration_avg_ms2": 2.5, "notes": "구 MD-95; 날개폭 28m로 ICAO B(15–24m) 경계이나 MTOW 기준 C 분류"},
+        {"id": "E190", "name": "Embraer E190", "icao": "C", "icaoJHL": "M", "recatEu": "E", "mtow_kg": 51800, "wingspan_m": 31.04, "length_m": 36.24, "engines": 2, "engine_type": "Turbofan", "typical_seats": 100, "max_range_km": 4537, "cruise_speed_ktas": 447, "touchdown_zone_avg_m": 850, "touchdown_speed_avg_ms": 67, "deceleration_avg_ms2": 2.5, "notes": "icaoJHL M으로 수정 (MTOW 51,800kg > 7,000kg)"},
+        {"id": "E175", "name": "Embraer E175", "icao": "C", "icaoJHL": "M", "recatEu": "E", "mtow_kg": 40370, "wingspan_m": 31.04, "length_m": 31.68, "engines": 2, "engine_type": "Turbofan", "typical_seats": 80, "max_range_km": 3740, "cruise_speed_ktas": 447, "touchdown_zone_avg_m": 800, "touchdown_speed_avg_ms": 65, "deceleration_avg_ms2": 2.4, "notes": "icaoJHL M으로 수정"},
+        {"id": "E170", "name": "Embraer E170", "icao": "C", "icaoJHL": "M", "recatEu": "E", "mtow_kg": 37200, "wingspan_m": 31.04, "length_m": 29.9, "engines": 2, "engine_type": "Turbofan", "typical_seats": 72, "max_range_km": 3334, "cruise_speed_ktas": 447, "touchdown_zone_avg_m": 780, "touchdown_speed_avg_ms": 64, "deceleration_avg_ms2": 2.4, "notes": "icaoJHL M으로 수정"},
+        {"id": "E195", "name": "Embraer E195", "icao": "C", "icaoJHL": "M", "recatEu": "E", "mtow_kg": 52290, "wingspan_m": 31.04, "length_m": 38.65, "engines": 2, "engine_type": "Turbofan", "typical_seats": 120, "max_range_km": 4260, "cruise_speed_ktas": 447, "touchdown_zone_avg_m": 900, "touchdown_speed_avg_ms": 67, "deceleration_avg_ms2": 2.5, "notes": "icaoJHL M으로 수정"},
+        {"id": "CRJ900", "name": "Bombardier CRJ900", "icao": "C", "icaoJHL": "M", "recatEu": "E", "mtow_kg": 36514, "wingspan_m": 26.18, "length_m": 36.19, "engines": 2, "engine_type": "Turbofan", "typical_seats": 90, "max_range_km": 2956, "cruise_speed_ktas": 447, "touchdown_zone_avg_m": 800, "touchdown_speed_avg_ms": 65, "deceleration_avg_ms2": 2.4, "notes": "날개폭 26m로 ICAO B/C 경계; MTOW 기준 및 날개폭으로 C 분류가 맞음. icaoJHL M 수정"},
+        {"id": "CRJ700", "name": "Bombardier CRJ700", "icao": "C", "icaoJHL": "M", "recatEu": "E", "mtow_kg": 33565, "wingspan_m": 23.24, "length_m": 32.51, "engines": 2, "engine_type": "Turbofan", "typical_seats": 70, "max_range_km": 3045, "cruise_speed_ktas": 447, "touchdown_zone_avg_m": 780, "touchdown_speed_avg_ms": 64, "deceleration_avg_ms2": 2.4, "notes": "날개폭 23m → ICAO B(15–24m) 경계; 실운용상 B 또는 C 혼용. icaoJHL M 수정"},
+        {"id": "CRJ200", "name": "Bombardier CRJ200", "icao": "B", "icaoJHL": "M", "recatEu": "F", "mtow_kg": 23133, "wingspan_m": 21.21, "length_m": 26.77, "engines": 2, "engine_type": "Turbofan", "typical_seats": 50, "max_range_km": 3045, "cruise_speed_ktas": 430, "touchdown_zone_avg_m": 750, "touchdown_speed_avg_ms": 62, "deceleration_avg_ms2": 2.3, "notes": "icaoJHL M 수정 (MTOW 23,133kg)"},
+        {"id": "ATR72", "name": "ATR 72", "icao": "C", "icaoJHL": "M", "recatEu": "F", "mtow_kg": 23000, "wingspan_m": 27.05, "length_m": 27.17, "engines": 2, "engine_type": "Turboprop", "typical_seats": 72, "max_range_km": 1528, "cruise_speed_ktas": 275, "touchdown_zone_avg_m": 700, "touchdown_speed_avg_ms": 55, "deceleration_avg_ms2": 2.2, "notes": "날개폭 27m → ICAO C(24–36m); icaoJHL M 수정"},
+        {"id": "ATR42", "name": "ATR 42", "icao": "B", "icaoJHL": "M", "recatEu": "F", "mtow_kg": 18600, "wingspan_m": 24.57, "length_m": 22.67, "engines": 2, "engine_type": "Turboprop", "typical_seats": 48, "max_range_km": 1326, "cruise_speed_ktas": 265, "touchdown_zone_avg_m": 650, "touchdown_speed_avg_ms": 54, "deceleration_avg_ms2": 2.1, "notes": "날개폭 24.57m → ICAO B/C 경계; icaoJHL M 수정"},
+        {"id": "DHC8", "name": "Dash 8 Q400", "icao": "C", "icaoJHL": "M", "recatEu": "F", "mtow_kg": 29257, "wingspan_m": 28.42, "length_m": 32.84, "engines": 2, "engine_type": "Turboprop", "typical_seats": 78, "max_range_km": 2522, "cruise_speed_ktas": 360, "touchdown_zone_avg_m": 720, "touchdown_speed_avg_ms": 57, "deceleration_avg_ms2": 2.2, "notes": "날개폭 28m → ICAO C; icaoJHL M 수정"},
+        {"id": "MD11", "name": "McDonnell Douglas MD-11", "icao": "E", "icaoJHL": "H", "recatEu": "B", "mtow_kg": 286000, "wingspan_m": 51.66, "length_m": 61.24, "engines": 3, "engine_type": "Turbofan", "typical_seats": 298, "max_range_km": 12455, "cruise_speed_ktas": 473, "touchdown_zone_avg_m": 1800, "touchdown_speed_avg_ms": 72, "deceleration_avg_ms2": 2.5, "notes": "생산 종료; 현재는 화물기 위주 운용"},
+        {"id": "MD90", "name": "McDonnell Douglas MD-90", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 70760, "wingspan_m": 32.87, "length_m": 46.51, "engines": 2, "engine_type": "Turbofan", "typical_seats": 153, "max_range_km": 3787, "cruise_speed_ktas": 442, "touchdown_zone_avg_m": 900, "touchdown_speed_avg_ms": 68, "deceleration_avg_ms2": 2.5, "notes": "생산 종료"},
+        {"id": "MD80", "name": "McDonnell Douglas MD-80", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 67812, "wingspan_m": 32.87, "length_m": 45.06, "engines": 2, "engine_type": "Turbofan", "typical_seats": 149, "max_range_km": 4635, "cruise_speed_ktas": 442, "touchdown_zone_avg_m": 900, "touchdown_speed_avg_ms": 68, "deceleration_avg_ms2": 2.5, "notes": "생산 종료"},
+        {"id": "IL96", "name": "Ilyushin IL-96", "icao": "E", "icaoJHL": "H", "recatEu": "B", "mtow_kg": 270000, "wingspan_m": 60.11, "length_m": 63.94, "engines": 4, "engine_type": "Turbofan", "typical_seats": 300, "max_range_km": 13500, "cruise_speed_ktas": 459, "touchdown_zone_avg_m": 1800, "touchdown_speed_avg_ms": 72, "deceleration_avg_ms2": 2.5, "notes": "IL-96-300 기준; 구소련/러시아 광동체"},
+        {"id": "TU204", "name": "Tupolev Tu-204", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 107500, "wingspan_m": 41.8, "length_m": 46.14, "engines": 2, "engine_type": "Turbofan", "typical_seats": 210, "max_range_km": 6500, "cruise_speed_ktas": 459, "touchdown_zone_avg_m": 1000, "touchdown_speed_avg_ms": 69, "deceleration_avg_ms2": 2.5, "notes": "Tu-204-100 기준"},
+        {"id": "SSJ100", "name": "Sukhoi Superjet 100", "icao": "C", "icaoJHL": "M", "recatEu": "E", "mtow_kg": 49450, "wingspan_m": 27.8, "length_m": 29.94, "engines": 2, "engine_type": "Turbofan", "typical_seats": 98, "max_range_km": 4578, "cruise_speed_ktas": 447, "touchdown_zone_avg_m": 820, "touchdown_speed_avg_ms": 66, "deceleration_avg_ms2": 2.5, "notes": "RECAT-EU E로 수정 (MTOW ~49톤, Lower Medium 수준)"},
+        {"id": "C919", "name": "COMAC C919", "icao": "C", "icaoJHL": "M", "recatEu": "D", "mtow_kg": 77300, "wingspan_m": 35.8, "length_m": 38.9, "engines": 2, "engine_type": "Turbofan", "typical_seats": 168, "max_range_km": 5555, "cruise_speed_ktas": 450, "touchdown_zone_avg_m": 900, "touchdown_speed_avg_ms": 68, "deceleration_avg_ms2": 2.5, "notes": "A320 동급; 중국 국산 협동체"},
+        {"id": "ARJ21", "name": "COMAC ARJ21", "icao": "C", "icaoJHL": "M", "recatEu": "E", "mtow_kg": 43500, "wingspan_m": 27.28, "length_m": 33.46, "engines": 2, "engine_type": "Turbofan", "typical_seats": 90, "max_range_km": 3700, "cruise_speed_ktas": 422, "touchdown_zone_avg_m": 800, "touchdown_speed_avg_ms": 64, "deceleration_avg_ms2": 2.4, "notes": "icaoJHL M으로 수정 (MTOW 43,500kg); RECAT-EU E"}
+        ]
+    }
+  }
+}

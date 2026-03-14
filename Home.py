@@ -1,126 +1,158 @@
 import streamlit as st
-from utils.masterplan import *
-# 📕📗📘📙📒📓📚📖
-# --- CSS ---
+import streamlit.components.v1 as components
+import pandas as pd
+import json
+import os
 
 st.set_page_config(
     page_title="HOME",
     layout="wide",
-    initial_sidebar_state="collapsed"  # 사이드바 접힌 상태 유지
+    initial_sidebar_state="collapsed",
 )
 
+# 로그인 인증 정보 (환경변수로 변경 권장)
+LOGIN_CREDENTIALS = {
+    "admin": "admin123",  # ID: admin, PW: admin123
+}
 
+# Full-screen dark theme for Home
+st.markdown("""
+<style>
+    /* 사이드바 투명 */
+    [data-testid="stSidebar"] { background: transparent !important; }
+    [data-testid="stSidebar"] > div:first-child { background: transparent !important; }
+    
+    .stApp { background: #000000 !important; padding-top: 0 !important; }
+    [data-testid="stAppViewContainer"] { background: #000000 !important; padding: 0 !important; overflow: visible !important; }
+    [data-testid="stHeader"], header[data-testid="stHeader"] { display: none !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; overflow: hidden !important; border: none !important; }
+    .block-container { padding: 0 !important; max-width: 100% !important; overflow: visible !important; min-height: 100vh !important; margin: 0 !important; }
+    [data-testid="stAppViewContainer"] > section, [data-testid="stAppViewContainer"] main { padding-top: 0 !important; margin-top: 0 !important; }
+    div[data-testid="stVerticalBlock"] { padding-top: 0 !important; }
+    .block-container iframe, div[data-testid="stEmbeddedFrameBlock"] iframe { position: fixed !important; top: -120px !important; left: 0 !important; width: 100vw !important; height: calc(100vh + 120px) !important; min-height: calc(100vh + 120px) !important; display: block !important; border: none !important; z-index: 0 !important; }
+    
+    /* Login / Logout - 우측 하단 */
+    div[data-testid="column"]:has(form),
+    div[data-testid="column"]:has(button) {
+        position: fixed !important;
+        bottom: 24px !important;
+        right: 24px !important;
+        top: auto !important;
+        z-index: 2147483647 !important;
+        min-width: 200px !important;
+        background: transparent !important;
+        padding: 16px !important;
+        border: none !important;
+        border-radius: 8px !important;
+    }
+    div[data-testid="column"]:has(form) form,
+    div[data-testid="column"]:has(button) form {
+        border: none !important;
+    }
+    
+    /* Title */
+    div[data-testid="column"]:has(form) p,
+    div[data-testid="column"]:has(button) p {
+        color: rgba(255,255,255,0.9) !important;
+        font-weight: 300 !important;
+        letter-spacing: 0.08em !important;
+        font-size: 0.75rem !important;
+        margin-bottom: 10px !important;
+    }
+    
+    /* Input fields */
+    div[data-testid="column"]:has(form) input {
+        background: rgba(255,255,255,0.06) !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        border-radius: 6px !important;
+        color: rgba(255,255,255,0.95) !important;
+        padding: 6px 10px !important;
+        font-size: 0.8rem !important;
+    }
+    div[data-testid="column"]:has(form) input:focus {
+        border-color: rgba(255,255,255,0.25) !important;
+    }
+    
+    /* Labels */
+    div[data-testid="column"]:has(form) label {
+        color: rgba(255,255,255,0.5) !important;
+        font-size: 0.75rem !important;
+    }
+    
+    /* Login form: Enter 버튼 숨김 (Enter 키로 제출 가능, 폼에 버튼 필수) */
+    div[data-testid="column"]:has(form) button {
+        position: absolute !important;
+        left: -9999px !important;
+        width: 1px !important;
+        height: 1px !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+    
+    /* Logout 버튼 */
+    div[data-testid="column"]:has(button):not(:has(form)) button {
+        background: rgba(255,255,255,0.08) !important;
+        border: 1px solid rgba(255,255,255,0.15) !important;
+        color: rgba(255,255,255,0.9) !important;
+        border-radius: 6px !important;
+        font-size: 0.8rem !important;
+    }
+    div[data-testid="column"]:has(button):not(:has(form)) button:hover {
+        background: rgba(255,255,255,0.12) !important;
+        border-color: rgba(255,255,255,0.2) !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# 사용 예시
-set_bg_image(image_path="data/image/MP_right.png")
+# 세션 상태 초기화
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 
+# 로그인 체크
+if not st.session_state.authenticated:
+    # 글로브 먼저 배치 (전체 화면) + 로그인 폼 오버레이
+    _, col_right = st.columns([5, 1])
+    with col_right:
+        with st.form("login_form"):
+            login_id = st.text_input("Username", key="login_id", placeholder="ID")
+            login_pw = st.text_input("Password", key="login_pw", type="password", placeholder="••••••••")
+            submitted = st.form_submit_button("Login")
+            if submitted:
+                if login_id and login_pw and LOGIN_CREDENTIALS.get(login_id) == login_pw:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password.")
+    df_airport = pd.read_parquet("data/raw/airport/cirium_airport_ref.parquet")
+    df_airport["airport_name"] = df_airport["name"] + " (" + df_airport["airport_id"] + ")"
+    airports_data = [
+        {"lat": float(row["lat"]), "lon": float(row["lon"]), "name": str(row["airport_name"])}
+        for _, row in df_airport.iterrows()
+    ]
+    _script_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(_script_dir, "data", "home_globe.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        html_content = f.read()
+    html_content = html_content.replace("__AIRPORTS_JSON__", json.dumps(airports_data, ensure_ascii=False))
+    components.html(html_content, height=2000, scrolling=False)
+else:
+    # 로그인 성공 시
+    df_airport = pd.read_parquet("data/raw/airport/cirium_airport_ref.parquet")
+    df_airport["airport_name"] = df_airport["name"] + " (" + df_airport["airport_id"] + ")"
+    airports_data = [
+        {"lat": float(row["lat"]), "lon": float(row["lon"]), "name": str(row["airport_name"])}
+        for _, row in df_airport.iterrows()
+    ]
+    _script_dir = os.path.dirname(os.path.abspath(__file__))
+    html_path = os.path.join(_script_dir, "data", "home_globe.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        html_content = f.read()
+    html_content = html_content.replace("__AIRPORTS_JSON__", json.dumps(airports_data, ensure_ascii=False))
+    components.html(html_content, height=2000, scrolling=False)
 
-
-df_airport=pd.read_parquet("data/raw/airport/cirium_airport_ref.parquet")
-df_airport["airport_name"] = df_airport["name"] + " (" + df_airport["airport_id"] + ")"
-fig = go.Figure()
-st.markdown("<h1 style='color : white; '>Enter Your Airport Here!!<h1>", unsafe_allow_html=True)
-# st.title("Enter your Airport")
-
-# dst_airport (파란색 점들 추가)
-fig.add_trace(go.Scattergeo(
-    lon=df_airport["lon"],
-    lat=df_airport["lat"],
-    mode='markers',
-    marker=dict(
-        size=1.5,
-        color='#00FF00'
-    ),
-    hovertext=df_airport["airport_name"],  # 여기에 공항 이름 컬럼 사용
-    hoverinfo='text'
-
-))
-
-# geo 객체를 사용하여 지구본 설정
-fig.update_geos(
-    projection_type='orthographic',
-    showland=True,
-    showcountries=True,
-    showocean=True,
-    showcoastlines=True,
-    bgcolor='rgba(0,0,0,0)', 
-    landcolor='rgb(42, 35, 35)',
-    oceancolor = "#007aff",
-
-
-    # landcolor='rgb(20, 20, 20)',
-    # oceancolor='rgb(10, 30, 60)',
-    # countrycolor='rgba(255,255,255,0.1)',  # 국가 경계선 은은하게
-    # showframe=False,
-
-
-)
-fig.update_layout(
-height=1700,
-width=1700,
-paper_bgcolor='rgba(0,0,0,0)',  # 페이퍼 배경을 투명하게
-plot_bgcolor='rgba(0,0,0,0)' ,   # 플롯 배경을 투명하게
-margin=dict(l=0, r=0, t=0, b=0),  # 모든 마진을 0으로 설정
-showlegend=False  # 범례 없애기
-)
-
-
-if st.button("**Explore Your Airport→**", type="primary"):
-    st.switch_page("pages/1_✈️_Masterplan.py")
-
-st.markdown(
-    '<span style="color:#FFFFFF">🟢 <b>Accessible Airport</b></span>',
-    unsafe_allow_html=True
-)
-st.plotly_chart(fig, config={'scrollZoom': False}, use_container_width=True)
-
-st.title("")
-st.title("")
-st.image("data/image/who_we_are.svg", use_column_width=True)
-st.title("")
-st.title("")
-st.title("")
-st.title("")
-st.image("data/image/for_whom_1.svg", use_column_width=True)
-st.title("")
-st.title("")
-st.title("")
-st.title("")
-st.title("")
-st.title("")
-st.title("")
-st.image("data/image/for_whom_2.svg", use_column_width=True)
-st.title("")
-st.title("")
-st.title("")
-st.title("")
-st.title("")
-st.image("data/image/5_things.svg")
-st.title("")
-st.title("")
-st.title("")
-st.image("data/image/data_source.svg")
-st.title("")
-st.title("")
-st.title("")
-st.image("data/image/flexa_samsung.svg")
-st.title("")
-st.title("")
-st.title("")
-st.title("")
-st.image("data/image/price_policy.svg")
-st.title("")
-st.title("")
-st.title("")
-st.title("")
-st.image("data/image/qr_linkedin.svg")
-
-
-
-
-
-
-
-
-
-
+    # 로그아웃 버튼 (우측 하단, 로그인 박스와 동일한 위치)
+    _, col_right = st.columns([5, 1])
+    with col_right:
+        st.markdown("Signed in")
+        if st.button("Sign Out"):
+            st.session_state.authenticated = False
+            st.rerun()

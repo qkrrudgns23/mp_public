@@ -1,7 +1,12 @@
 [theme]
-base="light"
+base = "dark"
 primaryColor="#007aff"
 font="pretendard"
+backgroundColor="#181818"
+secondaryBackgroundColor="rgba(09, 09, 09, 0.25)"
+
+[theme.sidebar]
+backgroundColor="#000000"
 
 [server]
 # port = 8080

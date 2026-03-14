@@ -7,6 +7,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"  # 사이드바 접힌 상태 유지
 )
 
+if not st.session_state.get("authenticated", False):
+    st.warning("Please log in from the Home page to access this section.")
+    st.stop()
 
 ms=MasterplanInput()
 ms.apply_css()

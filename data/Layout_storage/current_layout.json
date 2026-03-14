@@ -1,0 +1,760 @@
+{
+  "grid": {
+    "cols": 200,
+    "rows": 200,
+    "cellSize": 20
+  },
+  "terminals": [
+    {
+      "id": "id_yk4wq8bng",
+      "name": "Terminal1",
+      "vertices": [
+        {
+          "col": 73,
+          "row": 148
+        },
+        {
+          "col": 95,
+          "row": 148
+        },
+        {
+          "col": 95,
+          "row": 157
+        },
+        {
+          "col": 91,
+          "row": 157
+        },
+        {
+          "col": 91,
+          "row": 152
+        },
+        {
+          "col": 77,
+          "row": 152
+        },
+        {
+          "col": 77,
+          "row": 157
+        },
+        {
+          "col": 73,
+          "row": 157
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 4,
+      "floorHeight": 4,
+      "departureCapacity": 0,
+      "arrivalCapacity": 0
+    },
+    {
+      "id": "id_7rkx6qmzf",
+      "name": "Terminal2",
+      "vertices": [
+        {
+          "col": 90,
+          "row": 115
+        },
+        {
+          "col": 90,
+          "row": 140
+        },
+        {
+          "col": 95,
+          "row": 140
+        },
+        {
+          "col": 95,
+          "row": 115
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 4,
+      "floorHeight": 4,
+      "departureCapacity": 0,
+      "arrivalCapacity": 0
+    }
+  ],
+  "pbbStands": [
+    {
+      "id": "id_zll5u20qd",
+      "name": "104",
+      "x1": 1872.1280728184418,
+      "y1": 3140,
+      "x2": 1872.1280728184418,
+      "y2": 3176,
+      "category": "C",
+      "edgeCol": 95,
+      "edgeRow": 157
+    },
+    {
+      "id": "id_r4qlsdjvs",
+      "name": "101",
+      "x1": 1501.062217836047,
+      "y1": 3140,
+      "x2": 1501.062217836047,
+      "y2": 3176,
+      "category": "C",
+      "edgeCol": 77,
+      "edgeRow": 157
+    },
+    {
+      "id": "id_rzo3jb76h",
+      "name": "103",
+      "x1": 1727.321885508239,
+      "y1": 3040,
+      "x2": 1727.321885508239,
+      "y2": 3076,
+      "category": "E",
+      "edgeCol": 91,
+      "edgeRow": 152
+    },
+    {
+      "id": "id_8rbdr0n4e",
+      "name": "102",
+      "x1": 1630.784427301437,
+      "y1": 3040,
+      "x2": 1630.784427301437,
+      "y2": 3076,
+      "category": "E",
+      "edgeCol": 91,
+      "edgeRow": 152
+    },
+    {
+      "id": "id_ubyi4a54w",
+      "name": "203",
+      "x1": 1900,
+      "y1": 2663.2056052201806,
+      "x2": 1936,
+      "y2": 2663.2056052201806,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_qwlf8whg2",
+      "name": "202",
+      "x1": 1900,
+      "y1": 2760.5005345181944,
+      "x2": 1936,
+      "y2": 2760.5005345181944,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_6wl7x34z1",
+      "name": "204",
+      "x1": 1900,
+      "y1": 2584.691583572037,
+      "x2": 1936,
+      "y2": 2584.691583572037,
+      "category": "C",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_p9smarr3a",
+      "name": "205",
+      "x1": 1900,
+      "y1": 2520.7417148960035,
+      "x2": 1936,
+      "y2": 2520.7417148960035,
+      "category": "C",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_y7ylfufa3",
+      "name": "206",
+      "x1": 1900,
+      "y1": 2443.829035001855,
+      "x2": 1936,
+      "y2": 2443.829035001855,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_jja9cqwhd",
+      "name": "207",
+      "x1": 1900,
+      "y1": 2371.2372921804113,
+      "x2": 1936,
+      "y2": 2371.2372921804113,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_hwytcyxgv",
+      "name": "208",
+      "x1": 1881.2421173004552,
+      "y1": 2300,
+      "x2": 1881.2421173004552,
+      "y2": 2264,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 115
+    },
+    {
+      "id": "id_bovqqobrh",
+      "name": "201",
+      "x1": 1859.999758919754,
+      "y1": 2800,
+      "x2": 1859.999758919754,
+      "y2": 2836,
+      "category": "E",
+      "edgeCol": 90,
+      "edgeRow": 140
+    }
+  ],
+  "remoteStands": [],
+  "taxiways": [
+    {
+      "id": "id_to86fdah0",
+      "name": "RW1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 30
+        },
+        {
+          "col": 60,
+          "row": 160
+        }
+      ],
+      "width": 60,
+      "directionModeId": "dm_cw",
+      "pathType": "runway",
+      "start_point": {
+        "col": 60,
+        "row": 30
+      },
+      "end_point": {
+        "col": 60,
+        "row": 160
+      },
+      "rwySepConfig": {
+        "standard": "ICAO",
+        "mode": "MIX",
+        "activeSeq": "ARR→ARR",
+        "seqData": {
+          "ARR→ARR": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "240"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "180"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "180"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "DEP→DEP": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "180"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "120"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "ARR→DEP": {
+            "J": "90",
+            "H": "80",
+            "M": "65",
+            "L": "50"
+          },
+          "DEP→ARR": {
+            "J": "60",
+            "H": "60",
+            "M": "70",
+            "L": "90"
+          }
+        },
+        "rot": {
+          "J": "70",
+          "H": "65",
+          "M": "55",
+          "L": "40"
+        }
+      }
+    },
+    {
+      "id": "id_h8nto7prx",
+      "name": "TX1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 150
+        },
+        {
+          "col": 70,
+          "row": 160
+        },
+        {
+          "col": 100,
+          "row": 160
+        },
+        {
+          "col": 100,
+          "row": 80
+        },
+        {
+          "col": 71,
+          "row": 68
+        },
+        {
+          "col": 60,
+          "row": 68
+        }
+      ],
+      "width": 15,
+      "directionModeId": "dm_cw",
+      "pathType": "taxiway",
+      "start_point": {
+        "col": 60,
+        "row": 150
+      },
+      "end_point": {
+        "col": 60,
+        "row": 68
+      }
+    },
+    {
+      "id": "id_to1e7jv7l",
+      "name": "TX2",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 141
+        },
+        {
+          "col": 65,
+          "row": 146
+        },
+        {
+          "col": 100,
+          "row": 146
+        }
+      ],
+      "width": 15,
+      "directionModeId": "dm_cw",
+      "pathType": "taxiway",
+      "start_point": {
+        "col": 60,
+        "row": 141
+      },
+      "end_point": {
+        "col": 100,
+        "row": 146
+      }
+    },
+    {
+      "id": "id_g8fb1un85",
+      "name": "Taxiway 4",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 158
+        },
+        {
+          "col": 70,
+          "row": 160
+        }
+      ],
+      "width": 15,
+      "directionModeId": "dm_cw",
+      "pathType": "taxiway",
+      "start_point": {
+        "col": 60,
+        "row": 158
+      },
+      "end_point": {
+        "col": 70,
+        "row": 160
+      }
+    }
+  ],
+  "apronLinks": [
+    {
+      "id": "id_cszwrw966",
+      "pbbId": "id_rzo3jb76h",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 1725.8763434574514,
+      "ty": 3200
+    },
+    {
+      "id": "id_krxayfcj2",
+      "pbbId": "id_8rbdr0n4e",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 1629.998804892435,
+      "ty": 3200
+    },
+    {
+      "id": "id_mpqualxv6",
+      "pbbId": "id_r4qlsdjvs",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 1502.3034991045145,
+      "ty": 3200
+    },
+    {
+      "id": "id_6ha8tnb0u",
+      "pbbId": "id_zll5u20qd",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 1871.8138357865034,
+      "ty": 3200
+    },
+    {
+      "id": "id_ars11oar6",
+      "pbbId": "id_ubyi4a54w",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2665.5786522762296
+    },
+    {
+      "id": "id_2bhdi8ifa",
+      "pbbId": "id_qwlf8whg2",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2759.3140109901697
+    },
+    {
+      "id": "id_bcs7txw9y",
+      "pbbId": "id_bovqqobrh",
+      "taxiwayId": "id_to1e7jv7l",
+      "tx": 1858.7951451638075,
+      "ty": 2920
+    },
+    {
+      "id": "id_0ykielitu",
+      "pbbId": "id_6wl7x34z1",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2586.0636963716815
+    },
+    {
+      "id": "id_1jgg1v3u5",
+      "pbbId": "id_p9smarr3a",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2522.709514821491
+    },
+    {
+      "id": "id_0ptgmnuj9",
+      "pbbId": "id_y7ylfufa3",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2448.9123363124786
+    },
+    {
+      "id": "id_5a1tsqmdl",
+      "pbbId": "id_jja9cqwhd",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2370.241759222682
+    },
+    {
+      "id": "id_nv0q3jxx1",
+      "pbbId": "id_hwytcyxgv",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2261.6345908509275
+    }
+  ],
+  "directionModes": [
+    {
+      "id": "dm_cw",
+      "name": "CW",
+      "direction": "clockwise"
+    },
+    {
+      "id": "dm_ccw",
+      "name": "CCW",
+      "direction": "counter_clockwise"
+    },
+    {
+      "id": "dm_both",
+      "name": "Both",
+      "direction": "both"
+    }
+  ],
+  "flights": [
+    {
+      "id": "id_8mt2cvdoi",
+      "timeMin": 563,
+      "code": "E",
+      "velocity": 15,
+      "reg": "HL0024",
+      "dwellMin": 60,
+      "noWayArr": false,
+      "noWayDep": false,
+      "aircraftType": "A350",
+      "minDwellMin": 20,
+      "eldtMin": 559.519191687312,
+      "etotMin": 628.2064736389875,
+      "token": {
+        "arrRunwayId": "id_to86fdah0",
+        "apronId": "id_rzo3jb76h",
+        "terminalId": "id_yk4wq8bng",
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_eea8gtwro",
+      "timeMin": 570,
+      "code": "C",
+      "velocity": 15,
+      "reg": "HL2103",
+      "dwellMin": 60,
+      "noWayArr": false,
+      "noWayDep": false,
+      "aircraftType": "A321",
+      "minDwellMin": 20,
+      "eldtMin": 566.468157105157,
+      "etotMin": 635.7466041051908,
+      "token": {
+        "arrRunwayId": "id_to86fdah0",
+        "apronId": "id_zll5u20qd",
+        "terminalId": "id_yk4wq8bng",
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_cdfnv70ba",
+      "timeMin": 572,
+      "code": "C",
+      "velocity": 15,
+      "reg": "HL4721",
+      "dwellMin": 60,
+      "noWayArr": false,
+      "noWayDep": false,
+      "aircraftType": "A321",
+      "minDwellMin": 20,
+      "eldtMin": 568.8786907892135,
+      "etotMin": 638.7466041051908,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_r4qlsdjvs",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_qlqs3h4ou",
+      "timeMin": 573,
+      "code": "E",
+      "velocity": 15,
+      "reg": "HL5572",
+      "dwellMin": 60,
+      "noWayArr": false,
+      "noWayDep": false,
+      "aircraftType": "A350",
+      "minDwellMin": 20,
+      "eldtMin": 570.3786907892135,
+      "etotMin": 640.2466041051908,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_qwlf8whg2",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_bvenipraj",
+      "timeMin": 563.3333333333334,
+      "aircraftType": "A340",
+      "code": "E",
+      "velocity": 15,
+      "reg": "DD2939",
+      "dwellMin": 60,
+      "noWayArr": false,
+      "noWayDep": false,
+      "minDwellMin": 20,
+      "eldtMin": 561.019191687312,
+      "etotMin": 629.7064736389875,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_8rbdr0n4e",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_pyarybnqm",
+      "timeMin": 563.8333333333334,
+      "aircraftType": "A340",
+      "code": "E",
+      "velocity": 15,
+      "reg": "DD1132",
+      "dwellMin": 45,
+      "noWayArr": false,
+      "noWayDep": false,
+      "minDwellMin": 20,
+      "eldtMin": 562.519191687312,
+      "etotMin": 613.5365640943526,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_bovqqobrh",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_qi7ipxf08",
+      "timeMin": 564.3333333333334,
+      "aircraftType": "A340",
+      "code": "E",
+      "velocity": 15,
+      "reg": "DD1135",
+      "dwellMin": 45,
+      "noWayArr": false,
+      "noWayDep": false,
+      "minDwellMin": 20,
+      "eldtMin": 564.019191687312,
+      "etotMin": 615.0365640943526,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_ubyi4a54w",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_p73tvfeiy",
+      "timeMin": 585.3333333333334,
+      "aircraftType": "A320",
+      "code": "C",
+      "velocity": 15,
+      "reg": "DD0091",
+      "dwellMin": 45,
+      "noWayArr": false,
+      "noWayDep": false,
+      "minDwellMin": 20,
+      "eldtMin": 581.249791845106,
+      "etotMin": 634.2466041051908,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_jja9cqwhd",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_zps09x24c",
+      "timeMin": 586.3333333333334,
+      "aircraftType": "A320",
+      "code": "C",
+      "velocity": 15,
+      "reg": "DD0021",
+      "dwellMin": 45,
+      "noWayArr": false,
+      "noWayDep": false,
+      "minDwellMin": 20,
+      "eldtMin": 582.749791845106,
+      "etotMin": 637.2466041051908,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_p9smarr3a",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_hb79obb43",
+      "timeMin": 588.8833333333333,
+      "aircraftType": "A320",
+      "code": "C",
+      "velocity": 15,
+      "reg": "DD2557",
+      "dwellMin": 45,
+      "noWayArr": false,
+      "noWayDep": false,
+      "minDwellMin": 20,
+      "eldtMin": 584.6182575524928,
+      "etotMin": 642.2466041051908,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_hwytcyxgv",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_gevq1as3p",
+      "timeMin": 588.8333333333334,
+      "aircraftType": "A320",
+      "code": "C",
+      "velocity": 15,
+      "reg": "DD2512",
+      "dwellMin": 45,
+      "noWayArr": false,
+      "noWayDep": false,
+      "minDwellMin": 20,
+      "eldtMin": 587.6182575524928,
+      "etotMin": 645.2466041051908,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_6wl7x34z1",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    },
+    {
+      "id": "id_o2aion8iy",
+      "timeMin": 588.8666666666667,
+      "aircraftType": "A320",
+      "code": "C",
+      "velocity": 15,
+      "reg": "DD2555",
+      "dwellMin": 45,
+      "noWayArr": false,
+      "noWayDep": false,
+      "minDwellMin": 20,
+      "eldtMin": 586.1182575524928,
+      "etotMin": 643.7466041051908,
+      "token": {
+        "arrRunwayId": null,
+        "apronId": "id_y7ylfufa3",
+        "terminalId": null,
+        "depRunwayId": null
+      }
+    }
+  ]
+}
