@@ -66,15 +66,21 @@ def _layout_path_for_read(name: str) -> Optional[Path]:
 
 
 def save_layout_to_file(layout: Dict[str, Any], name: Optional[str] = None) -> None:
-    """레이아웃을 data/Layout_storage 에만 저장. name 없으면 current_layout.json (Run Simulation용)."""
+    """레이아웃을 data/Layout_storage 에만 저장. name 없으면 current_layout.json (Run Simulation용).
+    name 이 default_layout/current_layout 이어도 덮어쓰기(현재 상태 저장) 허용."""
     LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     if name:
-        if (name or "").strip().lower() in _RESERVED_NAMES:
-            raise ValueError("'current_layout', 'default_layout' 은 레이아웃 이름으로 사용할 수 없습니다.")
-        path = _safe_layout_path(name)
-        if path is None:
+        safe = _sanitize_layout_name(name)
+        if not safe and (name or "").strip():
             raise ValueError(f"Invalid layout name: {name!r}")
-        path = path.resolve()
+        # 예약 이름(default_layout, current_layout)도 덮어쓰기 허용 (경로는 소문자로 통일)
+        if safe and safe.lower() in _RESERVED_NAMES:
+            path = (LAYOUT_STORAGE_DIR / f"{safe.lower()}.json").resolve()
+        else:
+            path = _safe_layout_path(name)
+            if path is None:
+                raise ValueError(f"Invalid layout name: {name!r}")
+            path = path.resolve()
     else:
         # Run Simulation: 반드시 Layout_storage/current_layout.json
         path = (LAYOUT_STORAGE_DIR / "current_layout.json").resolve()

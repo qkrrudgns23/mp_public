@@ -1,0 +1,1353 @@
+{
+  "grid": {
+    "cols": 200,
+    "rows": 200,
+    "cellSize": 20
+  },
+  "terminals": [
+    {
+      "id": "id_yk4wq8bng",
+      "name": "Terminal1",
+      "vertices": [
+        {
+          "col": 75,
+          "row": 148
+        },
+        {
+          "col": 93,
+          "row": 148
+        },
+        {
+          "col": 95,
+          "row": 157
+        },
+        {
+          "col": 91,
+          "row": 157
+        },
+        {
+          "col": 91,
+          "row": 152
+        },
+        {
+          "col": 77,
+          "row": 152
+        },
+        {
+          "col": 77,
+          "row": 157
+        },
+        {
+          "col": 73,
+          "row": 157
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 4,
+      "floorHeight": 4,
+      "departureCapacity": 0,
+      "arrivalCapacity": 0
+    },
+    {
+      "id": "id_7rkx6qmzf",
+      "name": "Terminal2",
+      "vertices": [
+        {
+          "col": 90,
+          "row": 115
+        },
+        {
+          "col": 90,
+          "row": 140
+        },
+        {
+          "col": 95,
+          "row": 140
+        },
+        {
+          "col": 95,
+          "row": 115
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 4,
+      "floorHeight": 4,
+      "departureCapacity": 0,
+      "arrivalCapacity": 0
+    }
+  ],
+  "pbbStands": [
+    {
+      "id": "id_zll5u20qd",
+      "name": "104",
+      "x1": 1872.1280728184418,
+      "y1": 3140,
+      "x2": 1872.1280728184418,
+      "y2": 3176,
+      "category": "C",
+      "edgeCol": 95,
+      "edgeRow": 157
+    },
+    {
+      "id": "id_r4qlsdjvs",
+      "name": "101",
+      "x1": 1501.062217836047,
+      "y1": 3140,
+      "x2": 1501.062217836047,
+      "y2": 3176,
+      "category": "C",
+      "edgeCol": 77,
+      "edgeRow": 157
+    },
+    {
+      "id": "id_rzo3jb76h",
+      "name": "103",
+      "x1": 1727.321885508239,
+      "y1": 3040,
+      "x2": 1727.321885508239,
+      "y2": 3076,
+      "category": "E",
+      "edgeCol": 91,
+      "edgeRow": 152
+    },
+    {
+      "id": "id_8rbdr0n4e",
+      "name": "102",
+      "x1": 1630.784427301437,
+      "y1": 3040,
+      "x2": 1630.784427301437,
+      "y2": 3076,
+      "category": "E",
+      "edgeCol": 91,
+      "edgeRow": 152
+    },
+    {
+      "id": "id_ubyi4a54w",
+      "name": "203",
+      "x1": 1900,
+      "y1": 2663.2056052201806,
+      "x2": 1936,
+      "y2": 2663.2056052201806,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_qwlf8whg2",
+      "name": "202",
+      "x1": 1900,
+      "y1": 2760.5005345181944,
+      "x2": 1936,
+      "y2": 2760.5005345181944,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_6wl7x34z1",
+      "name": "204",
+      "x1": 1900,
+      "y1": 2584.691583572037,
+      "x2": 1936,
+      "y2": 2584.691583572037,
+      "category": "C",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_p9smarr3a",
+      "name": "205",
+      "x1": 1900,
+      "y1": 2520.7417148960035,
+      "x2": 1936,
+      "y2": 2520.7417148960035,
+      "category": "C",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_y7ylfufa3",
+      "name": "206",
+      "x1": 1900,
+      "y1": 2443.829035001855,
+      "x2": 1936,
+      "y2": 2443.829035001855,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_jja9cqwhd",
+      "name": "207",
+      "x1": 1900,
+      "y1": 2371.2372921804113,
+      "x2": 1936,
+      "y2": 2371.2372921804113,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 140
+    },
+    {
+      "id": "id_hwytcyxgv",
+      "name": "208",
+      "x1": 1881.2421173004552,
+      "y1": 2300,
+      "x2": 1881.2421173004552,
+      "y2": 2264,
+      "category": "E",
+      "edgeCol": 95,
+      "edgeRow": 115
+    },
+    {
+      "id": "id_bovqqobrh",
+      "name": "201",
+      "x1": 1859.999758919754,
+      "y1": 2800,
+      "x2": 1859.999758919754,
+      "y2": 2836,
+      "category": "E",
+      "edgeCol": 90,
+      "edgeRow": 140
+    }
+  ],
+  "remoteStands": [
+    {
+      "id": "id_5z3kblu82",
+      "col": 109,
+      "row": 154,
+      "category": "C",
+      "name": "R001"
+    },
+    {
+      "id": "id_0u3m55i6j",
+      "col": 106.5,
+      "row": 154,
+      "category": "C",
+      "name": "R002"
+    },
+    {
+      "id": "id_xfrvdnw7k",
+      "col": 104,
+      "row": 154,
+      "category": "C",
+      "name": "R003"
+    },
+    {
+      "id": "id_wy1modd3h",
+      "col": 104,
+      "row": 158,
+      "category": "C",
+      "name": "R006"
+    },
+    {
+      "id": "id_gy4ncgn4u",
+      "col": 106.5,
+      "row": 158,
+      "category": "C",
+      "name": "R005"
+    },
+    {
+      "id": "id_wc9bjrtla",
+      "col": 109,
+      "row": 158,
+      "category": "C",
+      "name": "R004"
+    },
+    {
+      "id": "id_qttriyh4w",
+      "col": 112.5,
+      "row": 156,
+      "category": "E",
+      "name": "R002",
+      "allowedTerminals": [
+        "id_7rkx6qmzf"
+      ]
+    }
+  ],
+  "taxiways": [
+    {
+      "id": "id_to86fdah0",
+      "name": "RW1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 0
+        },
+        {
+          "col": 60,
+          "row": 196.5
+        }
+      ],
+      "width": 60,
+      "directionModeId": "dm_cw",
+      "pathType": "runway",
+      "start_point": {
+        "col": 60,
+        "row": 0
+      },
+      "end_point": {
+        "col": 60,
+        "row": 196.5
+      },
+      "rwySepConfig": {
+        "standard": "ICAO",
+        "mode": "MIX",
+        "activeSeq": "ARR→ARR",
+        "seqData": {
+          "ARR→ARR": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "240"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "180"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "180"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "DEP→DEP": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "180"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "120"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "ARR→DEP": {
+            "J": "90",
+            "H": "80",
+            "M": "65",
+            "L": "50"
+          },
+          "DEP→ARR": {
+            "J": "60",
+            "H": "60",
+            "M": "70",
+            "L": "90"
+          }
+        },
+        "rot": {
+          "J": "70",
+          "H": "65",
+          "M": "55",
+          "L": "40"
+        }
+      },
+      "direction": "clockwise",
+      "avgMoveVelocity": 10,
+      "lineup_point": {
+        "col": 60,
+        "row": 0
+      },
+      "depPointPos": 0
+    },
+    {
+      "id": "id_h8nto7prx",
+      "name": "TX3",
+      "vertices": [
+        {
+          "col": 69,
+          "row": 160
+        },
+        {
+          "col": 70,
+          "row": 160
+        },
+        {
+          "col": 100,
+          "row": 160
+        },
+        {
+          "col": 100,
+          "row": 80
+        },
+        {
+          "col": 100,
+          "row": 28
+        },
+        {
+          "col": 78,
+          "row": 5
+        }
+      ],
+      "width": 10,
+      "directionModeId": "dm_cw",
+      "pathType": "taxiway",
+      "start_point": {
+        "col": 69,
+        "row": 160
+      },
+      "end_point": {
+        "col": 78,
+        "row": 5
+      },
+      "direction": "clockwise",
+      "avgMoveVelocity": 10
+    },
+    {
+      "id": "id_to1e7jv7l",
+      "name": "TX1",
+      "vertices": [
+        {
+          "col": 69,
+          "row": 63
+        },
+        {
+          "col": 69,
+          "row": 146
+        },
+        {
+          "col": 100,
+          "row": 146
+        }
+      ],
+      "width": 10,
+      "directionModeId": "dm_cw",
+      "pathType": "taxiway",
+      "start_point": {
+        "col": 69,
+        "row": 63
+      },
+      "end_point": {
+        "col": 100,
+        "row": 146
+      },
+      "direction": "clockwise",
+      "avgMoveVelocity": 10
+    },
+    {
+      "id": "id_05a54g85p",
+      "name": "EXIT7",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 143
+        },
+        {
+          "col": 69,
+          "row": 147.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "rwySepConfig": {
+        "standard": "ICAO",
+        "mode": "MIX",
+        "activeSeq": "ARR→ARR",
+        "seqData": {
+          "ARR→ARR": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "240"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "180"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "180"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "DEP→DEP": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "180"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "120"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "ARR→DEP": {
+            "J": "90",
+            "H": "80",
+            "M": "65",
+            "L": "50"
+          },
+          "DEP→ARR": {
+            "J": "60",
+            "H": "60",
+            "M": "70",
+            "L": "90"
+          }
+        },
+        "rot": {
+          "J": "70",
+          "H": "65",
+          "M": "55",
+          "L": "40"
+        }
+      },
+      "start_point": {
+        "col": 60,
+        "row": 143
+      },
+      "end_point": {
+        "col": 69,
+        "row": 147.5
+      },
+      "avgMoveVelocity": 10
+    },
+    {
+      "id": "id_mh8mf5bks",
+      "name": "EXIT6",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 136
+        },
+        {
+          "col": 69,
+          "row": 140
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 136
+      },
+      "end_point": {
+        "col": 69,
+        "row": 140
+      }
+    },
+    {
+      "id": "id_b19eziuhx",
+      "name": "EXIT5",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 129
+        },
+        {
+          "col": 69,
+          "row": 133
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 129
+      },
+      "end_point": {
+        "col": 69,
+        "row": 133
+      }
+    },
+    {
+      "id": "id_9rskm2uou",
+      "name": "EXIT4",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 122
+        },
+        {
+          "col": 69,
+          "row": 126
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 122
+      },
+      "end_point": {
+        "col": 69,
+        "row": 126
+      }
+    },
+    {
+      "id": "id_2ducvwnxr",
+      "name": "EXIT3",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 115
+        },
+        {
+          "col": 69,
+          "row": 119
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 115
+      },
+      "end_point": {
+        "col": 69,
+        "row": 119
+      }
+    },
+    {
+      "id": "id_wb2w4d43j",
+      "name": "EXIT2",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 110
+        },
+        {
+          "col": 69,
+          "row": 113.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 110
+      },
+      "end_point": {
+        "col": 69,
+        "row": 113.5
+      }
+    },
+    {
+      "id": "id_nf44a53hd",
+      "name": "EXIT1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 101
+        },
+        {
+          "col": 69,
+          "row": 104.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 101
+      },
+      "end_point": {
+        "col": 69,
+        "row": 104.5
+      }
+    },
+    {
+      "id": "id_56exjlxny",
+      "name": "LINEUP_TX",
+      "vertices": [
+        {
+          "col": 78,
+          "row": 5
+        },
+        {
+          "col": 60,
+          "row": 5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 78,
+        "row": 5
+      },
+      "end_point": {
+        "col": 60,
+        "row": 5
+      }
+    },
+    {
+      "id": "id_874sf9s4r",
+      "name": "EXIT8",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 158
+        },
+        {
+          "col": 69,
+          "row": 161.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 158
+      },
+      "end_point": {
+        "col": 69,
+        "row": 161.5
+      }
+    },
+    {
+      "id": "id_ucex4i5ow",
+      "name": "TX2",
+      "vertices": [
+        {
+          "col": 69,
+          "row": 146
+        },
+        {
+          "col": 69,
+          "row": 160
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "taxiway",
+      "start_point": {
+        "col": 69,
+        "row": 146
+      },
+      "end_point": {
+        "col": 69,
+        "row": 160
+      }
+    },
+    {
+      "id": "id_wqg929p1m",
+      "name": "TX2",
+      "vertices": [],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "taxiway",
+      "maxExitVelocity": null,
+      "start_point": null,
+      "end_point": null
+    },
+    {
+      "id": "id_vjvpqx8vh",
+      "name": "TX2",
+      "vertices": [
+        {
+          "col": 100,
+          "row": 156
+        },
+        {
+          "col": 110,
+          "row": 156
+        }
+      ],
+      "width": 10,
+      "direction": "both",
+      "pathType": "taxiway",
+      "avgMoveVelocity": 10,
+      "start_point": null,
+      "end_point": null
+    },
+    {
+      "id": "id_xc6iqii7a",
+      "name": "EXIT0",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 93
+        },
+        {
+          "col": 69,
+          "row": 96.5
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 93
+      },
+      "end_point": {
+        "col": 69,
+        "row": 96.5
+      }
+    },
+    {
+      "id": "id_h0qtm44uv",
+      "name": "EXIT_B1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 82.5
+        },
+        {
+          "col": 69,
+          "row": 86.5
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 82.5
+      },
+      "end_point": {
+        "col": 69,
+        "row": 86.5
+      }
+    },
+    {
+      "id": "id_3yyb5632n",
+      "name": "EXIT_B2",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 69
+        },
+        {
+          "col": 69,
+          "row": 72.5
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 69
+      },
+      "end_point": {
+        "col": 69,
+        "row": 72.5
+      }
+    },
+    {
+      "id": "id_5kiv3kntf",
+      "name": "EXIT_B3",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 61
+        },
+        {
+          "col": 69,
+          "row": 65
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 61
+      },
+      "end_point": {
+        "col": 69,
+        "row": 65
+      }
+    },
+    {
+      "id": "id_8gepwuey6",
+      "name": "RW1",
+      "vertices": [
+        {
+          "col": 69,
+          "row": 198.5
+        },
+        {
+          "col": 69,
+          "row": 160
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "taxiway",
+      "avgMoveVelocity": 10,
+      "rwySepConfig": {
+        "standard": "ICAO",
+        "mode": "MIX",
+        "activeSeq": "ARR→ARR",
+        "seqData": {
+          "ARR→ARR": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "240"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "180"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "180"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "DEP→DEP": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "180"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "120"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "ARR→DEP": {
+            "J": "90",
+            "H": "80",
+            "M": "65",
+            "L": "50"
+          },
+          "DEP→ARR": {
+            "J": "60",
+            "H": "60",
+            "M": "70",
+            "L": "90"
+          }
+        },
+        "rot": {
+          "J": "70",
+          "H": "65",
+          "M": "55",
+          "L": "40"
+        }
+      },
+      "start_point": {
+        "col": 69,
+        "row": 198.5
+      },
+      "end_point": {
+        "col": 69,
+        "row": 160
+      }
+    },
+    {
+      "id": "id_zivlo2p0v",
+      "name": "RW1",
+      "vertices": [],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "taxiway",
+      "maxExitVelocity": null,
+      "avgMoveVelocity": 10,
+      "start_point": null,
+      "end_point": null
+    },
+    {
+      "id": "id_v2wi3xdey",
+      "name": "EXIT9",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 164
+        },
+        {
+          "col": 69,
+          "row": 167.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 164
+      },
+      "end_point": {
+        "col": 69,
+        "row": 167.5
+      }
+    },
+    {
+      "id": "id_2gl88v7zh",
+      "name": "EXIT10",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 172
+        },
+        {
+          "col": 69,
+          "row": 176
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 172
+      },
+      "end_point": {
+        "col": 69,
+        "row": 176
+      }
+    },
+    {
+      "id": "id_11gcfx8k5",
+      "name": "EXIT11",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 184
+        },
+        {
+          "col": 69,
+          "row": 187
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 184
+      },
+      "end_point": {
+        "col": 69,
+        "row": 187
+      }
+    },
+    {
+      "id": "id_v9f5fs9vi",
+      "name": "RW1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 195
+        },
+        {
+          "col": 69,
+          "row": 198.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 195
+      },
+      "end_point": {
+        "col": 69,
+        "row": 198.5
+      }
+    }
+  ],
+  "apronLinks": [
+    {
+      "id": "id_cszwrw966",
+      "pbbId": "id_rzo3jb76h",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 1725.8763434574514,
+      "ty": 3200
+    },
+    {
+      "id": "id_krxayfcj2",
+      "pbbId": "id_8rbdr0n4e",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 1629.998804892435,
+      "ty": 3200
+    },
+    {
+      "id": "id_mpqualxv6",
+      "pbbId": "id_r4qlsdjvs",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 1502.3034991045145,
+      "ty": 3200
+    },
+    {
+      "id": "id_6ha8tnb0u",
+      "pbbId": "id_zll5u20qd",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 1871.8138357865034,
+      "ty": 3200
+    },
+    {
+      "id": "id_ars11oar6",
+      "pbbId": "id_ubyi4a54w",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2665.5786522762296
+    },
+    {
+      "id": "id_2bhdi8ifa",
+      "pbbId": "id_qwlf8whg2",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2759.3140109901697
+    },
+    {
+      "id": "id_bcs7txw9y",
+      "pbbId": "id_bovqqobrh",
+      "taxiwayId": "id_to1e7jv7l",
+      "tx": 1858.7951451638075,
+      "ty": 2920
+    },
+    {
+      "id": "id_0ykielitu",
+      "pbbId": "id_6wl7x34z1",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2586.0636963716815
+    },
+    {
+      "id": "id_1jgg1v3u5",
+      "pbbId": "id_p9smarr3a",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2522.709514821491
+    },
+    {
+      "id": "id_0ptgmnuj9",
+      "pbbId": "id_y7ylfufa3",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2448.9123363124786
+    },
+    {
+      "id": "id_5a1tsqmdl",
+      "pbbId": "id_jja9cqwhd",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2370.241759222682
+    },
+    {
+      "id": "id_nv0q3jxx1",
+      "pbbId": "id_hwytcyxgv",
+      "taxiwayId": "id_h8nto7prx",
+      "tx": 2000,
+      "ty": 2261.6345908509275
+    },
+    {
+      "id": "id_qoscmg0ea",
+      "pbbId": "id_0u3m55i6j",
+      "taxiwayId": "id_vjvpqx8vh",
+      "tx": 2128.0904305771,
+      "ty": 3120
+    },
+    {
+      "id": "id_29p14liiv",
+      "pbbId": "id_xfrvdnw7k",
+      "taxiwayId": "id_vjvpqx8vh",
+      "tx": 2080.758837871064,
+      "ty": 3120
+    },
+    {
+      "id": "id_dnwm7r3nq",
+      "pbbId": "id_5z3kblu82",
+      "taxiwayId": "id_vjvpqx8vh",
+      "tx": 2177.3843666117723,
+      "ty": 3120
+    },
+    {
+      "id": "id_y7iku2xy1",
+      "pbbId": "id_wy1modd3h",
+      "taxiwayId": "id_vjvpqx8vh",
+      "tx": 2081.5523252516928,
+      "ty": 3120
+    },
+    {
+      "id": "id_uj9e2v80b",
+      "pbbId": "id_gy4ncgn4u",
+      "taxiwayId": "id_vjvpqx8vh",
+      "tx": 2126.5818386618507,
+      "ty": 3120
+    },
+    {
+      "id": "id_rct4ist30",
+      "pbbId": "id_wc9bjrtla",
+      "taxiwayId": "id_vjvpqx8vh",
+      "tx": 2176.6146313398035,
+      "ty": 3120
+    },
+    {
+      "id": "id_follzj219",
+      "pbbId": "id_qttriyh4w",
+      "taxiwayId": "id_vjvpqx8vh",
+      "tx": 2200,
+      "ty": 3120
+    }
+  ],
+  "directionModes": [
+    {
+      "id": "dm_cw",
+      "name": "CW",
+      "direction": "clockwise"
+    },
+    {
+      "id": "dm_ccw",
+      "name": "CCW",
+      "direction": "counter_clockwise"
+    },
+    {
+      "id": "dm_both",
+      "name": "Both",
+      "direction": "both"
+    }
+  ],
+  "flights": [
+    {
+      "id": "id_ty5fsgfbh",
+      "reg": "HL-MA9498",
+      "airlineCode": "7C",
+      "flightNumber": "7C9498",
+      "aircraftType": "A321",
+      "code": "C",
+      "timeMin": 1128.8833333333334,
+      "dwellMin": 60,
+      "minDwellMin": 30,
+      "noWayArr": false,
+      "noWayDep": false,
+      "sldtMin_orig": 1125.6977987835332,
+      "sibtMin_orig": 1128.8833333333334,
+      "sobtMin_orig": 1188.8833333333334,
+      "stotMin_orig": 1200.3054882967278,
+      "sldtMin_d": 1125.7,
+      "sibtMin_d": 1128.8833333333334,
+      "sobtMin_d": 1188.8833333333334,
+      "stotMin_d": 1200.3,
+      "sldtMin": 1125.6977987835332,
+      "sibtMin": 1128.8833333333334,
+      "sobtMin": 1188.8833333333334,
+      "stotMin": 1200.3054882967278,
+      "eldtMin": 1125.7,
+      "eibtMin": 1128.8833333333334,
+      "eobtMin": 1188.8833333333334,
+      "etotMin": 1200.3,
+      "vttADelayMin": 0,
+      "arrRotSec": 37.29917958829447,
+      "eOverlapPushed": false,
+      "sampledArrRet": "id_nf44a53hd",
+      "arrRetFailed": false,
+      "arrRunwayIdUsed": "id_to86fdah0",
+      "arrTdDistM": 357.5044512880705,
+      "arrRetDistM": 2020.0000000000002,
+      "arrVTdMs": 77.55444864454682,
+      "arrVRetInMs": 20.936819726936836,
+      "arrVRetOutMs": 15,
+      "token": {
+        "arrRunwayId": "id_to86fdah0",
+        "apronId": "id_p9smarr3a",
+        "terminalId": null,
+        "depRunwayId": "id_to86fdah0"
+      }
+    }
+  ]
+}

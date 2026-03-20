@@ -297,7 +297,7 @@ def _build_path_graph(ctx: LayoutContext) -> _PathGraph:
     """
     g = _PathGraph()
 
-    # Runway: start → end. Taxiway 정점 중 runway 위에 있는 점을 수집해 runway를 분할.
+    # Runway: start → end. Runway–Taxiway 교차점은 그래프에 넣지 않음(다익스트라에서 바이패스).
     for tw in ctx.taxiways.values():
         if tw.get("pathType") != "runway" and "runway" not in (tw.get("name") or "").lower():
             continue
@@ -305,30 +305,8 @@ def _build_path_graph(ctx: LayoutContext) -> _PathGraph:
         if not r:
             continue
         _start, _end, pts = r
-        junctions: List[Tuple[float, Point]] = []  # (t along segment, point) — taxiway 정점 q 사용해 노드 병합
-        tol = ctx.cell_size * 0.6
-        for seg_i in range(len(pts) - 1):
-            a, b = pts[seg_i], pts[seg_i + 1]
-            for other in ctx.taxiways.values():
-                if other.get("id") == tw.get("id") or other.get("pathType") == "runway":
-                    continue
-                ordered = _get_taxiway_ordered_points(other, ctx.cell_size)
-                if not ordered:
-                    continue
-                for q in ordered:
-                    if not _point_on_segment(a, b, q, tol):
-                        continue
-                    t, _ = _project_on_segment(a, b, q)
-                    t_along = seg_i + t
-                    junctions.append((t_along, q))
-        junctions.sort(key=lambda x: x[0])
-        # t 순서대로 유지하면서 가까운 중복 제거
-        run_pts: List[Point] = [pts[0]]
-        for _, p in junctions:
-            if _dist2(p, run_pts[-1]) < (ctx.cell_size * 0.5) ** 2:
-                continue
-            run_pts.append(p)
-        run_pts.append(pts[-1])
+        # Taxiway가 runway 선분을 교차해도 junction으로 수집하지 않음 → runway는 원래 꼭짓점만 사용
+        run_pts: List[Point] = list(pts)
         for i in range(len(run_pts) - 1):
             g.add_edge_if_near(run_pts[i], run_pts[i + 1])
 
