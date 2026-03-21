@@ -785,6 +785,80 @@ html = f"""
     function isPathLayoutMode(m) {{
       return PATH_LAYOUT_MODES.indexOf(m) >= 0;
     }}
+    function settingModeValueForHit(hit) {{
+      if (!hit || !hit.type) return null;
+      if (hit.type === 'terminal') return 'terminal';
+      if (hit.type === 'pbb') return 'pbb';
+      if (hit.type === 'remote') return 'remote';
+      if (hit.type === 'taxiway') return layoutModeFromPathType((hit.obj && hit.obj.pathType) || 'taxiway');
+      if (hit.type === 'apronLink') return 'apronTaxiway';
+      return null;
+    }}
+    function cancelActiveLayoutDrawingState() {{
+      state.pbbDrawing = false;
+      state.remoteDrawing = false;
+      state.apronLinkDrawing = false;
+      state.previewPbb = null;
+      state.previewRemote = null;
+    }}
+    function syncDrawToggleButton(elementId, isDrawing) {{
+      const btn = document.getElementById(elementId);
+      if (!btn) return;
+      btn.textContent = isDrawing ? 'Drawing' : 'Draw';
+      btn.classList.toggle('drawing', isDrawing);
+    }}
+    function toggleLayoutDrawMode(flagKey, previewKey, tempKey) {{
+      state.selectedObject = null;
+      if (state[flagKey]) {{
+        state[flagKey] = false;
+        if (previewKey) state[previewKey] = null;
+        if (tempKey) state[tempKey] = null;
+      }} else {{
+        state[flagKey] = true;
+        if (previewKey) state[previewKey] = null;
+        if (tempKey) state[tempKey] = null;
+      }}
+      syncPanelFromState();
+      draw();
+    }}
+    function handlePbbOrRemoteMouseUp2D(mode, wx, wy) {{
+      if (mode === 'pbb' && state.pbbDrawing) {{
+        if (tryPlacePbbAt(wx, wy)) {{ syncPanelFromState(); draw(); }}
+        return true;
+      }}
+      if (mode === 'remote' && state.remoteDrawing) {{
+        const prev = state.previewRemote;
+        if (prev && !prev.overlap && tryPlaceRemoteAt(prev.col, prev.row)) {{ syncPanelFromState(); draw(); }}
+        return true;
+      }}
+      return false;
+    }}
+    function tryCommitStandPlacement3D(mode, wx, wy, col, row) {{
+      if (mode === 'pbb' && state.pbbDrawing) {{
+        if (tryPlacePbbAt(wx, wy)) {{ syncPanelFromState(); updateObjectInfo(); update3DScene(); }}
+        return;
+      }}
+      if (mode === 'remote' && state.remoteDrawing) {{
+        if (tryPlaceRemoteAt(col, row)) {{ syncPanelFromState(); updateObjectInfo(); update3DScene(); }}
+      }}
+    }}
+    function findLayoutObjectByListType(typ, idr) {{
+      if (typ === 'terminal') return state.terminals.find(t => t.id === idr);
+      if (typ === 'pbb') return state.pbbStands.find(p => p.id === idr);
+      if (typ === 'remote') return state.remoteStands.find(r => r.id === idr);
+      if (typ === 'taxiway') return state.taxiways.find(tw => tw.id === idr);
+      if (typ === 'apronLink') return state.apronLinks.find(lk => lk.id === idr);
+      if (typ === 'flight') return state.flights.find(f => f.id === idr);
+      return null;
+    }}
+    function removeLayoutObjectFromState(type, id) {{
+      if (type === 'terminal') state.terminals = state.terminals.filter(t => t.id !== id);
+      else if (type === 'pbb') state.pbbStands = state.pbbStands.filter(p => p.id !== id);
+      else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
+      else if (type === 'taxiway') state.taxiways = state.taxiways.filter(tw => tw.id !== id);
+      else if (type === 'apronLink') state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
+      else if (type === 'flight') state.flights = state.flights.filter(f => f.id !== id);
+    }}
     function syncPathFieldVisibilityForPathType(pt) {{
       const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
       const runwayMinArrWrap = document.getElementById('runwayMinArrVelocityWrap');
@@ -1649,12 +1723,7 @@ html = f"""
         document.getElementById('terminalDepartureCapacity').value = term.departureCapacity != null ? term.departureCapacity : 0;
         document.getElementById('terminalArrivalCapacity').value = term.arrivalCapacity != null ? term.arrivalCapacity : 0;
       }}
-      const drawBtn = document.getElementById('btnTerminalDraw');
-      if (drawBtn) {{
-        const drawing = !!state.terminalDrawingId;
-        drawBtn.textContent = drawing ? 'Drawing' : 'Draw';
-        drawBtn.classList.toggle('drawing', drawing);
-      }}
+      syncDrawToggleButton('btnTerminalDraw', !!state.terminalDrawingId);
       if (state.selectedObject && state.selectedObject.type === 'pbb') {{
         const pbb = state.selectedObject.obj;
         const nameInput = document.getElementById('standName');
@@ -1740,30 +1809,10 @@ html = f"""
           if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = 'none';
         }}
       }}
-      const taxiwayDrawBtn = document.getElementById('btnTaxiwayDraw');
-      if (taxiwayDrawBtn) {{
-        const drawing = !!state.taxiwayDrawingId;
-        taxiwayDrawBtn.textContent = drawing ? 'Drawing' : 'Draw';
-        taxiwayDrawBtn.classList.toggle('drawing', drawing);
-      }}
-      const apronDrawBtn = document.getElementById('btnApronLinkDraw');
-      if (apronDrawBtn) {{
-        const drawing = !!state.apronLinkDrawing;
-        apronDrawBtn.textContent = drawing ? 'Drawing' : 'Draw';
-        apronDrawBtn.classList.toggle('drawing', drawing);
-      }}
-      const btnPbbDraw = document.getElementById('btnPbbDraw');
-      if (btnPbbDraw) {{
-        const drawing = !!state.pbbDrawing;
-        btnPbbDraw.textContent = drawing ? 'Drawing' : 'Draw';
-        btnPbbDraw.classList.toggle('drawing', drawing);
-      }}
-      const btnRemoteDraw = document.getElementById('btnRemoteDraw');
-      if (btnRemoteDraw) {{
-        const drawing = !!state.remoteDrawing;
-        btnRemoteDraw.textContent = drawing ? 'Drawing' : 'Draw';
-        btnRemoteDraw.classList.toggle('drawing', drawing);
-      }}
+      syncDrawToggleButton('btnTaxiwayDraw', !!state.taxiwayDrawingId);
+      syncDrawToggleButton('btnApronLinkDraw', !!state.apronLinkDrawing);
+      syncDrawToggleButton('btnPbbDraw', !!state.pbbDrawing);
+      syncDrawToggleButton('btnRemoteDraw', !!state.remoteDrawing);
       renderObjectList();
     }}
 
@@ -1851,11 +1900,7 @@ html = f"""
     }}
 
     settingModeSelect.addEventListener('change', function() {{
-      state.pbbDrawing = false;
-      state.remoteDrawing = false;
-      state.apronLinkDrawing = false;
-      state.previewPbb = null;
-      state.previewRemote = null;
+      cancelActiveLayoutDrawingState();
       syncSettingsPaneToMode();
     }});
     syncSettingsPaneToMode();
@@ -1863,11 +1908,7 @@ html = f"""
     let activeTab = 'settings';
     function switchToTab(tabId) {{
       activeTab = tabId;
-      state.pbbDrawing = false;
-      state.remoteDrawing = false;
-      state.apronLinkDrawing = false;
-      state.previewPbb = null;
-      state.previewRemote = null;
+      cancelActiveLayoutDrawingState();
       document.querySelectorAll('.right-panel-tab').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       const tabBtn = document.querySelector('.right-panel-tab[data-tab="' + tabId + '"]');
@@ -1890,30 +1931,12 @@ html = f"""
     }});
 
     // Apron 탭: S-Point / S-Bar / E-Bar / E-Point 토글
-    const chkShowSPoints = document.getElementById('chkShowSPoints');
-    if (chkShowSPoints) {{
-      chkShowSPoints.addEventListener('change', function() {{
+    ['chkShowSPoints', 'chkShowEBar', 'chkShowEPoints', 'chkShowSBars'].forEach(function(chkId) {{
+      const el = document.getElementById(chkId);
+      if (el) el.addEventListener('change', function() {{
         if (typeof renderFlightGantt === 'function') renderFlightGantt();
       }});
-    }}
-    const chkShowEBar = document.getElementById('chkShowEBar');
-    if (chkShowEBar) {{
-      chkShowEBar.addEventListener('change', function() {{
-        if (typeof renderFlightGantt === 'function') renderFlightGantt();
-      }});
-    }}
-    const chkShowEPoints = document.getElementById('chkShowEPoints');
-    if (chkShowEPoints) {{
-      chkShowEPoints.addEventListener('change', function() {{
-        if (typeof renderFlightGantt === 'function') renderFlightGantt();
-      }});
-    }}
-    const chkShowSBars = document.getElementById('chkShowSBars');
-    if (chkShowSBars) {{
-      chkShowSBars.addEventListener('change', function() {{
-        if (typeof renderFlightGantt === 'function') renderFlightGantt();
-      }});
-    }}
+    }});
 
     document.getElementById('gridCellSize').addEventListener('change', function() {{ CELL_SIZE = Math.max(10, Number(this.value) || 10); draw(); }});
     document.getElementById('gridCols').addEventListener('change', function() {{ GRID_COLS = Math.max(5, Math.min(500, parseInt(this.value,10)||400)); draw(); }});
@@ -6118,46 +6141,15 @@ html = f"""
     }});
     const btnPbbDrawEl = document.getElementById('btnPbbDraw');
     if (btnPbbDrawEl) btnPbbDrawEl.addEventListener('click', function() {{
-      state.selectedObject = null;
-      if (state.pbbDrawing) {{
-        // finish
-        state.pbbDrawing = false;
-        state.previewPbb = null;
-      }} else {{
-        // start
-        state.pbbDrawing = true;
-        state.previewPbb = null;
-      }}
-      syncPanelFromState();
-      draw();
+      toggleLayoutDrawMode('pbbDrawing', 'previewPbb', null);
     }});
     const btnRemoteDrawEl = document.getElementById('btnRemoteDraw');
     if (btnRemoteDrawEl) btnRemoteDrawEl.addEventListener('click', function() {{
-      state.selectedObject = null;
-      if (state.remoteDrawing) {{
-        // finish
-        state.remoteDrawing = false;
-        state.previewRemote = null;
-      }} else {{
-        // start
-        state.remoteDrawing = true;
-        state.previewRemote = null;
-      }}
-      syncPanelFromState();
-      draw();
+      toggleLayoutDrawMode('remoteDrawing', 'previewRemote', null);
     }});
     const btnApronDrawEl = document.getElementById('btnApronLinkDraw');
     if (btnApronDrawEl) btnApronDrawEl.addEventListener('click', function() {{
-      state.selectedObject = null;
-      if (state.apronLinkDrawing) {{
-        state.apronLinkDrawing = false;
-        state.apronLinkTemp = null;
-      }} else {{
-        state.apronLinkDrawing = true;
-        state.apronLinkTemp = null;
-      }}
-      syncPanelFromState();
-      draw();
+      toggleLayoutDrawMode('apronLinkDrawing', null, 'apronLinkTemp');
     }});
 
     panelToggle.addEventListener('click', function() {{
@@ -6336,12 +6328,7 @@ html = f"""
         el.querySelector('.obj-item-delete').addEventListener('click', function(ev) {{
           ev.stopPropagation();
           pushUndo();
-          if (type === 'terminal') state.terminals = state.terminals.filter(t => t.id !== id);
-          else if (type === 'pbb') state.pbbStands = state.pbbStands.filter(p => p.id !== id);
-          else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
-          else if (type === 'taxiway') state.taxiways = state.taxiways.filter(tw => tw.id !== id);
-          else if (type === 'apronLink') state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
-          else if (type === 'flight') state.flights = state.flights.filter(f => f.id !== id);
+          removeLayoutObjectFromState(type, id);
           if (state.selectedObject && state.selectedObject.type === type && state.selectedObject.id === id)
             state.selectedObject = null;
           if (type === 'terminal' && state.currentTerminalId === id) {{
@@ -6357,13 +6344,7 @@ html = f"""
           if (ev.target.classList.contains('obj-item-delete')) return;
           const typ = this.getAttribute('data-type');
           const idr = this.getAttribute('data-id');
-          let obj = null;
-          if (typ === 'terminal') obj = state.terminals.find(t => t.id === idr);
-          else if (typ === 'pbb') obj = state.pbbStands.find(p => p.id === idr);
-          else if (typ === 'remote') obj = state.remoteStands.find(r => r.id === idr);
-          else if (typ === 'taxiway') obj = state.taxiways.find(tw => tw.id === idr);
-          else if (typ === 'apronLink') obj = state.apronLinks.find(lk => lk.id === idr);
-          else if (typ === 'flight') obj = state.flights.find(f => f.id === idr);
+          const obj = findLayoutObjectByListType(typ, idr);
           if (!obj) return;
           const wasExpanded = this.classList.contains('expanded');
           listItems.forEach(li => li.classList.remove('selected', 'expanded'));
@@ -7791,20 +7772,7 @@ html = f"""
       const mode = settingModeSelect.value;
       const inStandDrawingMode = (mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing);
       if (!state.dragStart && !inStandDrawingMode) {{ state.dragStart = null; return; }}
-      if (mode === 'pbb' && state.pbbDrawing) {{
-        if (tryPlacePbbAt(wx, wy)) {{
-          syncPanelFromState();
-          draw();
-        }}
-        state.dragStart = null;
-        return;
-      }}
-      if (mode === 'remote' && state.remoteDrawing) {{
-        const prev = state.previewRemote;
-        if (prev && !prev.overlap && tryPlaceRemoteAt(prev.col, prev.row)) {{
-          syncPanelFromState();
-          draw();
-        }}
+      if (handlePbbOrRemoteMouseUp2D(mode, wx, wy)) {{
         state.dragStart = null;
         return;
       }}
@@ -7850,11 +7818,8 @@ html = f"""
           state.selectedObject = hit;
           if (hit.type === 'terminal') state.currentTerminalId = hit.id;
           // 캔버스에서 클릭했을 때 해당 타입의 Mode 로 전환
-          if (hit.type === 'terminal') settingModeSelect.value = 'terminal';
-          else if (hit.type === 'pbb') settingModeSelect.value = 'pbb';
-          else if (hit.type === 'remote') settingModeSelect.value = 'remote';
-          else if (hit.type === 'taxiway') settingModeSelect.value = layoutModeFromPathType(hit.obj.pathType || 'taxiway');
-          else if (hit.type === 'apronLink') settingModeSelect.value = 'apronTaxiway';
+          const sm = settingModeValueForHit(hit);
+          if (sm) settingModeSelect.value = sm;
           if (hit.type === 'flight' && typeof switchToTab === 'function') switchToTab('flight');
           if (hit.type === 'taxiway' && hit.obj.pathType === 'runway' && typeof switchToTab === 'function') switchToTab('rwysep');
           if (typeof syncSettingsPaneToMode === 'function') syncSettingsPaneToMode();
@@ -8103,15 +8068,7 @@ html = f"""
         const p = grid3DMapper.worldToPixel(hit.x, hit.z);
         const wx = p.x, wy = p.y;
         const [col, row] = grid3DMapper.worldToCell(hit.x, hit.z);
-        if (mode === 'pbb' && state.pbbDrawing) {{
-          if (tryPlacePbbAt(wx, wy)) {{
-            syncPanelFromState(); updateObjectInfo(); update3DScene();
-          }}
-        }} else if (mode === 'remote' && state.remoteDrawing) {{
-          if (tryPlaceRemoteAt(col, row)) {{
-            syncPanelFromState(); updateObjectInfo(); update3DScene();
-          }}
-        }}
+        tryCommitStandPlacement3D(mode, wx, wy, col, row);
       }});
       const step = CELL_SIZE;
       const GRID_MAJOR = 10;
