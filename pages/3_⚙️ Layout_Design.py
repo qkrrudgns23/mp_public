@@ -883,11 +883,13 @@ html = f"""
         (obj.runwayTaxiways || []).forEach(function(tw) {{
           const o = Object.assign({{}}, tw);
           o.pathType = 'runway_exit';
+          delete o.rwySepConfig;
           out.push(o);
         }});
         (obj.taxiways || []).forEach(function(tw) {{
           const o = Object.assign({{}}, tw);
           if (o.pathType !== 'runway' && o.pathType !== 'runway_exit') o.pathType = 'taxiway';
+          if (o.pathType !== 'runway') delete o.rwySepConfig;
           out.push(o);
         }});
         return out;
@@ -1409,7 +1411,9 @@ html = f"""
         delete copy.dep_point;
         delete copy.depPointPos;
       }}
-      if (tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
+      // Runway separation은 물리 활주로(runway path)에만 의미 있음; exit/일반 TW에 붙은 키는 저장하지 않음
+      if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
+      else delete copy.rwySepConfig;
       return copy;
     }}
     function partitionTaxiwaysForPersist(list) {{

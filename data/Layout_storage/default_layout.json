@@ -266,7 +266,7 @@
       ]
     }
   ],
-  "taxiways": [
+  "runwayPaths": [
     {
       "id": "id_to86fdah0",
       "name": "RW1",
@@ -282,7 +282,6 @@
       ],
       "width": 60,
       "directionModeId": "dm_cw",
-      "pathType": "runway",
       "start_point": {
         "col": 60,
         "row": 0
@@ -369,13 +368,446 @@
         }
       },
       "direction": "clockwise",
-      "avgMoveVelocity": 10,
-      "lineup_point": {
+      "avgMoveVelocity": 10
+    }
+  ],
+  "runwayTaxiways": [
+    {
+      "id": "id_05a54g85p",
+      "name": "EXIT7",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 143
+        },
+        {
+          "col": 69,
+          "row": 147.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "start_point": {
         "col": 60,
-        "row": 0
+        "row": 143
       },
-      "depPointPos": 0
+      "end_point": {
+        "col": 69,
+        "row": 147.5
+      },
+      "avgMoveVelocity": 10
     },
+    {
+      "id": "id_mh8mf5bks",
+      "name": "EXIT6",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 136
+        },
+        {
+          "col": 69,
+          "row": 140
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 136
+      },
+      "end_point": {
+        "col": 69,
+        "row": 140
+      }
+    },
+    {
+      "id": "id_b19eziuhx",
+      "name": "EXIT5",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 129
+        },
+        {
+          "col": 69,
+          "row": 133
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 129
+      },
+      "end_point": {
+        "col": 69,
+        "row": 133
+      }
+    },
+    {
+      "id": "id_9rskm2uou",
+      "name": "EXIT4",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 122
+        },
+        {
+          "col": 69,
+          "row": 126
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 122
+      },
+      "end_point": {
+        "col": 69,
+        "row": 126
+      }
+    },
+    {
+      "id": "id_2ducvwnxr",
+      "name": "EXIT3",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 115
+        },
+        {
+          "col": 69,
+          "row": 119
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 115
+      },
+      "end_point": {
+        "col": 69,
+        "row": 119
+      }
+    },
+    {
+      "id": "id_wb2w4d43j",
+      "name": "EXIT2",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 110
+        },
+        {
+          "col": 69,
+          "row": 113.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 110
+      },
+      "end_point": {
+        "col": 69,
+        "row": 113.5
+      }
+    },
+    {
+      "id": "id_nf44a53hd",
+      "name": "EXIT1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 101
+        },
+        {
+          "col": 69,
+          "row": 104.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 101
+      },
+      "end_point": {
+        "col": 69,
+        "row": 104.5
+      }
+    },
+    {
+      "id": "id_56exjlxny",
+      "name": "LINEUP_TX",
+      "vertices": [
+        {
+          "col": 78,
+          "row": 5
+        },
+        {
+          "col": 60,
+          "row": 5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 78,
+        "row": 5
+      },
+      "end_point": {
+        "col": 60,
+        "row": 5
+      }
+    },
+    {
+      "id": "id_874sf9s4r",
+      "name": "EXIT8",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 158
+        },
+        {
+          "col": 69,
+          "row": 161.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 158
+      },
+      "end_point": {
+        "col": 69,
+        "row": 161.5
+      }
+    },
+    {
+      "id": "id_xc6iqii7a",
+      "name": "EXIT0",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 93
+        },
+        {
+          "col": 69,
+          "row": 96.5
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 93
+      },
+      "end_point": {
+        "col": 69,
+        "row": 96.5
+      }
+    },
+    {
+      "id": "id_h0qtm44uv",
+      "name": "EXIT_B1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 82.5
+        },
+        {
+          "col": 69,
+          "row": 86.5
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 82.5
+      },
+      "end_point": {
+        "col": 69,
+        "row": 86.5
+      }
+    },
+    {
+      "id": "id_3yyb5632n",
+      "name": "EXIT_B2",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 69
+        },
+        {
+          "col": 69,
+          "row": 72.5
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 69
+      },
+      "end_point": {
+        "col": 69,
+        "row": 72.5
+      }
+    },
+    {
+      "id": "id_5kiv3kntf",
+      "name": "EXIT_B3",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 61
+        },
+        {
+          "col": 69,
+          "row": 65
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 61
+      },
+      "end_point": {
+        "col": 69,
+        "row": 65
+      }
+    },
+    {
+      "id": "id_v2wi3xdey",
+      "name": "EXIT9",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 164
+        },
+        {
+          "col": 69,
+          "row": 167.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 164
+      },
+      "end_point": {
+        "col": 69,
+        "row": 167.5
+      }
+    },
+    {
+      "id": "id_2gl88v7zh",
+      "name": "EXIT10",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 172
+        },
+        {
+          "col": 69,
+          "row": 176
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 172
+      },
+      "end_point": {
+        "col": 69,
+        "row": 176
+      }
+    },
+    {
+      "id": "id_11gcfx8k5",
+      "name": "EXIT11",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 184
+        },
+        {
+          "col": 69,
+          "row": 187
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 184
+      },
+      "end_point": {
+        "col": 69,
+        "row": 187
+      }
+    },
+    {
+      "id": "id_v9f5fs9vi",
+      "name": "RW1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 195
+        },
+        {
+          "col": 69,
+          "row": 198.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 195
+      },
+      "end_point": {
+        "col": 69,
+        "row": 198.5
+      }
+    }
+  ],
+  "taxiways": [
     {
       "id": "id_h8nto7prx",
       "name": "TX3",
@@ -407,7 +839,6 @@
       ],
       "width": 10,
       "directionModeId": "dm_cw",
-      "pathType": "taxiway",
       "start_point": {
         "col": 69,
         "row": 160
@@ -438,7 +869,6 @@
       ],
       "width": 10,
       "directionModeId": "dm_cw",
-      "pathType": "taxiway",
       "start_point": {
         "col": 69,
         "row": 63
@@ -449,318 +879,6 @@
       },
       "direction": "clockwise",
       "avgMoveVelocity": 10
-    },
-    {
-      "id": "id_05a54g85p",
-      "name": "EXIT7",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 143
-        },
-        {
-          "col": 69,
-          "row": 147.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "rwySepConfig": {
-        "standard": "ICAO",
-        "mode": "MIX",
-        "activeSeq": "ARR→ARR",
-        "seqData": {
-          "ARR→ARR": {
-            "J": {
-              "J": "90",
-              "H": "120",
-              "M": "180",
-              "L": "240"
-            },
-            "H": {
-              "J": "90",
-              "H": "90",
-              "M": "120",
-              "L": "180"
-            },
-            "M": {
-              "J": "90",
-              "H": "90",
-              "M": "90",
-              "L": "180"
-            },
-            "L": {
-              "J": "90",
-              "H": "90",
-              "M": "90",
-              "L": "90"
-            }
-          },
-          "DEP→DEP": {
-            "J": {
-              "J": "90",
-              "H": "120",
-              "M": "180",
-              "L": "180"
-            },
-            "H": {
-              "J": "90",
-              "H": "90",
-              "M": "120",
-              "L": "120"
-            },
-            "M": {
-              "J": "90",
-              "H": "90",
-              "M": "90",
-              "L": "90"
-            },
-            "L": {
-              "J": "90",
-              "H": "90",
-              "M": "90",
-              "L": "90"
-            }
-          },
-          "ARR→DEP": {
-            "J": "90",
-            "H": "80",
-            "M": "65",
-            "L": "50"
-          },
-          "DEP→ARR": {
-            "J": "60",
-            "H": "60",
-            "M": "70",
-            "L": "90"
-          }
-        },
-        "rot": {
-          "J": "70",
-          "H": "65",
-          "M": "55",
-          "L": "40"
-        }
-      },
-      "start_point": {
-        "col": 60,
-        "row": 143
-      },
-      "end_point": {
-        "col": 69,
-        "row": 147.5
-      },
-      "avgMoveVelocity": 10
-    },
-    {
-      "id": "id_mh8mf5bks",
-      "name": "EXIT6",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 136
-        },
-        {
-          "col": 69,
-          "row": 140
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 136
-      },
-      "end_point": {
-        "col": 69,
-        "row": 140
-      }
-    },
-    {
-      "id": "id_b19eziuhx",
-      "name": "EXIT5",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 129
-        },
-        {
-          "col": 69,
-          "row": 133
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 129
-      },
-      "end_point": {
-        "col": 69,
-        "row": 133
-      }
-    },
-    {
-      "id": "id_9rskm2uou",
-      "name": "EXIT4",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 122
-        },
-        {
-          "col": 69,
-          "row": 126
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 122
-      },
-      "end_point": {
-        "col": 69,
-        "row": 126
-      }
-    },
-    {
-      "id": "id_2ducvwnxr",
-      "name": "EXIT3",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 115
-        },
-        {
-          "col": 69,
-          "row": 119
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 115
-      },
-      "end_point": {
-        "col": 69,
-        "row": 119
-      }
-    },
-    {
-      "id": "id_wb2w4d43j",
-      "name": "EXIT2",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 110
-        },
-        {
-          "col": 69,
-          "row": 113.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 110
-      },
-      "end_point": {
-        "col": 69,
-        "row": 113.5
-      }
-    },
-    {
-      "id": "id_nf44a53hd",
-      "name": "EXIT1",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 101
-        },
-        {
-          "col": 69,
-          "row": 104.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 101
-      },
-      "end_point": {
-        "col": 69,
-        "row": 104.5
-      }
-    },
-    {
-      "id": "id_56exjlxny",
-      "name": "LINEUP_TX",
-      "vertices": [
-        {
-          "col": 78,
-          "row": 5
-        },
-        {
-          "col": 60,
-          "row": 5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 78,
-        "row": 5
-      },
-      "end_point": {
-        "col": 60,
-        "row": 5
-      }
-    },
-    {
-      "id": "id_874sf9s4r",
-      "name": "EXIT8",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 158
-        },
-        {
-          "col": 69,
-          "row": 161.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 158
-      },
-      "end_point": {
-        "col": 69,
-        "row": 161.5
-      }
     },
     {
       "id": "id_ucex4i5ow",
@@ -777,7 +895,6 @@
       ],
       "width": 10,
       "direction": "clockwise",
-      "pathType": "taxiway",
       "start_point": {
         "col": 69,
         "row": 146
@@ -793,7 +910,6 @@
       "vertices": [],
       "width": 10,
       "direction": "clockwise",
-      "pathType": "taxiway",
       "maxExitVelocity": null,
       "start_point": null,
       "end_point": null
@@ -813,118 +929,9 @@
       ],
       "width": 10,
       "direction": "both",
-      "pathType": "taxiway",
       "avgMoveVelocity": 10,
       "start_point": null,
       "end_point": null
-    },
-    {
-      "id": "id_xc6iqii7a",
-      "name": "EXIT0",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 93
-        },
-        {
-          "col": 69,
-          "row": 96.5
-        }
-      ],
-      "width": 10,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 93
-      },
-      "end_point": {
-        "col": 69,
-        "row": 96.5
-      }
-    },
-    {
-      "id": "id_h0qtm44uv",
-      "name": "EXIT_B1",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 82.5
-        },
-        {
-          "col": 69,
-          "row": 86.5
-        }
-      ],
-      "width": 10,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 82.5
-      },
-      "end_point": {
-        "col": 69,
-        "row": 86.5
-      }
-    },
-    {
-      "id": "id_3yyb5632n",
-      "name": "EXIT_B2",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 69
-        },
-        {
-          "col": 69,
-          "row": 72.5
-        }
-      ],
-      "width": 10,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 69
-      },
-      "end_point": {
-        "col": 69,
-        "row": 72.5
-      }
-    },
-    {
-      "id": "id_5kiv3kntf",
-      "name": "EXIT_B3",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 61
-        },
-        {
-          "col": 69,
-          "row": 65
-        }
-      ],
-      "width": 10,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 61
-      },
-      "end_point": {
-        "col": 69,
-        "row": 65
-      }
     },
     {
       "id": "id_8gepwuey6",
@@ -941,85 +948,7 @@
       ],
       "width": 10,
       "direction": "clockwise",
-      "pathType": "taxiway",
       "avgMoveVelocity": 10,
-      "rwySepConfig": {
-        "standard": "ICAO",
-        "mode": "MIX",
-        "activeSeq": "ARR→ARR",
-        "seqData": {
-          "ARR→ARR": {
-            "J": {
-              "J": "90",
-              "H": "120",
-              "M": "180",
-              "L": "240"
-            },
-            "H": {
-              "J": "90",
-              "H": "90",
-              "M": "120",
-              "L": "180"
-            },
-            "M": {
-              "J": "90",
-              "H": "90",
-              "M": "90",
-              "L": "180"
-            },
-            "L": {
-              "J": "90",
-              "H": "90",
-              "M": "90",
-              "L": "90"
-            }
-          },
-          "DEP→DEP": {
-            "J": {
-              "J": "90",
-              "H": "120",
-              "M": "180",
-              "L": "180"
-            },
-            "H": {
-              "J": "90",
-              "H": "90",
-              "M": "120",
-              "L": "120"
-            },
-            "M": {
-              "J": "90",
-              "H": "90",
-              "M": "90",
-              "L": "90"
-            },
-            "L": {
-              "J": "90",
-              "H": "90",
-              "M": "90",
-              "L": "90"
-            }
-          },
-          "ARR→DEP": {
-            "J": "90",
-            "H": "80",
-            "M": "65",
-            "L": "50"
-          },
-          "DEP→ARR": {
-            "J": "60",
-            "H": "60",
-            "M": "70",
-            "L": "90"
-          }
-        },
-        "rot": {
-          "J": "70",
-          "H": "65",
-          "M": "55",
-          "L": "40"
-        }
-      },
       "start_point": {
         "col": 69,
         "row": 198.5
@@ -1035,119 +964,10 @@
       "vertices": [],
       "width": 15,
       "direction": "clockwise",
-      "pathType": "taxiway",
       "maxExitVelocity": null,
       "avgMoveVelocity": 10,
       "start_point": null,
       "end_point": null
-    },
-    {
-      "id": "id_v2wi3xdey",
-      "name": "EXIT9",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 164
-        },
-        {
-          "col": 69,
-          "row": 167.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 164
-      },
-      "end_point": {
-        "col": 69,
-        "row": 167.5
-      }
-    },
-    {
-      "id": "id_2gl88v7zh",
-      "name": "EXIT10",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 172
-        },
-        {
-          "col": 69,
-          "row": 176
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 172
-      },
-      "end_point": {
-        "col": 69,
-        "row": 176
-      }
-    },
-    {
-      "id": "id_11gcfx8k5",
-      "name": "EXIT11",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 184
-        },
-        {
-          "col": 69,
-          "row": 187
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 184
-      },
-      "end_point": {
-        "col": 69,
-        "row": 187
-      }
-    },
-    {
-      "id": "id_v9f5fs9vi",
-      "name": "RW1",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 195
-        },
-        {
-          "col": 69,
-          "row": 198.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "pathType": "runway_exit",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 195
-      },
-      "end_point": {
-        "col": 69,
-        "row": 198.5
-      }
     }
   ],
   "apronLinks": [
@@ -1328,8 +1148,8 @@
       "sibtMin": 563,
       "sobtMin": 623,
       "stotMin": 636.2675948371937,
-      "eldtMin": 561.25,
-      "eibtMin": 563.4166666666666,
+      "eldtMin": 560.8333333333334,
+      "eibtMin": 563,
       "eobtMin": 623,
       "etotMin": 636.2666666666667,
       "vttADelayMin": 0,
@@ -1473,7 +1293,7 @@
       "sobtMin": 633,
       "stotMin": 644.1680045335438,
       "eldtMin": 571,
-      "eibtMin": 574.0666666666667,
+      "eibtMin": 574.05,
       "eobtMin": 635.2,
       "etotMin": 646.3666666666667,
       "vttADelayMin": 0,
@@ -1617,7 +1437,7 @@
       "sobtMin": 609.3333333333334,
       "stotMin": 620.993626417698,
       "eldtMin": 565.75,
-      "eibtMin": 568.2,
+      "eibtMin": 568.2166666666667,
       "eobtMin": 610.4833333333333,
       "etotMin": 622.15,
       "vttADelayMin": 0,
@@ -1714,7 +1534,7 @@
       "stotMin": 642.7554882967278,
       "eldtMin": 583.15,
       "eibtMin": 586.9333333333333,
-      "eobtMin": 633.4333333333333,
+      "eobtMin": 633.45,
       "etotMin": 644.8666666666667,
       "vttADelayMin": 0,
       "arrRotSec": 31.274735411633344,
@@ -1810,7 +1630,7 @@
       "stotMin": 646.1862778506197,
       "eldtMin": 587.65,
       "eibtMin": 591.0333333333333,
-      "eobtMin": 640.5,
+      "eobtMin": 640.5166666666667,
       "etotMin": 652.8666666666667,
       "vttADelayMin": 0,
       "arrRotSec": 29.670369411858136,
