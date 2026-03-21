@@ -494,7 +494,9 @@ html = f"""
           <option value="terminal">Terminal</option>
           <option value="pbb">Contact Stand</option>
           <option value="remote">Remote stand</option>
-          <option value="taxiway">Taxiway &amp; Runway</option>
+          <option value="runwayPath">Runway</option>
+          <option value="runwayTaxiway">Runway Taxiway</option>
+          <option value="taxiway">Taxiway</option>
           <option value="apronTaxiway">Apron Taxiway</option>
         </select>
 
@@ -546,24 +548,18 @@ html = f"""
           <button class="small draw-toggle-btn" id="btnRemoteDraw">Draw</button>
         </div>
         <div id="settings-taxiway" class="settings-pane" style="display:none;">
-          <label>Type</label>
-          <select id="pathType">
-            <option value="runway">Runway</option>
-            <option value="runway_exit">Runway Taxiway</option>
-            <option value="taxiway" selected>Taxiway</option>
-          </select>
           <label>Name</label>
           <input type="text" id="taxiwayName" placeholder="e.g. Taxiway A" />
           <label>Width (m)</label>
           <input type="number" id="taxiwayWidth" min="10" max="100" value="15" step="1" />
+          <div id="runwayMinArrVelocityWrap" style="display:none;margin-top:6px;">
+            <label>Min Arr Velocity (m/s)</label>
+            <input type="number" id="runwayMinArrVelocity" min="1" max="150" value="15" step="1" />
+            <p style="font-size:10px;color:#9ca3af;margin-top:2px;">활주로 구간에서 도착기 속도가 이 값 아래로는 더 내려가지 않습니다.</p>
+          </div>
           <div id="taxiwayAvgVelocityWrap" style="display:none;">
             <label>Avg Move Velocity (m/s)</label>
             <input type="number" id="taxiwayAvgMoveVelocity" min="1" max="50" value="10" step="0.5" />
-          </div>
-          <div id="runwayDepPointExtras" style="display:none;margin-top:6px;">
-            <label>Runway line-up point position (m)</label>
-            <input type="number" id="runwayDepPointPos" min="0" max="500" value="0" step="1" />
-            <p style="font-size:10px;color:#9ca3af;margin-top:2px;">0 = Start Point (default), 최대 500&nbsp;m까지 입력 가능합니다.</p>
           </div>
           <div id="runwayExitExtras" style="display:none;margin-top:6px;">
             <label>Max Exit Velocity</label>
@@ -592,24 +588,6 @@ html = f"""
             Click a Contact Stand (PBB end) and a Taxiway point to create an Apron–Taxiway link.
           </p>
           <button class="small draw-toggle-btn" id="btnApronLinkDraw">Draw</button>
-        </div>
-        <div id="settings-runway" class="settings-pane" style="display:none;">
-          <label>Name</label>
-          <input type="text" id="runwayName" placeholder="e.g. RWY 09/27" />
-          <label>Length (m)</label>
-          <input type="number" id="runwayLength" min="100" max="6000" value="3000" step="10" />
-          <label>Width (m)</label>
-          <input type="number" id="runwayWidth" min="20" max="80" value="45" step="1" />
-          <label style="margin-top:10px;">Direction</label>
-          <select id="runwayDirection">
-            <option value="clockwise">Clockwise</option>
-            <option value="counter_clockwise">Counter CW</option>
-            <option value="both" selected>Both</option>
-          </select>
-          <button class="small draw-toggle-btn" id="btnRunwayDraw" style="margin-top:6px;">Draw</button>
-          <p style="font-size:11px;color:#9ca3af;margin-top:4px;">
-            In Runway mode: click start point, then end point (bearing). Runway is drawn from start in that direction with the given length.
-          </p>
         </div>
 
         <div class="section-title">Objects</div>
@@ -761,7 +739,6 @@ html = f"""
       remoteStands: [],
       taxiways: [],
       apronLinks: [],
-      runways: [],
       directionModes: [],
       // 현재 선택/로드된 레이아웃 이름 (Simulation 요청 시 사용)
       currentLayoutName: String(INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout'),
@@ -790,17 +767,60 @@ html = f"""
       remoteDrawing: false,
       apronLinkDrawing: false,
       apronLinkTemp: null,
-      runwayTemp: null,
-      runwayDrawing: false,
       hoverCell: null,
     }};
-    // #region agent log (No Way 디버깅)
-    function _logNoWay(payload) {{
-      try {{
-        fetch('http://127.0.0.1:7242/ingest/d3690a39-df65-41bd-83b6-eb0ef6ed1c98', {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }}, body: JSON.stringify({{ ...payload, timestamp: Date.now() }}) }}).catch(function() {{}});
-      }} catch (e) {{}}
+    const DEFAULT_AIRLINE_CODES = ['KE', '7C', 'DL'];
+    const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
+    function pathTypeFromLayoutMode(layoutMode) {{
+      if (layoutMode === 'runwayPath') return 'runway';
+      if (layoutMode === 'runwayTaxiway') return 'runway_exit';
+      if (layoutMode === 'taxiway') return 'taxiway';
+      return 'taxiway';
     }}
-    // #endregion
+    function layoutModeFromPathType(pt) {{
+      if (pt === 'runway') return 'runwayPath';
+      if (pt === 'runway_exit') return 'runwayTaxiway';
+      return 'taxiway';
+    }}
+    function isPathLayoutMode(m) {{
+      return PATH_LAYOUT_MODES.indexOf(m) >= 0;
+    }}
+    function syncPathFieldVisibilityForPathType(pt) {{
+      const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
+      const runwayMinArrWrap = document.getElementById('runwayMinArrVelocityWrap');
+      const exitWrap = document.getElementById('runwayExitExtras');
+      const rwDirWrap = document.getElementById('runwayDirectionWrap');
+      if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway') ? 'block' : 'none';
+      if (runwayMinArrWrap) runwayMinArrWrap.style.display = (pt === 'runway') ? 'block' : 'none';
+      if (exitWrap) exitWrap.style.display = (pt === 'runway_exit') ? 'block' : 'none';
+      if (rwDirWrap) rwDirWrap.style.display = (pt === 'runway') ? 'block' : 'none';
+    }}
+    function mergeTaxiwaysFromLayoutObject(obj) {{
+      if (!obj || typeof obj !== 'object') return [];
+      const newSchema = Object.prototype.hasOwnProperty.call(obj, 'runwayPaths') ||
+        Object.prototype.hasOwnProperty.call(obj, 'runwayTaxiways');
+      if (newSchema) {{
+        const out = [];
+        (obj.runwayPaths || []).forEach(function(tw) {{
+          const o = Object.assign({{}}, tw);
+          o.pathType = 'runway';
+          out.push(o);
+        }});
+        (obj.runwayTaxiways || []).forEach(function(tw) {{
+          const o = Object.assign({{}}, tw);
+          o.pathType = 'runway_exit';
+          out.push(o);
+        }});
+        (obj.taxiways || []).forEach(function(tw) {{
+          const o = Object.assign({{}}, tw);
+          if (o.pathType !== 'runway' && o.pathType !== 'runway_exit') o.pathType = 'taxiway';
+          out.push(o);
+        }});
+        return out;
+      }}
+      if (Array.isArray(obj.taxiways)) return obj.taxiways.slice();
+      return [];
+    }}
     function applyLayoutObject(obj) {{
       if (!obj || typeof obj !== 'object') return;
       if (obj.grid) {{
@@ -811,7 +831,7 @@ html = f"""
       if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.slice();
       if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.slice();
       if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.slice();
-      if (Array.isArray(obj.taxiways)) state.taxiways = obj.taxiways.slice();
+      state.taxiways = mergeTaxiwaysFromLayoutObject(obj);
       if (Array.isArray(obj.apronLinks)) state.apronLinks = obj.apronLinks.slice();
       if (Array.isArray(obj.directionModes) && obj.directionModes.length) {{
         state.directionModes = obj.directionModes.slice();
@@ -841,8 +861,7 @@ html = f"""
             terminalId: f.terminalId || null,
             depRunwayId: f.depRunwayId || null,
           }};
-          const AIRLINE_CODES_LOAD = ['KE', '7C', 'DL'];
-          if (!f.airlineCode) f.airlineCode = AIRLINE_CODES_LOAD[Math.floor(Math.random() * AIRLINE_CODES_LOAD.length)];
+          if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
           if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
         }});
       }} else {{
@@ -1015,6 +1034,17 @@ html = f"""
       }}
       return {{ bg: '#280d0d', color: '#fc8181', border: '#fc818155' }};
     }}
+    function rsepLegendHtml(filled, total) {{
+      const countColor = filled === total ? '#68d391' : '#9ca3af';
+      let html = '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
+      html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d2018;border-radius:2px;margin-right:4px;"></span><span style="color:#68d391;">&lt;90s</span></span>';
+      html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d1a28;border-radius:2px;margin-right:4px;"></span><span style="color:#63b3ed;">90–119s</span></span>';
+      html += '<span><span style="display:inline-block;width:10px;height:10px;background:#1e1e08;border-radius:2px;margin-right:4px;"></span><span style="color:#f6e05e;">120–149s</span></span>';
+      html += '<span><span style="display:inline-block;width:10px;height:10px;background:#280d0d;border-radius:2px;margin-right:4px;"></span><span style="color:#fc8181;">≥150s</span></span>';
+      html += '<span style="margin-left:4px;color:' + countColor + ';">' + filled + '/' + total + '</span>';
+      html += '</div>';
+      return html;
+    }}
     function rsepMakeConfig(stdKey) {{
       const std = RSEP_STANDARDS[stdKey] || RSEP_STANDARDS['ICAO'];
       const cats = RSEP_STD_CATS[stdKey];
@@ -1154,6 +1184,65 @@ html = f"""
       }}
       return false;
     }}
+    function tryPlacePbbAt(wx, wy) {{
+      let bestEdge = null, bestD2 = Infinity;
+      state.terminals.forEach(t => {{
+        if (!t.closed || t.vertices.length < 2) return;
+        let cx = 0, cy = 0;
+        t.vertices.forEach(v => {{ const [px, py] = cellToPixel(v.col, v.row); cx += px; cy += py; }});
+        cx /= t.vertices.length || 1; cy /= t.vertices.length || 1;
+        for (let i = 0; i < t.vertices.length; i++) {{
+          const v1 = t.vertices[i], v2 = t.vertices[(i + 1) % t.vertices.length];
+          const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
+          const near = closestPointOnSegment(p1, p2, [wx, wy]);
+          if (near) {{
+            const d2 = dist2(near, [wx, wy]);
+            if (d2 < bestD2) {{ bestD2 = d2; bestEdge = {{ near, p1, p2, col: v1.col, row: v1.row, cx, cy }}; }}
+          }}
+        }}
+      }});
+      const maxD2 = (CELL_SIZE * 1.0) ** 2;
+      if (!bestEdge || bestD2 >= maxD2) return false;
+      const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
+      let nx = -(y2 - y1), ny = x2 - x1;
+      const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
+      const toClickX = wx - ex, toClickY = wy - ey;
+      if (nx * toClickX + ny * toClickY < 0) {{ nx *= -1; ny *= -1; }}
+      const category = document.getElementById('standCategory').value || 'C';
+      const standSize = getStandSizeMeters(category);
+      const minLen = standSize / 2 + 3;
+      const lenCells = parseInt(document.getElementById('pbbLength').value || '2', 10);
+      const lenPx = Math.max(lenCells * CELL_SIZE * 0.9, minLen);
+      const newPbb = {{ x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx, category }};
+      if (pbbStandOverlapsExisting(newPbb)) return false;
+      pushUndo();
+      state.pbbStands.push({{
+        id: id(),
+        name: document.getElementById('standName').value.trim() || ('Contact Stand ' + (state.pbbStands.length + 1)),
+        x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx,
+        category: newPbb.category, edgeCol: bestEdge.col, edgeRow: bestEdge.row
+      }});
+      return true;
+    }}
+    function tryPlaceRemoteAt(col, row) {{
+      if (col < 0 || row < 0 || col > GRID_COLS || row > GRID_ROWS) return false;
+      const category = document.getElementById('remoteCategory').value || 'C';
+      const [cx, cy] = cellToPixel(col, row);
+      const size = getStandSizeMeters(category);
+      const bounds = getStandBoundsRect(cx, cy, size);
+      if (standOverlapsExisting(bounds)) return false;
+      pushUndo();
+      const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || 'R001';
+      const usedNames = new Set((state.remoteStands || []).map(s => (s.name || '').trim()).filter(Boolean));
+      let finalName = baseName;
+      if (usedNames.has(finalName)) {{
+        let idx = 1;
+        while (usedNames.has(baseName + ' (' + idx + ')')) idx++;
+        finalName = baseName + ' (' + idx + ')';
+      }}
+      state.remoteStands.push({{ id: id(), col, row, category, name: finalName }});
+      return true;
+    }}
     function taxiwayOverlapsAnyTerminal(tw) {{
       if (!tw || !tw.vertices || tw.vertices.length < 2) return false;
       const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
@@ -1238,59 +1327,30 @@ html = f"""
       if (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) {{
         copy.avgMoveVelocity = tw.avgMoveVelocity;
       }}
-      // Runway line-up point를 좌표 형태로 JSON에 저장 (lineup_point)
+      if (tw.pathType === 'runway' && typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0) {{
+        copy.minArrVelocity = Math.max(1, Math.min(150, tw.minArrVelocity));
+      }}
       if (tw.pathType === 'runway') {{
-        if (tw.dep_point && typeof tw.dep_point.col === 'number' && typeof tw.dep_point.row === 'number') {{
-          copy.lineup_point = {{ col: tw.dep_point.col, row: tw.dep_point.row }};
-        }} else if (typeof tw.depPointPos === 'number' && tw.vertices && tw.vertices.length >= 2) {{
-          const verts = tw.vertices;
-          // col/row 차이를 1m 단위로 보고 depPointPos(m)를 길이에 대한 비율로 변환
-          const totalLen = verts.reduce((acc, v, i) =>
-            acc + (i > 0 ? Math.hypot(v.col - verts[i-1].col, v.row - verts[i-1].row) : 0), 0);
-          if (totalLen > 0) {{
-            const desired = Math.max(0, Math.min(500, tw.depPointPos)); // 0~500m
-            const ratio = Math.max(0, Math.min(1, desired / totalLen));
-            const targetDist = totalLen * ratio;
-            let acc = 0;
-            let cx = verts[0].col, cy = verts[0].row;
-            for (let i = 1; i < verts.length; i++) {{
-              const seg = Math.hypot(verts[i].col - verts[i-1].col, verts[i].row - verts[i-1].row);
-              if (acc + seg >= targetDist) {{
-                const t = seg > 0 ? (targetDist - acc) / seg : 0;
-                cx = verts[i-1].col + t * (verts[i].col - verts[i-1].col);
-                cy = verts[i-1].row + t * (verts[i].row - verts[i-1].row);
-                break;
-              }}
-              acc += seg;
-            }}
-            copy.lineup_point = {{ col: Math.round(cx), row: Math.round(cy) }};
-          }}
-        }}
+        delete copy.lineup_point;
+        delete copy.dep_point;
+        delete copy.depPointPos;
       }}
       if (tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
       return copy;
     }}
-    function serializeRunwayWithEndpoints(rw) {{
-      const copy = Object.assign({{}}, rw);
-      const dir = getTaxiwayDirection(rw);
-      if (dir === 'both') {{
-        copy.start_point = null;
-        copy.end_point = null;
-      }} else {{
-        const [sx, sy] = cellToPixel(rw.startCol, rw.startRow);
-        const ex = 2 * rw.cx - sx;
-        const ey = 2 * rw.cy - sy;
-        const [endCol, endRow] = pixelToCell(ex, ey);
-        if (dir === 'clockwise') {{
-          copy.start_point = {{ col: rw.startCol, row: rw.startRow }};
-          copy.end_point = {{ col: endCol, row: endRow }};
-        }} else {{
-          copy.start_point = {{ col: endCol, row: endRow }};
-          copy.end_point = {{ col: rw.startCol, row: rw.startRow }};
-        }}
-      }}
-      if (rw.rwySepConfig) copy.rwySepConfig = rw.rwySepConfig;
-      return copy;
+    function partitionTaxiwaysForPersist(list) {{
+      const runwayPaths = [];
+      const runwayTaxiways = [];
+      const taxiways = [];
+      (list || []).forEach(function(tw) {{
+        const ser = serializeTaxiwayWithEndpoints(tw);
+        const pt = tw.pathType || 'taxiway';
+        delete ser.pathType;
+        if (pt === 'runway') runwayPaths.push(ser);
+        else if (pt === 'runway_exit') runwayTaxiways.push(ser);
+        else taxiways.push(ser);
+      }});
+      return {{ runwayPaths: runwayPaths, runwayTaxiways: runwayTaxiways, taxiways: taxiways }};
     }}
     function serializeCurrentLayout() {{
       return {{
@@ -1303,7 +1363,10 @@ html = f"""
         terminals: makeUniqueNamedCopy(state.terminals, 'name'),
         pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
         remoteStands: state.remoteStands.slice(),
-        taxiways: state.taxiways.map(tw => serializeTaxiwayWithEndpoints(tw)),
+        ...(function() {{
+          const p = partitionTaxiwaysForPersist(state.taxiways);
+          return {{ runwayPaths: p.runwayPaths, runwayTaxiways: p.runwayTaxiways, taxiways: p.taxiways }};
+        }})(),
         apronLinks: state.apronLinks.slice(),
         directionModes: state.directionModes.slice(),
         // 항공편-주기장ID 매칭(apronId)을 JSON에 포함해 두면, 불러올 때 Allocation이 그대로 복원됨
@@ -1432,6 +1495,27 @@ html = f"""
       return false;
     }}
     function dist2(a, b) {{ const dx = a[0]-b[0], dy = a[1]-b[1]; return dx*dx+dy*dy; }}
+    function formatMinToHM(m) {{
+      const hh = Math.floor(m / 60);
+      const mm = Math.floor(m % 60);
+      return hh + ':' + (mm < 10 ? '0' : '') + mm;
+    }}
+    function findNearestItem(candidates, getPoint, wx, wy, maxD2) {{
+      const click = [wx, wy];
+      let best = null;
+      let bestD2 = maxD2;
+      for (let i = 0; i < candidates.length; i++) {{
+        const c = candidates[i];
+        const pt = getPoint(c);
+        if (!pt || pt.length < 2) continue;
+        const d2 = dist2(pt, click);
+        if (d2 < bestD2) {{
+          bestD2 = d2;
+          best = c;
+        }}
+      }}
+      return best;
+    }}
     function closestPointOnSegment(p1, p2, p) {{
       const [x1,y1]=p1,[x2,y2]=p2,[px,py]=p;
       const dx=x2-x1,dy=y2-y1,len2=dx*dx+dy*dy;
@@ -1490,21 +1574,15 @@ html = f"""
     }}
 
     function hitTestTerminalVertex(wx, wy) {{
-      const click = [wx, wy];
       const maxD2 = (CELL_SIZE * 0.6) ** 2;
-      let best = null;
-      let bestD2 = maxD2;
+      const cands = [];
       state.terminals.forEach(t => {{
         t.vertices.forEach((v, idx) => {{
-          const [vx, vy] = cellToPixel(v.col, v.row);
-          const d2 = dist2([vx, vy], click);
-          if (d2 < bestD2) {{
-            bestD2 = d2;
-            best = {{ terminalId: t.id, index: idx }};
-          }}
+          cands.push({{ terminalId: t.id, index: idx, v }});
         }});
       }});
-      return best;
+      const best = findNearestItem(cands, c => cellToPixel(c.v.col, c.v.row), wx, wy, maxD2);
+      return best ? {{ terminalId: best.terminalId, index: best.index }} : null;
     }}
 
     function hitTestTaxiwayVertex(wx, wy) {{
@@ -1621,21 +1699,21 @@ html = f"""
         const tw = state.selectedObject.obj;
         const nameInput = document.getElementById('taxiwayName');
         const widthInput = document.getElementById('taxiwayWidth');
-        const typeSel = document.getElementById('pathType');
-        const exitWrap = document.getElementById('runwayExitExtras');
         const maxExitInput = document.getElementById('taxiwayMaxExitVel');
         const minExitInput = document.getElementById('taxiwayMinExitVel');
-        const depExtras = document.getElementById('runwayDepPointExtras');
-        const depPosInput = document.getElementById('runwayDepPointPos');
         if (nameInput) nameInput.value = tw.name || '';
         const widthDefault = tw.pathType === 'runway' ? 60 : 15;
         if (widthInput) widthInput.value = tw.width != null ? tw.width : widthDefault;
         const avgVelInput = document.getElementById('taxiwayAvgMoveVelocity');
         if (avgVelInput) avgVelInput.value = (tw.avgMoveVelocity != null ? tw.avgMoveVelocity : 10);
-        if (typeSel) typeSel.value = tw.pathType || 'taxiway';
-        if (exitWrap) exitWrap.style.display = (tw.pathType === 'runway_exit') ? 'block' : 'none';
-        const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
-        if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (tw.pathType === 'taxiway') ? 'block' : 'none';
+        syncPathFieldVisibilityForPathType(tw.pathType || 'taxiway');
+        const runwayMinArrInput = document.getElementById('runwayMinArrVelocity');
+        if (runwayMinArrInput) {{
+          const mav = (typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0)
+            ? Math.max(1, Math.min(150, tw.minArrVelocity))
+            : 15;
+          runwayMinArrInput.value = mav;
+        }}
         if (maxExitInput) maxExitInput.value = tw.maxExitVelocity != null ? tw.maxExitVelocity : 30;
         if (minExitInput) {{
           const minVal = (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
@@ -1644,28 +1722,23 @@ html = f"""
           minExitInput.value = minVal;
         }}
         const modeSel = document.getElementById('taxiwayDirectionMode');
-        if (modeSel) modeSel.value = getTaxiwayDirection(tw);
-        // Dep Point 입력칸은 Runway 타입일 때만 보이도록
-        if (depExtras) depExtras.style.display = (tw.pathType === 'runway') ? 'block' : 'none';
-        if (depPosInput) {{
-          if (tw.pathType === 'runway' && typeof tw.depPointPos === 'number') depPosInput.value = tw.depPointPos;
-          else depPosInput.value = 0;
-        }}
-      }} else if (state.selectedObject && state.selectedObject.type === 'runway') {{
-        const rw = state.selectedObject.obj;
-        const dirSel = document.getElementById('runwayDirection');
-        if (dirSel) dirSel.value = rw.direction || 'both';
-        const rwWrap = document.getElementById('runwayDirectionWrap');
+        const d = getTaxiwayDirection(tw);
+        if (modeSel) modeSel.value = d;
         const rwDirInPane = document.getElementById('runwayDirectionInTaxiwayPane');
-        if (rwWrap) rwWrap.style.display = 'block';
-        if (rwDirInPane) rwDirInPane.value = rw.direction || 'both';
+        if (rwDirInPane) rwDirInPane.value = d;
       }} else {{
-        const rwWrap = document.getElementById('runwayDirectionWrap');
-        if (rwWrap) rwWrap.style.display = 'none';
-        const exitWrap = document.getElementById('runwayExitExtras');
-        if (exitWrap) exitWrap.style.display = 'none';
-        const depExtras = document.getElementById('runwayDepPointExtras');
-        if (depExtras) depExtras.style.display = 'none';
+        const rm = settingModeSelect ? settingModeSelect.value : '';
+        if (isPathLayoutMode(rm)) syncPathFieldVisibilityForPathType(pathTypeFromLayoutMode(rm));
+        else {{
+          const rwWrap = document.getElementById('runwayDirectionWrap');
+          if (rwWrap) rwWrap.style.display = 'none';
+          const exitWrap = document.getElementById('runwayExitExtras');
+          if (exitWrap) exitWrap.style.display = 'none';
+          const runwayMinArrWrap = document.getElementById('runwayMinArrVelocityWrap');
+          if (runwayMinArrWrap) runwayMinArrWrap.style.display = 'none';
+          const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
+          if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = 'none';
+        }}
       }}
       const taxiwayDrawBtn = document.getElementById('btnTaxiwayDraw');
       if (taxiwayDrawBtn) {{
@@ -1690,12 +1763,6 @@ html = f"""
         const drawing = !!state.remoteDrawing;
         btnRemoteDraw.textContent = drawing ? 'Drawing' : 'Draw';
         btnRemoteDraw.classList.toggle('drawing', drawing);
-      }}
-      const runwayDrawBtn = document.getElementById('btnRunwayDraw');
-      if (runwayDrawBtn) {{
-        const drawing = !!state.runwayDrawing;
-        runwayDrawBtn.textContent = drawing ? 'Drawing' : 'Draw';
-        runwayDrawBtn.classList.toggle('drawing', drawing);
       }}
       renderObjectList();
     }}
@@ -1736,42 +1803,50 @@ html = f"""
           st.allowedTerminals = allowed;
         }}
       }}
-      if (state.selectedObject && (state.selectedObject.type === 'taxiway' || state.selectedObject.type === 'runway')) {{
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
         var tw = state.selectedObject.obj;
         if (el('taxiwayName')) tw.name = (el('taxiwayName').value || '').trim();
         if (el('taxiwayWidth')) tw.width = Math.max(10, Math.min(100, Number(el('taxiwayWidth').value) || 15));
-        if (el('pathType')) tw.pathType = el('pathType').value || 'taxiway';
         if (el('taxiwayMaxExitVel')) {{
           const mv = Number(el('taxiwayMaxExitVel').value);
           if (tw.pathType === 'runway_exit') tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
           else delete tw.maxExitVelocity;
         }}
-        if (el('taxiwayDirectionMode')) tw.direction = el('taxiwayDirectionMode').value || 'both';
+        if (el('taxiwayMinExitVel') && tw.pathType === 'runway_exit') {{
+          const mv2 = Number(el('taxiwayMinExitVel').value);
+          let v = isFinite(mv2) && mv2 > 0 ? mv2 : 15;
+          if (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && v > tw.maxExitVelocity) v = tw.maxExitVelocity;
+          tw.minExitVelocity = v;
+        }} else if (tw.pathType !== 'runway_exit') {{
+          delete tw.minExitVelocity;
+        }}
+        if (tw.pathType === 'runway' && el('runwayDirectionInTaxiwayPane')) {{
+          tw.direction = el('runwayDirectionInTaxiwayPane').value || 'both';
+        }} else if (el('taxiwayDirectionMode')) {{
+          tw.direction = el('taxiwayDirectionMode').value || 'both';
+        }}
         if (el('taxiwayAvgMoveVelocity')) {{
           var v = Number(el('taxiwayAvgMoveVelocity').value);
           tw.avgMoveVelocity = (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
         }}
-        // Runway Dep Point 비율 입력값을 상태에 반영 (Runway 타입일 때만)
-        if (tw.pathType === 'runway' && el('runwayDepPointPos')) {{
-          const depRaw = Number(el('runwayDepPointPos').value);
-          if (isFinite(depRaw)) tw.depPointPos = Math.max(0, Math.min(500, depRaw));
+        if (el('runwayMinArrVelocity')) {{
+          const mav = Number(el('runwayMinArrVelocity').value);
+          if (tw.pathType === 'runway') {{
+            tw.minArrVelocity = (typeof mav === 'number' && isFinite(mav) && mav > 0) ? Math.max(1, Math.min(150, mav)) : 15;
+          }} else {{
+            delete tw.minArrVelocity;
+          }}
         }}
-      }}
-      const sel = state.selectedObject;
-      if (sel && sel.type === 'runway') {{
-        const dirVal = (el('runwayDirectionInTaxiwayPane') && el('runwayDirectionInTaxiwayPane').value) || (el('runwayDirection') && el('runwayDirection').value) || 'both';
-        sel.obj.direction = dirVal;
       }}
     }}
 
     function syncSettingsPaneToMode() {{
       const mode = settingModeSelect ? settingModeSelect.value : 'grid';
       document.querySelectorAll('.settings-pane').forEach(el => {{ el.style.display = 'none'; }});
-      const pane = document.getElementById('settings-' + mode);
+      const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
+      const pane = document.getElementById('settings-' + paneKey);
       if (pane) pane.style.display = 'block';
-      const pathTypeEl = document.getElementById('pathType');
-      const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
-      if (taxiwayAvgWrap && pathTypeEl) taxiwayAvgWrap.style.display = (pathTypeEl.value === 'taxiway') ? 'block' : 'none';
+      if (isPathLayoutMode(mode)) syncPathFieldVisibilityForPathType(pathTypeFromLayoutMode(mode));
       if (typeof renderObjectList === 'function') renderObjectList();
     }}
 
@@ -1840,97 +1915,9 @@ html = f"""
       }});
     }}
 
-    // Runway line-up point 값 변경 시 바로 상태/그리드에 반영
-    const depPointPosInput = document.getElementById('runwayDepPointPos');
-    if (depPointPosInput) {{
-      depPointPosInput.addEventListener('input', function() {{
-        let v = Number(this.value);
-        if (!isFinite(v)) v = 0;
-        v = Math.max(0, Math.min(500, v));
-        this.value = v;
-        if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
-          const tw = state.selectedObject.obj;
-          if (tw.pathType === 'runway') {{
-            tw.depPointPos = v;
-            // 좌표 기반 line-up point가 이미 있으면 depPointPos가 무시되므로, 입력 시 좌표 값을 리셋
-            if (tw.lineup_point) delete tw.lineup_point;
-            if (tw.dep_point) delete tw.dep_point;
-            // dep_point/lineup_point는 저장 시 다시 계산하므로 여기서는 depPointPos만 갱신
-            draw();
-            if (typeof update3DScene === 'function') update3DScene();
-          }}
-        }}
-      }});
-    }}
-
     document.getElementById('gridCellSize').addEventListener('change', function() {{ CELL_SIZE = Math.max(10, Number(this.value) || 10); draw(); }});
     document.getElementById('gridCols').addEventListener('change', function() {{ GRID_COLS = Math.max(5, Math.min(500, parseInt(this.value,10)||400)); draw(); }});
     document.getElementById('gridRows').addEventListener('change', function() {{ GRID_ROWS = Math.max(5, Math.min(500, parseInt(this.value,10)||400)); draw(); }});
-
-    const pathTypeSelect = document.getElementById('pathType');
-    if (pathTypeSelect) {{
-      pathTypeSelect.addEventListener('change', function() {{
-        const nameInput = document.getElementById('taxiwayName');
-        const widthInput = document.getElementById('taxiwayWidth');
-        const exitWrap = document.getElementById('runwayExitExtras');
-        const maxExitInput = document.getElementById('taxiwayMaxExitVel');
-          const depExtras = document.getElementById('runwayDepPointExtras');
-        if (!nameInput || !widthInput) return;
-        const currentName = nameInput.value.trim();
-        const currentWidth = Number(widthInput.value);
-        const newType = this.value || 'taxiway';
-
-        // 인풋 필드 기본값 조정
-        if (newType === 'runway') {{
-          if (!currentName || currentName.startsWith('Taxiway ') || currentName.startsWith('Runway Exit')) {{
-            nameInput.value = 'Runway';
-          }}
-          if (!currentWidth || currentWidth === 15) widthInput.value = 60;
-        }} else if (newType === 'runway_exit') {{
-          if (!currentName || currentName === 'Runway') {{
-            nameInput.value = 'Runway Exit TW';
-          }}
-          if (!currentWidth) widthInput.value = 15;
-        }} else {{
-          if (!currentName || currentName === 'Runway' || currentName.startsWith('Runway Exit')) {{
-            nameInput.value = '';
-          }}
-          if (!currentWidth || currentWidth === 60) widthInput.value = 15;
-        }}
-        if (exitWrap) exitWrap.style.display = (newType === 'runway_exit') ? 'block' : 'none';
-          if (depExtras) depExtras.style.display = (newType === 'runway') ? 'block' : 'none';
-        const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
-        if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (newType === 'taxiway') ? 'block' : 'none';
-
-        // 선택된 Taxiway 객체에도 타입/폭/Max Exit Velocity 반영
-        if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
-          const tw = state.selectedObject.obj;
-          tw.pathType = newType;
-          const baseWidth = newType === 'runway' ? 60 : 15;
-          const parsed = Number(widthInput.value);
-          tw.width = Math.max(10, Math.min(100, parsed || baseWidth));
-            if (newType === 'runway') {{
-              const depPosInput = document.getElementById('runwayDepPointPos');
-              const depVal = depPosInput ? Number(depPosInput.value) : 0;
-              const clamped = isFinite(depVal) ? Math.max(0, Math.min(100, depVal)) : 0;
-              tw.depPointPos = clamped; // 0~100 %, 0 = start point
-            }} else {{
-              delete tw.depPointPos;
-            }}
-          if (newType === 'runway_exit' && maxExitInput) {{
-            const mv = Number(maxExitInput.value);
-            tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
-          }} else {{
-            delete tw.maxExitVelocity;
-          }}
-          widthInput.value = tw.width;
-          renderObjectList();
-          updateObjectInfo();
-          draw();
-          if (typeof update3DScene === 'function') update3DScene();
-        }}
-      }});
-    }}
 
     document.getElementById('terminalName').addEventListener('change', function() {{
       const t = getCurrentTerminal();
@@ -2129,8 +2116,50 @@ html = f"""
         if (typeof update3DScene === 'function') update3DScene();
       }}
     }});
+    const runwayMinArrVelEl = document.getElementById('runwayMinArrVelocity');
+    if (runwayMinArrVelEl) {{
+      runwayMinArrVelEl.addEventListener('change', function() {{
+        if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
+          const tw = state.selectedObject.obj;
+          if (tw.pathType !== 'runway') return;
+          const val = Number(this.value);
+          const v = (typeof val === 'number' && isFinite(val) && val > 0) ? Math.max(1, Math.min(150, val)) : 15;
+          tw.minArrVelocity = v;
+          this.value = v;
+          updateObjectInfo();
+          renderObjectList();
+          if (typeof renderFlightList === 'function') renderFlightList();
+          draw();
+        }}
+      }});
+    }}
 
     // ---- Flight helpers ----
+    function getMinArrVelocityMpsForRunwayId(runwayId) {{
+      if (runwayId == null || runwayId === '') return 15;
+      const list = state.taxiways || [];
+      let tw = list.find(t => t.id === runwayId && t.pathType === 'runway');
+      if (!tw) tw = list.find(t => t.id === runwayId && (t.name || '').toLowerCase().includes('runway'));
+      if (!tw) return 15;
+      const v = tw.minArrVelocity;
+      if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, Math.min(150, v));
+      return 15;
+    }}
+    /** v0에서 감속도 a(m/s²)로 distM(m) 이동 시 RET 입구 속도·소요시간. 속도는 vFloor(m/s) 미만으로 내려가지 않음. */
+    function runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn) {{
+      const vf0 = Math.max(1, Math.min(150, vFloorIn));
+      const vf = Math.min(vf0, v0);
+      if (!(a > 0) || distM <= 0) return {{ vAtRet: v0, tSec: 0 }};
+      if (v0 <= vf) return {{ vAtRet: v0, tSec: distM / Math.max(v0, 1e-6) }};
+      const dStop = (v0 * v0 - vf * vf) / (2 * a);
+      if (distM < dStop) {{
+        const vEnd = Math.sqrt(Math.max(0, v0 * v0 - 2 * a * distM));
+        return {{ vAtRet: vEnd, tSec: (v0 - vEnd) / a }};
+      }}
+      const tDecel = (v0 - vf) / a;
+      const tCruise = (distM - dStop) / vf;
+      return {{ vAtRet: vf, tSec: tDecel + tCruise }};
+    }}
     function parseTimeToMinutes(val) {{
       if (!val) return 0;
       const s = String(val).trim();
@@ -2182,8 +2211,7 @@ html = f"""
       return hh + ':' + mm;
     }}
 
-    function formatMinutesToHHMMSS(minsRaw) {{
-      const totalSec = Math.max(0, Math.round((minsRaw || 0) * 60));
+    function formatTotalSecondsToHHMMSS(totalSec) {{
       const h = Math.floor(totalSec / 3600);
       const m = Math.floor((totalSec % 3600) / 60);
       const s = totalSec % 60;
@@ -2192,16 +2220,13 @@ html = f"""
       const ss = (s < 10 ? '0' : '') + s;
       return hh + ':' + mm + ':' + ss;
     }}
-
+    function formatMinutesToHHMMSS(minsRaw) {{
+      const totalSec = Math.max(0, Math.round((minsRaw || 0) * 60));
+      return formatTotalSecondsToHHMMSS(totalSec);
+    }}
     function formatSecondsToHHMMSS(secRaw) {{
       const totalSec = Math.max(0, Math.floor(secRaw || 0));
-      const h = Math.floor(totalSec / 3600);
-      const m = Math.floor((totalSec % 3600) / 60);
-      const s = totalSec % 60;
-      const hh = (h < 10 ? '0' : '') + h;
-      const mm = (m < 10 ? '0' : '') + m;
-      const ss = (s < 10 ? '0' : '') + s;
-      return hh + ':' + mm + ':' + ss;
+      return formatTotalSecondsToHHMMSS(totalSec);
     }}
 
     function getStandBusyIntervals(standId, ignoreFlightId) {{
@@ -2233,64 +2258,6 @@ html = f"""
       return s;
     }}
 
-    function assignStandForExistingFlights() {{
-      if (!state.flights || !state.flights.length) return;
-      if (!state.pbbStands || !state.pbbStands.length) return;
-      const thr2 = (CELL_SIZE * 5) ** 2;
-      state.flights.forEach(f => {{
-        if (!f || f.standId || !f.timeline || !f.timeline.length) return;
-        if (f.arrDep !== 'Arr') return;
-        const last = f.timeline[f.timeline.length - 1];
-        if (!last || typeof last.x !== 'number' || typeof last.y !== 'number') return;
-        let bestId = null;
-        let bestD2 = thr2;
-        state.pbbStands.forEach(pbb => {{
-          if (pbb.x2 == null || pbb.y2 == null) return;
-          const dx = last.x - pbb.x2;
-          const dy = last.y - pbb.y2;
-          const d2 = dx*dx + dy*dy;
-          if (d2 < bestD2) {{
-            bestD2 = d2;
-            bestId = pbb.id;
-          }}
-        }});
-        if (bestId) f.standId = bestId;
-      }});
-    }}
-
-    function findRunwayTouchPoint(runwayId) {{
-      if (state.runways && state.runways.length) {{
-        const rw = runwayId ? state.runways.find(r => r.id === runwayId) : state.runways[0];
-        if (rw) return [rw.cx, rw.cy];
-      }}
-      const taxiwaysToUse = state.taxiways || [];
-      const runwayPath = runwayId
-        ? taxiwaysToUse.find(tw => tw.id === runwayId && tw.vertices && tw.vertices.length >= 2)
-        : (taxiwaysToUse.find(tw => tw.pathType === 'runway' && tw.vertices && tw.vertices.length >= 2)
-           || taxiwaysToUse.find(tw => (tw.name || '').toLowerCase().includes('runway') && tw.vertices && tw.vertices.length >= 2));
-      if (runwayPath && runwayPath.vertices) {{
-        const verts = runwayPath.vertices;
-        const pts = verts.map(v => cellToPixel(v.col, v.row));
-        let totalLen = 0;
-        for (let i = 1; i < pts.length; i++) totalLen += Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
-        if (totalLen > 0) {{
-          const target = totalLen / 2;
-          let acc = 0;
-          for (let i = 1; i < pts.length; i++) {{
-            const [x1,y1] = pts[i-1], [x2,y2] = pts[i];
-            const segLen = Math.hypot(x2-x1, y2-y1);
-            if (acc + segLen >= target) {{
-              const t = (target - acc) / (segLen || 1);
-              return [x1 + (x2-x1)*t, y1 + (y2-y1)*t];
-            }}
-            acc += segLen;
-          }}
-        }}
-        return [pts[0][0], pts[0][1]];
-      }}
-      return null;
-    }}
-
     function getTerminalForStand(stand) {{
       if (!stand || !state.terminals.length) return null;
       const [px, py] = (stand.x2 != null && stand.y2 != null)
@@ -2320,17 +2287,51 @@ html = f"""
       return nearest;
     }}
 
-    function getCandidateStandsForCode(code) {{
-      const list = [];
-      state.pbbStands.forEach(pbb => {{
-        if (code && pbb.category && pbb.category !== code) return;
-        if (state.apronLinks.some(lk => lk.pbbId === pbb.id)) list.push({{ id: pbb.id, name: (pbb.name || '').trim() || 'PBB', type: 'pbb', obj: pbb }});
-      }});
-      state.remoteStands.forEach(st => {{
-        if (code && st.category && st.category !== code) return;
-        list.push({{ id: st.id, name: (st.name || '').trim() || 'Remote', type: 'remote', obj: st }});
-      }});
-      return list;
+    function flightCanUseStand(f, stand) {{
+      if (!stand) return true;
+      const order = {{ A:1,B:2,C:3,D:4,E:5,F:6 }};
+      const fCode = (f.code || 'C').toUpperCase();
+      const sCat = (stand.category || 'F').toUpperCase();
+      const fc = order[fCode] || 99;
+      const sc = order[sCat] || 0;
+      if (fc > sc) return false;
+      const ft = (f.terminalId || (f.token && f.token.terminalId)) || null;
+      if (!ft) return true;
+      const isRemote = (state.remoteStands || []).some(function(r) {{ return r.id === stand.id; }});
+      if (isRemote) {{
+        const allowed = Array.isArray(stand.allowedTerminals) ? stand.allowedTerminals : [];
+        if (allowed.length) return allowed.includes(ft);
+      }}
+      const term = getTerminalForStand(stand);
+      const standTermId = term ? term.id : null;
+      if (!standTermId) return false;
+      return ft === standTermId;
+    }}
+
+    function assignStandToFlight(f, standId) {{
+      if (!f) return false;
+      if (standId) {{
+        const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
+        const stand = allStands.find(function(s) {{ return s.id === standId; }});
+        if (!flightCanUseStand(f, stand)) {{
+          alert('Code 또는 선택된 Terminal이 맞지 않아 이 Apron(Stand)에 배정할 수 없습니다.');
+          return false;
+        }}
+      }}
+      f.standId = standId;
+      if (f.token) f.token.apronId = standId;
+      delete f.sobtMin_orig;
+      delete f.sldtMin_orig;
+      delete f.sibtMin_orig;
+      delete f.stotMin_orig;
+      delete f.eldtMin_orig;
+      delete f.eibtMin_orig;
+      delete f.eobtMin_orig;
+      delete f.etotMin_orig;
+      if (typeof renderFlightGantt === 'function') renderFlightGantt();
+      if (typeof renderFlightList === 'function') renderFlightList();
+      if (typeof draw === 'function') draw();
+      return true;
     }}
 
     function getCandidatePbbStandsForCode(code) {{
@@ -2353,103 +2354,30 @@ html = f"""
       return arr[idx];
     }}
 
-    function buildTaxiwayPathPixels(tw, fromPt, toPt, dirPreference) {{
-      if (!tw || !tw.vertices || tw.vertices.length < 2) return null;
-      const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
-      let srcIdx = 0, dstIdx = pts.length - 1;
-      let bestSrc = Infinity, bestDst = Infinity;
-      for (let i = 0; i < pts.length; i++) {{
-        const dSrc = (pts[i][0]-fromPt[0])**2 + (pts[i][1]-fromPt[1])**2;
-        if (dSrc < bestSrc) {{ bestSrc = dSrc; srcIdx = i; }}
-        const dDst = (pts[i][0]-toPt[0])**2 + (pts[i][1]-toPt[1])**2;
-        if (dDst < bestDst) {{ bestDst = dDst; dstIdx = i; }}
+    function resolveStand(flight) {{
+      const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
+      if (flight.standId) {{
+        return allStands.find(s => s.id === flight.standId) || null;
       }}
-      if (srcIdx === dstIdx) return [fromPt, pts[srcIdx], toPt];
-      const dir = getTaxiwayDirection(tw); // 'clockwise' | 'counter_clockwise' | 'both'
-      const needForward = srcIdx <= dstIdx;
-      const allowForward = dir === 'both' || dir === 'clockwise';
-      const allowBackward = dir === 'both' || dir === 'counter_clockwise';
-      if (needForward && !allowForward) return null;
-      if (!needForward && !allowBackward) return null;
-      const forward = needForward;
-      const seq = [];
-      seq.push(fromPt);
-      if (forward) {{
-        for (let i = srcIdx; i <= dstIdx; i++) seq.push(pts[i]);
-      }} else {{
-        for (let i = srcIdx; i >= dstIdx; i--) seq.push(pts[i]);
+      let candidates = getCandidatePbbStandsForCode(flight.code);
+      if (!candidates.length) return null;
+      const termId = (flight.token && flight.token.terminalId) || null;
+      if (termId) {{
+        const filtered = candidates.filter(st => {{
+          const allowed = Array.isArray(st.allowedTerminals) ? st.allowedTerminals : null;
+          if (allowed && allowed.length) return allowed.includes(termId);
+          const t = getTerminalForStand(st);
+          return t && t.id === termId;
+        }});
+        if (filtered.length) candidates = filtered;
       }}
-      seq.push(toPt);
-      return seq;
+      const stand = pickRandom(candidates);
+      if (stand) flight.standId = stand.id;
+      return stand;
     }}
 
-    function buildArrivalTimeline(flight) {{
-      const runwayId = (flight.token && flight.token.runwayId) || null;
-      const touch = findRunwayTouchPoint(runwayId);
-      if (!touch) return null;
-      const [rx, ry] = touch;
-
-      // 1) JSON에서 불러온 기존 주기장 배정이 있으면 그대로 사용 (무조건 우선)
-      const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
-      let stand = null;
-      if (flight.standId) {{
-        stand = allStands.find(s => s.id === flight.standId) || null;
-      }}
-
-      // 2) 기존 배정이 없을 때만 자동 배정 로직 실행
-      if (!stand) {{
-        let candidates = getCandidatePbbStandsForCode(flight.code);
-        if (!candidates.length) return null;
-        const termId = flight.token && flight.token.terminalId;
-        if (termId) {{
-          const filtered = candidates.filter(st => {{
-            const allowed = Array.isArray(st.allowedTerminals) ? st.allowedTerminals : null;
-            if (allowed && allowed.length) {{
-              return allowed.includes(termId);
-            }}
-            const t = getTerminalForStand(st);
-            return t && t.id === termId;
-          }});
-          if (filtered.length) candidates = filtered;
-        }}
-        stand = pickRandom(candidates);
-        if (!stand) return null;
-        flight.standId = stand.id;
-      }}
-      const links = state.apronLinks.filter(lk => lk.pbbId === stand.id);
-      if (!links.length) return null;
-      // 가장 가까운 링크 선택
-      let best = links[0];
-      let bestD2 = Infinity;
-      links.forEach(lk => {{
-        if (lk.tx == null || lk.ty == null) return;
-        const dx = lk.tx - rx, dy = lk.ty - ry;
-        const d2 = dx*dx + dy*dy;
-        if (d2 < bestD2) {{ bestD2 = d2; best = lk; }}
-      }});
-      if (best.tx == null || best.ty == null) return null;
-      const [ax, ay] = [stand.x2 != null ? stand.x2 : cellToPixel(stand.col, stand.row)[0],
-                        stand.y2 != null ? stand.y2 : cellToPixel(stand.col, stand.row)[1]];
-      const tw = state.taxiways.find(t => t.id === best.taxiwayId);
-      let pts;
-      if (tw) {{
-        // Arrival: runway → taxiway → 링크 → stand, taxiway는 설정된 방향을 따르도록 시도
-        pts = buildTaxiwayPathPixels(tw, [rx, ry], [best.tx, best.ty], 'forward');
-        if (!pts) {{
-          // taxiway 경로를 만들 수 없으면 기존 직선 경로로 fallback
-          pts = [
-            [rx, ry],
-            [best.tx, best.ty]
-          ];
-        }}
-        pts.push([ax, ay]);
-      }} else {{
-        pts = [
-          [rx, ry],
-          [best.tx, best.ty],
-          [ax, ay]
-        ];
-      }}
+    function buildArrivalTimelineFromPts(flight, pts) {{
+      if (!pts || pts.length < 2) return null;
       const sibtMin_d = flight.sibtMin_d != null ? flight.sibtMin_d : (flight.timeMin != null ? flight.timeMin : 0);
       const baseT = sibtMin_d * 60;
       const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
@@ -2466,7 +2394,6 @@ html = f"""
       }}
       const sobtMin_d = flight.sobtMin_d != null ? flight.sobtMin_d : (sibtMin_d + (flight.dwellMin != null ? flight.dwellMin : 0));
       const dwellSec = Math.max(0, (sobtMin_d - sibtMin_d) * 60);
-      const arrivalTimeAtStand = tAcc;
       if (dwellSec > 0) {{
         tAcc = sobtMin_d * 60;
         const last = timeline[timeline.length - 1];
@@ -2475,73 +2402,8 @@ html = f"""
       return timeline;
     }}
 
-    function buildDepartureTimeline(flight) {{
-      const runwayId = (flight.token && flight.token.runwayId) || null;
-      const touch = findRunwayTouchPoint(runwayId);
-      if (!touch) return null;
-      const [rx, ry] = touch;
-
-      // 1) 기존 standId가 있으면 그대로 사용 (JSON 배정 유지)
-      const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
-      let stand = null;
-      if (flight.standId) {{
-        stand = allStands.find(s => s.id === flight.standId) || null;
-      }}
-
-      // 2) 없는 경우에만 자동 후보에서 선택
-      if (!stand) {{
-        let candidates = getCandidatePbbStandsForCode(flight.code);
-        if (!candidates.length) return null;
-        const termId = flight.token && flight.token.terminalId;
-        if (termId) {{
-          const filtered = candidates.filter(st => {{
-            const allowed = Array.isArray(st.allowedTerminals) ? st.allowedTerminals : null;
-            if (allowed && allowed.length) {{
-              return allowed.includes(termId);
-            }}
-            const t = getTerminalForStand(st);
-            return t && t.id === termId;
-          }});
-          if (filtered.length) candidates = filtered;
-        }}
-        stand = pickRandom(candidates);
-        if (!stand) return null;
-        flight.standId = stand.id;
-      }}
-      const links = state.apronLinks.filter(lk => lk.pbbId === stand.id);
-      if (!links.length) return null;
-      let best = links[0];
-      let bestD2 = Infinity;
-      links.forEach(lk => {{
-        if (lk.tx == null || lk.ty == null) return;
-        const [sx, sy] = [stand.x2 != null ? stand.x2 : cellToPixel(stand.col, stand.row)[0],
-                          stand.y2 != null ? stand.y2 : cellToPixel(stand.col, stand.row)[1]];
-        const dx = lk.tx - sx, dy = lk.ty - sy;
-        const d2 = dx*dx + dy*dy;
-        if (d2 < bestD2) {{ bestD2 = d2; best = lk; }}
-      }});
-      if (best.tx == null || best.ty == null) return null;
-      const [sx, sy] = [stand.x2 != null ? stand.x2 : cellToPixel(stand.col, stand.row)[0],
-                        stand.y2 != null ? stand.y2 : cellToPixel(stand.col, stand.row)[1]];
-      const tw = state.taxiways.find(t => t.id === best.taxiwayId);
-      let pts;
-      if (tw) {{
-        // Departure: stand → 링크 → taxiway → runway, taxiway 방향 반대로 이동 시도
-        pts = buildTaxiwayPathPixels(tw, [sx, sy], [best.tx, best.ty], 'backward');
-        if (!pts) {{
-          pts = [
-            [sx, sy],
-            [best.tx, best.ty]
-          ];
-        }}
-        pts.push([rx, ry]);
-      }} else {{
-        pts = [
-          [sx, sy],
-          [best.tx, best.ty],
-          [rx, ry]
-        ];
-      }}
+    function buildDepartureTimelineFromPts(flight, pts) {{
+      if (!pts || pts.length < 2) return null;
       const sobtMin_d = flight.sobtMin_d != null ? flight.sobtMin_d : (flight.timeMin != null ? flight.timeMin + (flight.dwellMin != null ? flight.dwellMin : 0) : 0);
       const baseT = sobtMin_d * 60;
       const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
@@ -2596,17 +2458,15 @@ html = f"""
       return null;
     }}
 
+    function getRunwayOptions() {{
+      const list = [];
+      (state.taxiways || []).filter(t => t.pathType === 'runway' || (t.name || '').toLowerCase().includes('runway'))
+        .forEach(t => list.push({{ id: t.id, name: (t.name || '').trim() || 'Runway' }}));
+      return list;
+    }}
     function buildRunwayOptionsHtml(selectedId) {{
       const opts = [];
-      const list = [];
-      (state.runways || []).forEach(r => {{
-        list.push({{ id: r.id, name: (r.name || '').trim() || 'Runway' }});
-      }});
-      (state.taxiways || []).filter(t =>
-        t.pathType === 'runway' || (t.name || '').toLowerCase().includes('runway')
-      ).forEach(t => {{
-        list.push({{ id: t.id, name: (t.name || '').trim() || 'Runway' }});
-      }});
+      const list = getRunwayOptions();
       if (!list.length) {{
         opts.push('<option value=\"\">Runway</option>');
       }} else {{
@@ -2669,6 +2529,14 @@ html = f"""
         vttArrMin = dist / v / 60;
       }}
       return vttArrMin;
+    }}
+    function getBaseVttDepMinutes(f) {{
+      const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
+      if (!depPts || depPts.length < 2) return 0;
+      const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
+      let dist = 0;
+      for (let i = 0; i < depPts.length - 1; i++) dist += pathDist(depPts[i], depPts[i+1]);
+      return dist / v / 60;
     }}
 
     // 활주로별 SLDT(d)가 가장 이른 도착편은 ELDT = SLDT(d).
@@ -2797,6 +2665,7 @@ html = f"""
           const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
           const cfg = typeKey ? configByType[typeKey] : null;
           if (cfg) {{
+            const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
             const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
             const tdMin = cfg.tdMu * 0.85;
             const tdMax = cfg.tdMu * 1.15;
@@ -2816,7 +2685,7 @@ html = f"""
               candidates.forEach(r => {{
                 if (chosen) return;
                 const distFromTd = Math.max(0, r.distM - dTd);
-                const vAt = Math.sqrt(Math.max(0, v0*v0 - 2*aDec*distFromTd));
+                const vAt = runwayArrSpeedAndTimeToRet(v0, aDec, distFromTd, minArrVelRwy).vAtRet;
                 if (vAt <= r.maxExitVelocity) {{ chosen = r; }}
               }});
               if (chosen) {{
@@ -2825,15 +2694,11 @@ html = f"""
                 f.sampledArrRet = sampledRetId;
                 f.arrRetFailed = false;
                 const MAX_DECEL_MS2 = 15;
-                const EXIT_CRAWL_SPEED_MS = 15;
                 const distFromTdChosen = Math.max(0, chosen.distM - dTd);
-                const vAtChosen = Math.sqrt(Math.max(0, v0*v0 - 2*aDec*distFromTdChosen));
                 const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
-                // Touchdown ~ RET 입구까지 시간 (기존 ROT 구간)
-                const decelTime = (v0 - vAtChosen) / aDecRot;
-                const distDuringDecel = (v0*v0 - vAtChosen*vAtChosen) / (2 * aDecRot);
-                const remainingDist = Math.max(0, distFromTdChosen - distDuringDecel);
-                const tToRetEntrance = decelTime + remainingDist / EXIT_CRAWL_SPEED_MS;
+                const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
+                const vAtChosen = rtRunway.vAtRet;
+                const tToRetEntrance = rtRunway.tSec;
                 // RET 내부: 입구 속도에서 Min Exit Velocity까지 감속 시간을 추가
                 const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
                   ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
@@ -2868,17 +2733,10 @@ html = f"""
         const tArrMin = f.timeMin != null ? f.timeMin : 0;
         const dwell = f.dwellMin != null ? f.dwellMin : 0;
         const tDepMin = tArrMin + dwell;
-        const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
         // RET 샘플링까지 모두 반영된 현재 경로 기준으로 VTT(Arr)를 1회 계산하고,
         // SLDT(orig)·SLDT(d)가 동일한 VTT(Arr)를 사용하도록 동기화
         const vttArrMin = getBaseVttArrMinutes(f);
-        let vttDepMin = 0;
-        const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
-        if (depPts && depPts.length >= 2) {{
-          let dist = 0;
-          for (let i = 0; i < depPts.length - 1; i++) dist += pathDist(depPts[i], depPts[i+1]);
-          vttDepMin = dist / v / 60;
-        }}
+        const vttDepMin = getBaseVttDepMinutes(f);
         // SLDT(orig)/SLDT(d)는 항상 SIBT - VTT(Arr)로 계산된 동일 값 사용
         const sldtCalc = Math.max(0, tArrMin - vttArrMin);
         f.sldtMin_orig = sldtCalc;
@@ -2898,16 +2756,10 @@ html = f"""
         const tArrMin = f.timeMin != null ? f.timeMin : 0;
         const dwell = f.dwellMin != null ? f.dwellMin : 0;
         const tDepMin = tArrMin + dwell;
-        const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
         const vttArrMin = getBaseVttArrMinutes(f);
-        let vttDepMin = 0;
-        const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
-        if (depPts && depPts.length >= 2) {{
-          let dist = 0;
-          for (let i = 0; i < depPts.length - 1; i++) dist += pathDist(depPts[i], depPts[i+1]);
-          vttDepMin = dist / v / 60;
-        }}
+        const vttDepMin = getBaseVttDepMinutes(f);
         const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin));
+        const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
         const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
         const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + vttDepMin);
         const sldtStr = formatMinutesToHHMMSS(f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc);
@@ -2920,34 +2772,6 @@ html = f"""
         const etotMin = f.etotMin != null ? f.etotMin : (f.stotMin_d != null ? f.stotMin_d : stotOrig);
         f.eldtMin = eldtMin;
         f.etotMin = etotMin;
-
-        // #region agent log: FlightScheduleRowRender
-        try {{
-          const logPayload = {{
-            id: 'log_' + Date.now() + '_' + Math.random().toString(16).slice(2),
-            timestamp: Date.now(),
-            runId: 'pre-fix',
-            hypothesisId: 'H1-H2-H3',
-            location: '3_Layout_Design.py:renderFlightList.dataRows',
-            message: 'Flight row render times',
-            data: {{
-              flightId: f.id || null,
-              sldtMin_d: f.sldtMin_d ?? null,
-              sldtMin_orig: f.sldtMin_orig ?? null,
-              eldtMin_field: f.eldtMin,
-              etotMin_field: f.etotMin,
-              tArrMin,
-              vttArrMin,
-              vttDepMin
-            }}
-          }};
-          fetch('http://127.0.0.1:7242/ingest/d3690a39-df65-41bd-83b6-eb0ef6ed1c98', {{
-            method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify(logPayload)
-          }}).catch(() => {{}});
-        }} catch (e) {{}}
-        // #endregion
 
         const tArr = formatMinutesToHHMMSS(tArrMin);
         const tDep = formatMinutesToHHMMSS(tDepMin);
@@ -3380,6 +3204,16 @@ html = f"""
       if (typeof renderFlightGantt === 'function') renderFlightGantt();
     }}
 
+    // Allocation Gantt / Runway separation 타임라인에서 공통으로 쓰는 색 (CSS .alloc-* 와 동일 팔레트)
+    const GANTT_COLORS = {{
+      S_BAR: '#007aff',
+      S_SERIES: '#38bdf8',
+      E_BAR: '#fb37c5',
+      E_SERIES: '#fb923c',
+      CONFLICT: '#7f1d1d',
+      SELECTED: '#fbbf24',
+    }};
+
     // Allocation Gantt (세로: Apron/Stand, 가로: 시간)
     function renderFlightGantt() {{
       const ganttEl = document.getElementById('allocationGantt');
@@ -3419,8 +3253,6 @@ html = f"""
       }}
       const flights = state.flights.slice();
       const stands = (state.pbbStands || []).concat(state.remoteStands || []);
-      const standById = {{}};
-      stands.forEach(s => {{ standById[s.id] = s; }});
       if (!flights.length) {{
         ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
         return;
@@ -3517,34 +3349,6 @@ html = f"""
       const minT = baseMinT;
       const maxT = baseMaxT;
 
-      function formatMinToHM(m) {{
-        const hh = Math.floor(m / 60);
-        const mm = Math.floor(m % 60);
-        return hh + ':' + (mm < 10 ? '0' : '') + mm;
-      }}
-      function flightCanUseStand(f, stand) {{
-        if (!stand) return true;
-        const order = {{ A:1,B:2,C:3,D:4,E:5,F:6 }};
-        const fCode = (f.code || 'C').toUpperCase();
-        const sCat = (stand.category || 'F').toUpperCase();
-        const fc = order[fCode] || 99;
-        const sc = order[sCat] || 0;
-        if (fc > sc) return false;
-        // 터미널 호환성: Flight에 선택된 터미널이 있으면, 해당 터미널에 속한 Stand에만 배정
-        const ft = (f.terminalId || (f.token && f.token.terminalId)) || null;
-        if (!ft) return true; // Random
-        // 1) Remote stand의 allowedTerminals 우선
-        const isRemote = (state.remoteStands || []).some(function(r) {{ return r.id === stand.id; }});
-        if (isRemote) {{
-          const allowed = Array.isArray(stand.allowedTerminals) ? stand.allowedTerminals : [];
-          if (allowed.length) return allowed.includes(ft);
-          // allowedTerminals 비어 있으면 일반 터미널 위치 기반으로 판단
-        }}
-        const term = getTerminalForStand(stand);
-        const standTermId = term ? term.id : null;
-        if (!standTermId) return false;
-        return ft === standTermId;
-      }}
       // Allocation/바차트/주기장 배치는 사용자가 명시적으로 변경할 때만 갱신. 택시웨이 등 경로 갱신 시 자동 재배정하지 않음
 
       // 시간축 눈금 위치 (Apron 전체 공통) - 어떤 화면에서도 최대 6개까지만 표시
@@ -3770,7 +3574,7 @@ html = f"""
               );
             }}
           }}
-        // S-Point: SLDT/STOT에도 아래/위 삼각형 추가 (E-Point와 동일 디자인, 색상만 #007aff)
+        // S-Point: SLDT/STOT에도 아래/위 삼각형 추가 (E-Point와 동일 디자인, 색상은 GANTT_COLORS.S_BAR)
           if (showSPoints) {{
             if (sTrisDown && isFinite(sldt) && sldt >= baseMinT && sldt <= baseMaxT) {{
               const leftPctS1 = ((sldt - baseMinT) / baseSpan) * 100 * zoom;
@@ -4202,27 +4006,7 @@ html = f"""
           if (!f) return;
           const sidAttr = track.getAttribute('data-stand-id') || '';
           const standId = sidAttr || null;
-          if (standId) {{
-            const stand = standById[standId];
-            if (!flightCanUseStand(f, stand)) {{
-              alert('Code 또는 선택된 Terminal이 맞지 않아 이 Apron(Stand)에 배정할 수 없습니다.');
-              return;
-            }}
-          }}
-          f.standId = standId;
-          if (f.token) f.token.apronId = standId;
-          // reset original S/E times so they are recomputed for the new stand
-          delete f.sobtMin_orig;
-          delete f.sldtMin_orig;
-          delete f.sibtMin_orig;
-          delete f.stotMin_orig;
-          delete f.eldtMin_orig;
-          delete f.eibtMin_orig;
-          delete f.eobtMin_orig;
-          delete f.etotMin_orig;
-          renderFlightGantt();
-          renderFlightList();
-          if (typeof draw === 'function') draw();
+          assignStandToFlight(f, standId);
         }}, true);
       }})();
 
@@ -4282,36 +4066,15 @@ html = f"""
           if (!f) return;
           const sidAttr = this.getAttribute('data-stand-id') || '';
           const standId = sidAttr || null;
-          if (standId) {{
-            const stand = standById[standId];
-            if (!flightCanUseStand(f, stand)) {{
-              alert('Code 또는 선택된 Terminal이 맞지 않아 이 Apron(Stand)에 배정할 수 없습니다.');
-              return;
-            }}
-          }}
-          f.standId = standId;
-          if (f.token) f.token.apronId = standId;
-          // reset original S/E times so they are recomputed for the new stand
-          delete f.sobtMin_orig;
-          delete f.sldtMin_orig;
-          delete f.sibtMin_orig;
-          delete f.stotMin_orig;
-          delete f.eldtMin_orig;
-          delete f.eibtMin_orig;
-          delete f.eobtMin_orig;
-          delete f.etotMin_orig;
-          renderFlightGantt();
-          renderFlightList();
-          if (typeof draw === 'function') draw();
+          assignStandToFlight(f, standId);
         }});
       }});
     }}
 
     function validateNetworkForFlights() {{
       const msgs = [];
-      const hasRunwayObject = state.runways && state.runways.length > 0;
       const hasRunwayPath = state.taxiways && state.taxiways.some(tw => tw.pathType === 'runway' || (tw.name || '').toLowerCase().includes('runway'));
-      if (!hasRunwayObject && !hasRunwayPath) msgs.push('Runway가 없습니다.');
+      if (!hasRunwayPath) msgs.push('Runway가 없습니다.');
       if (!state.taxiways || !state.taxiways.length) msgs.push('Taxiway가 없습니다.');
       const stands = (state.pbbStands || []).concat(state.remoteStands || []);
       const linked = state.apronLinks || [];
@@ -4364,7 +4127,7 @@ html = f"""
 
     // ---- Layout Design 최소경로: Node/Edge 그래프, 역방향 비용 1,000,000 ----
     const REVERSE_COST = 1000000;
-    function pathDist2(a, b) {{ return (a[0]-b[0])**2 + (a[1]-b[1])**2; }}
+    function pathDist2(a, b) {{ return dist2(a, b); }}
     function pathDist(a, b) {{ return Math.hypot(a[0]-b[0], a[1]-b[1]); }}
 
     function clamp(v, min, max) {{
@@ -4402,14 +4165,7 @@ html = f"""
         f.minDwellMin = minDwell;
         // VTT(Arr)는 Flight Schedule에서 사용하는 정의와 동일하게 계산된 값을 재사용
         let vttArrMin = getBaseVttArrMinutes(f);
-        let vttDepMin = 0;
-        const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
-        if (depPts && depPts.length >= 2) {{
-          const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-          let dist = 0;
-          for (let i = 0; i < depPts.length - 1; i++) dist += pathDist(depPts[i], depPts[i+1]);
-          vttDepMin = dist / v / 60;
-        }}
+        const vttDepMin = getBaseVttDepMinutes(f);
         const sldtOrig = Math.max(0, tArrMin - vttArrMin);
         const sobtOrig = tArrMin + dwell;
         const stotOrig = sobtOrig + vttDepMin;
@@ -4436,14 +4192,7 @@ html = f"""
         list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
         let prevSOBT = -1e9;
         list.forEach(f => {{
-          const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-          let vttDepMin = 0;
-          const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
-          if (depPts && depPts.length >= 2) {{
-            let dist = 0;
-            for (let i = 0; i < depPts.length - 1; i++) dist += pathDist(depPts[i], depPts[i+1]);
-            vttDepMin = dist / v / 60;
-          }}
+          const vttDepMin = getBaseVttDepMinutes(f);
           const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
           const overlap = Math.max(0, prevSOBT - sibt0);
           f.vttADelayMin = overlap;
@@ -4482,6 +4231,117 @@ html = f"""
         f.stotMin = f.stotMin_d;
         f.sobtMin = f.sobtMin_d;
       }});
+    }}
+
+    function rsepGetSec(val) {{
+      const n = Number(val);
+      return isFinite(n) && n >= 0 ? n : 90;
+    }}
+
+    function rsepApplySeparationToEvents(events, cfg) {{
+      const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {{}};
+      const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {{}};
+      const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {{}};
+      const rot = (cfg.rot) ? cfg.rot : {{}};
+      const getSec = rsepGetSec;
+      events.sort((a, b) => a.time - b.time || a.index - b.index);
+      let lastArrETime = -1e9, lastArrCat = null;
+      let lastDepETime = -1e9, lastDepCat = null;
+      events.forEach(ev => {{
+        if (ev.type === 'arr') {{
+          let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : 90) / 60 : -1e9;
+          let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
+          const eTime = Math.max(ev.time, minFromArr, minFromDep);
+          ev.flight.eldtMin = eTime;
+          lastArrETime = eTime;
+          lastArrCat = ev.cat;
+        }} else {{
+          let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
+          let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : 90) / 60 : -1e9;
+          const etotSep = Math.max(ev.time, minFromArr, minFromDep);
+          const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
+          const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + (ev.vttArrMin || 0) + vttADelay;
+          const vttDep = ev.vttDepMin || 0;
+          const etotMin = etotSep;
+          const eobtMin = etotMin - vttDep;
+          ev.flight.etotMin = etotMin;
+          lastDepETime = etotMin;
+          lastDepCat = ev.cat;
+        }}
+      }});
+      let minT = Infinity, maxT = -Infinity;
+      events.forEach(ev => {{
+        const s = ev.time;
+        const e = ev.type === 'arr'
+          ? (ev.flight && ev.flight.eldtMin != null ? ev.flight.eldtMin : s)
+          : (ev.flight && ev.flight.etotMin != null ? ev.flight.etotMin : s);
+        if (s < minT) minT = s;
+        if (e < minT) minT = e;
+        if (s > maxT) maxT = s;
+        if (e > maxT) maxT = e;
+      }});
+      if (!isFinite(minT) || !isFinite(maxT)) {{ minT = 0; maxT = 60; }} else if (maxT <= minT) {{ maxT = minT + 60; }}
+      return {{ minT, maxT }};
+    }}
+
+    function rsepCollectEventsForRunway(rwy, flights, runways) {{
+      const cfg = rsepGetConfigForRunway(rwy);
+      if (!cfg) return null;
+      const stdKey = cfg.standard || 'ICAO';
+      const events = [];
+      let eventIndex = 0;
+      flights.forEach((f, flightIdx) => {{
+        if (f.noWayArr || f.noWayDep) return;
+        let arrRwy = f.arrRunwayId || (f.token && f.token.runwayId);
+        let depRwy = f.depRunwayId || (f.token && f.token.depRunwayId);
+        if (arrRwy == null && depRwy == null && runways.length === 1) {{ arrRwy = rwy.id; depRwy = rwy.id; }}
+        else if (depRwy == null && arrRwy === rwy.id) depRwy = rwy.id;
+        else if (arrRwy == null && depRwy === rwy.id) arrRwy = rwy.id;
+        if (arrRwy !== rwy.id && depRwy !== rwy.id) return;
+        const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+        const cat = stdKey === 'ICAO' ? (ac && ac.icaoJHL ? ac.icaoJHL : 'M') : (ac && ac.recatEu ? ac.recatEu : 'D');
+        const sldtMin_d = f.sldtMin_d != null ? f.sldtMin_d : 0;
+        const stotMin_d = f.stotMin_d != null ? f.stotMin_d : 0;
+        const sobtMin_d = f.sobtMin_d != null ? f.sobtMin_d : 0;
+        const vttArrMin = getBaseVttArrMinutes(f);
+        const vttDepMin = getBaseVttDepMinutes(f);
+        if (arrRwy === rwy.id) events.push({{ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, index: eventIndex++ }});
+        if (depRwy === rwy.id) {{
+          events.push({{ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, sobtMin: sobtMin_d, index: eventIndex++ }});
+        }}
+      }});
+      return {{ cfg, events }};
+    }}
+
+    function runSeparationPass(runways, flights, byRunway, phase) {{
+      if (phase === 'initial') {{
+        runways.forEach(rwy => {{
+          const pack = rsepCollectEventsForRunway(rwy, flights, runways);
+          if (!pack) return;
+          const {{ cfg, events }} = pack;
+          if (!events.length) {{
+            byRunway[rwy.id] = {{ events: [], minT: 0, maxT: 0 }};
+            return;
+          }}
+          const {{ minT, maxT }} = rsepApplySeparationToEvents(events, cfg);
+          byRunway[rwy.id] = {{ events, minT, maxT }};
+        }});
+      }} else {{
+        runways.forEach(rwy => {{
+          const cfg = rsepGetConfigForRunway(rwy);
+          if (!cfg) return;
+          const data = byRunway[rwy.id];
+          if (!data || !data.events || !data.events.length) return;
+          const events = data.events;
+          events.forEach(ev => {{
+            ev.time = ev.type === 'arr'
+              ? (ev.flight.eldtMin != null ? ev.flight.eldtMin : ev.time)
+              : (ev.flight.etotMin != null ? ev.flight.etotMin : ev.time);
+          }});
+          const {{ minT, maxT }} = rsepApplySeparationToEvents(events, cfg);
+          byRunway[rwy.id] = {{ events, minT, maxT }};
+        }});
+      }}
     }}
 
     // Runway separation: SLDT(Arr)·STOT(Dep) 단일 타임라인 시간순 정렬, 동일 시각은 위쪽(리스트 순)을 선행으로 보고
@@ -4530,126 +4390,12 @@ html = f"""
       }})();
 
       const byRunway = {{}};
-      function getSec(val) {{ const n = Number(val); return isFinite(n) && n >= 0 ? n : 90; }}
-      runways.forEach(rwy => {{
-        const cfg = rsepGetConfigForRunway(rwy);
-        if (!cfg) return;
-        const stdKey = cfg.standard || 'ICAO';
-        const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {{}};
-        const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {{}};
-        const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {{}};
-        const rot = (cfg.rot) ? cfg.rot : {{}};
-        const events = [];
-        let eventIndex = 0;
-        flights.forEach((f, flightIdx) => {{
-          if (f.noWayArr || f.noWayDep) return;
-          let arrRwy = f.arrRunwayId || (f.token && f.token.runwayId);
-          let depRwy = f.depRunwayId || (f.token && f.token.depRunwayId);
-          if (arrRwy == null && depRwy == null && runways.length === 1) {{ arrRwy = rwy.id; depRwy = rwy.id; }}
-          else if (depRwy == null && arrRwy === rwy.id) depRwy = rwy.id;
-          else if (arrRwy == null && depRwy === rwy.id) arrRwy = rwy.id;
-          if (arrRwy !== rwy.id && depRwy !== rwy.id) return;
-          const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-          const cat = stdKey === 'ICAO' ? (ac && ac.icaoJHL ? ac.icaoJHL : 'M') : (ac && ac.recatEu ? ac.recatEu : 'D');
-          const sldtMin_d = f.sldtMin_d != null ? f.sldtMin_d : 0;
-          const stotMin_d = f.stotMin_d != null ? f.stotMin_d : 0;
-          const sobtMin_d = f.sobtMin_d != null ? f.sobtMin_d : 0;
-          let vttArrMin = 0, vttDepMin = 0;
-          if (f.sldtMin_orig != null && f.sibtMin_orig != null) {{
-            vttArrMin = f.sibtMin_orig - f.sldtMin_orig;
-          }} else {{
-            const v = Math.max(1, typeof getTaxiwayAvgMoveVelocity === 'function' ? getTaxiwayAvgMoveVelocity() : 10);
-            const arrPts = (typeof getPathForFlight === 'function') ? getPathForFlight(f) : null;
-            if (arrPts && arrPts.length >= 2) {{
-              let dist = 0;
-              for (let i = 0; i < arrPts.length - 1; i++) dist += pathDist(arrPts[i], arrPts[i+1]);
-              vttArrMin = dist / v / 60;
-            }}
-          }}
-          const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
-          if (depPts && depPts.length >= 2) {{
-            const v = Math.max(1, typeof getTaxiwayAvgMoveVelocity === 'function' ? getTaxiwayAvgMoveVelocity() : 10);
-            let dist = 0;
-            for (let i = 0; i < depPts.length - 1; i++) dist += pathDist(depPts[i], depPts[i+1]);
-            vttDepMin = dist / v / 60;
-          }}
-          if (arrRwy === rwy.id) events.push({{ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, index: eventIndex++ }});
-          if (depRwy === rwy.id) {{
-            events.push({{ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, sobtMin: sobtMin_d, index: eventIndex++ }});
-          }}
-        }});
-        events.sort((a, b) => a.time - b.time || a.index - b.index);
-        let lastArrETime = -1e9, lastArrCat = null;
-        let lastDepETime = -1e9, lastDepCat = null;
-        events.forEach(ev => {{
-          if (ev.type === 'arr') {{
-            let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : 90) / 60 : -1e9;
-            let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
-            const eTime = Math.max(ev.time, minFromArr, minFromDep);
-            ev.flight.eldtMin = eTime;
-            lastArrETime = eTime;
-            lastArrCat = ev.cat;
-          }} else {{
-            let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
-            let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : 90) / 60 : -1e9;
-            const etotSep = Math.max(ev.time, minFromArr, minFromDep);
-            const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
-            const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + (ev.vttArrMin || 0) + vttADelay;
-            const vttDep = ev.vttDepMin || 0;
-            const etotMin = etotSep;              // ETOT depends only on runway separation
-            const eobtMin = etotMin - vttDep;     // derived off-block from ETOT and taxi-out
-            ev.flight.etotMin = etotMin;
-            // keep eibtMin/eobtMin provisional; they will be recomputed for apron overlap below
-            lastDepETime = etotMin;
-            lastDepCat = ev.cat;
-          }}
-        }});
-        // 시각화를 위한 시간 범위 계산
-        if (events.length) {{
-          let minT = Infinity;
-          let maxT = -Infinity;
-          events.forEach(ev => {{
-            const s = ev.time;
-            const e = ev.type === 'arr'
-              ? (ev.flight && ev.flight.eldtMin != null ? ev.flight.eldtMin : s)
-              : (ev.flight && ev.flight.etotMin != null ? ev.flight.etotMin : s);
-            if (s < minT) minT = s;
-            if (e < minT) minT = e;
-            if (s > maxT) maxT = s;
-            if (e > maxT) maxT = e;
-          }});
-          if (!isFinite(minT) || !isFinite(maxT)) {{
-            minT = 0; maxT = 60;
-          }} else if (maxT <= minT) {{
-            maxT = minT + 60;
-          }}
-          byRunway[rwy.id] = {{ events, minT, maxT }};
-        }} else {{
-          byRunway[rwy.id] = {{ events: [], minT: 0, maxT: 0 }};
-        }}
-      }});
+      runSeparationPass(runways, flights, byRunway, 'initial');
       // E계열 Apron 겹침: 1차 RW 결과 E를 주기장별 EIBT 기준 정렬 후 겹치면 뒤로 밀고, 2차 RW로 최종 E 확정
       flights.forEach(f => {{
         if (f.noWayArr || f.noWayDep) return;
-        let vttArrMin = 0, vttDepMin = 0;
-        if (f.sldtMin_orig != null && f.sibtMin_orig != null) {{
-          vttArrMin = f.sibtMin_orig - f.sldtMin_orig;
-        }} else {{
-          const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-          const arrPts = (typeof getPathForFlight === 'function') ? getPathForFlight(f) : null;
-          if (arrPts && arrPts.length >= 2) {{
-            let dist = 0;
-            for (let i = 0; i < arrPts.length - 1; i++) dist += pathDist(arrPts[i], arrPts[i+1]);
-            vttArrMin = dist / v / 60;
-          }}
-        }}
-        const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
-        if (depPts && depPts.length >= 2) {{
-          const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-          let dist = 0;
-          for (let i = 0; i < depPts.length - 1; i++) dist += pathDist(depPts[i], depPts[i+1]);
-          vttDepMin = dist / v / 60;
-        }}
+        const vttArrMin = getBaseVttArrMinutes(f);
+        const vttDepMin = getBaseVttDepMinutes(f);
         const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
         f.eibtMin = (f.eldtMin != null ? f.eldtMin : 0) + vttArrMin + vttADelay;
         f.eobtMin = (f.etotMin != null ? f.etotMin : 0) - vttDepMin;
@@ -4667,24 +4413,8 @@ html = f"""
         list.sort((a, b) => (a.eibtMin != null ? a.eibtMin : 0) - (b.eibtMin != null ? b.eibtMin : 0));
         let prevEOBT = -1e9;
         list.forEach(f => {{
-          const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-          let vttDepMin = 0, vttArrMin = 0;
-          const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
-          if (depPts && depPts.length >= 2) {{
-            let dist = 0;
-            for (let i = 0; i < depPts.length - 1; i++) dist += pathDist(depPts[i], depPts[i+1]);
-            vttDepMin = dist / v / 60;
-          }}
-          if (f.sldtMin_orig != null && f.sibtMin_orig != null) {{
-            vttArrMin = f.sibtMin_orig - f.sldtMin_orig;
-          }} else {{
-            const arrPts = (typeof getPathForFlight === 'function') ? getPathForFlight(f) : null;
-            if (arrPts && arrPts.length >= 2) {{
-              let dist = 0;
-              for (let i = 0; i < arrPts.length - 1; i++) dist += pathDist(arrPts[i], arrPts[i+1]);
-              vttArrMin = dist / v / 60;
-            }}
-          }}
+          const vttDepMin = getBaseVttDepMinutes(f);
+          const vttArrMin = getBaseVttArrMinutes(f);
           const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
           const eibtMin = f.eibtMin != null ? f.eibtMin : 0;
           const overlap = Math.max(0, prevEOBT - eibtMin);
@@ -4707,60 +4437,7 @@ html = f"""
         }});
       }});
       // 2차 RW: 밀린 E계열을 이벤트 시간으로 사용하고, 원 로직과 동일하게 1번 더 수행
-      runways.forEach(rwy => {{
-        const cfg = rsepGetConfigForRunway(rwy);
-        if (!cfg) return;
-        const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {{}};
-        const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {{}};
-        const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {{}};
-        const rot = (cfg.rot) ? cfg.rot : {{}};
-        const data = byRunway[rwy.id];
-        if (!data || !data.events || !data.events.length) return;
-        const events = data.events;
-        events.forEach(ev => {{
-          ev.time = ev.type === 'arr'
-            ? (ev.flight.eldtMin != null ? ev.flight.eldtMin : ev.time)
-            : (ev.flight.etotMin != null ? ev.flight.etotMin : ev.time);
-        }});
-        events.sort((a, b) => a.time - b.time || a.index - b.index);
-        let lastArrETime = -1e9, lastArrCat = null;
-        let lastDepETime = -1e9, lastDepCat = null;
-        events.forEach(ev => {{
-          if (ev.type === 'arr') {{
-            let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : 90) / 60 : -1e9;
-            let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
-            const eTime = Math.max(ev.time, minFromArr, minFromDep);
-            ev.flight.eldtMin = eTime;
-            lastArrETime = eTime;
-            lastArrCat = ev.cat;
-          }} else {{
-            let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
-            let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : 90) / 60 : -1e9;
-            const etotSep = Math.max(ev.time, minFromArr, minFromDep);
-            const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
-            const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + (ev.vttArrMin || 0) + vttADelay;
-            const vttDep = ev.vttDepMin || 0;
-            const etotMin = etotSep;              // ETOT depends only on runway separation (2nd pass as well)
-            const eobtMin = etotMin - vttDep;
-            ev.flight.etotMin = etotMin;
-            lastDepETime = etotMin;
-            lastDepCat = ev.cat;
-          }}
-        }});
-        let minT = Infinity, maxT = -Infinity;
-        events.forEach(ev => {{
-          const s = ev.time;
-          const e = ev.type === 'arr'
-            ? (ev.flight && ev.flight.eldtMin != null ? ev.flight.eldtMin : s)
-            : (ev.flight && ev.flight.etotMin != null ? ev.flight.etotMin : s);
-          if (s < minT) minT = s;
-          if (e < minT) minT = e;
-          if (s > maxT) maxT = s;
-          if (e > maxT) maxT = e;
-        }});
-        if (!isFinite(minT) || !isFinite(maxT)) {{ minT = 0; maxT = 60; }} else if (maxT <= minT) {{ maxT = minT + 60; }}
-        byRunway[rwy.id] = {{ events, minT, maxT }};
-      }});
+      runSeparationPass(runways, flights, byRunway, 'refine');
       // SLDT(d)가 가장 작은(일찍인) 항공편은 무조건 ELDT = SLDT(d). 활주로별로 해당 도착 1편만 적용.
       runways.forEach(rwy => {{
         const data = byRunway[rwy.id];
@@ -5172,7 +4849,7 @@ html = f"""
       return d;
     }}
 
-    function getPathForFlight(f) {{
+    function graphPathArrival(f) {{
       if (f.arrRetFailed) {{ f.noWayArr = true; return null; }}
       const token = f.token || {{}};
       let runwayId = token.arrRunwayId || token.runwayId || f.arrRunwayId;
@@ -5190,11 +4867,9 @@ html = f"""
       const selectedArrRetId = f.sampledArrRet != null ? f.sampledArrRet : null;
       const g = buildPathGraph(selectedArrRetId);
       state.pathGraphJunctions = g.junctions || [];
-      // 녹색 점(연결점)이 있는 경우에만 경로 허용: apron link로 연결된 주기장 노드만 사용
       const endIdx = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
       if (endIdx == null) {{
         f.noWayArr = true;
-        if (typeof _logNoWay === 'function') _logNoWay({{ location: 'getPathForFlight:noWayArr', message: 'No Way Arr (no apron link)', data: {{ flightId: f.id, reg: f.reg, apronId: apronId, runwayId: runwayId }} }});
         return null;
       }}
       const startIdx = nearestPathNode(g, r.startPx);
@@ -5208,14 +4883,13 @@ html = f"""
       const totalD = pathIndices ? pathTotalDist(g, pathIndices) : Infinity;
       if (!pathIndices || pathIndices.length < 2 || totalD >= REVERSE_COST) {{
         f.noWayArr = true;
-        if (typeof _logNoWay === 'function') _logNoWay({{ location: 'getPathForFlight:noWayArr', message: 'No Way Arr', data: {{ flightId: f.id, reg: f.reg, apronId: apronId, runwayId: runwayId, startIdx: startIdx, endIdx: endIdx, endRunwayIdx: endRunwayIdx, fromStartLen: fromStart ? fromStart.length : null, fromEndLen: fromEnd ? fromEnd.length : null, distFromStart: distFromStart, distFromEnd: distFromEnd, totalD: totalD, nodesCount: g.nodes.length, junctionsCount: (g.junctions && g.junctions.length) || 0, taxiwayNames: (state.taxiways || []).map(function(t) {{ return t.name || t.id; }}) }} }});
         return null;
       }}
       f.noWayArr = false;
       return pathIndices.map(i => g.nodes[i]);
     }}
 
-    function getPathForFlightDeparture(f) {{
+    function graphPathDeparture(f) {{
       const token = f.token || {{}};
       let runwayId = token.depRunwayId || token.runwayId || f.depRunwayId || f.arrRunwayId;
       const apronId = f.standId != null ? f.standId : (token.apronId || null);
@@ -5230,11 +4904,9 @@ html = f"""
       const stand = (state.pbbStands || []).find(s => s.id === apronId) || (state.remoteStands || []).find(s => s.id === apronId);
       if (!stand) return null;
       const g = buildPathGraph();
-      // 녹색 점(연결점)이 있는 경우에만 경로 허용: apron link로 연결된 주기장 노드만 사용
       const startIdx = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
       if (startIdx == null) {{
         f.noWayDep = true;
-        if (typeof _logNoWay === 'function') _logNoWay({{ location: 'getPathForFlightDeparture:noWayDep', message: 'No Way Dep (no apron link)', data: {{ flightId: f.id, reg: f.reg, apronId: apronId, runwayId: runwayId }} }});
         return null;
       }}
       const toStart = pathDijkstra(g, startIdx, nearestPathNode(g, r.startPx));
@@ -5246,34 +4918,52 @@ html = f"""
       const totalD = pathIndices ? pathTotalDist(g, pathIndices) : Infinity;
       if (!pathIndices || pathIndices.length < 2 || totalD >= REVERSE_COST) {{
         f.noWayDep = true;
-        if (typeof _logNoWay === 'function') _logNoWay({{ location: 'getPathForFlightDeparture:noWayDep', message: 'No Way Dep', data: {{ flightId: f.id, reg: f.reg, apronId: apronId, runwayId: runwayId, startIdx: startIdx, toStartLen: toStart ? toStart.length : null, toEndLen: toEnd ? toEnd.length : null, distToStart: distToStart, distToEnd: distToEnd, totalD: totalD, nodesCount: g.nodes.length, taxiwayNames: (state.taxiways || []).map(function(t) {{ return t.name || t.id; }}) }} }});
         return null;
       }}
       f.noWayDep = false;
-      // 기본 그래프 경로는 apron → runway 접속점까지.
-      // Departure 항공기는 항상 Runway End Point까지 이어지도록,
-      // Runway path의 endPx를 추가로 연결해 준다.
       const pts = pathIndices.map(i => g.nodes[i]);
       if (r && r.endPx && Array.isArray(r.endPx) && r.endPx.length === 2) {{
         const last = pts[pts.length - 1];
         const dx = r.endPx[0] - last[0];
         const dy = r.endPx[1] - last[1];
-        // 이미 거의 같은 위치면 중복 추가는 피한다.
         if (Math.hypot(dx, dy) > 1e-3) pts.push(r.endPx);
       }}
       return pts;
     }}
 
+    function getPathForFlight(f) {{
+      resolveStand(f);
+      return graphPathArrival(f);
+    }}
+
+    function getPathForFlightDeparture(f) {{
+      resolveStand(f);
+      return graphPathDeparture(f);
+    }}
+
+    function computeFlightPath(flight, direction) {{
+      resolveStand(flight);
+      if (direction === 'arrival') {{
+        const pts = graphPathArrival(flight);
+        const timeline = (!flight.noWayArr && pts && pts.length >= 2)
+          ? buildArrivalTimelineFromPts(flight, pts)
+          : null;
+        return {{ pts: pts || null, timeline }};
+      }}
+      const pts = graphPathDeparture(flight);
+      const timeline = (!flight.noWayDep && pts && pts.length >= 2)
+        ? buildDepartureTimelineFromPts(flight, pts)
+        : null;
+      return {{ pts: pts || null, timeline }};
+    }}
+
     function updateAllFlightPaths() {{
       if (!state.flights || !state.flights.length) {{ draw(); return; }}
       state.flights.forEach(f => {{
-        if (typeof getPathForFlight === 'function') getPathForFlight(f);
-        if (typeof getPathForFlightDeparture === 'function') getPathForFlightDeparture(f);
+        const arr = computeFlightPath(f, 'arrival');
+        computeFlightPath(f, 'departure');
         if (f.noWayArr || f.noWayDep) f.timeline = null;
-        else {{
-          const tl = typeof buildArrivalTimeline === 'function' ? buildArrivalTimeline(f) : null;
-          if (tl && tl.length) f.timeline = tl;
-        }}
+        else if (arr.timeline && arr.timeline.length) f.timeline = arr.timeline;
       }});
       if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
       // 경로만 갱신: Allocation/바차트/주기장 배치는 건드리지 않고 리스트·캔버스만 갱신
@@ -5615,8 +5305,7 @@ html = f"""
       if (!arrDepEl) return;
       populateAircraftSelect(aircraftEl);
 
-      const AIRLINE_CODES = ['KE', '7C', 'DL'];
-      function randomAirlineCode() {{ return AIRLINE_CODES[Math.floor(Math.random() * AIRLINE_CODES.length)]; }}
+      function randomAirlineCode() {{ return DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)]; }}
       function randomFlightNumber(airlineCode) {{ return (airlineCode || randomAirlineCode()) + String(Math.floor(1000 + Math.random() * 9000)); }}
       // 현재 이미 생성된 Flight들의 SIBT(d) 중 최대값 + 10분을 기본 SIBT로 사용
       function getDefaultSibtMinutes() {{
@@ -5647,12 +5336,6 @@ html = f"""
         syncMinDwell();
       }}
       const TOKEN_NODE_ORDER = ['runway','taxiway','apron','terminal'];
-      function getRunwayOptions() {{
-        const list = [];
-        (state.runways || []).forEach(r => list.push({{ id: r.id, name: (r.name || '').trim() || 'Runway' }}));
-        (state.taxiways || []).filter(t => t.pathType === 'runway' || (t.name || '').toLowerCase().includes('runway')).forEach(t => list.push({{ id: t.id, name: (t.name || '').trim() || 'Runway' }}));
-        return list;
-      }}
       function fillTokenSelects(flightCode) {{
         const runwaySel = document.getElementById('tokenRunwaySelect');
         const termSel = document.getElementById('tokenTerminalSelect');
@@ -5821,12 +5504,9 @@ html = f"""
               terminalId: null
             }}
           }};
-          if (typeof getPathForFlight === 'function') getPathForFlight(f);
-          // Taxiway / Apron 경로가 없어도 Flight는 생성할 수 있도록, 경로 오류는 경고만 남기고 계속 진행
-          let tl = null;
-          if (typeof buildArrivalTimeline === 'function') {{
-            tl = buildArrivalTimeline(f);
-          }}
+          const arrPath = computeFlightPath(f, 'arrival');
+          computeFlightPath(f, 'departure');
+          const tl = arrPath.timeline;
           if (!tl || !tl.length) {{
             // 경로가 없으면 timeline은 null로 두고, 우측 패널에만 경고 메시지 표시
             updateFlightError('참고: 해당 네트워크에서 유효한 Taxiway / Apron 경로를 찾지 못했습니다. (시뮬레이션 경로는 그려지지 않을 수 있습니다.)');
@@ -5887,8 +5567,8 @@ html = f"""
       function rebuildSelectedFlightTimeline() {{
         if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
         const f = state.selectedObject.obj;
-        if (typeof getPathForFlight === 'function') getPathForFlight(f);
-        if (typeof getPathForFlightDeparture === 'function') getPathForFlightDeparture(f);
+        const arr = computeFlightPath(f, 'arrival');
+        const dep = computeFlightPath(f, 'departure');
         const isArr = f.arrDep !== 'Dep';
         if (isArr && f.noWayArr) {{
           updateFlightError('경로 없음(No Way): 도착 경로를 찾을 수 없습니다.');
@@ -5902,7 +5582,7 @@ html = f"""
           draw();
           return;
         }}
-        const tl = isArr ? buildArrivalTimeline(f) : buildDepartureTimeline(f);
+        const tl = isArr ? arr.timeline : dep.timeline;
         if (!tl || !tl.length) {{
           updateFlightError('해당 네트워크에서 유효한 경로를 찾을 수 없습니다. (설정 변경 후)');
           return;
@@ -6384,8 +6064,8 @@ html = f"""
         }}
         return;
       }}
-      const pathTypeEl = document.getElementById('pathType');
-      const pathType = pathTypeEl ? (pathTypeEl.value || 'taxiway') : 'taxiway';
+      const layoutMode = settingModeSelect ? settingModeSelect.value : 'taxiway';
+      const pathType = pathTypeFromLayoutMode(isPathLayoutMode(layoutMode) ? layoutMode : 'taxiway');
       const rawName = document.getElementById('taxiwayName').value.trim();
       const nameBase = rawName || (pathType === 'runway'
         ? 'Runway'
@@ -6407,54 +6087,34 @@ html = f"""
             return mv;
           }})()
         : undefined;
-      const depPosInput = document.getElementById('runwayDepPointPos');
-      const depPosRaw = depPosInput ? Number(depPosInput.value) : 0;
-      const depPointPos = pathType === 'runway'
-        ? (isFinite(depPosRaw) ? Math.max(0, Math.min(500, depPosRaw)) : 0)
+      const minArrVelInput = document.getElementById('runwayMinArrVelocity');
+      const minArrVelocity = (pathType === 'runway' && minArrVelInput)
+        ? (function() {{
+            const mv = Number(minArrVelInput.value);
+            return (isFinite(mv) && mv > 0) ? Math.max(1, Math.min(150, mv)) : 15;
+          }})()
         : undefined;
-      const taxiway = {{ id: id(), name: nameBase, vertices: [], width: widthVal, direction: modeVal, pathType, maxExitVelocity, minExitVelocity, depPointPos, avgMoveVelocity: (function() {{
+      const taxiway = {{ id: id(), name: nameBase, vertices: [], width: widthVal, direction: modeVal, pathType, maxExitVelocity, minExitVelocity, minArrVelocity, avgMoveVelocity: (function() {{
         const el = document.getElementById('taxiwayAvgMoveVelocity');
         const v = el ? Number(el.value) : 10;
         return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
       }})() }};
+      if (pathType !== 'runway') delete taxiway.minArrVelocity;
+      if (pathType !== 'runway_exit') {{ delete taxiway.maxExitVelocity; delete taxiway.minExitVelocity; }}
       pushUndo();
       state.taxiways.push(taxiway);
       state.taxiwayDrawingId = taxiway.id;
       syncPanelFromState();
       if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
     }});
-    document.getElementById('runwayDirection').addEventListener('change', function() {{
-      if (state.selectedObject && state.selectedObject.type === 'runway') {{
-        state.selectedObject.obj.direction = this.value || 'both';
-        updateObjectInfo();
-        draw();
-        if (scene3d) update3DScene();
-      }}
-    }});
     const runwayDirInPaneEl = document.getElementById('runwayDirectionInTaxiwayPane');
     if (runwayDirInPaneEl) runwayDirInPaneEl.addEventListener('change', function() {{
-      if (state.selectedObject && state.selectedObject.type === 'runway') {{
+      if (state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.obj.pathType === 'runway') {{
         state.selectedObject.obj.direction = this.value || 'both';
         updateObjectInfo();
         draw();
         if (typeof scene3d !== 'undefined' && scene3d) update3DScene();
       }}
-    }});
-    document.getElementById('btnRunwayDraw').addEventListener('click', function() {{
-      // Draw를 시작/종료할 때는 기존 객체 선택 해제
-      state.selectedObject = null;
-      if (state.runwayDrawing) {{
-        // cancel current drawing
-        state.runwayDrawing = false;
-        state.runwayTemp = null;
-        syncPanelFromState();
-        draw();
-        return;
-      }}
-      state.runwayDrawing = true;
-      state.runwayTemp = null;
-      syncPanelFromState();
-      draw();
     }});
     const btnPbbDrawEl = document.getElementById('btnPbbDraw');
     if (btnPbbDrawEl) btnPbbDrawEl.addEventListener('click', function() {{
@@ -6582,9 +6242,12 @@ html = f"""
               '<br>가용 터미널: ' + allowedLabel
           }});
         }});
-      }} else if (mode === 'taxiway') {{
+      }} else if (isPathLayoutMode(mode)) {{
+        const wantPt = pathTypeFromLayoutMode(mode);
         state.taxiways.forEach((tw, idx) => {{
           if (seen['taxiway_' + tw.id]) return;
+          const pt = tw.pathType || 'taxiway';
+          if (pt !== wantPt) return;
           seen['taxiway_' + tw.id] = true;
           const baseName = (tw.name && tw.name.trim()) ? tw.name.trim() : ('Taxiway ' + (idx + 1));
           const dirVal = getTaxiwayDirection(tw);
@@ -6610,6 +6273,11 @@ html = f"""
           const minExit = (tw.pathType === 'runway_exit' && typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
             ? (maxExit != null && tw.minExitVelocity > maxExit ? maxExit : tw.minExitVelocity)
             : null;
+          const minArrDisplay = tw.pathType === 'runway'
+            ? ((typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0)
+              ? Math.max(1, Math.min(150, tw.minArrVelocity))
+              : 15)
+            : null;
           items.push({{
             type: 'taxiway',
             id: tw.id,
@@ -6621,6 +6289,7 @@ html = f"""
               '<br>Width: ' + widthVal + ' m' +
               (maxExit != null ? '<br>Max exit velocity: ' + maxExit + ' m/s' : '') +
               (minExit != null ? '<br>Min exit velocity: ' + minExit + ' m/s' : '') +
+              (minArrDisplay != null ? '<br>Min arr velocity: ' + minArrDisplay + ' m/s' : '') +
               (tw.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
               '<br>Start point: ' + startStr +
               '<br>End point: ' + endStr
@@ -6643,29 +6312,6 @@ html = f"""
             title: uniqueTitle('Apron–Taxiway | ' + title),
             tag: 'Apron–Taxiway',
             details
-          }});
-        }});
-      }} else if (mode === 'runway') {{
-        state.runways.forEach((rw, idx) => {{
-          if (seen['runway_' + rw.id]) return;
-          seen['runway_' + rw.id] = true;
-          const baseName = (rw.name && rw.name.trim()) ? rw.name.trim() : ('Runway ' + (idx + 1));
-          const dirVal = getTaxiwayDirection(rw);
-          const dirLabel = dirVal === 'clockwise' ? 'Clockwise' : (dirVal === 'counter_clockwise' ? 'Counter CW' : 'Both');
-          const serRw = serializeRunwayWithEndpoints(rw);
-          const startStr = serRw.start_point != null ? '(' + serRw.start_point.col + ',' + serRw.start_point.row + ')' : '—';
-          const endStr = serRw.end_point != null ? '(' + serRw.end_point.col + ',' + serRw.end_point.row + ')' : '—';
-          items.push({{
-            type: 'runway',
-            id: rw.id,
-            title: uniqueTitle('Runway | ' + baseName),
-            tag: dirLabel,
-            details:
-              'Length: ' + rw.length.toFixed(0) + ' m' +
-              '<br>Width: ' + rw.width.toFixed(0) + ' m' +
-              '<br>Start: (' + rw.startCol + ',' + rw.startRow + ')' +
-              '<br>Start point: ' + startStr +
-              '<br>End point: ' + endStr
           }});
         }});
       }}
@@ -6695,7 +6341,6 @@ html = f"""
           else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
           else if (type === 'taxiway') state.taxiways = state.taxiways.filter(tw => tw.id !== id);
           else if (type === 'apronLink') state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
-          else if (type === 'runway') state.runways = state.runways.filter(rw => rw.id !== id);
           else if (type === 'flight') state.flights = state.flights.filter(f => f.id !== id);
           if (state.selectedObject && state.selectedObject.type === type && state.selectedObject.id === id)
             state.selectedObject = null;
@@ -6718,7 +6363,6 @@ html = f"""
           else if (typ === 'remote') obj = state.remoteStands.find(r => r.id === idr);
           else if (typ === 'taxiway') obj = state.taxiways.find(tw => tw.id === idr);
           else if (typ === 'apronLink') obj = state.apronLinks.find(lk => lk.id === idr);
-          else if (typ === 'runway') obj = state.runways.find(rw => rw.id === idr);
           else if (typ === 'flight') obj = state.flights.find(f => f.id === idr);
           if (!obj) return;
           const wasExpanded = this.classList.contains('expanded');
@@ -6787,23 +6431,19 @@ html = f"""
           const startStr = ser.start_point != null ? '(' + ser.start_point.col + ', ' + ser.start_point.row + ')' : '—';
           const endStr = ser.end_point != null ? '(' + ser.end_point.col + ', ' + ser.end_point.row + ')' : '—';
           const avgVel = (typeof o.avgMoveVelocity === 'number' && isFinite(o.avgMoveVelocity) && o.avgMoveVelocity > 0) ? o.avgMoveVelocity : 10;
+          const minArr = (o.pathType === 'runway')
+            ? ((typeof o.minArrVelocity === 'number' && isFinite(o.minArrVelocity) && o.minArrVelocity > 0) ? Math.max(1, Math.min(150, o.minArrVelocity)) : 15)
+            : null;
+          const maxEx = (o.pathType === 'runway_exit' && typeof o.maxExitVelocity === 'number' && isFinite(o.maxExitVelocity) && o.maxExitVelocity > 0) ? o.maxExitVelocity : null;
+          const minEx = (o.pathType === 'runway_exit' && typeof o.minExitVelocity === 'number' && isFinite(o.minExitVelocity) && o.minExitVelocity > 0) ? o.minExitVelocity : null;
           objectInfoEl.innerHTML = '<strong>' + heading + '</strong><br>Name: ' + (o.name || '—') +
             '<br>Direction: ' + dirLabel +
             '<br>Width: ' + (o.width != null ? o.width : 23) + ' m' +
-            '<br>Avg move velocity: ' + avgVel + ' m/s' +
+            (o.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
+            (minArr != null ? '<br>Min arr velocity: ' + minArr + ' m/s' : '') +
+            (maxEx != null ? '<br>Max exit velocity: ' + maxEx + ' m/s' : '') +
+            (minEx != null ? '<br>Min exit velocity: ' + minEx + ' m/s' : '') +
             '<br>Points: ' + (o.vertices ? o.vertices.length : 0) +
-            '<br>Start point: ' + startStr + '<br>End point: ' + endStr;
-        }} else if (state.selectedObject.type === 'runway') {{
-          const dirVal = getTaxiwayDirection(o);
-          const dirLabel = dirVal === 'clockwise' ? 'Clockwise' : (dirVal === 'counter_clockwise' ? 'Counter CW' : 'Both');
-          const ser = serializeRunwayWithEndpoints(o);
-          const startStr = ser.start_point != null ? '(' + ser.start_point.col + ', ' + ser.start_point.row + ')' : '—';
-          const endStr = ser.end_point != null ? '(' + ser.end_point.col + ', ' + ser.end_point.row + ')' : '—';
-          objectInfoEl.innerHTML = '<strong>Runway</strong><br>Name: ' + (o.name || '—') +
-            '<br>Direction: ' + dirLabel +
-            '<br>Length: ' + (o.length != null ? o.length.toFixed(0) : '—') + ' m' +
-            '<br>Width: ' + (o.width != null ? o.width.toFixed(0) : '—') + ' m' +
-            '<br>Start cell: (' + o.startCol + ',' + o.startRow + ')' +
             '<br>Start point: ' + startStr + '<br>End point: ' + endStr;
         }} else if (state.selectedObject.type === 'flight') {{
           const dir = o.arrDep === 'Dep' ? 'Departure' : 'Arrival';
@@ -7091,7 +6731,7 @@ html = f"""
       if (!panel) return;
       const runways = (state.taxiways || []).filter(tw => tw.pathType === 'runway');
       if (!runways.length) {{
-        panel.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No runway-path taxiways. Mode Taxiway &amp; Runway에서 Type을 Runway로 설정한 객체를 먼저 생성하세요.</div>';
+        panel.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No runway paths. Layout Mode <strong>Runway</strong>로 활주로 폴리라인을 먼저 그리세요.</div>';
         return;
       }}
       if (!state.activeRwySepId || !runways.some(r => r.id === state.activeRwySepId)) {{
@@ -7171,14 +6811,7 @@ html = f"""
           const val = cfg.rot && cfg.rot[c] != null ? cfg.rot[c] : '';
           if (val !== '' && val != null) filledRot += 1;
         }});
-        html += '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
-        html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d2018;border-radius:2px;margin-right:4px;"></span><span style="color:#68d391;">&lt;90s</span></span>';
-        html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d1a28;border-radius:2px;margin-right:4px;"></span><span style="color:#63b3ed;">90–119s</span></span>';
-        html += '<span><span style="display:inline-block;width:10px;height:10px;background:#1e1e08;border-radius:2px;margin-right:4px;"></span><span style="color:#f6e05e;">120–149s</span></span>';
-        html += '<span><span style="display:inline-block;width:10px;height:10px;background:#280d0d;border-radius:2px;margin-right:4px;"></span><span style="color:#fc8181;">≥150s</span></span>';
-        const rotCountColor = filledRot === totalRot ? '#68d391' : '#9ca3af';
-        html += '<span style="margin-left:4px;color:' + rotCountColor + ';">' + filledRot + '/' + totalRot + '</span>';
-        html += '</div>';
+        html += rsepLegendHtml(filledRot, totalRot);
 
         html += '<div class="rwysep-row" style="flex-wrap:wrap;">';
         cats.forEach(c => {{
@@ -7220,14 +6853,7 @@ html = f"""
               if (v !== '' && v != null) filled += 1;
             }});
           }});
-          html += '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
-          html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d2018;border-radius:2px;margin-right:4px;"></span><span style="color:#68d391;">&lt;90s</span></span>';
-          html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d1a28;border-radius:2px;margin-right:4px;"></span><span style="color:#63b3ed;">90–119s</span></span>';
-          html += '<span><span style="display:inline-block;width:10px;height:10px;background:#1e1e08;border-radius:2px;margin-right:4px;"></span><span style="color:#f6e05e;">120–149s</span></span>';
-          html += '<span><span style="display:inline-block;width:10px;height:10px;background:#280d0d;border-radius:2px;margin-right:4px;"></span><span style="color:#fc8181;">≥150s</span></span>';
-          const countColor = filled === total ? '#68d391' : '#9ca3af';
-          html += '<span style="margin-left:4px;color:' + countColor + ';">' + filled + '/' + total + '</span>';
-          html += '</div>';
+          html += rsepLegendHtml(filled, total);
 
           html += '<div class="rwysep-matrix-wrap"><table class="rwysep-table"><thead><tr>';
           html += '<th>Lead↓ / Trail→</th>';
@@ -7263,14 +6889,7 @@ html = f"""
             const v = data1d[cat] != null ? data1d[cat] : '';
             if (v !== '' && v != null) filled += 1;
           }});
-          html += '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
-          html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d2018;border-radius:2px;margin-right:4px;"></span><span style="color:#68d391;">&lt;90s</span></span>';
-          html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d1a28;border-radius:2px;margin-right:4px;"></span><span style="color:#63b3ed;">90–119s</span></span>';
-          html += '<span><span style="display:inline-block;width:10px;height:10px;background:#1e1e08;border-radius:2px;margin-right:4px;"></span><span style="color:#f6e05e;">120–149s</span></span>';
-          html += '<span><span style="display:inline-block;width:10px;height:10px;background:#280d0d;border-radius:2px;margin-right:4px;"></span><span style="color:#fc8181;">≥150s</span></span>';
-          const countColor = filled === total ? '#68d391' : '#9ca3af';
-          html += '<span style="margin-left:4px;color:' + countColor + ';">' + filled + '/' + total + '</span>';
-          html += '</div>';
+          html += rsepLegendHtml(filled, total);
 
           html += '<div class="rwysep-row" style="flex-wrap:wrap;margin-top:4px;">';
           cats.forEach(cat => {{
@@ -7379,12 +6998,6 @@ html = f"""
         const minT = baseMinT;
         const maxT = baseMaxT;
 
-        function formatMinToHM(m) {{
-          const hh = Math.floor(m / 60);
-          const mm = Math.floor(m % 60);
-          return hh + ':' + (mm < 10 ? '0' : '') + mm;
-        }}
-
         lanes.sort((a, b) => {{
           const ta = (a.sldt ?? a.stot ?? a.eldt ?? a.etot ?? 0);
           const tb = (b.sldt ?? b.stot ?? b.eldt ?? b.etot ?? 0);
@@ -7446,13 +7059,13 @@ html = f"""
               '<div class="rwysep-tri" style="' +
                 'top:20%;' +
                 'left:' + leftPct + '%;' +
-                'border-top:6px solid #38bdf8;' +
+                'border-top:6px solid ' + GANTT_COLORS.S_SERIES + ';' +
               '"></div>' +
               // 종료점: 위 방향 삼각형
               '<div class="rwysep-tri" style="' +
                 'top:20%;' +
                 'left:' + rightPct + '%;' +
-                'border-bottom:6px solid #38bdf8;' +
+                'border-bottom:6px solid ' + GANTT_COLORS.S_SERIES + ';' +
               '"></div>';
           }}
           if (eStart != null && eEnd != null && span > 0) {{
@@ -7475,13 +7088,13 @@ html = f"""
               '<div class="rwysep-tri" style="' +
                 'top:54%;' +
                 'left:' + leftPct2 + '%;' +
-                'border-top:6px solid #fb923c;' +
+                'border-top:6px solid ' + GANTT_COLORS.E_SERIES + ';' +
               '"></div>' +
               // 종료점: 위 방향 삼각형
               '<div class="rwysep-tri" style="' +
                 'top:54%;' +
                 'left:' + rightPct2 + '%;' +
-                'border-bottom:6px solid #fb923c;' +
+                'border-bottom:6px solid ' + GANTT_COLORS.E_SERIES + ';' +
               '"></div>';
           }}
 
@@ -7507,8 +7120,8 @@ html = f"""
             'top:60%;' +
             'left:' + m.leftPct + '%;' +
             (m.type === 'start'
-              ? 'border-top:6px solid #38bdf8;'
-              : 'border-bottom:6px solid #38bdf8;') +
+              ? 'border-top:6px solid ' + GANTT_COLORS.S_SERIES + ';'
+              : 'border-bottom:6px solid ' + GANTT_COLORS.S_SERIES + ';') +
           '"></div>'
         ).join('');
 
@@ -7517,8 +7130,8 @@ html = f"""
             'top:60%;' +
             'left:' + m.leftPct + '%;' +
             (m.type === 'start'
-              ? 'border-top:6px solid #fb923c;'
-              : 'border-bottom:6px solid #fb923c;') +
+              ? 'border-top:6px solid ' + GANTT_COLORS.E_SERIES + ';'
+              : 'border-bottom:6px solid ' + GANTT_COLORS.E_SERIES + ';') +
           '"></div>'
         ).join('');
 
@@ -7758,50 +7371,6 @@ html = f"""
             ctx.fill();
           }}
         }}
-        // Runway path에 line-up point 마커 표시 (lineup_point 좌표가 우선, 없으면 depPointPos m 지점)
-        if (isRunwayPath && tw.vertices.length >= 2 && (tw.lineup_point || tw.dep_point || typeof tw.depPointPos === 'number')) {{
-          let px, py;
-          const lup = tw.lineup_point || tw.dep_point;
-          if (lup && typeof lup.col === 'number' && typeof lup.row === 'number') {{
-            // 저장된 좌표 기반 (lineup_point 우선, dep_point 호환)
-            const pt = cellToPixel(lup.col, lup.row);
-            px = pt[0];
-            py = pt[1];
-          }} else {{
-            const verts = tw.vertices;
-            const pts = verts.map(v => cellToPixel(v.col, v.row));
-            // col/row 차이를 1m 단위로 보고 depPointPos(m)를 길이에 대한 비율로 변환
-            const totalLen = verts.reduce((acc, v, i) =>
-              acc + (i > 0 ? Math.hypot(v.col - verts[i-1].col, v.row - verts[i-1].row) : 0), 0);
-            const desired = Math.max(0, Math.min(500, tw.depPointPos || 0));
-            const ratio = totalLen > 0 ? Math.max(0, Math.min(1, desired / totalLen)) : 0;
-            const targetDist = totalLen * ratio;
-            let acc = 0;
-            px = pts[0][0]; py = pts[0][1];
-            for (let i = 1; i < pts.length; i++) {{
-              const seg = Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
-              if (acc + seg >= targetDist) {{
-                const t = seg > 0 ? (targetDist - acc) / seg : 0;
-                px = pts[i-1][0] + t * (pts[i][0]-pts[i-1][0]);
-                py = pts[i-1][1] + t * (pts[i][1]-pts[i-1][1]);
-                break;
-              }}
-              acc += seg;
-            }}
-          }}
-          ctx.fillStyle = '#f97373';
-          ctx.beginPath();
-          ctx.arc(px, py, 6, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#b91c1c';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          ctx.fillStyle = '#fef2f2';
-          ctx.font = 'bold 9px system-ui';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText('Line-up', px, py - 8);
-        }}
         if ((drawing || sel) && tw.vertices.length >= 1) {{
           tw.vertices.forEach((v, i) => {{
             const [x, y] = cellToPixel(v.col, v.row);
@@ -7832,84 +7401,6 @@ html = f"""
           }});
         }}
       }});
-      ctx.restore();
-    }}
-
-    function drawRunways() {{
-      if (!state.runways.length && !state.runwayTemp) return;
-      ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.translate(state.panX, state.panY);
-      ctx.scale(state.scale, state.scale);
-      state.runways.forEach(rw => {{
-        const cx = rw.cx, cy = rw.cy;
-        const ux = rw.dx, uy = rw.dy;
-        const len2 = rw.length / 2;
-        const w2 = rw.width / 2;
-        const px = -uy, py = ux; // left normal
-        const p1x = cx - ux*len2 - px*w2, p1y = cy - uy*len2 - py*w2;
-        const p2x = cx + ux*len2 - px*w2, p2y = cy + uy*len2 - py*w2;
-        const p3x = cx + ux*len2 + px*w2, p3y = cy + uy*len2 + py*w2;
-        const p4x = cx - ux*len2 + px*w2, p4y = cy - uy*len2 + py*w2;
-        ctx.fillStyle = 'rgba(148,163,184,0.65)';
-        ctx.strokeStyle = '#e5e7eb';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(p1x, p1y);
-        ctx.lineTo(p2x, p2y);
-        ctx.lineTo(p3x, p3y);
-        ctx.lineTo(p4x, p4y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-
-        // Direction arrows along runway centerline (like taxiway)
-        const dirVal = getTaxiwayDirection(rw);
-        if (dirVal !== 'both') {{
-          const [startCol, startRow] = [rw.startCol, rw.startRow];
-          const [sx, sy] = cellToPixel(startCol, startRow);
-          const baseUx = ux;
-          const baseUy = uy;
-          const dirSign = dirVal === 'clockwise' ? 1 : -1;
-          const vx = baseUx * dirSign;
-          const vy = baseUy * dirSign;
-          const totalLen = rw.length;
-          const arrowSpacing = Math.max(80, Math.min(200, totalLen / 6));
-          const arrLen = Math.max(18, Math.min(40, rw.width * 1.2));
-          const numArrows = Math.floor(totalLen / arrowSpacing);
-          ctx.fillStyle = '#f97316';
-          ctx.strokeStyle = '#f97316';
-          ctx.lineWidth = 1.2;
-          for (let i = 1; i <= numArrows; i++) {{
-            const d = (i * totalLen) / (numArrows + 1);
-            const ax = sx + vx * d;
-            const ay = sy + vy * d;
-            const ang = Math.atan2(vy, vx);
-            ctx.save();
-            ctx.translate(ax, ay);
-            ctx.rotate(ang);
-            ctx.beginPath();
-            ctx.moveTo(-arrLen * 0.5, -arrLen * 0.25);
-            ctx.lineTo(arrLen * 0.5, 0);
-            ctx.lineTo(-arrLen * 0.5, arrLen * 0.25);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-          }}
-        }}
-      }});
-      // Runway drawing start point indicator (like taxiway)
-      if (state.runwayTemp) {{
-        const sx = state.runwayTemp.x;
-        const sy = state.runwayTemp.y;
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(sx, sy, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#0ea5e9';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }}
       ctx.restore();
     }}
 
@@ -8028,7 +7519,6 @@ html = f"""
       drawGrid();
       drawTerminals();
       drawTaxiways();
-      drawRunways();
       drawPBBs();
       drawRemoteStands();
       drawApronTaxiwayLinks();
@@ -8057,7 +7547,6 @@ html = f"""
       else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
       else if (type === 'taxiway') state.taxiways = state.taxiways.filter(tw => tw.id !== id);
       else if (type === 'apronLink') state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
-      else if (type === 'runway') state.runways = state.runways.filter(rw => rw.id !== id);
       else if (type === 'flight') state.flights = state.flights.filter(f => f.id !== id);
       else return;
       state.selectedObject = null;
@@ -8202,7 +7691,7 @@ html = f"""
       if (flightTooltip && !state.isPanning) {{
         const hit = hitTest(wx, wy);
         if (hit && hit.obj) {{
-          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Terminal' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'taxiway' || hit.type === 'runway' ? (hit.obj.name || hit.type) : hit.type);
+          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Terminal' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type);
           flightTooltip.style.display = 'block';
           flightTooltip.textContent = name;
           flightTooltip.style.left = (ev.clientX + 12) + 'px';
@@ -8242,27 +7731,17 @@ html = f"""
       try {{ draw(); }} catch(e) {{}}
     }});
     function hitTestPbbEnd(wx, wy) {{
-      const click = [wx, wy];
       const maxD2 = (CELL_SIZE * 0.8) ** 2;
-      let best = null;
-      let bestD2 = maxD2;
+      const cands = [];
       state.pbbStands.forEach(pbb => {{
-        const ex = pbb.x2, ey = pbb.y2;
-        const d2 = dist2([ex, ey], click);
-        if (d2 < bestD2) {{
-          bestD2 = d2;
-          best = {{ id: pbb.id, kind: 'pbb', x: ex, y: ey }};
-        }}
+        cands.push({{ id: pbb.id, kind: 'pbb', x: pbb.x2, y: pbb.y2 }});
       }});
       state.remoteStands.forEach(st => {{
         const [cx, cy] = cellToPixel(st.col, st.row);
-        const d2 = dist2([cx, cy], click);
-        if (d2 < bestD2) {{
-          bestD2 = d2;
-          best = {{ id: st.id, kind: 'remote', x: cx, y: cy }};
-        }}
+        cands.push({{ id: st.id, kind: 'remote', x: cx, y: cy }});
       }});
-      return best;
+      const best = findNearestItem(cands, c => [c.x, c.y], wx, wy, maxD2);
+      return best || null;
     }}
 
     function hitTestAnyTaxiwayVertex(wx, wy) {{
@@ -8313,68 +7792,18 @@ html = f"""
       const inStandDrawingMode = (mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing);
       if (!state.dragStart && !inStandDrawingMode) {{ state.dragStart = null; return; }}
       if (mode === 'pbb' && state.pbbDrawing) {{
-        let bestEdge = null, bestD2 = Infinity;
-        state.terminals.forEach(t => {{
-          if (!t.closed || t.vertices.length < 2) return;
-          let cx = 0, cy = 0;
-          t.vertices.forEach(v => {{ const [px, py] = cellToPixel(v.col, v.row); cx += px; cy += py; }});
-          cx /= t.vertices.length || 1; cy /= t.vertices.length || 1;
-          for (let i = 0; i < t.vertices.length; i++) {{
-            const v1 = t.vertices[i], v2 = t.vertices[(i+1) % t.vertices.length];
-            const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-            const near = closestPointOnSegment(p1, p2, [wx, wy]);
-            if (near) {{ const d2 = dist2(near, [wx, wy]); if (d2 < bestD2) {{ bestD2 = d2; bestEdge = {{ near, p1, p2, col: v1.col, row: v1.row, cx, cy }}; }} }}
-          }}
-        }});
-        const maxD2 = (CELL_SIZE*1.0)**2;
-        if (bestEdge && bestD2 < maxD2) {{
-          const [ex,ey]=bestEdge.near, [x1,y1]=bestEdge.p1, [x2,y2]=bestEdge.p2;
-          let nx = -(y2-y1), ny = x2-x1;
-          const len = Math.hypot(nx,ny) || 1; nx /= len; ny /= len;
-          const toClickX = wx - ex, toClickY = wy - ey;
-          if (nx * toClickX + ny * toClickY < 0) {{ nx *= -1; ny *= -1; }}
-          const category = document.getElementById('standCategory').value || 'C';
-          const standSize = getStandSizeMeters(category);
-          const minLen = standSize / 2 + 3;
-          const lenCells = parseInt(document.getElementById('pbbLength').value || '2', 10);
-          const lenPx = Math.max(lenCells * CELL_SIZE * 0.9, minLen);
-          const newPbb = {{ x1: ex, y1: ey, x2: ex+nx*lenPx, y2: ey+ny*lenPx, category }};
-          if (!pbbStandOverlapsExisting(newPbb)) {{
-            pushUndo();
-            state.pbbStands.push({{ id: id(), name: document.getElementById('standName').value.trim() || ('Contact Stand ' + (state.pbbStands.length + 1)), x1: ex, y1: ey, x2: ex+nx*lenPx, y2: ey+ny*lenPx, category: newPbb.category, edgeCol: bestEdge.col, edgeRow: bestEdge.row }});
-            syncPanelFromState();
-            draw();
-          }}
+        if (tryPlacePbbAt(wx, wy)) {{
+          syncPanelFromState();
+          draw();
         }}
         state.dragStart = null;
         return;
       }}
       if (mode === 'remote' && state.remoteDrawing) {{
-        // Remote Stand는 항상 미리보기(초록/빨강 박스)가 잡힌 위치에서만 생성되도록 제한
         const prev = state.previewRemote;
-        if (prev && !prev.overlap) {{
-          const col = prev.col;
-          const row = prev.row;
-          if (col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {{
-            const category = document.getElementById('remoteCategory').value || 'C';
-            const [cx, cy] = cellToPixel(col, row);
-            const size = getStandSizeMeters(category);
-            const bounds = getStandBoundsRect(cx, cy, size);
-            if (!standOverlapsExisting(bounds)) {{
-              pushUndo();
-              const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || 'R001';
-              const usedNames = new Set((state.remoteStands || []).map(s => (s.name || '').trim()).filter(Boolean));
-              let finalName = baseName;
-              if (usedNames.has(finalName)) {{
-                let idx = 1;
-                while (usedNames.has(baseName + ' (' + idx + ')')) idx++;
-                finalName = baseName + ' (' + idx + ')';
-              }}
-              state.remoteStands.push({{ id: id(), col, row, category, name: finalName }});
-              syncPanelFromState();
-              draw();
-            }}
-          }}
+        if (prev && !prev.overlap && tryPlaceRemoteAt(prev.col, prev.row)) {{
+          syncPanelFromState();
+          draw();
         }}
         state.dragStart = null;
         return;
@@ -8417,46 +7846,6 @@ html = f"""
             }}
             draw();
           }}
-        }} else if (mode === 'runway') {{
-          if (!state.runwayDrawing) return;
-          const [col, row] = pixelToCell(wx, wy);
-          const [sx, sy] = cellToPixel(col, row);
-          if (!state.runwayTemp) {{
-            state.runwayTemp = {{ x: sx, y: sy, col, row }};
-          }} else {{
-            const s = state.runwayTemp;
-            const dx = sx - s.x;
-            const dy = sy - s.y;
-            const lenDir = Math.hypot(dx, dy);
-            if (lenDir > 0.0001) {{
-              const ux = dx / lenDir, uy = dy / lenDir;
-              const lengthM = Math.max(50, Number(document.getElementById('runwayLength').value) || 3000);
-              const widthM = Math.max(10, Number(document.getElementById('runwayWidth').value) || 45);
-              ensureDefaultRunwayDirectionModes();
-              const modeId = document.getElementById('runwayDirectionMode').value || (state.runwayDirectionModes[0] && state.runwayDirectionModes[0].id);
-              const nameBase = document.getElementById('runwayName').value.trim() || ('Runway ' + (state.runways.length + 1));
-              const cx = s.x + ux * (lengthM / 2);
-              const cy = s.y + uy * (lengthM / 2);
-              pushUndo();
-              state.runways.push({{
-                id: id(),
-                name: nameBase,
-                cx, cy,
-                dx: ux, dy: uy,
-                length: lengthM,
-                width: widthM,
-                startCol: s.col,
-                startRow: s.row,
-                directionModeId: modeId || null,
-                direction: document.getElementById('runwayDirection').value || 'both'
-              }});
-            }}
-            state.runwayTemp = null;
-            state.runwayDrawing = false;
-            if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-            syncPanelFromState();
-            if (typeof update3DScene === 'function') update3DScene();
-          }}
         }} else if (hit) {{
           state.selectedObject = hit;
           if (hit.type === 'terminal') state.currentTerminalId = hit.id;
@@ -8464,9 +7853,10 @@ html = f"""
           if (hit.type === 'terminal') settingModeSelect.value = 'terminal';
           else if (hit.type === 'pbb') settingModeSelect.value = 'pbb';
           else if (hit.type === 'remote') settingModeSelect.value = 'remote';
-          else if (hit.type === 'taxiway' || hit.type === 'runway' || hit.type === 'apronLink') settingModeSelect.value = 'taxiway';
+          else if (hit.type === 'taxiway') settingModeSelect.value = layoutModeFromPathType(hit.obj.pathType || 'taxiway');
+          else if (hit.type === 'apronLink') settingModeSelect.value = 'apronTaxiway';
           if (hit.type === 'flight' && typeof switchToTab === 'function') switchToTab('flight');
-          if (hit.type === 'runway' && typeof switchToTab === 'function') switchToTab('rwysep');
+          if (hit.type === 'taxiway' && hit.obj.pathType === 'runway' && typeof switchToTab === 'function') switchToTab('rwysep');
           if (typeof syncSettingsPaneToMode === 'function') syncSettingsPaneToMode();
           syncPanelFromState();
           renderObjectList();
@@ -8500,7 +7890,7 @@ html = f"""
                 draw();
               }}
             }}
-          }} else if (mode === 'taxiway') {{
+          }} else if (isPathLayoutMode(mode)) {{
             if (state.taxiwayDrawingId) {{
               const tw = state.taxiways.find(t => t.id === state.taxiwayDrawingId);
               if (tw) {{
@@ -8523,76 +7913,15 @@ html = f"""
               }}
             }}
           }} else if (mode === 'pbb') {{
-            let bestEdge = null, bestD2 = Infinity;
-            state.terminals.forEach(t => {{
-              if (!t.closed || t.vertices.length < 2) return;
-              let cx = 0, cy = 0;
-              t.vertices.forEach(v => {{
-                const [px, py] = cellToPixel(v.col, v.row);
-                cx += px; cy += py;
-              }});
-              cx /= t.vertices.length || 1;
-              cy /= t.vertices.length || 1;
-              for (let i = 0; i < t.vertices.length; i++) {{
-                const v1 = t.vertices[i], v2 = t.vertices[(i+1) % t.vertices.length];
-                const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-                const near = closestPointOnSegment(p1, p2, [wx, wy]);
-                if (near) {{
-                  const d2 = dist2(near, [wx, wy]);
-                  if (d2 < bestD2) {{
-                    bestD2 = d2;
-                    bestEdge = {{ near, p1, p2, col: v1.col, row: v1.row, cx, cy }};
-                  }}
-                }}
-              }}
-            }});
-            const maxD2 = (CELL_SIZE*1.0)**2;
-            if (bestEdge && bestD2 < maxD2) {{
-              const [ex,ey]=bestEdge.near, [x1,y1]=bestEdge.p1, [x2,y2]=bestEdge.p2;
-              let nx = -(y2-y1), ny = x2-x1;
-              const len = Math.hypot(nx,ny) || 1;
-              nx /= len; ny /= len;
-              const toClickX = wx - ex, toClickY = wy - ey;
-              if (nx * toClickX + ny * toClickY < 0) {{ nx *= -1; ny *= -1; }}
-              const category = document.getElementById('standCategory').value || 'C';
-              const standSize = getStandSizeMeters(category);
-              const minLen = standSize / 2 + 3;
-              const lenCells = parseInt(document.getElementById('pbbLength').value || '2', 10);
-              const lenPx = Math.max(lenCells * CELL_SIZE * 0.9, minLen);
-              const newPbb = {{ x1: ex, y1: ey, x2: ex+nx*lenPx, y2: ey+ny*lenPx, category }};
-              if (!pbbStandOverlapsExisting(newPbb)) {{
-                pushUndo();
-                state.pbbStands.push({{ id: id(), name: document.getElementById('standName').value.trim() || ('Contact Stand ' + (state.pbbStands.length + 1)), x1: ex, y1: ey, x2: ex+nx*lenPx, y2: ey+ny*lenPx, category: newPbb.category, edgeCol: bestEdge.col, edgeRow: bestEdge.row }});
-                syncPanelFromState();
-                draw();
-              }}
+            if (tryPlacePbbAt(wx, wy)) {{
+              syncPanelFromState();
+              draw();
             }}
           }} else if (mode === 'remote' && state.remoteDrawing) {{
-            // 3D에서도 previewRemote가 유효할 때만 Remote Stand 생성
             const prev = state.previewRemote;
-            if (prev && !prev.overlap) {{
-              const col = prev.col;
-              const row = prev.row;
-              if (col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {{
-                const category = document.getElementById('remoteCategory').value || 'C';
-                const [cx, cy] = cellToPixel(col, row);
-                const size = getStandSizeMeters(category);
-                const bounds = getStandBoundsRect(cx, cy, size);
-                if (!standOverlapsExisting(bounds)) {{
-                  pushUndo();
-                  const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || 'R001';
-                  const usedNames = new Set((state.remoteStands || []).map(s => (s.name || '').trim()).filter(Boolean));
-                  let finalName = baseName;
-                  if (usedNames.has(finalName)) {{
-                    let idx = 1;
-                    while (usedNames.has(baseName + ' (' + idx + ')')) idx++;
-                    finalName = baseName + ' (' + idx + ')';
-                  }}
-                  state.remoteStands.push({{ id: id(), col, row, category, name: finalName }});
-                  syncPanelFromState();
-                  draw();
-                }}
-              }}
+            if (prev && !prev.overlap && tryPlaceRemoteAt(prev.col, prev.row)) {{
+              syncPanelFromState();
+              draw();
             }}
           }}
         }}
@@ -8775,57 +8104,12 @@ html = f"""
         const wx = p.x, wy = p.y;
         const [col, row] = grid3DMapper.worldToCell(hit.x, hit.z);
         if (mode === 'pbb' && state.pbbDrawing) {{
-          let bestEdge = null, bestD2 = Infinity;
-          state.terminals.forEach(t => {{
-            if (!t.closed || t.vertices.length < 2) return;
-            let cx = 0, cy = 0;
-            t.vertices.forEach(v => {{ const [px, py] = cellToPixel(v.col, v.row); cx += px; cy += py; }});
-            cx /= t.vertices.length || 1; cy /= t.vertices.length || 1;
-            for (let i = 0; i < t.vertices.length; i++) {{
-              const v1 = t.vertices[i], v2 = t.vertices[(i+1) % t.vertices.length];
-              const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-              const near = closestPointOnSegment(p1, p2, [wx, wy]);
-              if (near) {{ const d2 = dist2(near, [wx, wy]); if (d2 < bestD2) {{ bestD2 = d2; bestEdge = {{ near, p1, p2, col: v1.col, row: v1.row, cx, cy }}; }} }}
-            }}
-          }});
-          const maxD2 = (CELL_SIZE*1.0)**2;
-          if (bestEdge && bestD2 < maxD2) {{
-            const [ex,ey]=bestEdge.near, [x1,y1]=bestEdge.p1, [x2,y2]=bestEdge.p2;
-            let nx = -(y2-y1), ny = x2-x1;
-            const len = Math.hypot(nx,ny) || 1; nx /= len; ny /= len;
-            const toClickX = wx - ex, toClickY = wy - ey;
-            if (nx * toClickX + ny * toClickY < 0) {{ nx *= -1; ny *= -1; }}
-            const category = document.getElementById('standCategory').value || 'C';
-            const standSize = getStandSizeMeters(category);
-            const minLen = standSize / 2 + 3;
-            const lenCells = parseInt(document.getElementById('pbbLength').value || '2', 10);
-            const lenPx = Math.max(lenCells * CELL_SIZE * 0.9, minLen);
-            const newPbb = {{ x1: ex, y1: ey, x2: ex+nx*lenPx, y2: ey+ny*lenPx, category }};
-            if (!pbbStandOverlapsExisting(newPbb)) {{
-              pushUndo();
-              state.pbbStands.push({{ id: id(), name: document.getElementById('standName').value.trim() || ('Contact Stand ' + (state.pbbStands.length + 1)), x1: ex, y1: ey, x2: ex+nx*lenPx, y2: ey+ny*lenPx, category: newPbb.category, edgeCol: bestEdge.col, edgeRow: bestEdge.row }});
-              syncPanelFromState(); updateObjectInfo(); update3DScene();
-            }}
+          if (tryPlacePbbAt(wx, wy)) {{
+            syncPanelFromState(); updateObjectInfo(); update3DScene();
           }}
         }} else if (mode === 'remote' && state.remoteDrawing) {{
-          if (col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {{
-            const category = document.getElementById('remoteCategory').value || 'C';
-            const [cx, cy] = cellToPixel(col, row);
-            const size = getStandSizeMeters(category);
-            const bounds = getStandBoundsRect(cx, cy, size);
-            if (!standOverlapsExisting(bounds)) {{
-              pushUndo();
-              const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || 'R001';
-              const usedNames = new Set((state.remoteStands || []).map(s => (s.name || '').trim()).filter(Boolean));
-              let finalName = baseName;
-              if (usedNames.has(finalName)) {{
-                let idx = 1;
-                while (usedNames.has(baseName + ' (' + idx + ')')) idx++;
-                finalName = baseName + ' (' + idx + ')';
-              }}
-              state.remoteStands.push({{ id: id(), col, row, category, name: finalName }});
-              syncPanelFromState(); updateObjectInfo(); update3DScene();
-            }}
+          if (tryPlaceRemoteAt(col, row)) {{
+            syncPanelFromState(); updateObjectInfo(); update3DScene();
           }}
         }}
       }});
@@ -9080,54 +8364,6 @@ html = f"""
             const cone = new THREE.Mesh(coneGeo, coneMat);
             cone.position.copy(pos);
             cone.position.y = h + 0.8;
-            cone.quaternion.copy(quat);
-            scene3d.add(cone);
-          }}
-        }}
-      }});
-      // Runways
-      state.runways.forEach(rw => {{
-        const h = CELL_SIZE * 0.03;
-        const cx = rw.cx, cy = rw.cy;
-        const ux = rw.dx, uy = rw.dy;
-        const len2 = rw.length / 2;
-        const startPx = cx - ux * len2;
-        const startPy = cy - uy * len2;
-        const endPx = cx + ux * len2;
-        const endPy = cy + uy * len2;
-        const start = grid3DMapper.worldFromPixel(startPx, startPy, h);
-        const end = grid3DMapper.worldFromPixel(endPx, endPy, h);
-        const dirVec = new THREE.Vector3().subVectors(end, start);
-        const length = dirVec.length() || 1;
-        dirVec.normalize();
-        const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        const segGeo = new THREE.BoxGeometry(length, h * 0.6, rw.width);
-        const segMat = new THREE.MeshPhongMaterial({{ color: 0x9ca3af }});
-        const seg = new THREE.Mesh(segGeo, segMat);
-        seg.position.copy(mid);
-        seg.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dirVec);
-        scene3d.add(seg);
-
-        // Direction arrows in 3D along runway centerline (like taxiway)
-        const dirVal = getTaxiwayDirection(rw);
-        if (dirVal !== 'both') {{
-          const dirSign = dirVal === 'clockwise' ? 1 : -1;
-          const baseStart = dirSign === 1 ? start : end;
-          const baseDir = dirSign === 1 ? dirVec.clone() : dirVec.clone().negate();
-          const totalLen = rw.length;
-          const arrowSpacing = Math.max(80, Math.min(200, totalLen / 6));
-          const arrLen = Math.max(CELL_SIZE * 0.8, Math.min(CELL_SIZE * 2.0, rw.width * 0.8));
-          const numArrows = Math.floor(totalLen / arrowSpacing);
-          for (let i = 1; i <= numArrows; i++) {{
-            const d = (i * totalLen) / (numArrows + 1);
-            const pos = new THREE.Vector3().copy(baseStart).add(baseDir.clone().multiplyScalar(d));
-            const coneGeo = new THREE.ConeGeometry(arrLen * 0.4, arrLen, 12);
-            const coneMat = new THREE.MeshPhongMaterial({{ color: 0xf97316 }});
-            const cone = new THREE.Mesh(coneGeo, coneMat);
-            cone.position.copy(pos);
-            const up = new THREE.Vector3(0, 1, 0);
-            const tangent = baseDir.clone().normalize();
-            const quat = new THREE.Quaternion().setFromUnitVectors(up, tangent);
             cone.quaternion.copy(quat);
             scene3d.add(cone);
           }}
