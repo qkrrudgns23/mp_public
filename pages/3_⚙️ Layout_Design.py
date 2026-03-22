@@ -18,7 +18,7 @@ from utils.layout_receiver import (
     start_layout_receiver,
 )
 
-# run_app.py 사용 시(LAYOUT_SAME_PORT=1): 8501 프록시에서 API 처리. 그 외: layout_receiver(8765) 기동.
+# run_app.py When used(LAYOUT_SAME_PORT=1): 8501 From proxy API treatment. Others: layout_receiver(8765) movement.
 if os.environ.get("LAYOUT_SAME_PORT") == "1":
     LAYOUT_API_URL = os.environ.get("LAYOUT_API_BASE_URL", "http://127.0.0.1:8501")
 else:
@@ -36,7 +36,7 @@ GRID_COLS = 200
 GRID_ROWS = 200
 CELL_SIZE = 20.0
 
-# data/Layout_storage 만 사용. data/ 직하위에는 current_layout/default_layout 생성·사용 안 함
+# data/Layout_storage use only. data/ Directly below current_layout/default_layout generation·Disabled
 _data_dir = Path(__file__).resolve().parents[1] / "data"
 _fallback_default = _data_dir / "default_layout.json"
 LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
@@ -51,10 +51,49 @@ try:
         INFORMATION = json.loads(INFO_FILE.read_text(encoding="utf-8"))
 except Exception:
     pass
+
+
+def _info_path(*keys, default=None):
+    d = INFORMATION
+    for k in keys:
+        if not isinstance(d, dict):
+            return default
+        d = d.get(k)
+    return d if d is not None else default
+
+
+_layout_info = _info_path("tiers", "layout") or {}
+_grid_info = (_layout_info.get("grid") or {}) if isinstance(_layout_info, dict) else {}
+if isinstance(_grid_info, dict):
+    try:
+        if _grid_info.get("cols") is not None:
+            GRID_COLS = max(1, int(_grid_info["cols"]))
+    except (TypeError, ValueError):
+        pass
+    try:
+        if _grid_info.get("rows") is not None:
+            GRID_ROWS = max(1, int(_grid_info["rows"]))
+    except (TypeError, ValueError):
+        pass
+    try:
+        if _grid_info.get("cellSize") is not None:
+            CELL_SIZE = float(_grid_info["cellSize"])
+    except (TypeError, ValueError):
+        pass
+
+_term_ui = (_layout_info.get("terminal") or {}) if isinstance(_layout_info, dict) else {}
+_tw_ui = (_layout_info.get("taxiway") or {}) if isinstance(_layout_info, dict) else {}
+_rw_path_ui = (_layout_info.get("runwayPath") or {}) if isinstance(_layout_info, dict) else {}
+_rw_exit_ui = (_layout_info.get("runwayExit") or {}) if isinstance(_layout_info, dict) else {}
+
+_flight_info = _info_path("tiers", "flight_schedule") or _info_path("tiers", "flight") or {}
+_algo_info = _info_path("tiers", "algorithm") or {}
+_sim_step = (_algo_info.get("simulation") or {}).get("timeStepSec") if isinstance(_algo_info, dict) else None
+
 if not DEFAULT_LAYOUT_PATH.is_file() and _fallback_default.is_file():
     shutil.copy2(_fallback_default, DEFAULT_LAYOUT_PATH)
 
-# Load initial layout: Layout_storage/default_layout.json 우선, 없으면 data/default_layout.json
+# Load initial layout: Layout_storage/default_layout.json First of all, if there is no data/default_layout.json
 DEFAULT_LAYOUT: dict = {}
 try:
     for _layout_path in (DEFAULT_LAYOUT_PATH, _fallback_default):
@@ -83,16 +122,63 @@ def _ensure_random_regs(layout: dict) -> None:
 _ensure_random_regs(DEFAULT_LAYOUT)
 
 
-# --- Python 디스크리트 시뮬레이션 엔진 (5초 단위) ---
+# --- Python Discrete simulation engine (Information.json algorithm.simulation.timeStepSec) ---
 SIM_TIME_STEP_SEC = 5
+try:
+    if _sim_step is not None:
+        SIM_TIME_STEP_SEC = max(1, int(_sim_step))
+except (TypeError, ValueError):
+    pass
 
-# 쿼리 파라미터: load_layout=이름 → Layout_storage에서 해당 JSON 로드하여 표시 (API/포트 없이)
-# 기본은 DEFAULT_LAYOUT; load_layout 이 있으면 해당 파일로 덮어씀
+# HTML / iframe initial value (Layout tab, Flight tab — tiers.flight_schedule)
+_ui_g_min_cs = int(_grid_info.get("minCellSize", 10)) if isinstance(_grid_info, dict) else 10
+_ui_g_max_cs = int(_grid_info.get("maxCellSize", 1000)) if isinstance(_grid_info, dict) else 1000
+_ui_g_cs_step = int(_grid_info.get("cellSizeStep", 10)) if isinstance(_grid_info, dict) else 10
+_ui_g_min_dim = int(_grid_info.get("minDim", 5)) if isinstance(_grid_info, dict) else 5
+_ui_g_max_dim = int(_grid_info.get("maxDim", 500)) if isinstance(_grid_info, dict) else 500
+
+_ui_term_floors = int(_term_ui.get("floorsDefault", 1)) if isinstance(_term_ui, dict) else 1
+_ui_term_floors_min = int(_term_ui.get("floorsMin", 1)) if isinstance(_term_ui, dict) else 1
+_ui_term_floors_max = int(_term_ui.get("floorsMax", 20)) if isinstance(_term_ui, dict) else 20
+_ui_term_f2f = float(_term_ui.get("floorToFloor", 4)) if isinstance(_term_ui, dict) else 4.0
+_ui_term_f2f_min = float(_term_ui.get("floorToFloorMin", 1)) if isinstance(_term_ui, dict) else 1.0
+_ui_term_f2f_max = float(_term_ui.get("floorToFloorMax", 10)) if isinstance(_term_ui, dict) else 10.0
+_ui_term_f2f_step = float(_term_ui.get("floorToFloorStep", 0.5)) if isinstance(_term_ui, dict) else 0.5
+_ui_term_dep = int(_term_ui.get("departureCapacity", 0)) if isinstance(_term_ui, dict) else 0
+_ui_term_arr = int(_term_ui.get("arrivalCapacity", 0)) if isinstance(_term_ui, dict) else 0
+
+_ui_tw_w = int(_tw_ui.get("width", 15)) if isinstance(_tw_ui, dict) else 15
+_ui_tw_avg = float(_tw_ui.get("avgMoveVelocity", 10)) if isinstance(_tw_ui, dict) else 10.0
+_ui_rw_min_arr = int(_rw_path_ui.get("minArrVelocity", 15)) if isinstance(_rw_path_ui, dict) else 15
+_ui_rw_lineup = int(_rw_path_ui.get("lineupDistM", 0)) if isinstance(_rw_path_ui, dict) else 0
+_ui_ex_max = int(_rw_exit_ui.get("maxExitVelocity", 30)) if isinstance(_rw_exit_ui, dict) else 30
+_ui_ex_min = int(_rw_exit_ui.get("minExitVelocity", 15)) if isinstance(_rw_exit_ui, dict) else 15
+
+_ui_flight_dwell = int(_flight_info.get("defaultDwellMin", 60)) if isinstance(_flight_info, dict) else 60
+_ui_flight_min_dwell = int(_flight_info.get("defaultMinDwellMin", 0)) if isinstance(_flight_info, dict) else 0
+_ui_flight_dwell_max = int(_flight_info.get("dwellInputMax", 600)) if isinstance(_flight_info, dict) else 600
+_ui_flight_dwell_step = int(_flight_info.get("dwellStep", 5)) if isinstance(_flight_info, dict) else 5
+_ui_sim_speeds = (
+    _flight_info.get("simSpeedOptions")
+    if isinstance(_flight_info, dict) and isinstance(_flight_info.get("simSpeedOptions"), list)
+    else [0.5, 1, 5, 10, 20, 50, 100, 200]
+)
+try:
+    _ui_default_sim_speed = float(_flight_info.get("defaultSimSpeed", 20)) if isinstance(_flight_info, dict) else 20.0
+except (TypeError, ValueError):
+    _ui_default_sim_speed = 20.0
+_flight_speed_options_html = "".join(
+    f'<option value="{v}"{" selected" if float(v) == float(_ui_default_sim_speed) else ""}>{v}x</option>'
+    for v in _ui_sim_speeds
+)
+
+# query parameters: load_layout=name → Layout_storagecorresponding to JSON Load and display (API/without port)
+# The basics are DEFAULT_LAYOUT; load_layout If there is one, overwrite it with that file.
 layout_for_html = DEFAULT_LAYOUT
 
 
 def _get_query_one(key: str):
-    """Streamlit 쿼리 파라미터에서 단일 값 추출 (query_params / experimental_get_query_params 모두 처리)."""
+    """Streamlit Extract single value from query parameter (query_params / experimental_get_query_params handle it all)."""
     try:
         _qp = getattr(st, "query_params", None)
         if _qp is not None:
@@ -119,7 +205,7 @@ try:
             layout_for_html = json.loads(_load_path.read_text(encoding="utf-8"))
             _ensure_random_regs(layout_for_html)
             layout_display_name = load_name
-    # Run Simulation: ?run_simulation=1 이면 current_layout 읽어서 시뮬레이션 후 표시
+    # Run Simulation: ?run_simulation=1 This side current_layout Read and display after simulation
     q = _get_query_one("run_simulation")
     if q and LAYOUT_FILE.is_file():
         layout_from_designer = json.loads(LAYOUT_FILE.read_text(encoding="utf-8"))
@@ -132,10 +218,150 @@ try:
 except Exception:
     pass
 
-# Layout_storage 파일 목록은 페이지 렌더 시 주입 (API 호출 없음)
+# Layout_storage The file list is injected when the page is rendered. (API no call)
 layout_names = list_layout_names()
 
-# 그리드 상단에 표시할 레이아웃 이름
+
+def _grid_view_background(info: dict) -> str:
+    """tiers.style.gridView.background → 2D/3D workspace fill color."""
+    tiers = info.get("tiers") if isinstance(info, dict) else None
+    st = (tiers.get("style") if isinstance(tiers, dict) else None) or {}
+    gv = st.get("gridView") if isinstance(st.get("gridView"), dict) else {}
+    bg = str(gv.get("background", "#252525")).strip()
+    if not bg.startswith("#") or len(bg) not in (4, 7):
+        bg = "#252525"
+    return bg
+
+
+def _right_panel_background_opacity(info: dict) -> float:
+    """tiers.style.rightPanel.backgroundOpacity → 0–1 for color-mix over transparent."""
+    tiers = info.get("tiers") if isinstance(info, dict) else None
+    st = (tiers.get("style") if isinstance(tiers, dict) else None) or {}
+    rp = st.get("rightPanel") if isinstance(st.get("rightPanel"), dict) else {}
+    try:
+        op = float(rp.get("backgroundOpacity", 0.95))
+    except (TypeError, ValueError):
+        op = 0.95
+    return max(0.0, min(1.0, op))
+
+
+def _style_root_css_from_information(info: dict) -> str:
+    """tiers.style → :root CSS variables (Gantt, tables, canvas, 3D theme)."""
+    tiers = info.get("tiers") if isinstance(info, dict) else None
+    st = (tiers.get("style") if isinstance(tiers, dict) else None) or {}
+    if not isinstance(st, dict):
+        st = {}
+    _gv_bg = _grid_view_background(info)
+    _rp_bg_op = _right_panel_background_opacity(info)
+    _rp_mix_pct = f"{round(_rp_bg_op * 100)}%"
+
+    def _emit(name: str, value) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            value = str(value).lower()
+        elif isinstance(value, float):
+            pass
+        elif isinstance(value, int):
+            pass
+        else:
+            value = str(value).strip().replace("\n", " ").replace("\r", "")
+            if not value:
+                return None
+        return f"  {name}: {value};"
+
+    lines: list[str] = [":root {"]
+    g = st.get("gantt") if isinstance(st.get("gantt"), dict) else {}
+    pairs_gantt = [
+        ("--style-gantt-s-bar", g.get("sBar")),
+        ("--style-gantt-s-series", g.get("sSeries")),
+        ("--style-gantt-e-bar", g.get("eBar")),
+        ("--style-gantt-e-series", g.get("eSeries")),
+        ("--style-gantt-conflict", g.get("conflict")),
+        ("--style-gantt-conflict-stripe2", g.get("conflictStripe2")),
+        ("--style-gantt-conflict-text", g.get("conflictText")),
+        ("--style-gantt-conflict-border", g.get("conflictBorder")),
+        ("--style-gantt-selected", g.get("selected")),
+        ("--style-gantt-selected-ring", g.get("selectedShadowRing")),
+        ("--style-gantt-selected-glow", g.get("selectedGlow")),
+        ("--style-gantt-flight-bg", g.get("flightBarBg")),
+        ("--style-gantt-flight-fg", g.get("flightBarFg")),
+        ("--style-gantt-flight-shadow", g.get("flightBarShadow")),
+        ("--style-gantt-flight-dim-opacity", g.get("flightBarDimOpacity")),
+        ("--style-gantt-ovlp-bg", g.get("overlapBadgeBg")),
+        ("--style-gantt-ovlp-fg", g.get("overlapBadgeFg")),
+        ("--style-gantt-grid-opacity", g.get("timeGridLineOpacity")),
+        ("--style-gantt-sbar-opacity", g.get("sBarOpacity")),
+        ("--style-gantt-ebar-opacity", g.get("eBarOpacity")),
+        ("--style-gantt-e2bar-opacity", g.get("e2BarOpacity")),
+        ("--style-gantt-apron-slot-opacity", g.get("apronSlotLabelOpacity")),
+    ]
+    fs = st.get("flightScheduleTable") if isinstance(st.get("flightScheduleTable"), dict) else {}
+    pairs_fs = [
+        ("--style-fs-col-s", fs.get("colS")),
+        ("--style-fs-col-sd", fs.get("colSd")),
+        ("--style-fs-col-e", fs.get("colE")),
+    ]
+    rwy = st.get("rwySepTimeline") if isinstance(st.get("rwySepTimeline"), dict) else {}
+    pairs_rwy = [
+        ("--style-rwysep-line-s", rwy.get("lineS")),
+        ("--style-rwysep-line-e", rwy.get("lineE")),
+        ("--style-rwysep-line-opacity", rwy.get("lineOpacity")),
+    ]
+    c2 = st.get("canvas2d") if isinstance(st.get("canvas2d"), dict) else {}
+    pairs_c2 = [
+        ("--style-c2d-path-dep-stroke", c2.get("pathDepartureStroke")),
+        ("--style-c2d-vtt-badge-bg", c2.get("vttBadgeBg")),
+        ("--style-c2d-vtt-badge-stroke", c2.get("vttBadgeStroke")),
+        ("--style-c2d-vtt-badge-text", c2.get("vttBadgeText")),
+        ("--style-c2d-noway-fill", c2.get("noWayFill")),
+        ("--style-c2d-noway-stroke", c2.get("noWayStroke")),
+        ("--style-c2d-noway-text", c2.get("noWayText")),
+        ("--style-c2d-term-stroke-sel", c2.get("terminalStrokeSelected")),
+        ("--style-c2d-term-stroke-def", c2.get("terminalStrokeDefault")),
+        ("--style-c2d-term-fill-sel", c2.get("terminalFillSelected")),
+        ("--style-c2d-term-fill-def", c2.get("terminalFillDefault")),
+        ("--style-c2d-term-label-fill", c2.get("terminalLabelFill")),
+        ("--style-c2d-term-dash", c2.get("terminalSelectedDash")),
+        ("--style-c2d-obj-sel-stroke", c2.get("objectSelectedStroke")),
+        ("--style-c2d-obj-sel-fill", c2.get("objectSelectedFill")),
+        ("--style-c2d-obj-sel-dash", c2.get("objectSelectedDashStroke")),
+        ("--style-c2d-obj-sel-glow", c2.get("objectSelectedGlow")),
+        ("--style-c2d-obj-sel-glow-blur", c2.get("objectSelectedGlowBlur")),
+    ]
+    td = st.get("threeD") if isinstance(st.get("threeD"), dict) else {}
+    pairs_3d = [
+        ("--style-3d-remote-apron", td.get("remoteApron")),
+        ("--style-3d-remote-apron-opacity", td.get("remoteApronOpacity")),
+        ("--style-3d-remote-box", td.get("remoteStandBox")),
+        ("--style-3d-taxiway", td.get("taxiway")),
+        ("--style-3d-runway-path", td.get("runwayPath")),
+        ("--style-3d-arrow-cone", td.get("arrowCone")),
+        ("--style-3d-apron-link", td.get("apronLink")),
+        ("--style-3d-apron-link-opacity", td.get("apronLinkOpacity")),
+        ("--style-3d-dir-light", td.get("directionalLightIntensity")),
+        ("--style-3d-amb-light", td.get("ambientLightIntensity")),
+    ]
+    for pairs in (pairs_gantt, pairs_fs, pairs_rwy, pairs_c2, pairs_3d):
+        for name, val in pairs:
+            row = _emit(name, val)
+            if row:
+                lines.append(row)
+    for name, val in (
+        ("--style-grid-view-bg", _gv_bg),
+        ("--style-right-panel-bg-mix-percent", _rp_mix_pct),
+    ):
+        row = _emit(name, val)
+        if row:
+            lines.append(row)
+    lines.append("}")
+    return "\n".join(lines)
+
+
+_style_root_css = _style_root_css_from_information(INFORMATION)
+_GRID_VIEW_BG = _grid_view_background(INFORMATION)
+
+# Layout name to display at the top of the grid
 layout_display_name = "default_layout"
 
 html = f"""
@@ -144,27 +370,55 @@ html = f"""
 <head>
   <meta charset="utf-8" />
   <style>
+{_style_root_css}
+    :root {{
+      --ui-bg-base: #0d0d0f;
+      --ui-bg-surface: #141416;
+      --ui-bg-elevated: #1c1c1f;
+      --ui-bg-overlay: #242428;
+      --ui-bg-input: #1a1a1d;
+      --ui-border-subtle: rgba(255, 255, 255, 0.06);
+      --ui-border-default: rgba(255, 255, 255, 0.10);
+      --ui-border-strong: rgba(255, 255, 255, 0.18);
+      --ui-text-primary: #f0f0f2;
+      --ui-text-secondary: #8b8b96;
+      --ui-text-muted: #5c5c68;
+      --ui-accent: #7c6af7;
+      --ui-accent-hover: #9181f8;
+      --ui-accent-muted: rgba(124, 106, 247, 0.16);
+      --ui-accent-ring: rgba(124, 106, 247, 0.35);
+      --ui-success-bg: rgba(61, 214, 140, 0.14);
+      --ui-success-border: rgba(61, 214, 140, 0.45);
+      --ui-success-text: #b8f0d0;
+      --ui-error-bg: rgba(248, 113, 113, 0.12);
+      --ui-error-border: rgba(248, 113, 113, 0.35);
+      --ui-error-text: #fca5a5;
+      --ui-font: 'Inter', 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --ui-transition: border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s cubic-bezier(0.16, 1, 0.3, 1), filter 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    html, body {{ width: 100%; min-height: 100%; height: 100%; background: #303030; color: #e5e7eb; font-family: system-ui, sans-serif; overflow: hidden; }}
+    button {{ border: none; }}
+    #right-panel button {{ appearance: none; -webkit-appearance: none; }}
+    html, body {{ width: 100%; min-height: 100%; height: 100%; background: var(--ui-bg-base); color: var(--ui-text-primary); font-family: var(--ui-font); font-size: 14px; line-height: 1.5; overflow: hidden; -webkit-font-smoothing: antialiased; }}
     #app {{ position: absolute; inset: 0; width: 100%; height: 100%; }}
-    #canvas-container {{ position: absolute; inset: 0; cursor: crosshair; }}
+    #canvas-container {{ position: absolute; inset: 0; cursor: crosshair; background: var(--style-grid-view-bg, #252525); }}
     #grid-canvas {{ width: 100%; height: 100%; display: block; }}
     #toolbar {{ position: absolute; bottom: 56px; right: 50vw; left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 30; pointer-events: auto; }}
-    #sim-controls-container {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(148,163,184,0.5); background: rgba(55,65,81,0.95); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }}
-    #sim-controls-container .tool-btn {{ margin: 0; border: none; border-radius: 4px; font-size: 11px; padding: 6px 12px; background: rgba(75,85,99,0.9); color: #e5e7eb; cursor: pointer; }}
-    #sim-controls-container .tool-btn:hover {{ background: rgba(100,116,139,0.9); }}
-    #sim-controls-container select {{ width: auto; min-width: 70px; margin: 0; padding: 4px 8px; font-size: 11px; background: rgba(75,85,99,0.9); color: #e5e7eb; border: 1px solid rgba(100,100,100,0.5); border-radius: 4px; }}
-    #sim-controls-container label {{ margin: 0 4px 0 0; font-size: 11px; color: #9ca3af; }}
-    #sim-controls-container #flightSimSlider {{ width: 120px; margin: 0; vertical-align: middle; accent-color: #3b82f6; }}
-    #sim-controls-container #flightSimTimeLabel {{ font-size: 11px; color: #e5e7eb; min-width: 72px; display: inline-block; }}
-    #view-toggle {{ display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid rgba(148,163,184,0.5); background: rgba(40,40,40,0.95); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }}
-    #view-toggle .tool-btn {{ margin: 0; border: none; border-radius: 0; border-right: 1px solid rgba(148,163,184,0.3); font-size: 11px; padding: 6px 12px; }}
-    #view-toggle .tool-btn:last-child {{ border-right: none; }}
-    #view-toggle .tool-btn.active {{ background: #1e3a5f; color: #93c5fd; }}
-    #view-toggle .tool-btn:not(.active) {{ background: transparent; color: #9ca3af; }}
-    #view-toggle .tool-btn:hover {{ background: rgba(60,60,60,0.9); }}
-    #info-bar {{ display: none; position: absolute; bottom: 8px; left: 10px; right: 10px; padding: 8px 12px; min-height: 2.2em; border-radius: 8px; background: rgba(0,0,0,0.45); color: #9ca3af; font-size: 12px; align-items: center; pointer-events: none; z-index: 5; }}
-    #right-panel {{ position: absolute; top: 0; right: 0; bottom: 0; width: 50vw; background: rgba(30,30,30,0.95); border-left: 1px solid rgba(100,100,100,0.5); padding: 12px; font-size: 12px; overflow-y: auto; z-index: 20; transition: width 0.2s, min-width 0.2s; }}
+    #sim-controls-container {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-elevated); transition: var(--ui-transition); }}
+    #sim-controls-container .tool-btn {{ margin: 0; border: none; border-radius: 4px; font-size: 11px; font-weight: 500; padding: 6px 12px; background: var(--ui-bg-overlay); color: var(--ui-text-primary); cursor: pointer; transition: var(--ui-transition); }}
+    #sim-controls-container .tool-btn:hover {{ background: var(--ui-bg-surface); }}
+    #sim-controls-container select {{ width: auto; min-width: 70px; margin: 0; padding: 4px 8px; font-size: 11px; background: var(--ui-bg-input); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); border-radius: 4px; transition: var(--ui-transition); }}
+    #sim-controls-container select:focus {{ outline: none; border-color: var(--ui-accent-ring); box-shadow: 0 0 0 2px var(--ui-accent-muted); }}
+    #sim-controls-container label {{ margin: 0 4px 0 0; font-size: 11px; color: var(--ui-text-secondary); }}
+    #sim-controls-container #flightSimSlider {{ width: 120px; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); }}
+    #sim-controls-container #flightSimTimeLabel {{ font-size: 11px; color: var(--ui-text-primary); min-width: 72px; display: inline-block; }}
+    #view-toggle {{ display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--ui-border-default); background: var(--ui-bg-elevated); transition: var(--ui-transition); }}
+    #view-toggle .tool-btn {{ margin: 0; border: none; border-radius: 0; font-size: 11px; font-weight: 500; padding: 6px 12px; transition: var(--ui-transition); }}
+    #view-toggle .tool-btn.active {{ background: var(--ui-accent-muted); color: var(--ui-accent); }}
+    #view-toggle .tool-btn:not(.active) {{ background: transparent; color: var(--ui-text-secondary); }}
+    #view-toggle .tool-btn:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
+    #info-bar {{ display: none; position: absolute; bottom: 8px; left: 10px; right: 10px; padding: 8px 12px; min-height: 2.2em; border-radius: 8px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); color: var(--ui-text-secondary); font-size: 12px; align-items: center; pointer-events: none; z-index: 5; }}
+    #right-panel {{ position: absolute; top: 0; right: 0; bottom: 0; width: 50vw; background: color-mix(in srgb, var(--ui-bg-surface) var(--style-right-panel-bg-mix-percent, 95%), transparent); border-left: 1px solid var(--ui-border-default); padding: 12px; font-size: 12px; overflow-y: auto; z-index: 20; transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1); }}
     #right-panel.collapsed {{ width: 44px; min-width: 44px; padding: 8px; overflow: hidden; }}
     #right-panel.collapsed .panel-content {{ display: none; }}
     #panel-toggle {{
@@ -175,51 +429,55 @@ html = f"""
       width: 32px;
       height: 84px;
       border-radius: 9999px 0 0 9999px;
-      border: 1px solid rgba(148,163,184,0.8);
-      border-right: none;
-      background: linear-gradient(180deg, #1f2937, #020617);
-      color: #f9fafb;
+      background: var(--ui-bg-elevated);
+      color: var(--ui-text-primary);
       cursor: pointer;
       font-size: 16px;
       font-weight: 600;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.65);
-      backdrop-filter: blur(4px);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      backdrop-filter: blur(8px);
       z-index: 30;
+      transition: var(--ui-transition);
     }}
     #panel-toggle:hover {{
-      background: linear-gradient(180deg, #111827, #000000);
-      color: #f97316;
-      border-color: rgba(249,250,251,0.95);
+      background: var(--ui-bg-overlay);
+      color: var(--ui-accent);
     }}
-    .section-title {{ font-size: 10px; font-weight: 600; text-transform: uppercase; color: #9ca3af; margin: 10px 0 4px 0; }}
+    #panel-toggle:focus-visible {{ outline: none; box-shadow: 0 0 0 2px var(--ui-accent-muted), 0 0 0 1px var(--ui-accent-ring); }}
+    .section-title {{ font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ui-text-secondary); margin: 12px 0 4px 0; }}
     .section-title:first-child {{ margin-top: 0; }}
-    label {{ font-size: 11px; color: #9ca3af; display: block; margin-top: 6px; }}
-    input, select {{ width: 100%; background: #1a1a1a; color: #e5e7eb; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; font-size: 11px; margin-top: 2px; }}
-    button.small {{ padding: 4px 8px; font-size: 11px; margin-top: 4px; cursor: pointer; border-radius: 4px; border: 1px solid #555; background: #2a2a2a; color: #e5e7eb; }}
-    button.small:hover {{ background: #333; }}
-    .draw-toggle-btn.drawing {{ background:#14532d; border-color:#16a34a; color:#dcfce7; }}
+    label {{ font-size: 11px; color: var(--ui-text-secondary); display: block; margin-top: 8px; }}
+    input, select {{ width: 100%; background: var(--ui-bg-input); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); border-radius: 4px; padding: 6px 8px; font-size: 11px; margin-top: 4px; transition: var(--ui-transition); }}
+    input:focus, select:focus {{ outline: none; border-color: var(--ui-accent-ring); box-shadow: 0 0 0 2px var(--ui-accent-muted); }}
+    button.small {{ padding: 6px 12px; font-size: 11px; font-weight: 500; margin-top: 4px; cursor: pointer; border-radius: 4px; background: var(--ui-bg-elevated); color: var(--ui-text-primary); transition: var(--ui-transition); }}
+    button.small:hover {{ background: var(--ui-bg-overlay); }}
+    button.small:focus-visible {{ outline: none; box-shadow: 0 0 0 2px var(--ui-accent-muted); }}
+    .draw-toggle-btn.drawing {{ background: var(--ui-success-bg); color: var(--ui-success-text); }}
+    .draw-toggle-btn.drawing:hover {{ filter: brightness(1.12); }}
     .obj-list {{ max-height: 160px; overflow-y: auto; margin-top: 6px; }}
-    /* Layout 탭의 object 리스트는 패널 높이까지 확장하고,
-       전체 패널 높이를 초과하는 경우에만 우측 패널 스크롤을 사용 */
+    /* Layout of tab object The list extends to the panel height,
+       Use right panel scrolling only if it exceeds the total panel height */
     #object-list.obj-list {{ max-height: none; }}
-    /* Flight schedule는 기본 12편 정도 보이도록 높이 확장 (10% 증가) */
+    /* Flight scheduleThe height is expanded to show about 12 basic episodes. (10% increase) */
     #flightList.obj-list {{ max-height: 418px; }}
-    /* Flight Configuration은 세로 스크롤 없이 20개 이상 표시, 가로는 스크롤 가능 */
+    /* Flight ConfigurationMore than 20 items can be displayed without vertical scrolling, and horizontal scrolling is possible. */
     #flightConfigList.obj-list {{ max-height: none; overflow-y: visible; overflow-x: auto; }}
-    .obj-item {{ padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; background: rgba(50,50,50,0.9); border: 1px solid #444; font-size: 11px; cursor: pointer; }}
-    .obj-item:hover {{ background: #3a3a3a; }}
-    .obj-item.selected {{ border-color: #3b82f6; background: rgba(59,130,246,0.15); }}
+    .obj-item {{ padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); font-size: 11px; cursor: pointer; transition: var(--ui-transition); }}
+    .obj-item:hover {{ background: var(--ui-bg-overlay); border-color: var(--ui-border-default); }}
+    #right-panel select:not(:disabled):hover:not(:focus),
+    #right-panel input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not(:disabled):hover:not(:focus) {{ background: var(--ui-bg-overlay); border-color: var(--ui-border-default); }}
+    .obj-item.selected {{ border-color: var(--ui-accent-ring); background: var(--ui-accent-muted); }}
     .obj-item-header {{ display: flex; justify-content: space-between; align-items: center; gap: 6px; }}
     .obj-item-title {{ font-weight: 500; flex: 1; min-width: 0; }}
-    .obj-item-tag {{ font-size: 10px; color: #9ca3af; flex-shrink: 0; }}
-    .obj-item-time {{ color: #94a3b8; font-weight: normal; margin-left: 4px; }}
-    .obj-item-details {{ display: none; margin-top: 4px; color: #d1d5db; font-size: 10px; line-height: 1.4; }}
+    .obj-item-tag {{ font-size: 10px; color: var(--ui-text-secondary); flex-shrink: 0; }}
+    .obj-item-time {{ color: var(--ui-text-secondary); font-weight: normal; margin-left: 4px; }}
+    .obj-item-details {{ display: none; margin-top: 4px; color: var(--ui-text-primary); font-size: 10px; line-height: 1.4; opacity: 0.92; }}
     .obj-item.expanded .obj-item-details {{ display: block; }}
-    .obj-item-delete {{ flex-shrink: 0; padding: 2px 6px; font-size: 10px; border-radius: 3px; border: 1px solid #555; background: #2a2a2a; color: #f87171; cursor: pointer; }}
-    .obj-item-delete:hover {{ background: #3a2a2a; }}
+    .obj-item-delete {{ flex-shrink: 0; padding: 2px 6px; font-size: 10px; border-radius: 3px; background: transparent; color: var(--ui-error-text); cursor: pointer; transition: var(--ui-transition); }}
+    .obj-item-delete:hover {{ background: var(--ui-bg-overlay); color: var(--ui-error-text); }}
     .flight-row {{ display:flex; gap:8px; align-items:stretch; margin-bottom:4px; }}
     .flight-row .obj-item {{ flex: 1.3; }}
     .flight-assign-panel {{ flex: 1; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; font-size:11px; }}
@@ -227,16 +485,16 @@ html = f"""
     .flight-assign-col-arr {{ width:110px; }}
     .flight-assign-col-term {{ width:140px; }}
     .flight-assign-col-dep {{ width:110px; }}
-    .flight-assign-label {{ font-size:10px; color:#9ca3af; }}
-    .flight-assign-select {{ min-width:90px; padding:4px 8px; font-size:11px; background:#020617; color:#e5e7eb; border-radius:4px; border:1px solid #4b5563; }}
-    /* Flight schedule 표: 칸은 넓게, 글씨 크기만큼 열이 벌어지고 선택 칸 글씨 전부 보이게 */
+    .flight-assign-label {{ font-size:10px; color:var(--ui-text-secondary); letter-spacing:0.04em; }}
+    .flight-assign-select {{ min-width:90px; padding:4px 8px; font-size:11px; background:var(--ui-bg-input); color:var(--ui-text-primary); border-radius:4px; border:1px solid var(--ui-border-default); }}
+    /* Flight schedule Table: The columns are wide, the columns are as wide as the font size, and all the text in the selected column is visible. */
     .flight-schedule-table {{ width:100%; border-collapse:collapse; font-size:11px; margin-top:4px; table-layout:auto; }}
     .flight-schedule-table thead {{ position:sticky; top:0; z-index:1; }}
-    .flight-schedule-table th {{ text-align:left; padding:6px 8px 6px 0; font-weight:600; color:#e5e7eb; font-size:11px; white-space:nowrap; border-bottom:1px solid #374151; background:#111827; }}
-    .flight-schedule-table td {{ padding:4px 8px 4px 0; border-bottom:1px solid #1f2933; vertical-align:middle; white-space:nowrap; background:transparent; }}
-    .flight-schedule-table th.flight-col-s {{ color:#22c55e; }}
-    .flight-schedule-table th.flight-col-sd {{ color:#007aff; }}
-    .flight-schedule-table th.flight-col-e {{ color:#ff69b4; }}
+    .flight-schedule-table th {{ text-align:left; padding:6px 8px 6px 0; font-weight:600; color:var(--ui-text-primary); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; border-bottom:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
+    .flight-schedule-table td {{ padding:4px 8px 4px 0; border-bottom:1px solid var(--ui-border-subtle); vertical-align:middle; white-space:nowrap; background:transparent; }}
+    .flight-schedule-table th.flight-col-s {{ color: var(--style-fs-col-s, #22c55e); }}
+    .flight-schedule-table th.flight-col-sd {{ color: var(--style-fs-col-sd, #007aff); }}
+    .flight-schedule-table th.flight-col-e {{ color: var(--style-fs-col-e, #ff69b4); }}
     .flight-schedule-table .flight-td-reg {{ font-weight:500; min-width:72px; }}
     .flight-schedule-table .flight-td-time {{ min-width:1em; }}
     .flight-schedule-table .flight-td-select {{ padding:4px 6px 4px 0; min-width:0; }}
@@ -245,89 +503,89 @@ html = f"""
     .flight-config-input {{ width:72px; font-size:11px; text-align:right; }}
     .flight-config-table th.sticky-col,
     .flight-config-table td.sticky-col {{ position:sticky; left:0; z-index:2; background:rgba(17,24,39,0.98); }}
-    /* Allocation Gantt (Apron × Time, 10% 높이 증가)
-       - 높이 고정으로 가로 스크롤바를 항상 뷰포트 하단에 표시 (우측 열만 스크롤)
-       - 세로 스크롤: .alloc-gantt-scroll-col + .alloc-gantt-label-col (JS로 동기화)
-       - 가로 스크롤: .alloc-gantt-scroll-col 에서만 → 스크롤바가 항상 하단에 위치 */
-    #allocationGantt {{ margin-top: 10px; padding: 10px 12px 10px 0; background: rgba(15,23,42,0.98); border-radius: 10px; border: 1px solid rgba(55,65,81,0.95); width: 800px; height: 700px; max-height: 700px; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; }}
+    /* Allocation Gantt (Apron × Time, 10% height increase)
+       - Fixed height makes horizontal scrollbar always appear at bottom of viewport (Scroll only the right column)
+       - vertical scroll: .alloc-gantt-scroll-col + .alloc-gantt-label-col (JSsync with)
+       - horizontal scroll: .alloc-gantt-scroll-col Only in → Scrollbar is always at the bottom */
+    #allocationGantt {{ margin-top: 10px; padding: 10px 12px 10px 0; background: var(--ui-bg-elevated); border-radius: 12px; border: 1px solid var(--ui-border-default); width: 100%; max-width: 100%; min-width: 0; height: 700px; max-height: 700px; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; }}
     .alloc-gantt-root {{ display:flex; align-items:stretch; width:100%; flex:1; min-height:0; }}
-    .alloc-gantt-label-col {{ flex-shrink:0; width:122px; padding-left:12px; padding-right:8px; box-sizing:border-box; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; min-height:0; scrollbar-width:none; -ms-overflow-style:none; background:linear-gradient(180deg, #111827 0%, #0e131f 100%); border-right:1px solid #252b38; }}
+    .alloc-gantt-label-col {{ flex-shrink:0; width:122px; padding-left:12px; padding-right:8px; box-sizing:border-box; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; min-height:0; scrollbar-width:none; -ms-overflow-style:none; background:var(--ui-bg-surface); border-right:1px solid var(--ui-border-default); }}
     .alloc-gantt-label-col::-webkit-scrollbar {{ display:none; }}
     .alloc-gantt-scroll-col {{ flex:1; overflow:auto; min-height:0; }}
-    /* Zoom 배율을 반영한 가로 inner wrapper (전체 타임라인 폭 = 100% × zoom) */
+    /* Zoom Horizontal reflecting magnification inner wrapper (Full timeline width = 100% × zoom) */
     .alloc-gantt-inner {{ position:relative; min-width:100%; height:100%; }}
-    /* 우측 더미 트랙(24px)과 세로 1:1 정렬 — margin 없음 */
-    .alloc-terminal-header {{ margin:0; height:24px; min-height:24px; line-height:24px; font-size: 11px; font-weight: 600; color: #e5e7eb; text-transform: uppercase; letter-spacing: 0.03em; flex-shrink:0; display:flex; align-items:center; gap:4px; box-sizing:border-box; }}
-    .alloc-section-toggle-icon {{ display:inline-block; width:12px; text-align:center; font-size:10px; color:#9ca3af; }}
+    /* Right dummy track(24px)and vertical 1:1 alignment — margin doesn't exist */
+    .alloc-terminal-header {{ margin:0; height:24px; min-height:24px; line-height:24px; font-size: 11px; font-weight: 600; color: var(--ui-text-primary); text-transform: uppercase; letter-spacing: 0.06em; flex-shrink:0; display:flex; align-items:center; gap:4px; box-sizing:border-box; }}
+    .alloc-section-toggle-icon {{ display:inline-block; width:12px; text-align:center; font-size:10px; color:var(--ui-text-secondary); }}
     .alloc-row {{ display:flex; align-items:stretch; margin:0; font-size:11px; }}
-    /* 좌측 고정 라벨 열에서만 사용. sticky 대신 별도 열로 분리됨. */
-    /* 바 높이 70%(40→28px), 바 사이 간격 1/4(4px→1px) */
-    .alloc-row-label {{ height:28px; line-height:28px; margin:0; color:#e5e7eb; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }}
+    /* Only used in the left fixed label column. sticky Instead, it is separated into a separate column.. */
+    /* bar height 70%(40→28px), spacing between bars 1/4(4px→1px) */
+    .alloc-row-label {{ height:28px; line-height:28px; margin:0; color:var(--ui-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }}
     .alloc-row-track {{ flex:1; position:relative; height:28px; margin:0; border-radius:6px; background:transparent; border:none; overflow:visible; z-index:1; }}
-    /* Apron 상단 활주로 LDT/TOT 개요 행: 드롭 대상 제외 */
+    /* Apron top runway LDT/TOT Overview row: Exclude drop targets */
     .alloc-row-track[data-runway-legend="1"] {{ pointer-events: none; }}
-    .alloc-runway-legend-label {{ font-size:10px; color:#cbd5e1; letter-spacing:0.02em; }}
-    .alloc-time-grid-line {{ position:absolute; top:0; bottom:0; width:1px; background:#4b5563; opacity:0.4; transform:translateX(-0.5px); pointer-events:none; }}
-    .alloc-apron-bg-slot {{ position:absolute; top:4px; bottom:4px; display:flex; align-items:center; justify-content:center; font-size:4px; font-weight:600; color:rgba(148,163,184,0.35); opacity:0.35; pointer-events:none; white-space:nowrap; }}
-    .alloc-flight {{ position:absolute; top:3px; bottom:3px; border-radius:4px; background:#38bdf8; color:#0f172a; padding:1px 2px; font-size:4px; display:flex; flex-direction:column; justify-content:space-between; cursor:default; box-shadow:0 1px 3px rgba(0,0,0,0.5); overflow:visible; transition:opacity 0.15s ease-out; z-index:1; }}
+    .alloc-runway-legend-label {{ font-size:10px; color:var(--ui-text-secondary); letter-spacing:0.02em; }}
+    .alloc-time-grid-line {{ position:absolute; top:0; bottom:0; width:1px; background:var(--ui-border-strong); opacity:var(--style-gantt-grid-opacity, 0.4); transform:translateX(-0.5px); pointer-events:none; }}
+    .alloc-apron-bg-slot {{ position:absolute; top:4px; bottom:4px; display:flex; align-items:center; justify-content:center; font-size:4px; font-weight:600; color:rgba(148,163,184,0.35); opacity:var(--style-gantt-apron-slot-opacity, 0.35); pointer-events:none; white-space:nowrap; }}
+    .alloc-flight {{ position:absolute; top:3px; bottom:3px; border-radius:4px; background:var(--style-gantt-flight-bg, #38bdf8); color:var(--style-gantt-flight-fg, #0f172a); padding:1px 2px; font-size:4px; display:flex; flex-direction:column; justify-content:space-between; cursor:default; box-shadow:0 1px 3px var(--style-gantt-flight-shadow, rgba(0,0,0,0.5)); overflow:visible; transition:opacity 0.15s ease-out; z-index:1; }}
     .alloc-flight.conflict {{
-      background:repeating-linear-gradient(135deg, #7f1d1d 0, #7f1d1d 6px, #111827 6px, #111827 12px);
-      color:#fee2e2;
-      border:1px solid #f87171;
+      background:repeating-linear-gradient(135deg, var(--style-gantt-conflict, #7f1d1d) 0, var(--style-gantt-conflict, #7f1d1d) 6px, var(--style-gantt-conflict-stripe2, #111827) 6px, var(--style-gantt-conflict-stripe2, #111827) 12px);
+      color:var(--style-gantt-conflict-text, #fee2e2);
+      border:1px solid var(--style-gantt-conflict-border, #f87171);
     }}
-    /* S‑Bar 체크 시 SIBT‑SOBT 기본 바차트 투명도 조절용 */
-    .alloc-flight.alloc-flight-sbar-dim {{ opacity:0.4; }}
-    .alloc-flight.alloc-flight-selected {{ outline:1px solid #fbbf24; outline-offset:1px; box-shadow:0 0 0 1px #0f172a, 0 1px 4px rgba(251,191,36,0.4); z-index:2; }}
-    .alloc-flight-ovlp-badge {{ position:absolute; top:0; right:1px; font-size:3px; font-weight:700; padding:0 1px; border-radius:1px; background:#e879f9; color:#0f172a; pointer-events:none; line-height:1.1; }}
-    .alloc-apron-tag {{ font-size:3px; font-weight:500; padding:0 1px; border-radius:9999px; background:rgba(15,23,42,0.92); color:#f9fafb; border:1px solid #4b5563; align-self:flex-start; margin-bottom:0; white-space:nowrap; }}
+    /* S‑Bar When checking SIBT‑SOBT For adjusting basic bar chart transparency */
+    .alloc-flight.alloc-flight-sbar-dim {{ opacity:var(--style-gantt-flight-dim-opacity, 0.4); }}
+    .alloc-flight.alloc-flight-selected {{ outline:1px solid var(--style-gantt-selected, #fbbf24); outline-offset:1px; box-shadow:0 0 0 1px var(--style-gantt-selected-ring, #0f172a), 0 1px 4px var(--style-gantt-selected-glow, rgba(251,191,36,0.4)); z-index:2; }}
+    .alloc-flight-ovlp-badge {{ position:absolute; top:0; right:1px; font-size:3px; font-weight:700; padding:0 1px; border-radius:1px; background:var(--style-gantt-ovlp-bg, #e879f9); color:var(--style-gantt-ovlp-fg, #0f172a); pointer-events:none; line-height:1.1; }}
+    .alloc-apron-tag {{ font-size:3px; font-weight:500; padding:0 1px; border-radius:9999px; background:var(--ui-bg-overlay); color:var(--ui-text-primary); border:1px solid var(--ui-border-default); align-self:flex-start; margin-bottom:0; white-space:nowrap; }}
     .alloc-flight-reg {{ font-weight:600; font-size:9px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; }}
     .alloc-flight-meta {{ font-size:9px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; opacity:0.95; }}
-    /* SLDT/SIBT/SOBT/STOT 보조 바차트 (S-Point용)
-       - 세로 위치/높이를 S 계열 점(.alloc-time-dot-s)과 맞춤 */
+    /* SLDT/SIBT/SOBT/STOT Auxiliary bar chart (S-Pointdragon)
+       - vertical position/height S series point(.alloc-time-dot-s)and fit */
     .alloc-s-bar {{
       position:absolute;
       top:calc(29% + 3px);
       height:2px;
-      background:#007aff;
+      background:var(--style-gantt-s-bar, #007aff);
       border-radius:9999px;
-      opacity:0.8;
+      opacity:var(--style-gantt-sbar-opacity, 0.8);
       pointer-events:none;
       z-index:5;
     }}
-    /* EOBT(orig) 세로 기준선 (투명도 제거, 완전 불투명) */
+    /* EOBT(orig) vertical baseline (Remove transparency, fully opaque) */
     .alloc-s-line-orig {{ position:absolute; top:2px; bottom:2px; width:0; border-left:1px dashed #0f172a; pointer-events:none; z-index:2; }}
     .alloc-s-line-orig-solid {{ border-left-style:solid; }}
-    /* EIBT/EOBT 보조 바차트 (E-Bar) : 행 높이 70%에 맞춘 여백 */
+    /* EIBT/EOBT Auxiliary bar chart (E-Bar) : Margins adjusted to 70% row height */
     .alloc-e-bar {{
       position:absolute;
       top:3px;
       bottom:3px;
-      background:#fb37c5;
+      background:var(--style-gantt-e-bar, #fb37c5);
       border-radius:4px;
-      opacity:0.45;
+      opacity:var(--style-gantt-ebar-opacity, 0.45);
       pointer-events:none;
       z-index:6;
     }}
-    /* ELDT/EIBT, EOBT/ETOT 보조 바차트 (E-Point용 하이라이트)
-       - 세로 위치/높이를 E 계열 점(.alloc-time-dot-e)과 맞춤 */
+    /* ELDT/EIBT, EOBT/ETOT Auxiliary bar chart (E-Pointdragon highlights)
+       - vertical position/height E series point(.alloc-time-dot-e)and fit */
     .alloc-e2-bar {{
       position:absolute;
       top:calc(71% + 1px);
       height:2px;
-      background:#fb37c5;
+      background:var(--style-gantt-e-bar, #fb37c5);
       border-radius:9999px;
-      opacity:0.9;
+      opacity:var(--style-gantt-e2bar-opacity, 0.9);
       pointer-events:none;
       z-index:7;
     }}
-    /* SLDT/STOT 시점 마커 점 (바 위)
-       - S-Point: 행 위쪽 영역에 배치
-       - E-Point: 행 아래쪽 영역에 배치 */
+    /* SLDT/STOT viewpoint marker point (on the rock)
+       - S-Point: Place in the area above the row
+       - E-Point: Place in bottom area of ​​row */
     .alloc-time-dot {{ position:absolute; width:6px; height:6px; border-radius:50%; pointer-events:none; z-index:8; transform:translateX(-50%); }}
-    .alloc-time-dot-s {{ top:32%; background:#007aff !important; }}
-    .alloc-time-dot-sd {{ top:32%; background:#007aff !important; }}
-    .alloc-time-dot-e {{ top:68%; background:#fb37c5; }}
-    /* S-Point / E-Point 삼각형 (아래: LDT, 위: TOT) - 20% 정도 더 작게, 색상만 계열별로 다르게 */
+    .alloc-time-dot-s {{ top:32%; background:var(--style-gantt-s-bar, #007aff) !important; }}
+    .alloc-time-dot-sd {{ top:32%; background:var(--style-gantt-s-bar, #007aff) !important; }}
+    .alloc-time-dot-e {{ top:68%; background:var(--style-gantt-e-bar, #fb37c5); }}
+    /* S-Point / E-Point triangle (under: LDT, stomach: TOT) - 20% The degree is smaller, and only the colors are different for each series. */
     .alloc-s-tri,
     .alloc-e-tri {{
       position:absolute;
@@ -339,96 +597,107 @@ html = f"""
       pointer-events:none;
       z-index:9;
     }}
-    /* 아래 삼각형은 S/E 계열 기준으로 각각 상/하 영역에 배치 */
-    .alloc-s-tri-down {{ border-top:5px solid #007aff; top:44%; }}
-    .alloc-e-tri-down {{ border-top:5px solid #fb37c5; top:76%; }}
-    /* 위 삼각형은 S/E 계열 기준으로 각각 상/하 영역에 배치 */
-    .alloc-s-tri-up {{ border-bottom:5px solid #007aff; top:20%; }}
-    /* STOT(orig)용 검은 위쪽 삼각형 (S-Point 상단 영역) */
-    .alloc-s-tri-orig-up {{ border-bottom:5px solid #000; top:20%; }}
-    .alloc-e-tri-up {{ border-bottom:5px solid #fb37c5; top:60%; }}
-    /* Time axis overlay (Apron/Runway 공통, 간트 하단에 sticky)
-       - 우측 타임라인 열(.alloc-gantt-scroll-col) 안에서만 sticky 동작
-       - 좌측 라벨 열과는 독립된 스크롤 컨텍스트를 사용
-       - 높이 24px 고정으로 좌측 스페이서와 시각적 정렬 유지 */
-    .alloc-time-axis-overlay {{ position:sticky; bottom:0; z-index:4; background:rgba(15,23,42,0.98); height:24px; min-height:24px; max-height:24px; overflow:hidden; box-sizing:border-box; padding:0; }}
+    /* The triangle below is S/E Each award based on series/placed in lower area */
+    .alloc-s-tri-down {{ border-top:5px solid var(--style-gantt-s-bar, #007aff); top:44%; }}
+    .alloc-e-tri-down {{ border-top:5px solid var(--style-gantt-e-bar, #fb37c5); top:76%; }}
+    /* The upper triangle is S/E Each award based on series/placed in lower area */
+    .alloc-s-tri-up {{ border-bottom:5px solid var(--style-gantt-s-bar, #007aff); top:20%; }}
+    /* STOT(orig)dragon black upward triangle (S-Point top area) */
+    .alloc-s-tri-orig-up {{ border-bottom:5px solid #0d0d0f; top:20%; }}
+    .alloc-e-tri-up {{ border-bottom:5px solid var(--style-gantt-e-bar, #fb37c5); top:60%; }}
+    /* Time axis overlay (Apron/Runway Common, at the bottom of the Gantt sticky)
+       - Right timeline column(.alloc-gantt-scroll-col) Only inside sticky action
+       - Use a scroll context independent of the left label column
+       - height 24px Fixed to maintain visual alignment with left spacer */
+    .alloc-time-axis-overlay {{ position:sticky; bottom:0; z-index:4; background:var(--ui-bg-elevated); border-top:1px solid var(--ui-border-subtle); height:24px; min-height:24px; max-height:24px; overflow:hidden; box-sizing:border-box; padding:0; }}
     .alloc-label-axis-spacer {{ height:24px; min-height:24px; flex-shrink:0; box-sizing:border-box; }}
-    /* Remote 섹션 위 여백: 좌·우 동일 높이 스페이서 행과 짝 */
+    /* Remote Margin above section: left·Right paired with a row of equal height spacers */
     .alloc-gantt-section-spacer {{ height:8px; min-height:8px; flex-shrink:0; box-sizing:border-box; }}
-    /* Remote 헤더: 기존 margin-bottom 2px 효과를 높이 안에 포함 → 우측 더미 트랙(20px)과 동일 */
-    .alloc-remote-header {{ margin:0; height:20px; min-height:20px; line-height:18px; font-size:11px; font-weight:600; color:#9ca3af; display:flex; align-items:center; gap:4px; flex-shrink:0; box-sizing:border-box; padding-bottom:2px; }}
-    .alloc-time-axis-inner {{ position:relative; height:24px; min-height:24px; max-height:24px; min-width:100%; font-size:9px; line-height:24px; color:#9ca3af; overflow:hidden; box-sizing:border-box; padding:0; }}
+    /* Remote Header: Existing margin-bottom 2px Contain effect within height → Right dummy track(20px)Same as */
+    .alloc-remote-header {{ margin:0; height:20px; min-height:20px; line-height:18px; font-size:11px; font-weight:600; color:var(--ui-text-secondary); display:flex; align-items:center; gap:4px; flex-shrink:0; box-sizing:border-box; padding-bottom:2px; }}
+    .alloc-time-axis-inner {{ position:relative; height:24px; min-height:24px; max-height:24px; min-width:100%; font-size:9px; line-height:24px; color:var(--ui-text-secondary); overflow:hidden; box-sizing:border-box; padding:0; }}
     .rwysep-timeline-root {{ display:flex; align-items:stretch; width:100%; }}
     .rwysep-timeline-label-col {{ display:flex; flex-direction:column; flex-shrink:0; width:110px; }}
     .rwysep-timeline-scroll-col {{ flex:1; overflow-x:auto; }}
     .rwysep-timeline-inner {{ min-width:100%; }}
-    .rwysep-reg-tag {{ position:absolute; left:0; top:50%; transform:translate(-50%,-50%); font-size:9px; padding:2px 6px; border-radius:9999px; background:#111827; color:#e5e7eb; border:1px solid #4b5563; white-space:nowrap; pointer-events:none; }}
+    .rwysep-reg-tag {{ position:absolute; left:0; top:50%; transform:translate(-50%,-50%); font-size:9px; padding:2px 6px; border-radius:9999px; background:var(--ui-bg-elevated); color:var(--ui-text-primary); border:1px solid var(--ui-border-default); white-space:nowrap; pointer-events:none; }}
     .alloc-time-tick {{ position:absolute; bottom:0; transform:translateX(-50%); text-align:center; }}
     .alloc-time-tick-line {{ display:none; }}
     .alloc-time-tick-label {{ white-space:nowrap; }}
-    /* Runway Separation Timeline 전용 (Reg × Time) */
-    .rwysep-line-s {{ position:absolute; height:7%; top:26%; background:#38bdf8; border-radius:9999px; opacity:0.55; pointer-events:none; }}
-    .rwysep-line-e {{ position:absolute; height:7%; top:60%; background:#fb923c; border-radius:9999px; opacity:0.55; pointer-events:none; }}
+    /* Runway Separation Timeline exclusive (Reg × Time) */
+    .rwysep-line-s {{ position:absolute; height:7%; top:26%; background:var(--style-rwysep-line-s, #38bdf8); border-radius:9999px; opacity:var(--style-rwysep-line-opacity, 0.55); pointer-events:none; }}
+    .rwysep-line-e {{ position:absolute; height:7%; top:60%; background:var(--style-rwysep-line-e, #fb923c); border-radius:9999px; opacity:var(--style-rwysep-line-opacity, 0.55); pointer-events:none; }}
     .rwysep-tri {{ position:absolute; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; transform:translateX(-50%); pointer-events:none; }}
-    .rwysep-head-row {{ display:flex; align-items:center; font-size:9px; color:#9ca3af; margin-bottom:2px; }}
-    /* Runway Separation Timeline 헤더 라벨 폭을 Apron Gantt 라벨(alloc-row-label)과 동일하게 맞춰
-       상단 S/E 헤더 트랙과 각 Reg 행, 아래 시간축의 세로 눈금이 정확히 정렬되도록 한다. */
-    .rwysep-head-label {{ width:122px; padding:0 8px 0 12px; text-align:left; position:sticky; left:0; z-index:10; background:rgba(15,23,42,0.98); }}
+    .rwysep-head-row {{ display:flex; align-items:center; font-size:9px; color:var(--ui-text-secondary); margin-bottom:2px; }}
+    /* Runway Separation Timeline header label width Apron Gantt label(alloc-row-label)Match the same as
+       top S/E header track and angle Reg Ensure that the vertical scales of the row and lower time axes are accurately aligned.. */
+    .rwysep-head-label {{ width:122px; padding:0 8px 0 12px; text-align:left; position:sticky; left:0; z-index:10; background:var(--ui-bg-elevated); }}
     .rwysep-head-track {{ flex:1; position:relative; height:14px; z-index:1; }}
     #directionModesList {{ width: 100%; }}
     .direction-mode-row {{ display: flex; align-items: center; gap: 6px; margin-bottom: 6px; width: 100%; min-width: 0; }}
     .direction-mode-row .direction-mode-name {{ flex: 1; min-width: 90px; width: 0; max-width: 100%; }}
     .direction-mode-row select.direction-mode-dir {{ flex-shrink: 0; width: auto; min-width: 95px; }}
-    .direction-mode-row .direction-mode-delete {{ flex-shrink: 0; padding: 2px 8px; font-size: 12px; }}
-    #object-info {{ margin-top: 10px; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.3); border: 1px solid #444; font-size: 11px; display: none; }}
+    .direction-mode-row .direction-mode-delete {{ flex-shrink: 0; padding: 2px 8px; font-size: 12px; cursor: pointer; border-radius: 4px; background: transparent; color: var(--ui-text-secondary); transition: var(--ui-transition); }}
+    .direction-mode-row .direction-mode-delete:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
+    #object-info {{ margin-top: 10px; padding: 8px; border-radius: 8px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-default); font-size: 11px; display: none; color: var(--ui-text-secondary); }}
     #view3d-container {{ position: absolute; inset: 0; z-index: 10; display: none; pointer-events: auto; }}
     #view3d-container.active {{ display: block; }}
-    #layout-name-bar {{ position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8; pointer-events: none; font-size: 11px; color: #9ca3af; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 6px; }}
-    .right-panel-tabs {{ display: flex; gap: 2px; margin-bottom: 10px; }}
-    .right-panel-tab {{ flex: 1; padding: 6px 8px; font-size: 11px; cursor: pointer; background: #252525; color: #9ca3af; border: none; border-radius: 4px; }}
-    .right-panel-tab:hover {{ background: #333; color: #e5e7eb; }}
-    /* 상단 메인 탭도 Save/Load 탭과 동일한 파란 음영 스타일 사용 */
-    .right-panel-tab.active {{ background: #1e3a5f; color: #93c5fd; }}
+    #layout-name-bar {{ position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8; pointer-events: none; font-size: 11px; font-weight: 500; color: var(--ui-text-secondary); background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); padding: 6px 12px; border-radius: 8px; letter-spacing: 0.02em; }}
+    .right-panel-tabs {{ display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }}
+    .right-panel-tab {{ flex: 1; min-width: 0; padding: 8px 8px; font-size: 11px; font-weight: 500; cursor: pointer; background: var(--ui-bg-elevated); color: var(--ui-text-secondary); border-radius: 6px; transition: var(--ui-transition); }}
+    .right-panel-tab:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
+    .right-panel-tab.active {{ background: var(--ui-accent-muted); color: var(--ui-accent); }}
+    .right-panel-tab.active:hover {{ filter: brightness(1.1); }}
     .tab-content {{ display: none; width: 100%; }}
     .token-nodes {{ display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 8px; }}
-    .token-nodes .token-node {{ display: flex; align-items: center; gap: 4px; font-size: 11px; color: #9ca3af; cursor: pointer; }}
+    .token-nodes .token-node {{ display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ui-text-secondary); cursor: pointer; }}
     .token-nodes .token-node input {{ margin: 0; }}
     .token-object-pane {{ margin-bottom: 8px; }}
-    .token-object-pane label {{ font-size: 11px; color: #9ca3af; display: block; margin-top: 4px; }}
-    .token-object-pane select {{ width: 100%; max-width: 200px; font-size: 11px; padding: 4px; background: #1a1a1a; color: #e5e7eb; border: 1px solid #444; border-radius: 4px; }}
-    .token-auto-label {{ font-size: 11px; color: #6b7280; }}
+    .token-object-pane label {{ font-size: 11px; color: var(--ui-text-secondary); display: block; margin-top: 4px; }}
+    .token-object-pane select {{ width: 100%; max-width: 200px; font-size: 11px; padding: 4px 8px; background: var(--ui-bg-input); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); border-radius: 4px; }}
+    .token-auto-label {{ font-size: 11px; color: var(--ui-text-muted); }}
     .tab-content.active {{ display: block; }}
-    .layout-save-load-tabs {{ display: flex; gap: 2px; margin-bottom: 8px; }}
-    .layout-save-load-tab {{ flex: 1; padding: 4px 6px; font-size: 10px; cursor: pointer; background: #252525; color: #9ca3af; border: none; border-radius: 4px; }}
-    .layout-save-load-tab:hover {{ background: #333; color: #e5e7eb; }}
-    .layout-save-load-tab.active {{ background: #1e3a5f; color: #93c5fd; }}
-    /* Flight 탭 내부 Schedule / Configuration 서브탭도 Save/Load 탭과 동일한 파란 음영 사용 */
-    .flight-subtab.active {{ background: #1e3a5f; color: #93c5fd; }}
+    .layout-save-load-tabs {{ display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }}
+    .layout-save-load-tab {{ flex: 1; min-width: 0; padding: 6px 8px; font-size: 10px; font-weight: 500; letter-spacing: 0.04em; cursor: pointer; background: var(--ui-bg-elevated); color: var(--ui-text-secondary); border-radius: 6px; transition: var(--ui-transition); }}
+    .layout-save-load-tab:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
+    .layout-save-load-tab.active {{ background: var(--ui-accent-muted); color: var(--ui-accent); }}
+    .layout-save-load-tab.active:hover {{ filter: brightness(1.1); }}
+    .flight-subtab.active {{ background: var(--ui-accent-muted); color: var(--ui-accent); }}
+    .flight-subtab.active:hover {{ filter: brightness(1.1); }}
     .layout-save-load-pane {{ display: none; }}
     .layout-save-load-pane.active {{ display: block; }}
     #layoutLoadList {{ max-height: 140px; overflow-y: auto; margin-top: 6px; }}
-    #layoutLoadList .layout-load-item {{ display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; margin-bottom: 4px; border-radius: 4px; background: rgba(50,50,50,0.9); border: 1px solid #444; font-size: 11px; cursor: pointer; }}
-    #layoutLoadList .layout-load-item:hover {{ background: #3a3a3a; border-color: #3b82f6; }}
+    #layoutLoadList .layout-load-item {{ display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; margin-bottom: 4px; border-radius: 6px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); font-size: 11px; cursor: pointer; transition: var(--ui-transition); }}
+    #layoutLoadList .layout-load-item:hover {{ background: var(--ui-bg-overlay); border-color: var(--ui-accent-ring); }}
     #layoutLoadList .layout-load-name {{ flex: 1; min-width: 0; }}
-    #layoutLoadList .layout-load-delete {{ flex-shrink: 0; padding: 2px 6px; font-size: 12px; cursor: pointer; border: none; background: transparent; color: #9ca3af; border-radius: 3px; }}
-    #layoutLoadList .layout-load-delete:hover {{ background: rgba(239,68,68,0.3); color: #f87171; }}
+    #layoutLoadList .layout-load-delete {{ flex-shrink: 0; padding: 2px 6px; font-size: 12px; cursor: pointer; border: none; background: transparent; color: var(--ui-text-secondary); border-radius: 3px; transition: var(--ui-transition); }}
+    #layoutLoadList .layout-load-delete:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
 
     /* Runway Separation tab */
-    #rwySepPanel {{ font-size: 11px; color: #e5e7eb; }}
+    #rwySepPanel {{ font-size: 11px; color: var(--ui-text-primary); }}
     .rwysep-rwy-bar {{ display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; }}
     .rwysep-rwy-tabs {{ display:flex; flex-wrap:wrap; gap:4px; }}
-    .rwysep-rwy-btn {{ background:#1a1a1a; border:1px solid #444; color:#e5e7eb; padding:4px 10px; font-size:11px; border-radius:9999px; cursor:pointer; }}
-    .rwysep-rwy-btn.active {{ background:#111827; border-color:#3b82f6; color:#bfdbfe; }}
-    .rwysep-rwy-del {{ background:transparent; border:none; color:#6b7280; cursor:pointer; font-size:11px; padding:0 4px; }}
-    .rwysep-block {{ margin-top:8px; padding:8px 10px; border-radius:8px; border:1px solid #444; background:rgba(0,0,0,0.3); }}
-    .rwysep-label {{ font-size:10px; color:#9ca3af; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.08em; }}
+    .rwysep-rwy-btn {{ background:var(--ui-bg-input); color:var(--ui-text-primary); padding:4px 12px; font-size:11px; font-weight:500; border-radius:9999px; cursor:pointer; transition:var(--ui-transition); }}
+    .rwysep-rwy-btn:hover:not(.active) {{ background: var(--ui-bg-overlay); }}
+    .rwysep-rwy-btn.active {{ background:var(--ui-accent-muted); color:var(--ui-accent); }}
+    .rwysep-rwy-btn.active:hover {{ filter: brightness(1.1); }}
+    .rwysep-rwy-del {{ background:transparent; border:none; color:var(--ui-text-muted); cursor:pointer; font-size:11px; padding:0 4px; }}
+    .rwysep-rwy-del:hover {{ background: var(--ui-bg-overlay); color:var(--ui-text-primary); border-radius: 4px; }}
+    .rwysep-block {{ margin-top:8px; padding:8px 12px; border-radius:8px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
+    .rwysep-label {{ font-size:10px; color:var(--ui-text-secondary); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.08em; }}
     .rwysep-row {{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:6px; }}
-    .rwysep-row select {{ width:auto; min-width:90px; max-width:140px; font-size:11px; padding:4px 8px; background:#1a1a1a; color:#e5e7eb; border-radius:4px; border:1px solid #444; }}
+    .rwysep-row select {{ width:auto; min-width:90px; max-width:140px; font-size:11px; padding:4px 8px; background:var(--ui-bg-input); color:var(--ui-text-primary); border-radius:4px; border:1px solid var(--ui-border-default); }}
     .rwysep-matrix-wrap {{ margin-top:8px; overflow-x:auto; }}
     .rwysep-table {{ border-collapse:collapse; min-width:360px; }}
-    .rwysep-table th, .rwysep-table td {{ border:1px solid #1f2937; padding:4px 6px; text-align:center; }}
-    .rwysep-table th {{ background:#1a1a1a; color:#9ca3af; font-size:10px; }}
-    .rwysep-table input {{ width:56px; background:#1a1a1a; border:1px solid #444; color:#e5e7eb; font-size:10px; padding:2px 4px; text-align:center; border-radius:3px; }}
+    .rwysep-table th, .rwysep-table td {{ border:1px solid var(--ui-border-subtle); padding:4px 6px; text-align:center; }}
+    .rwysep-table th {{ background:var(--ui-bg-elevated); color:var(--ui-text-secondary); font-size:10px; letter-spacing:0.04em; text-transform:uppercase; }}
+    .rwysep-table input {{ width:56px; background:var(--ui-bg-input); border:1px solid var(--ui-border-default); color:var(--ui-text-primary); font-size:10px; padding:2px 4px; text-align:center; border-radius:4px; }}
+    #api-warning-banner {{ display: none; background: var(--ui-error-bg); color: var(--ui-error-text); padding: 10px 12px; font-size: 11px; border-radius: 8px; margin-bottom: 12px; line-height: 1.45; border: 1px solid var(--ui-error-border); }}
+    #api-warning-banner strong {{ color: var(--ui-text-primary); font-weight: 600; }}
+    #flight-tooltip {{ position: absolute; pointer-events: none; padding: 4px 8px; font-size: 11px; border-radius: 6px; background: var(--ui-bg-elevated); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); display: none; z-index: 40; box-shadow: 0 1px 3px rgba(0,0,0,0.4); max-width: 280px; }}
+    #btnRunSimulation {{ background: var(--ui-accent) !important; color: var(--ui-bg-base) !important; font-weight: 600; }}
+    #btnRunSimulation:hover {{ background: var(--ui-accent-hover) !important; filter: brightness(1.06); }}
+    #remoteTerminalAccess {{ margin-top: 4px; padding: 8px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-input); font-size: 11px; color: var(--ui-text-primary); max-height: 120px; overflow: auto; }}
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -438,27 +707,20 @@ html = f"""
     <div id="layout-name-bar"></div>
     <div id="toolbar">
       <div id="sim-controls-container" style="display:none;">
-        <button type="button" class="tool-btn" id="btnPlayFlights" title="재생">▶ Play</button>
-        <button type="button" class="tool-btn" id="btnPauseFlights" title="일시정지">⏸ Pause</button>
+        <button type="button" class="tool-btn" id="btnPlayFlights" title="Play">▶ Play</button>
+        <button type="button" class="tool-btn" id="btnPauseFlights" title="Pause">⏸ Pause</button>
         <select id="flightSpeed">
-          <option value="0.5">0.5x</option>
-          <option value="1">1x</option>
-          <option value="5">5x</option>
-          <option value="10">10x</option>
-          <option value="20" selected>20x</option>
-          <option value="50">50x</option>
-          <option value="100">100x</option>
-          <option value="200">200x</option>
+          {_flight_speed_options_html}
         </select>
         <label for="flightSimSlider">Current</label>
         <input type="range" id="flightSimSlider" min="0" max="100" value="0" step="1" />
         <span id="flightSimTimeLabel">00:00:00</span>
       </div>
       <div id="view-toggle">
-        <button class="tool-btn" id="btnView2D" title="2D 뷰">2D</button>
-        <button class="tool-btn" id="btnView3D" title="3D orbit 뷰">3D</button>
-        <button class="tool-btn" id="btnResetView" title="전체 격자 보기">Fit</button>
-        <button class="tool-btn" id="btnGlobalUpdate" title="모든 뷰/계산 새로고침" style="margin-left:8px;">Update</button>
+        <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
+        <button class="tool-btn" id="btnView3D" title="3D orbit view">3D</button>
+        <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
+        <button class="tool-btn" id="btnGlobalUpdate" title="Refresh all views and calculations" style="margin-left:8px;">Update</button>
       </div>
     </div>
     <div id="canvas-container">
@@ -468,14 +730,14 @@ html = f"""
       <span id="hint">Draw terminal: click grid points, then near first point to close. Drag to pan, scroll to zoom.</span>
       <span id="coord"></span>
     </div>
-    <div id="flight-tooltip" style="position:absolute;pointer-events:none;padding:2px 6px;font-size:11px;border-radius:4px;background:rgba(15,23,42,0.9);color:#f9fafb;border:1px solid rgba(148,163,184,0.7);display:none;z-index:40;"></div>
+    <div id="flight-tooltip"></div>
     <div id="right-panel">
       <button id="panel-toggle" title="Toggle panel">◀</button>
       <div class="panel-content">
-        <div id="api-warning-banner" style="display:none;background:#7f1d1d;color:#fecaca;padding:8px 10px;font-size:11px;border-radius:6px;margin-bottom:10px;line-height:1.4;">
-          <strong>API 연결 안 됨</strong><br/>
-          Save/Load/Run Simulation을 사용하려면 <strong>python run_app.py</strong>로 실행한 뒤<br/>
-          <strong>http://127.0.0.1:8501</strong> 로 접속하세요. (streamlit run 사용 시 동작하지 않습니다)
+        <div id="api-warning-banner">
+          <strong>API Not connected</strong><br/>
+          Save/Load/Run SimulationTo use <strong>python run_app.py</strong>After running it with<br/>
+          <strong>http://127.0.0.1:8501</strong> Please access. (streamlit run Doesn't work when used)
         </div>
         <div class="right-panel-tabs">
           <button type="button" class="right-panel-tab active" data-tab="settings">Layout</button>
@@ -502,23 +764,23 @@ html = f"""
 
         <div id="settings-grid" class="settings-pane">
           <label>Cell size (m)</label>
-          <input type="number" id="gridCellSize" min="10" max="1000" value="20" step="10" />
+          <input type="number" id="gridCellSize" min="{_ui_g_min_cs}" max="{_ui_g_max_cs}" value="{CELL_SIZE}" step="{_ui_g_cs_step}" />
           <label>Columns</label>
-          <input type="number" id="gridCols" min="5" max="500" value="200" />
+          <input type="number" id="gridCols" min="{_ui_g_min_dim}" max="{_ui_g_max_dim}" value="{GRID_COLS}" />
           <label>Rows</label>
-          <input type="number" id="gridRows" min="5" max="500" value="200" />
+          <input type="number" id="gridRows" min="{_ui_g_min_dim}" max="{_ui_g_max_dim}" value="{GRID_ROWS}" />
         </div>
         <div id="settings-terminal" class="settings-pane" style="display:none;">
           <label>Building name</label>
           <input type="text" id="terminalName" placeholder="e.g. T1" />
           <label>Floors</label>
-          <input type="number" id="terminalFloors" min="1" max="20" value="1" step="1" />
+          <input type="number" id="terminalFloors" min="{_ui_term_floors_min}" max="{_ui_term_floors_max}" value="{_ui_term_floors}" step="1" />
           <label>Floor-to-floor height (m)</label>
-          <input type="number" id="terminalFloorToFloor" min="1" max="10" value="4" step="0.5" />
+          <input type="number" id="terminalFloorToFloor" min="{_ui_term_f2f_min}" max="{_ui_term_f2f_max}" value="{_ui_term_f2f}" step="{_ui_term_f2f_step}" />
           <label>Departure capacity</label>
-          <input type="number" id="terminalDepartureCapacity" min="0" value="0" step="1" />
+          <input type="number" id="terminalDepartureCapacity" min="0" value="{_ui_term_dep}" step="1" />
           <label>Arrival capacity</label>
-          <input type="number" id="terminalArrivalCapacity" min="0" value="0" step="1" />
+          <input type="number" id="terminalArrivalCapacity" min="0" value="{_ui_term_arr}" step="1" />
           <button class="small draw-toggle-btn" id="btnTerminalDraw">Draw</button>
         </div>
         <div id="settings-pbb" class="settings-pane" style="display:none;">
@@ -542,7 +804,7 @@ html = f"""
             <option value="D">D</option><option value="E">E</option><option value="F">F</option>
           </select>
           <label style="margin-top:6px;">Available terminals</label>
-          <div id="remoteTerminalAccess" style="margin-top:4px;padding:6px 8px;border-radius:6px;border:1px solid #1f2937;background:#020617;font-size:11px;color:#e5e7eb;max-height:120px;overflow:auto;">
+          <div id="remoteTerminalAccess">
             <!-- Terminal checkboxes are rendered dynamically -->
           </div>
           <button class="small draw-toggle-btn" id="btnRemoteDraw">Draw</button>
@@ -551,21 +813,26 @@ html = f"""
           <label>Name</label>
           <input type="text" id="taxiwayName" placeholder="e.g. Taxiway A" />
           <label>Width (m)</label>
-          <input type="number" id="taxiwayWidth" min="10" max="100" value="15" step="1" />
+          <input type="number" id="taxiwayWidth" min="10" max="100" value="{_ui_tw_w}" step="1" />
           <div id="runwayMinArrVelocityWrap" style="display:none;margin-top:6px;">
             <label>Min Arr Velocity (m/s)</label>
-            <input type="number" id="runwayMinArrVelocity" min="1" max="150" value="15" step="1" />
-            <p style="font-size:10px;color:#9ca3af;margin-top:2px;">활주로 구간에서 도착기 속도가 이 값 아래로는 더 내려가지 않습니다.</p>
+            <input type="number" id="runwayMinArrVelocity" min="1" max="150" value="{_ui_rw_min_arr}" step="1" />
+            <p style="font-size:10px;color:#9ca3af;margin-top:2px;">Arrival airspeed on a runway segment will not drop below this value..</p>
+            <div id="runwayLineupDistWrap" style="margin-top:8px;">
+              <label>Line up Point (m, start → end)</label>
+              <input type="number" id="runwayLineupDistM" min="0" max="500000" value="{_ui_rw_lineup}" step="1" />
+              <p style="font-size:10px;color:#9ca3af;margin-top:2px;">Startat End directionby this distance(m) spot. The departure route passes through this point and continues to the end of the runway..</p>
+            </div>
           </div>
           <div id="taxiwayAvgVelocityWrap" style="display:none;">
             <label>Avg Move Velocity (m/s)</label>
-            <input type="number" id="taxiwayAvgMoveVelocity" min="1" max="50" value="10" step="0.5" />
+            <input type="number" id="taxiwayAvgMoveVelocity" min="1" max="50" value="{_ui_tw_avg}" step="0.5" />
           </div>
           <div id="runwayExitExtras" style="display:none;margin-top:6px;">
             <label>Max Exit Velocity</label>
-            <input type="number" id="taxiwayMaxExitVel" min="1" max="150" value="30" step="1" />
+            <input type="number" id="taxiwayMaxExitVel" min="1" max="150" value="{_ui_ex_max}" step="1" />
             <label style="margin-top:4px;">Min Exit Velocity</label>
-            <input type="number" id="taxiwayMinExitVel" min="1" max="150" value="15" step="1" />
+            <input type="number" id="taxiwayMinExitVel" min="1" max="150" value="{_ui_ex_min}" step="1" />
           </div>
           <label style="margin-top:10px;">Taxiway Direction Mode</label>
           <select id="taxiwayDirectionMode">
@@ -601,7 +868,7 @@ html = f"""
             <button type="button" class="layout-save-load-tab flight-subtab active" data-flight-subtab="schedule">Flight Schedule</button>
             <button type="button" class="layout-save-load-tab flight-subtab" data-flight-subtab="config">Flight Configuration</button>
           </div>
-          <!-- Arr / Dep 선택은 내부 호환성을 위해 남겨두되, UI에서는 숨김 -->
+          <!-- Arr / Dep The choice is reserved for internal compatibility., UIhidden in -->
           <label style="display:none;">Arr / Dep</label>
           <select id="flightArrDep" style="display:none;">
             <option value="Arr" selected>Arr (Arrival)</option>
@@ -609,21 +876,21 @@ html = f"""
           </select>
           <div id="flightPaneSchedule">
             <label>SIBT (Scheduled In Block Time)</label>
-            <input type="text" id="flightTime" placeholder="예: 0, 12:30, 09:23:45 (분 / HH:MM:SS)" />
+            <input type="text" id="flightTime" placeholder="yes: 0, 12:30, 09:23:45 (minute / HH:MM:SS)" />
             <label>Aircraft type</label>
             <select id="flightAircraftType">
               <!-- Populated from INFORMATION.tiers.aircraft.types -->
             </select>
             <label>Reg. number</label>
-            <input type="text" id="flightReg" placeholder="예: HL1234" />
+            <input type="text" id="flightReg" placeholder="yes: HL1234" />
             <label>Airline Code</label>
-            <input type="text" id="flightAirlineCode" placeholder="예: KE" />
+            <input type="text" id="flightAirlineCode" placeholder="yes: KE" />
             <label>Flight Number</label>
-            <input type="text" id="flightFlightNumber" placeholder="예: KE0081" />
-            <label>Dwell time (분, 스탠드 점유 시간)</label>
-            <input type="number" id="flightDwell" min="0" max="600" value="60" step="5" />
-            <label>Min Dwell (분, 최소 드웰·Turnaround 보장)</label>
-            <input type="number" id="flightMinDwell" min="0" max="600" value="0" step="5" title="도착 지연 시 EOBT = EIBT + Min Dwell 로 조정 (0이면 미적용)" />
+            <input type="text" id="flightFlightNumber" placeholder="yes: KE0081" />
+            <label>Dwell time (minutes, stand occupancy time)</label>
+            <input type="number" id="flightDwell" min="0" max="{_ui_flight_dwell_max}" value="{_ui_flight_dwell}" step="{_ui_flight_dwell_step}" />
+            <label>Min Dwell (minutes, minimum dwell·Turnaround guarantee)</label>
+            <input type="number" id="flightMinDwell" min="0" max="{_ui_flight_dwell_max}" value="{_ui_flight_min_dwell}" step="{_ui_flight_dwell_step}" title="In case of delayed arrival EOBT = EIBT + Min Dwell Adjust to (0Not applicable to this side)" />
             <button class="small" id="btnAddFlight">+ Add Flight</button>
             <div id="flightError" style="color:#f97316;font-size:11px;margin-top:4px;"></div>
             <div class="section-title" style="margin-top:10px;">Flight schedule</div>
@@ -669,7 +936,7 @@ html = f"""
 
         <div id="tab-simulation" class="tab-content">
           <div class="section-title">Simulation</div>
-          <button type="button" class="small" id="btnRunSimulation" style="background:#1e40af;color:#fff;">Run Simulation</button>
+          <button type="button" class="small" id="btnRunSimulation">Run Simulation</button>
         </div>
 
         <div id="tab-saveload" class="tab-content">
@@ -681,13 +948,13 @@ html = f"""
           </div>
           <div id="layout-saveas-pane" class="layout-save-load-pane active">
             <label>Layout name</label>
-            <input type="text" id="layoutName" placeholder="예: base_layout" />
+            <input type="text" id="layoutName" placeholder="yes: base_layout" />
             <button type="button" class="small" id="btnSaveLayout" style="margin-top:6px;">Save as</button>
             <div id="layoutMessage" style="font-size:11px;color:#9ca3af;margin-top:4px;"></div>
           </div>
           <div id="layout-save-pane" class="layout-save-load-pane">
-            <p style="font-size:11px;color:#9ca3af;">현재 로드된 레이아웃 파일에 덮어씁니다.</p>
-            <button type="button" class="small" id="btnSaveCurrentLayout" style="margin-top:6px;">현재 상태 저장</button>
+            <p style="font-size:11px;color:#9ca3af;">Overwrites the currently loaded layout file.</p>
+            <button type="button" class="small" id="btnSaveCurrentLayout" style="margin-top:6px;">Save current state</button>
             <div id="layoutMessageSave" style="font-size:11px;color:#9ca3af;margin-top:4px;"></div>
           </div>
           <div id="layout-load-pane" class="layout-save-load-pane">
@@ -707,13 +974,107 @@ html = f"""
     const INITIAL_LAYOUT = {json.dumps(layout_for_html)};
     const INITIAL_LAYOUT_DISPLAY_NAME = {json.dumps(layout_display_name)};
     const INFORMATION = {json.dumps(INFORMATION)};
+    const GRID_VIEW_BG = {json.dumps(_GRID_VIEW_BG)};
     let GRID_COLS = {GRID_COLS};
     let GRID_ROWS = {GRID_ROWS};
     let CELL_SIZE = {CELL_SIZE};
 
+    const _tiers = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers) ? INFORMATION.tiers : {{}};
+    const _layoutTier = _tiers.layout || {{}};
+    const _flightTier = _tiers.flight_schedule || _tiers.flight || {{}};
+    const _algoTier = _tiers.algorithm || {{}};
+    const _styleTier = _tiers.style || {{}};
+    const _ganttStyle = _styleTier.gantt || {{}};
+    const _canvas2dStyle = _styleTier.canvas2d || {{}};
+    function c2dObjectSelectedStroke() {{ return _canvas2dStyle.objectSelectedStroke || '#e9d5ff'; }}
+    function c2dObjectSelectedFill() {{ return _canvas2dStyle.objectSelectedFill || 'rgba(196, 181, 253, 0.42)'; }}
+    function c2dObjectSelectedDashStroke() {{ return _canvas2dStyle.objectSelectedDashStroke || 'rgba(255, 252, 255, 0.95)'; }}
+    function c2dObjectSelectedGlow() {{ return _canvas2dStyle.objectSelectedGlow || 'rgba(167, 139, 250, 0.9)'; }}
+    function c2dObjectSelectedGlowBlur() {{
+      const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
+      return (isFinite(n) && n >= 0) ? n : 22;
+    }}
+    const _threeDStyle = _styleTier.threeD || {{}};
+    const GANTT_COLORS = {{
+      S_BAR: _ganttStyle.sBar || '#007aff',
+      S_SERIES: _ganttStyle.sSeries || '#38bdf8',
+      E_BAR: _ganttStyle.eBar || '#fb37c5',
+      E_SERIES: _ganttStyle.eSeries || '#fb923c',
+      CONFLICT: _ganttStyle.conflict || '#7f1d1d',
+      SELECTED: _ganttStyle.selected || '#fbbf24',
+    }};
+    const _apronAc = _layoutTier.apronAircraft || {{}};
+    const _acScaleByCat = (_apronAc.scaleByIcaoCategory && typeof _apronAc.scaleByIcaoCategory === 'object') ? _apronAc.scaleByIcaoCategory : {{}};
+    function apronAircraftScaleForIcao(code) {{
+      const c = String(code || '').toUpperCase();
+      const v = Number(_acScaleByCat[c]);
+      if (isFinite(v) && v > 0) return v;
+      const d = Number(_acScaleByCat.default);
+      return (isFinite(d) && d > 0) ? d : 1.0;
+    }}
+    const _ac2d = _apronAc.twoD || {{}};
+    const _acSil = (_ac2d.silhouette && typeof _ac2d.silhouette === 'object') ? _ac2d.silhouette : {{}};
+    function apron2DGlyphFill() {{ return _ac2d.fillColor || '#ff2f92'; }}
+    const _ac3d = _apronAc.threeD || {{}};
+    function _numOr(v, def) {{
+      const n = Number(v);
+      return (isFinite(n) && n > 0) ? n : def;
+    }}
+    function hexToThreeColor(hex) {{
+      const s = String(hex || '').replace('#', '').trim();
+      if (!s || s.length < 6) return 0xff2f92;
+      const n = parseInt(s.slice(0, 6), 16);
+      return isFinite(n) ? n : 0xff2f92;
+    }}
+    function threeOpacity(v, def) {{
+      const o = Number(v);
+      return (isFinite(o) && o >= 0 && o <= 1) ? o : def;
+    }}
+    const _schedAlgo = _algoTier.scheduledTimes || {{}};
+    const SCHED_DWELL_FLOOR_MIN = (function() {{
+      const v = Number(_schedAlgo.dwellFloorMin);
+      return (isFinite(v) && v >= 0) ? v : 20;
+    }})();
+    const RSEP_MISSING_MATRIX_SEC = (function() {{
+      const v = Number(_schedAlgo.rsepMissingMatrixSeparationSec);
+      return (isFinite(v) && v >= 0) ? v : 90;
+    }})();
+    const TIME_AXIS_CFG = _algoTier.timeAxis || {{}};
+    function _taNum(k, def) {{
+      const v = Number(TIME_AXIS_CFG[k]);
+      return (isFinite(v) && v >= 0) ? v : def;
+    }}
+    const GANTT_PAD_MIN = _taNum('apronGanttPadMin', 20);
+    const RWY_SEP_TIMELINE_PAD_MIN = _taNum('runwaySepTimelinePadMin', 10);
+    const TICK_STEP_SPAN_LE60 = _taNum('tickStepWhenSpanLe60Min', 10);
+    const TICK_STEP_SPAN_LE240 = _taNum('tickStepWhenSpanLe240Min', 30);
+    const TICK_STEP_ELSE = _taNum('tickStepElseMin', 60);
+    const MAX_TICKS_SHOWN = (function() {{
+      const v = Math.floor(Number(TIME_AXIS_CFG.maxTicksShown));
+      return (isFinite(v) && v >= 2) ? v : 6;
+    }})();
+    const PATH_SEARCH_CFG = _algoTier.pathSearch || {{}};
+    const TAXIWAY_HEURISTIC_COST = (function() {{
+      const v = Number(PATH_SEARCH_CFG.taxiwayHeuristicCost);
+      return (isFinite(v) && v > 0) ? v : 200;
+    }})();
+    const _ix = _layoutTier.interaction || {{}};
+    function _ixNum(k, def) {{
+      const v = Number(_ix[k]);
+      return (isFinite(v) && v >= 0) ? v : def;
+    }}
+    const DRAG_THRESH = _ixNum('dragThresholdPx', 5);
+    const HIT_TERM_VTX_CF = _ixNum('hitTerminalVertexCellFactor', 0.6);
+    const HIT_TW_VTX_CF = _ixNum('hitTaxiwayVertexCellFactor', 0.6);
+    const HIT_TW_SEG_CF = _ixNum('hitTaxiwayAlongCellFactor', 0.8);
+    const HIT_PBB_END_CF = _ixNum('hitPbbEndCellFactor', 0.8);
+    const TRY_PBB_MAX_EDGE_CF = _ixNum('tryPlacePbbMaxEdgeCellFactor', 1.0);
+    const FLIGHT_TOOLTIP_CF = _ixNum('flightTooltipCellFactor', 1.2);
+    const TERM_CLOSE_POLY_CF = _ixNum('terminalClosePolygonCellFactor', 0.6);
+    const PBB_PREVIEW_LEN_CF = _ixNum('pbbPreviewLengthCellFactor', 0.9);
+
     const canvas = document.getElementById('grid-canvas');
     const container = document.getElementById('canvas-container');
-    const hintEl = document.getElementById('hint');
     const coordEl = document.getElementById('coord');
     const objectInfoEl = document.getElementById('object-info');
     const objectListEl = document.getElementById('object-list');
@@ -740,7 +1101,7 @@ html = f"""
       taxiways: [],
       apronLinks: [],
       directionModes: [],
-      // 현재 선택/로드된 레이아웃 이름 (Simulation 요청 시 사용)
+      // current selection/Loaded layout name (Simulation Available upon request)
       currentLayoutName: String(INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout'),
       // Flight / simulation state
       flights: [],
@@ -748,7 +1109,7 @@ html = f"""
       simStartSec: 0,
       simDurationSec: 0,
       simPlaying: false,
-      simSpeed: 20,
+      simSpeed: {json.dumps(float(_ui_default_sim_speed))},
       hasSimulationResult: false,
       currentTerminalId: null,
       selectedObject: null,
@@ -769,7 +1130,11 @@ html = f"""
       apronLinkTemp: null,
       hoverCell: null,
     }};
-    const DEFAULT_AIRLINE_CODES = ['KE', '7C', 'DL'];
+    let hookSyncFlightPanelFromSelection = null;
+    const DEFAULT_AIRLINE_CODES = (function() {{
+      const a = _flightTier.defaultAirlineCodes;
+      return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
+    }})();
     const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
     function pathTypeFromLayoutMode(layoutMode) {{
       if (layoutMode === 'runwayPath') return 'runway';
@@ -916,18 +1281,18 @@ html = f"""
         state.flights = obj.flights.slice();
         state.flights.forEach(f => {{
           const t = f.token || {{}};
-          // aircraftType/code: legacy JSON에는 code만 있을 수 있음. aircraftType이 있으면 code 유도, 없으면 code로 aircraftType 매칭
+          // aircraftType/code: legacy JSONIn codeThere can only be. aircraftTypeIf there is code Judo, if there is no codeas aircraftType matching
           if (f.aircraftType && typeof getCodeForAircraft === 'function') {{
             f.code = getCodeForAircraft(f.aircraftType);
           }} else if (f.code && typeof AIRCRAFT_TYPES !== 'undefined') {{
             const match = AIRCRAFT_TYPES.find(a => a.icao === f.code);
             f.aircraftType = match ? match.id : (AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320';
           }}
-          // JSON에서 저장된 최소 token 형식: arrRunwayId, apronId, terminalId, depRunwayId
+          // JSONMinimum saved at token form: arrRunwayId, apronId, terminalId, depRunwayId
           f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
           f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
           f.terminalId = f.terminalId || t.terminalId || null;
-          // 항공편-주기장ID 매칭: JSON token.apronId만 소스로 사용. 이 값이 유지되면 Allocation도 유지됨
+          // Flight-parking areaID matching: JSON token.apronIdUsed only as a source. If this value holds Allocationalso maintained
           const apronId = t.apronId != null ? t.apronId : (f.standId != null ? f.standId : null);
           f.standId = apronId;
           f.token = {{
@@ -943,10 +1308,10 @@ html = f"""
       }} else {{
         state.flights = [];
       }}
-      // 주기장 배치는 JSON(apronId)에서만 복원. 타임라인/경로 기반 자동 재배정 없음
-      // 시뮬레이션 자동 재생하지 않음
+      // The layout of the parking lot is JSON(apronId)Restored only. timeline/No route-based automatic reassignment
+      // Do not autoplay simulation
       state.simPlaying = false;
-      // flights가 바뀌면 경로·타임라인 계산 후 시뮬레이션 길이·리스트 갱신 (재생 가능하도록)
+      // flightsWhen the path changes·Simulation length after timeline calculation·List update (to be playable)
       if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
       else {{
         if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
@@ -1010,14 +1375,14 @@ html = f"""
     }}
     function getTaxiwayDirection(tw) {{
       if (!tw) return 'both';
-      // 새 UI: taxiwayDirectionMode에서 직접 tw.direction에 저장 (clockwise / counter_clockwise / both)
+      // bird UI: taxiwayDirectionModedirectly from tw.directionSave to (clockwise / counter_clockwise / both)
       if (tw.direction != null) {{
         const d = tw.direction;
         if (d === 'topToBottom') return 'clockwise';
         if (d === 'bottomToTop') return 'counter_clockwise';
         return d || 'both';
       }}
-      // 구버전 JSON 호환: directionModeId + state.directionModes 사용
+      // Old version JSON compatible: directionModeId + state.directionModes use
       if (tw.directionModeId) {{
         const m = state.directionModes.find(d => d.id === tw.directionModeId);
         if (m && m.direction) return m.direction;
@@ -1026,15 +1391,43 @@ html = f"""
     }}
 
     // ---- Runway Separation config (from Information.json) ----
-    const _info = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers) ? INFORMATION : {{}};
-    const _rwy = _info.runway || {{}};
+    const _rwy = _tiers.runway || {{}};
+    const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {{}};
+    const RSEP_COLOR_THRESHOLDS = (function() {{
+      const arr = _sepUi.inputColorThresholdsSec;
+      if (Array.isArray(arr) && arr.length) {{
+        return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
+      }}
+      return [90, 120, 150];
+    }})();
+    const RSEP_LEGEND_LAB = (_sepUi.legendLabels && typeof _sepUi.legendLabels === 'object') ? _sepUi.legendLabels : {{}};
+    function rsepLegendFmt(tpl, a0, a1) {{
+      let s = String(tpl || '');
+      if (a1 != null && s.indexOf('{{1}}') >= 0) return s.replace('{{0}}', String(a0)).replace('{{1}}', String(a1));
+      return s.replace('{{0}}', String(a0));
+    }}
+    const RSEP_COLOR_STYLES = [
+      {{ bg: '#0d2018', color: '#68d391', border: '#68d39155' }},
+      {{ bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' }},
+      {{ bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' }},
+      {{ bg: '#280d0d', color: '#fc8181', border: '#fc818155' }},
+    ];
     const _stds = _rwy.standards || {{}};
     const RSEP_STD_CATS = {{
       'ICAO': (_stds.ICAO && _stds.ICAO.categories) ? _stds.ICAO.categories : ['J','H','M','L'],
       'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categories) ? _stds['RECAT-EU'].categories : ['A','B','C','D','E','F'],
     }};
-    const RSEP_SEQ_TYPES = {{ 'ARR→ARR': 'matrix', 'DEP→DEP': 'matrix', 'ARR→DEP': 'lead-1d', 'DEP→ARR': 'trail-1d' }};
-    const RSEP_MODE_SEQS = {{ ARR: ['ARR→ARR'], DEP: ['DEP→DEP'], MIX: ['ARR→ARR','DEP→DEP','ARR→DEP','DEP→ARR'] }};
+    const RSEP_SEQ_TYPES = Object.assign({{ 'ARR→ARR': 'matrix', 'DEP→DEP': 'matrix', 'ARR→DEP': 'lead-1d', 'DEP→ARR': 'trail-1d' }}, _sepUi.seqTypes || {{}});
+    const RSEP_MODE_SEQS = (function() {{
+      const def = {{ ARR: ['ARR→ARR'], DEP: ['DEP→DEP'], MIX: ['ARR→ARR','DEP→DEP','ARR→DEP','DEP→ARR'] }};
+      const ms = _sepUi.modeSequences || {{}};
+      const out = {{}};
+      ['ARR','DEP','MIX'].forEach(k => {{
+        const a = ms[k];
+        out[k] = (Array.isArray(a) && a.length) ? a.slice() : def[k].slice();
+      }});
+      return out;
+    }})();
     const RSEP_DEFAULTS = {{}};
     ['ICAO','RECAT-EU'].forEach(k => {{
       const s = _stds[k];
@@ -1099,24 +1492,31 @@ html = f"""
       if (!isFinite(n) || val === '' || val == null) {{
         return {{ bg: '#1a1a1a', color: '#e5e7eb', border: '#444444' }};
       }}
-      if (n < 90) {{
-        return {{ bg: '#0d2018', color: '#68d391', border: '#68d39155' }};
+      const th = RSEP_COLOR_THRESHOLDS;
+      for (let i = 0; i < th.length; i++) {{
+        if (n < th[i]) return RSEP_COLOR_STYLES[i] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
       }}
-      if (n < 120) {{
-        return {{ bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' }};
-      }}
-      if (n < 150) {{
-        return {{ bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' }};
-      }}
-      return {{ bg: '#280d0d', color: '#fc8181', border: '#fc818155' }};
+      return RSEP_COLOR_STYLES[th.length] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
     }}
     function rsepLegendHtml(filled, total) {{
+      const th = RSEP_COLOR_THRESHOLDS;
       const countColor = filled === total ? '#68d391' : '#9ca3af';
       let html = '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d2018;border-radius:2px;margin-right:4px;"></span><span style="color:#68d391;">&lt;90s</span></span>';
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:#0d1a28;border-radius:2px;margin-right:4px;"></span><span style="color:#63b3ed;">90–119s</span></span>';
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:#1e1e08;border-radius:2px;margin-right:4px;"></span><span style="color:#f6e05e;">120–149s</span></span>';
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:#280d0d;border-radius:2px;margin-right:4px;"></span><span style="color:#fc8181;">≥150s</span></span>';
+      const lab = RSEP_LEGEND_LAB;
+      if (th.length) {{
+        const st0 = rsepColorForValue(Math.max(0, th[0] - 1));
+        html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st0.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st0.color + ';">' + escapeHtml(rsepLegendFmt(lab.ltFirst || '<{{0}}s', th[0])) + '</span></span>';
+        for (let i = 1; i < th.length; i++) {{
+          const lo = th[i - 1], hi = th[i];
+          const mid = lo + (hi - lo) / 2;
+          const st = rsepColorForValue(mid);
+          const text = rsepLegendFmt(lab.rangeMid || '{{0}}–{{1}}s', lo, hi - 1);
+          html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st.color + ';">' + escapeHtml(text) + '</span></span>';
+        }}
+        const lastT = th[th.length - 1];
+        const stL = rsepColorForValue(lastT + 1000);
+        html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + stL.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + stL.color + ';">' + escapeHtml(rsepLegendFmt(lab.gteLast || '≥{{0}}s', lastT)) + '</span></span>';
+      }}
       html += '<span style="margin-left:4px;color:' + countColor + ';">' + filled + '/' + total + '</span>';
       html += '</div>';
       return html;
@@ -1140,7 +1540,7 @@ html = f"""
       if (!rw.rwySepConfig) {{
         rw.rwySepConfig = rsepMakeConfig('ICAO');
       }}
-      // 표준이 바뀐 JSON이 들어올 수도 있으므로 cats 수에 안 맞으면 리셋
+      // standards have changed JSONBecause it may come in cats If the number does not match, reset
       const cfg = rw.rwySepConfig;
       if (!RSEP_STD_CATS[cfg.standard]) {{
         rw.rwySepConfig = rsepMakeConfig('ICAO');
@@ -1170,7 +1570,15 @@ html = f"""
       row = Math.max(0, Math.min(GRID_ROWS, row));
       return [col, row];
     }}
-    const ICAO_STAND_SIZE_M = {{ A: 20, B: 30, C: 40, D: 50, E: 60, F: 80 }};
+    const ICAO_STAND_SIZE_M = (function() {{
+      const m = _layoutTier.standSizesMByIcaoCategory;
+      if (m && typeof m === 'object') {{
+        const o = {{}};
+        Object.keys(m).forEach(k => {{ o[k] = Number(m[k]); }});
+        return o;
+      }}
+      return {{ A: 20, B: 30, C: 40, D: 50, E: 60, F: 80 }};
+    }})();
     function getStandSizeMeters(cat) {{ return ICAO_STAND_SIZE_M[cat] || 40; }}
     function getStandBoundsRect(cx, cy, sizeM) {{
       const h = sizeM / 2;
@@ -1178,7 +1586,7 @@ html = f"""
     }}
     function rectsOverlap(a, b) {{
       // Treat only positive-area intersection as overlap.
-      // If 두 사각형이 선이나 점으로만 닿는 경우(변이 겹치거나 모서리만 맞닿는 경우)는 겹침으로 보지 않는다.
+      // If When two squares touch only by a line or point(When sides overlap or only edges touch)is not considered overlap..
       return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
     }}
     function getPBBStandAngle(pbb) {{ return Math.atan2(pbb.y2 - pbb.y1, pbb.x2 - pbb.x1); }}
@@ -1277,7 +1685,7 @@ html = f"""
           }}
         }}
       }});
-      const maxD2 = (CELL_SIZE * 1.0) ** 2;
+      const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
       if (!bestEdge || bestD2 >= maxD2) return false;
       const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
       let nx = -(y2 - y1), ny = x2 - x1;
@@ -1288,7 +1696,7 @@ html = f"""
       const standSize = getStandSizeMeters(category);
       const minLen = standSize / 2 + 3;
       const lenCells = parseInt(document.getElementById('pbbLength').value || '2', 10);
-      const lenPx = Math.max(lenCells * CELL_SIZE * 0.9, minLen);
+      const lenPx = Math.max(lenCells * CELL_SIZE * PBB_PREVIEW_LEN_CF, minLen);
       const newPbb = {{ x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx, category }};
       if (pbbStandOverlapsExisting(newPbb)) return false;
       pushUndo();
@@ -1322,7 +1730,7 @@ html = f"""
     function taxiwayOverlapsAnyTerminal(tw) {{
       if (!tw || !tw.vertices || tw.vertices.length < 2) return false;
       const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-      // 각 vertex 가 어떤 터미널 안에 들어가는지 체크
+      // each vertex Check which terminal is in
       for (let t = 0; t < state.terminals.length; t++) {{
         const term = state.terminals[t];
         if (!term.closed || term.vertices.length < 3) continue;
@@ -1330,7 +1738,7 @@ html = f"""
         for (let i = 0; i < vertsPix.length; i++) {{
           if (pointInPolygonXY(vertsPix[i], termPix)) return true;
         }}
-        // Segments vs terminal polygon edges 교차 여부 체크
+        // Segments vs terminal polygon edges Check for intersection
         for (let i = 0; i < vertsPix.length - 1; i++) {{
           const a1 = vertsPix[i], a2 = vertsPix[i+1];
           for (let j = 0; j < termPix.length; j++) {{
@@ -1349,11 +1757,11 @@ html = f"""
         const tw = state.taxiways[i];
         if (!tw.vertices || tw.vertices.length < 2) continue;
         const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-        // Taxiway vertex 가 터미널 안에 있는지
+        // Taxiway vertex is in the terminal
         for (let k = 0; k < vertsPix.length; k++) {{
           if (pointInPolygonXY(vertsPix[k], termPix)) return true;
         }}
-        // Taxiway 세그먼트와 터미널 변 교차 여부
+        // Taxiway Whether the segment intersects the terminal edge
         for (let a = 0; a < vertsPix.length - 1; a++) {{
           const a1 = vertsPix[a], a2 = vertsPix[a+1];
           for (let b = 0; b < termPix.length; b++) {{
@@ -1399,7 +1807,7 @@ html = f"""
           copy.end_point = null;
         }}
       }}
-      // Avg move velocity는 개별 Taxiway 설정값을 그대로 직렬화
+      // Avg move velocityis individual Taxiway Serialize the settings as is
       if (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) {{
         copy.avgMoveVelocity = tw.avgMoveVelocity;
       }}
@@ -1407,11 +1815,13 @@ html = f"""
         copy.minArrVelocity = Math.max(1, Math.min(150, tw.minArrVelocity));
       }}
       if (tw.pathType === 'runway') {{
+        if (typeof tw.lineupDistM === 'number' && isFinite(tw.lineupDistM) && tw.lineupDistM >= 0) copy.lineupDistM = tw.lineupDistM;
+        else delete copy.lineupDistM;
         delete copy.lineup_point;
         delete copy.dep_point;
         delete copy.depPointPos;
       }}
-      // Runway separation은 물리 활주로(runway path)에만 의미 있음; exit/일반 TW에 붙은 키는 저장하지 않음
+      // Runway separationsilver physics runway(runway path)Meaning only; exit/common TWKeys attached to are not saved.
       if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
       else delete copy.rwySepConfig;
       return copy;
@@ -1437,7 +1847,7 @@ html = f"""
           rows: GRID_ROWS,
           cellSize: CELL_SIZE
         }},
-        // 이름이 중복될 경우 Objects 패널에서 보이는 형태(예: "Stand 1 (2)")로 저장
+        // In case of duplicate names Objects Shape visible on the panel(yes: "Stand 1 (2)")Save as
         terminals: makeUniqueNamedCopy(state.terminals, 'name'),
         pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
         remoteStands: state.remoteStands.slice(),
@@ -1447,12 +1857,12 @@ html = f"""
         }})(),
         apronLinks: state.apronLinks.slice(),
         directionModes: state.directionModes.slice(),
-        // 항공편-주기장ID 매칭(apronId)을 JSON에 포함해 두면, 불러올 때 Allocation이 그대로 복원됨
+        // Flight-parking areaID matching(apronId)second JSONIf you include it in , when loading AllocationRestored as is
         flights: state.flights.map(function(f) {{
           const copy = {{ }};
-          // 먼저 기본·시간 관련 필드를 원하는 순서(S(orig) > S(d) > S(final) > E(final), 각 그룹은 ldt > ibt > obt > tot 순)로 채운다
-          // NOTE: E(orig) 계열(eldtMin_orig/eibtMin_orig/eobtMin_orig/etotMin_orig)은
-          //       JSON에 저장하지 않고, 최종 E계열(eldtMin/eibtMin/eobtMin/etotMin)만 저장한다.
+          // First the basics·Order in which you want time-related fields(S(orig) > S(d) > S(final) > E(final), Each group ldt > ibt > obt > tot net)Fill with
+          // NOTE: E(orig) line(eldtMin_orig/eibtMin_orig/eobtMin_orig/etotMin_orig)silver
+          //       JSONwithout saving to final Eline(eldtMin/eibtMin/eobtMin/etotMin)save only.
           const orderedKeys = [
             'id',
             'reg',
@@ -1486,7 +1896,7 @@ html = f"""
             'eibtMin',
             'eobtMin',
             'etotMin',
-            // 기타 지표
+            // Other indicators
             'vttADelayMin',
             'arrRotSec',
             'eOverlapPushed',
@@ -1495,8 +1905,8 @@ html = f"""
             'arrRetFailed'
           ];
           orderedKeys.forEach(function(k) {{
-            // sibtMin은 명시적으로 최종 SIBT를 남기기 위해,
-            // 원본 필드가 없으면 sibtMin_d를 복사해 둔다.
+            // sibtMinis explicitly final SIBTto leave a,
+            // If there is no original field sibtMin_dMake a copy of.
             if (k === 'sibtMin') {{
               if (
                 Object.prototype.hasOwnProperty.call(f, 'sibtMin') &&
@@ -1524,7 +1934,7 @@ html = f"""
               copy[k] = f[k];
             }}
           }});
-          // 나머지 필드는 기존 순서대로 뒤에 붙인다
+          // The remaining fields are appended in the original order.
           for (const k in f) {{
             if (
               k === 'timeline' ||
@@ -1639,7 +2049,7 @@ html = f"""
           const tw = state.taxiways[i];
           if (tw.vertices.length < 2) continue;
           const halfW = (tw.width != null ? tw.width : 23) / 2;
-          const hitD2 = (CELL_SIZE * 0.8 + halfW) ** 2;
+          const hitD2 = (CELL_SIZE * HIT_TW_SEG_CF + halfW) ** 2;
           for (let j = 0; j < tw.vertices.length - 1; j++) {{
             const [x1, y1] = cellToPixel(tw.vertices[j].col, tw.vertices[j].row);
             const [x2, y2] = cellToPixel(tw.vertices[j + 1].col, tw.vertices[j + 1].row);
@@ -1652,7 +2062,7 @@ html = f"""
     }}
 
     function hitTestTerminalVertex(wx, wy) {{
-      const maxD2 = (CELL_SIZE * 0.6) ** 2;
+      const maxD2 = (CELL_SIZE * HIT_TERM_VTX_CF) ** 2;
       const cands = [];
       state.terminals.forEach(t => {{
         t.vertices.forEach((v, idx) => {{
@@ -1668,7 +2078,7 @@ html = f"""
       const tw = state.selectedObject.obj;
       if (!tw || !tw.vertices || tw.vertices.length === 0) return null;
       const click = [wx, wy];
-      const maxD2 = (CELL_SIZE * 0.6) ** 2;
+      const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
       let best = null;
       let bestD2 = maxD2;
       tw.vertices.forEach((v, idx) => {{
@@ -1787,6 +2197,11 @@ html = f"""
             : 15;
           runwayMinArrInput.value = mav;
         }}
+        const runwayLineupInput = document.getElementById('runwayLineupDistM');
+        if (runwayLineupInput && tw.pathType === 'runway') {{
+          const lv = getEffectiveRunwayLineupDistM(tw);
+          runwayLineupInput.value = String(lv);
+        }}
         if (maxExitInput) maxExitInput.value = tw.maxExitVelocity != null ? tw.maxExitVelocity : 30;
         if (minExitInput) {{
           const minVal = (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
@@ -1890,6 +2305,12 @@ html = f"""
             delete tw.minArrVelocity;
           }}
         }}
+        if (el('runwayLineupDistM') && tw.pathType === 'runway') {{
+          const lx = Number(el('runwayLineupDistM').value);
+          tw.lineupDistM = (typeof lx === 'number' && isFinite(lx) && lx >= 0) ? lx : 0;
+        }} else if (tw.pathType !== 'runway') {{
+          delete tw.lineupDistM;
+        }}
       }}
     }}
 
@@ -1919,22 +2340,18 @@ html = f"""
       const tabEl = document.getElementById('tab-' + tabId);
       if (tabBtn) tabBtn.classList.add('active');
       if (tabEl) tabEl.classList.add('active');
-      // 패널 폭은 CSS에서 일관되게 관리 (Flight / Allocation / 다른 탭 동일 폭, 접기 기능 정상 동작)
       if (tabId === 'flight') {{
-        if (state.selectedObject && state.selectedObject.type === 'flight' && typeof syncFlightPanelFromSelection === 'function') syncFlightPanelFromSelection();
+        if (state.selectedObject && state.selectedObject.type === 'flight' && typeof hookSyncFlightPanelFromSelection === 'function')
+          hookSyncFlightPanelFromSelection();
       }}
-      if (tabId === 'allocation') {{
-        if (typeof renderFlightGantt === 'function') renderFlightGantt();
-      }}
-      if (tabId === 'rwysep') {{
-        if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
-      }}
+      if (tabId === 'allocation' && typeof renderFlightGantt === 'function') renderFlightGantt();
+      if (tabId === 'rwysep' && typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
     }}
     document.querySelectorAll('.right-panel-tab').forEach(btn => {{
       btn.addEventListener('click', function() {{ switchToTab(this.getAttribute('data-tab')); }});
     }});
 
-    // Apron 탭: S-Point / S-Bar / E-Bar / E-Point 토글
+    // Apron tab: S-Point / S-Bar / E-Bar / E-Point toggle
     ['chkShowSPoints', 'chkShowEBar', 'chkShowEPoints', 'chkShowSBars'].forEach(function(chkId) {{
       const el = document.getElementById(chkId);
       if (el) el.addEventListener('change', function() {{
@@ -2099,7 +2516,7 @@ html = f"""
         const val = Number(this.value);
         if (tw.pathType === 'runway_exit') {{
           tw.maxExitVelocity = isFinite(val) && val > 0 ? val : null;
-          // minExitVelocity는 maxExitVelocity를 넘지 않도록 보정
+          // minExitVelocityIs maxExitVelocityAdjusted not to exceed
           if (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.maxExitVelocity != null && tw.minExitVelocity > tw.maxExitVelocity) {{
             tw.minExitVelocity = tw.maxExitVelocity;
           }}
@@ -2160,6 +2577,21 @@ html = f"""
         }}
       }});
     }}
+    const runwayLineupEl = document.getElementById('runwayLineupDistM');
+    if (runwayLineupEl) {{
+      runwayLineupEl.addEventListener('change', function() {{
+        if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
+          const tw = state.selectedObject.obj;
+          if (tw.pathType !== 'runway') return;
+          const val = Number(this.value);
+          const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : 0;
+          tw.lineupDistM = v;
+          this.value = String(v);
+          updateObjectInfo();
+          if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+        }}
+      }});
+    }}
 
     // ---- Flight helpers ----
     function getMinArrVelocityMpsForRunwayId(runwayId) {{
@@ -2172,7 +2604,7 @@ html = f"""
       if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, Math.min(150, v));
       return 15;
     }}
-    /** v0에서 감속도 a(m/s²)로 distM(m) 이동 시 RET 입구 속도·소요시간. 속도는 vFloor(m/s) 미만으로 내려가지 않음. */
+    /** v0deceleration from a(m/s²)as distM(m) When moving RET entrance speed·time taken. The speed is vFloor(m/s) Do not go below. */
     function runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn) {{
       const vf0 = Math.max(1, Math.min(150, vFloorIn));
       const vf = Math.min(vf0, v0);
@@ -2296,9 +2728,9 @@ html = f"""
         const t = state.terminals[i];
         if (!t.vertices || t.vertices.length < 1) continue;
         const termPix = t.vertices.map(v => cellToPixel(v.col, v.row));
-        // 1) 먼저 폴리곤 내부인지 체크 (닫힌 터미널만)
+        // 1) First check if it is inside the polygon (Closed terminal only)
         if (t.closed && termPix.length >= 3 && pointInPolygonXY([px, py], termPix)) return t;
-        // 2) 아니면 가장 가까운 터미널을 기억해 둔다
+        // 2) Or remember the nearest terminal
         let cx = 0, cy = 0;
         termPix.forEach(p => {{ cx += p[0]; cy += p[1]; }});
         cx /= termPix.length;
@@ -2310,7 +2742,7 @@ html = f"""
           nearest = t;
         }}
       }}
-      // 어떤 폴리곤에도 속하지 않으면, 가장 가까운 터미널을 반환
+      // If it does not belong to any polygon, return the nearest terminal
       return nearest;
     }}
 
@@ -2341,7 +2773,7 @@ html = f"""
         const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
         const stand = allStands.find(function(s) {{ return s.id === standId; }});
         if (!flightCanUseStand(f, stand)) {{
-          alert('Code 또는 선택된 Terminal이 맞지 않아 이 Apron(Stand)에 배정할 수 없습니다.');
+          alert("Code or selected terminal: aircraft doesn't fit apron (stand); cannot be assigned.");
           return false;
         }}
       }}
@@ -2365,11 +2797,11 @@ html = f"""
       const list = [];
       const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
       allStands.forEach(stand => {{
-        // 코드가 지정된 경우 카테고리가 같을 때만 사용
+        // If a code is specified, only use it when the categories are the same
         if (code && stand.category && stand.category !== code) return;
         const hasLink = state.apronLinks.some(lk => lk.pbbId === stand.id);
         if (!hasLink) return;
-        // 터미널 제약은 여기서는 확인하지 않고, 이후 flight.token.terminalId와 allowedTerminals에서 필터링
+        // Terminal constraints will not be checked here, and later flight.token.terminalIdand allowedTerminalsFilter by
         list.push(stand);
       }});
       return list;
@@ -2497,7 +2929,7 @@ html = f"""
       if (!list.length) {{
         opts.push('<option value=\"\">Runway</option>');
       }} else {{
-        // Random/빈 값 옵션 없이, 실제 Runway 객체만 나열
+        // Random/real, without empty value option Runway List only objects
         list.forEach(o => {{
           const sel = selectedId && o.id === selectedId ? ' selected' : '';
           opts.push('<option value=\"' + String(o.id || '').replace(/\"/g,'&quot;') + '\"' + sel + '>' +
@@ -2509,7 +2941,7 @@ html = f"""
 
     function buildTerminalOptionsHtml(selectedId) {{
       const opts = [];
-      // 이름이 중복될 경우 makeUniqueNamedCopy를 사용해 'Pier Apron3 (2)' 형태로 표시
+      // In case of duplicate names makeUniqueNamedCopyuse 'Pier Apron3 (2)' displayed in the form
       const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(t => ({{
         id: t.id,
         name: (t.name || '').trim() || 'Terminal'
@@ -2527,8 +2959,8 @@ html = f"""
       return opts.join('');
     }}
 
-    // Flight Schedule 및 S(d) 계산에서 동일한 VTT(Arr) 정의를 사용하기 위한 헬퍼
-    // ※ 항상 현재 경로를 기준으로 재계산하여, 항공기/Apron/경로 변경 시 즉시 반영되도록 캐시는 사용하지 않는다.
+    // Flight Schedule and S(d) same in calculation VTT(Arr) Helpers for using definitions
+    // ※ Always recalculate based on the current route,/Apron/Cache is not used so that path changes are reflected immediately.
     function getBaseVttArrMinutes(f) {{
       const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
       const arrPts = (typeof getPathForFlight === 'function') ? getPathForFlight(f) : null;
@@ -2566,8 +2998,8 @@ html = f"""
       return dist / v / 60;
     }}
 
-    // 활주로별 SLDT(d)가 가장 이른 도착편은 ELDT = SLDT(d).
-    // renderFlightList에서 SIBT−VTT로 SLDT(d)를 다시 맞춘 뒤 호출하여 Flight Schedule·Save·JSON이 일치하도록 한다.
+    // By runway SLDT(d)The earliest arrival flight is ELDT = SLDT(d).
+    // renderFlightListat SIBT−VTTas SLDT(d)After adjusting again, call Flight Schedule·Save·JSONMake sure this matches.
     function pinEarliestEldtToSldtPerRunway(flights) {{
       if (!Array.isArray(flights)) return;
       const byRwy = {{}};
@@ -2592,6 +3024,133 @@ html = f"""
       }});
     }}
 
+    // One computeRunwayExitDistances() per user action when wrapped in begin/end (e.g. Global Update).
+    var __schedRetStatsBatchActive = false;
+    var __schedRetStatsCached = null;
+    function beginScheduleRetStatsBatch() {{
+      __schedRetStatsBatchActive = true;
+      __schedRetStatsCached = null;
+    }}
+    function endScheduleRetStatsBatch() {{
+      __schedRetStatsBatchActive = false;
+      __schedRetStatsCached = null;
+    }}
+    function getScheduleRetStatsAll() {{
+      if (__schedRetStatsBatchActive) {{
+        if (__schedRetStatsCached === null) {{
+          __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+        }}
+        return __schedRetStatsCached;
+      }}
+      return typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+    }}
+
+    function warmFlightPathsForSchedule(flights) {{
+      if (!Array.isArray(flights)) return;
+      flights.forEach(f => {{
+        if (typeof getPathForFlight === 'function') getPathForFlight(f);
+        if (typeof getPathForFlightDeparture === 'function') getPathForFlightDeparture(f);
+        if (f.noWayArr || f.noWayDep) f.timeline = null;
+      }});
+    }}
+
+    // Warm paths + RET/ROT sampling (single place; uses batched runway-exit stats when active).
+    function warmPathsEnsureArrRetRot(flights, forceResampleRet) {{
+      warmFlightPathsForSchedule(flights);
+      return (typeof ensureArrRetRotSampled === 'function')
+        ? ensureArrRetRotSampled(flights, !!forceResampleRet)
+        : getScheduleRetStatsAll();
+    }}
+
+    // RET selection + ROT(arrRotSec) only. Caller must have warmed paths. Uses getScheduleRetStatsAll().
+    function ensureArrRetRotSampled(flights, forceResampleRet) {{
+      if (!Array.isArray(flights) || !flights.length) return [];
+      const configByType = {{}};
+      const seenTypeCfg = new Set();
+      flights.forEach(f => {{
+        const acInfo = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+        const typeKey = f.aircraftType || (acInfo && acInfo.id) || (acInfo && acInfo.name) || '';
+        if (!typeKey || seenTypeCfg.has(typeKey)) return;
+        seenTypeCfg.add(typeKey);
+        const tdMu = (typeof acInfo?.touchdown_zone_avg_m === 'number') ? acInfo.touchdown_zone_avg_m : 900;
+        const vMu = (typeof acInfo?.touchdown_speed_avg_ms === 'number') ? acInfo.touchdown_speed_avg_ms : 70;
+        const aMu = (typeof acInfo?.deceleration_avg_ms2 === 'number') ? acInfo.deceleration_avg_ms2 : 2.5;
+        const tdSigma = Math.round(tdMu * 0.1);
+        const vSigma = Math.round(vMu * 0.1);
+        const aSigma = Math.round(aMu * 0.1 * 10) / 10;
+        configByType[typeKey] = {{ tdMu, tdSigma, vMu, vSigma, aMu, aSigma }};
+      }});
+      const retStatsAll = getScheduleRetStatsAll();
+      flights.forEach(function(f) {{
+        const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+        const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+        const alreadySampled =
+          !forceResampleRet &&
+          f.sampledArrRet !== undefined &&
+          f.sampledArrRet !== null &&
+          f.arrRetFailed === false;
+
+        if (!alreadySampled && retStatsAll && retStatsAll.length && arrRunwayId != null) {{
+          const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
+          const cfg = typeKey ? configByType[typeKey] : null;
+          if (cfg) {{
+            const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
+            const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
+            const tdMin = cfg.tdMu * 0.85;
+            const tdMax = cfg.tdMu * 1.15;
+            const dTd = clamp(tdSample, Math.max(0, tdMin), Math.max(0, tdMax));
+            const vSample = sampleNormal(cfg.vMu, cfg.vSigma);
+            const vMin = cfg.vMu * 0.85;
+            const vMax = cfg.vMu * 1.15;
+            const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
+            const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
+            const aMin = Math.max(0.1, cfg.aMu * 0.85);
+            const aMax = Math.min(6,   cfg.aMu * 1.15);
+            const aDec = clamp(aSample, aMin, aMax);
+            const candidates = retStatsAll.filter(r => r.runway && r.runway.id === arrRunwayId);
+            if (candidates.length) {{
+              let chosen = null;
+              candidates.forEach(r => {{
+                if (chosen) return;
+                const distFromTd = Math.max(0, r.distM - dTd);
+                const vAt = runwayArrSpeedAndTimeToRet(v0, aDec, distFromTd, minArrVelRwy).vAtRet;
+                if (vAt <= r.maxExitVelocity) {{ chosen = r; }}
+              }});
+              if (chosen) {{
+                f.sampledArrRet = chosen.exit && chosen.exit.id || null;
+                f.arrRetFailed = false;
+                const MAX_DECEL_MS2 = 15;
+                const distFromTdChosen = Math.max(0, chosen.distM - dTd);
+                const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
+                const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
+                const vAtChosen = rtRunway.vAtRet;
+                const tToRetEntrance = rtRunway.tSec;
+                const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
+                  ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
+                  : 15;
+                let tExit = 0;
+                if (vAtChosen > minExitVel) {{
+                  tExit = (vAtChosen - minExitVel) / aDecRot;
+                }}
+                f.arrRotSec = tToRetEntrance + tExit;
+                f.arrRunwayIdUsed = arrRunwayId;
+                f.arrTdDistM = dTd;
+                f.arrRetDistM = chosen.distM;
+                f.arrVTdMs = v0;
+                f.arrVRetInMs = vAtChosen;
+                f.arrVRetOutMs = minExitVel;
+              }} else if (!alreadySampled) {{
+                f.sampledArrRet = null;
+                f.arrRetFailed = true;
+                f.arrRotSec = null;
+              }}
+            }}
+          }}
+        }}
+      }});
+      return retStatsAll;
+    }}
+
     function renderFlightList(skipAutoAllocate, forceResampleRet) {{
       const listEl = document.getElementById('flightList');
       const cfgEl = document.getElementById('flightConfigList');
@@ -2605,7 +3164,7 @@ html = f"""
         }}
         return;
       }}
-      // 정렬은 표시용 복사본만 사용. state.flights 순서는 유지하여 Allocation 바차트/주기장 배치가 경로 갱신 시 바뀌지 않도록 함
+      // Alignment uses display copies only. state.flights Maintain the order Allocation bar chart/Ensure that the parking lot layout does not change when route is updated.
       const flightsSorted = state.flights.slice();
       flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
       flightsSorted.forEach(f => {{
@@ -2613,10 +3172,10 @@ html = f"""
         if (typeof getPathForFlightDeparture === 'function') getPathForFlightDeparture(f);
         if (f.noWayArr || f.noWayDep) f.timeline = null;
       }});
-      // 최초 S(d) 계열(SLDT(d)/SIBT(d)/SOBT(d)/STOT(d)) 계산만 수행
-      // E 계열(ELDT/ETOT)은 분리 로직(computeSeparationAdjustedTimes)에서만 계산/갱신하고,
-      // 여기서는 추가로 재계산하지 않는다.
-      if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
+      // Paths (above) → RET/ROT → S(d)+E (compute* below). Order matches schedule dependency.
+      const retStatsAll = (typeof ensureArrRetRotSampled === 'function')
+        ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
+        : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
       const headerRow = '' +
         '<table class="flight-schedule-table">' +
         '<thead><tr>' +
@@ -2653,123 +3212,8 @@ html = f"""
           '<th class="flight-td-del"></th>' +
         '</tr></thead>' +
         '<tbody>';
-      // Flight configuration 분포(μ, σ)를 aircraft type별로 정리
-      const configByType = {{}};
-      if (cfgEl) {{
-        const seenTypeCfg = new Set();
-        flightsSorted.forEach(f => {{
-          const acInfo = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-          const typeKey = f.aircraftType || (acInfo && acInfo.id) || (acInfo && acInfo.name) || '';
-          if (!typeKey || seenTypeCfg.has(typeKey)) return;
-          seenTypeCfg.add(typeKey);
-          const tdMu = (typeof acInfo?.touchdown_zone_avg_m === 'number') ? acInfo.touchdown_zone_avg_m : 900;
-          const vMu = (typeof acInfo?.touchdown_speed_avg_ms === 'number') ? acInfo.touchdown_speed_avg_ms : 70;
-          const aMu = (typeof acInfo?.deceleration_avg_ms2 === 'number') ? acInfo.deceleration_avg_ms2 : 2.5;
-          // 초기 σ는 μ의 10% 수준으로 설정
-          const tdSigma = Math.round(tdMu * 0.1);
-          const vSigma = Math.round(vMu * 0.1);
-          const aSigma = Math.round(aMu * 0.1 * 10) / 10;
-          configByType[typeKey] = {{ tdMu, tdSigma, vMu, vSigma, aMu, aSigma }};
-        }});
-      }}
-      const retStatsAll = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-
-      flightsSorted.forEach(function(f) {{
-        const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
-        const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-        // --- RET 샘플링: 경로 계산보다 먼저 실행하여 f.sampledArrRet/f.arrRetFailed가 설정된 상태에서 noWayArr/noWayDep 계산
-        let sampledRetName = '—';
-        let sampledRetId = null;
-        let retCandidateCount = 0;
-        // JSON에서 불러온 sampledArrRet이 이미 존재하면 재샘플링 스킵
-        const alreadySampled =
-          !forceResampleRet &&
-          f.sampledArrRet !== undefined &&
-          f.sampledArrRet !== null &&
-          f.arrRetFailed === false;
-
-        if (!alreadySampled && retStatsAll && retStatsAll.length && arrRunwayId != null) {{
-          const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
-          const cfg = typeKey ? configByType[typeKey] : null;
-          if (cfg) {{
-            const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
-            const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
-            const tdMin = cfg.tdMu * 0.85;
-            const tdMax = cfg.tdMu * 1.15;
-            const dTd = clamp(tdSample, Math.max(0, tdMin), Math.max(0, tdMax));
-            const vSample = sampleNormal(cfg.vMu, cfg.vSigma);
-            const vMin = cfg.vMu * 0.85;
-            const vMax = cfg.vMu * 1.15;
-            const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
-            const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
-            const aMin = Math.max(0.1, cfg.aMu * 0.85);
-            const aMax = Math.min(6,   cfg.aMu * 1.15);
-            const aDec = clamp(aSample, aMin, aMax);
-            const candidates = retStatsAll.filter(r => r.runway && r.runway.id === arrRunwayId);
-            retCandidateCount = candidates.length;
-            if (candidates.length) {{
-              let chosen = null;
-              candidates.forEach(r => {{
-                if (chosen) return;
-                const distFromTd = Math.max(0, r.distM - dTd);
-                const vAt = runwayArrSpeedAndTimeToRet(v0, aDec, distFromTd, minArrVelRwy).vAtRet;
-                if (vAt <= r.maxExitVelocity) {{ chosen = r; }}
-              }});
-              if (chosen) {{
-                sampledRetName = chosen.name || 'RET';
-                sampledRetId = chosen.exit && chosen.exit.id || null;
-                f.sampledArrRet = sampledRetId;
-                f.arrRetFailed = false;
-                const MAX_DECEL_MS2 = 15;
-                const distFromTdChosen = Math.max(0, chosen.distM - dTd);
-                const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
-                const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
-                const vAtChosen = rtRunway.vAtRet;
-                const tToRetEntrance = rtRunway.tSec;
-                // RET 내부: 입구 속도에서 Min Exit Velocity까지 감속 시간을 추가
-                const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
-                  ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
-                  : 15;
-                let tExit = 0;
-                if (vAtChosen > minExitVel) {{
-                  tExit = (vAtChosen - minExitVel) / aDecRot;
-                }}
-                f.arrRotSec = tToRetEntrance + tExit;
-                // ROT 시뮬레이션에서 사용한 속도/위치를 저장해서 2D Grid 상에 표시할 수 있도록 한다.
-                f.arrRunwayIdUsed = arrRunwayId;
-                f.arrTdDistM = dTd;
-                f.arrRetDistM = chosen.distM;
-                f.arrVTdMs = v0;           // Touchdown 부근 속도
-                f.arrVRetInMs = vAtChosen; // RET 입구 통과 속도
-                f.arrVRetOutMs = minExitVel; // RET 출구(최소 속도 도달) 속도
-              }} else if (!alreadySampled) {{
-                sampledRetName = 'Failed';
-                f.sampledArrRet = null;
-                f.arrRetFailed = true;
-                f.arrRotSec = null;
-              }}
-            }}
-          }}
-        }}
-        // 이미 샘플링된 경우: 저장된 값으로 표시용 변수만 채움
-        if (alreadySampled) {{
-          const retInfo = retStatsAll.find(r => r.exit && r.exit.id === f.sampledArrRet);
-          sampledRetName = retInfo ? (retInfo.name || 'RET') : 'RET';
-          sampledRetId   = f.sampledArrRet;
-        }}
-        const tArrMin = f.timeMin != null ? f.timeMin : 0;
-        const dwell = f.dwellMin != null ? f.dwellMin : 0;
-        const tDepMin = tArrMin + dwell;
-        // RET 샘플링까지 모두 반영된 현재 경로 기준으로 VTT(Arr)를 1회 계산하고,
-        // SLDT(orig)·SLDT(d)가 동일한 VTT(Arr)를 사용하도록 동기화
-        const vttArrMin = getBaseVttArrMinutes(f);
-        const vttDepMin = getBaseVttDepMinutes(f);
-        // SLDT(orig)/SLDT(d)는 항상 SIBT - VTT(Arr)로 계산된 동일 값 사용
-        const sldtCalc = Math.max(0, tArrMin - vttArrMin);
-        f.sldtMin_orig = sldtCalc;
-        f.sldtMin_d = sldtCalc;
-        f.sldtMin = sldtCalc;
-      }});
+      if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
+      if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
       pinEarliestEldtToSldtPerRunway(flightsSorted);
       const dataRows = flightsSorted.map(function(f) {{
         const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
@@ -2805,7 +3249,7 @@ html = f"""
         const vttADelayMin = f.vttADelayMin != null ? f.vttADelayMin : 0;
         const eibtMin = eldtMin + vttArrMin + vttADelayMin;
         const eobtMin = etotMin - vttDepMin;
-        // Flight Schedule 원본 기준 S/E 계열 시간을 보존해 두고, 이후 Gantt에서는 *_orig 기준으로 참조
+        // Flight Schedule Original standard S/E Save the series time, and then GanttIn *_orig Reference as standard
         if (f.sobtMin_orig == null) {{
           f.sldtMin_orig = sldtOrig;
           f.sibtMin_orig = tArrMin;
@@ -2816,7 +3260,7 @@ html = f"""
           f.eobtMin_orig = eobtMin;
           f.etotMin_orig = etotMin;
         }}
-        // Flight 객체에 EIBT/EOBT 저장 (Apron Gantt 등에서 직접 참조)
+        // Flight to object EIBT/EOBT save (Apron Gantt Direct reference from etc.)
         f.eibtMin = eibtMin;
         f.eobtMin = eobtMin;
 
@@ -2829,7 +3273,7 @@ html = f"""
         const vttArrStr = formatMinutesToHHMMSS(vttArrMin);
         const vttADelayStr = formatMinutesToHHMMSS(vttADelayMin);
         const vttDepStr = formatMinutesToHHMMSS(vttDepMin);
-        // Arr Runway / 옵션 / No Way 배지 (arrRunwayId, ac는 위 RET 샘플링 단계에서 이미 정의됨)
+        // Arr Runway / options / No Way badge (arrRunwayId, acabove RET Already defined in the sampling step)
         const arrOpt = buildRunwayOptionsHtml(arrRunwayId);
         const termOpt = buildTerminalOptionsHtml(f.terminalId || (f.token && f.token.terminalId));
         const depOpt = buildRunwayOptionsHtml(f.depRunwayId || (f.token && f.token.depRunwayId));
@@ -2876,7 +3320,7 @@ html = f"""
           '</tr>';
       }});
       listEl.innerHTML = headerRow + dataRows.join('') + '</tbody></table>';
-      // Flight Configuration 탭: Aircraft type 단위의 설정 테이블 (입력 UI만, 다른 로직과는 미연결)
+      // Flight Configuration tab: Aircraft type Setting table of units (input UIHowever, it is not connected to other logic)
       if (cfgEl) {{
         const seenType = new Set();
         const unique = [];
@@ -2893,7 +3337,7 @@ html = f"""
         if (!unique.length) {{
           cfgEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights yet.</div>';
         }} else {{
-          // 기존 테이블이 있으면, 사용자가 수정한 값을 우선 읽어와서 유지
+          // If there is an existing table, the values ​​modified by the user are first read and maintained.
           const prevConfigByType = {{}};
           const prevInputs = cfgEl.querySelectorAll('.flight-config-input[data-ac][data-param]');
           prevInputs.forEach(inp => {{
@@ -2920,7 +3364,7 @@ html = f"""
               headerCols +
             '</tr></thead><tbody>';
           const rows = [];
-          // per-aircraft 기본값: Information.json의 static 값 사용하되, 기존 테이블에서 사용자가 수정한 값이 있으면 우선 사용
+          // per-aircraft default: Information.jsonof static Use the value, but if there is a value modified by the user in the existing table, use it first
           const tdMeans = unique.map(info => {{
             const acKey = info.key;
             const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['td-mean'];
@@ -2942,7 +3386,7 @@ html = f"""
             const ac = getAircraftInfoByType(acKey) || {{}};
             return (typeof ac.deceleration_avg_ms2 === 'number') ? ac.deceleration_avg_ms2 : 2.5;
           }});
-          // σ는 μ의 10% 수준으로 설정 (사용자가 수정 가능), 기존 테이블에서 수정된 값이면 우선 사용
+          // σIs μset to 10% of (User editable), If the value has been modified from an existing table, use it first.
           const tdSigmas = unique.map((info, idx) => {{
             const acKey = info.key;
             const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['td-sigma'];
@@ -2964,7 +3408,7 @@ html = f"""
             const v = aMeans[idx];
             return Math.round(v * 0.1 * 10) / 10;
           }});
-          // Deceleration a 및 VTD의 mean 값으로부터, 26 m/s 에 도달하는 위치 (threshold로부터 거리, m)
+          // Deceleration a and VTDof mean from value, 26 m/s position to reach (thresholddistance from, m)
           const vTarget = 26;
           const aMeanStopDists = aMeans.map((aMu, idx) => {{
             const vMu = vtdMeans[idx];
@@ -2973,20 +3417,6 @@ html = f"""
             const dFromTouchdown = (vMu*vMu - vTarget*vTarget) / (2 * aMu);
             const dTotal = (tdMu || 0) + (dFromTouchdown > 0 ? dFromTouchdown : 0);
             return dTotal > 0 ? Math.round(dTotal) : 0;
-          }});
-
-          // RET 샘플링용 configByType:
-          // 최초에는 Information.json에서 시작하지만, 이후에는 사용자가 UI에서 수정한 tdMeans/vtdMeans/aMeans 및 시그마를 그대로 사용
-          unique.forEach((info, idx) => {{
-            const key = info.key;
-            configByType[key] = {{
-              tdMu: tdMeans[idx],
-              tdSigma: tdSigmas[idx],
-              vMu: vtdMeans[idx],
-              vSigma: vtdSigmas[idx],
-              aMu: aMeans[idx],
-              aSigma: aSigmas[idx]
-            }};
           }});
 
           rows.push(
@@ -3049,7 +3479,7 @@ html = f"""
               ).join('') +
             '</tr>'
           );
-          // Deceleration a: mean(μ) 값만 사용했을 때 26 m/s 에 도달하는 거리 (threshold 기준, 읽기 전용)
+          // Deceleration a: mean(μ) When only values ​​are used 26 m/s Distance to reach (threshold Baseline, read-only)
           rows.push(
             '<tr>' +
               '<td class="sticky-col" style="background:rgba(22,163,74,0.14);">Distance to 26 m/s (from threshold)</td>' +
@@ -3060,10 +3490,10 @@ html = f"""
               ).join('') +
             '</tr>'
           );
-          // Runway Taxiway (RET) 위치 표: threshold로부터의 거리 + Flight schedule에서 선택된 RET별 기종 카운트
+          // Runway Taxiway (RET) location table: thresholddistance from + Flight scheduleselected from RETstar model count
           const retStats = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
           if (retStats && retStats.length) {{
-            // 섹션 헤더 행
+            // Section header row
             rows.push(
               '<tr>' +
                 '<td class="sticky-col" style="padding-top:10px;">Runway exits (distance from threshold)</td>' +
@@ -3074,7 +3504,7 @@ html = f"""
             );
             retStats.forEach((r, idx) => {{
               const rwLabel = r.runway && (r.runway.name || ('Runway ' + (idx + 1)));
-              // 각 RET에 대해, Flight schedule에서 선택된 RET별 기종 카운트 계산
+              // each RETAbout, Flight scheduleselected from RETCalculate star model count
               const counts = unique.map(info => {{
                 const typeKey = info.key;
                 return (state.flights || []).filter(f =>
@@ -3082,7 +3512,7 @@ html = f"""
                   (f.aircraftType || '') === typeKey
                 ).length;
               }});
-              // 가장 많은 기종(1위), 2~3위 색상 구분
+              // most models(1stomach), 2~3color coded above
               const sortedIdx = counts
                 .map((c, i) => [c, i])
                 .filter(([c]) => c > 0)
@@ -3108,10 +3538,10 @@ html = f"""
                     let bg = 'rgba(15,23,42,0.9)';
                     let color = '#e5e7eb';
                     if (colIdx === top1) {{
-                      bg = 'rgba(22,163,74,0.35)'; // 1위: 녹색
+                      bg = 'rgba(22,163,74,0.35)'; // 1Above: green
                       color = '#bbf7d0';
                     }} else if (colIdx === top2 || colIdx === top3) {{
-                      bg = 'rgba(251,146,60,0.3)'; // 2,3위: 주황색
+                      bg = 'rgba(251,146,60,0.3)'; // 2,3Above: Orange
                       color = '#fed7aa';
                     }}
                     return '<td style="background:' + bg + ';color:' + color + ';font-weight:600;text-align:center;">' + cnt + '</td>';
@@ -3119,7 +3549,7 @@ html = f"""
                 '</tr>'
               );
             }});
-            // RET로 탈출할 수 없었던 항공편(조건 미충족)을 별도 Failed 행으로 요약
+            // RETFlights that could not be escaped by(Condition not met)Separately Failed Summarize by row
             const failedCounts = unique.map(info => {{
               const typeKey = info.key;
               return (state.flights || []).filter(f =>
@@ -3149,10 +3579,10 @@ html = f"""
                     let bg = 'rgba(30,30,30,0.9)';
                     let color = '#fecaca';
                     if (colIdx === fTop1) {{
-                      bg = 'rgba(220,38,38,0.65)'; // 1위 실패: 진한 빨강
+                      bg = 'rgba(220,38,38,0.65)'; // 1Stomach failure: dark red
                       color = '#fee2e2';
                     }} else if (colIdx === fTop2 || colIdx === fTop3) {{
-                      bg = 'rgba(239,68,68,0.45)'; // 2,3위 실패: 연한 빨강
+                      bg = 'rgba(239,68,68,0.45)'; // 2,3Stomach failure: light red
                       color = '#fee2e2';
                     }}
                     return '<td style="background:' + bg + ';color:' + color + ';font-weight:600;text-align:center;">' + cnt + '</td>';
@@ -3175,7 +3605,7 @@ html = f"""
           renderFlightList();
         }});
       }});
-      // 클릭해서 해당 Flight 선택
+      // Click on the corresponding Flight select
       listEl.querySelectorAll('.obj-item').forEach(row => {{
         row.addEventListener('click', function(ev) {{
           if ((ev.target.classList && ev.target.classList.contains('obj-item-delete')) || ev.target.getAttribute('data-del')) return;
@@ -3183,7 +3613,7 @@ html = f"""
           const f = state.flights.find(x => x.id === idVal);
           if (!f) return;
           state.selectedObject = {{ type: 'flight', id: idVal, obj: f }};
-          // 선택 표시
+          // check mark
           listEl.querySelectorAll('.obj-item').forEach(r => r.classList.remove('selected', 'expanded'));
           this.classList.add('selected', 'expanded');
           if (typeof updateObjectInfo === 'function') updateObjectInfo();
@@ -3192,7 +3622,7 @@ html = f"""
           if (typeof renderFlightGantt === 'function') renderFlightGantt();
         }});
       }});
-      // Arr Rw / Terminal / Dep Rw 선택 핸들러
+      // Arr Rw / Terminal / Dep Rw selection handler
       listEl.querySelectorAll('.flight-assign-select').forEach(sel => {{
         sel.addEventListener('change', function() {{
           const idVal = this.getAttribute('data-id');
@@ -3207,7 +3637,7 @@ html = f"""
           }} else if (role === 'term') {{
             f.terminalId = val;
             f.token.terminalId = val;
-            // 선택된 터미널과 맞지 않는 Stand에 이미 배정되어 있으면 Unassigned로 이동
+            // does not match the selected terminal StandIf it is already assigned to UnassignedGo to
             if (f.standId) {{
               const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
               const st = allStands.find(s => s.id === f.standId);
@@ -3223,7 +3653,7 @@ html = f"""
             f.depRunwayId = val;
             f.token.depRunwayId = val;
           }}
-          // Arr Rw / Terminal / Dep Rw 변경 후, RET 샘플링과 타임라인·Gantt를 모두 다시 계산
+          // Arr Rw / Terminal / Dep Rw After change, RET Sampling and Timeline·GanttRecalculate everything
           if (typeof renderFlightList === 'function') renderFlightList();
           if (typeof renderFlightGantt === 'function') renderFlightGantt();
         }});
@@ -3231,28 +3661,20 @@ html = f"""
       if (typeof renderFlightGantt === 'function') renderFlightGantt();
     }}
 
-    // Allocation Gantt / Runway separation 타임라인에서 공통으로 쓰는 색 (CSS .alloc-* 와 동일 팔레트)
-    const GANTT_COLORS = {{
-      S_BAR: '#007aff',
-      S_SERIES: '#38bdf8',
-      E_BAR: '#fb37c5',
-      E_SERIES: '#fb923c',
-      CONFLICT: '#7f1d1d',
-      SELECTED: '#fbbf24',
-    }};
+    // GANTT_COLORS: from the top INFORMATION.tiers.style.gantt defined as
 
-    // Allocation Gantt (세로: Apron/Stand, 가로: 시간)
+    // Allocation Gantt (length: Apron/Stand, horizontal: time)
     function renderFlightGantt() {{
       const ganttEl = document.getElementById('allocationGantt');
       if (!ganttEl) return;
-      // 현재 가로/세로 스크롤 위치를 기억했다가 DOM 재구성 후 복원
+      // current landscape/Remember the vertical scroll position DOM Restore after rebuild
       let prevScrollLeft = 0, prevScrollTop = 0;
       const prevScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
       if (prevScrollCol) {{
         prevScrollLeft = prevScrollCol.scrollLeft || 0;
         prevScrollTop = prevScrollCol.scrollTop || 0;
       }}
-      // 기존 DOM에서 Terminal / Remote 섹션 접힘 상태를 기억했다가 재렌더 후 복원
+      // existing DOMat Terminal / Remote Remember section folding state and restore it after re-render
       const prevCollapsedTerminals = new Set();
       let prevRemoteCollapsed = false;
       const prevLabelCol = ganttEl.querySelector('.alloc-gantt-label-col');
@@ -3262,7 +3684,7 @@ html = f"""
           if (el.classList && el.classList.contains('alloc-terminal-header')) {{
             if (el.getAttribute('data-collapsed') === '1') {{
               let txt = (el.textContent || '').trim();
-              // 앞의 토글 아이콘(▶/▼) 제거
+              // Toggle icon in front(▶/▼) eliminate
               txt = txt.replace(/^[▶▼]\s*/, '');
               if (txt) prevCollapsedTerminals.add(txt);
             }}
@@ -3284,8 +3706,14 @@ html = f"""
         ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
         return;
       }}
-      // S(d)/E 계열은 Flight Schedule 표에 표시된 값을 **직접** 읽어와 사용한다.
-      // (표가 없거나 렌더링되지 않은 경우에만 state.flights 값을 사용하는 fallback)
+      flights.forEach(f => {{
+        if (typeof getPathForFlight === 'function') getPathForFlight(f);
+        if (typeof getPathForFlightDeparture === 'function') getPathForFlightDeparture(f);
+        if (f.noWayArr || f.noWayDep) f.timeline = null;
+      }});
+      if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(flights, false);
+      // S(d)/E The series is Flight Schedule The values ​​shown in the table **directly** Read and use.
+      // (Only if the table does not exist or is not rendered state.flights using value fallback)
       if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
       if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
 
@@ -3300,7 +3728,7 @@ html = f"""
           if (!f) return;
           const tds = Array.from(row.querySelectorAll('td'));
           if (tds.length < 15) return;
-          // Flight Schedule 컬럼 인덱스:
+          // Flight Schedule column index:
           // 0 Reg, 1 Airline, 2 FlightNo,
           // 3 SLDT, 4 SIBT, 5 SOBT, 6 STOT,
           // 7 SLDT(d), 8 SIBT(d), 9 SOBT(d), 10 STOT(d),
@@ -3333,7 +3761,7 @@ html = f"""
         }});
       }}
       if (!intervals.length) {{
-        // 표를 찾을 수 없거나 파싱 실패 시 기존 state 기반 로직으로 fallback
+        // If the table cannot be found or parsing fails, the existing state with based logic fallback
         intervals = flights.map(f => {{
           const t0 = f.sibtMin_d != null ? f.sibtMin_d : (f.timeMin != null ? f.timeMin : 0);
           const t1 = f.sobtMin_d != null ? f.sobtMin_d : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
@@ -3350,7 +3778,7 @@ html = f"""
         }});
       }}
 
-      // 공통 시간축: Flight Schedule의 min(SLDT) - 20분, max(ETOT) + 20분
+      // common time base: Flight Scheduleof min(SLDT) - pad, max(ETOT) + pad (algorithm.timeAxis)
       let minS = Infinity;
       let maxE = -Infinity;
       intervals.forEach(it => {{
@@ -3362,10 +3790,10 @@ html = f"""
         ganttEl.innerHTML = '';
         return;
       }}
-      // 기본 전체 범위 (zoom의 최소 축소 한계)
-      const baseMinT = Math.max(0, minS - 20);
-      const baseMaxT0 = maxE + 20;
-      // 최대 범위는 baseMinT 기준 24시간(1440분)로 방어적으로 제한
+      // default full range (zoomThe minimum reduction limit of)
+      const baseMinT = Math.max(0, minS - GANTT_PAD_MIN);
+      const baseMaxT0 = maxE + GANTT_PAD_MIN;
+      // The maximum range is baseMinT 24 hours standard(1440minute)Defensively limited to
       const baseMaxT = Math.min(
         (baseMaxT0 <= baseMinT) ? (baseMinT + 60) : baseMaxT0,
         baseMinT + 1440
@@ -3376,11 +3804,11 @@ html = f"""
       const minT = baseMinT;
       const maxT = baseMaxT;
 
-      // Allocation/바차트/주기장 배치는 사용자가 명시적으로 변경할 때만 갱신. 택시웨이 등 경로 갱신 시 자동 재배정하지 않음
+      // Allocation/bar chart/The apron layout is updated only when explicitly changed by the user. No automatic reassignment when updating routes such as taxiways
 
-      // 시간축 눈금 위치 (Apron 전체 공통) - 어떤 화면에서도 최대 6개까지만 표시
+      // Time axis scale position (Apron common to all) - Only display up to 6 items on any screen
       const tickPositions = [];
-      const axisStep = span <= 60 ? 10 : (span <= 240 ? 30 : 60); // minutes
+      const axisStep = span <= 60 ? TICK_STEP_SPAN_LE60 : (span <= 240 ? TICK_STEP_SPAN_LE240 : TICK_STEP_ELSE); // minutes
       let tt = Math.floor(minT / axisStep) * axisStep;
       while (tt <= maxT) {{
         const leftPct = ((tt - baseMinT) / baseSpan) * 100 * zoom;
@@ -3388,8 +3816,8 @@ html = f"""
         tickPositions.push({{ leftPct, label }});
         tt += axisStep;
       }}
-      if (tickPositions.length > 6) {{
-        const stepTicks = Math.ceil(tickPositions.length / 6);
+      if (tickPositions.length > MAX_TICKS_SHOWN) {{
+        const stepTicks = Math.ceil(tickPositions.length / MAX_TICKS_SHOWN);
         const reduced = [];
         for (let i = 0; i < tickPositions.length; i += stepTicks) {{
           reduced.push(tickPositions[i]);
@@ -3404,15 +3832,15 @@ html = f"""
         const showSPointsEl = document.getElementById('chkShowSPoints');
         const showSPoints = !showSPointsEl || showSPointsEl.checked;
         const showSBarsEl = document.getElementById('chkShowSBars');
-        // S‑Bar 체크: 기본 SIBT‑SOBT 바는 불투명, 체크 해제: 기본 바에 투명도 적용
+        // S‑Bar check: default SIBT‑SOBT Bars are opaque, uncheck: Apply transparency to the default bar.
         const dimSBars = !!(showSBarsEl && !showSBarsEl.checked);
         const showEBarEl = document.getElementById('chkShowEBar');
         const showEBar = !showEBarEl || showEBarEl.checked;
         const showEPointsEl = document.getElementById('chkShowEPoints');
         const showEPoints = !showEPointsEl || showEPointsEl.checked;
-        // S‑Point: S 계열 보조바 + 점 + 세로선 전체 제어
-        // E‑Bar : EIBT/EOBT 굵은 보조 바
-        // E‑Point: ELDT/ETOT 점 + 삼각형 + ELDT/EIBT·EOBT/ETOT 보조 바
+        // S‑Point: S Series auxiliary bar + dot + Full vertical control
+        // E‑Bar : EIBT/EOBT thick auxiliary bar
+        // E‑Point: ELDT/ETOT dot + triangle + ELDT/EIBT·EOBT/ETOT auxiliary bar
         const showAuxBars = showSPoints;
         const showEibtBars = showEBar;
         const showEldtBars = showEPoints;
@@ -3424,13 +3852,13 @@ html = f"""
           const sid = (f.standId || null);
           return (standId == null) ? !sid : sid === standId;
         }});
-        // 동일 Apron/Stand 안에서 겹치는 구간이 있는 Flight를 conflict로 표시
+        // identification Apron/Stand There are overlapping sections within Flightcast conflictdisplayed as
         const conflictMap = {{}};
         for (let i = 0; i < rowFlights.length; i++) {{
           for (let j = i + 1; j < rowFlights.length; j++) {{
             const a = rowFlights[i];
             const b = rowFlights[j];
-            if (a.t0 < b.t1 && b.t0 < a.t1) {{ // 구간 겹침
+            if (a.t0 < b.t1 && b.t0 < a.t1) {{ // Section overlap
               conflictMap[a.f.id] = true;
               conflictMap[b.f.id] = true;
             }}
@@ -3447,11 +3875,11 @@ html = f"""
           const leftPct = ((t - baseMinT) / baseSpan) * 100 * zoom;
           arr.push('<div class="alloc-time-dot ' + cls + '" style="left:' + leftPct + '%;"></div>');
         }}
-        const sLines = showSPoints ? [] : null;      // SOBT(orig) 세로선
-        const sTrisDown = showSPoints ? [] : null;   // SLDT용 아래 삼각형
-        const sTrisUp = showSPoints ? [] : null;     // STOT용 위 삼각형
-        const eTrisDown = showEPoints ? [] : null;   // ELDT용 아래 삼각형
-        const eTrisUp = showEPoints ? [] : null;     // ETOT용 위 삼각형
+        const sLines = showSPoints ? [] : null;      // SOBT(orig) vertical line
+        const sTrisDown = showSPoints ? [] : null;   // SLDTtriangle under dragon
+        const sTrisUp = showSPoints ? [] : null;     // STOTtriangle above dragon
+        const eTrisDown = showEPoints ? [] : null;   // ELDTtriangle under dragon
+        const eTrisUp = showEPoints ? [] : null;     // ETOTtriangle above dragon
         const blocks = rowFlights.map(it => {{
           const f = it.f;
           const t0 = it.t0;
@@ -3503,7 +3931,7 @@ html = f"""
           const hasOverlap = (f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed;
           const ovlpBadgeHtml = hasOverlap ? '<span class="alloc-flight-ovlp-badge">OVLP</span>' : '';
           if (showEldtBars && e2Bars) {{
-            // ELDT~EIBT (pre-block, 중앙 정렬된 얇은 핫핑크 바)
+            // ELDT~EIBT (pre-block, Center aligned thin hot pink bar)
             if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) {{
               const s1 = Math.max(eldt, baseMinT);
               const s2 = Math.min(eibt, baseMaxT);
@@ -3519,7 +3947,7 @@ html = f"""
               );
               }}
             }}
-            // EOBT~ETOT (post-block, 중앙 정렬된 얇은 핫핑크 바)
+            // EOBT~ETOT (post-block, Center aligned thin hot pink bar)
             if (isFinite(eobt) && isFinite(etot) && etot >= eobt) {{
               const s1 = Math.max(eobt, baseMinT);
               const s2 = Math.min(etot, baseMaxT);
@@ -3537,7 +3965,7 @@ html = f"""
             }}
           }}
           if (showAuxBars && sBars) {{
-            // SLDT~SIBT (pre-block) 보조 바
+            // SLDT~SIBT (pre-block) auxiliary bar
             if (isFinite(sldt) && sldt <= t0) {{
               const s1 = Math.max(sldt, baseMinT);
               const s2 = Math.min(t0, baseMaxT);
@@ -3553,7 +3981,7 @@ html = f"""
               );
               }}
             }}
-            // SOBT~STOT (post-block) 보조 바: 메인 바 위쪽에 붙여 표시
+            // SOBT~STOT (post-block) Auxiliary bar: Attached to the top of the main bar
             if (isFinite(stot) && stot >= t1) {{
               const s1 = Math.max(t1, baseMinT);
               const s2 = Math.min(stot, baseMaxT);
@@ -3571,17 +3999,17 @@ html = f"""
             }}
           }}
           if (showSDots && sDots) {{
-            // S-Point: 보조 바(sBars)와 동일하게 S(d) 계열 시각(SLDT(d)/STOT(d))에만 원을 표시
+            // S-Point: auxiliary bar(sBars)same as S(d) series time(SLDT(d)/STOT(d))Show only circles
             pushDot(sDots, sldt, 'alloc-time-dot-s');
             pushDot(sDots, stot, 'alloc-time-dot-s');
           }}
           if (showSdDots && sdDots) {{
-            // S(d) 계열도 동일한 파란 점으로 표현
+            // S(d) The series is also represented by the same blue dot.
             pushDot(sdDots, sldt, 'alloc-time-dot-sd');
             pushDot(sdDots, stot, 'alloc-time-dot-sd');
           }}
           if (showEDots && eDots) {{
-            // E-Point: ELDT/ETOT 점 + 삼각형 (핑크)
+            // E-Point: ELDT/ETOT dot + triangle (pink)
             pushDot(eDots, eldt, 'alloc-time-dot-e');
             pushDot(eDots, etot, 'alloc-time-dot-e');
             if (eTrisDown && isFinite(eldt) && eldt >= baseMinT && eldt <= baseMaxT) {{
@@ -3601,7 +4029,7 @@ html = f"""
               );
             }}
           }}
-        // S-Point: SLDT/STOT에도 아래/위 삼각형 추가 (E-Point와 동일 디자인, 색상은 GANTT_COLORS.S_BAR)
+        // S-Point: SLDT/STOTunder Edo/Add top triangle (E-PointSame design and color as GANTT_COLORS.S_BAR)
           if (showSPoints) {{
             if (sTrisDown && isFinite(sldt) && sldt >= baseMinT && sldt <= baseMaxT) {{
               const leftPctS1 = ((sldt - baseMinT) / baseSpan) * 100 * zoom;
@@ -3620,8 +4048,8 @@ html = f"""
               );
             }}
           }}
-        // 검은 세로 점선은 SOBT(orig)에 위치시키는데,
-        // "OVERLAP"된 항공기이면서 SOBT(orig) ≠ SOBT(d) 인 경우에만 표시
+        // The black vertical dotted line is SOBT(orig)It is placed in,
+        // "OVERLAP"Although it is an aircraft SOBT(orig) ≠ SOBT(d) Show only if
         if (sLines && ((f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed) && isFinite(sobtOrig)) {{
           const sobtD = (f.sobtMin_d != null ? f.sobtMin_d : t1);
           if (!isNaN(sobtD) && Math.abs(sobtOrig - sobtD) > 1e-6) {{
@@ -3642,7 +4070,7 @@ html = f"""
         const gridLines = tickPositions.map(tp =>
           '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>'
         ).join('');
-        // 시간축과 시간축 "사이"의 중앙에 배경 텍스트를 배치
+        // time axis and time axis "between"Place background text in the center of
         const bgSlots = (tickPositions.length > 1)
           ? tickPositions.slice(0, -1).map((tp, idx) => {{
               const next = tickPositions[idx + 1];
@@ -3679,7 +4107,7 @@ html = f"""
           '</div>';
         return {{ labelHtml, trackHtml }};
       }}
-      // Unassigned 위: 전 항공편 SLDT/STOT·ELDT/ETOT 점만 (S/E 포인트와 동일 클래스·좌표식, 기존 행 로직 미변경)
+      // Unassigned Above: All flights SLDT/STOT·ELDT/ETOT Only dots (S/E Same class as point·Coordinate formula, existing row logic unchanged)
       function buildRunwayLegendPair() {{
         const gridLines = tickPositions.map(function(tp) {{
           return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
@@ -3722,13 +4150,13 @@ html = f"""
         labelRows.push(rw.eLabelHtml);
         trackRows.push(rw.eTrackHtml);
       }})();
-      // Unassigned 행
+      // Unassigned line
       (function() {{
         const row = buildRowHtml('Unassigned', null);
         labelRows.push(row.labelHtml);
         trackRows.push(row.trackHtml);
       }})();
-      // 터미널별 Stand 그룹화
+      // By terminal Stand grouping
       const terminalCopies = makeUniqueNamedCopy(state.terminals || [], 'name');
       const termLabelById = {{}};
       terminalCopies.forEach(t => {{ termLabelById[t.id] = (t.name || '').trim() || 'Terminal'; }});
@@ -3765,39 +4193,39 @@ html = f"""
         const headerLabel = term
           ? (termLabelById[term.id] || term.name || 'Terminal')
           : 'No Terminal';
-        // 터미널 헤더: 좌측 라벨 열과 우측 타임라인 열에 각각 1개씩 행을 추가
+        // Terminal header: Add one row each to the left label column and right timeline column.
         labelRows.push(
           '<div class="alloc-terminal-header" data-collapsed="0">' +
             '<span class="alloc-section-toggle-icon">▼</span>' +
             escapeHtml(headerLabel) +
           '</div>'
         );
-        // 우측 헤더용 dummy 트랙은 터미널 라벨 높이(24px)에 맞춰서 행 높이를 동일하게 맞춘다.
+        // For right header dummy Track terminal label height(24px)Set the row height to be the same..
         trackRows.push('<div class="alloc-row" data-stand-id="">' +
           '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:24px;"></div>' +
         '</div>');
-        // 각 주기장 행: Contact / Remote를 구분해 표시 (터미널 이름은 헤더에)
+        // Each apron row: Contact / RemoteDisplay separately (The terminal name is in the header)
         const contactStands = [];
         const remoteStandsInTerm = [];
         group.stands.forEach(s => {{
           if (remoteIdSet.has(s.id)) remoteStandsInTerm.push(s);
           else contactStands.push(s);
         }});
-        // Contact stands 먼저
+        // Contact stands first
         contactStands.forEach(s => {{
           const label = (s.name || '') + ' (' + (s.category || '') + ')';
           const row = buildRowHtml(label, s.id);
           labelRows.push(row.labelHtml);
           trackRows.push(row.trackHtml);
         }});
-        // Remote stands는 전역 배열에 모아서, 모든 Terminal 뒤에 한 번만 표시
+        // Remote standsgathers them into a global array, Terminal Show only once after
         if (remoteStandsInTerm.length) {{
           remoteStandsInTerm.forEach(s => allRemoteStands.push(s));
         }}
       }});
-      // 모든 Terminal 뒤, 맨 아래에 Remote stand 전용 섹션 추가
+      // every Terminal behind, at the bottom Remote stand Add a dedicated section
       if (allRemoteStands.length) {{
-        // 좌·우 동일: Remote 위 8px 간격(구 margin-top)을 스페이서 행으로 분리해 행 인덱스 1:1 유지
+        // left·Right same: Remote stomach 8px interval(nine margin-top)Separated by spacer rows to maintain row index 1:1
         labelRows.push('<div class="alloc-gantt-section-spacer" aria-hidden="true"></div>');
         trackRows.push(
           '<div class="alloc-row" data-stand-id="">' +
@@ -3822,7 +4250,7 @@ html = f"""
           trackRows.push(row.trackHtml);
         }});
       }}
-      // Time axis overlay at bottom (세로 그리드라인과 같은 위치에 시간 라벨만 표시)
+      // Time axis overlay at bottom (Display only time labels at the same location as the vertical grid lines)
       const axisTicks = tickPositions.map(tp =>
         '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
           '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
@@ -3833,14 +4261,14 @@ html = f"""
           '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
         '</div>';
 
-      // 좌측 라벨 열도 하단 시간축과 높이를 맞추기 위해 동일한 spacer를 추가
+      // The left label row also has the same height to match the bottom time axis. spaceradd
       labelRows.push('<div class="alloc-label-axis-spacer"></div>');
 
       const labelColHtml =
         '<div class="alloc-gantt-label-col">' +
           labelRows.join('') +
         '</div>';
-      // zoom 배율만큼 inner 너비를 늘려, 스크롤된 구간까지 .alloc-row-track hit area가 확장되도록 함 (드롭 존 = 전체 타임라인)
+      // zoom As much as the magnification inner Increase the width to the scrolled section .alloc-row-track hit areaAllow to expand (drop zone = full timeline)
       const innerMinWidthPct = Math.max(100, Math.round(zoom * 100));
       const trackColHtml =
         '<div class="alloc-gantt-scroll-col">' +
@@ -3858,17 +4286,17 @@ html = f"""
       ganttEl.innerHTML = rootHtml;
       const newScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
       const newLabelCol = ganttEl.querySelector('.alloc-gantt-label-col');
-      // DOM 재구성 후 가로/세로 스크롤 위치 복원
+      // DOM Horizontal after reconstruction/Restore vertical scroll position
       if (newScrollCol) {{
         if (prevScrollLeft > 0) newScrollCol.scrollLeft = prevScrollLeft;
         if (prevScrollTop > 0) newScrollCol.scrollTop = prevScrollTop;
       }}
-      // 좌측 라벨 열 ↔ 우측 타임라인 열 세로 스크롤 동기화 (가로 스크롤바가 항상 뷰포트 하단에 보이도록)
+      // Left label column ↔ Synchronize vertical scrolling of right timeline column (Make the horizontal scrollbar always visible at the bottom of the viewport)
       if (newScrollCol && newLabelCol) {{
         newScrollCol.addEventListener('scroll', function() {{ newLabelCol.scrollTop = newScrollCol.scrollTop; }});
         newLabelCol.addEventListener('scroll', function() {{ newScrollCol.scrollTop = newLabelCol.scrollTop; }});
       }}
-      // Terminal / Remote 섹션 접기/펼치기
+      // Terminal / Remote Collapse section/Expand
       if (newScrollCol && newLabelCol) {{
         const labelChildren = Array.from(newLabelCol.children);
         const innerEl = newScrollCol.querySelector('.alloc-gantt-inner');
@@ -3876,10 +4304,10 @@ html = f"""
           return el.classList.contains('alloc-row');
         }}) : [];
         labelChildren.forEach(function(el, idx) {{
-          // Terminal 헤더 토글
+          // Terminal header toggle
           if (el.classList.contains('alloc-terminal-header')) {{
             el.style.cursor = 'pointer';
-            // 이전 렌더에서 접혀 있던 Terminal이면 초기 상태를 접힌 상태로 복원
+            // which was collapsed in the previous render TerminalIf so, restore the initial state to the collapsed state.
             (function applyInitialCollapsed() {{
               let txt = (el.textContent || '').trim();
               txt = txt.replace(/^[▶▼]\s*/, '');
@@ -3915,10 +4343,10 @@ html = f"""
               }}
             }});
           }}
-          // Remote 섹션 헤더 토글
+          // Remote Toggle section header
           if (el.classList.contains('alloc-remote-header')) {{
             el.style.cursor = 'pointer';
-            // 이전 렌더에서 Remote 섹션이 접혀 있던 경우 초기 상태 복원
+            // From previous render Remote Restore initial state if section was collapsed
             if (prevRemoteCollapsed) {{
               el.setAttribute('data-collapsed', '1');
               const icon0 = el.querySelector('.alloc-section-toggle-icon');
@@ -3952,7 +4380,7 @@ html = f"""
           }}
         }});
       }}
-      // Ctrl + 휠로 가로 스크롤 지원 (Apron 차트 전용)
+      // Ctrl + Supports horizontal scrolling with wheel (Apron chart only)
       if (newScrollCol && !newScrollCol._allocWheelBound) {{
         newScrollCol._allocWheelBound = true;
         newScrollCol.addEventListener('wheel', function(ev) {{
@@ -3963,10 +4391,10 @@ html = f"""
         }}, {{ passive: false }});
       }}
 
-      // 스크롤된 영역에서 커서가 트랙/바 밖(빈 구간)에 있을 때 target이 .alloc-gantt-scroll-col이 되어
-      // preventDefault가 호출되지 않아 금지 커서가 뜨는 문제 방지: 트랙 밖일 때만 scroll col에서 accept.
-      // 드래그 중 elementFromPoint는 드래그 이미지를 반환해 트랙을 못 찾으므로, clientY로 어떤 행 위인지 계산해 저장.
-      // 리스너는 ganttEl에 두어 renderFlightGantt() 재호출 후에도 동작하도록 함. _lastDropTrack은 ganttEl에 저장.
+      // The cursor tracks in the scrolled area./outside the bar(empty section)When in targetthis .alloc-gantt-scroll-colbecome this
+      // preventDefaultPrevents the prohibition cursor from appearing because it is not called: only when off-track. scroll colat accept.
+      // Dragging elementFromPointreturns a drag image and cannot find the track., clientYCalculate which row it is and store it.
+      // The listener is ganttElPut it on renderFlightGantt() Make it work even after recall. _lastDropTracksilver ganttElSave to.
       (function() {{
         if (ganttEl._allocDropBound) return;
         ganttEl._allocDropBound = true;
@@ -4037,18 +4465,18 @@ html = f"""
         }}, true);
       }})();
 
-      // Shift + 마우스 휠로 시간축 줌 (Apron)
+      // Shift + Zoom on the time axis with the mouse wheel (Apron)
       if (!ganttEl._allocZoomBound) {{
         ganttEl._allocZoomBound = true;
         ganttEl.addEventListener('wheel', function(e) {{
           if (!e.shiftKey) return;
           e.preventDefault();
-          // 위로 스크롤 = 확대, 아래로 스크롤 = 축소
+          // scroll up = Zoom in, scroll down = reduction
           const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
           let z = state.allocTimeZoom || 1;
           z *= factor;
-          if (z < 1) z = 1;           // 최소: 전체 범위
-          if (z > 8) z = 8;           // 최대 확대 배율
+          if (z < 1) z = 1;           // Minimum: full range
+          if (z > 8) z = 8;           // maximum magnification
           state.allocTimeZoom = z;
           if (typeof renderFlightGantt === 'function') renderFlightGantt();
         }}, {{ passive: false }});
@@ -4101,11 +4529,11 @@ html = f"""
     function validateNetworkForFlights() {{
       const msgs = [];
       const hasRunwayPath = state.taxiways && state.taxiways.some(tw => tw.pathType === 'runway' || (tw.name || '').toLowerCase().includes('runway'));
-      if (!hasRunwayPath) msgs.push('Runway가 없습니다.');
-      if (!state.taxiways || !state.taxiways.length) msgs.push('Taxiway가 없습니다.');
+      if (!hasRunwayPath) msgs.push('RunwayThere is no.');
+      if (!state.taxiways || !state.taxiways.length) msgs.push('TaxiwayThere is no.');
       const stands = (state.pbbStands || []).concat(state.remoteStands || []);
       const linked = state.apronLinks || [];
-      // 적어도 하나의 Stand(PBB/Remote)가 실제 존재하는 Taxiway와 Apron Taxiway 링크로 연결되어 있어야 한다.
+      // at least one Stand(PBB/Remote)actually exists Taxiwayand Apron Taxiway Must be connected by link.
       const hasApronLink = stands.some(pbb =>
         linked.some(lk =>
           lk.pbbId === pbb.id &&
@@ -4113,8 +4541,8 @@ html = f"""
           state.taxiways.some(tw => tw.id === lk.taxiwayId)
         )
       );
-      if (!stands.length || !hasApronLink) msgs.push('Apron(PBB)과 Taxiway를 연결하는 링크가 최소 1개 이상 필요합니다.');
-      // Remote stand의 가용 터미널 제약과 Flight Schedule의 Terminal 설정이 충돌하는지 확인
+      if (!stands.length || !hasApronLink) msgs.push('Apron(PBB)class TaxiwayAt least one link is required to connect.');
+      // Remote standAvailable terminal constraints and Flight Scheduleof Terminal Check for conflicting settings
       const termsForLabel = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {{ return {{
         id: t.id,
         name: (t.name || '').trim() || 'Terminal'
@@ -4128,11 +4556,11 @@ html = f"""
         if (!f || !f.standId) return;
         const stand = allStands.find(function(s) {{ return s.id === f.standId; }});
         if (!stand) return;
-        // Remote stand만 터미널 접근 제약 적용
+        // Remote standOnly terminal access restrictions apply
         const isRemote = (state.remoteStands || []).some(function(r) {{ return r.id === stand.id; }});
         if (!isRemote) return;
         const termId = (f.token && f.token.terminalId) || null;
-        // Flight Schedule에서 Terminal이 특정 값일 때만 (Random 이면 termId 가 없음)
+        // Flight Scheduleat TerminalOnly when this specific value (Random This side termId There is no)
         if (!termId) return;
         const allowed = Array.isArray(stand.allowedTerminals) ? stand.allowedTerminals : [];
         if (allowed.length && !allowed.includes(termId)) {{
@@ -4140,7 +4568,7 @@ html = f"""
           const standLabel = stand.name || 'Remote';
           const termLabel = termNameById(termId);
           const allowedLabel = allowed.map(termNameById).join(', ');
-          msgs.push('Flight ' + (flightLabel || '') + ' 의 Terminal 설정(' + termLabel + ')이 Remote stand ' + standLabel + ' 의 가용 터미널 설정(' + allowedLabel + ')과 일치하지 않습니다.');
+          msgs.push('Flight ' + (flightLabel || '') + ' of Terminal setting(' + termLabel + ')this Remote stand ' + standLabel + ' Available terminal settings for(' + allowedLabel + ')does not match.');
         }}
       }});
       return msgs;
@@ -4152,7 +4580,7 @@ html = f"""
       el.textContent = Array.isArray(msgs) ? msgs.join(' / ') : (msgs || '');
     }}
 
-    // ---- Layout Design 최소경로: Node/Edge 그래프, 역방향 비용 1,000,000 ----
+    // ---- Layout Design minimum path: Node/Edge Graph, reverse cost 1,000,000 ----
     const REVERSE_COST = 1000000;
     function pathDist2(a, b) {{ return dist2(a, b); }}
     function pathDist(a, b) {{ return Math.hypot(a[0]-b[0], a[1]-b[1]); }}
@@ -4167,7 +4595,7 @@ html = f"""
       return mu + sigma * z;
     }}
 
-    // 동일 격자(같은 셀, 반 격자 단위)는 항상 같은 노드로: 셀 좌표 기반 키
+    // same grid(Same cell, half grid unit)Always with the same node: key based on cell coordinates
     function pathPointKey(p) {{
       const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
       const cellCol = Math.round(p[0] / cs * 2) / 2;
@@ -4175,8 +4603,8 @@ html = f"""
       return cellCol + ',' + cellRow;
     }}
 
-    // S(d) 계열: 최초 S(d)=S(Original), 동일 주기장 겹침 시 선행 SOBT(d)-후행 SIBT(d) 만큼 후행 S(d) 밀기. SLDT(d)=SLDT, SOBT(d)에 Min Dwell 반영.
-    // Original S 계열은 이 함수에서 복제 후 어디에서도 참조하지 않음. 모든 계산은 S(d)만 사용.
+    // S(d) Series: First S(d)=S(Original), Takes precedence when the same parking lot overlaps SOBT(d)-trailing SIBT(d) trailing as much as S(d) push. SLDT(d)=SLDT, SOBT(d)to Min Dwell reflect.
+    // Original S The series is not referenced anywhere after being copied in this function. All calculations are S(d)use only.
     function computeScheduledDisplayTimes(flights) {{
       if (!flights || !flights.length) return;
       flights.forEach(f => {{
@@ -4185,19 +4613,19 @@ html = f"""
         const tArrMin = f.timeMin != null ? f.timeMin : 0;
         let dwell = f.dwellMin != null ? f.dwellMin : 0;
         let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
-        dwell = Math.max(20, dwell);
-        minDwell = Math.max(20, minDwell);
+        dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+        minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
         if (minDwell > dwell) minDwell = dwell;
         f.dwellMin = dwell;
         f.minDwellMin = minDwell;
-        // VTT(Arr)는 Flight Schedule에서 사용하는 정의와 동일하게 계산된 값을 재사용
+        // VTT(Arr)Is Flight ScheduleReuse the same calculated value as the definition used in
         let vttArrMin = getBaseVttArrMinutes(f);
         const vttDepMin = getBaseVttDepMinutes(f);
         const sldtOrig = Math.max(0, tArrMin - vttArrMin);
         const sobtOrig = tArrMin + dwell;
         const stotOrig = sobtOrig + vttDepMin;
-        // SLDT/SIBT/SOBT/STOT(orig)는 항상 내부 계산값으로 갱신하고,
-        // SLDT(d)는 SLDT(orig)를 그대로 복사하여 사용 (JSON 초기값은 무시)
+        // SLDT/SIBT/SOBT/STOT(orig)is always updated with the internal calculated value.,
+        // SLDT(d)Is SLDT(orig)Copy and use as is (JSON Ignore the initial value)
         f.sldtMin_orig = sldtOrig;
         f.sibtMin_orig = tArrMin;
         f.sobtMin_orig = sobtOrig;
@@ -4223,12 +4651,12 @@ html = f"""
           const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
           const overlap = Math.max(0, prevSOBT - sibt0);
           f.vttADelayMin = overlap;
-          // OVLP 반영 후의 SIBT(d)
+          // OVLP after reflection SIBT(d)
           f.sibtMin_d = sibt0 + overlap;
-          // 기존 SOBT(d) 후보 (예: separation 로직에서 밀려난 값)가 있으면 유지하고,
-          // Min dwell 기준으로 필요한 최소 SOBT(d)와 비교해 더 큰 값을 사용
-          const dwell = f.dwellMin != null ? f.dwellMin : 20;
-          const minDwell = f.minDwellMin != null ? f.minDwellMin : 20;
+          // existing SOBT(d) candidate (yes: separation Value pushed out of logic)If you have it, keep it,
+          // Min dwell Minimum required as standard SOBT(d)Use a larger value compared to
+          const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
+          const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
           const minSobtByDwell = f.sibtMin_d + minDwell;
           const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
           f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
@@ -4236,12 +4664,12 @@ html = f"""
           prevSOBT = f.sobtMin_d;
         }});
       }});
-      // OVLP 여부와 상관없이 모든 스탠드 배정 항공편에 대해
-      // Min dwell 제약을 한 번 더 강제 적용하여 일반 항공편도 동일 규칙을 따르도록 보정
+      // OVLP For all stand assigned flights, regardless of whether
+      // Min dwell By enforcing the constraint once more, regular flights are corrected to follow the same rules.
       flights.forEach(f => {{
         if (!f || f.noWayArr || f.noWayDep || !f.standId) return;
-        const dwell = f.dwellMin != null ? f.dwellMin : 20;
-        const minDwell = f.minDwellMin != null ? f.minDwellMin : 20;
+        const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
+        const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
         const sibt = (f.sibtMin_d != null ? f.sibtMin_d
                      : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
         const minSobtByDwell = sibt + minDwell;
@@ -4262,7 +4690,7 @@ html = f"""
 
     function rsepGetSec(val) {{
       const n = Number(val);
-      return isFinite(n) && n >= 0 ? n : 90;
+      return isFinite(n) && n >= 0 ? n : RSEP_MISSING_MATRIX_SEC;
     }}
 
     function rsepApplySeparationToEvents(events, cfg) {{
@@ -4276,7 +4704,7 @@ html = f"""
       let lastDepETime = -1e9, lastDepCat = null;
       events.forEach(ev => {{
         if (ev.type === 'arr') {{
-          let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : 90) / 60 : -1e9;
+          let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
           let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
           const eTime = Math.max(ev.time, minFromArr, minFromDep);
           ev.flight.eldtMin = eTime;
@@ -4284,7 +4712,7 @@ html = f"""
           lastArrCat = ev.cat;
         }} else {{
           let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
-          let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : 90) / 60 : -1e9;
+          let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
           const etotSep = Math.max(ev.time, minFromArr, minFromDep);
           const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
           const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + (ev.vttArrMin || 0) + vttADelay;
@@ -4371,18 +4799,18 @@ html = f"""
       }}
     }}
 
-    // Runway separation: SLDT(Arr)·STOT(Dep) 단일 타임라인 시간순 정렬, 동일 시각은 위쪽(리스트 순)을 선행으로 보고
-    // 선행 E계열 + 분리기준으로 후행 E계열 계산 (도미노). Arr→ELDT, Dep→ETOT. 모든 기준은 S(d) 계열 사용.
-    // 반환값: 활주로 ID별로 events/minT/maxT를 담은 맵 (시각화용)
+    // Runway separation: SLDT(Arr)·STOT(Dep) Single timeline sorted chronologically, same time at the top(List order)See it as a good deed
+    // preceding Eline + Trailing by separation criteria ESeries calculation (dominoes). Arr→ELDT, Dep→ETOT. All standards are S(d) Use series.
+    // Returns: Runway IDnot really events/minT/maxTA map containing (For visualization)
     function computeSeparationAdjustedTimes() {{
       const flights = state.flights || [];
-      // E 계열(ELDT/ETOT) 재계산 시에는 이미 계산된 S(d) 계열을 그대로 사용한다.
-      // SOBT(d)·STOT(d) 조정 로직은 최초 S(d) 계산 함수(computeScheduledDisplayTimes)에서만 수행.
+      // E line(ELDT/ETOT) When recalculating, the already calculated S(d) Use the series as is.
+      // SOBT(d)·STOT(d) Coordination logic is the first S(d) calculation function(computeScheduledDisplayTimes)Perform only in.
       flights.forEach(f => {{ delete f.eldtMin; delete f.etotMin; }});
       const runwaysRaw = (state.taxiways || []).filter(t => t.pathType === 'runway');
       if (!runwaysRaw.length) return {{}};
 
-      // 동일 항공기에서 Arr 활주로가 Dep 활주로보다 먼저 처리되도록 활주로 순서를 정렬
+      // on the same aircraft Arr the runway Dep Sort the runway order so that it is processed before the runway
       const runways = (function() {{
         const idToIndex = {{}};
         runwaysRaw.forEach((r, i) => {{ if (r && r.id != null) idToIndex[r.id] = i; }});
@@ -4411,14 +4839,14 @@ html = f"""
             if (indeg[j] === 0) q.push(j);
           }});
         }}
-        // 순환 등으로 모든 노드를 방문하지 못한 경우, 원래 순서를 사용
+        // If all nodes cannot be visited due to rotation, etc., the original order is used.
         if (orderIdx.length !== n) return runwaysRaw;
         return orderIdx.map(i => runwaysRaw[i]);
       }})();
 
       const byRunway = {{}};
       runSeparationPass(runways, flights, byRunway, 'initial');
-      // E계열 Apron 겹침: 1차 RW 결과 E를 주기장별 EIBT 기준 정렬 후 겹치면 뒤로 밀고, 2차 RW로 최종 E 확정
+      // Eline Apron Overlap: 1st RW result EBy parking lot EIBT After aligning the criteria, if they overlap, push them back, and then RWto final E confirmed
       flights.forEach(f => {{
         if (f.noWayArr || f.noWayDep) return;
         const vttArrMin = getBaseVttArrMinutes(f);
@@ -4447,14 +4875,14 @@ html = f"""
           const overlap = Math.max(0, prevEOBT - eibtMin);
           f.eOverlapPushed = overlap > 0;
           f.eibtMin = eibtMin + overlap;
-          // S(d) 계열의 드웰을 그대로 따른다: dwellSd = SOBT(d) - SIBT(d)
+          // S(d) Follows the dwell of the series.: dwellSd = SOBT(d) - SIBT(d)
           const dwellSd = (f.sobtMin_d != null && f.sibtMin_d != null)
             ? Math.max(0, f.sobtMin_d - f.sibtMin_d)
             : (f.dwellMin != null ? f.dwellMin : 0);
           const runwayEtot = f.etotMin != null ? f.etotMin : (f.eobtMin + vttDepMin);
           f.eobtMin = f.eibtMin + dwellSd;        // ✅ EOBT = EIBT + S(d) dwell
           f.eldtMin = f.eibtMin - vttArrMin - vttADelay;
-          // ELDT는 물리적으로 SLDT(d)보다 앞설 수 없도록 하드 클램프
+          // ELDTis physically SLDT(d)Hard clamp to prevent it from getting ahead of you
           const sldtBase = (f.sldtMin_d != null ? f.sldtMin_d
                            : (f.sldtMin_orig != null ? f.sldtMin_orig : 0));
           if (f.eldtMin < sldtBase) f.eldtMin = sldtBase;
@@ -4463,9 +4891,9 @@ html = f"""
           prevEOBT = f.eobtMin;
         }});
       }});
-      // 2차 RW: 밀린 E계열을 이벤트 시간으로 사용하고, 원 로직과 동일하게 1번 더 수행
+      // 2car RW: back EUse the series as the event time and perform the same as the original logic one more time.
       runSeparationPass(runways, flights, byRunway, 'refine');
-      // SLDT(d)가 가장 작은(일찍인) 항공편은 무조건 ELDT = SLDT(d). 활주로별로 해당 도착 1편만 적용.
+      // SLDT(d)is the smallest(early) Flights are always ELDT = SLDT(d). Applies to only one arrival per runway.
       runways.forEach(rwy => {{
         const data = byRunway[rwy.id];
         if (!data || !data.events) return;
@@ -4522,6 +4950,44 @@ html = f"""
       return pts[pts.length - 1];
     }}
 
+    /** Runway departure lineup: JSON/When panel is not set 0(starting point). */
+    function getEffectiveRunwayLineupDistM(tw) {{
+      if (!tw || tw.pathType !== 'runway') return 0;
+      const v = tw.lineupDistM;
+      if (typeof v === 'number' && isFinite(v) && v >= 0) return v;
+      return 0;
+    }}
+
+    function runwayPolylineLengthPx(pts) {{
+      if (!pts || pts.length < 2) return 0;
+      let s = 0;
+      for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
+      return s;
+    }}
+
+    /** On the runway centerline distPx Row of pixel coordinates from point to end (starting point dist branch included). */
+    function polylineTailFromDistancePx(pts, distPx) {{
+      if (!pts || pts.length < 2) return [];
+      const total = runwayPolylineLengthPx(pts);
+      const d = Math.max(0, Math.min(distPx, total));
+      if (d <= 1e-9) return pts.map(p => [p[0], p[1]]);
+      let acc = 0;
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const p1 = pts[i], p2 = pts[i + 1];
+        const segLen = pathDist(p1, p2);
+        if (segLen < 1e-9) continue;
+        if (acc + segLen >= d - 1e-6) {{
+          const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+          const lp = [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])];
+          const out = [lp];
+          for (let j = i + 1; j < pts.length; j++) out.push([pts[j][0], pts[j][1]]);
+          return out;
+        }}
+        acc += segLen;
+      }}
+      return [[pts[pts.length - 1][0], pts[pts.length - 1][1]]];
+    }}
+
     function syncStartEndFromVertices(obj) {{
       if (!obj || !obj.vertices || obj.vertices.length < 2) return;
       const first = obj.vertices[0], last = obj.vertices[obj.vertices.length - 1];
@@ -4552,7 +5018,7 @@ html = f"""
       t = Math.max(0, Math.min(1, t));
       return {{ t, p: [ax+t*dx, ay+t*dy] }};
     }}
-    // 세그먼트 (a,b)와 (c,d)의 교차점. 실제 교차 시에만 반환 (0<=t,s<=1).
+    // segment (a,b)and (c,d)intersection. Returns only when actual intersection occurs (0<=t,s<=1).
     function segmentSegmentIntersection(a, b, c, d) {{
       const ax = a[0], ay = a[1], bx = b[0], by = b[1];
       const cx = c[0], cy = c[1], dx = d[0], dy = d[1];
@@ -4570,7 +5036,7 @@ html = f"""
       return pathDist2(p, q) <= SPLIT_TOL_D2;
     }}
 
-    // Runway별로 연결된 Runway Taxiway(RET)의 threshold로부터 거리(m)를 계산
+    // Runwaynot very connected Runway Taxiway(RET)of thresholddistance from(m)calculate
     function computeRunwayExitDistances() {{
       const taxiways = state.taxiways || [];
       const runways = taxiways.filter(t => t.pathType === 'runway' && Array.isArray(t.vertices) && t.vertices.length >= 2);
@@ -4579,14 +5045,14 @@ html = f"""
       if (!runways.length || !exits.length) return results;
 
       runways.forEach(rw => {{
-        // Runway 중심선(격자 좌표) 정렬: start_point 기준 방향 정리
+        // Runway center line(grid coordinates) array: start_point Reference direction summary
         let rVerts = rw.vertices.map(v => [v.col, v.row]);
         if (rw.start_point && rw.end_point && rVerts.length >= 2) {{
           const sp = [rw.start_point.col, rw.start_point.row];
           if (pathDist2(rVerts[rVerts.length - 1], sp) < pathDist2(rVerts[0], sp)) rVerts.reverse();
         }}
         if (rVerts.length < 2) return;
-        // prefix 거리(셀 단위)
+        // prefix distance(cell unit)
         const prefixDist = [0];
         for (let i = 1; i < rVerts.length; i++) {{
           prefixDist[i] = prefixDist[i - 1] + pathDist(rVerts[i - 1], rVerts[i]);
@@ -4603,7 +5069,7 @@ html = f"""
               const segLen = pathDist(a, b);
               if (!(segLen > 1e-6)) continue;
               const proj = projectOnSegment(a, b, q);
-              // proj.p는 a-b 세그먼트 상의 점
+              // proj.pIs a-b point on segment
               const t = Math.max(0, Math.min(1, segLen > 0 ? pathDist(a, proj.p) / segLen : 0));
               const distCells = prefixDist[i] + segLen * t;
               const distM = distCells * CELL_SIZE;
@@ -4624,7 +5090,7 @@ html = f"""
         }});
       }});
 
-      // threshold로부터 거리 순으로 정렬
+      // thresholdSort by distance from
       results.sort((a, b) => a.distM - b.distM);
       return results;
     }}
@@ -4685,7 +5151,7 @@ html = f"""
                 const {{ t }} = projectOnSegment(a, b, isec.p);
                 junctions.push({{ tAlong: seg + t, p: isec.p }});
               }} else {{
-                // 공선이면 교차가 null. 끝점이 겹치는 경우 정션으로 추가 (활주로-택시웨이 끝끼리 연결)
+                // If it is a collinear line, the intersection is null. If endpoints overlap, add them as junctions (Runway-taxiway ends connected)
                 [c, d].forEach(function(q, idx) {{
                   if (pathDist2(a, q) <= SPLIT_TOL_D2 || pathDist2(b, q) <= SPLIT_TOL_D2) {{
                     const {{ t, p: proj }} = projectOnSegment(a, b, q);
@@ -4714,6 +5180,30 @@ html = f"""
             }});
           }}
         }}
+        if (obj.pathType === 'runway') {{
+          const ldm = getEffectiveRunwayLineupDistM(obj);
+          const rpath = getRunwayPath(obj.id);
+          if (rpath && rpath.pts && rpath.pts.length >= 2 && ldm > 1e-6) {{
+            let total = 0;
+            for (let ri = 0; ri < rpath.pts.length - 1; ri++) total += pathDist(rpath.pts[ri], rpath.pts[ri + 1]);
+            const d = Math.min(ldm, total);
+            if (d > 1e-6) {{
+              let acc = 0;
+              for (let ri = 0; ri < rpath.pts.length - 1; ri++) {{
+                const p1 = rpath.pts[ri], p2 = rpath.pts[ri + 1];
+                const segLen = pathDist(p1, p2);
+                if (segLen < 1e-9) continue;
+                if (acc + segLen >= d - 1e-6) {{
+                  const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+                  const px = p1[0] + t * (p2[0] - p1[0]), py = p1[1] + t * (p2[1] - p1[1]);
+                  junctions.push({{ tAlong: ri + t, p: [px, py] }});
+                  break;
+                }}
+                acc += segLen;
+              }}
+            }}
+          }}
+        }}
         const waypoints = [];
         for (let i = 0; i < pts.length; i++) waypoints.push({{ tAlong: i, p: pts[i], isJunction: false }});
         junctions.forEach(({{ tAlong, p }}) => waypoints.push({{ tAlong, p, isJunction: true }}));
@@ -4735,7 +5225,7 @@ html = f"""
           let cost = d;
           if (selectedArrRetId != null) {{
             if (isRunwayExit && obj.id !== selectedArrRetId) cost = REVERSE_COST;
-            else if (isTaxiway) cost = d + 200;
+            else if (isTaxiway) cost = d + TAXIWAY_HEURISTIC_COST;
           }}
           addEdgeWithDirection(chain[i], chain[i+1], dir, cost);
         }}
@@ -4755,7 +5245,7 @@ html = f"""
         edges.push({{ from: i, to: j, dist: d }});
         edges.push({{ from: j, to: i, dist: d }});
       }});
-      // BFS: cost < REVERSE_COST인 간선만 따라 도달 가능한 노드 집합
+      // BFS: cost < REVERSE_COSTA set of nodes that can be reached only along an edge.
       function bfsReachable(startIndices) {{
         const out = new Set();
         const q = startIndices.slice();
@@ -4791,7 +5281,7 @@ html = f"""
       const standReachable = standNodeIndices.length ? bfsReachable(standNodeIndices) : new Set();
       const connected = new Set();
       runwayReachable.forEach(function(i) {{ if (standReachable.has(i)) connected.add(i); }});
-      // 활주로-주기장이 서로 도달 가능한 연결된 구간 안의 분기점(degree>=2)만 녹색 정션으로 표시
+      // Runway-park Junction within a connected section within reach of each other(degree>=2)Only marked with green junctions
       const junctionsForDraw = junctionPts.filter(function(p) {{
         const i = keyToIdx[pathPointKey(p)];
         return i != null && adj[i] && adj[i].length >= 2 && connected.has(i);
@@ -4928,6 +5418,8 @@ html = f"""
       if (!runwayId) return null;
       const r = getRunwayPath(runwayId);
       if (!r) return null;
+      const rwTw = (state.taxiways || []).find(t => t.id === runwayId && t.pathType === 'runway')
+        || (state.taxiways || []).find(t => t.id === runwayId && (t.name||'').toLowerCase().includes('runway'));
       const stand = (state.pbbStands || []).find(s => s.id === apronId) || (state.remoteStands || []).find(s => s.id === apronId);
       if (!stand) return null;
       const g = buildPathGraph();
@@ -4935,6 +5427,38 @@ html = f"""
       if (startIdx == null) {{
         f.noWayDep = true;
         return null;
+      }}
+      const useLineup = rwTw && rwTw.pathType === 'runway';
+      if (useLineup) {{
+        const ldm = getEffectiveRunwayLineupDistM(rwTw);
+        const lenPx = runwayPolylineLengthPx(r.pts);
+        const dPx = Math.min(Math.max(0, ldm), lenPx);
+        const lineupPx = getRunwayPointAtDistance(runwayId, dPx);
+        if (!lineupPx) {{
+          f.noWayDep = true;
+          return null;
+        }}
+        const lineupIdx = nearestPathNode(g, lineupPx);
+        const pathIndices = pathDijkstra(g, startIdx, lineupIdx);
+        const totalD = pathIndices ? pathTotalDist(g, pathIndices) : Infinity;
+        if (!pathIndices || pathIndices.length < 2 || totalD >= REVERSE_COST) {{
+          f.noWayDep = true;
+          return null;
+        }}
+        f.noWayDep = false;
+        let pts = pathIndices.map(i => g.nodes[i]);
+        const tail = polylineTailFromDistancePx(r.pts, dPx);
+        if (tail.length) {{
+          const last = pts[pts.length - 1];
+          const firstTail = tail[0];
+          if (pathDist2(last, firstTail) <= SPLIT_TOL_D2) pts = pts.concat(tail.slice(1));
+          else pts = pts.concat(tail);
+        }}
+        if (r.endPx && Array.isArray(r.endPx) && r.endPx.length === 2) {{
+          const last = pts[pts.length - 1];
+          if (pathDist(last, r.endPx) > 1e-3) pts.push([r.endPx[0], r.endPx[1]]);
+        }}
+        return pts;
       }}
       const toStart = pathDijkstra(g, startIdx, nearestPathNode(g, r.startPx));
       const toEnd = pathDijkstra(g, startIdx, nearestPathNode(g, r.endPx));
@@ -4993,7 +5517,7 @@ html = f"""
         else if (arr.timeline && arr.timeline.length) f.timeline = arr.timeline;
       }});
       if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-      // 경로만 갱신: Allocation/바차트/주기장 배치는 건드리지 않고 리스트·캔버스만 갱신
+      // Update path only: Allocation/bar chart/List without touching the apron layout·Update only the canvas
       if (typeof renderFlightList === 'function') renderFlightList(true);
       draw();
     }}
@@ -5084,7 +5608,7 @@ html = f"""
       ctx.textBaseline = 'middle';
       ctx.fillText(badgeText, cx, cy - 4);
 
-      // --- TD / RET 입구 / RET 출구 속도 라벨 ---
+      // --- Touch Down / RET entrance / RET outlet speed label ---
       ctx.font = 'bold ' + Math.max(9, CELL_SIZE * 0.35) + 'px system-ui';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
@@ -5093,6 +5617,25 @@ html = f"""
         if (!pt) return;
         const ox = 4, oy = -4;
         ctx.fillText(label, pt[0] + ox, pt[1] + oy);
+      }}
+      function drawTouchDownLabel(pt, distM, speedMs) {{
+        if (!pt) return;
+        const ox = 4, oy = -4;
+        const x = pt[0] + ox, yBot = pt[1] + oy;
+        const lh = Math.max(11, Math.round(CELL_SIZE * 0.36));
+        let distPart = '---m';
+        if (typeof distM === 'number' && isFinite(distM)) {{
+          const r = Math.round(distM);
+          distPart = (r >= 1000 ? String(r) : String(r).padStart(3, '0')) + 'm';
+        }}
+        let spdPart = '--.-m/s';
+        if (typeof speedMs === 'number' && isFinite(speedMs)) {{
+          spdPart = speedMs.toFixed(1) + 'm/s';
+        }}
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('(' + distPart + ',  ' + spdPart + ')', x, yBot);
+        ctx.fillText('Touch Down', x, yBot - lh);
       }}
       let tdPt = null, retInPt = null, retOutPt = null;
       if (f.arrRunwayIdUsed && typeof getRunwayPointAtDistance === 'function') {{
@@ -5103,7 +5646,7 @@ html = f"""
           retInPt = getRunwayPointAtDistance(f.arrRunwayIdUsed, f.arrRetDistM);
         }}
       }}
-      // RET OUT: 선택된 RET(출구) Taxiway의 마지막 지점
+      // RET OUT: selected RET(exit) Taxiwaylast point of
       if (!retOutPt && f.sampledArrRet) {{
         const tw = (state.taxiways || []).find(t => t.id === f.sampledArrRet);
         if (tw && Array.isArray(tw.vertices) && tw.vertices.length) {{
@@ -5120,8 +5663,8 @@ html = f"""
         const idxOut = Math.max(2, Math.floor(pathPts.length * 0.7));
         retOutPt = pathPts[Math.min(idxOut, pathPts.length - 1)];
       }}
-      if (typeof f.arrVTdMs === 'number' && isFinite(f.arrVTdMs)) {{
-        drawSpeedLabel(tdPt, 'TD ' + f.arrVTdMs.toFixed(1) + ' m/s');
+      if (tdPt && ((typeof f.arrVTdMs === 'number' && isFinite(f.arrVTdMs)) || (typeof f.arrTdDistM === 'number' && isFinite(f.arrTdDistM)))) {{
+        drawTouchDownLabel(tdPt, f.arrTdDistM, f.arrVTdMs);
       }}
       if (typeof f.arrVRetInMs === 'number' && isFinite(f.arrVRetInMs)) {{
         drawSpeedLabel(retInPt, 'RET IN ' + f.arrVRetInMs.toFixed(1) + ' m/s');
@@ -5145,7 +5688,7 @@ html = f"""
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.translate(state.panX, state.panY);
       ctx.scale(state.scale, state.scale);
-      ctx.strokeStyle = '#000000';
+      ctx.strokeStyle = _canvas2dStyle.pathDepartureStroke || '#000000';
       ctx.lineWidth = 6;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -5163,8 +5706,8 @@ html = f"""
       const bh = CELL_SIZE * 0.5, pad = CELL_SIZE * 0.2, r = 4;
       const bw = tw + pad*2;
       const bx = cx - bw/2, by = cy - bh/2 - 4;
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
-      ctx.strokeStyle = '#000';
+      ctx.fillStyle = _canvas2dStyle.vttBadgeBg || 'rgba(15, 23, 42, 0.95)';
+      ctx.strokeStyle = _canvas2dStyle.vttBadgeStroke || '#000000';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(bx + r, by);
@@ -5179,7 +5722,7 @@ html = f"""
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = _canvas2dStyle.vttBadgeText || '#ffffff';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(badgeText, cx, cy - 4);
@@ -5196,7 +5739,7 @@ html = f"""
       state.flights.forEach(f => {{
         const hasNoWay = f.noWayArr || f.noWayDep;
         if (hasNoWay) {{
-          // No way: 항공기 위치는 그리지 않고, 링크가 끊기는 지점(스탠드)에만 No way 딱지
+          // No way: The aircraft position is not drawn, but the point where the link breaks.(stand)Only No way scab
           if (!f.standId) return;
           const stand = (state.pbbStands || []).find(s => s.id === f.standId) || (state.remoteStands || []).find(s => s.id === f.standId);
           if (!stand) return;
@@ -5214,8 +5757,8 @@ html = f"""
           const bx = x - badgeW / 2;
           const by = y - badgeH - 8;
           const r = badgeH * 0.35;
-          ctx.fillStyle = 'rgba(220, 38, 38, 0.92)';
-          ctx.strokeStyle = 'rgba(185, 28, 28, 0.9)';
+          ctx.fillStyle = _canvas2dStyle.noWayFill || 'rgba(220, 38, 38, 0.92)';
+          ctx.strokeStyle = _canvas2dStyle.noWayStroke || 'rgba(185, 28, 28, 0.9)';
           ctx.lineWidth = 1.5;
           ctx.beginPath();
           ctx.moveTo(bx + r, by);
@@ -5230,7 +5773,7 @@ html = f"""
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
-          ctx.fillStyle = '#ffffff';
+          ctx.fillStyle = _canvas2dStyle.noWayText || '#ffffff';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(label, x, by + badgeH / 2);
@@ -5242,24 +5785,38 @@ html = f"""
         const x = pose.x, y = pose.y, dx = pose.dx, dy = pose.dy;
         const len = Math.hypot(dx, dy) || 1;
         const nx = dx / len, ny = dy / len;
-        let scale = 1.0;
         const code = (f.code || '').toUpperCase();
-        if (code === 'A' || code === 'B') scale = 0.8;
-        else if (code === 'C') scale = 1.0;
-        else if (code === 'D') scale = 1.2;
-        else if (code === 'E') scale = 1.4;
-        else if (code === 'F') scale = 1.6;
+        const scale = apronAircraftScaleForIcao(code);
         const size = CELL_SIZE * scale;
+        const silN = Number(_acSil.noseX), silWR = Number(_acSil.wingRearX), silUY = Number(_acSil.wingUpperY);
+        const silTN = Number(_acSil.tailNeckX), silLY = Number(_acSil.wingLowerY);
+        const nX = isFinite(silN) ? silN : 0.6;
+        const wRx = isFinite(silWR) ? silWR : -0.5;
+        const uY = isFinite(silUY) ? silUY : 0.35;
+        const tX = isFinite(silTN) ? silTN : -0.3;
+        const lY = isFinite(silLY) ? silLY : -0.35;
+        const isFlightSel = state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id;
+        if (isFlightSel) {{
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(x, y, size * 0.62, 0, Math.PI * 2);
+          ctx.strokeStyle = c2dObjectSelectedStroke();
+          ctx.lineWidth = 2.5;
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+          ctx.stroke();
+          ctx.restore();
+        }}
         ctx.save();
         ctx.translate(x, y);
         const ang = Math.atan2(ny, nx);
         ctx.rotate(ang);
-        ctx.fillStyle = '#ff2f92';
+        ctx.fillStyle = apron2DGlyphFill();
         ctx.beginPath();
-        ctx.moveTo(size * 0.6, 0);
-        ctx.lineTo(-size * 0.5, size * 0.35);
-        ctx.lineTo(-size * 0.3, 0);
-        ctx.lineTo(-size * 0.5, -size * 0.35);
+        ctx.moveTo(size * nX, 0);
+        ctx.lineTo(size * wRx, size * uY);
+        ctx.lineTo(size * tX, 0);
+        ctx.lineTo(size * wRx, size * lY);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
@@ -5273,7 +5830,7 @@ html = f"""
       ensureSimLoop._lastTs = null;
       function tick(ts) {{
         if (ensureSimLoop._lastTs == null) ensureSimLoop._lastTs = ts;
-        const dt = (ts - ensureSimLoop._lastTs) / 1000; // 초 단위 경과 시간
+        const dt = (ts - ensureSimLoop._lastTs) / 1000; // Elapsed time in seconds
         ensureSimLoop._lastTs = ts;
         if (state.simPlaying && state.simDurationSec > state.simStartSec) {{
           const speed = state.simSpeed != null ? state.simSpeed : 1;
@@ -5334,7 +5891,7 @@ html = f"""
 
       function randomAirlineCode() {{ return DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)]; }}
       function randomFlightNumber(airlineCode) {{ return (airlineCode || randomAirlineCode()) + String(Math.floor(1000 + Math.random() * 9000)); }}
-      // 현재 이미 생성된 Flight들의 SIBT(d) 중 최대값 + 10분을 기본 SIBT로 사용
+      // Currently already created Flightfield SIBT(d) The maximum value of + 10Minutes are basic SIBTused as
       function getDefaultSibtMinutes() {{
         let maxT = 0;
         (state.flights || []).forEach(f => {{
@@ -5382,20 +5939,20 @@ html = f"""
           if (el) el.style.display = arr.indexOf(node) >= 0 ? 'block' : 'none';
         }});
       }}
-      // 화면 상단 Global Update 버튼: 현재 상태 기반으로 주요 뷰/계산을 모두 다시 실행
+      // top of screen Global Update Button: Main view based on current state/Redo all calculations
       if (globalUpdateBtn) {{
         globalUpdateBtn.addEventListener('click', function() {{
           try {{
             if (typeof syncPanelFromState === 'function') syncPanelFromState();
             if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
             else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-            // 모든 계산을 먼저 수행
+            // Do all calculations first
             if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
             if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
-            // 계산 결과를 사용하는 뷰를 갱신
+            // Update the view using the calculation result
             if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
             if (typeof renderFlightGantt === 'function') renderFlightGantt();
-            // 마지막에 Flight schedule 표를 한 번만 렌더링 (RET/ELDT 전편 재샘플링)
+            // at the end Flight schedule Render the table only once (RET/ELDT Full-length resampling)
             if (typeof renderFlightList === 'function') renderFlightList(false, true);
             if (typeof draw === 'function') draw();
           }} catch (e) {{
@@ -5454,7 +6011,7 @@ html = f"""
         f.token.terminalId = this.value || null;
         rebuildSelectedFlightTimeline();
       }});
-      // Flight 탭 내 Schedule / Configuration 서브탭 전환
+      // Flight My tab Schedule / Configuration Switch sub tabs
       const flightSubtabButtons = document.querySelectorAll('.flight-subtab');
       const flightPaneSchedule = document.getElementById('flightPaneSchedule');
       const flightPaneConfig = document.getElementById('flightPaneConfig');
@@ -5479,7 +6036,7 @@ html = f"""
           const networkErrors = validateNetworkForFlights();
           if (networkErrors.length) {{
             updateFlightError(networkErrors);
-            alert('Flight를 생성할 수 없습니다:\\n' + networkErrors.join('\\n'));
+            alert('Flightcannot be created:\\n' + networkErrors.join('\\n'));
             return;
           }}
           let timeStr = (document.getElementById('flightTime').value || '').trim();
@@ -5500,12 +6057,12 @@ html = f"""
           let minDwellMin = parseFloat(document.getElementById('flightMinDwell').value);
           dwellMin = (typeof dwellMin === 'number' && !isNaN(dwellMin) && dwellMin >= 0) ? dwellMin : 0;
           minDwellMin = (typeof minDwellMin === 'number' && !isNaN(minDwellMin) && minDwellMin >= 0) ? minDwellMin : 0;
-          dwellMin = Math.max(20, dwellMin);
-          minDwellMin = Math.max(20, minDwellMin);
+          dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, dwellMin);
+          minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, minDwellMin);
           if (minDwellMin > dwellMin) minDwellMin = dwellMin;
-          // Arr/Dep은 하나의 Flight(Arr+Dep)를 표현하는 개념으로, 내부적으로는 Arr 기준으로만 관리
+          // Arr/Depis one Flight(Arr+Dep)It is a concept that expresses, and internally, Arr Manage only based on standards
           const arrDep = 'Arr';
-          // 기본 Runway 선택: 현재 정의된 Runway 목록 중 첫 번째를 사용 (없으면 null)
+          // basic Runway Select: currently defined Runway Use the first one in the list (If there is no null)
           const runwayOptions = getRunwayOptions();
           const defaultRunwayId = runwayOptions.length ? (runwayOptions[0].id || null) : null;
           const f = {{
@@ -5535,15 +6092,15 @@ html = f"""
           computeFlightPath(f, 'departure');
           const tl = arrPath.timeline;
           if (!tl || !tl.length) {{
-            // 경로가 없으면 timeline은 null로 두고, 우측 패널에만 경고 메시지 표시
-            updateFlightError('참고: 해당 네트워크에서 유효한 Taxiway / Apron 경로를 찾지 못했습니다. (시뮬레이션 경로는 그려지지 않을 수 있습니다.)');
+            // If there is no path timelinesilver nullLeave it at and display the warning message only on the right panel.
+            updateFlightError('NOTE: Available on your network Taxiway / Apron path not found. (Simulation paths may not be drawn.)');
           }} else {{
             f.timeline = tl;
           }}
           state.flights.push(f);
           recomputeSimDuration();
           renderFlightList();
-          // 다음 Flight 추가를 위한 기본 SIBT 인풋 갱신 (Max SIBT + 10분)
+          // next Flight base for adding SIBT Input update (Max SIBT + 10minute)
           if (timeInputEl) {{
             const nextDef = getDefaultSibtMinutes();
             timeInputEl.value = formatMinutesToHHMMSS(nextDef);
@@ -5551,11 +6108,11 @@ html = f"""
           updateFlightError('');
         }});
       }}
-      // Flight 객체 선택 시 패널 인풋에 값 반영
+      // Flight When selecting an object, the value is reflected in the panel input
       function syncFlightPanelFromSelection() {{
         if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
         const f = state.selectedObject.obj;
-        // Arr/Dep은 UI에서 선택하지 않으며, 모든 Flight는 Arr+스탠드 점유(Dwell)를 포함하는 구조
+        // Arr/Depsilver UIdo not select from, all FlightIs Arr+stand occupancy(Dwell)Structure containing
         if (arrDepEl) arrDepEl.value = 'Arr';
         if (dwellEl) {{
           dwellEl.disabled = false;
@@ -5584,13 +6141,14 @@ html = f"""
         if (tokenRunwaySel) tokenRunwaySel.value = f.token.runwayId || '';
         if (tokenTerminalSel) tokenTerminalSel.value = f.token.terminalId || '';
       }}
-      // selection 변경 시마다 동기화될 수 있도록 hook
+      hookSyncFlightPanelFromSelection = syncFlightPanelFromSelection;
+      // selection So that every change is synchronized. hook
       const origSyncPanel = syncPanelFromState;
       syncPanelFromState = function() {{
         origSyncPanel();
         if (activeTab === 'flight') syncFlightPanelFromSelection();
       }};
-      // Flight 설정 인풋 변경 시 선택된 Flight 객체에 반영 + 경로 재계산
+      // Flight Selected when changing setting input Flight reflected in object + Recalculate route
       function rebuildSelectedFlightTimeline() {{
         if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
         const f = state.selectedObject.obj;
@@ -5598,20 +6156,20 @@ html = f"""
         const dep = computeFlightPath(f, 'departure');
         const isArr = f.arrDep !== 'Dep';
         if (isArr && f.noWayArr) {{
-          updateFlightError('경로 없음(No Way): 도착 경로를 찾을 수 없습니다.');
+          updateFlightError('no path(No Way): Arrival route not found.');
           f.timeline = null;
           draw();
           return;
         }}
         if (!isArr && f.noWayDep) {{
-          updateFlightError('경로 없음(No Way): 출발 경로를 찾을 수 없습니다.');
+          updateFlightError('no path(No Way): Departure route not found.');
           f.timeline = null;
           draw();
           return;
         }}
         const tl = isArr ? arr.timeline : dep.timeline;
         if (!tl || !tl.length) {{
-          updateFlightError('해당 네트워크에서 유효한 경로를 찾을 수 없습니다. (설정 변경 후)');
+          updateFlightError('No valid route found on that network. (After changing settings)');
           return;
         }}
         f.timeline = tl;
@@ -5699,9 +6257,9 @@ html = f"""
           const f = state.selectedObject.obj;
           let v = parseFloat(this.value);
           v = (typeof v === 'number' && !isNaN(v) && v >= 0) ? v : 0;
-          let dwell = Math.max(20, v);
+          let dwell = Math.max(SCHED_DWELL_FLOOR_MIN, v);
           let minDwell = f.minDwellMin != null ? f.minDwellMin : dwell;
-          minDwell = Math.max(20, minDwell);
+          minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
           if (minDwell > dwell) minDwell = dwell;
           f.dwellMin = dwell;
           f.minDwellMin = minDwell;
@@ -5715,16 +6273,23 @@ html = f"""
           if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
           const f = state.selectedObject.obj;
           let dwell = f.dwellMin != null ? f.dwellMin : 0;
-          dwell = Math.max(20, dwell);
+          dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
           let v = parseFloat(this.value);
           v = (typeof v === 'number' && !isNaN(v) && v >= 0) ? v : 0;
-          let minDwell = Math.max(20, v);
+          let minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, v);
           if (minDwell > dwell) minDwell = dwell;
           f.dwellMin = dwell;
           f.minDwellMin = minDwell;
           if (dwellEl) dwellEl.value = f.dwellMin;
           this.value = f.minDwellMin;
-          // Flight Schedule 표 + Apron Gantt를 즉시 다시 계산/반영
+          // Flight Schedule graph + Apron Ganttrecalculate immediately/reflect
+          const _prepSched = state.flights.slice();
+          _prepSched.forEach(ff => {{
+            if (typeof getPathForFlight === 'function') getPathForFlight(ff);
+            if (typeof getPathForFlightDeparture === 'function') getPathForFlightDeparture(ff);
+            if (ff.noWayArr || ff.noWayDep) ff.timeline = null;
+          }});
+          if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(_prepSched, false);
           if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
           if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
           if (typeof renderFlightGantt === 'function') renderFlightGantt();
@@ -5737,15 +6302,15 @@ html = f"""
           if (errs.length) {{
             state.simPlaying = false;
             updateFlightError(errs);
-            alert('시뮬레이션을 재생할 수 없습니다:\\n' + errs.join('\\n'));
+            alert('Simulation cannot be played:\\n' + errs.join('\\n'));
             return;
           }}
           if (!state.flights.length) {{
-            updateFlightError('등록된 Flight가 없습니다.');
-            alert('등록된 Flight가 없습니다.');
+            updateFlightError('registered FlightThere is no.');
+            alert('registered FlightThere is no.');
             return;
           }}
-          // 재생 시작 시, 가장 이른 Flight 시간부터 시작
+          // When playback starts, the earliest Flight start from time
           let earliest = Infinity;
           state.flights.forEach(f => {{
             if (f.timeline && f.timeline.length) {{
@@ -5793,10 +6358,10 @@ html = f"""
           state.simSpeed = !isNaN(v) && v > 0 ? v : 1;
         }});
         const v0 = parseFloat(speedSelect.value);
-        state.simSpeed = !isNaN(v0) && v0 > 0 ? v0 : 20;
+        state.simSpeed = !isNaN(v0) && v0 > 0 ? v0 : {json.dumps(float(_ui_default_sim_speed))};
       }}
-      // Flight Schedule 테이블의 표시값을 state.flights에 다시 반영하여
-      // Save/Run 시 JSON에 테이블 최종 값(특히 E계열)이 반영되도록 동기화
+      // Flight Schedule the displayed value in the table state.flightsBy reflecting back on
+      // Save/Run city JSONin table final values(especially Eline)sync to reflect this
       function syncTableToFlightState() {{
         const schedTable = document.querySelector('.flight-schedule-table');
         if (!schedTable || !Array.isArray(state.flights)) return;
@@ -5821,7 +6386,7 @@ html = f"""
             const n = parseFloat(txt);
             return isNaN(n) ? null : n;
           }};
-          // 컬럼 순서: 7=SLDT(d), 8=SIBT(d), 9=SOBT(d), 10=STOT(d)
+          // Column order: 7=SLDT(d), 8=SIBT(d), 9=SOBT(d), 10=STOT(d)
           //            11=ELDT,  12=EIBT,   13=EOBT,   14=ETOT
           const map = {{
             sldtMin_d: 7, sibtMin_d: 8, sobtMin_d: 9,  stotMin_d: 10,
@@ -5833,7 +6398,7 @@ html = f"""
           }});
         }});
       }}
-      // Layout Save / Load: data/Layout_storage 에 이름별 저장·로드 (API)
+      // Layout Save / Load: data/Layout_storage Save by name to·load (API)
       function setLayoutMessage(msg, isError) {{
         if (!layoutMsgEl) return;
         layoutMsgEl.textContent = msg || '';
@@ -5843,7 +6408,7 @@ html = f"""
         saveLayoutBtn.addEventListener('click', function() {{
           const name = (layoutNameInput && layoutNameInput.value || '').trim();
           if (!name) {{
-            setLayoutMessage('저장명을 입력하세요.', true);
+            setLayoutMessage('Please enter a save name.', true);
             return;
           }}
           try {{
@@ -5859,13 +6424,13 @@ html = f"""
               if (r.ok) {{
                 if (typeof updateLayoutNameBar === 'function') updateLayoutNameBar(name);
                 setLayoutMessage('Saved to Layout_storage as "' + name + '.json"', false);
-              }} else setLayoutMessage('저장 실패 (status ' + r.status + ') — python run_app.py로 실행 후 http://127.0.0.1:8501 접속', true);
+              }} else setLayoutMessage('save failed (status ' + r.status + ') — python run_app.pyAfter running with http://127.0.0.1:8501 connection', true);
             }}).catch(function(e) {{
-              setLayoutMessage('연결 실패: ' + (e && e.message) + ' — python run_app.py로 실행 후 http://127.0.0.1:8501 접속', true);
+              setLayoutMessage('Connection failed: ' + (e && e.message) + ' — python run_app.pyAfter running with http://127.0.0.1:8501 connection', true);
             }});
           }} catch (e) {{
             console.error(e);
-            setLayoutMessage('레이아웃을 저장할 수 없습니다.', true);
+            setLayoutMessage('Unable to save layout.', true);
           }}
         }});
       }}
@@ -5877,13 +6442,13 @@ html = f"""
             const data = serializeCurrentLayout();
             const layoutName = (state.currentLayoutName && state.currentLayoutName.trim()) || (INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout');
             const apiBase = (typeof getLayoutApiBase === 'function') ? getLayoutApiBase() : (LAYOUT_API_URL || '');
-            if (layoutMsgEl) {{ layoutMsgEl.textContent = '시뮬레이션 실행 중...'; layoutMsgEl.style.color = '#9ca3af'; }}
+            if (layoutMsgEl) {{ layoutMsgEl.textContent = 'Running simulation...'; layoutMsgEl.style.color = '#9ca3af'; }}
             fetch(apiBase + '/api/run-simulation', {{
               method: 'POST',
               headers: {{ 'Content-Type': 'application/json' }},
               body: JSON.stringify({{ layout: data, layoutName: layoutName }})
             }}).then(function(r) {{
-              if (!r.ok) throw new Error('시뮬레이션 실패');
+              if (!r.ok) throw new Error('Simulation failed');
               return r.json();
             }}).then(function(result) {{
               if (!result) return;
@@ -5895,20 +6460,22 @@ html = f"""
               if (typeof draw === 'function') draw();
               if (typeof update3DScene === 'function') update3DScene();
               if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-              if (layoutMsgEl) {{ layoutMsgEl.textContent = '시뮬레이션 완료.'; layoutMsgEl.style.color = '#9ca3af'; }}
+              if (layoutMsgEl) {{ layoutMsgEl.textContent = 'Simulation complete.'; layoutMsgEl.style.color = '#9ca3af'; }}
             }}).catch(function(e) {{
-              if (layoutMsgEl) {{ layoutMsgEl.textContent = '연결 실패: ' + ((e && e.message) || '시뮬레이션 실패') + ' — python run_app.py로 실행 후 http://127.0.0.1:8501 접속'; layoutMsgEl.style.color = '#f97316'; }}
+              if (layoutMsgEl) {{ layoutMsgEl.textContent = 'Connection failed: ' + ((e && e.message) || 'Simulation failed') + ' — python run_app.pyAfter running with http://127.0.0.1:8501 connection'; layoutMsgEl.style.color = '#f97316'; }}
             }});
           }} catch (e) {{
-            if (layoutMsgEl) {{ layoutMsgEl.textContent = '오류: ' + (e && e.message); layoutMsgEl.style.color = '#f97316'; }}
+            if (layoutMsgEl) {{ layoutMsgEl.textContent = 'error: ' + (e && e.message); layoutMsgEl.style.color = '#f97316'; }}
           }}
         }});
       }}
-      // Save / Load sub-tabs
+      // Save / Load sub-tabs (certainly #tab-saveload Inside only — Flight Prevent malfunctions during global queries by sharing subtabs and classes)
       function switchLayoutTab(tabId) {{
-        document.querySelectorAll('.layout-save-load-tab').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.layout-save-load-pane').forEach(p => p.classList.remove('active'));
-        const btn = document.querySelector('.layout-save-load-tab[data-sltab="' + tabId + '"]');
+        const root = document.getElementById('tab-saveload');
+        if (!root) return;
+        root.querySelectorAll('.layout-save-load-tab').forEach(btn => btn.classList.remove('active'));
+        root.querySelectorAll('.layout-save-load-pane').forEach(p => p.classList.remove('active'));
+        const btn = root.querySelector('.layout-save-load-tab[data-sltab="' + tabId + '"]');
         const pane = document.getElementById('layout-' + tabId + '-pane');
         if (btn) btn.classList.add('active');
         if (pane) pane.classList.add('active');
@@ -5929,16 +6496,19 @@ html = f"""
             body: JSON.stringify({{ layout: data, name: name }})
           }}).then(function(r) {{
             if (r.ok) {{
-              if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = '저장됨: ' + name + '.json'; layoutMessageSaveEl.style.color = '#9ca3af'; }}
-            }} else if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = '저장 실패 (status ' + r.status + ')'; layoutMessageSaveEl.style.color = '#f97316'; }}
+              if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = 'saved: ' + name + '.json'; layoutMessageSaveEl.style.color = '#9ca3af'; }}
+            }} else if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = 'save failed (status ' + r.status + ')'; layoutMessageSaveEl.style.color = '#f97316'; }}
           }}).catch(function(e) {{
-            if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = '연결 실패: ' + (e && e.message); layoutMessageSaveEl.style.color = '#f97316'; }}
+            if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = 'Connection failed: ' + (e && e.message); layoutMessageSaveEl.style.color = '#f97316'; }}
           }});
-        }} catch (e) {{ if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = '오류: ' + (e && e.message); layoutMessageSaveEl.style.color = '#f97316'; }} }}
+        }} catch (e) {{ if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = 'error: ' + (e && e.message); layoutMessageSaveEl.style.color = '#f97316'; }} }}
       }});
-      document.querySelectorAll('.layout-save-load-tab').forEach(btn => {{
-        btn.addEventListener('click', function() {{ switchLayoutTab(this.getAttribute('data-sltab')); }});
-      }});
+      const saveLoadTabRoot = document.getElementById('tab-saveload');
+      if (saveLoadTabRoot) {{
+        saveLoadTabRoot.querySelectorAll('.layout-save-load-tab[data-sltab]').forEach(btn => {{
+          btn.addEventListener('click', function() {{ switchLayoutTab(this.getAttribute('data-sltab')); }});
+        }});
+      }}
       function getLayoutApiBase() {{
         if (LAYOUT_API_URL && LAYOUT_API_URL !== 'null') return LAYOUT_API_URL;
         try {{ if (window.location && window.location.origin && window.location.origin !== 'null') return window.location.origin; }} catch(e) {{}}
@@ -5946,30 +6516,30 @@ html = f"""
       }}
       function fetchAndRefreshLayoutList() {{
         if (!layoutLoadListEl) return;
-        layoutLoadListEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">목록 불러오는 중...</div>';
+        layoutLoadListEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">Loading list...</div>';
         const apiBase = getLayoutApiBase();
         fetch(apiBase + '/api/list-layouts').then(function(r) {{
-          if (!r.ok) throw new Error('API 연결 실패 (status ' + r.status + ')');
+          if (!r.ok) throw new Error('API Connection failed (status ' + r.status + ')');
           return r.json();
         }}).then(function(data) {{
           const names = (data && data.names) ? data.names : (Array.isArray(LAYOUT_NAMES) ? LAYOUT_NAMES : []);
           refreshLayoutLoadList(names);
         }}).catch(function(e) {{
-          layoutLoadListEl.innerHTML = '<div style="font-size:11px;color:#f97316;">연결 실패: ' + (e && e.message) + '</div><div style="font-size:10px;color:#9ca3af;margin-top:4px;">python run_app.py 로 실행 후 http://127.0.0.1:8501 접속</div>';
+          layoutLoadListEl.innerHTML = '<div style="font-size:11px;color:#f97316;">Connection failed: ' + (e && e.message) + '</div><div style="font-size:10px;color:#9ca3af;margin-top:4px;">python run_app.py After running with http://127.0.0.1:8501 connection</div>';
         }});
       }}
       function refreshLayoutLoadList(namesFromApi) {{
         if (!layoutLoadListEl) return;
         const names = namesFromApi != null ? (Array.isArray(namesFromApi) ? namesFromApi : []) : (Array.isArray(LAYOUT_NAMES) ? LAYOUT_NAMES : []);
         if (!names.length) {{
-          layoutLoadListEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">저장된 레이아웃이 없습니다.</div>';
+          layoutLoadListEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">There are no saved layouts.</div>';
           return;
         }}
         const reserved = {{ 'default_layout': true, 'current_layout': true }};
         layoutLoadListEl.innerHTML = names.map(function(name) {{
           const n = (name || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
           const showDel = !reserved[(name || '').toLowerCase()];
-          const delBtn = showDel ? '<button type="button" class="layout-load-delete" title="삭제" data-name="' + (name || '').replace(/"/g, '&quot;') + '">×</button>' : '';
+          const delBtn = showDel ? '<button type="button" class="layout-load-delete" title="Delete" data-name="' + (name || '').replace(/"/g, '&quot;') + '">×</button>' : '';
           return '<div class="layout-load-item" data-name="' + (name || '').replace(/"/g, '&quot;') + '"><span class="layout-load-name">' + n + '</span>' + delBtn + '</div>';
         }}).join('');
         layoutLoadListEl.querySelectorAll('.layout-load-item').forEach(function(el) {{
@@ -5978,7 +6548,7 @@ html = f"""
             if (ev.target && ev.target.classList && ev.target.classList.contains('layout-load-delete')) return;
             if (!name) return;
             var apiBase = getLayoutApiBase();
-            if (layoutMsgEl) {{ layoutMsgEl.textContent = '불러오는 중...'; layoutMsgEl.style.color = '#9ca3af'; }}
+            if (layoutMsgEl) {{ layoutMsgEl.textContent = 'Loading...'; layoutMsgEl.style.color = '#9ca3af'; }}
             fetch(apiBase + '/api/load-layout?name=' + encodeURIComponent(name)).then(function(r) {{
               if (!r.ok) throw new Error('not_found');
               return r.json();
@@ -6000,7 +6570,7 @@ html = f"""
                 throw err;
               }}
             }}).catch(function(e) {{
-              if (layoutMsgEl) {{ layoutMsgEl.textContent = '불러오기 실패: ' + ((e && e.message) || name || '') + ' — python run_app.py로 실행 후 http://127.0.0.1:8501 접속'; layoutMsgEl.style.color = '#f97316'; }}
+              if (layoutMsgEl) {{ layoutMsgEl.textContent = 'Failed to load: ' + ((e && e.message) || name || '') + ' — python run_app.pyAfter running with http://127.0.0.1:8501 connection'; layoutMsgEl.style.color = '#f97316'; }}
             }});
           }});
           el.querySelector('.layout-load-delete') && el.querySelector('.layout-load-delete').addEventListener('click', function(ev) {{
@@ -6013,18 +6583,18 @@ html = f"""
               headers: {{ 'Content-Type': 'application/json' }},
               body: JSON.stringify({{ name: n }})
             }}).then(function(r) {{
-              if (!r.ok) return r.json().then(function(d) {{ throw new Error(d.error || '삭제 실패'); }});
+              if (!r.ok) return r.json().then(function(d) {{ throw new Error(d.error || 'Deletion failed'); }});
               return fetch(apiBase + '/api/list-layouts').then(function(r2) {{ return r2.json(); }});
             }}).then(function(data) {{
               if (data && data.names) refreshLayoutLoadList(data.names);
-              if (layoutMsgEl) {{ layoutMsgEl.textContent = '삭제됨.'; layoutMsgEl.style.color = '#9ca3af'; }}
+              if (layoutMsgEl) {{ layoutMsgEl.textContent = 'deleted.'; layoutMsgEl.style.color = '#9ca3af'; }}
             }}).catch(function(e) {{
-              if (layoutMsgEl) {{ layoutMsgEl.textContent = ((e && e.message) || '삭제 실패') + ' — python run_app.py로 실행 후 http://127.0.0.1:8501 접속'; layoutMsgEl.style.color = '#f97316'; }}
+              if (layoutMsgEl) {{ layoutMsgEl.textContent = ((e && e.message) || 'Deletion failed') + ' — python run_app.pyAfter running with http://127.0.0.1:8501 connection'; layoutMsgEl.style.color = '#f97316'; }}
             }});
           }});
         }});
       }}
-      // 페이지 로드 시 API 연결 확인 (405/404 시 안내 배너 표시)
+      // On page load API Check connection (405/404 City information banner display)
       fetch((getLayoutApiBase() || '') + '/api/list-layouts').then(function(r) {{
         if (r.ok) return;
         var banner = document.getElementById('api-warning-banner');
@@ -6036,15 +6606,15 @@ html = f"""
     }})();
 
     document.getElementById('btnTerminalDraw').addEventListener('click', function() {{
-      // Draw를 시작/종료할 때는 기존 객체 선택 해제
+      // Drawstart/Deselect existing objects when exiting
       state.selectedObject = null;
       if (state.terminalDrawingId) {{
         const t = state.terminals.find(x => x.id === state.terminalDrawingId);
         if (t && !t.closed && t.vertices.length >= 3) {{
           t.closed = true;
-          // 완료 시 Taxiway 중심선과의 겹침 검사
+          // Upon completion Taxiway Overlap check with center line
           if (terminalOverlapsAnyTaxiway(t)) {{
-            alert('이 Apron/Terminal은 Taxiway 중심선과 겹칩니다. 다른 위치에 배치해주세요.');
+            alert('this Apron/Terminalsilver Taxiway Overlaps the center line. Please place it in a different location.');
             state.terminals = state.terminals.filter(term => term.id !== t.id);
           }}
         }}
@@ -6073,14 +6643,14 @@ html = f"""
     }});
 
     document.getElementById('btnTaxiwayDraw').addEventListener('click', function() {{
-      // Draw를 시작/종료할 때는 기존 객체 선택 해제
+      // Drawstart/Deselect existing objects when exiting
       state.selectedObject = null;
       if (state.taxiwayDrawingId) {{
         const tw = state.taxiways.find(x => x.id === state.taxiwayDrawingId);
         if (tw && tw.vertices.length >= 2) {{
-          // 완료 시 터미널과의 겹침 검사
+          // Check for overlap with terminal upon completion
           if (taxiwayOverlapsAnyTerminal(tw)) {{
-            alert('이 Taxiway는 Terminal과 겹칩니다. 다른 경로로 그려주세요.');
+            alert('this TaxiwayIs TerminalIt overlaps with . Please draw a different path.');
             pushUndo();
             state.taxiways = state.taxiways.filter(t => t.id !== tw.id);
           }}
@@ -6121,12 +6691,17 @@ html = f"""
             return (isFinite(mv) && mv > 0) ? Math.max(1, Math.min(150, mv)) : 15;
           }})()
         : undefined;
-      const taxiway = {{ id: id(), name: nameBase, vertices: [], width: widthVal, direction: modeVal, pathType, maxExitVelocity, minExitVelocity, minArrVelocity, avgMoveVelocity: (function() {{
+      const lineupEl = document.getElementById('runwayLineupDistM');
+      const lineupDistM = (pathType === 'runway' && lineupEl)
+        ? (function() {{ const x = Number(lineupEl.value); return (isFinite(x) && x >= 0) ? x : 0; }})()
+        : undefined;
+      const taxiway = {{ id: id(), name: nameBase, vertices: [], width: widthVal, direction: modeVal, pathType, maxExitVelocity, minExitVelocity, minArrVelocity, lineupDistM, avgMoveVelocity: (function() {{
         const el = document.getElementById('taxiwayAvgMoveVelocity');
         const v = el ? Number(el.value) : 10;
         return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
       }})() }};
       if (pathType !== 'runway') delete taxiway.minArrVelocity;
+      if (pathType !== 'runway') delete taxiway.lineupDistM;
       if (pathType !== 'runway_exit') {{ delete taxiway.maxExitVelocity; delete taxiway.minExitVelocity; }}
       pushUndo();
       state.taxiways.push(taxiway);
@@ -6235,7 +6810,7 @@ html = f"""
             details:
               'Category: ' + (st.category || '—') +
               '<br>Cell: (' + st.col + ',' + st.row + ')' +
-              '<br>가용 터미널: ' + allowedLabel
+              '<br>available terminals: ' + allowedLabel
           }});
         }});
       }} else if (isPathLayoutMode(mode)) {{
@@ -6286,6 +6861,7 @@ html = f"""
               (maxExit != null ? '<br>Max exit velocity: ' + maxExit + ' m/s' : '') +
               (minExit != null ? '<br>Min exit velocity: ' + minExit + ' m/s' : '') +
               (minArrDisplay != null ? '<br>Min arr velocity: ' + minArrDisplay + ' m/s' : '') +
+              (tw.pathType === 'runway' ? '<br>Line up: ' + getEffectiveRunwayLineupDistM(tw) + ' m (start→end)' : '') +
               (tw.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
               '<br>Start point: ' + startStr +
               '<br>End point: ' + endStr
@@ -6406,7 +6982,7 @@ html = f"""
             '<br>Name: ' + (o.name || '—') +
             '<br>Category: ' + (o.category || '—') +
             '<br>Cell: (' + o.col + ',' + o.row + ')' +
-            '<br>가용한 터미널: ' + allowedLabel;
+            '<br>available terminals: ' + allowedLabel;
         }}
         else if (state.selectedObject.type === 'taxiway') {{
           const dirVal = getTaxiwayDirection(o);
@@ -6419,6 +6995,7 @@ html = f"""
           const minArr = (o.pathType === 'runway')
             ? ((typeof o.minArrVelocity === 'number' && isFinite(o.minArrVelocity) && o.minArrVelocity > 0) ? Math.max(1, Math.min(150, o.minArrVelocity)) : 15)
             : null;
+          const lineupStr = (o.pathType === 'runway') ? (String(getEffectiveRunwayLineupDistM(o)) + ' m (from start toward end)') : '';
           const maxEx = (o.pathType === 'runway_exit' && typeof o.maxExitVelocity === 'number' && isFinite(o.maxExitVelocity) && o.maxExitVelocity > 0) ? o.maxExitVelocity : null;
           const minEx = (o.pathType === 'runway_exit' && typeof o.minExitVelocity === 'number' && isFinite(o.minExitVelocity) && o.minExitVelocity > 0) ? o.minExitVelocity : null;
           objectInfoEl.innerHTML = '<strong>' + heading + '</strong><br>Name: ' + (o.name || '—') +
@@ -6426,6 +7003,7 @@ html = f"""
             '<br>Width: ' + (o.width != null ? o.width : 23) + ' m' +
             (o.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
             (minArr != null ? '<br>Min arr velocity: ' + minArr + ' m/s' : '') +
+            (o.pathType === 'runway' ? '<br>Line up: ' + lineupStr : '') +
             (maxEx != null ? '<br>Max exit velocity: ' + maxEx + ' m/s' : '') +
             (minEx != null ? '<br>Min exit velocity: ' + minEx + ' m/s' : '') +
             '<br>Points: ' + (o.vertices ? o.vertices.length : 0) +
@@ -6491,14 +7069,14 @@ html = f"""
       canvas.style.width = w + 'px';
       canvas.style.height = h + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      try {{ draw(); }} catch(e) {{}}
+      safeDraw();
     }}
 
     function drawGrid() {{
       const w = canvas.width / dpr, h = canvas.height / dpr;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = '#303030';
+      ctx.fillStyle = GRID_VIEW_BG;
       ctx.fillRect(0, 0, w, h);
       ctx.restore();
       ctx.save();
@@ -6509,7 +7087,7 @@ html = f"""
       const GRID_MAJOR = 10;
       for (let c = 0; c <= GRID_COLS; c++) {{
         const x = c * CELL_SIZE;
-        ctx.strokeStyle = (c % GRID_MAJOR === 0) ? 'rgba(255,255,255,0.85)' : 'rgba(140,140,140,0.18)';
+        ctx.strokeStyle = (c % GRID_MAJOR === 0) ? 'rgba(255,255,255,0.35)' : 'rgba(140,140,140,0.2)';
         ctx.lineWidth = (c % GRID_MAJOR === 0) ? 1.2 : 1;
         ctx.beginPath();
         ctx.moveTo(x, 0);
@@ -6518,7 +7096,7 @@ html = f"""
       }}
       for (let r = 0; r <= GRID_ROWS; r++) {{
         const y = r * CELL_SIZE;
-        ctx.strokeStyle = (r % GRID_MAJOR === 0) ? 'rgba(255,255,255,0.85)' : 'rgba(140,140,140,0.18)';
+        ctx.strokeStyle = (r % GRID_MAJOR === 0) ? 'rgba(255,255,255,0.35)' : 'rgba(140,140,140,0.2)';
         ctx.lineWidth = (r % GRID_MAJOR === 0) ? 1.2 : 1;
         ctx.beginPath();
         ctx.moveTo(0, y);
@@ -6557,21 +7135,29 @@ html = f"""
         if (term.vertices.length === 0) return;
         const selected = state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.id === term.id;
         ctx.lineWidth = selected ? 3 : 2;
-        ctx.strokeStyle = selected ? '#60a5fa' : '#38bdf8';
-        ctx.fillStyle = selected ? 'rgba(56,189,248,0.2)' : 'rgba(56,189,248,0.12)';
+        ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : (_canvas2dStyle.terminalStrokeDefault || '#38bdf8');
+        ctx.fillStyle = selected ? c2dObjectSelectedFill() : (_canvas2dStyle.terminalFillDefault || 'rgba(56,189,248,0.12)');
         ctx.beginPath();
         for (let i = 0; i < term.vertices.length; i++) {{
           const [x,y] = cellToPixel(term.vertices[i].col, term.vertices[i].row);
           if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
         }}
         if (term.closed) {{ ctx.closePath(); ctx.fill(); }}
+        if (selected) {{
+          ctx.save();
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }}
         ctx.stroke();
-        // 선택된 터미널은 점선 컨투어로 한 번 더 강조
+        if (selected) ctx.restore();
+        // Selected terminals are highlighted once more with a dotted contour
         if (selected) {{
           ctx.save();
           ctx.setLineDash([8, 6]);
           ctx.lineWidth = 2;
-          ctx.strokeStyle = 'rgba(248,250,252,0.85)';
+          ctx.strokeStyle = c2dObjectSelectedDashStroke();
           ctx.beginPath();
           for (let i = 0; i < term.vertices.length; i++) {{
             const [x,y] = cellToPixel(term.vertices[i].col, term.vertices[i].row);
@@ -6581,7 +7167,7 @@ html = f"""
           ctx.stroke();
           ctx.restore();
         }}
-        // 터미널 이름을 터미널 중심에 표시 (height 제거)
+        // Show terminal name centered in terminal (height eliminate)
         if (term.closed && term.vertices.length > 0) {{
           let cx = 0, cy = 0;
           term.vertices.forEach(v => {{
@@ -6591,7 +7177,7 @@ html = f"""
           cx /= term.vertices.length;
           cy /= term.vertices.length;
           const label = term.name || term.id || 'Terminal';
-          ctx.fillStyle = 'rgba(56,189,248,0.95)';
+          ctx.fillStyle = _canvas2dStyle.terminalLabelFill || 'rgba(56,189,248,0.95)';
           ctx.font = '12px system-ui';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
@@ -6618,16 +7204,22 @@ html = f"""
         if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) return;
         const endSize = getStandSizeMeters(pbb.category || 'C');
         const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
-        ctx.strokeStyle = sel ? '#fb923c' : '#f97316';
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#f97316';
         ctx.lineWidth = sel ? 4 : 3;
+        if (sel) {{
+          ctx.save();
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+        }}
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
+        if (sel) ctx.restore();
         const ex = x2, ey = y2;
         const angle = Math.atan2(y2 - y1, x2 - x1);
-        ctx.fillStyle = sel ? 'rgba(34,197,94,0.35)' : 'rgba(22,163,74,0.18)';
-        ctx.strokeStyle = sel ? '#4ade80' : '#22c55e';
+        ctx.fillStyle = sel ? c2dObjectSelectedFill() : 'rgba(22,163,74,0.18)';
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#22c55e';
         ctx.lineWidth = sel ? 2.5 : 1.5;
         ctx.save();
         ctx.translate(ex, ey);
@@ -6635,18 +7227,24 @@ html = f"""
         ctx.beginPath();
         ctx.rect(-endSize/2, -endSize/2, endSize, endSize);
         ctx.fill();
+        if (sel) {{
+          ctx.save();
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+        }}
         ctx.stroke();
+        if (sel) ctx.restore();
         if (sel) {{
           ctx.save();
           ctx.setLineDash([6, 4]);
           ctx.lineWidth = 2;
-          ctx.strokeStyle = 'rgba(248,250,252,0.9)';
+          ctx.strokeStyle = c2dObjectSelectedDashStroke();
           ctx.beginPath();
           ctx.rect(-endSize/2, -endSize/2, endSize, endSize);
           ctx.stroke();
           ctx.restore();
         }}
-        // 주기장 라벨: "Category / Name" 형식 (이름 없으면 번호)
+        // Parking lot label: "Category / Name" form (If there is no name, there is a number)
         const nameRaw = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : String(state.pbbStands.indexOf(pbb) + 1);
         const label = (pbb.category || 'C') + ' / ' + nameRaw;
         const pad = 3;
@@ -6672,24 +7270,30 @@ html = f"""
         const [cx,cy] = cellToPixel(st.col, st.row);
         const size = getStandSizeMeters(st.category || 'C');
         const sel = state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.id === st.id;
-        ctx.fillStyle = sel ? 'rgba(34,197,94,0.35)' : 'rgba(22,163,74,0.18)';
-        ctx.strokeStyle = sel ? '#4ade80' : '#22c55e';
+        ctx.fillStyle = sel ? c2dObjectSelectedFill() : 'rgba(22,163,74,0.18)';
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#22c55e';
         ctx.lineWidth = sel ? 2.5 : 1.5;
         ctx.beginPath();
         ctx.rect(cx-size/2, cy-size/2, size, size);
         ctx.fill();
+        if (sel) {{
+          ctx.save();
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+        }}
         ctx.stroke();
+        if (sel) ctx.restore();
         if (sel) {{
           ctx.save();
           ctx.setLineDash([6, 4]);
           ctx.lineWidth = 2;
-          ctx.strokeStyle = 'rgba(248,250,252,0.9)';
+          ctx.strokeStyle = c2dObjectSelectedDashStroke();
           ctx.beginPath();
           ctx.rect(cx-size/2, cy-size/2, size, size);
           ctx.stroke();
           ctx.restore();
         }}
-        // Apron Taxiway 링크용 기준점: Remote stand 중심에 작은 점 표시
+        // Apron Taxiway Reference point for link: Remote stand Show small dot in center
         if (mode === 'apronTaxiway') {{
           ctx.save();
           ctx.fillStyle = sel ? '#f97316' : '#e5e7eb';
@@ -6698,7 +7302,7 @@ html = f"""
           ctx.fill();
           ctx.restore();
         }}
-        // Remote stand 라벨: "Category / Name" 형식 (이름 없으면 기본 Rxxx) - 좌상단 배치
+        // Remote stand label: "Category / Name" form (Default if no name Rxxx) - Top left placement
         const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
         const label = (st.category || 'C') + ' / ' + nameRaw;
         ctx.fillStyle = '#bbf7d0';
@@ -6716,7 +7320,7 @@ html = f"""
       if (!panel) return;
       const runways = (state.taxiways || []).filter(tw => tw.pathType === 'runway');
       if (!runways.length) {{
-        panel.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No runway paths. Layout Mode <strong>Runway</strong>로 활주로 폴리라인을 먼저 그리세요.</div>';
+        panel.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No runway paths. Layout Mode <strong>Runway</strong>Draw the runway polyline first with.</div>';
         return;
       }}
       if (!state.activeRwySepId || !runways.some(r => r.id === state.activeRwySepId)) {{
@@ -6741,13 +7345,13 @@ html = f"""
       }});
       html += '</div></div>';
 
-      // 기본 탭 이름을 'No Name'으로 두고, 별도 타임라인 그래프는 제공하지 않는다.
+      // default tab name 'No Name', and no separate timeline graph is provided..
       const activeSub = 'noname';
       html += '<div class="layout-save-load-tabs" style="margin-top:8px;">';
       html += '<button type="button" class="layout-save-load-tab rwysep-subtab-btn active" data-subtab="noname">No Name</button>';
       html += '</div>';
 
-      // --- Subtab: No Name (입력 폼 유지) ---
+      // --- Subtab: No Name (Maintain input form) ---
       html += '<div id="rwysep-subtab-input" style="">';
       html += '<div class="rwysep-block">';
       html += '<div class="rwysep-label">Standard &amp; Mode</div>';
@@ -6784,12 +7388,12 @@ html = f"""
         html += '</div>';
       }}
 
-      // ROT: Arr→Dep 조합에서만 표시
+      // ROT: Arr→Dep Shown only in combination
       if (seq === 'ARR→DEP') {{
         html += '<div class="rwysep-block">';
         html += '<div class="rwysep-label">ROT (Runway Occupancy Time, sec)</div>';
 
-        // 색상 범례 + 채워진 ROT 개수
+        // color legend + filled ROT count
         const totalRot = cats.length;
         let filledRot = 0;
         cats.forEach(c => {{
@@ -6901,7 +7505,7 @@ html = f"""
       html += '<div id="rwysep-subtab-timeline" style="' + (activeSub === 'timeline' ? '' : 'display:none;') + '">';
       html += '<div class="rwysep-block" style="margin-top:8px;">';
       html += '<div class="rwysep-label">Separation Timeline (Reg × Time)</div>';
-      // 최대 약 12개 Reg 행만 한 화면에 보이고, 그 이상은 세로 스크롤
+      // Up to about 12 Reg Only one row appears on the screen, anything beyond that scrolls vertically
       html += '<div id="rwySepTimeWrap" style="width:100%;background:#020617;border-radius:8px;border:1px solid #1f2937;position:relative;overflow-x:auto;overflow-y:auto;margin-top:4px;max-height:calc(40px * 12 + 80px);"></div>';
       html += '<div style="font-size:9px;color:#9ca3af;margin-top:4px;">';
       html += 'Y: Reg Number · X: Time · Bars = S-series (SLDT–STOT) · Lines = E-series (ELDT–ETOT)';
@@ -6910,15 +7514,22 @@ html = f"""
 
       panel.innerHTML = html;
 
-      // draw timeline only when timeline subtab is visible (Apron Gantt 스타일, Reg × Time)
+      // draw timeline only when timeline subtab is visible (Apron Gantt style, Reg × Time)
       function drawRwySeparationTimeline() {{
         if (state.activeRwySepSubtab && state.activeRwySepSubtab !== 'timeline') return;
         const wrap = panel.querySelector('#rwySepTimeWrap');
         if (!wrap) return;
 
+        const _prepRwy = state.flights.slice();
+        _prepRwy.forEach(ff => {{
+          if (typeof getPathForFlight === 'function') getPathForFlight(ff);
+          if (typeof getPathForFlightDeparture === 'function') getPathForFlightDeparture(ff);
+          if (ff.noWayArr || ff.noWayDep) ff.timeline = null;
+        }});
+        if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(_prepRwy, false);
         if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
         const allData = typeof computeSeparationAdjustedTimes === 'function' ? computeSeparationAdjustedTimes() : null;
-        // Runway 분리(E계열) 재계산 후 Flight Schedule 표도 최신 ELDT/ETOT를 반영하도록 즉시 재렌더
+        // Runway separation(Eline) After recalculation Flight Schedule The table is also up to date ELDT/ETOTImmediately re-render to reflect
         if (typeof renderFlightList === 'function') renderFlightList();
         const data = allData && active && active.id != null ? allData[active.id] : null;
         if (!data || !data.events || !data.events.length) {{
@@ -6926,7 +7537,7 @@ html = f"""
           return;
         }}
 
-        // Flight 별로 SLDT/STOT/ELDT/ETOT 모으기 (한 행 = 한 Reg)
+        // Flight not really SLDT/STOT/ELDT/ETOT collect (line = one Reg)
         const byFlight = new Map();
         data.events.forEach(ev => {{
           const f = ev.flight;
@@ -6963,7 +7574,7 @@ html = f"""
           return;
         }}
 
-        // 시간축: min(SLDT) - 10분, max(ETOT) + 10분 (Apron과 유사)
+        // time axis: min(SLDT) - pad, max(ETOT) + pad (algorithm.timeAxis.runwaySepTimelinePadMin)
         let minT0 = Infinity;
         let maxT0 = -Infinity;
         lanes.forEach(ln => {{
@@ -6974,8 +7585,8 @@ html = f"""
           minT0 = data.minT;
           maxT0 = data.maxT;
         }}
-        let baseMinT = Math.max(0, minT0 - 10);
-        let baseMaxT = maxT0 + 10;
+        let baseMinT = Math.max(0, minT0 - RWY_SEP_TIMELINE_PAD_MIN);
+        let baseMaxT = maxT0 + RWY_SEP_TIMELINE_PAD_MIN;
         if (baseMaxT <= baseMinT) baseMaxT = baseMinT + 60;
         const baseSpan = baseMaxT - baseMinT;
         const zoom = (state.rwySepTimeZoom && state.rwySepTimeZoom > 1) ? state.rwySepTimeZoom : 1;
@@ -6989,9 +7600,9 @@ html = f"""
           return ta - tb;
         }});
 
-        // 시간축 눈금 위치 (Runway Timeline 전체 공통) - 어떤 화면에서도 최대 6개까지만 표시
+        // Time axis scale position (Runway Timeline common to all) - Only display up to 6 items on any screen
         const tickPositions = [];
-        const axisStep = span <= 60 ? 10 : (span <= 240 ? 30 : 60);
+        const axisStep = span <= 60 ? TICK_STEP_SPAN_LE60 : (span <= 240 ? TICK_STEP_SPAN_LE240 : TICK_STEP_ELSE);
         let tt = Math.floor(minT / axisStep) * axisStep;
         while (tt <= maxT) {{
           const leftPct = ((tt - baseMinT) / baseSpan) * 100 * zoom;
@@ -6999,8 +7610,8 @@ html = f"""
           tickPositions.push({{ leftPct, label }});
           tt += axisStep;
         }}
-        if (tickPositions.length > 6) {{
-          const stepTicks = Math.ceil(tickPositions.length / 6);
+        if (tickPositions.length > MAX_TICKS_SHOWN) {{
+          const stepTicks = Math.ceil(tickPositions.length / MAX_TICKS_SHOWN);
           const reduced = [];
           for (let i = 0; i < tickPositions.length; i += stepTicks) {{
             reduced.push(tickPositions[i]);
@@ -7011,7 +7622,7 @@ html = f"""
           Array.prototype.push.apply(tickPositions, reduced);
         }}
 
-        // 상단 S/E 삼각형 타임라인용 데이터
+        // top S/E Data for triangle timeline
         const sMarkers = [];
         const eMarkers = [];
 
@@ -7031,22 +7642,22 @@ html = f"""
             const leftPct = ((s1 - baseMinT) / baseSpan) * 100 * zoom;
             const widthPct = Math.max(1, ((s2 - s1) / baseSpan) * 100 * zoom);
             const rightPct = leftPct + widthPct;
-            // 상단 S계열 삼각형용 마커(시작/종료)
+            // top SMarkers for Series Triangles(start/end)
             sMarkers.push({{ t: sStart, leftPct, type: 'start' }});
             sMarkers.push({{ t: sEnd, leftPct: rightPct, type: 'end' }});
-            // S-series: 얇은 파란 바 + 시작/종료 삼각형 (위쪽에 배치)
+            // S-series: thin blue bar + start/exit triangle (placed at the top)
             blocks +=
               '<div class="rwysep-line-s" style="' +
                 'left:' + leftPct + '%;' +
                 'width:' + widthPct + '%;' +
               '"></div>' +
-              // 시작점: 아래 방향 삼각형 (바를 향해)
+              // Starting point: downward triangle (towards the bar)
               '<div class="rwysep-tri" style="' +
                 'top:20%;' +
                 'left:' + leftPct + '%;' +
                 'border-top:6px solid ' + GANTT_COLORS.S_SERIES + ';' +
               '"></div>' +
-              // 종료점: 위 방향 삼각형
+              // End point: upward triangle
               '<div class="rwysep-tri" style="' +
                 'top:20%;' +
                 'left:' + rightPct + '%;' +
@@ -7060,22 +7671,22 @@ html = f"""
             const leftPct2 = ((e1 - baseMinT) / baseSpan) * 100 * zoom;
             const widthPct2 = Math.max(0.5, ((e2 - e1) / baseSpan) * 100 * zoom);
             const rightPct2 = leftPct2 + widthPct2;
-            // 상단 E계열 삼각형용 마커(시작/종료)
+            // top EMarkers for Series Triangles(start/end)
             eMarkers.push({{ t: eStart, leftPct: leftPct2, type: 'start' }});
             eMarkers.push({{ t: eEnd, leftPct: rightPct2, type: 'end' }});
-            // E-series: 얇은 주황 바 + 시작/종료 삼각형 (아래쪽에 배치)
+            // E-series: thin orange bar + start/exit triangle (placed at the bottom)
             blocks +=
               '<div class="rwysep-line-e" style="' +
                 'left:' + leftPct2 + '%;' +
                 'width:' + widthPct2 + '%;' +
               '"></div>' +
-              // 시작점: 아래 방향 삼각형
+              // Starting point: downward triangle
               '<div class="rwysep-tri" style="' +
                 'top:54%;' +
                 'left:' + leftPct2 + '%;' +
                 'border-top:6px solid ' + GANTT_COLORS.E_SERIES + ';' +
               '"></div>' +
-              // 종료점: 위 방향 삼각형
+              // End point: upward triangle
               '<div class="rwysep-tri" style="' +
                 'top:54%;' +
                 'left:' + rightPct2 + '%;' +
@@ -7090,13 +7701,13 @@ html = f"""
           rows.push(
             '<div class="alloc-row">' +
               '<div class="alloc-row-label">' + escapeHtml(reg) + '</div>' +
-              // Runway Separation Timeline에서는 각 행 배경(트랙 배경색/테두리)을 제거
+              // Runway Separation TimelineIn each row background(track background color/outline)remove
               '<div class="alloc-row-track" style="background:transparent;border:none;">' + gridLines + blocks + '</div>' +
             '</div>'
           );
         }});
 
-        // 상단 S/E 삼각형 라인 HTML (시간순)
+        // top S/E triangle lines HTML (chronological order)
         sMarkers.sort((a, b) => a.t - b.t);
         eMarkers.sort((a, b) => a.t - b.t);
 
@@ -7130,23 +7741,23 @@ html = f"""
             '<div class="rwysep-head-track">' + eHeadMarks + '</div>' +
           '</div>';
 
-        // Time axis overlay (Apron과 동일한 스타일, tickPositions 재사용)
+        // Time axis overlay (Apronsame style as, tickPositions reuse)
         const axisTicks = tickPositions.map(tp =>
           '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
             '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
           '</div>'
         );
-        // Runway Separation Timeline에서도 Apron과 동일하게 하단 시간축 오버레이를 사용
+        // Runway Separation TimelineEven in ApronUse the bottom time base overlay the same as
         const axisHtml =
           '<div class="alloc-time-axis-overlay">' +
             '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
           '</div>';
 
-        // 많은 Reg가 있을 경우 세로 스크롤로 보이도록, 헤더는 그대로 두고 행들을 래핑
+        // many RegIf present, wrap the rows while leaving the header intact to display vertical scrolling.
         const rowsHtml = '<div class="rwysep-rows">' + rows.join('') + '</div>';
         wrap.innerHTML = headHtml + rowsHtml + axisHtml;
 
-        // Shift + 마우스 휠로 시간축 줌 (Runway Timeline)
+        // Shift + Zoom on the time axis with the mouse wheel (Runway Timeline)
         if (!wrap._rwySepZoomBound) {{
           wrap._rwySepZoomBound = true;
           wrap.addEventListener('wheel', function(e) {{
@@ -7162,12 +7773,12 @@ html = f"""
           }}, {{ passive: false }});
         }}
 
-        // 수평 스크롤 시에도 현재 시간축/배경이 다시 계산되도록 재랜더링
+        // 수평 스크롤 cityto도 현재 time axis/Re-render so the background is recalculated
         if (!wrap._rwySepScrollBound) {{
           wrap._rwySepScrollBound = true;
           wrap.addEventListener('scroll', function() {{
             if (wrap._rwySepScrollRecalc) return;
-            // 현재 스크롤 위치를 보존한 채로 타임라인 전체를 다시 그린다.
+            // Redraw the entire timeline while preserving the current scroll position.
             const currentLeft = wrap.scrollLeft;
             wrap._rwySepScrollRecalc = true;
             drawRwySeparationTimeline();
@@ -7281,14 +7892,17 @@ html = f"""
         const widthDefault = isRunwayPath ? 60 : 15;
         const width = tw.width != null ? tw.width : widthDefault;
         const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
-        if (isRunwayPath || isRunwayExit) {{
-          // Runway 및 Runway Taxiway: 한 톤 더 어두운 회색 계열
-          ctx.strokeStyle = sel ? '#9ca3af' : '#4b5563';
-          ctx.fillStyle = sel ? 'rgba(107,114,128,0.35)' : 'rgba(55,65,81,0.25)';
+        if (sel) {{
+          ctx.strokeStyle = c2dObjectSelectedStroke();
+          ctx.fillStyle = c2dObjectSelectedFill();
+        }} else if (isRunwayPath || isRunwayExit) {{
+          // Runway and Runway Taxiway: One tone darker gray
+          ctx.strokeStyle = '#374151';
+          ctx.fillStyle = 'rgba(31,41,55,0.32)';
         }} else {{
-          // 일반 Taxiway: 더 밝은 노란 계열 (화살표 색상은 별도 유지)
-          ctx.strokeStyle = sel ? '#fde047' : (drawing ? '#facc15' : '#fbbf24');
-          ctx.fillStyle = sel ? 'rgba(254,224,71,0.28)' : 'rgba(251,191,36,0.18)';
+          // common Taxiway: brighter yellow color (Arrow colors remain separate)
+          ctx.strokeStyle = drawing ? '#facc15' : '#fbbf24';
+          ctx.fillStyle = 'rgba(251,191,36,0.18)';
         }}
         ctx.lineWidth = width;
         ctx.lineCap = 'round';
@@ -7298,11 +7912,17 @@ html = f"""
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }}
-        if (tw.vertices.length >= 2) ctx.stroke();
+        if (tw.vertices.length >= 2) {{
+          if (sel) {{
+            ctx.save();
+            ctx.shadowColor = c2dObjectSelectedGlow();
+            ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+            ctx.stroke();
+            ctx.restore();
+          }} else ctx.stroke();
+        }}
         ctx.lineWidth = 1.5;
-        ctx.strokeStyle = (isRunwayPath || isRunwayExit)
-          ? (sel ? '#e5e7eb' : '#6b7280')
-          : (sel ? '#fbbf24' : '#facc15');
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : ((isRunwayPath || isRunwayExit) ? '#52525b' : '#facc15');
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {{
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
@@ -7313,7 +7933,7 @@ html = f"""
           ctx.save();
           ctx.setLineDash([8, 6]);
           ctx.lineWidth = 3;
-          ctx.strokeStyle = 'rgba(248,250,252,0.9)';
+          ctx.strokeStyle = c2dObjectSelectedDashStroke();
           ctx.beginPath();
           for (let i = 0; i < tw.vertices.length; i++) {{
             const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
@@ -7328,7 +7948,7 @@ html = f"""
           const totalLen = pts.reduce((acc, p, i) => acc + (i > 0 ? Math.hypot(p[0]-pts[i-1][0], p[1]-pts[i-1][1]) : 0), 0);
           const arrowSpacing = Math.max(22, Math.min(42, totalLen / 10));
           const numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
-          // 화살표: 10% 축소, 색상 #f5930b
+          // Arrow: 10% zoom out, color #f5930b
           const arrLen = CELL_SIZE * 0.54;
           ctx.fillStyle = '#f5930b';
           for (let k = 1; k <= numArrows; k++) {{
@@ -7356,6 +7976,30 @@ html = f"""
             ctx.fill();
           }}
         }}
+        if (isRunwayPath && tw.vertices.length >= 2) {{
+          const rp = getRunwayPath(tw.id);
+          if (rp && rp.pts.length >= 2) {{
+            const lenPx = runwayPolylineLengthPx(rp.pts);
+            const d = Math.min(Math.max(0, getEffectiveRunwayLineupDistM(tw)), lenPx);
+            const lp = getRunwayPointAtDistance(tw.id, d);
+            if (lp) {{
+              ctx.save();
+              ctx.fillStyle = '#dc2626';
+              ctx.strokeStyle = '#450a0a';
+              ctx.lineWidth = 1.2;
+              ctx.beginPath();
+              ctx.arc(lp[0], lp[1], 5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = '#fecaca';
+              ctx.font = 'bold 11px system-ui, sans-serif';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'bottom';
+              ctx.fillText('Line up', lp[0] + 7, lp[1] - 4);
+              ctx.restore();
+            }}
+          }}
+        }}
         if ((drawing || sel) && tw.vertices.length >= 1) {{
           tw.vertices.forEach((v, i) => {{
             const [x, y] = cellToPixel(v.col, v.row);
@@ -7378,7 +8022,7 @@ html = f"""
               ctx.arc(x, y, sel ? 5 : 4, 0, Math.PI*2);
               ctx.fill();
               if (sel) {{
-                ctx.strokeStyle = '#ca8a04';
+                ctx.strokeStyle = c2dObjectSelectedStroke();
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
               }}
@@ -7415,7 +8059,9 @@ html = f"""
           ctx.save();
           ctx.setLineDash([4, 3]);
           ctx.lineWidth = 4;
-          ctx.strokeStyle = 'rgba(248,250,252,0.95)';
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+          ctx.strokeStyle = c2dObjectSelectedDashStroke();
           ctx.beginPath();
           ctx.moveTo(ax, ay);
           ctx.lineTo(bx, by);
@@ -7499,6 +8145,7 @@ html = f"""
       ctx.restore();
     }}
 
+    function safeDraw() {{ try {{ draw(); }} catch(e) {{}} }}
     function draw() {{
       if (!ctx || !canvas) return;
       drawGrid();
@@ -7526,14 +8173,9 @@ html = f"""
       if (!state.selectedObject) return;
       const type = state.selectedObject.type;
       const id = state.selectedObject.id;
+      if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight') return;
       pushUndo();
-      if (type === 'terminal') state.terminals = state.terminals.filter(t => t.id !== id);
-      else if (type === 'pbb') state.pbbStands = state.pbbStands.filter(p => p.id !== id);
-      else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
-      else if (type === 'taxiway') state.taxiways = state.taxiways.filter(tw => tw.id !== id);
-      else if (type === 'apronLink') state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
-      else if (type === 'flight') state.flights = state.flights.filter(f => f.id !== id);
-      else return;
+      removeLayoutObjectFromState(type, id);
       state.selectedObject = null;
       if (type === 'terminal' && state.currentTerminalId === id) {{
         state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
@@ -7546,7 +8188,6 @@ html = f"""
       ev.preventDefault();
     }});
 
-    const DRAG_THRESH = 5;
     container.addEventListener('mousedown', function(ev) {{
       if (ev.button !== 0) return;
       const rect = canvas.getBoundingClientRect();
@@ -7591,13 +8232,14 @@ html = f"""
       const prev = state.hoverCell;
       state.hoverCell = {{ col, row }};
       const hoverChanged = !prev || prev.col !== col || prev.row !== row;
+      let drewThisMove = false;
       if (state.dragVertex) {{
         const term = state.terminals.find(t => t.id === state.dragVertex.terminalId);
         if (term && term.vertices[state.dragVertex.index]) {{
           const v = term.vertices[state.dragVertex.index];
           v.col = col;
           v.row = row;
-          draw();
+          safeDraw(); drewThisMove = true;
         }}
         return;
       }}
@@ -7607,7 +8249,7 @@ html = f"""
           const v = tw.vertices[state.dragTaxiwayVertex.index];
           v.col = col;
           v.row = row;
-          draw();
+          safeDraw(); drewThisMove = true;
           if (scene3d) update3DScene();
         }}
         return;
@@ -7619,7 +8261,7 @@ html = f"""
         if (state.isPanning) {{
           state.panX = state.dragStart.panX + dx;
           state.panY = state.dragStart.panY + dy;
-          draw();
+          safeDraw(); drewThisMove = true;
         }}
       }}
       const mode = settingModeSelect.value;
@@ -7630,7 +8272,7 @@ html = f"""
         const bounds = getStandBoundsRect(cx, cy, size);
         const overlap = standOverlapsExisting(bounds);
         state.previewRemote = {{ col, row, overlap }};
-        draw();
+        safeDraw(); drewThisMove = true;
       }} else if (!state.isPanning && !state.dragVertex && mode === 'pbb' && state.pbbDrawing) {{
         let bestEdge = null, bestD2 = Infinity;
         state.terminals.forEach(t => {{
@@ -7659,18 +8301,20 @@ html = f"""
           const standSize = getStandSizeMeters(category);
           const minLen = standSize / 2 + 3;
           const lenCells = parseInt(document.getElementById('pbbLength').value || '2', 10);
-          const lenPx = Math.max(lenCells * CELL_SIZE * 0.9, minLen);
+          const lenPx = Math.max(lenCells * CELL_SIZE * PBB_PREVIEW_LEN_CF, minLen);
           const px2 = ex + nx * lenPx, py2 = ey + ny * lenPx;
           const preview = {{ x1: ex, y1: ey, x2: px2, y2: py2, category }};
           const overlap = pbbStandOverlapsExisting(preview);
           state.previewPbb = {{ x1: ex, y1: ey, x2: px2, y2: py2, category: preview.category, overlap }};
-          draw();
+          safeDraw(); drewThisMove = true;
         }} else {{
-          if (state.previewPbb) {{ state.previewPbb = null; draw(); }}
+          if (state.previewPbb) {{ state.previewPbb = null; safeDraw(); drewThisMove = true; }}
         }}
       }} else {{
-        if (state.previewRemote) {{ state.previewRemote = null; draw(); }}
-        if (state.previewPbb) {{ state.previewPbb = null; draw(); }}
+        let clearedPreview = false;
+        if (state.previewRemote) {{ state.previewRemote = null; clearedPreview = true; }}
+        if (state.previewPbb) {{ state.previewPbb = null; clearedPreview = true; }}
+        if (clearedPreview) {{ safeDraw(); drewThisMove = true; }}
       }}
       // Object name tooltip on hover (Grid); flight tooltip when simulation result and near aircraft
       if (flightTooltip && !state.isPanning) {{
@@ -7683,7 +8327,7 @@ html = f"""
           flightTooltip.style.top = (ev.clientY + 12) + 'px';
         }} else if (state.hasSimulationResult) {{
           let bestFlight = null;
-          let bestD2 = (CELL_SIZE * 1.2) ** 2;
+          let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
           const tSec = state.simTimeSec;
           state.flights.forEach(f => {{
             const pose = getFlightPoseAtTime(f, tSec);
@@ -7705,7 +8349,7 @@ html = f"""
           flightTooltip.style.display = 'none';
         }}
       }}
-      if (hoverChanged) try {{ draw(); }} catch(e) {{}}
+      if (hoverChanged && !drewThisMove) {{ safeDraw(); drewThisMove = true; }}
     }});
     container.addEventListener('mouseleave', function() {{
       state.dragStart = null;
@@ -7713,10 +8357,10 @@ html = f"""
       state.hoverCell = null;
       state.previewPbb = null;
       state.previewRemote = null;
-      try {{ draw(); }} catch(e) {{}}
+      safeDraw();
     }});
     function hitTestPbbEnd(wx, wy) {{
-      const maxD2 = (CELL_SIZE * 0.8) ** 2;
+      const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
       const cands = [];
       state.pbbStands.forEach(pbb => {{
         cands.push({{ id: pbb.id, kind: 'pbb', x: pbb.x2, y: pbb.y2 }});
@@ -7732,7 +8376,7 @@ html = f"""
     function hitTestAnyTaxiwayVertex(wx, wy) {{
       // For Apron Taxiway links: allow connecting to any point along a taxiway polyline
       const click = [wx, wy];
-      const maxD2 = (CELL_SIZE * 1.0) ** 2;
+      const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
       let best = null;
       let bestD2 = maxD2;
       state.taxiways.forEach(tw => {{
@@ -7821,11 +8465,10 @@ html = f"""
         }} else if (hit) {{
           state.selectedObject = hit;
           if (hit.type === 'terminal') state.currentTerminalId = hit.id;
-          // 캔버스에서 클릭했을 때 해당 타입의 Mode 로 전환
+          // When clicking on the canvas, the corresponding type Mode switch to
           const sm = settingModeValueForHit(hit);
           if (sm) settingModeSelect.value = sm;
           if (hit.type === 'flight' && typeof switchToTab === 'function') switchToTab('flight');
-          if (hit.type === 'taxiway' && hit.obj.pathType === 'runway' && typeof switchToTab === 'function') switchToTab('rwysep');
           if (typeof syncSettingsPaneToMode === 'function') syncSettingsPaneToMode();
           syncPanelFromState();
           renderObjectList();
@@ -7847,7 +8490,7 @@ html = f"""
                 }} else {{
                   const [fx,fy] = cellToPixel(term.vertices[0].col, term.vertices[0].row);
                   const d2 = dist2([fx,fy], cellToPixel(col, row));
-                  if (d2 < (CELL_SIZE*0.6)**2 && term.vertices.length >= 3) {{
+                  if (d2 < (CELL_SIZE * TERM_CLOSE_POLY_CF) ** 2 && term.vertices.length >= 3) {{
                     term.closed = true;
                     state.terminalDrawingId = null;
                     syncPanelFromState();
@@ -7866,12 +8509,12 @@ html = f"""
                 const pt = {{ col, row }};
                 const last = tw.vertices[tw.vertices.length - 1];
                 if (!last || last.col !== col || last.row !== row) {{
-                  // Runway 타입일 때는 딱 2개의 점(시작/끝)만 허용
+                  // Runway When it comes to type, there are only two points(start/end)only allowed
                   if (tw.pathType === 'runway' && tw.vertices.length >= 2) return;
                   pushUndo();
                   tw.vertices.push(pt);
                   if (typeof syncStartEndFromVertices === 'function') syncStartEndFromVertices(tw);
-                  // 두 점이 찍힌 순간 자동으로 그리기 종료
+                  // The drawing ends automatically the moment two points are struck.
                   if (tw.pathType === 'runway' && tw.vertices.length >= 2) {{
                     state.taxiwayDrawingId = null;
                     syncPanelFromState();
@@ -7907,8 +8550,8 @@ html = f"""
       document.getElementById('canvas-container').style.display = 'block';
       view3dContainer.classList.remove('active');
       if (renderer3d) renderer3d.domElement.style.display = 'none';
-      // display:block 직후에는 레이아웃이 아직 반영되지 않아 getBoundingClientRect가 0이 될 수 있음.
-      // 한 프레임 뒤 resizeCanvas()로 캔버스 크기 갱신 및 draw() 호출
+      // display:block Immediately after, the layout is not reflected yet. getBoundingClientRectcan be 0.
+      // one frame later resizeCanvas()Update the canvas size with and draw() call
       requestAnimationFrame(function() {{
         if (typeof resizeCanvas === 'function') resizeCanvas();
       }});
@@ -7988,8 +8631,8 @@ html = f"""
       if (renderer3d) {{ renderer3d.domElement.style.display = 'block'; update3DScene(); return; }}
       const w = view3dContainer.clientWidth, h = view3dContainer.clientHeight;
       scene3d = new THREE.Scene();
-      scene3d.background = new THREE.Color(0x303030);
-      // 3D 격자 + 축 전용 그룹 (update3DScene에서 지우지 않도록 별도 그룹으로 유지)
+      scene3d.background = new THREE.Color(GRID_VIEW_BG);
+      // 3D grid + Axis-only group (update3DSceneKeep them as separate groups to avoid erasing them from)
       gridGroup3d = new THREE.Group();
       scene3d.add(gridGroup3d);
       camera3d = new THREE.PerspectiveCamera(50, w/h, 1, 100000);
@@ -7997,7 +8640,7 @@ html = f"""
       const maxDim = Math.max(halfW, halfH);
       camera3d.position.set(maxDim * 1.2, maxDim * 1.2, maxDim * 1.2);
       camera3d.lookAt(0, 0, 0);
-      // 축 가이드: 그리드 평면을 X(빨강)–Y(초록)로, 수직축을 Z(파랑)로 표시
+      // Axis Guide: Grid Plane X(red)–Y(abstract), the vertical axis Z(blue)displayed as
       const axisLen = CELL_SIZE * 8;
       const axisOrigin = new THREE.Vector3(-maxDim, 0, -maxDim);
       function addAxis(toVec, color) {{
@@ -8007,13 +8650,13 @@ html = f"""
         const line = new THREE.Line(geo, mat);
         gridGroup3d.add(line);
       }}
-      // x-axis: 그리드 X 방향
+      // x-axis: grid X direction
       addAxis(new THREE.Vector3(axisLen, 0, 0), 0xef4444);
-      // y-axis: 그리드 Y 방향 (world Z 방향)
+      // y-axis: grid Y direction (world Z direction)
       addAxis(new THREE.Vector3(0, 0, axisLen), 0x22c55e);
-      // z-axis: 수직 (world Y 방향)
-      addAxis(new THREE.Vector3(0, axisLen, 0), 0x3b82f6);
-      // 축 끝에 x,y,z 레이블 스프라이트 추가
+      // z-axis: perpendicular (world Y direction)
+      addAxis(new THREE.Vector3(0, axisLen, 0), 0x7c6af7);
+      // at the end of the axis x,y,z Add label sprite
       function createAxisLabel(text, color, endVec) {{
         const size = 128;
         const canvasLabel = document.createElement('canvas');
@@ -8036,7 +8679,7 @@ html = f"""
       }}
       createAxisLabel('x', '#ef4444', new THREE.Vector3(axisLen * 1.1, 0, 0));
       createAxisLabel('y', '#22c55e', new THREE.Vector3(0, 0, axisLen * 1.1));
-      createAxisLabel('z', '#3b82f6', new THREE.Vector3(0, axisLen * 1.1, 0));
+      createAxisLabel('z', '#7c6af7', new THREE.Vector3(0, axisLen * 1.1, 0));
       grid3DMapper = new Grid3DMapper(GRID_COLS, GRID_ROWS, CELL_SIZE);
       renderer3d = new THREE.WebGLRenderer({{ antialias: true }});
       renderer3d.setSize(w, h);
@@ -8092,22 +8735,22 @@ html = f"""
       }}
       if (faintLines.length) {{
         const faintGeo = new THREE.BufferGeometry().setFromPoints(faintLines);
-        // 2D 보조격자와 비슷하지만 살짝 더 투명하게
+        // 2D Similar to auxiliary grid, but slightly more transparent
         const faintMat = new THREE.LineBasicMaterial({{
           color: 0xd4d4d4,
           transparent: true,
-          opacity: 0.16,
+          opacity: 0.2,
           depthTest: false
         }});
         gridGroup3d.add(new THREE.LineSegments(faintGeo, faintMat));
       }}
       if (majorLines.length) {{
         const majorGeo = new THREE.BufferGeometry().setFromPoints(majorLines);
-        // 주격자도 약간 투명도를 주어 배경과 잘 어우러지게
+        // The main grid is also slightly transparent so that it blends well with the background.
         const majorMat = new THREE.LineBasicMaterial({{
           color: 0xffffff,
           transparent: true,
-          opacity: 0.78,
+          opacity: 0.35,
           depthTest: false
         }});
         gridGroup3d.add(new THREE.LineSegments(majorGeo, majorMat));
@@ -8137,7 +8780,7 @@ html = f"""
         const floorHVal = term.floorHeight != null ? Number(term.floorHeight) || (floors * f2f) : (floors * f2f);
         const floorH = Math.max(0.5, floorHVal);
         const extrude = new THREE.ExtrudeGeometry(shape, {{ depth: floorH, bevelEnabled: false }});
-        const mesh = new THREE.Mesh(extrude, new THREE.MeshPhongMaterial({{ color: 0x38bdf8, transparent: true, opacity: 0.55 }}));
+        const mesh = new THREE.Mesh(extrude, new THREE.MeshPhongMaterial({{ color: hexToThreeColor(_canvas2dStyle.terminalStrokeDefault || '#38bdf8'), transparent: true, opacity: 0.55 }}));
         mesh.rotation.x = -Math.PI / 2;
         scene3d.add(mesh);
       }});
@@ -8170,8 +8813,8 @@ html = f"""
         const base = new THREE.Mesh(baseGeo, baseMat);
         base.position.copy(start);
 
-        // 3D green apron: PBB 3D 방향(dir)과 동일한 회전으로,
-        // XZ 평면 위에 정사각형을 직접 구성한다. (2D와 최대한 동일한 회전 느낌)
+        // 3D green apron: PBB 3D direction(dir)With the same rotation as,
+        // XZ Construct a square directly on a plane. (2DRotation feeling as similar as possible to)
         const standSize = getStandSizeMeters(pbb.category || 'C');
         const half = standSize / 2;
         const apronY = CELL_SIZE * 0.02;
@@ -8181,7 +8824,7 @@ html = f"""
         let apronMesh = null;
         if (dirXZ.lengthSq() > 1e-6) {{
           dirXZ.normalize();
-          const perp = new THREE.Vector3(-dirXZ.z, 0, dirXZ.x); // XZ 평면에서 90도 회전
+          const perp = new THREE.Vector3(-dirXZ.z, 0, dirXZ.x); // XZ Rotate 90 degrees in a plane
           const v1 = center.clone().addScaledVector(dirXZ, -half).addScaledVector(perp, -half);
           const v2 = center.clone().addScaledVector(dirXZ,  half).addScaledVector(perp, -half);
           const v3 = center.clone().addScaledVector(dirXZ,  half).addScaledVector(perp,  half);
@@ -8219,7 +8862,11 @@ html = f"""
         const [px, py] = cellToPixel(st.col, st.row);
         const center = grid3DMapper.worldFromPixel(px, py, CELL_SIZE * 0.02);
         const apronGeo = new THREE.PlaneGeometry(size, size);
-        const apronMat = new THREE.MeshPhongMaterial({{ color: 0x22c55e, transparent: true, opacity: 0.55 }});
+        const apronMat = new THREE.MeshPhongMaterial({{
+          color: hexToThreeColor(_threeDStyle.remoteApron || '#22c55e'),
+          transparent: true,
+          opacity: threeOpacity(_threeDStyle.remoteApronOpacity, 0.55),
+        }});
         const apron = new THREE.Mesh(apronGeo, apronMat);
         apron.position.copy(center);
         apron.rotation.x = -Math.PI / 2; // flat on ground, axis-aligned like 2D
@@ -8227,7 +8874,7 @@ html = f"""
 
         const box = new THREE.Mesh(
           new THREE.BoxGeometry(CELL_SIZE * 0.7, CELL_SIZE * 0.3, CELL_SIZE * 0.7),
-          new THREE.MeshPhongMaterial({{ color: 0x22c55e }})
+          new THREE.MeshPhongMaterial({{ color: hexToThreeColor(_threeDStyle.remoteStandBox || '#22c55e') }})
         );
         box.position.copy(grid3DMapper.cellToWorld(st.col, st.row, CELL_SIZE * 0.15));
         scene3d.add(box);
@@ -8236,14 +8883,16 @@ html = f"""
         if (tw.vertices.length < 2) return;
         const w = tw.width != null ? tw.width : (tw.pathType === 'runway' ? 60 : 15);
         const isRunwayPath = tw.pathType === 'runway';
+        const isRunwayExit3d = tw.pathType === 'runway_exit';
+        const rwGrayHex = _threeDStyle.runwayPath || '#374151';
         const h = CELL_SIZE * 0.04;
-        // 2D와 동일하게 vertex 사이를 직선 세그먼트로 연결하되,
-        // 코너 지점에는 추가 패치를 넣어 시각적으로 라운드 느낌을 준다.
+        // 2Dsame as vertex Connect with straight segments between,
+        // Additional patches are added to the corner points to give a visual roundness..
         const worldPts = tw.vertices.map(v => {{
           const [px, py] = cellToPixel(v.col, v.row);
           return grid3DMapper.worldFromPixel(px, py, h);
         }});
-        // 기본 세그먼트
+        // default segment
         for (let i = 0; i < worldPts.length - 1; i++) {{
           const start = worldPts[i];
           const end = worldPts[i + 1];
@@ -8252,13 +8901,13 @@ html = f"""
           dirVec.normalize();
           const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
           const segGeo = new THREE.BoxGeometry(length, h * 0.5, w);
-          const segMat = new THREE.MeshPhongMaterial({{ color: isRunwayPath ? 0x4b5563 : 0xeab308 }});
+          const segMat = new THREE.MeshPhongMaterial({{ color: hexToThreeColor((isRunwayPath || isRunwayExit3d) ? rwGrayHex : (_threeDStyle.taxiway || '#eab308')) }});
           const seg = new THREE.Mesh(segGeo, segMat);
           seg.position.copy(mid);
           seg.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dirVec);
           scene3d.add(seg);
         }}
-        // 코너 라운드용 보조 박스 (joint patch)
+        // Auxiliary box for corner rounding (joint patch)
         for (let i = 1; i < worldPts.length - 1; i++) {{
           const pPrev = worldPts[i - 1];
           const p = worldPts[i];
@@ -8269,14 +8918,14 @@ html = f"""
           v1.normalize();
           v2.normalize();
           const dot = v1.dot(v2);
-          // 거의 일직선이면 스킵
+          // If it's almost a straight line, skip it.
           if (Math.abs(dot) > 0.999) continue;
           const bis = new THREE.Vector3().addVectors(v1, v2);
           if (bis.lengthSq() < 1e-4) continue;
           bis.normalize();
           const jointLen = w * 0.8;
           const jointGeo = new THREE.BoxGeometry(jointLen, h * 0.5, w * 1.02);
-          const jointMat = new THREE.MeshPhongMaterial({{ color: isRunwayPath ? 0x4b5563 : 0xeab308 }});
+          const jointMat = new THREE.MeshPhongMaterial({{ color: hexToThreeColor((isRunwayPath || isRunwayExit3d) ? rwGrayHex : (_threeDStyle.taxiway || '#eab308')) }});
           const joint = new THREE.Mesh(jointGeo, jointMat);
           joint.position.copy(p);
           joint.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), bis);
@@ -8321,7 +8970,7 @@ html = f"""
             const up = new THREE.Vector3(0, 1, 0);
             const quat = new THREE.Quaternion().setFromUnitVectors(up, tangent);
             const coneGeo = new THREE.ConeGeometry(arrowSize * 0.6, arrowSize, 4);
-            const coneMat = new THREE.MeshPhongMaterial({{ color: 0xf59e0b }});
+            const coneMat = new THREE.MeshPhongMaterial({{ color: hexToThreeColor(_threeDStyle.arrowCone || '#f59e0b') }});
             const cone = new THREE.Mesh(coneGeo, coneMat);
             cone.position.copy(pos);
             cone.position.y = h + 0.8;
@@ -8344,7 +8993,11 @@ html = f"""
         const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
         const linkWidth = CELL_SIZE * 0.4;
         const linkGeo = new THREE.BoxGeometry(length, linkH * 0.5, linkWidth);
-        const linkMat = new THREE.MeshPhongMaterial({{ color: 0x22d3ee, transparent: true, opacity: 0.9 }});
+        const linkMat = new THREE.MeshPhongMaterial({{
+          color: hexToThreeColor(_threeDStyle.apronLink || '#22d3ee'),
+          transparent: true,
+          opacity: threeOpacity(_threeDStyle.apronLinkOpacity, 0.9),
+        }});
         const linkMesh = new THREE.Mesh(linkGeo, linkMat);
         linkMesh.position.copy(mid);
         linkMesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dirVec);
@@ -8357,29 +9010,31 @@ html = f"""
           const pose = getFlightPoseAtTime(f, tSec);
           if (!pose) return;
           const {{ x, y, dx, dy }} = pose;
-          const pos3d = grid3DMapper.worldFromPixel(x, y, CELL_SIZE * 0.5);
+          const pos3d = grid3DMapper.worldFromPixel(x, y, CELL_SIZE * _numOr(_ac3d.altitudeCellFactor, 0.5));
           const len = Math.hypot(dx, dy) || 1;
           const dirVec = new THREE.Vector3(dx / len, 0, dy / len);
-          let scale = 1.0;
           const code = (f.code || '').toUpperCase();
-          if (code === 'A' || code === 'B') scale = 0.8;
-          else if (code === 'C') scale = 1.0;
-          else if (code === 'D') scale = 1.2;
-          else if (code === 'E') scale = 1.4;
-          else if (code === 'F') scale = 1.6;
-          const bodyLen = CELL_SIZE * 1.2 * scale;
-          const bodyWidth = CELL_SIZE * 0.4 * scale;
-          const bodyHeight = CELL_SIZE * 0.2 * scale;
-          const color = 0xff2f92; // 핫핑크
+          const scale = apronAircraftScaleForIcao(code);
+          const bl = _numOr(_ac3d.bodyLengthCellFactor, 1.2);
+          const bw = _numOr(_ac3d.bodyWidthCellFactor, 0.4);
+          const bh = _numOr(_ac3d.bodyHeightCellFactor, 0.2);
+          const bodyLen = CELL_SIZE * bl * scale;
+          const bodyWidth = CELL_SIZE * bw * scale;
+          const bodyHeight = CELL_SIZE * bh * scale;
+          const wLen = _numOr(_ac3d.wingLengthRatio, 0.4);
+          const wHt = _numOr(_ac3d.wingHeightRatio, 0.5);
+          const wWd = _numOr(_ac3d.wingWidthRatio, 1.8);
+          const wYo = _numOr(_ac3d.wingYOffsetRatio, 0.2);
+          const color = hexToThreeColor(_ac3d.meshColorHex || '#ff2f92');
           const group = new THREE.Group();
           const bodyGeo = new THREE.BoxGeometry(bodyLen, bodyHeight, bodyWidth);
           const bodyMat = new THREE.MeshPhongMaterial({{ color }});
           const body = new THREE.Mesh(bodyGeo, bodyMat);
           group.add(body);
-          const wingGeo = new THREE.BoxGeometry(bodyLen * 0.4, bodyHeight * 0.5, bodyWidth * 1.8);
+          const wingGeo = new THREE.BoxGeometry(bodyLen * wLen, bodyHeight * wHt, bodyWidth * wWd);
           const wingMat = new THREE.MeshPhongMaterial({{ color }});
           const wings = new THREE.Mesh(wingGeo, wingMat);
-          wings.position.y = -bodyHeight * 0.2;
+          wings.position.y = -bodyHeight * wYo;
           group.add(wings);
           group.position.copy(pos3d);
           const forward = new THREE.Vector3(1, 0, 0);
@@ -8388,10 +9043,10 @@ html = f"""
           scene3d.add(group);
         }});
       }}
-      const light = new THREE.DirectionalLight(0xffffff, 0.8);
+      const light = new THREE.DirectionalLight(0xffffff, threeOpacity(_threeDStyle.directionalLightIntensity, 0.8));
       light.position.set(maxDim, maxDim * 2, maxDim);
       scene3d.add(light);
-      scene3d.add(new THREE.AmbientLight(0xffffff, 0.4));
+      scene3d.add(new THREE.AmbientLight(0xffffff, threeOpacity(_threeDStyle.ambientLightIntensity, 0.4)));
     }}
 
     function animate3D() {{
@@ -8437,9 +9092,10 @@ html = f"""
 </html>
 """
 
-# Home의 home_globe처럼 전체 화면에 HTML 표시 (position: fixed, 100vw x 100vh)
+# Homeof home_globelike in full screen HTML mark (position: fixed, 100vw x 100vh)
 st.markdown("""
   <style>
+    .stApp, [data-testid="stAppViewContainer"], section.main { background-color: #0d0d0f !important; }
     [data-testid="stHeader"], header[data-testid="stHeader"] { display: none !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; overflow: hidden !important; }
     [data-testid="stAppViewContainer"] { padding: 0 !important; }
     .block-container { padding: 0 !important; max-width: 100% !important; overflow: visible !important; min-height: 100vh !important; margin: 0 !important; }

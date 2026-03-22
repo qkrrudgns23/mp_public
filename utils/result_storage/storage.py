@@ -1,6 +1,6 @@
 """
-Relocation Master 결과 저장/불러오기 유틸리티.
-Run analysis 결과를 JSON으로 저장하고, 재분석 없이 불러와서 표시할 수 있게 합니다.
+Relocation Master Save results/Load Utility.
+Run analysis the result JSONSave it as , and load and display it without re-analysis..
 """
 import io
 import json
@@ -15,13 +15,13 @@ os.makedirs(STORAGE_DIR, exist_ok=True)
 
 
 def _sanitize_filename(name: str) -> str:
-    """파일명으로 사용할 수 없는 문자 제거"""
+    """Remove characters that cannot be used in file names"""
     s = re.sub(r'[<>:"/\\|?*]', "_", str(name).strip())
     return s[:200] if s else "unnamed"
 
 
 def _get_datetime_cols(df: pd.DataFrame) -> list:
-    """datetime64, timedelta64 타입 컬럼명 목록 반환"""
+    """datetime64, timedelta64 Return type column name list"""
     if df is None or len(df) == 0:
         return []
     cols = []
@@ -33,7 +33,7 @@ def _get_datetime_cols(df: pd.DataFrame) -> list:
 
 
 def _serialize_df(df: pd.DataFrame, datetime_cols: list = None) -> tuple[str, list]:
-    """DataFrame을 JSON 문자열로 직렬화. (json_str, datetime_cols) 반환."""
+    """DataFramesecond JSON serialize to string. (json_str, datetime_cols) return."""
     if df is None or len(df) == 0:
         return json.dumps({"columns": [], "index": [], "data": []}), []
     if datetime_cols is None:
@@ -43,7 +43,7 @@ def _serialize_df(df: pd.DataFrame, datetime_cols: list = None) -> tuple[str, li
 
 
 def _deserialize_df(val, datetime_cols: list = None) -> pd.DataFrame:
-    """JSON 문자열 또는 dict에서 DataFrame 복원. datetime_cols가 있으면 해당 컬럼을 datetime으로 변환."""
+    """JSON string or dictat DataFrame restore. datetime_colsIf there is, the corresponding column datetimeconvert to."""
     if val is None:
         return pd.DataFrame()
     if isinstance(val, pd.DataFrame):
@@ -65,7 +65,7 @@ def _deserialize_df(val, datetime_cols: list = None) -> pd.DataFrame:
                     return pd.DataFrame()
             except Exception:
                 return pd.DataFrame()
-    # datetime/timedelta 컬럼 복원 (JSON round-trip 시 문자열로 남음)
+    # datetime/timedelta Column restoration (JSON round-trip Poetry string remains)
     if datetime_cols:
         for col in datetime_cols:
             if col in df.columns and df[col].notna().any():
@@ -73,7 +73,7 @@ def _deserialize_df(val, datetime_cols: list = None) -> pd.DataFrame:
                     df[col] = pd.to_datetime(df[col])
                 except Exception:
                     pass
-    # 저장 시 datetime_cols 없이 로드된 예전 파일 대비: scheduled_gate_local 등 자주 쓰는 컬럼 강제 변환
+    # When saving datetime_cols Compared to old files loaded without: scheduled_gate_local Force conversion of frequently used columns, etc.
     _known_datetime_cols = ["scheduled_gate_local", "SHOW", "Time"]
     for col in _known_datetime_cols:
         if col in df.columns and col not in (datetime_cols or []):
@@ -87,8 +87,8 @@ def _deserialize_df(val, datetime_cols: list = None) -> pd.DataFrame:
 
 def save_result(analysis, name: str) -> str:
     """
-    RunAnalysis 결과를 JSON으로 저장합니다.
-    Returns: 저장된 파일 경로
+    RunAnalysis the result JSONSave it as.
+    Returns: Saved file path
     """
     name_safe = _sanitize_filename(name)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -130,8 +130,8 @@ def save_result(analysis, name: str) -> str:
 
 def load_result(filepath: str) -> dict:
     """
-    저장된 JSON에서 결과 데이터를 로드합니다.
-    Returns: RunAnalysis.from_saved()에 전달할 dict
+    saved JSONLoad the resulting data from.
+    Returns: RunAnalysis.from_saved()forward to dict
     """
     with open(filepath, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -144,7 +144,7 @@ def load_result(filepath: str) -> dict:
 
 
 def list_saved_results() -> list[dict]:
-    """저장된 결과 파일 목록을 반환 (최신순)"""
+    """Returns a list of saved result files (Latest)"""
     files = []
     for fname in os.listdir(STORAGE_DIR):
         if not fname.endswith(".json"):
@@ -170,7 +170,7 @@ def list_saved_results() -> list[dict]:
 
 
 def delete_result(filepath: str) -> bool:
-    """저장된 결과 파일을 삭제합니다. Returns: 성공 여부"""
+    """Delete saved result files. Returns: Success or failure"""
     if not filepath or not os.path.isfile(filepath):
         return False
     try:

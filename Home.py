@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 로그인 인증 정보 (환경변수로 변경 권장)
+# Login Credentials (Recommended to change to environment variable)
 LOGIN_CREDENTIALS = {
     "admin": "admin123",  # ID: admin, PW: admin123
 }
@@ -18,7 +18,7 @@ LOGIN_CREDENTIALS = {
 # Full-screen dark theme for Home
 st.markdown("""
 <style>
-    /* 사이드바 투명 */
+    /* sidebar transparent */
     [data-testid="stSidebar"] { background: transparent !important; }
     [data-testid="stSidebar"] > div:first-child { background: transparent !important; }
     
@@ -30,7 +30,7 @@ st.markdown("""
     div[data-testid="stVerticalBlock"] { padding-top: 0 !important; }
     .block-container iframe, div[data-testid="stEmbeddedFrameBlock"] iframe { position: fixed !important; top: -120px !important; left: 0 !important; width: 100vw !important; height: calc(100vh + 120px) !important; min-height: calc(100vh + 120px) !important; display: block !important; border: none !important; z-index: 0 !important; }
     
-    /* Login / Logout - 우측 하단 */
+    /* Login / Logout - bottom right */
     div[data-testid="column"]:has(form),
     div[data-testid="column"]:has(button) {
         position: fixed !important;
@@ -78,7 +78,7 @@ st.markdown("""
         font-size: 0.75rem !important;
     }
     
-    /* Login form: Enter 버튼 숨김 (Enter 키로 제출 가능, 폼에 버튼 필수) */
+    /* Login form: Enter button hidden (Enter Submission possible with key, button required on form) */
     div[data-testid="column"]:has(form) button {
         position: absolute !important;
         left: -9999px !important;
@@ -88,7 +88,7 @@ st.markdown("""
         pointer-events: none !important;
     }
     
-    /* Logout 버튼 */
+    /* Logout button */
     div[data-testid="column"]:has(button):not(:has(form)) button {
         background: rgba(255,255,255,0.08) !important;
         border: 1px solid rgba(255,255,255,0.15) !important;
@@ -103,13 +103,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 세션 상태 초기화
+# Reset session state
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
-# 로그인 체크
+# Login check
 if not st.session_state.authenticated:
-    # 글로브 먼저 배치 (전체 화면) + 로그인 폼 오버레이
+    # Place the globe first (full screen) + Login form overlay
     _, col_right = st.columns([5, 1])
     with col_right:
         with st.form("login_form"):
@@ -135,7 +135,7 @@ if not st.session_state.authenticated:
     html_content = html_content.replace("__AIRPORTS_JSON__", json.dumps(airports_data, ensure_ascii=False))
     components.html(html_content, height=2000, scrolling=False)
 else:
-    # 로그인 성공 시
+    # Upon successful login
     df_airport = pd.read_parquet("data/raw/airport/cirium_airport_ref.parquet")
     df_airport["airport_name"] = df_airport["name"] + " (" + df_airport["airport_id"] + ")"
     airports_data = [
@@ -149,7 +149,7 @@ else:
     html_content = html_content.replace("__AIRPORTS_JSON__", json.dumps(airports_data, ensure_ascii=False))
     components.html(html_content, height=2000, scrolling=False)
 
-    # 로그아웃 버튼 (우측 하단, 로그인 박스와 동일한 위치)
+    # logout button (Bottom right, same location as login box)
     _, col_right = st.columns([5, 1])
     with col_right:
         st.markdown("Signed in")

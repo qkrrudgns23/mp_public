@@ -1,12 +1,12 @@
 """
-Streamlit과 레이아웃 저장/로드 API를 한 포트(8501)에서 제공.
-data/Layout_storage/ 에 이름별 저장, default_layout / current_layout 사용.
+Streamlitand save layout/load APIto one port(8501)Provided by.
+data/Layout_storage/ Save by name to, default_layout / current_layout use.
 
-사용법: python run_app.py
-- 로컬: http://127.0.0.1:8501
-- AWS EC2: 보안 그룹에서 8501 인바운드 허용 후 http://<EC2퍼블릭IP>:8501
+How to use: python run_app.py
+- local: http://127.0.0.1:8501
+- AWS EC2: After allowing 8501 inbound in security group http://<EC2publicIP>:8501
 
-프록시는 0.0.0.0 에 바인드되어 EC2 등 외부 접속 가능. Streamlit은 127.0.0.1:8502 로만 동작.
+The proxy is bound to 0.0.0.0 EC2 External connection possible. StreamlitOnly works with 127.0.0.1:8502.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from utils.layout_receiver import LAYOUT_STORAGE_DIR, save_layout_to_file, list_
 ROOT = Path(__file__).resolve().parent
 STREAMLIT_PORT = 8502
 PROXY_PORT = int(os.environ.get("PORT", "8501"))
-PROXY_HOST = os.environ.get("HOST", "0.0.0.0")  # EC2 등에서는 0.0.0.0 으로 외부 접속 허용
+PROXY_HOST = os.environ.get("HOST", "0.0.0.0")  # EC2 In such cases, external access is allowed with 0.0.0.0.
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
@@ -101,7 +101,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     layout_name = "current_layout"
                 if not isinstance(layout, dict):
                     raise ValueError("layout must be a JSON object")
-                # Run Simulation 시 Layout_storage/current_layout.json 저장 (timeline 제외)
+                # Run Simulation city Layout_storage/current_layout.json save (timeline exception)
                 layout_to_save = dict(layout)
                 flights = layout_to_save.get("flights") or []
                 layout_to_save["flights"] = [{k: v for k, v in f.items() if k != "timeline"} for f in flights]

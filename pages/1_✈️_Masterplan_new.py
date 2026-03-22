@@ -4,7 +4,7 @@ from utils.masterplan import *
 st.set_page_config(
     page_title="MASTERPLANNER",
     layout="wide",
-    initial_sidebar_state="collapsed"  # 사이드바 접힌 상태 유지
+    initial_sidebar_state="collapsed"  # Keep sidebar collapsed
 )
 
 if not st.session_state.get("authenticated", False):

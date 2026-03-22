@@ -1,0 +1,61 @@
+---
+alwaysApply: true
+---
+
+---
+description: Core development rules — behavior, code quality, UI standards
+alwaysApply: true
+---
+
+## Agent Behavior
+- Before starting any task, summarize your understanding of the request.
+- If anything is ambiguous or has multiple interpretations, ask clarifying questions before proceeding. Do not assume.
+- Never auto-agree or try to please. Be honest. If something is wrong or suboptimal, say so.
+- Do not apologize for errors — fix them.
+- If code is incomplete, add `// TODO:` comments instead of leaving silent gaps.
+
+
+## information.json
+Layout_design.py를 수정할 경우, 디자인에 대한 값들은 Information.json의 값을 수정하여 반영되도록 해줘
+
+
+## Code Changes
+- Always read and understand existing code before making changes.
+- Make the smallest possible change that solves the problem — do not over-engineer.
+- Never remove or break existing working code unless explicitly asked.
+- Do not modify unrelated logic. Scope changes tightly.
+- Do not introduce linting errors or break formatting rules.
+- Do not add or remove blank lines, spacing, or indentation unless required.
+- Leave NO placeholders or half-finished sections in final output. All code must be complete and functional.
+
+## Code Quality
+- Follow SOLID principles and separation of concerns — but don't over-abstract.
+- Prefer functional and declarative patterns over classes where reasonable.
+- Avoid code duplication — reuse, modularize, compose.
+- If you spot redundant, dead, or inefficient code, suggest a cleanup as a separate recommendation (do not silently refactor).
+- Always add proper type annotations. Never use `any` unless explicitly permitted.
+- Respect existing linter and formatter settings (Prettier, ESLint, Black, etc.).
+
+## UI & Styling
+- Default to **dark mode** for all UI.
+- Build modern, polished interfaces — avoid plain/unstyled defaults.
+- Pay attention to spacing, color hierarchy, and typography.
+- Use Tailwind CSS utility-first conventions (or the project's existing style system).
+- Ensure responsive layouts. Test for different screen sizes.
+- All interactive elements must have hover states, pointer cursors, and visual feedback.
+- Follow ARIA and keyboard navigation best practices for accessibility.
+
+## Naming & Structure
+- Use clear, descriptive names for variables, functions, and components.
+- Components in PascalCase; functions/variables in camelCase; constants in UPPER_SNAKE_CASE.
+- Keep files focused — one responsibility per file where possible.
+- Keep rules and functions under 500 lines; split when needed.
+
+## Git & Commits
+- Use Conventional Commits format: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`.
+- Keep commit messages under 60 characters.
+
+## Error Handling
+- Fail fast and fail clearly — catch errors early and surface them explicitly.
+- Always log errors with meaningful context. Never silently swallow exceptions.
+- Use typed error handling where the language supports it.

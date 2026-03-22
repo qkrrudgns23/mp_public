@@ -105,13 +105,13 @@ def select_target_day(df_orig, key="default"):
         )
 
 
-    # 각 행의 주차 계산
+    # Parking calculation for each row
     def first_sunday(year):
         first_day = pd.Timestamp(f"{year}-01-01")
         first_sunday = first_day + pd.DateOffset(days=(6 - first_day.weekday()))
         return first_sunday
 
-    # 각 행의 첫 번째 일요일로부터의 일수 계산
+    # Calculate the number of days from the first Sunday in each row
     first_sundays = {year: first_sunday(year) for year in df_orig["year"].unique()}
 
     df_orig["first_sunday"] = df_orig["year"].map(first_sundays)
@@ -155,7 +155,7 @@ def select_target_day(df_orig, key="default"):
     fig = go.Figure()
     for year in df_grouped["year"].unique():
         df_year = df_grouped[df_grouped["year"] == year]
-        # 호버 텍스트 생성
+        # Create hover text
         if year != "Average":
             df_year[f"{year}_date"] = pd.to_datetime(
                 first_sundays[year]
@@ -175,7 +175,7 @@ def select_target_day(df_orig, key="default"):
                     y=df_year["count"],
                     mode="lines",
                     name=str(year),
-                    hoverinfo="text",  # 'text'만 표시하도록 설정
+                    hoverinfo="text",  # 'text'set to show only
                     hovertext=hover_text,
                     line=dict(width=0.3, color=None),
                 )
@@ -241,7 +241,7 @@ def select_target_day(df_orig, key="default"):
     
     def highlight_rows(row):
         if row.name in range(method_dict[method]["peak start"], method_dict[method]["peak end"]+1):
-            return ['background-color: rgba(160, 231, 160, 0.5)'] * len(row)  # 0.5는 투명도 50%
+            return ['background-color: rgba(160, 231, 160, 0.5)'] * len(row)  # 0.5is transparency 50%
         return [''] * len(row)
 
 
@@ -284,7 +284,7 @@ def show_df_schedule(df, group, key, time_col, y_label, title, unit_min=30):
             datetime.combine(start_date.date(), time.min),
             datetime.combine(end_date.date() + pd.Timedelta(days=1), time.min),
         ],
-        tickformat="%Y-%m-%d %H:%M",  # 년-월-일 시:분 형식으로 표시
+        tickformat="%Y-%m-%d %H:%M",  # Displayed in year-month-day hour:minute format
     )
 
     # Display the bar chart
@@ -330,7 +330,7 @@ def show_distribution(df, group_col, time_col):
     fig.add_trace(
         go.Scatter(
             x=[0],
-            y=[0],  # y 좌표는 0으로 설정하거나, 필요에 따라 조정할 수 있습니다
+            y=[0],  # y Coordinates can be set to 0 or adjusted as needed
             mode="markers",
             marker=dict(size=19, color="#007aff", symbol="circle"),
             name=f"Flight",
@@ -338,7 +338,7 @@ def show_distribution(df, group_col, time_col):
         )
     )
 
-    # 레이아웃 업데이트 (선택사항)
+    # Layout updates (Optional)
     fig.update_layout(
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
@@ -376,7 +376,7 @@ def create_normal_dist_col(
     # Check if the mean is within the clipping range
     assert (
         min_max_clip[0] <= mean <= min_max_clip[1]
-    ), "mean 값이 clipping 범위를 넘어서고 있습니다 >> min~max clipping 범위 내로 mean값을 재설정해주세요"
+    ), "mean value clipping It's going out of bounds. >> min~max clipping within range meanPlease reset the value"
     # Resample values outside the clipping range up to "iteration" times
     for _ in range(iteration):
         out_of_range_indices = np.where(
@@ -430,9 +430,9 @@ def select_airport(return_dict):
 
             uploaded_file = st.file_uploader("Upload Schedule File")
             c1, c2, c3, c4, c5 = st.columns(5, gap="small")
-            # NOTE : 공항선택
+            # NOTE : Select airport
             with c1:
-                # NOTE : 시리움 연결하기
+                # NOTE : Connect to Sirium
                 # ["ICN", "IST", "NRT", "BLR","MNL", "SGN", "BKK","DXB","CGK","PER","DAC","GRU","MVD"]
                 if uploaded_file is None:
                     airport_options = {
@@ -460,13 +460,13 @@ def select_airport(return_dict):
                             "**Airport**",
                             options=list(airport_options.keys()),
                             format_func=lambda x: f"{x} - {airport_options[x]}",
-                            # default=[list(airport_options.keys())[0]],  # 첫 번째 항목을 기본 선택
+                            # default=[list(airport_options.keys())[0]],  # default selection to first item
                             index=1,
                             key="select_airport__",
                         )
                     ]
                     if len(code_str) == 0:
-                        st.write("기본공항 : UGC")
+                        st.write("default airport : UGC")
                         code_str = ["UGC"]
 
                     airport_code = code_str[0]
@@ -482,19 +482,19 @@ def select_airport(return_dict):
                     st.write(df_orig.groupby(["year"])["total_seat_count"].sum())
 
                     uploded_file_is = False
-                # NOTE : 직접 업로드
+                # NOTE : direct upload
                 else:
                     df_orig = pd.read_parquet(uploaded_file)
                     uploded_file_is = True
 
-            # NOTE : 날짜선택
+            # NOTE : Select date
             with c2:
                 """
-                Cirium 데이터에는 2가지 종류가 있다.
-                1) Flight Status : 과거실적데이터
-                2) Schedule : 미래(today~ +1year)
-                selected_date 가, today ~ 미래일 경우 >> Schedule에서 받아와야 함
-                selected_date 가  today 미만일 경우 >> Flight_status 에서 가져와야 함
+                Cirium There are two types of data.
+                1) Flight Status : Past performance data
+                2) Schedule : future(today~ +1year)
+                selected_date go, today ~ If it's the future >> ScheduleMust get it from
+                selected_date go  today If it is less than >> Flight_status Must be imported from
                 """
                 if uploded_file_is:
                     crowded_date = (
@@ -512,7 +512,7 @@ def select_airport(return_dict):
                     )
                 return_dict["selected_date"] = selected_date
 
-            # NOTE:출발편 / 출발편 "d", 도착편 "a"
+            # NOTE:Departure flight / Departure flight "d", Arrival flight "a"
             with c3:
                 flight_io = st.selectbox(
                     "**Flight Dep/Arr**",
@@ -521,10 +521,10 @@ def select_airport(return_dict):
                 )
                 return_dict["flight_io"] = flight_io
 
-                # NOTE: 중요!!!
-                # Scheduled_gate_local >> 미래 날자를 선택했을 경우, 미래는 Actual이 없다 >> Scheduled_gate_local 을 쓴다
-                # 여객들이 공항에 언제 도착할지를 선택하는 시간이 보딩패스에 예상 출발시간이므로, 예상 출발시간을 써야 한다.
-                # 예를들어 VIncent 가 14:30 출발 비행기를 탄다 >> 14:30분은 예정일까 실제일까?? >> 이건 예정시간이다 >> scheduled_gate_local
+                # NOTE: importance!!!
+                # Scheduled_gate_local >> If you select a future date, the future is ActualThere is no >> Scheduled_gate_local Write
+                # The time at which passengers choose when to arrive at the airport is the expected departure time on their boarding pass, so the expected departure time must be written down..
+                # for example VIncent Take a flight departing at 14:30 >> 14:30Is it planned or actual??? >> This is the scheduled time >> scheduled_gate_local
 
                 df = df_orig[
                     (df_orig["flight_io"] == flight_io)
@@ -534,9 +534,9 @@ def select_airport(return_dict):
                 flight_io_dt = "scheduled_gate_local"
 
 
-            # NOTE : 터미널 선택
+            # NOTE : terminal selection
             with c4:
-                # 실렉트가 멀티인지, 싱글인지 이것도 중요
+                # It is also important whether the select is multi or single.
                 terminal_list = df[f"terminal"].value_counts().index
                 terminal = st.multiselect(
                     "**Terminal**",
@@ -551,12 +551,12 @@ def select_airport(return_dict):
                 )  # Filter by selected terminal
 
 
-                # 실렉트가 멀티인지, 싱글인지 이것도 중요
+                # It is also important whether the select is multi or single.
                 airline_lists = df[f"operating_carrier_iata"].value_counts().index.tolist()
                 selected_airline_lists = st.multiselect(
                     "**Airline**",
                     airline_lists,
-                    default=airline_lists,  # 모든 항목을 기본 선택
+                    default=airline_lists,  # Select all items as default
                     key="airline_lists",
                 )
                 
@@ -566,7 +566,7 @@ def select_airport(return_dict):
 
 
 
-            # NOTE : 그래프 컬러(그룹핑) 기준
+            # NOTE : graph color(grouping) standard
             with c5:
                 group = st.selectbox(
                     "**grouping**",
@@ -580,7 +580,7 @@ def select_airport(return_dict):
                 )
             st.success(f"✅ Total : {len(df)} Flight 🛫")
 
-            # NOTE : 바차트 그림 그리는 함수
+            # NOTE : Function to draw a bar chart
             show_df_schedule(
                 df=df,
                 group=group,
@@ -614,7 +614,7 @@ def select_airport(return_dict):
             df["new_col"] = df[group_columns].astype(str).agg(" & ".join, axis=1)
             col_values = df["new_col"].unique().tolist()
 
-            # df_pax의 최종모습 (360편) >> 한편당 100명 >> 36000명
+            # df_paxfinal appearance of (360side) >> 100 people per side >> 36000number of people
             df_pax_list = []
 
             # Iterate over each unique group value
@@ -644,7 +644,7 @@ def select_airport(return_dict):
 
                     value_list = value.split(" & ")
 
-                    # NOTE : 예시 값들
+                    # NOTE : Example values
                     # group_columns = ["Int/Dom", "carirers"]
                     # value_list = ["Int", "Korean Air"]
                     # df[group_columns] == value_list
@@ -654,7 +654,7 @@ def select_airport(return_dict):
                         filtered_df["total_seat_count"] * load_factor
                     )
 
-                    # Passenger (Total)가 260명일 경우, 260개의 동일한 로우로 뻥튀기
+                    # Passenger (Total)If there are 260 people, bounce with 260 identical rows.
                     filtered_df = filtered_df.loc[
                         filtered_df.index.repeat(filtered_df["Passenger (Total)"])
                     ].reset_index(drop=True)
@@ -740,7 +740,7 @@ def select_airport(return_dict):
 
         # =======================================================================
         # NOTE: Historical Data (Movements)
-        # SOURCE : df_orig >> 예를들어 ICN 선택했다면 ICN의 데이터가 들어온다
+        # SOURCE : df_orig >> for example ICN If you chose ICNdata comes in
         with profile_airport_tab:
 
             st.write(df_orig.groupby(["terminal","year"])["total_seat_count"].sum())
@@ -756,7 +756,7 @@ def select_airport(return_dict):
 
 
 # =======================================================================
-# NOTE : df_pax에 새로운 컬럼을 할당하고, value를 채워주는 함수
+# NOTE : df_paxAssign a new column to, valueA function that fills in
 @st.fragment
 def add_properties(return_dict, num_of_properties=1):
     """
@@ -777,10 +777,10 @@ def add_properties(return_dict, num_of_properties=1):
 
 
 
-    # 사용자로부터 새 속성의 수를 입력받음
+    # Receives input from the user for the number of new properties
     st.subheader(f"**How many New Properties you want**?")
 
-    # NOTE: 몇개의 새로운 컬럼을 생성하고 싶은가요?
+    # NOTE: How many new columns do you want to create??
     num_of_properties = st.number_input(
         f"**How many New Properties you want**?",
         min_value=1,
@@ -791,23 +791,23 @@ def add_properties(return_dict, num_of_properties=1):
     )
     st.divider()
 
-    # NOTE : 같은 값으로 들어가지 못하게 Alert를 하는 작업 필요
+    # NOTE : prevent them from entering with the same value AlertNeed to do something like
     for idx in range(num_of_properties):
         st.subheader(f"Property No {idx + 1}")
         col1, col2, col3 = st.columns(3)
 
         # NOTE : SET COLUMN NAME
         with col1:
-            # 새 속성 열 이름 입력
+            # Enter new attribute column name
             column_name = st.text_input(
                 "**Column Name**",
                 value="PRM Status",
                 key=f"new_property_column_name{idx}",
             )
 
-        # NOTE : SET VERTICAL_AXIS 즉
+        # NOTE : SET VERTICAL_AXIS in other words
         with col2:
-            # 세로축 속성선택
+            # Select vertical axis properties
             vertical_property = st.selectbox(
                 "**Vertical Column**",
                 [
@@ -822,7 +822,7 @@ def add_properties(return_dict, num_of_properties=1):
             )
             vertical_index = return_dict["df"][vertical_property].unique()
         with col3:
-            # 쉼표로 구분된 새 속성 값 입력
+            # Enter new property values ​​separated by commas
             horizontal_str = st.text_input(
                 "**Horizontal Column (separated by commas)**",
                 value="With children, Elderly, Disabilities, Non-PRM",
@@ -830,15 +830,15 @@ def add_properties(return_dict, num_of_properties=1):
             )
             horizontal_columns = [item.strip() for item in horizontal_str.split(",")]
 
-        # 선택된 속성 값으로 속성 행렬 DataFrame 생성
+        # Attribute matrix with selected attribute values DataFrame generation
         property_matrix = pd.DataFrame(index=vertical_index, columns=horizontal_columns)
         property_matrix = property_matrix.fillna(1 / len(property_matrix.columns))
-        # 사용자에게 속성 행렬 편집 허용
+        # Allow users to edit attribute matrices
         property_matrix = st.data_editor(
             property_matrix, use_container_width=True, key=f"property{idx}"
         )
         property_matrix = property_matrix.div(property_matrix.sum(axis=1), axis=0)
-        # 속성 행렬을 반환 사전에 저장
+        # Returns the attribute matrix and stores it in a dictionary
         return_dict["add_properties"][column_name] = property_matrix
 
         ######################
@@ -1028,7 +1028,7 @@ def node_chunk(process, return_dict):
     node_list = return_dict[process]["node_list"]
     st.title(f":blue[{process.upper()}]")
     return_dict[process]["facility_detail_list"] = []
-    return_dict[process]["facility_type"] = [] ## 2024.04.24 수정 ##
+    return_dict[process]["facility_type"] = [] ## 2024.04.24 correction ##
     return_dict[process]["facility_nums"] = []
     return_dict[process]["max_capacity"] = []
     for idx, col in enumerate(st.tabs(node_list)):
@@ -1051,18 +1051,18 @@ def node_chunk(process, return_dict):
                 ],
                 index=0,
                 key=f"{process} facility_type{idx}{process}",
-            )  ## 2024.04.24 수정 ##
-            return_dict[process]["facility_type"].append(facility_type)  ## 2024.04.24 수정 ##
+            )  ## 2024.04.24 correction ##
+            return_dict[process]["facility_type"].append(facility_type)  ## 2024.04.24 correction ##
 
 
             col1, col2, col3 = st.columns(3)
             with col1:
-                ###################  ## 2024.04.24 수정 ## #######################
+                ###################  ## 2024.04.24 correction ## #######################
                 st.subheader(f"1. How many Desks/Facilities?")
                 # Input for the number of facilities
                 if facility_type == "infinite_facility":  
                     facility_num=1
-                    st.write("보이지 않게 하지만, 자동으로 facility_num = 1로 설정")
+                    st.write("Invisibly, but automatically facility_num = 1set to")
 
                 elif facility_type == "normal_facility":   
                     if default_value == True:
@@ -1084,14 +1084,14 @@ def node_chunk(process, return_dict):
                     [f"{node_list[idx]}_" + fac_num for fac_num in facility_list]
                 )
                 return_dict[process]["facility_nums"].append(facility_num)
-                ###################  ## 2024.04.24 수정 ## #######################
+                ###################  ## 2024.04.24 correction ## #######################
 
             with col2:
-                ###################  ## 2024.04.24 수정 ## #######################
+                ###################  ## 2024.04.24 correction ## #######################
                 st.subheader(f"**2. Max Queue**")
                 if facility_type == "infinite_facility":
                     max_queue_length=1
-                    st.write("보이지 않게 하지만, 자동으로 max_queue_length = 1로 설정")
+                    st.write("Invisibly, but automatically max_queue_length = 1set to")
                 else:
                     max_queue_length = st.number_input(
                         f"💡 :blue[**Max Queue**] : maximum pax who can queue at Node (space constraint)",
@@ -1102,7 +1102,7 @@ def node_chunk(process, return_dict):
                         key=f"max_queue{idx}{process}",
                     )
                 return_dict[process]["max_capacity"].append(max_queue_length)
-                ###################  ## 2024.04.24 수정 ## #######################
+                ###################  ## 2024.04.24 correction ## #######################
             with col3:
                 st.subheader("3. Transaction Time")
                 transaction_time = st.number_input(
@@ -1183,7 +1183,7 @@ def node_chunk(process, return_dict):
                         df_pax[process + "_component"] == node_list[idx]
                     ]
                     df_pax_filtered["SHOW"] = df_pax_filtered["SHOW"].dt.floor("10T")
-                    # st.write(f"총 {node_list[idx]} 예상 이용여객 수 : {len(df_pax_filtered)}")
+                    # st.write(f"gun {node_list[idx]} Expected number of passengers : {len(df_pax_filtered)}")
 
                     grouped = df_pax_filtered["SHOW"].value_counts().reset_index()
                     grouped["index"] = grouped["SHOW"].astype(str).str[-8:]
@@ -1213,8 +1213,8 @@ def node_chunk(process, return_dict):
                     fig.update_layout(
                         yaxis_autorange="reversed",
                         height=5640,
-                        legend=dict(x=0.8, y=0.9),  # 레전드를 그래프에 겹치게 설정
-                        margin=dict(t=0),  # 위쪽 마진을 줄임
+                        legend=dict(x=0.8, y=0.9),  # Set the legend to overlap the graph
+                        margin=dict(t=0),  # Reduce top margin
                     )
 
                     st.plotly_chart(fig)
@@ -1367,7 +1367,7 @@ def choice_matrix(return_dict):
 
             return_dict["priority_conditions"][
                 dst
-            ] = {}  # component의 other conditions 담는 공간
+            ] = {}  # componentof other conditions space to contain
             if st.toggle("More conditions?", key=f"cond_toggle{idx}{source}"):
                 toggle = "on"
                 c1, c2 = st.columns([0.15, 0.85])
@@ -1382,7 +1382,7 @@ def choice_matrix(return_dict):
                 for add_idx in range(add_conditions):
                     return_dict["priority_conditions"][dst][
                         f"priority_{add_idx}"
-                    ] = {}  # component의 other conditions >> priority #1 담는 공간
+                    ] = {}  # componentof other conditions >> priority #1 space to contain
                     container = st.container(border=True)
                     with container:
                         dst_col = dst
@@ -1678,7 +1678,7 @@ def show_specific_node(return_dict):
                         unit_min=unit_min,
                     )
 
-                    # 여객 상위 80% 시간대만 뽑아내기
+                    # Select only the top 80% of passenger time slots
                     hour_counts = df_filtered["SHOW"].dt.hour.value_counts()
                     total_count = hour_counts.sum()
                     cumulative_percent = hour_counts.cumsum() / total_count
@@ -1816,7 +1816,7 @@ def add_columns(return_dict):
 
     # Copy the passenger DataFrame from return_dict
     df_pax = return_dict["df_pax_orig"].copy()
-    df_pax = df_pax.reset_index(drop=True)  # 중복 인덱스 문제 해결
+    df_pax = df_pax.reset_index(drop=True)  # Troubleshooting duplicate index issues
 
     return_dict["df_pax"] = None
 
@@ -1849,15 +1849,15 @@ def add_columns(return_dict):
             condition = pd.Series([True] * len(df_pax))
             for cond_col, cond_values in conds["conditions"]:
                 condition &= df_pax[cond_col].isin(cond_values)
-            n = len(df_pax.loc[condition])  # condition에 해당하는 행의 개수
+            n = len(df_pax.loc[condition])  # conditionNumber of rows corresponding to
 
             edited_df_values = pd.Series(
-                [conds["edited_df"]] * n,  # for 문 대신 곱셈 사용
+                [conds["edited_df"]] * n,  # for Use multiplication instead of statement
                 index=df_pax.loc[condition].index,
             )
             df_pax.loc[condition, f"{horizontal_process}_edited_df"] = edited_df_values
 
-            # process_component는 시뮬레이션 전에 probability로만 가는 값이기 때문에, temp_condition으로 vertical_process 값이 미리 확정되어있음
+            # process_componentbefore the simulation probabilityBecause it is a value that only goes to, temp_conditionby vertical_process Value is predetermined
             if horizontal_process_category == 1:  # is root
                 property_col = return_dict[horizontal_process]["source"][0]
                 temp_condition = condition & (
@@ -2007,7 +2007,7 @@ def set_capacity(return_dict):
     with capa_input:
         uploaded_file = st.file_uploader("Upload Capacity excel", type=["xlsx"])
         if uploaded_file is None:
-            return_dict.pop("capacity_datas", None)  # 파일이 없으면 capacity_datas 삭제
+            return_dict.pop("capacity_datas", None)  # If there is no file capacity_datas delete
         elif uploaded_file.name.endswith((".xlsx")):
             capacity_datas = pd.read_excel(
                 uploaded_file, sheet_name=None, index_col=False
@@ -2034,18 +2034,18 @@ import openpyxl
 
 
 def make_capacity_excel(return_dict):
-    # 엑셀 파일 경로
+    # Excel file path
     excel_path = "data/raw/excel_utility/simulator_capacity.xlsx"
-    # 기존 파일이 있는 경우 모든 시트 삭제 (Sheet1 제외)
+    # Delete all sheets if existing files exist (Sheet1 exception)
     book = openpyxl.load_workbook(excel_path)
-    # Sheet1을 제외한 모든 시트 삭제
+    # Sheet1Delete all sheets except
     for sheet_name in book.sheetnames:
         if sheet_name != "Sheet1":
             del book[sheet_name]
     book.save(excel_path)
     book.close()
 
-    # 기존 파일이 있는 경우에는 append 모드로, 없는 경우에는 새로 생성
+    # If you have an existing file append As a mode, if it does not exist, create a new one
     with pd.ExcelWriter(
         excel_path, mode="a", engine="openpyxl", if_sheet_exists="replace"
     ) as writer:
@@ -2054,7 +2054,7 @@ def make_capacity_excel(return_dict):
                 values = return_dict[component][node]
                 values = values[
                     ::10
-                ]  # values는 현재 1분단위 증강 데이터 > 다시 10분단위변환
+                ]  # valuesis the current one-minute augmented data > Convert again to 10 minute units
 
                 facility_num = return_dict[component]["facility_nums"][idx]
                 facility_columns = [
@@ -2070,7 +2070,7 @@ def make_capacity_excel(return_dict):
                 df = pd.DataFrame(data=values, columns=facility_columns, index=times)
                 df.to_excel(writer, sheet_name=str(node))
 
-    # 파일을 읽어서 다운로드 버튼 생성
+    # Read the file and create a download button
     with open("data/raw/excel_utility/simulator_capacity.xlsx", "rb") as f:
         st.download_button(
             label="Download Capacity Template",
@@ -2110,12 +2110,12 @@ def run(return_dict):
             return_dict = choice_matrix(return_dict)
         if "df_pax" in return_dict:
             # with SURVEY:
-            #     # st.write("제작중")
+            #     # st.write("In production")
             #     show_survey(return_dict)
             with CAPACITY:
                 _ = set_capacity(return_dict)
                 with RUN_SIMULATION:
-                    ###################  ## 2024.04.24 수정 ## #######################
+                    ###################  ## 2024.04.24 correction ## #######################
                     optimize = st.toggle("Operation schedule recommendations", key=f"ops_sch_recom", value=False)
                     if optimize:
                         for process in return_dict["component_list"] : 
@@ -2131,7 +2131,7 @@ def run(return_dict):
                             return_dict[process]["target_waiting_time"]=[]
                             for node in return_dict[process]["node_list"] :
                                 return_dict[process]["target_waiting_time"].append(None)
-                    ###################  ## 2024.04.24 수정 ## #######################
+                    ###################  ## 2024.04.24 correction ## #######################
 
                     if st.button(
                         "Run Simulation", use_container_width=True, type="primary"
@@ -2194,7 +2194,7 @@ def show_aemos_template(df, component_list, time_interval_min=15):
             if component !="Total Template":
                 group_col_list = st.multiselect(
                     f"Queue groupby", ["operating_carrier_name", "International/Domestic","terminal","country_name","region_name","aircraft_class"], 
-                    default=[],  # 디폴트 값 설정
+                    default=[],  # Set default value
                     key=f"method_{component}"
                 )
                 df["group_col"] = df[group_col_list].astype(str).agg("_".join, axis=1) if group_col_list else ""
@@ -2265,7 +2265,7 @@ def view(return_dict):
 
         return np.select(conditions, choices, default="over 60min")
 
-    # 각 component에 대해 적용
+    # each componentApply for
     for component in component_list:
         time_diff = (
             sim_df_orig[f"{component}_pt_pred"] - sim_df_orig[f"{component}_on_pred"]
@@ -2414,7 +2414,7 @@ def view(return_dict):
 
 
 
-                            # 새로운 인덱스 설정
+                            # Set new index
                             total_capa.index = time_range
                             capa_edited.index = time_range
 
@@ -2541,17 +2541,17 @@ def show_total(df, key):
         df.columns[2:],
         key=f"show_col{key}",
     )
-    # 기본 바 차트
+    # basic bar chart
     fig = px.bar(
         df,
         x="node",
         y=show_col,
     )
-    # 레이아웃 커스터마이징
+    # Layout customization
     fig.update_layout(
         height=500,
     )
-    fig.update_traces(marker_color="#007aff", opacity=0.8)  # 바 색상  # 투명도
+    fig.update_traces(marker_color="#007aff", opacity=0.8)  # bar color  # transparency
 
     st.plotly_chart(fig)
 
@@ -2594,9 +2594,9 @@ def make_passenger_queuesue_df(df, selected_date, start_time, end_time, group, f
     )
     df_expanded = df_expanded[
         df_expanded["Time"].isin(time_range)
-    ]  # 하루를 넘어가거나, 하루 이전의 값을 사전 제거
+    ]  # Exceeds one day, or pre-removes values ​​that are one day older.
 
-    # count_df 만들기
+    # count_df making
     count_df = (
         df_expanded.groupby(["Time", group]).size().unstack(fill_value=0).reset_index()
     )
@@ -2633,16 +2633,16 @@ def make_count_df(df, start_date, end_date, time_col, group, buffer_day=True, fr
 
     time_range_df = pd.DataFrame(time_range, columns=["Time"])
 
-    # 필요한 시간 열 설정(use loc_dict) 및 freq_min 단위로 반올림
+    # Set the required time column(use loc_dict) and freq_min round to unit
     df_copied[time_col] = df_copied[time_col].dt.floor(f"{freq_min}T")
 
-    # 그룹별로 카운트
+    # Count by group
     count_df = df_copied.groupby([time_col, group]).size().reset_index(name="index")
     count_df.columns = ["Time", group, "index"]
     count_df = pd.merge(time_range_df, count_df, on="Time", how="left")
     count_df["index"] = count_df["index"].fillna(0)
     count_df[group] = count_df[group].fillna("")
-    # ranking 설정하기
+    # ranking Setting up
     ranking_df = count_df.groupby(group)["index"].sum().sort_values(ascending=False)
     ranking_order = ranking_df.index.tolist()
 
@@ -2655,10 +2655,10 @@ def show_bar(df, ranking_order, group, capa_df=None, max_y=None):
         x="Time",
         y="index",
         color=group,
-        category_orders={group: ranking_order},  # 범례의 순서 지정
+        category_orders={group: ranking_order},  # Ordering the Legend
     )
     if max_y is not None:
-        fig.update_layout(yaxis_range=[0, max_y])  # y축 범위 설정: [최솟값, 최댓값]
+        fig.update_layout(yaxis_range=[0, max_y])  # yAxis range settings: [minimum, maximum]
 
     # if capa_df:
     if capa_df is not None:
@@ -2675,11 +2675,11 @@ def show_bar(df, ranking_order, group, capa_df=None, max_y=None):
         yaxis_title="",
         barmode="stack",
         legend=dict(
-            x=0.95,  # x좌표 (0~1 사이, 1에 가까울수록 오른쪽)
-            y=1,  # y좌표 (0~1 사이, 1에 가까울수록 위쪽)
+            x=0.95,  # xcoordinate (0~1 Between, the closer to 1, the more to the right)
+            y=1,  # ycoordinate (0~1 Between, the closer it is to 1, the higher it is.)
             xanchor="left",
             yanchor="top",
-            bgcolor="rgba(0,0,0,0)",  # 투명한 배경
+            bgcolor="rgba(0,0,0,0)",  # transparent background
         ),
     )
     st.plotly_chart(fig)
@@ -2692,23 +2692,23 @@ import numpy as np
 
 
 # def create_sankey(df, component_list, suffix="_pred"):
-#     # 프로세스별 고유값과 인덱스 매핑
+#     # Unique values ​​and index mapping for each process
 #     nodes = []
 #     node_dict = {}
 #     idx = 0
 
-#     # 노드 인덱스 생성
+#     # Create node index
 #     for process in component_list:
 #         col_name = f"{process}{suffix}"
 #         for value in df[col_name].unique():
 #             if value not in node_dict and pd.notna(value):
 #                 node_dict[value] = idx
-#                 # 각 value의 길이를 label로
+#                 # each valuethe length of labelas
 #                 label_count = len(df[df[col_name] == value])
 #                 nodes.append(f"{value} ({label_count})")
 #                 idx += 1
 
-#     # source, target, value 생성
+#     # source, target, value generation
 #     sources, targets, values = [], [], []
 #     for i in range(len(component_list) - 1):
 #         source_col = f"{component_list[i]}{suffix}"
@@ -2723,7 +2723,7 @@ import numpy as np
 
 #     def get_plotly_colors(
 #         n, palette_name="Pastel1", opacity=1
-#     ):  # opacity 매개변수 추가
+#     ):  # opacity Add parameter
 #         palettes = {
 #             "Alphabet": px.colors.qualitative.Alphabet,
 #             "Antique": px.colors.qualitative.Antique,
@@ -2738,22 +2738,22 @@ import numpy as np
 #             for color in colors
 #         ]
 
-#     # Sankey 다이어그램 생성
+#     # Sankey Create diagram
 #     fig = go.Figure(
 #         go.Sankey(
 #             node=dict(
 #                 label=nodes,
 #                 # pad = 15,
 #                 # thickness = 30,
-#                 color="#007aff",  # 노드 색상
-#                 hoverinfo="none",  # 링크 호버 비활성화
+#                 color="#007aff",  # node color
+#                 hoverinfo="none",  # Disable link hover
 #             ),
 #             link=dict(
 #                 source=sources,
 #                 target=targets,
 #                 value=values,
 #                 color=get_plotly_colors(len(sources), "Antique", opacity=0.5),
-#                 hoverinfo="none",  # 링크 호버 비활성화
+#                 hoverinfo="none",  # Disable link hover
 #             ),
 #         )
 #     )
@@ -2764,7 +2764,7 @@ import numpy as np
 
 
 def create_sankey(df, component_list, suffix="_pred"):
-    # 노드 생성
+    # Create Node
     node_dict, labels, idx = {}, [], 0
     for proc in component_list:
         col = f"{proc}{suffix}"
@@ -2774,7 +2774,7 @@ def create_sankey(df, component_list, suffix="_pred"):
                 labels.append(f"{v} ({(df[col]==v).sum()})")
                 idx += 1
 
-    # 링크 생성
+    # Create link
     sources, targets, values = [], [], []
     for i in range(len(component_list)-1):
         s, t = f"{component_list[i]}{suffix}", f"{component_list[i+1]}{suffix}"
@@ -2785,7 +2785,7 @@ def create_sankey(df, component_list, suffix="_pred"):
                 targets.append(node_dict[r[t]])
                 values.append(int(r["cnt"]))
 
-    # 색상 생성
+    # Color Generation
     #             "Alphabet": px.colors.qualitative.Alphabet,
     #             "Antique": px.colors.qualitative.Antique,
     #             "D3": px.colors.qualitative.D3,
@@ -2800,7 +2800,7 @@ def create_sankey(df, component_list, suffix="_pred"):
             out.append(c)
         return out
 
-    # source 노드별 색 매핑
+    # source Node-specific color mapping
     uniq = sorted(set(sources))
     pal = get_colors(len(uniq))
     cmap = {src: pal[i] for i, src in enumerate(uniq)}
@@ -2858,7 +2858,7 @@ class DsSimulator:
         while self.idx < self.N and self.show_up_arr[self.idx] <= t:
             edited_df = self.df_pax.loc[self.idx][f"{source}_edited_df"]
 
-            if edited_df is not None:  # edited_df 있는 경우
+            if edited_df is not None:  # edited_df If there is
                 dst = edited_df.columns
                 prob = edited_df.loc[self.dist_key[self.idx]]
             else:
@@ -2867,18 +2867,18 @@ class DsSimulator:
             ###################################### 2025.07.02
             ###################################### 2025.07.02
             ###################################### 2025.07.02
-            # STEP 1: open_mask 기반으로 닫힌 노드 제외
+            # STEP 1: open_mask Exclude closed nodes based on
             open_dst = []
             open_prob = []
             for i, d in enumerate(dst):
                 node = self.nodes[d]
-                config_now = node.processing_config_full[t // 60]  # ← second → t로 맞춤
+                config_now = node.processing_config_full[t // 60]  # ← second → tcustom by
                 open_mask = any(ti is not None and ti > 0 for ti in config_now)
                 if open_mask:
                     open_dst.append(d)
                     open_prob.append(prob[i])
 
-            # STEP 2: 열린 노드가 있을 경우만 필터 반영
+            # STEP 2: Filter is reflected only when there is an open node
             if open_dst:
                 dst = open_dst
                 prob = np.array(open_prob)
@@ -2895,17 +2895,17 @@ class DsSimulator:
                 node = self.nodes[dst[np.random.choice(candidates)]]
 
             else:
-                # max_capacity 안 넘는 후보만 추림
+                # max_capacity Select only candidates who do not exceed
                 candidates = [i for i, d in enumerate(dst) if len(self.nodes[d].passenger_queues) < self.nodes[d].max_capacity]
                 if candidates:
-                    # 확률도 그에 맞게 정규화
+                    # Probabilities are also normalized accordingly
                     norm_prob = prob[candidates] / np.sum(prob[candidates])
                     node = self.nodes[dst[np.random.choice(candidates, p=norm_prob)]]
                 else:
-                    # 모든 노드가 꽉 찼을 때는 기존 방식대로 뽑기
+                    # When all nodes are full, draw as usual
                     node = self.nodes[dst[np.random.choice(len(prob), p=prob)]]
 
-            available_sum = (node.unoccupied_facilities > 0).sum()  # 1인 상태만 고려 합산
+            available_sum = (node.unoccupied_facilities > 0).sum()  # 1Sum considering only the in state
             if available_sum == 0:
                 heapq.heappush(node.passenger_queues, (self.show_up_arr[self.idx], node.passenger_node_id))
                 node.que_history[node.passenger_node_id] = len(node.passenger_queues)
@@ -2915,11 +2915,11 @@ class DsSimulator:
                 heapq.heappush(node.passenger_queues, (self.show_up_arr[self.idx], node.passenger_node_id))
 
             # node.passenger_queues = [
-            #     (100, 0),  # 100초에 도착해서 수속중인 0번 승객
-            #     (120, 1)   # 120초에 도착해서 수속중인 1번 승객
+            #     (100, 0),  # 100Passenger number 0 arrived early and is in check-in.
+            #     (120, 1)   # 120Passenger number 1 arrived early and is checking in.
             # ]
             node.passenger_ids.append(self.idx)
-            node.on_time[node.passenger_node_id] = t  # node별 time_stamp 저장장소
+            node.on_time[node.passenger_node_id] = t  # nodestar time_stamp Storage location
             node.passenger_node_id += 1
             self.idx += 1
 
@@ -2931,7 +2931,7 @@ class DsSimulator:
         :param et: ending a time clock (seconds) for Delay & Selection simulation.
         :param unit: simulation unit (default = 1 second).
         """
-        # 전체 진행률을 표시할 progress bar 생성
+        # to display overall progress progress bar generation
         progress_bar = st.progress(0)
         total_iterations = (end_time - start_time + 1)//1000
         import time as tm
@@ -2944,7 +2944,7 @@ class DsSimulator:
             simulation_finished = self.graph.prod(t, self.df_pax, self.comp)
 
             if simulation_finished=="simulation_finished":
-                for node in self.nodes : # 시뮬레이션이 돌아가지 않는 시간대의 Capacity를 0으로 만들기 위한 조치
+                for node in self.nodes : # Time zone when the simulation does not run CapacityActions to bring to 0
                     node.processing_config_full[:start_time//60+1,:]=None ### 2025.05.12 ###
                     node.processing_config_full[t//60:,:]=None
 
@@ -2953,7 +2953,7 @@ class DsSimulator:
             ### 2024.04.24 ###
 
             if t % 1000 ==0:
-            # 진행률 계산 및 progress bar 업데이트
+            # Calculate progress and progress bar update
                 progress = min(((t - start_time)//1000) / total_iterations, 1)
                 progress_bar.progress(progress)
 
@@ -3055,23 +3055,23 @@ class DsGraph:
                     [dst[0] for dst in self.graph[i]]
                     if len(self.graph[i]) > 0
                     else None
-                ),  # dst_list = [4,5] >> 의미 4번, 5번 노드
+                ),  # dst_list = [4,5] >> Meaning Nodes 4 and 5
                 destination_choices=(
                     [dst[1] for dst in self.graph[i]]
                     if len(self.graph[i]) > 0
                     else None
-                ),  # dst_choice = [0.9, 0.1] >> 의미 4번노드로 0.9확률, 5번노드로 0.1확률로 뿌리기
+                ),  # dst_choice = [0.9, 0.1] >> Meaning Spray to node 4 with a probability of 0.9, to node 5 with a probability of 0.1
                 
-                node_label=f"{self.node_labels[i][0]}*^*{self.node_labels[i][1]}",  # node_label = check in_A >> 의미 component + _ + node
+                node_label=f"{self.node_labels[i][0]}*^*{self.node_labels[i][1]}",  # node_label = check in_A >> meaning component + _ + node
                 bypass=False,
             )
-            self.nodes.append(node)  # node 객체를 담은 것이 nodes이다.
+            self.nodes.append(node)  # node something that contains an object nodesam.
         self.nodes = np.array(self.nodes, dtype=object)
         for node in self.nodes:
             if node.destinations is not None:
                 node.destinations = [
                     self.nodes[i] for i in node.destinations
-                ]  # node.dst_list에 목적지 노드의 객체 자체를 넣는 과정
+                ]  # node.dst_listThe process of inserting the object itself of the destination node into
 
     def prod(self, t, df_pax, comp):
         """
@@ -3140,7 +3140,7 @@ class DsNode:
         self.on_time = np.zeros(num_passengers, dtype=int)
         self.done_time = np.zeros(num_passengers, dtype=int)
         self.move_time = np.zeros(num_passengers, dtype=int)
-        # 2025.07.24 - 이동 대기 큐 추가
+        # 2025.07.24 - Add queue to wait for movement
         self.moving_queues = []
 
 
@@ -3171,9 +3171,9 @@ class DsNode:
 
 
 
-    # 2025.07.24 - 노드 간 이동 시간 처리 메서드 추가
+    # 2025.07.24 - Added inter-node travel time handling method
     def _counter_to_move(self, second):
-        """처리 완료된 승객들을 이동 상태로 전환"""
+        """Transfer completed passengers to moving status"""
         while self.occupied_facilities and self.occupied_facilities[0][0] <= second:
             done_time, passenger_node_id, facility_number = heapq.heappop(
                 self.occupied_facilities
@@ -3183,7 +3183,7 @@ class DsNode:
             self.processing_time[passenger_node_id] += second - done_time 
             self.unoccupied_facilities[facility_number] = 1
             
-            # 이동 대기 큐에 추가 (600초 이동)
+            # Add to move queue (600moving seconds)
             move_time = second + 1200
             heapq.heappush(
                 self.moving_queues,
@@ -3191,7 +3191,7 @@ class DsNode:
             )
 
     def _move_to_next_node(self, second, nodes, passengers):
-        # 2025.07.24 - 이동 완료된 승객들 처리
+        # 2025.07.24 - Handling of passengers who have completed their transfer
         while self.moving_queues and self.moving_queues[0][0] <= second:
             move_time, passenger_node_id = heapq.heappop(
                 self.moving_queues
@@ -3201,7 +3201,7 @@ class DsNode:
 
             ##### STEP1 : SELECT DESTINATION ##########################
             if self.destinations is None:
-                continue # 마지막 프로세스인 경우(ex : passport)
+                continue # If this is the last process(ex : passport)
             passenger_id = self.passenger_ids[passenger_node_id]
             destination = self.select_destination(
                 nodes, passengers, passenger_id, second
@@ -3214,8 +3214,8 @@ class DsNode:
                 _passenger_node_id = destination.passenger_node_id
                 destination.passenger_node_id += 1
                 destination.on_time[_passenger_node_id] = max(
-                    self.move_time[passenger_node_id],  # Security 완료 시각
-                    second                              # 현재 시뮬레이터 시각
+                    self.move_time[passenger_node_id],  # Security completion time
+                    second                              # Current simulator time
                 ) # 2025.07.24
 
                 destination_second = destination.on_time[_passenger_node_id] 
@@ -3245,7 +3245,7 @@ class DsNode:
                     ) # TO→QUE
 
                 ############################################################# 2025.07.03 add dod component
-                # 목적지의 목적지가 꽉 찼을 경우, 안보낸다
+                # If the destination destination is full, it will not be displayed.
                 elif (dest_of_dest is not None) and (dest_of_dest.max_capacity * np.random.normal(0.4, 0.15)  <= len(dest_of_dest.passenger_queues)):
                     destination.unoccupied_facilities[
                         destination_facility_number - 1
@@ -3290,11 +3290,11 @@ class DsNode:
             priority_destination_node_indices = None
         else:
             edited_df = df_pax.loc[pax_idx][f"{destination_component}_edited_df"]
-            if edited_df is not None:  # edited_df 있는 경우
+            if edited_df is not None:  # edited_df If there is
                 priority_destination_node_indices = (
                     None if self.node_id not in edited_df.index else edited_df.columns
                 )
-            else:  # edited_df 없는 경우
+            else:  # edited_df If there is none
                 priority_destination_node_indices = None
         priority_destination_nodes = None if priority_destination_node_indices is None else nodes[priority_destination_node_indices]
         destination_nodes = priority_destination_nodes if priority_destination_nodes is not None else self.destinations
@@ -3331,13 +3331,13 @@ class DsNode:
                     open_nodes.append(node) 
 
             ### STEP3 : dst_choices ##########################
-            if len(open_notmax_node_ids) >= 1: # 맥스큐 안넘으면서 & 열려있는 경우>>
+            if len(open_notmax_node_ids) >= 1: # Without passing Max Q & If open>>
                 open_notmax_choices = [all_dst_choices[i] for i in open_notmax_node_ids]
                 return open_notmax_nodes[np.random.choice(len(open_notmax_choices), p=self.normalize(open_notmax_choices))]
-            elif len(open_node_ids)>=1: # 맥스큐 넘으면서 & 열려있는 경우>>
-                open_choices = [all_dst_choices[i] for i in open_node_ids] #하나라도 열린 node의 확률을 뽑는다.
+            elif len(open_node_ids)>=1: # Passing Max Q & If open>>
+                open_choices = [all_dst_choices[i] for i in open_node_ids] #even one open nodePick the probability of.
                 return open_nodes[np.random.choice(len(open_choices), p=self.normalize(open_choices))]
-            else: # 닫혀있는 경우
+            else: # If closed
                 return destination_nodes[np.random.choice(len(all_dst_choices), p=self.normalize(all_dst_choices))]
 
             ###################################### 2025.07.02
@@ -3367,11 +3367,11 @@ class DsNode:
             edited_df=None
             if destination_component:
                 edited_df = passengers.loc[passenger_id][f"{destination_component}_edited_df"]
-                if edited_df is not None: # edited_df 있는 경우
+                if edited_df is not None: # edited_df If there is
                     priority_destination_node_indices = (
                         None if self.node_id not in edited_df.index else edited_df.columns
                     )
-                else: # edited_df 없는 경우
+                else: # edited_df If there is none
                     priority_destination_node_indices = None
             priority_destination_nodes = None if priority_destination_node_indices is None else nodes[priority_destination_node_indices]
             destination_nodes = priority_destination_nodes if priority_destination_nodes is not None else self.destinations
@@ -3390,7 +3390,7 @@ class DsNode:
 
 
 
-                # 열린 노드만 필터링
+                # Filter only open nodes
                 open_nodes = []
                 for node in destination_nodes:
                     config_now = node.processing_config_full[second // 60]
@@ -3413,7 +3413,7 @@ class DsNode:
                             if len(n.passenger_queues) >= n.max_capacity * full_threshold
                         ]
                         if len(full_nodes) / num_of_nodes >= 0.5:
-                            return True # full_nodes 비율이 50% 초과면 break 
+                            return True # full_nodes If the ratio exceeds 50% break 
                         else:
                             return False
                     
@@ -3442,7 +3442,7 @@ class DsNode:
 
 
     def select_facility(self, second) -> int | None:
-        if self.facility_type=="infinite_facility": # infinite_facility일 경우, 열고닫는것 없이 무조건 1번 카운터로 통과하는 것으로 계산
+        if self.facility_type=="infinite_facility": # infinite_facilityIn this case, it is calculated as passing through counter 1 without opening or closing.
             return 1
 
         current_selection = self.selection_config[second//60] 
@@ -3461,7 +3461,7 @@ class DsNode:
             )
             index = np.random.choice(len(available_facility_indices), p=probabilities)
 
-        # NOTE: 선택된 시설(facility)의 가용 여부를 변경한다.
+        # NOTE: Selected facility(facility)Change the availability of.
         self.unoccupied_facilities[available_facility_indices[index]] = 0
 
         facility_index = available_facility_indices[index] + 1
@@ -3511,51 +3511,51 @@ class DsNode:
 
 
     def _adjust_facilities(self, target_delay, second, adjust_interval=1, open_threshold=0.85, close_threshold=0.1):
-        # 현재 시각의 분 단위 인덱스 계산
+        # Calculate the index in minutes of the current time
         idx_min = second // 60
         
-        # 현재 설정 복사
+        # Copy current settings
         updated_config = self.processing_config_full[idx_min].copy()
         updated_config_orig = self.processing_config_full[idx_min].copy()
 
-        # 닫힌 시설은 updated_config에서 None 처리
+        # Closed facilities updated_configat None treatment
         updated_config[self.unoccupied_facilities == -1] = None
 
-        # delay가 없으면 설정만 반영하고 종료
+        # delayIf there is no, only the settings are reflected and exit.
         latest_idx_min = np.argmax(self.done_time)
         if self.done_time[latest_idx_min] <= 0:
             self.processing_config_full[idx_min : idx_min+adjust_interval] = updated_config
             return
 
-        # 최근 지연시간과 대기열 비율 계산
+        # Latest latency and queue rate calculations
         recent_delay = self.done_time[latest_idx_min] - self.on_time[latest_idx_min]
         
-        # 현재 열린 시설의 총 1분당 처리 용량 계산
+        # Calculate total per minute throughput capacity for currently open facilities
         current_capacity = 0
         for i, status in enumerate(self.unoccupied_facilities):
             trans_time = updated_config_orig[i]
             if status >= 0 and trans_time is not None and trans_time > 0:
-                current_capacity += 60 / trans_time  # 60초 기준 처리 가능 수
+                current_capacity += 60 / trans_time  # 60Number of processing per second
                 
-        # 최근 5분간 온 여객 수 계산 → 1분 평균 수요 추정
+        # Calculate the number of passengers arriving in the last 5 minutes → 1Minute average demand estimation
         time_diff = second - self.on_time
         demand_5min = np.sum((time_diff >= 0) & (time_diff < 300))
         demand_per_min = demand_5min / 5.0
 
-        # 수요와 용량 차이 계산
+        # Calculate demand and capacity gap
         shortage = demand_per_min - current_capacity
 
-        ###### 시설 열기 ######
+        ###### Open facility ######
         if (recent_delay > target_delay * open_threshold or len(self.passenger_queues) > 10):
             if shortage > 0:
-                # 열 수 있는 후보 시설들의 평균 처리 시간 계산
+                # Calculate average processing time for candidate facilities to open
                 open_candidates = (self.unoccupied_facilities == -1) & (updated_config_orig > 0)
                 if np.any(open_candidates):
                     avg_trans_time = np.mean(updated_config_orig[open_candidates])
-                    # 부족분을 처리하기 위해 필요한 시설 수 계산 (10% 여유 추가)
+                    # Calculate the number of facilities needed to handle the shortfall (10% add margin)
                     iter_open = int(np.ceil(shortage * 1.1 * avg_trans_time / 60))
 
-                    # iter_open 개수만큼 시설 열기
+                    # iter_open Open as many facilities as there are
                     for _ in range(iter_open):
                         for fac in range(len(self.unoccupied_facilities)):
                             if self.unoccupied_facilities[fac] == -1:
@@ -3564,24 +3564,24 @@ class DsNode:
                                 self.latest_opened = second ### 2025.05.12 ###
                                 break
 
-        ###### 시설 닫기 (열린 후 1시간 지난 경우만) ######
+        ###### Close facility (Only if 1 hour has passed since opening) ######
         elif (recent_delay < target_delay * close_threshold) or (shortage < 0):
             if shortage < 0:
-                # 닫을 수 있는 후보 시설들의 평균 처리 시간 계산
+                # Calculate average turnaround time for candidate facilities for closure
                 closed_candidates = (self.unoccupied_facilities == 1) & (updated_config_orig > 0)
                 if np.any(closed_candidates):
                     avg_trans_time = np.mean(updated_config_orig[closed_candidates])
-                    # 10%의 여유를 두고 줄이도록 시설 수 계산
+                    # 10%Calculate the number of facilities to reduce the number with some margin.
                     iter_closed = int(np.ceil(shortage * -1 * 0.9 * avg_trans_time / 60))
 
-                    # 닫을 수 있는 시설 후보 선정 (1시간 이상 운영된 시설)
+                    # Selecting candidates for facilities that can be closed (1Facilities that have been operating for more than two hours)
                     MIN_OPEN_LASTED_MIN = 40
                     candidates = [
                         i for i in reversed(range(len(self.unoccupied_facilities)))
                         if self.unoccupied_facilities[i] == 1 and (second - self.latest_opened) >= MIN_OPEN_LASTED_MIN*60 ### 2025.05.12 ###
                     ]
 
-                    # 최소 1개 시설은 유지하면서 시설 닫기
+                    # Close a facility while retaining at least 1 property
                     MIN_OPEN_FACILITIES = 1
                     for i in range(min(len(candidates), iter_closed)):
                         if len([s for s in self.unoccupied_facilities if s >= 0]) > MIN_OPEN_FACILITIES and candidates:
@@ -3589,10 +3589,10 @@ class DsNode:
                             self.unoccupied_facilities[fac_to_close] = -1
                             updated_config[fac_to_close] = None
 
-        # 닫힌 시설은 config에서 None 처리
+        # Closed facilities configat None treatment
         updated_config[self.unoccupied_facilities == -1] = None
 
-        # 변경된 설정 반영
+        # Reflect changed settings
         self.processing_config_full[idx_min : idx_min+adjust_interval] = updated_config
 
 
@@ -3872,9 +3872,9 @@ class DsOutputWrapper:
         for node in self.nodes:
             node.passenger_ids = np.array(node.passenger_ids)
 
-            # FIXME: 수정완료
-            # ===> 만약 사용자가 Security에 SC_West, SC_East로 입력하면 이게 의도한 것과 다르게 된다.
-            new_col_on = (node.node_label.split("*^*")[0]) + "_on_pred" # node_label = check in_A >> 의미 component + _ + node
+            # FIXME: Edit completed
+            # ===> If the user Securityto SC_West, SC_EastIf you enter this, it will be different from what you intended..
+            new_col_on = (node.node_label.split("*^*")[0]) + "_on_pred" # node_label = check in_A >> meaning component + _ + node
             new_col_done = (node.node_label.split("*^*")[0]) + "_done_pred"
             new_pt = (node.node_label.split("*^*")[0]) + "_pt"
             new_passenger_queues = (node.node_label.split("*^*")[0]) + "_passenger_queues"
@@ -3902,7 +3902,7 @@ class DsOutputWrapper:
                 self.passengers[f"{component}_pt"], unit="s"
             )
 
-            # FIXME: 변수명 개선하기
+            # FIXME: Improving variable names
             self.passengers[f"{component}_pt_pred"] = self.passengers[f"{component}_done_pred"] - processing_time
 
 

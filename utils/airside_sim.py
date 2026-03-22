@@ -1,14 +1,14 @@
 """
 Airside Simulation Engine.
 
-layout_design.py의 Run Simulation에서 호출된다.
-입력 layout JSON을 받아 동일한 layout 구조에 timeline을 주입한 dict를 반환한다.
-반환값은 JS의 applyLayoutObject(result)로 바로 주입된다.
+layout_design.pyof Run SimulationIt is called from
+input layout JSONtake the same layout to the rescue timelineinjected dictreturns .
+The return value is JSof applyLayoutObject(result)is injected directly into.
 
-- Runway: start → end 방향만 허용 (역방향 불가).
-- Taxiway: start → end 방향만 허용.
-- 최소 거리 경로 탐색(Dijkstra)으로 runway start ↔ apron 간 정방향만 사용.
-- 경로가 없으면 noWay=True, timeline은 빈 배열 또는 초기점만 두고 "No way" 경고 유지.
+- Runway: start → end Direction only allowed (No reverse).
+- Taxiway: start → end Only direction allowed.
+- Minimum distance route search(Dijkstra)by runway start ↔ apron Only use forward direction.
+- If there is no path noWay=True, timelineleaves an empty array or an initial point only. "No way" stay alert.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 Point = Tuple[float, float]
-_EPS = 1.0  # 픽셀 단위 동일점 판정
+_EPS = 1.0  # Determination of identical points per pixel
 
 
 @dataclass
@@ -51,19 +51,19 @@ def _dist(a: Point, b: Point) -> float:
 
 
 def _point_key(p: Point) -> Tuple[float, float]:
-    """그래프 노드 병합용 키 (소수점 1자리)."""
+    """Keys for merging graph nodes (1 decimal place)."""
     return (round(p[0], 1), round(p[1], 1))
 
 
 # ---------------------------------------------------------------------------
-# Runway / Taxiway: start → end 정방향만 사용
+# Runway / Taxiway: start → end Use forward direction only
 # ---------------------------------------------------------------------------
 
 
 def _get_runway_path(ctx: LayoutContext, runway_id: Optional[str]) -> Optional[Tuple[Point, Point, List[Point]]]:
     """
-    Runway polyline을 start → end 순서의 점 목록으로 반환.
-    반환: (start_px, end_px, [start, ..., end]) 또는 None.
+    Runway polylinesecond start → end Returns an ordered list of points.
+    return: (start_px, end_px, [start, ..., end]) or None.
     """
     runway_path = None
     if runway_id and runway_id in ctx.taxiways:
@@ -101,7 +101,7 @@ def _get_runway_path(ctx: LayoutContext, runway_id: Optional[str]) -> Optional[T
     if sp is not None and ep is not None:
         start_px = _cell_to_pixel(float(sp.get("col", 0)), float(sp.get("row", 0)), ctx.cell_size)
         end_px = _cell_to_pixel(float(ep.get("col", 0)), float(ep.get("row", 0)), ctx.cell_size)
-        # vertices 순서가 start→end인지 확인
+        # vertices the order start→endCheck if you are aware
         d_start_first = _dist2(pts[0], start_px)
         d_start_last = _dist2(pts[-1], start_px)
         if d_start_last < d_start_first:
@@ -114,7 +114,7 @@ def _get_runway_path(ctx: LayoutContext, runway_id: Optional[str]) -> Optional[T
 
 def _get_taxiway_ordered_points(tw: Dict[str, Any], cell_size: float) -> Optional[List[Point]]:
     """
-    Taxiway를 start → end 정방향 점 목록으로 반환.
+    Taxiwaycast start → end Returns a list of forward points.
     """
     verts = tw.get("vertices") or []
     if len(verts) < 2:
@@ -149,8 +149,8 @@ def _build_taxiway_path_pixels(
     dm_by_id: Dict[str, Dict[str, Any]],
 ) -> Optional[List[Point]]:
     """
-    한 taxiway polyline 위에서 from_pt → to_pt 경로를 vertices 기준으로 생성.
-    정방향(start→end)만 허용; 역방향이면 None.
+    one taxiway polyline from above from_pt → to_pt path vertices Created based on.
+    forward(start→end)Only allowed; If it's reverse None.
     """
     verts = tw.get("vertices") or []
     if len(verts) < 2:
@@ -166,16 +166,16 @@ def _build_taxiway_path_pixels(
     src_idx = min(range(len(ordered)), key=lambda i: _dist2(ordered[i], from_pt))
     dst_idx = min(range(len(ordered)), key=lambda i: _dist2(ordered[i], to_pt))
     if src_idx > dst_idx:
-        return None  # 역방향 불가
+        return None  # No reverse
     seq: List[Point] = [from_pt] + ordered[src_idx : dst_idx + 1] + [to_pt]
     return seq
 
 
 def _find_runway_touch_point(ctx: LayoutContext, runway_id: Optional[str]) -> Optional[Point]:
     """
-    JS findRunwayTouchPoint 포트.
-    - runways 배열에 있으면 그 객체의 중심(cx, cy)을 사용.
-    - 아니면 taxiways 중 pathType='runway' 또는 이름에 'runway'가 포함된 polyline의 중간점을 사용.
+    JS findRunwayTouchPoint port.
+    - runways If in an array, the center of the object(cx, cy)Use .
+    - or not taxiways middle pathType='runway' or in the name 'runway'contains polylineUse the midpoint of.
     """
     if ctx.runways:
         rw = ctx.runways.get(runway_id) if runway_id else next(iter(ctx.runways.values()), None)
@@ -228,24 +228,24 @@ def _find_runway_touch_point(ctx: LayoutContext, runway_id: Optional[str]) -> Op
                     t = (target - acc) / (seg_len or 1.0)
                     return x1 + (x2 - x1) * t, y1 + (y2 - y1) * t
                 acc += seg_len
-        # fallback: 첫 점
+        # fallback: first point
         return pts[0]
 
     return None
 
 
 # ---------------------------------------------------------------------------
-# 방향 보존 그래프: runway start→end, taxiway start→end 만 엣지로 사용
+# Direction-preserving graph: runway start→end, taxiway start→end Use only as an edge
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class _PathGraph:
-    """정방향만 허용하는 노드/엣지 그래프. 노드 = (x,y) 픽셀, 키는 _point_key로 통일."""
+    """Nodes that only allow forward direction/Edge graph. node = (x,y) pixel, key _point_keyunification."""
     nodes: List[Point] = field(default_factory=list)
     key_to_idx: Dict[Tuple[float, float], int] = field(default_factory=dict)
     edges: List[Tuple[int, int, float]] = field(default_factory=list)  # (from, to, dist)
-    stand_id_to_node_index: Dict[str, int] = field(default_factory=dict)  # apron link로 연결된 주기장만
+    stand_id_to_node_index: Dict[str, int] = field(default_factory=dict)  # apron linkOnly the apron connected to
 
     def get_or_add(self, p: Point) -> int:
         k = _point_key(p)
@@ -268,7 +268,7 @@ class _PathGraph:
 
 
 def _project_on_segment(a: Point, b: Point, q: Point) -> Tuple[float, Point]:
-    """점 q를 선분 a-b에 투영한 t(0~1)와 투영점."""
+    """dot qline segment a-bprojected onto t(0~1)and projection point."""
     ax, ay = a[0], a[1]
     bx, by = b[0], b[1]
     qx, qy = q[0], q[1]
@@ -285,19 +285,19 @@ def _project_on_segment(a: Point, b: Point, q: Point) -> Tuple[float, Point]:
 
 
 def _point_on_segment(a: Point, b: Point, q: Point, tol: float = 2.0) -> bool:
-    """q가 선분 a-b 위에 있는지 (거리 기준)."""
+    """qline segment a-b Is it above? (based on distance)."""
     _, proj = _project_on_segment(a, b, q)
     return _dist2(proj, q) <= tol * tol
 
 
 def _build_path_graph(ctx: LayoutContext) -> _PathGraph:
     """
-    Runway( start→end ), Taxiway( start→end ), Apron link (tx,ty)→stand, stand→(tx,ty) 로
-    방향 보존 그래프 구성. Runway와 taxiway 접점에서 runway를 분할해 연결.
+    Runway( start→end ), Taxiway( start→end ), Apron link (tx,ty)→stand, stand→(tx,ty) by
+    Constructing a direction-preserving graph. Runwayand taxiway At the contact point runwaySplit and connect.
     """
     g = _PathGraph()
 
-    # Runway: start → end. Runway–Taxiway 교차점은 그래프에 넣지 않음(다익스트라에서 바이패스).
+    # Runway: start → end. Runway–Taxiway Intersection points are not included in the graph.(Bypass in Dijkstra).
     for tw in ctx.taxiways.values():
         if tw.get("pathType") != "runway" and "runway" not in (tw.get("name") or "").lower():
             continue
@@ -305,12 +305,12 @@ def _build_path_graph(ctx: LayoutContext) -> _PathGraph:
         if not r:
             continue
         _start, _end, pts = r
-        # Taxiway가 runway 선분을 교차해도 junction으로 수집하지 않음 → runway는 원래 꼭짓점만 사용
+        # Taxiwaygo runway Even if the line segments intersect junctionNot collected by → runwayuses only the original vertices
         run_pts: List[Point] = list(pts)
         for i in range(len(run_pts) - 1):
             g.add_edge_if_near(run_pts[i], run_pts[i + 1])
 
-    # Taxiway: start → end 만 (역방향 엣지 없음)
+    # Taxiway: start → end only (No reverse edge)
     for tw in ctx.taxiways.values():
         if tw.get("pathType") == "runway":
             continue
@@ -320,7 +320,7 @@ def _build_path_graph(ctx: LayoutContext) -> _PathGraph:
         for i in range(len(ordered) - 1):
             g.add_edge_if_near(ordered[i], ordered[i + 1])
 
-    # Apron link 점 (tx,ty)를 해당 taxiway 세그먼트에 연결
+    # Apron link dot (tx,ty)corresponding to taxiway Connect to segment
     for lk in ctx.apron_links:
         tx_val = lk.get("tx")
         ty_val = lk.get("ty")
@@ -344,7 +344,7 @@ def _build_path_graph(ctx: LayoutContext) -> _PathGraph:
                     g.add_edge_if_near(ordered[best_i], link_pt)
                     g.add_edge_if_near(link_pt, ordered[best_i + 1])
 
-        # (tx,ty) ↔ stand (도착: runway→stand, 출발: stand→runway)
+        # (tx,ty) ↔ stand (arrive: runway→stand, depart: stand→runway)
         pbb_id = lk.get("pbbId")
         stand = ctx.pbb_stands.get(pbb_id or "") or ctx.remote_stands.get(pbb_id or "")
         if stand:
@@ -367,7 +367,7 @@ def _dijkstra(
     start_idx: int,
     end_idx: int,
 ) -> Optional[List[int]]:
-    """최소 거리 경로의 노드 인덱스 리스트. 없으면 None."""
+    """List of node indices of the minimum distance path. If there is no None."""
     n = len(g.nodes)
     dist = [1e99] * n
     dist[start_idx] = 0.0
@@ -440,8 +440,8 @@ def _build_arrival_timeline(
     graph: Optional[_PathGraph],
 ) -> Tuple[List[Dict[str, float]], bool]:
     """
-    Runway start → apron(stand) 최소거리 경로(정방향만)로 타임라인 생성.
-    경로가 없으면 ([], True) 반환하여 noWay 처리.
+    Runway start → apron(stand) minimum distance path(Forward only)Create a timeline with .
+    If there is no path ([], True) by returning noWay treatment.
     """
     token = flight.get("token") or {}
     runway_id = token.get("arrRunwayId") or token.get("runwayId")
@@ -468,7 +468,7 @@ def _build_arrival_timeline(
     if graph is None:
         graph = _build_path_graph(ctx)
 
-    # apron link로 연결된 주기장만 허용 (녹색 점이 있어야 경로 허용)
+    # apron linkOnly aprons connected to (Green dot must be present to allow path)
     end_idx = graph.stand_id_to_node_index.get(apron_id)
     if end_idx is None:
         return ([], True)
@@ -479,7 +479,7 @@ def _build_arrival_timeline(
         return ([], True)
 
     pts = _path_points_from_indices(graph, path_indices)
-    # S(d) 계열 사용 (sibtMin_d), 없으면 Original timeMin
+    # S(d) Use series (sibtMin_d), If there is no Original timeMin
     sibt_d = flight.get("sibtMin_d")
     sobt_d = flight.get("sobtMin_d")
     time_min = float(flight.get("timeMin", 0) or 0)
@@ -501,8 +501,8 @@ def _build_departure_timeline(
     graph: Optional[_PathGraph],
 ) -> Tuple[List[Dict[str, float]], bool]:
     """
-    Apron(stand) → Runway start 최소거리 경로(정방향만)로 출발 타임라인.
-    경로 없으면 ([], True).
+    Apron(stand) → Runway start minimum distance path(Forward only)Departure timeline.
+    If there is no path ([], True).
     """
     token = flight.get("token") or {}
     runway_id = token.get("depRunwayId") or token.get("arrRunwayId") or token.get("runwayId")
@@ -529,7 +529,7 @@ def _build_departure_timeline(
     if graph is None:
         graph = _build_path_graph(ctx)
 
-    # apron link로 연결된 주기장만 허용 (녹색 점이 있어야 경로 허용)
+    # apron linkOnly aprons connected to (Green dot must be present to allow path)
     start_idx = graph.stand_id_to_node_index.get(apron_id)
     if start_idx is None:
         return ([], True)
@@ -540,7 +540,7 @@ def _build_departure_timeline(
         return ([], True)
 
     pts = _path_points_from_indices(graph, path_indices)
-    # S(d) 계열 사용 (sobtMin_d), 없으면 Original timeMin + dwellMin
+    # S(d) Use series (sobtMin_d), If there is no Original timeMin + dwellMin
     sobt_d = flight.get("sobtMin_d")
     time_min = float(flight.get("timeMin", 0) or 0)
     dwell_min = float(flight.get("dwellMin", 0) or 0)
@@ -577,12 +577,12 @@ def run_simulation(
     layout_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    입력 layout(JSON)을 받아 result를 반환.
-    - Runway/Taxiway는 start→end 정방향만 사용하여 최소거리 경로 탐색.
-    - 도착: runway start → apron(stand), 출발: apron → runway start.
-    - 경로가 없으면 noWay=True, timeline은 시작점 한 점만 두어 "No way" 경고와 함께 표시.
+    input layout(JSON)take it resultreturn.
+    - Runway/TaxiwayIs start→end Minimum distance path search using only forward direction.
+    - arrive: runway start → apron(stand), depart: apron → runway start.
+    - If there is no path noWay=True, timelineLeave only one starting point "No way" Show with warning.
     """
-    print(f"[airside_sim] 사용 JSON: {layout_name or '(이름 미지정)'}")
+    print(f"[airside_sim] use JSON: {layout_name or '(name not given)'}")
     if not use_discrete_engine:
         return copy.deepcopy(layout or {})
 
@@ -643,10 +643,10 @@ def run_simulation(
     return base_layout
 
 
-# ─────────────── __main__: JSON 파일 입력 → run_simulation → result 파일 저장 ───────────────
+# ─────────────── __main__: JSON Enter file → run_simulation → result save file ───────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Airside simulation (JSON 입출력 테스트)")
+    parser = argparse.ArgumentParser(description="Airside simulation (JSON Input/Output Test)")
     parser.add_argument(
         "--input",
         default="data/Layout_storage/default_layout.json",
@@ -659,7 +659,7 @@ if __name__ == "__main__":
     if not path.is_file():
         raise SystemExit(1)
     json_name = path.stem
-    print(f"[airside_sim] 입력 JSON 파일: {path} (이름: {json_name})")
+    print(f"[airside_sim] input JSON file: {path} (name: {json_name})")
     with open(path, encoding="utf-8") as f:
         layout = json.load(f)
 
@@ -667,4 +667,4 @@ if __name__ == "__main__":
     out_path = path.parent / "sim_result.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
-    print(f"[완료] 결과 저장: {out_path}")
+    print(f"[complete] Save results: {out_path}")

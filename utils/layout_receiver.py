@@ -1,8 +1,8 @@
 """
-레이아웃 저장/로드: data/Layout_storage/ 에 이름별로 저장.
-- Save: name 있으면 Layout_storage/{name}.json, 없으면 current_layout.json (Run Simulation용).
-- POST /api/save-layout: body { "layout": {...}, "name": "optional" } 또는 전체 레이아웃 객체.
-- GET /api/load-layout?name=xxx: Layout_storage/{name}.json 반환.
+Save Layout/load: data/Layout_storage/ Save by name to.
+- Save: name If there is Layout_storage/{name}.json, If there is no current_layout.json (Run Simulationdragon).
+- POST /api/save-layout: body { "layout": {...}, "name": "optional" } or the entire layout object.
+- GET /api/load-layout?name=xxx: Layout_storage/{name}.json return.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ try:
 except ImportError:
     from utils.airside_sim import run_simulation as _run_simulation
 
-# Run Simulation 시 current_layout.json 은 반드시 data/Layout_storage/ 에만 저장
+# Run Simulation city current_layout.json must be data/Layout_storage/ Save only to
 _ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_STORAGE_DIR = (_ROOT / "data" / "Layout_storage").resolve()
 LAYOUT_FILE = LAYOUT_STORAGE_DIR / "current_layout.json"
@@ -28,7 +28,7 @@ DEFAULT_LAYOUT_PATH = LAYOUT_STORAGE_DIR / "default_layout.json"
 
 _PORT = 8765
 _RESERVED_NAMES = frozenset({"current_layout", "default_layout"})
-# 파일명으로 쓸 수 있도록 위험 문자만 제거 (공백·한글 등 허용)
+# Remove only dangerous characters so they can be used as file names (gap·Korean, etc. allowed)
 def _sanitize_layout_name(name: str) -> str:
     s = (name or "").strip()
     s = re.sub(r'[<>:"/\\|?*]', "_", s)
@@ -43,7 +43,7 @@ def _safe_layout_path(name: str) -> Optional[Path]:
 
 
 def _layout_path_for_read(name: str) -> Optional[Path]:
-    """Load(읽기)용 경로. default_layout/current_layout 포함 모든 저장된 이름 허용."""
+    """Load(read)dragon path. default_layout/current_layout Allow all saved names, including."""
     if not name or not (name or "").strip():
         return None
     safe = _sanitize_layout_name((name or "").strip())
@@ -52,7 +52,7 @@ def _layout_path_for_read(name: str) -> Optional[Path]:
     path = LAYOUT_STORAGE_DIR / f"{safe}.json"
     if path.is_file():
         return path
-    # streamlit 등 다른 cwd에서 실행 시 대비: 프로젝트 루트 기준 data/Layout_storage
+    # streamlit etc. other cwdContrast when running on: Based on project root data/Layout_storage
     try:
         cwd_path = Path.cwd() / "data" / "Layout_storage" / f"{safe}.json"
         if cwd_path.is_file():
@@ -66,14 +66,14 @@ def _layout_path_for_read(name: str) -> Optional[Path]:
 
 
 def save_layout_to_file(layout: Dict[str, Any], name: Optional[str] = None) -> None:
-    """레이아웃을 data/Layout_storage 에만 저장. name 없으면 current_layout.json (Run Simulation용).
-    name 이 default_layout/current_layout 이어도 덮어쓰기(현재 상태 저장) 허용."""
+    """Layout data/Layout_storage Save only to. name If there is no current_layout.json (Run Simulationdragon).
+    name this default_layout/current_layout Overwrite even if it is(Save current state) allowance."""
     LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     if name:
         safe = _sanitize_layout_name(name)
         if not safe and (name or "").strip():
             raise ValueError(f"Invalid layout name: {name!r}")
-        # 예약 이름(default_layout, current_layout)도 덮어쓰기 허용 (경로는 소문자로 통일)
+        # reservation name(default_layout, current_layout)Also allow overwriting (Paths are in lowercase letters)
         if safe and safe.lower() in _RESERVED_NAMES:
             path = (LAYOUT_STORAGE_DIR / f"{safe.lower()}.json").resolve()
         else:
@@ -82,13 +82,13 @@ def save_layout_to_file(layout: Dict[str, Any], name: Optional[str] = None) -> N
                 raise ValueError(f"Invalid layout name: {name!r}")
             path = path.resolve()
     else:
-        # Run Simulation: 반드시 Layout_storage/current_layout.json
+        # Run Simulation: certainly Layout_storage/current_layout.json
         path = (LAYOUT_STORAGE_DIR / "current_layout.json").resolve()
     path.write_text(json.dumps(layout, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def list_layout_names():
-    """Layout_storage 내 .json 파일의 이름(확장자 제외) 목록을 반환."""
+    """Layout_storage my .json name of the file(Excluding extension) returns a list."""
     try:
         LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
         if not LAYOUT_STORAGE_DIR.is_dir():
@@ -103,9 +103,9 @@ def list_layout_names():
 
 
 def delete_layout(name: str) -> None:
-    """Layout_storage에서 해당 이름의 json 파일 삭제. default_layout/current_layout 은 삭제 불가."""
+    """Layout_storageof that name in json Delete file. default_layout/current_layout cannot be deleted."""
     if not name or (name or "").strip().lower() in _RESERVED_NAMES:
-        raise ValueError("default_layout, current_layout 은 삭제할 수 없습니다.")
+        raise ValueError("default_layout, current_layout cannot be deleted.")
     path = _safe_layout_path(name)
     if path is None:
         raise ValueError(f"Invalid layout name: {name!r}")
@@ -199,7 +199,7 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                     layout_name = "current_layout"
                 if not isinstance(layout, dict):
                     raise ValueError("layout must be a JSON object")
-                # Run Simulation 시 Layout_storage/current_layout.json 저장 (timeline 제외)
+                # Run Simulation city Layout_storage/current_layout.json save (timeline exception)
                 layout_to_save = dict(layout)
                 flights = layout_to_save.get("flights") or []
                 layout_to_save["flights"] = [{k: v for k, v in f.items() if k != "timeline"} for f in flights]
@@ -242,7 +242,7 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
             return
         try:
             obj = json.loads(body)
-            # 이름 저장: body에 "layout" 키가 있고 그 값이 객체면 → layout + name 사용
+            # save name: bodyto "layout" If there is a key and its value is an object → layout + name use
             if isinstance(obj, dict) and "layout" in obj and isinstance(obj.get("layout"), dict):
                 layout = obj["layout"]
                 name = obj.get("name")
@@ -273,7 +273,7 @@ _thread: Optional[threading.Thread] = None
 
 
 def start_layout_receiver(port: int = _PORT) -> str:
-    """백그라운드에서 레이아웃 수신 서버를 띄우고, 접속 URL을 반환한다."""
+    """Launch the layout receiving server in the background and connect to it URLreturns."""
     global _server, _thread
     if _server is not None:
         return f"http://127.0.0.1:{_PORT}"

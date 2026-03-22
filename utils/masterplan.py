@@ -11,7 +11,7 @@ from streamlit_folium import st_folium
 import folium
 from geopy.distance import geodesic
 
-# 전역 랜덤 시드 (create_normal_dist_col용)
+# Global random seed (create_normal_dist_coldragon)
 RANDOM_SEED = 42
 
 
@@ -203,12 +203,12 @@ def create_normal_dist_col(
     iteration=1,
     datetime=False,
 ):
-    """정규분포 랜덤값을 ref_col에 더해 new_col을 만듦."""
+    """Normally distributed random values ref_colIn addition to new_colcreate."""
     np.random.seed(RANDOM_SEED)
     random_arr = np.random.normal(mean, sigma, size=len(df))
     assert (
         min_max_clip[0] <= mean <= min_max_clip[1]
-    ), "mean 값이 clipping 범위를 넘어서고 있습니다 >> min~max clipping 범위 내로 mean값을 재설정해주세요"
+    ), "mean value clipping It's going out of bounds. >> min~max clipping within range meanPlease reset the value"
     for _ in range(iteration):
         out_of_range_indices = np.where(
             (random_arr < min_max_clip[0]) | (random_arr > min_max_clip[1])
@@ -451,13 +451,13 @@ class MasterplanInput:
             with code :
                 if data_source=="Cirium_Status":
                     import os
-                    folder_path = r"C:\Users\qkrru\Desktop\바탕 화면\creative_code\DMK_레포지토리\cirium_database"
+                    folder_path = r"C:\Users\qkrru\Desktop\desktop\creative_code\DMK_repository\cirium_database"
                     files = os.listdir(folder_path)
                     airport_list = [filename[:3] for filename in files if '_gd_table.' in filename]
 
                 elif data_source=="Cirium_Schedule":
                     import os
-                    folder_path = r"C:\Users\qkrru\Desktop\바탕 화면\creative_code\DMK_레포지토리\cirium_database"
+                    folder_path = r"C:\Users\qkrru\Desktop\desktop\creative_code\DMK_repository\cirium_database"
                     files = os.listdir(folder_path)
                     airport_list = [filename[:3] for filename in files if '_schedule_ready_.parquet' in filename]
 
@@ -516,10 +516,10 @@ class MasterplanInput:
                     break
                 except Exception as e:
                     if attempt==9:
-                        st.write(f"{attempt}차 실패")
+                        st.write(f"{attempt}tea failure")
 
 
-            # 공항 여객데이터 불러오기 from wiki_data
+            # Load airport passenger data from wiki_data
             open_source_pax_df = self.classify_passenger_data(open_source_pax_df)
             open_source_pax_df=open_source_pax_df.rename({"Year":"year","Month":"month","Passengers":"total_pax"},axis=1)
             pax_count_by_year = open_source_pax_df[open_source_pax_df["Type"]=="year"][["year","total_pax"]]
@@ -529,7 +529,7 @@ class MasterplanInput:
             pax_count_by_year['total_pax'] = pax_count_by_year['total_pax'].interpolate().astype(int)
 
 
-            # 스케쥴 데이터 불러오기
+            # Load schedule data
             if data_source=="Cirium_Status":
                 df_orig=pd.read_parquet("../../cirium_database/" + f'{iata_code}_gd_table.parquet')
                 df_orig=df_orig[df_orig["scheduled_gate_local"].dt.year>=2018]
@@ -727,14 +727,14 @@ class MasterplanInput:
             distances = R * c
             return distances
 
-        # 거리 계산 및 필터링
+        # Distance calculation and filtering
         distances = haversine_vectorized(self.airport_lat, self.airport_long, 
                                     self.df_cities['lat'].values, 
                                     self.df_cities['lng'].values)
 
         df_cities_filtered = self.df_cities[(distances <= radius_distance)&(self.df_cities["population"]>0)]
         df_cities_filtered["population"]=df_cities_filtered["population"].astype(int)
-        # 지도 생성
+        # map creation
 
         def create_circle(lat, lon, radius_km, points=100):
             local_azimuths = np.linspace(0, 360, points)
@@ -755,7 +755,7 @@ class MasterplanInput:
                                 hover_name='city',
                                 zoom=3)
 
-        # 원 추가
+        # add circle
         fig.add_trace(go.Scattermapbox(
             lat=circle_lat,
             lon=circle_lon,
@@ -764,7 +764,7 @@ class MasterplanInput:
             name=f"{radius_distance}km radius"
         ))
 
-        # 중심점 표시
+        # Show center point
         fig.add_trace(go.Scattermapbox(
             lat=[self.airport_lat],
             lon=[self.airport_long],
@@ -784,7 +784,7 @@ class MasterplanInput:
                 zoom=4
             ),
             height=650,
-            margin=dict(t=0, l=0, r=0, b=0),  # 모든 방향의 마진을 0으로 설정
+            margin=dict(t=0, l=0, r=0, b=0),  # Set margin in all directions to 0
             legend=dict(
                 yanchor="top",
                 y=0.99,
@@ -794,7 +794,7 @@ class MasterplanInput:
             ),
             )
 
-        # 스트림릿에 지도 표시
+        # Display map in streamlet
         graph, table=st.columns([0.5,0.5])
         with graph:
             st.plotly_chart(fig, use_container_width=True)
@@ -836,11 +836,11 @@ class MasterplanInput:
                 text = ['Center'],
                 marker = dict(
                 size = 7,
-                color = '#FF0066'  # 또는 'rgb(255, 105, 180)'
+                color = '#FF0066'  # or 'rgb(255, 105, 180)'
                 )
                 ))
 
-        # dst_airport (파란색 점들 추가)
+        # dst_airport (Add blue dots)
         fig.add_trace(go.Scattergeo(
             lon=dep_arr_airport["lon"],
             lat=dep_arr_airport["lat"],
@@ -851,7 +851,7 @@ class MasterplanInput:
             )
         ))
 
-        # geo 객체를 사용하여 지구본 설정
+        # geo Setting up a globe using objects
         fig.update_geos(
             projection_type='orthographic',
             showland=True,
@@ -866,7 +866,7 @@ class MasterplanInput:
                 lon=lon,
                 lat=lat
             ),
-            # 지구본 회전 설정
+            # Globe rotation settings
             projection_rotation=dict(
                 lon=lon,
                 lat=lat,
@@ -876,10 +876,10 @@ class MasterplanInput:
         fig.update_layout(
         height=1000,
         width=1000,
-        paper_bgcolor='rgba(0,0,0,0)',  # 페이퍼 배경을 투명하게
-        plot_bgcolor='rgba(0,0,0,0)' ,   # 플롯 배경을 투명하게
-        margin=dict(l=0, r=0, t=0, b=0),  # 모든 마진을 0으로 설정
-        showlegend=False  # 범례 없애기
+        paper_bgcolor='rgba(0,0,0,0)',  # Make the paper background transparent
+        plot_bgcolor='rgba(0,0,0,0)' ,   # Make plot background transparent
+        margin=dict(l=0, r=0, t=0, b=0),  # Set all margins to 0
+        showlegend=False  # Remove legend
         )
         st.caption(f"{len(dep_arr_airport)} routes")
         st.plotly_chart(fig, use_container_width=True)
@@ -905,10 +905,10 @@ class MasterplanInput:
 
 
 
-        # 연도별 카운트 계산
+        # Calculate counts by year
         site_counts = df.groupby(['year', 'dep/arr_airport']).size().reset_index(name='count')
         site_counts.columns = ['year', 'airport_id', 'count']
-        # 카운트와 공항 데이터 결합
+        # Combining counts and airport data
         df_with_counts = pd.merge(
             site_counts,
             self.df_airport[['airport_id', 'lat', 'lon', 'country_code',"region_name", 'city']],
@@ -916,7 +916,7 @@ class MasterplanInput:
             how='left'
         )
 
-        # 선택된 공항 여부 컬럼 추가
+        # Add column for selected airport
         if self.iata_code!=None:
             df_with_counts['is_selected'] = df_with_counts['airport_id'].isin([self.iata_code])
             max_val=df_with_counts["count"].max()*0.5
@@ -937,21 +937,21 @@ class MasterplanInput:
                 for year in years
             ], ignore_index=True)
             df_selected_extra[color]="selected airport"
-        # 선택된 공항을 추가로 모든 연도에 복제하여 표시
+        # Display selected airports duplicated for all additional years
 
 
 
-        # 전체 데이터 통합
-        # 데이터 통합
+        # Full data integration
+        # data integration
         df_final = pd.concat([df_with_counts, df_selected_extra], ignore_index=True)
         df_final['count'] = df_final['count'].clip(lower=max_val * 0.1)
 
-        # 모든 연도-컬러 조합 생성 후 병합
+        # Create and then merge all year-color combinations
         from itertools import product
         all_combinations = pd.DataFrame(product(df_final['year'].unique(), df_final[color].unique()),
                                         columns=['year', color])
 
-        # 병합하여 누락된 조합에 dummy 채우기
+        # Merge to find missing combinations dummy fill
         df_final = pd.merge(all_combinations, df_final, on=['year', color], how='left')
         df_final.fillna({
             'airport_id': 'selected airport',
@@ -962,7 +962,7 @@ class MasterplanInput:
             'count': max_val * 0.2
         }, inplace=True)
 
-        # 지도 그리기
+        # draw a map
         fig = px.scatter_mapbox(df_final,
                                 lat='lat',
                                 lon='lon',
@@ -979,7 +979,7 @@ class MasterplanInput:
             height=800,
             margin=dict(t=0, l=0, r=0, b=0),
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, borderwidth=2),
-            updatemenus=[],   # 재생 버튼 제거
+            updatemenus=[],   # Remove play button
             )
         
         
@@ -991,12 +991,12 @@ class MasterplanInput:
 
     def heatmap(self, df):
         fig = go.Figure(data=go.Heatmap(
-            z=df.T.values,                    # 데이터 값
-            x=df.T.columns,  # x축 레이블 (시간)
-            y=df.T.index,                     # y축 레이블 (날짜)
+            z=df.T.values,                    # data value
+            x=df.T.columns,  # xaxis label (hour)
+            y=df.T.index,                     # yaxis label (date)
             colorscale=[
                         [0, 'black'],
-                        [0.5, 'pink'],  # 중간값은 분홍색
+                        [0.5, 'pink'],  # median is pink
                         [1, 'red']
                         ]
                         ))
@@ -1010,10 +1010,10 @@ class MasterplanInput:
         st.subheader("**📄 Issue Paper Analysis**")
         
         if self.df_orig is None or len(self.df_orig) == 0:
-            st.warning("⚠️ 스케줄 데이터가 없습니다. 먼저 데이터를 로드해주세요.")
+            st.warning("⚠️ There is no schedule data. Please load the data first.")
             return
         
-        # 데이터 전처리
+        # Data preprocessing
         df = self.df_orig.copy()
         if 'scheduled_gate_local' in df.columns:
             df['scheduled_gate_local'] = pd.to_datetime(df['scheduled_gate_local'])
@@ -1024,7 +1024,7 @@ class MasterplanInput:
             df['scheduled_gate_dayofweek'] = df['scheduled_gate_local'].dt.dayofweek
             df['scheduled_gate_dayname'] = df['scheduled_gate_local'].dt.day_name()
         
-        # 탭 구성
+        # Tab Configuration
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "📊 1. Executive Summary",
             "🚦 2. Operations Congestion",
@@ -1062,9 +1062,9 @@ class MasterplanInput:
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("#### 🔍 핵심 발견 (Key Findings)")
+            st.markdown("#### 🔍 key discovery (Key Findings)")
             
-            # 1. 시간대별 혼잡도 분석
+            # 1. Congestion analysis by time zone
             if 'scheduled_gate_hour' in df.columns:
                 hourly_movements = df.groupby('scheduled_gate_hour').size()
                 peak_hour = hourly_movements.idxmax()
@@ -1072,29 +1072,29 @@ class MasterplanInput:
                 avg_movements = hourly_movements.mean()
                 
                 st.info(f"""
-                **1. 피크 시간대 식별**
-                - 최대 혼잡 시간: **{peak_hour:02d}:00**
-                - 피크 시간 운항수: **{peak_movements:.0f}편**
-                - 평균 시간당 운항수: **{avg_movements:.1f}편**
-                - 피크/평균 비율: **{peak_movements/avg_movements:.2f}x**
+                **1. Identify peak times**
+                - peak rush hour: **{peak_hour:02d}:00**
+                - Number of peak hour operations: **{peak_movements:.0f}side**
+                - Average number of flights per hour: **{avg_movements:.1f}side**
+                - peak/average ratio: **{peak_movements/avg_movements:.2f}x**
                 """)
             
-            # 2. 게이트 포화도
+            # 2. gate saturation
             if 'terminal' in df.columns and 'scheduled_gate_local' in df.columns:
-                # 시간대별 게이트 점유 추정 (15분 단위)
+                # Estimation of gate occupancy by time period (15minute by minute)
                 df['time_slot'] = df['scheduled_gate_local'].dt.floor('15min')
                 gate_occupancy = df.groupby(['time_slot', 'terminal']).size().reset_index(name='occupancy')
                 max_occupancy = gate_occupancy['occupancy'].max()
                 avg_occupancy = gate_occupancy['occupancy'].mean()
                 
                 st.info(f"""
-                **2. 게이트 포화도**
-                - 최대 동시 점유 게이트: **{max_occupancy:.0f}개**
-                - 평균 동시 점유 게이트: **{avg_occupancy:.1f}개**
-                - 포화 위험도: **{'높음' if max_occupancy > avg_occupancy * 2 else '보통'}**
+                **2. gate saturation**
+                - Maximum concurrently occupied gates: **{max_occupancy:.0f}dog**
+                - Average concurrently occupied gates: **{avg_occupancy:.1f}dog**
+                - saturation risk: **{'height' if max_occupancy > avg_occupancy * 2 else 'commonly'}**
                 """)
             
-            # 3. 항공사 시장 점유율 변화
+            # 3. Airline market share changes
             if 'operating_carrier_name' in df.columns and 'scheduled_gate_year' in df.columns:
                 carrier_trend = df.groupby(['scheduled_gate_year', 'operating_carrier_name']).size().reset_index(name='movements')
                 if len(carrier_trend) > 0:
@@ -1104,40 +1104,40 @@ class MasterplanInput:
                     top_share = latest_data['movements'].max() / latest_data['movements'].sum() * 100
                     
                     st.info(f"""
-                    **3. 주요 항공사 점유율**
-                    - 최대 점유 항공사: **{top_carrier}**
-                    - 시장 점유율: **{top_share:.1f}%**
+                    **3. Major airline share**
+                    - most occupied airline: **{top_carrier}**
+                    - market share: **{top_share:.1f}%**
                     """)
         
         with col2:
-            st.markdown("#### ⚠️ 위험/기회 신호 (Risk/Opportunity Signals)")
+            st.markdown("#### ⚠️ danger/opportunity signal (Risk/Opportunity Signals)")
             
-            # 위험 신호 1: 구조적 지연 구간
+            # Red flag 1: Structural delay zone
             if 'scheduled_gate_hour' in df.columns:
                 hourly_movements = df.groupby('scheduled_gate_hour').size()
                 congestion_zones = hourly_movements[hourly_movements > hourly_movements.quantile(0.75)]
                 
                 if len(congestion_zones) > 0:
                     st.warning(f"""
-                    **⚠️ 위험 신호 1: 구조적 지연 구간**
-                    - 혼잡 시간대: **{', '.join([f'{h:02d}:00' for h in congestion_zones.index[:3]])}**
-                    - 지속적 혼잡으로 인한 지연 위험 존재
+                    **⚠️ Red flag 1: Structural delay zone**
+                    - rush hour: **{', '.join([f'{h:02d}:00' for h in congestion_zones.index[:3]])}**
+                    - Risk of delays due to persistent congestion
                     """)
             
-            # 기회 신호 1: 야간 운영
+            # Sign of Opportunity 1: Night Operations
             if 'scheduled_gate_hour' in df.columns:
                 night_flights = df[(df['scheduled_gate_hour'] >= 22) | (df['scheduled_gate_hour'] < 6)]
                 night_ratio = len(night_flights) / len(df) * 100 if len(df) > 0 else 0
                 
                 if night_ratio < 10:
                     st.success(f"""
-                    **💡 기회 신호 1: 야간 운영 확대 가능성**
-                    - 현재 야간편 비율: **{night_ratio:.1f}%**
-                    - 야간 Slot 활용률이 낮아 확대 여지 존재
+                    **💡 Opportunity Signal 1: Potential for expanded nighttime operations**
+                    - Current night flight ratio: **{night_ratio:.1f}%**
+                    - nighttime Slot There is room for expansion due to low utilization rate.
                     """)
         
-        # 요약 통계 테이블
-        st.markdown("#### 📊 요약 통계")
+        # Summary statistics table
+        st.markdown("#### 📊 Summary Statistics")
         summary_stats = []
         
         if 'scheduled_gate_year' in df.columns:
@@ -1156,16 +1156,16 @@ class MasterplanInput:
             st.dataframe(summary_df, use_container_width=True)
     
     def _operations_congestion_analysis(self, df):
-        st.markdown("### 🚦 공항 혼잡(Operations) 분석")
+        st.markdown("### 🚦 airport congestion(Operations) analyze")
         
-        # 1. 시간대별 혼잡 지수
-        st.markdown("#### 1) 시간대별 혼잡 지수 (Time-of-Day Congestion Index)")
+        # 1. Congestion index by time of day
+        st.markdown("#### 1) Congestion index by time of day (Time-of-Day Congestion Index)")
         
         if 'scheduled_gate_hour' in df.columns:
             col1, col2 = st.columns(2)
             
             with col1:
-                # 도착/출발별 피크 시간대
+                # arrive/Peak times by departure
                 if 'flight_io' in df.columns:
                     arrival_df = df[df['flight_io'] == 'a'] if 'a' in df['flight_io'].values else df
                     departure_df = df[df['flight_io'] == 'd'] if 'd' in df['flight_io'].values else df
@@ -1180,7 +1180,7 @@ class MasterplanInput:
                         if len(departure_hourly) > 0:
                             fig.add_trace(go.Bar(x=departure_hourly.index, y=departure_hourly.values, name='Departure', marker_color='#ff7f0e'))
                         fig.update_layout(
-                            title='시간대별 도착/출발 운항수',
+                            title='Arrival by time slot/number of departures',
                             xaxis_title='Hour',
                             yaxis_title='Number of Flights',
                             barmode='group',
@@ -1189,7 +1189,7 @@ class MasterplanInput:
                         st.plotly_chart(fig, use_container_width=True)
             
             with col2:
-                # 전체 시간대별 혼잡도
+                # Congestion by overall time zone
                 hourly_movements = df.groupby('scheduled_gate_hour').size()
                 avg_movements = hourly_movements.mean()
                 congestion_index = (hourly_movements / avg_movements).round(2)
@@ -1206,34 +1206,34 @@ class MasterplanInput:
                 ))
                 fig.add_hline(y=1.5, line_dash="dash", line_color="red", annotation_text="High Congestion Threshold")
                 fig.update_layout(
-                    title='시간대별 혼잡 지수 (Congestion Index)',
+                    title='Congestion index by time of day (Congestion Index)',
                     xaxis_title='Hour',
                     yaxis_title='Congestion Index (vs Average)',
                     height=400
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Structural Delay Zone 식별
+                # Structural Delay Zone discrimination
                 delay_zones = congestion_index[congestion_index > 1.5]
                 if len(delay_zones) > 0:
                     st.warning(f"**⚠️ Structural Delay Zones:** {', '.join([f'{h:02d}:00' for h in delay_zones.index])}")
         
-        # 2. 게이트 포화도 분석
-        st.markdown("#### 2) 탑승구(Gate) 포화도 분석")
+        # 2. Gate saturation analysis
+        st.markdown("#### 2) gate(Gate) Saturation analysis")
         
         if 'terminal' in df.columns and 'scheduled_gate_local' in df.columns:
-            # 시간대별 게이트 점유율
+            # Gate occupancy by time slot
             df['time_slot'] = df['scheduled_gate_local'].dt.floor('15min')
             gate_occupancy = df.groupby(['time_slot', 'terminal']).size().reset_index(name='occupancy')
             
-            # Wide/Narrow-body 비율
+            # Wide/Narrow-body ratio
             if 'aircraft_class' in df.columns:
                 wide_narrow_ratio = df.groupby(['scheduled_gate_year', 'aircraft_class']).size().unstack(fill_value=0)
                 if len(wide_narrow_ratio) > 0:
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        # 시간대별 게이트 점유율 히트맵
+                        # Gate share heatmap by time zone
                         occupancy_pivot = gate_occupancy.pivot_table(
                             index=gate_occupancy['time_slot'].dt.hour,
                             columns='terminal',
@@ -1244,36 +1244,36 @@ class MasterplanInput:
                         fig = px.imshow(
                             occupancy_pivot,
                             labels=dict(x="Terminal", y="Hour", color="Gate Occupancy"),
-                            title="시간대별 터미널별 게이트 점유율",
+                            title="Gate share by terminal by time zone",
                             aspect="auto"
                         )
                         st.plotly_chart(fig, use_container_width=True)
                     
                     with col2:
-                        # Wide/Narrow-body 비율 변화
+                        # Wide/Narrow-body rate change
                         wide_narrow_pct = wide_narrow_ratio.div(wide_narrow_ratio.sum(axis=1), axis=0) * 100
                         fig = px.line(
                             wide_narrow_pct.reset_index(),
                             x='scheduled_gate_year',
                             y=wide_narrow_pct.columns.tolist(),
-                            title="Wide/Narrow-body 비율 변화",
+                            title="Wide/Narrow-body rate change",
                             labels={'value': 'Percentage (%)', 'scheduled_gate_year': 'Year'}
                         )
                         st.plotly_chart(fig, use_container_width=True)
             
-            # 포화 위험 시간대
+            # Saturation risk time zone
             max_occupancy_by_hour = gate_occupancy.groupby(gate_occupancy['time_slot'].dt.hour)['occupancy'].max()
             avg_occupancy = gate_occupancy['occupancy'].mean()
             saturation_risk = max_occupancy_by_hour[max_occupancy_by_hour > avg_occupancy * 1.5]
             
             if len(saturation_risk) > 0:
-                st.warning(f"**⚠️ 게이트 포화 위험 시간대:** {', '.join([f'{h:02d}:00' for h in saturation_risk.index[:5]])}")
+                st.warning(f"**⚠️ Gate saturation risk period:** {', '.join([f'{h:02d}:00' for h in saturation_risk.index[:5]])}")
         
-        # 3. 택시시간 증가 위험
-        st.markdown("#### 3) 택시시간(Taxi Time) 증가 위험 식별")
+        # 3. Risk of increased taxi time
+        st.markdown("#### 3) taxi time(Taxi Time) Identification of increased risk")
         
         if 'actual_taxi_time' in df.columns:
-            # 동시 지상 이동 항공편 수 추정 (15분 단위)
+            # Estimating the number of simultaneous ground movement flights (15minute by minute)
             df['taxi_time_slot'] = df['scheduled_gate_local'].dt.floor('15min')
             simultaneous_taxi = df.groupby('taxi_time_slot').size()
             
@@ -1289,7 +1289,7 @@ class MasterplanInput:
                     line=dict(color='orange', width=2)
                 ))
                 fig.update_layout(
-                    title='시간대별 동시 지상 이동 항공편 수',
+                    title='Number of simultaneous ground flights per hour',
                     xaxis_title='Time',
                     yaxis_title='Number of Flights',
                     height=400
@@ -1297,35 +1297,35 @@ class MasterplanInput:
                 st.plotly_chart(fig, use_container_width=True)
             
             with col2:
-                # 택시시간 분포
+                # Taxi time distribution
                 if df['actual_taxi_time'].notna().sum() > 0:
                     fig = px.histogram(
                         df[df['actual_taxi_time'].notna()],
                         x='actual_taxi_time',
                         nbins=30,
-                        title="택시시간 분포",
+                        title="Taxi time distribution",
                         labels={'actual_taxi_time': 'Taxi Time (minutes)', 'count': 'Frequency'}
                     )
                     st.plotly_chart(fig, use_container_width=True)
     
     def _airline_route_trends(self, df):
-        st.markdown("### 📈 항공사·노선별 성장/축소 트렌드")
+        st.markdown("### 📈 airline·Growth by route/shrinking trend")
         
-        # 1. 노선 신규/중단 분석
-        st.markdown("#### 1) 노선 신규/중단 분석 (New & Suspended Routes Tracker)")
+        # 1. New route/Interruption Analysis
+        st.markdown("#### 1) New route/Interruption Analysis (New & Suspended Routes Tracker)")
         
         if 'dep/arr_airport' in df.columns and 'scheduled_gate_year' in df.columns and 'scheduled_gate_month' in df.columns:
-            # 최근 3개월 기준 노선 변화
+            # Route changes in the last 3 months
             latest_year = df['scheduled_gate_year'].max()
             latest_month = df[df['scheduled_gate_year'] == latest_year]['scheduled_gate_month'].max()
             
-            # 최근 3개월 노선
+            # Routes for the last 3 months
             recent_df = df[
                 (df['scheduled_gate_year'] == latest_year) & 
                 (df['scheduled_gate_month'] >= latest_month - 2)
             ]
             
-            # 이전 3개월 노선 (같은 기간 전년)
+            # Previous 3 months route (same period previous year)
             if latest_year > df['scheduled_gate_year'].min():
                 previous_df = df[
                     (df['scheduled_gate_year'] == latest_year - 1) & 
@@ -1341,23 +1341,23 @@ class MasterplanInput:
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.success(f"**✅ 신규 취항 노선 ({len(new_routes)}개)**")
+                    st.success(f"**✅ New routes ({len(new_routes)}dog)**")
                     if new_routes:
                         for route in list(new_routes)[:10]:
                             st.write(f"- {route}")
                     else:
-                        st.write("신규 취항 노선 없음")
+                        st.write("No new routes")
                 
                 with col2:
-                    st.error(f"**❌ 운휴/중단 노선 ({len(suspended_routes)}개)**")
+                    st.error(f"**❌ closed/suspended route ({len(suspended_routes)}dog)**")
                     if suspended_routes:
                         for route in list(suspended_routes)[:10]:
                             st.write(f"- {route}")
                     else:
-                        st.write("운휴/중단 노선 없음")
+                        st.write("closed/No interrupted routes")
         
-        # 2. 항공사별 Market Share 변동
-        st.markdown("#### 2) 항공사별 Market Share 변동")
+        # 2. By airline Market Share change
+        st.markdown("#### 2) By airline Market Share change")
         
         if 'operating_carrier_name' in df.columns and 'scheduled_gate_year' in df.columns:
             carrier_share = df.groupby(['scheduled_gate_year', 'operating_carrier_name']).size().reset_index(name='movements')
@@ -1365,7 +1365,7 @@ class MasterplanInput:
                 lambda x: x / x.sum() * 100
             )
             
-            # 상위 10개 항공사만 표시
+            # Show only top 10 airlines
             top_carriers = carrier_share.groupby('operating_carrier_name')['movements'].sum().nlargest(10).index
             carrier_share_filtered = carrier_share[carrier_share['operating_carrier_name'].isin(top_carriers)]
             
@@ -1374,12 +1374,12 @@ class MasterplanInput:
                 x='scheduled_gate_year',
                 y='share',
                 color='operating_carrier_name',
-                title="항공사별 시장 점유율 변화",
+                title="Changes in market share by airline",
                 labels={'share': 'Market Share (%)', 'scheduled_gate_year': 'Year'}
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # International/Domestic 비율
+            # International/Domestic ratio
             if 'International/Domestic' in df.columns:
                 intl_dom_ratio = df.groupby(['scheduled_gate_year', 'International/Domestic']).size().reset_index(name='count')
                 intl_dom_ratio['percentage'] = intl_dom_ratio.groupby('scheduled_gate_year')['count'].transform(
@@ -1391,16 +1391,16 @@ class MasterplanInput:
                     x='scheduled_gate_year',
                     y='percentage',
                     color='International/Domestic',
-                    title="International/Domestic 비율 변화",
+                    title="International/Domestic rate change",
                     labels={'percentage': 'Percentage (%)', 'scheduled_gate_year': 'Year'}
                 )
                 st.plotly_chart(fig, use_container_width=True)
         
-        # 3. LCC vs FSC 비중 변화
-        st.markdown("#### 3) LCC vs FSC 비중 변화")
+        # 3. LCC vs FSC change in specific gravity
+        st.markdown("#### 3) LCC vs FSC change in specific gravity")
         
         if 'operating_carrier_name' in df.columns:
-            # LCC 목록 (일반적인 LCC 항공사, 실제로는 별도 매핑 필요)
+            # LCC inventory (general LCC Airlines actually need separate mapping)
             lcc_keywords = ['air', 'jet', 'express', 'asia', 'tiger', 'cebu', 'peach', 'vanilla']
             df['carrier_type'] = df['operating_carrier_name'].apply(
                 lambda x: 'LCC' if any(keyword in str(x).lower() for keyword in lcc_keywords) else 'FSC'
@@ -1417,30 +1417,30 @@ class MasterplanInput:
                     x='scheduled_gate_year',
                     y='percentage',
                     color='carrier_type',
-                    title="LCC vs FSC 비중 변화",
+                    title="LCC vs FSC change in specific gravity",
                     labels={'percentage': 'Percentage (%)', 'scheduled_gate_year': 'Year'},
                     barmode='stack'
                 )
                 st.plotly_chart(fig, use_container_width=True)
     
     def _connectivity_hub_analysis(self, df):
-        st.markdown("### 🌐 연결성(Connectivity) & 허브 경쟁력 분석")
+        st.markdown("### 🌐 connectivity(Connectivity) & Hub Competitiveness Analysis")
         
-        # 1. 허브 파워 (Hub Strength Index)
-        st.markdown("#### 1) 허브 파워 (Hub Strength Index)")
+        # 1. hub power (Hub Strength Index)
+        st.markdown("#### 1) hub power (Hub Strength Index)")
         
         if 'dep/arr_airport' in df.columns and 'scheduled_gate_local' in df.columns:
-            # 환승 가능 조합 수 계산 (간단한 추정)
-            # 실제로는 MCT(Minimum Connection Time) 기반 계산 필요
+            # Calculate the number of possible transfer combinations (simple estimation)
+            # actually MCT(Minimum Connection Time) Based calculation required
             
-            # 도착-출발 시간 차이로 환승 가능성 추정 (2-6시간 간격)
+            # Estimation of transfer possibility based on arrival-departure time difference (2-6time interval)
             arrival_df = df[df['flight_io'] == 'a'] if 'flight_io' in df.columns else df
             departure_df = df[df['flight_io'] == 'd'] if 'flight_io' in df.columns else df
             
             if len(arrival_df) > 0 and len(departure_df) > 0:
-                # 간단한 환승 가능 쌍 계산
+                # Simple transferable pair calculation
                 connectivity_pairs = []
-                for _, arr_row in arrival_df.head(1000).iterrows():  # 샘플링으로 성능 향상
+                for _, arr_row in arrival_df.head(1000).iterrows():  # Improve performance with sampling
                     arr_time = arr_row['scheduled_gate_local']
                     arr_origin = arr_row.get('origin_airport', '')
                     
@@ -1455,12 +1455,12 @@ class MasterplanInput:
                 avg_connectivity = np.mean(connectivity_pairs) if connectivity_pairs else 0
                 
                 st.info(f"""
-                **허브 연결성 지수 (Hub Connectivity Index)**
-                - 평균 환승 가능 연결 수: **{avg_connectivity:.1f}개**
-                - 허브 강도: **{'강함' if avg_connectivity > 5 else '보통' if avg_connectivity > 2 else '약함'}**
+                **Hub Connectivity Index (Hub Connectivity Index)**
+                - Average number of transferable connections: **{avg_connectivity:.1f}dog**
+                - herb strength: **{'strong' if avg_connectivity > 5 else 'commonly' if avg_connectivity > 2 else 'weakness'}**
                 """)
             
-            # 노선 네트워크 시각화
+            # Route network visualization
             route_counts = df.groupby('dep/arr_airport').size().reset_index(name='frequency')
             top_routes = route_counts.nlargest(20, 'frequency')
             
@@ -1468,24 +1468,24 @@ class MasterplanInput:
                 top_routes,
                 x='dep/arr_airport',
                 y='frequency',
-                title="상위 노선별 운항 빈도",
+                title="Flight frequency by top route",
                 labels={'frequency': 'Frequency', 'dep/arr_airport': 'Route'}
             )
             fig.update_xaxis(tickangle=45)
             st.plotly_chart(fig, use_container_width=True)
         
-        # 2. 경쟁 허브와의 비교 (데이터가 있는 경우)
-        st.markdown("#### 2) 경쟁 허브와의 환승 가능성 비교")
-        st.info("💡 경쟁 허브 비교는 다중 공항 데이터가 필요합니다. 현재는 단일 공항 분석만 제공됩니다.")
+        # 2. Comparison with competing hubs (If you have data)
+        st.markdown("#### 2) Comparison of transfer possibilities with competing hubs")
+        st.info("💡 Competitive hub comparison requires multi-airport data. Currently only single airport analysis is available.")
     
     def _revenue_perspective(self, df):
-        st.markdown("### 💰 수익 관점 이슈 페이퍼")
+        st.markdown("### 💰 Revenue Perspective Issue Paper")
         
-        # 1. 야간 운영 가치 분석
-        st.markdown("#### 1) 야간 운영(Night Operation) 가치 분석")
+        # 1. Night Operation Value Analysis
+        st.markdown("#### 1) night operation(Night Operation) value analysis")
         
         if 'scheduled_gate_hour' in df.columns:
-            # 야간편 정의: 22:00-06:00
+            # Night flight definition: 22:00-06:00
             df['is_night'] = (df['scheduled_gate_hour'] >= 22) | (df['scheduled_gate_hour'] < 6)
             night_flights = df[df['is_night']]
             
@@ -1496,32 +1496,32 @@ class MasterplanInput:
             
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("야간편 비율", f"{night_ratio:.1f}%")
+                st.metric("Night flight ratio", f"{night_ratio:.1f}%")
             with col2:
-                st.metric("야간편 여객 수", f"{night_pax:,.0f}")
+                st.metric("Number of night passengers", f"{night_pax:,.0f}")
             with col3:
-                st.metric("야간편 여객 비율", f"{night_pax_ratio:.1f}%")
+                st.metric("Night flight passenger ratio", f"{night_pax_ratio:.1f}%")
             
-            # 시간대별 야간 운영 현황
+            # Nighttime operation status by time zone
             hourly_night = df[df['is_night']].groupby('scheduled_gate_hour').size()
             fig = px.bar(
                 x=hourly_night.index,
                 y=hourly_night.values,
-                title="야간 시간대별 운항수",
+                title="Number of flights by night time slot",
                 labels={'x': 'Hour', 'y': 'Number of Flights'}
             )
             st.plotly_chart(fig, use_container_width=True)
             
             if night_ratio < 15:
-                st.success("💡 **야간 운영 확대 기회**: 현재 야간편 비율이 낮아 Slot 활용률 향상 및 수익 증대 가능")
+                st.success("💡 **Opportunity to expand nighttime operations**: Currently, the rate of night flights is low. Slot Possible to improve utilization rate and increase profits")
         
-        # 2. 비항공수익 영향 모델
-        st.markdown("#### 2) 비항공수익 영향 모델 (쇼핑/면세 시간)")
+        # 2. Non-Aviation Revenue Impact Model
+        st.markdown("#### 2) Non-Aviation Revenue Impact Model (shopping/duty free time)")
         
         if 'scheduled_gate_local' in df.columns and 'total_pax' in df.columns:
-            # 체류시간 추정 (도착-출발 간격)
-            # 실제로는 OD vs Transfer 구분 필요
-            st.info("💡 체류시간 분석은 OD/Transfer 구분 데이터가 필요합니다. 현재는 전체 평균 체류시간만 제공됩니다.")
+            # Estimation of residence time (Arrival-departure interval)
+            # actually OD vs Transfer Separation required
+            st.info("💡 Analysis of residence time OD/Transfer Separated data is required. Currently only overall average length of stay is provided.")
             
             if 'flight_io' in df.columns:
                 arrival_pax = df[df['flight_io'] == 'a']['total_pax'].sum() if 'a' in df['flight_io'].values else 0
@@ -1529,21 +1529,21 @@ class MasterplanInput:
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("도착 여객 수", f"{arrival_pax:,.0f}")
+                    st.metric("arrive passenger 수", f"{arrival_pax:,.0f}")
                 with col2:
-                    st.metric("출발 여객 수", f"{departure_pax:,.0f}")
+                    st.metric("number of departing passengers", f"{departure_pax:,.0f}")
     
     def _safety_environment(self, df):
-        st.markdown("### 🛡️ 안전·규제·환경 이슈")
+        st.markdown("### 🛡️ safety·regulation·environmental issues")
         
-        # 1. 활주로 혼잡도 기반 안전 여유도
-        st.markdown("#### 1) 활주로 혼잡도 기반 안전 여유도 분석")
+        # 1. Safety margin based on runway congestion
+        st.markdown("#### 1) Safety margin analysis based on runway congestion")
         
         if 'scheduled_gate_hour' in df.columns:
-            # 시간대별 이착륙 빈도
+            # Frequency of takeoffs and landings by time of day
             hourly_movements = df.groupby('scheduled_gate_hour').size()
             
-            # 안전 여유도 계산 (가정: 시간당 60편 이상 시 위험)
+            # Safety margin calculation (Assumption: Risk for more than 60 flights per hour)
             safety_threshold = 60
             risk_hours = hourly_movements[hourly_movements > safety_threshold]
             
@@ -1557,7 +1557,7 @@ class MasterplanInput:
             ))
             fig.add_hline(y=safety_threshold, line_dash="dash", line_color="red", annotation_text="Safety Threshold")
             fig.update_layout(
-                title="시간대별 활주로 혼잡도 및 안전 여유도",
+                title="Runway congestion and safety margin by time of day",
                 xaxis_title="Hour",
                 yaxis_title="Number of Movements",
                 height=400
@@ -1565,13 +1565,13 @@ class MasterplanInput:
             st.plotly_chart(fig, use_container_width=True)
             
             if len(risk_hours) > 0:
-                st.warning(f"**⚠️ 안전 여유도 부족 시간대:** {', '.join([f'{h:02d}:00' for h in risk_hours.index])}")
+                st.warning(f"**⚠️ Time zone where safety margin is insufficient:** {', '.join([f'{h:02d}:00' for h in risk_hours.index])}")
         
-        # 2. 탄소 배출 추정
-        st.markdown("#### 2) 탄소 배출 추정 (Carbon Emission Structure)")
+        # 2. carbon emissions estimates
+        st.markdown("#### 2) carbon emissions estimates (Carbon Emission Structure)")
         
         if 'aircraft_class' in df.columns:
-            # 항공기 기종별 운항 빈도
+            # Flight frequency by aircraft type
             aircraft_distribution = df.groupby('aircraft_class').size().reset_index(name='count')
             aircraft_distribution['percentage'] = aircraft_distribution['count'] / aircraft_distribution['count'].sum() * 100
             
@@ -1579,11 +1579,11 @@ class MasterplanInput:
                 aircraft_distribution,
                 values='percentage',
                 names='aircraft_class',
-                title="항공기 기종별 분포"
+                title="Distribution by aircraft type"
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # Wide-body 비율 변화
+            # Wide-body rate change
             if 'scheduled_gate_year' in df.columns:
                 wide_body_ratio = df.groupby('scheduled_gate_year').apply(
                     lambda x: (x['aircraft_class'].str.contains('Wide', case=False, na=False).sum() / len(x) * 100)
@@ -1593,85 +1593,85 @@ class MasterplanInput:
                     wide_body_ratio,
                     x='scheduled_gate_year',
                     y='wide_body_pct',
-                    title="Wide-body 항공기 비율 변화",
+                    title="Wide-body aircraft rate change",
                     labels={'wide_body_pct': 'Wide-body Ratio (%)', 'scheduled_gate_year': 'Year'}
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
-                st.info("💡 Wide-body 비율 감소는 탄소 배출 구조 변화를 의미할 수 있습니다.")
+                st.info("💡 Wide-body A decline in rates could mean a change in the structure of carbon emissions.")
     
     def _strategic_recommendations(self, df):
-        st.markdown("### 🎯 공항 전략 제언형 이슈 페이퍼")
+        st.markdown("### 🎯 Airport strategy proposal type issue paper")
         
         # 1. Airline Reallocation Scenario
         st.markdown("#### 1) Airline Reallocation Scenario")
         
         if 'terminal' in df.columns and 'scheduled_gate_hour' in df.columns:
-            # 터미널별 시간대별 혼잡도
+            # Congestion by terminal and time slot
             terminal_hourly = df.groupby(['terminal', 'scheduled_gate_hour']).size().reset_index(name='movements')
             
-            # 터미널별 피크 시간대 식별
+            # Identify peak times by terminal
             terminal_peaks = terminal_hourly.loc[terminal_hourly.groupby('terminal')['movements'].idxmax()]
             
             st.dataframe(terminal_peaks[['terminal', 'scheduled_gate_hour', 'movements']], use_container_width=True)
             
             st.info("""
-            **💡 재배치 시사점:**
-            - 터미널별 피크 시간대가 겹치는 경우 재배치를 통해 혼잡 완화 가능
-            - 항공사별 터미널 재배치로 시간대별 부하 분산 가능
+            **💡 Relocation implications:**
+            - If peak times for each terminal overlap, congestion can be alleviated through relocation.
+            - Load distribution by time zone is possible through terminal relocation for each airline.
             """)
         
-        # 2. 특정 Zone 확충 필요성
-        st.markdown("#### 2) 특정 Zone 확충 필요성 이슈페이퍼")
+        # 2. specific Zone Need for expansion
+        st.markdown("#### 2) specific Zone Necessity of expansion issue paper")
         
         if 'scheduled_gate_hour' in df.columns:
-            # 시간대별 수요 분석
+            # Demand analysis by time zone
             hourly_demand = df.groupby('scheduled_gate_hour').size()
             peak_hours = hourly_demand.nlargest(5)
             
-            st.markdown("**피크 시간대별 확충 우선순위:**")
+            st.markdown("**Expansion priorities by peak hour:**")
             for idx, (hour, count) in enumerate(peak_hours.items(), 1):
-                st.write(f"{idx}. **{hour:02d}:00** - {count:.0f}편 (확충 필요도: {'높음' if count > hourly_demand.mean() * 1.5 else '보통'})")
+                st.write(f"{idx}. **{hour:02d}:00** - {count:.0f}side (Need for expansion: {'height' if count > hourly_demand.mean() * 1.5 else 'commonly'})")
             
-            # 게이트 확충 필요성
+            # Need for gate expansion
             if 'terminal' in df.columns:
                 df['time_slot'] = df['scheduled_gate_local'].dt.floor('15min')
                 gate_occupancy = df.groupby(['time_slot', 'terminal']).size().reset_index(name='occupancy')
                 max_occupancy = gate_occupancy.groupby('terminal')['occupancy'].max()
                 
-                st.markdown("**터미널별 최대 동시 게이트 점유:**")
+                st.markdown("**Maximum simultaneous gate occupancy per terminal:**")
                 for terminal, occupancy in max_occupancy.items():
-                    st.write(f"- **{terminal}**: {occupancy:.0f}개 게이트 동시 사용")
+                    st.write(f"- **{terminal}**: {occupancy:.0f}Simultaneous use of two gates")
         
-        # 3. 종합 제언
-        st.markdown("#### 3) 종합 전략 제언")
+        # 3. Comprehensive suggestions
+        st.markdown("#### 3) Comprehensive strategy proposal")
         
         recommendations = []
         
-        # 혼잡도 기반 제언
+        # Congestion-based suggestions
         if 'scheduled_gate_hour' in df.columns:
             hourly_movements = df.groupby('scheduled_gate_hour').size()
             if hourly_movements.max() > hourly_movements.mean() * 1.5:
-                recommendations.append("**단기 개선:** 피크 시간대 혼잡 완화를 위한 스케줄 재조정 검토")
+                recommendations.append("**short term improvement:** Review schedule readjustment to relieve congestion during peak hours")
         
-        # 야간 운영 기반 제언
+        # Nighttime operation basis suggestions
         if 'scheduled_gate_hour' in df.columns:
             night_ratio = ((df['scheduled_gate_hour'] >= 22) | (df['scheduled_gate_hour'] < 6)).sum() / len(df) * 100
             if night_ratio < 15:
-                recommendations.append("**중기 개선:** 야간 Slot 활용률 향상을 통한 수익 증대 기회")
+                recommendations.append("**mid-term improvement:** nighttime Slot Opportunity to increase revenue through improved utilization")
         
-        # 게이트 확충 기반 제언
+        # Proposal based on gate expansion
         if 'terminal' in df.columns and 'scheduled_gate_local' in df.columns:
             df['time_slot'] = df['scheduled_gate_local'].dt.floor('15min')
             gate_occupancy = df.groupby(['time_slot', 'terminal']).size()
-            if gate_occupancy.max() > 50:  # 임계값
-                recommendations.append("**장기 개선:** 게이트 확충 검토 (특정 시간대 포화 위험)")
+            if gate_occupancy.max() > 50:  # threshold
+                recommendations.append("**long term improvement:** Gate expansion review (Risk of saturation at certain times)")
         
         if recommendations:
             for rec in recommendations:
                 st.write(f"- {rec}")
         else:
-            st.success("현재 운영 상태가 양호합니다. 추가 개선 사항이 없습니다.")
+            st.success("Currently operating in good condition. No further improvements.")
 
 
 
@@ -1691,7 +1691,7 @@ class MasterplanInput:
                 st.subheader("**Filter**")
 
             with start_date_col:
-                start_date = st.date_input("start date", value=pd.to_datetime("2024-08-03"), key=f"{key}_start_date") # 마닐라는 2025-08-03
+                start_date = st.date_input("start date", value=pd.to_datetime("2024-08-03"), key=f"{key}_start_date") # Manila is 2025-08-03
             with end_date_col:
                 end_date = st.date_input("end date", value=pd.to_datetime("2024-08-09"), key=f"{key}_end_date")
 
@@ -1743,7 +1743,7 @@ class MasterplanInput:
                         if selected_values:
                             df_filtered = df_filtered[df_filtered[filter_name].isin(selected_values)]
                             
-                            # 현재 필터 정보를 저장 (시나리오용)
+                            # Save current filter information (For scenarios)
                             if f'current_filters_{key}' not in st.session_state:
                                 st.session_state[f'current_filters_{key}'] = {}
                             st.session_state[f'current_filters_{key}'][filter_name] = selected_values
@@ -1978,12 +1978,12 @@ class MasterplanInput:
                 show_bar(start_count_df, start_count_ranking_order, group)
                 # st.dataframe(start_count_df, hide_index=True)
             else:
-                st.warning("선택한 기간이 30일을 초과합니다. 30일 이내의 기간을 선택하거나 다른 시각화 방법(line 계열) 을 선택해주세요.")
+                st.warning("The selected period exceeds 30 days. Select a time period within 30 days or another visualization method(line line) Please select.")
             
             total_df = start_count_df.groupby("Time")["index"].sum()//1
             
-            # 통계 정보 계산 및 표시
-            st.markdown("#### 📊 통계 정보")
+            # Calculating and displaying statistical information
+            st.markdown("#### 📊 statistical information")
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
@@ -1992,17 +1992,17 @@ class MasterplanInput:
             
             with col2:
                 percentile_95 = total_df.quantile(0.95)
-                st.metric("95% 상위값", f"{percentile_95:,.0f}")
+                st.metric("95% upper value", f"{percentile_95:,.0f}")
             
             with col3:
                 percentile_90 = total_df.quantile(0.90)
-                st.metric("90% 상위값", f"{percentile_90:,.0f}")
+                st.metric("90% upper value", f"{percentile_90:,.0f}")
             
             with col4:
                 mean_value = total_df.mean()
-                st.metric("평균", f"{mean_value:,.0f}")
+                st.metric("average", f"{mean_value:,.0f}")
             
-            st.markdown("#### 📋 시간별 데이터")
+            st.markdown("#### 📋 Hourly data")
             st.table(total_df.T)
             return total_df
             
@@ -2079,7 +2079,7 @@ class MasterplanInput:
             st.dataframe(df_show_download.apply(np.ceil).T, use_container_width=True)
 
 
-        elif method == "(compare) weekday_average":  # 요일별 패턴 추가
+        elif method == "(compare) weekday_average":  # Add pattern for each day of the week
             df_show = start_count_df.groupby("Time")["index"].agg("sum").to_frame()
             df_show['weekday'] = df_show.index.weekday  # 0=Monday, 6=Sunday
             df_show['time'] = df_show.index.strftime('%H:%M')
@@ -2136,7 +2136,7 @@ class MasterplanInput:
             self.heatmap(df_show_download)
             st.dataframe(df_show_download.T, use_container_width=True)
 
-        elif method == "*(compare) weekday_peak":  # 요일별 패턴 추가
+        elif method == "*(compare) weekday_peak":  # Add pattern for each day of the week
             df_show = start_count_df.groupby("Time")["index"].agg("sum").to_frame()
             df_show['weekday'] = df_show.index.weekday  # 0=Monday, 6=Sunday
             df_show['time'] = df_show.index.strftime('%H:%M')
@@ -2187,7 +2187,7 @@ class MasterplanInput:
             #                 max_value=10000000.0,
             #                 step=0.1,
             #                 format="%.2f",
-            #                 key="1대당 용량",
+            #                 key="1Capacity per unit",
             #             )
             #     with workers_col:
             #         workers=st.number_input(
@@ -2197,7 +2197,7 @@ class MasterplanInput:
             #                 max_value=10000000.0,
             #                 step=0.1,
             #                 format="%.2f",
-            #                 key="워커스",
+            #                 key="workers",
             #             )
             #     df_show = df_show.rename({"index":category}, axis=1)
             #     df_show["Required number of EA"]=(df_show[category]/(capacity_min*unit_min)).round()
@@ -2212,7 +2212,7 @@ class MasterplanInput:
             ########################################
 
         elif method=="(peak time) weekly":
-            # 주차 정보를 더 명확하게 표시
+            # Display parking information more clearly
             df_show = (start_count_df
                         .assign(
                             year=start_count_df['Time'].dt.year,
@@ -2243,7 +2243,7 @@ class MasterplanInput:
             #                 max_value=10000000.0,
             #                 step=0.1,
             #                 format="%.2f",
-            #                 key="1대당 용량",
+            #                 key="1Capacity per unit",
             #             )
             #     with workers_col:
             #         workers=st.number_input(
@@ -2253,7 +2253,7 @@ class MasterplanInput:
             #                 max_value=10000000.0,
             #                 step=0.1,
             #                 format="%.2f",
-            #                 key="워커스",
+            #                 key="workers",
             #             )
             #     df_show = df_show.rename({"index":category}, axis=1)
             #     df_show["Required number of EA"]=(df_show[category]/(capacity_min*unit_min)).round()
@@ -2292,7 +2292,7 @@ class MasterplanInput:
             #                 max_value=10000000.0,
             #                 step=0.1,
             #                 format="%.2f",
-            #                 key="1대당 용량",
+            #                 key="1Capacity per unit",
             #             )
             #     with workers_col:
             #         workers=st.number_input(
@@ -2302,7 +2302,7 @@ class MasterplanInput:
             #                 max_value=10000000.0,
             #                 step=0.1,
             #                 format="%.2f",
-            #                 key="워커스",
+            #                 key="workers",
             #             )
             #     df_show = df_show.rename({"index":category}, axis=1)
             #     df_show["Required number of EA"]=(df_show[category]/(capacity_min*unit_min)).round()
@@ -2341,7 +2341,7 @@ class MasterplanInput:
             month = int(r["month"]["value"])
             passengers = int(r["passengers"]["value"])
 
-            # 날짜가 1월 1일이면 연간 합계, 아니면 월간 데이터
+            # Annual total if date is January 1st, otherwise monthly data
 
             data.append({
                 "date":date,
@@ -2499,7 +2499,7 @@ class MasterplanInput:
                     x='Year', 
                     y='Value', 
                     color=group_col,
-                    title="연도별 지역 데이터"
+                    title="Regional data by year"
                 )
                 st.plotly_chart(fig)
 
@@ -2673,7 +2673,7 @@ class MasterplanInput:
                         self.start_year = int(st.number_input(
                                 "**Start**",
                                 value=max(2015, min_year),
-                                min_value=max(2015, min_year), # 최소 2018년 이후부터 분석(시리움에서 2018이전데이터 못받음)
+                                min_value=max(2015, min_year), # Analysis since at least 2018(I did not receive data prior to 2018 from Cirium.)
                                 max_value=2024,
                                 key="Start Year",
                             ))
@@ -2728,7 +2728,7 @@ class MasterplanInput:
             self.ref_year_table[self.end_year]=1
 
             self.ref_year_table = st.data_editor(self.ref_year_table.fillna(0).astype(bool), height=530, use_container_width=True)
-            self.ref_year_table.columns=year_col_list # data_editor를 통과하면 컬럼이 스트링으로 변함, 하지만 컬럼은 인트여야 함
+            self.ref_year_table.columns=year_col_list # data_editorIf passed, the column changes to a string, but the column must be an int.
             st.info("""
             The checkboxes indicate which year's data will be used as a reference for future predictions. \n
             ✅ If you select 2019, future estimates will be based on 2019 data. \n
@@ -2758,9 +2758,9 @@ class MasterplanInput:
                 filter_col = filter_cols[idx]
                 
 
-                # 해당 공항의 데이터만 필터링
+                # Filter data only for that airport
                 
-                # 각 공항별 ratio_df 생성
+                # For each airport ratio_df generation
                 ratio_df = pd.DataFrame({
                     'Category': airport_df[filter_col].value_counts().index.tolist(),
                     'Ratio': [100] * (len(airport_df[filter_col].value_counts())),
@@ -2768,7 +2768,7 @@ class MasterplanInput:
 
                 ratio_col, year_col = st.columns([0.4,0.6])
                 with ratio_col:
-                    # 각 공항별 data_editor
+                    # For each airport data_editor
                     editor_key = f"box_{filter_col}_{airport_list}_{idx}_{key}"
                     ratio_df = st.data_editor(
                         ratio_df,
@@ -2791,7 +2791,7 @@ class MasterplanInput:
                     # choice_df = choice_df.copy()
 
                 with year_col:
-                    # choice_df 대신 choice_df 사용
+                    # choice_df instead choice_df use
                     filtered_df=[]
                     for category, ratio_100 in zip(ratio_df['Category'], 
                                             ratio_df['Ratio']):
@@ -2891,32 +2891,32 @@ class MasterplanInput:
             
             df_one_year = df[df['scheduled_gate_year']==year]
             FleetMix = df_one_year.groupby(['aircraft_class'])[['total_seat_count','total_pax','movement','crew','tr_pax','maximum_payload_lb','operating_maximum_takeoff_weight_lb',
-                                            'hand_carry_kg','actual_taxi_time','standing_time','ground_time','flight_distance_km']].sum().reset_index()  # ['OD화물','총우편물','총환적화물']
+                                            'hand_carry_kg','actual_taxi_time','standing_time','ground_time','flight_distance_km']].sum().reset_index()  # ['ODfreight','total mail','Total transshipment cargo']
             
             if (category=="passenger") : 
                 passenger_analysis=[
-                    [f"연간여객", df_one_year['total_pax'].sum()],
-                    [f"International여객", df_one_year[df_one_year['International/Domestic']=="international"]['total_pax'].sum()],
-                    [f"Domestic여객", df_one_year[df_one_year['International/Domestic']=="domestic"]['total_pax'].sum()],
+                    [f"Annual Passengers", df_one_year['total_pax'].sum()],
+                    [f"Internationalpassenger", df_one_year[df_one_year['International/Domestic']=="international"]['total_pax'].sum()],
+                    [f"Domesticpassenger", df_one_year[df_one_year['International/Domestic']=="domestic"]['total_pax'].sum()],
 
-                    [f"Long_haul여객", df_one_year[df_one_year['Long/Short_haul']== 'Long_haul' ]['total_pax'].sum()],
-                    [f"Short_haul여객", df_one_year[df_one_year['Long/Short_haul']== 'Short_haul' ]['total_pax'].sum()],
-                    [f"정규여객", df_one_year[df_one_year['move_category']=='normal']['total_pax'].sum()],
-                    [f"전세기여객", df_one_year[df_one_year['move_category']=='charter']['total_pax'].sum()],
+                    [f"Long_haulpassenger", df_one_year[df_one_year['Long/Short_haul']== 'Long_haul' ]['total_pax'].sum()],
+                    [f"Short_haulpassenger", df_one_year[df_one_year['Long/Short_haul']== 'Short_haul' ]['total_pax'].sum()],
+                    [f"regular passenger", df_one_year[df_one_year['move_category']=='normal']['total_pax'].sum()],
+                    [f"Charter passenger", df_one_year[df_one_year['move_category']=='charter']['total_pax'].sum()],
                     
-                    [f"연간OD여객", df_one_year['total_pax'].sum() - df_one_year['tr_pax'].sum()],  
-                    [f"연간환승승객", df_one_year['tr_pax'].sum()],  
-                    [f"연간승무원", df_one_year['crew'].sum()],  
+                    [f"annualODpassenger", df_one_year['total_pax'].sum() - df_one_year['tr_pax'].sum()],  
+                    [f"Annual transfer passengers", df_one_year['tr_pax'].sum()],  
+                    [f"annual crew", df_one_year['crew'].sum()],  
 
-                    [f"대당좌석수", FleetMix['total_seat_count'].sum()/FleetMix['movement'].sum()], 
-                    [f"대당여객", FleetMix['total_pax'].sum()/FleetMix['movement'].sum()], 
-                    [f"탑승율", FleetMix['total_pax'].sum()/FleetMix['total_seat_count'].sum()], 
-                    [f"환승율", FleetMix['tr_pax'].sum()/FleetMix['total_pax'].sum()], 
-                    [f"대당환승승객", FleetMix['tr_pax'].sum()/FleetMix['movement'].sum()], 
-                    [f"대당승무원", FleetMix['crew'].sum()/FleetMix['movement'].sum()], 
-                    [f"승무원비율", FleetMix['crew'].sum()/FleetMix['total_pax'].sum()], 
-                    [f"명당수하물", FleetMix['hand_carry_kg'].sum()/FleetMix['total_pax'].sum()], 
-                    [f"연간수하물", df_one_year['hand_carry_kg'].sum()], 
+                    [f"Number of seats per party", FleetMix['total_seat_count'].sum()/FleetMix['movement'].sum()], 
+                    [f"Passengers per car", FleetMix['total_pax'].sum()/FleetMix['movement'].sum()], 
+                    [f"load factor", FleetMix['total_pax'].sum()/FleetMix['total_seat_count'].sum()], 
+                    [f"transfer rate", FleetMix['tr_pax'].sum()/FleetMix['total_pax'].sum()], 
+                    [f"Great transfer passengers", FleetMix['tr_pax'].sum()/FleetMix['movement'].sum()], 
+                    [f"crew member", FleetMix['crew'].sum()/FleetMix['movement'].sum()], 
+                    [f"Crew ratio", FleetMix['crew'].sum()/FleetMix['total_pax'].sum()], 
+                    [f"Myeongdang baggage", FleetMix['hand_carry_kg'].sum()/FleetMix['total_pax'].sum()], 
+                    [f"annual baggage", df_one_year['hand_carry_kg'].sum()], 
                     ]
                 Analysis +=passenger_analysis
 
@@ -2924,14 +2924,14 @@ class MasterplanInput:
             
             if (category=="passenger") | (category=="cargo") |(category=="airside"): 
                 movement_analysis=[
-                    [f"연간운항", len(df_one_year)],
-                    [f"International운항", df_one_year[df_one_year['International/Domestic']=="international"]['movement'].sum()],
-                    [f"Domestic운항", df_one_year[df_one_year['International/Domestic']=="domestic"]['movement'].sum()],
+                    [f"Annual operation", len(df_one_year)],
+                    [f"Internationaloperation", df_one_year[df_one_year['International/Domestic']=="international"]['movement'].sum()],
+                    [f"Domesticoperation", df_one_year[df_one_year['International/Domestic']=="domestic"]['movement'].sum()],
 
-                    [f"Long_haul운항", df_one_year[df_one_year['Long/Short_haul']== 'Long_haul' ]['movement'].sum()],
-                    [f"Short_haul운항", df_one_year[df_one_year['Long/Short_haul']== 'Short_haul' ]['movement'].sum()],
-                    [f"정규운항", len(df_one_year[df_one_year['move_category']=='normal'])],
-                    [f"전세기운항", len(df_one_year[df_one_year['move_category']=='charter'])], 
+                    [f"Long_hauloperation", df_one_year[df_one_year['Long/Short_haul']== 'Long_haul' ]['movement'].sum()],
+                    [f"Short_hauloperation", df_one_year[df_one_year['Long/Short_haul']== 'Short_haul' ]['movement'].sum()],
+                    [f"Regular operation", len(df_one_year[df_one_year['move_category']=='normal'])],
+                    [f"Charter flight operation", len(df_one_year[df_one_year['move_category']=='charter'])], 
                     ]
                 Analysis +=movement_analysis
 
@@ -2939,18 +2939,18 @@ class MasterplanInput:
 
             if (category=="passenger") | (category=="cargo") |(category=="airside"): 
                 cargo_analysis=[
-                    [f"연간최대이륙중량", df_one_year['operating_maximum_takeoff_weight_lb'].sum()], 
-                    [f"연간Long_haul최대이륙중량", df_one_year[df_one_year['Long/Short_haul']== 'Long_haul' ]['operating_maximum_takeoff_weight_lb'].sum()],
-                    [f"연간Short_haul최대이륙중량", df_one_year[df_one_year['Long/Short_haul']== 'Short_haul' ]['operating_maximum_takeoff_weight_lb'].sum()],
+                    [f"Maximum annual takeoff weight", df_one_year['operating_maximum_takeoff_weight_lb'].sum()], 
+                    [f"annualLong_haulMaximum takeoff weight", df_one_year[df_one_year['Long/Short_haul']== 'Long_haul' ]['operating_maximum_takeoff_weight_lb'].sum()],
+                    [f"annualShort_haulMaximum takeoff weight", df_one_year[df_one_year['Long/Short_haul']== 'Short_haul' ]['operating_maximum_takeoff_weight_lb'].sum()],
                     
-                    [f"연간유상탑재중량", df_one_year['maximum_payload_lb'].sum()], 
-                    [f"연간Long_haul유상탑재중량", df_one_year[df_one_year['Long/Short_haul']== 'Long_haul' ]['maximum_payload_lb'].sum()],
-                    [f"연간Short_haul유상탑재중량", df_one_year[df_one_year['Long/Short_haul']== 'Short_haul' ]['maximum_payload_lb'].sum()],
-                    [f"대당최대이륙중량", FleetMix['operating_maximum_takeoff_weight_lb'].sum()/FleetMix['movement'].sum()], 
+                    [f"Annual paid payload", df_one_year['maximum_payload_lb'].sum()], 
+                    [f"annualLong_haulPaid payload", df_one_year[df_one_year['Long/Short_haul']== 'Long_haul' ]['maximum_payload_lb'].sum()],
+                    [f"annualShort_haulPaid payload", df_one_year[df_one_year['Long/Short_haul']== 'Short_haul' ]['maximum_payload_lb'].sum()],
+                    [f"Maximum takeoff weight per unit", FleetMix['operating_maximum_takeoff_weight_lb'].sum()/FleetMix['movement'].sum()], 
 
-                    [f"대당택싱평균", FleetMix['actual_taxi_time'].sum()/FleetMix['movement'].sum()], 
-                    [f"비행거리평균(km)", FleetMix['flight_distance_km'].sum()/FleetMix['movement'].sum()], 
-                    [f"대당유상탑재중량", FleetMix['maximum_payload_lb'].sum()/FleetMix['movement'].sum()], 
+                    [f"Taxi average per vehicle", FleetMix['actual_taxi_time'].sum()/FleetMix['movement'].sum()], 
+                    [f"Flight distance average(km)", FleetMix['flight_distance_km'].sum()/FleetMix['movement'].sum()], 
+                    [f"Paid payload per unit", FleetMix['maximum_payload_lb'].sum()/FleetMix['movement'].sum()], 
                     ]
                 Analysis +=cargo_analysis
             
@@ -2973,13 +2973,13 @@ class MasterplanInput:
             ground = df_one_year[limit_mask]["ground_time"].mean()
 
             Analysis+=  [
-                        ["피크시간 턴어라운드편 평균주기시간(분)", peak_limit_turn_standing],
-                        ["피크시간 턴어라운드편 평균그라운드시간(분)", peak_limit_trun_ground],
-                        ["턴어라운드편 평균주기시간(분)",turn_standing],
-                        ["턴어라운드편 평균그라운드시간(분)",turn_ground],
-                        ["(오버나잇, 소산 포함) 피크시간 평균주기시간(분)",peak_standing],
-                        ["(오버나잇, 소산 포함) 평균주기시간(분)",standing],
-                        ["(오버나잇, 소산 포함) 평균그라운드시간(분)",ground],
+                        ["Peak time Turnaround average cycle time(minute)", peak_limit_turn_standing],
+                        ["Peak time Turnaround average ground time(minute)", peak_limit_trun_ground],
+                        ["Turnaround average cycle time(minute)",turn_standing],
+                        ["Turnaround average ground time(minute)",turn_ground],
+                        ["(Overnight, including Sosan) Peak time average cycle time(minute)",peak_standing],
+                        ["(Overnight, including Sosan) average cycle time(minute)",standing],
+                        ["(Overnight, including Sosan) average ground time(minute)",ground],
                         ]
 
             peak_limit_turn_standing_byclass = df_one_year[peak_mask & limit_trunaround_mask & is_turnaround].groupby(["aircraft_class"])["standing_time"].agg('mean')
@@ -3002,13 +3002,13 @@ class MasterplanInput:
                                         ground_byclass,
                                         ],
                                         [
-                                        "피크시간 턴어라운드편 평균주기시간(분)",
-                                        "피크시간 턴어라운드편 평균그라운드시간(분)",
-                                        "턴어라운드편 평균주기시간(분)",
-                                        "턴어라운드편 평균그라운드시간(분)",
-                                        "(오버나잇, 소산 포함) 피크시간 평균주기시간(분)",
-                                        "(오버나잇, 소산 포함) 평균주기시간(분)",
-                                        "(오버나잇, 소산 포함) 평균그라운드시간(분)",
+                                        "Peak time Turnaround average cycle time(minute)",
+                                        "Peak time Turnaround average ground time(minute)",
+                                        "Turnaround average cycle time(minute)",
+                                        "Turnaround average ground time(minute)",
+                                        "(Overnight, including Sosan) Peak time average cycle time(minute)",
+                                        "(Overnight, including Sosan) average cycle time(minute)",
+                                        "(Overnight, including Sosan) average ground time(minute)",
                                         ]
                                         ):
                 for aircraft_class in series.index:
@@ -3040,81 +3040,81 @@ class MasterplanInput:
             for i in range(len(FleetMix)):
 
                 if (category=="passenger") | (category=="cargo") |(category=="airside"): 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})운항횟수", FleetMix['movement'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})혼합율", FleetMix['FleetMix'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Number of flights", FleetMix['movement'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})mixing ratio", FleetMix['FleetMix'][i]]) 
 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})대당최대이륙중량", FleetMix['mtow_per_aircraft'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})대당택싱평균", FleetMix['taxi_time_per_aircraft'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})비행거리평균(km)", FleetMix['flight_distance_km_per_aircraft'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})대당유상탑재중량", FleetMix['payload_per_aircraft'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Maximum takeoff weight per unit", FleetMix['mtow_per_aircraft'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Taxi average per vehicle", FleetMix['taxi_time_per_aircraft'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Flight distance average(km)", FleetMix['flight_distance_km_per_aircraft'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Paid payload per unit", FleetMix['payload_per_aircraft'][i]]) 
 
                 if (category=="passenger"): 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})대당좌석수", FleetMix['seats_per_aircraft'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})대당여객", FleetMix['pax_per_aircraft'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})탑승율", FleetMix['load_factor'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})환승율", FleetMix['tr_ratio'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})대당환승승객", FleetMix['trpax_per_aircraft'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})대당승무원", FleetMix['crew_per_aircraft'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})승무원비율", FleetMix['crew_ratio'][i]]) 
-                    Analysis.append([f"({FleetMix['aircraft_class'][i]})명당수하물", FleetMix['hand_carry_per_pax'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Number of seats per party", FleetMix['seats_per_aircraft'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Passengers per car", FleetMix['pax_per_aircraft'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})load factor", FleetMix['load_factor'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})transfer rate", FleetMix['tr_ratio'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Great transfer passengers", FleetMix['trpax_per_aircraft'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})crew member", FleetMix['crew_per_aircraft'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Crew ratio", FleetMix['crew_ratio'][i]]) 
+                    Analysis.append([f"({FleetMix['aircraft_class'][i]})Myeongdang baggage", FleetMix['hand_carry_per_pax'][i]]) 
 
 
             
             if len(df_one_year) >100 : 
-                출발도착 = ['all',"d","a"]
-                # 시작지점과 종료지점을 2개로 설정한 이유는 다음과 같다
-                # 1, 30으로 설정하면 1~30개의 평균으로 SBR이 나오고
-                시작지점 = 140 
-                종료지점 = 160
-                df_일별 = df_one_year.groupby(['scheduled_gate_date','scheduled_gate_hour'])[peak_list_1].sum().sort_values(by=peak_list_1[0], ascending=False).reset_index()
-                df_일별2 = df_one_year.groupby(['scheduled_gate_date','scheduled_gate_hour','flight_io'])[peak_list_1].sum().sort_values(by=peak_list_1[0], ascending=False).reset_index()
+                DepartureArrival = ['all',"d","a"]
+                # The reason for setting two start and end points is as follows.
+                # 1, 30If set to 1~30on average SBRThis comes out
+                starting point = 140 
+                end point = 160
+                df_glance = df_one_year.groupby(['scheduled_gate_date','scheduled_gate_hour'])[peak_list_1].sum().sort_values(by=peak_list_1[0], ascending=False).reset_index()
+                df_glance2 = df_one_year.groupby(['scheduled_gate_date','scheduled_gate_hour','flight_io'])[peak_list_1].sum().sort_values(by=peak_list_1[0], ascending=False).reset_index()
 
                 Peak_list = []
-                Peak_list.append([f"SBR/시작(N번째)",f"{시작지점}번째"]) 
-                Peak_list.append([f"SBR/종료(N번째)",f"{종료지점}번째"]) 
-                for 기준 in (peak_list_1):
-                    for 출도착 in (출발도착):
-                        H_Factor, D_Factor, PHF, SUM = H_D(df_one_year, 기준, 출도착)
-                        Peak_list.append([f"ADPM/{기준}/{출도착}/H팩터",H_Factor]) 
-                        Peak_list.append([f"ADPM/{기준}/{출도착}/D팩터",D_Factor]) 
-                        Peak_list.append([f"ADPM/{기준}/{출도착}/PHF",PHF]) 
-                        Peak_list.append([f"ADPM/{기준}/{출도착}/첨두시",PHF*SUM]) 
-                        if 출도착=='all':
-                            df_순위 = df_일별.nlargest(종료지점, 기준)[시작지점-1:종료지점]
-                            전체 = df_일별[기준].sum()
-                            N번째 = df_일별.sort_values(기준, ascending=False)
+                Peak_list.append([f"SBR/start(Nth)",f"{starting point}th"]) 
+                Peak_list.append([f"SBR/end(Nth)",f"{end point}th"]) 
+                for standard in (peak_list_1):
+                    for Departure and Arrival in (DepartureArrival):
+                        H_Factor, D_Factor, PHF, SUM = H_D(df_one_year, Standard, departure and arrival)
+                        Peak_list.append([f"ADPM/{standard}/{Departure and Arrival}/Hfactor",H_Factor]) 
+                        Peak_list.append([f"ADPM/{standard}/{Departure and Arrival}/Dfactor",D_Factor]) 
+                        Peak_list.append([f"ADPM/{standard}/{Departure and Arrival}/PHF",PHF]) 
+                        Peak_list.append([f"ADPM/{standard}/{Departure and Arrival}/peak hour",PHF*SUM]) 
+                        if Departure and Arrival=='all':
+                            df_ranking = df_glance.nlargest(End point, reference point)[Start point-1:End point]
+                            entire = df_glance[standard].sum()
+                            Nth = df_glance.sort_values(standard, ascending=False)
                         else:
-                            df_일별3 = df_일별2[df_일별2['flight_io'] == 출도착]
-                            df_순위 = df_일별3.nlargest(종료지점, 기준)[시작지점-1:종료지점]
-                            전체 = df_일별3[기준].sum()
-                            N번째 = df_일별2.sort_values(기준, ascending=False)
-                        첨두 = df_순위[기준].sum() / (종료지점-시작지점+1)
-                        Peak_list.append([f"SBR/{기준}/{출도착}/PHF",첨두/전체]) 
-                        Peak_list.append([f"SBR/{기준}/{출도착}/첨두시",첨두]) 
-                        Peak_list.append([f"ADPM_SBR/{기준}/{출도착}/첨두시_N번째",len(N번째[N번째[기준] > PHF*SUM]) if PHF!=0 else 0]) 
+                            df_glance3 = df_glance2[df_glance2['flight_io'] == Departure and Arrival]
+                            df_ranking = df_glance3.nlargest(End point, reference point)[Start point-1:End point]
+                            entire = df_glance3[standard].sum()
+                            Nth = df_glance2.sort_values(standard, ascending=False)
+                        peak = df_ranking[standard].sum() / (End point-start point+1)
+                        Peak_list.append([f"SBR/{standard}/{Departure and Arrival}/PHF",peak/entire]) 
+                        Peak_list.append([f"SBR/{standard}/{Departure and Arrival}/peak hour",peak]) 
+                        Peak_list.append([f"ADPM_SBR/{standard}/{Departure and Arrival}/peak hour_Nth",len(Nth[Nth[standard] > PHF*SUM]) if PHF!=0 else 0]) 
                 Analysis += Peak_list
                 result = pd.DataFrame(Analysis)
 
-                result.columns = ['변수명','결과']
-                중방향 = []
-                for 대상 in (peak_list_2):
-                    for 기준 in (['ADPM']): # ['ADPM','SBR']
-                        if (대상 !='movement') & (대상 !='total_pax'):
-                            중방향분자 = result.loc[result['변수명']==f'{기준}/{대상}/all/첨두시']['결과'].values[0] 
-                            중방향분모 = result.loc[result['변수명']==f'{기준}/total_pax/all/첨두시']['결과'].values[0] 
-                            중방향.append([f"{기준}/{대상}/all/중방향계수",중방향분자/중방향분모 if 중방향분모 !=0 else 0]) 
-                        for 출도착 in (["d","a"]):
-                            중방향분자 = result.loc[result['변수명']==f'{기준}/{대상}/{출도착}/첨두시']['결과'].values[0] 
-                            중방향분모 = result.loc[result['변수명']==f'{기준}/{대상}/all/첨두시']['결과'].values[0] 
-                            중방향.append([f"{기준}/{대상}/{출도착}/중방향계수",중방향분자/중방향분모 if 중방향분모 !=0 else 0]) 
-                Analysis += 중방향
+                result.columns = ['variable name','result']
+                middle direction = []
+                for Target in (peak_list_2):
+                    for standard in (['ADPM']): # ['ADPM','SBR']
+                        if (Target !='movement') & (Target !='total_pax'):
+                            middle direction molecule = result.loc[result['variable name']==f'{standard}/{Target}/all/peak hour']['result'].values[0] 
+                            middle directional denominator = result.loc[result['variable name']==f'{standard}/total_pax/all/peak hour']['result'].values[0] 
+                            middle direction.append([f"{standard}/{Target}/all/Middle direction coefficient",middle direction molecule/middle directional denominator if middle directional denominator !=0 else 0]) 
+                        for Departure and Arrival in (["d","a"]):
+                            middle direction molecule = result.loc[result['variable name']==f'{standard}/{Target}/{Departure and Arrival}/peak hour']['result'].values[0] 
+                            middle directional denominator = result.loc[result['variable name']==f'{standard}/{Target}/all/peak hour']['result'].values[0] 
+                            middle direction.append([f"{standard}/{Target}/{Departure and Arrival}/Middle direction coefficient",middle direction molecule/middle directional denominator if middle directional denominator !=0 else 0]) 
+                Analysis += middle direction
             else : 
                 pass
 
-            Analysis.append([f"항공사배치", list(df_one_year['operating_carrier_id'].unique())]) 
+            Analysis.append([f"Airline placement", list(df_one_year['operating_carrier_id'].unique())]) 
             result = pd.DataFrame(Analysis)
-            result.columns = ['변수명',year]
-            result=result.set_index('변수명')
+            result.columns = ['variable name',year]
+            result=result.set_index('variable name')
             result_list+=[result]
         result_df = pd.concat(result_list, axis=1)
         return result_df
@@ -3194,13 +3194,13 @@ class MasterplanInput:
         with virtual_location_tab:
             st.subheader("Select Virtual Airport Location")
 
-            # 기본 지도
+            # base map
             first_id = self.iata_code_list[0]
             first_row = self.df_airport[self.df_airport["airport_id"] == first_id]
             init_lat = first_row["lat"].values[0]
             init_lon = first_row["lon"].values[0]
 
-            # 지도 생성 (CartoDB dark_matter 스타일)
+            # map creation (CartoDB dark_matter style)
             m = folium.Map(
                 location=[init_lat, init_lon],
                 zoom_start=4,
@@ -3209,7 +3209,7 @@ class MasterplanInput:
 
             m.add_child(folium.LatLngPopup())
 
-            # 공항 점 추가
+            # Add airport point
             for airport_id in self.iata_code_list:
                 row = self.df_airport[self.df_airport["airport_id"] == airport_id]
                 if not row.empty:
@@ -3229,12 +3229,12 @@ class MasterplanInput:
             st_data = st_folium(m, width="100%", height=700)
 
                 
-            # 클릭된 좌표 추출 및 국가코드 표시
+            # Extract clicked coordinates and display country code
             if st_data and st_data['last_clicked']:
                 self.airport_lat = st_data['last_clicked']['lat']
                 self.airport_long = st_data['last_clicked']['lng']
 
-                # 국가코드 얻기
+                # Get country code
                 from geopy.geocoders import Nominatim   
                 geolocator = Nominatim(user_agent="virtual-airport")
                 location = geolocator.reverse((self.airport_lat, self.airport_long), language='en')
@@ -3281,49 +3281,49 @@ class MasterplanInput:
         #         st.write("break at year")
         #         break
 
-        #     FleetMix = df_cargo.groupby(['aircraft_class'])[['total_seat_count','total_pax','movement','crew','tr_pax','maximum_payload_lb','operating_maximum_takeoff_weight_lb','hand_carry_kg','actual_taxi_time','standing_time','ground_time','flight_distance_km']].sum().reset_index()  # ['OD화물','총우편물','총환적화물']
+        #     FleetMix = df_cargo.groupby(['aircraft_class'])[['total_seat_count','total_pax','movement','crew','tr_pax','maximum_payload_lb','operating_maximum_takeoff_weight_lb','hand_carry_kg','actual_taxi_time','standing_time','ground_time','flight_distance_km']].sum().reset_index()  # ['ODfreight','total mail','Total transshipment cargo']
 
 
         #     Analysis = [
-        #         # 운항
-        #         [f"연간운항", len(df_cargo)],
-        #         [f"International운항", df_cargo[df_cargo['International/Domestic']=="international"]['movement'].sum()],
-        #         [f"Domestic운항", df_cargo[df_cargo['International/Domestic']=="domestic"]['movement'].sum()],
+        #         # operation
+        #         [f"Annual operation", len(df_cargo)],
+        #         [f"Internationaloperation", df_cargo[df_cargo['International/Domestic']=="international"]['movement'].sum()],
+        #         [f"Domesticoperation", df_cargo[df_cargo['International/Domestic']=="domestic"]['movement'].sum()],
 
-        #         [f"Long_haul운항", df_cargo[df_cargo['Long/Short_haul']== 'Long_haul' ]['movement'].sum()],
-        #         [f"Short_haul운항", df_cargo[df_cargo['Long/Short_haul']== 'Short_haul' ]['movement'].sum()],
-        #         [f"정규운항", len(df_cargo[df_cargo['move_category']=='normal'])],
-        #         [f"전세기운항", len(df_cargo[df_cargo['move_category']=='charter'])],
+        #         [f"Long_hauloperation", df_cargo[df_cargo['Long/Short_haul']== 'Long_haul' ]['movement'].sum()],
+        #         [f"Short_hauloperation", df_cargo[df_cargo['Long/Short_haul']== 'Short_haul' ]['movement'].sum()],
+        #         [f"Regular operation", len(df_cargo[df_cargo['move_category']=='normal'])],
+        #         [f"Charter flight operation", len(df_cargo[df_cargo['move_category']=='charter'])],
                 
-        #         # 화물
-        #         [f"연간수하물", df_cargo['hand_carry_kg'].sum()], 
-        #         [f"연간최대이륙중량", df_cargo['operating_maximum_takeoff_weight_lb'].sum()], 
-        #         [f"연간Long_haul최대이륙중량", df_cargo[df_cargo['Long/Short_haul']== 'Long_haul' ]['operating_maximum_takeoff_weight_lb'].sum()],
-        #         [f"연간Short_haul최대이륙중량", df_cargo[df_cargo['Long/Short_haul']== 'Short_haul' ]['operating_maximum_takeoff_weight_lb'].sum()],
+        #         # freight
+        #         [f"annual baggage", df_cargo['hand_carry_kg'].sum()], 
+        #         [f"Maximum annual takeoff weight", df_cargo['operating_maximum_takeoff_weight_lb'].sum()], 
+        #         [f"annualLong_haulMaximum takeoff weight", df_cargo[df_cargo['Long/Short_haul']== 'Long_haul' ]['operating_maximum_takeoff_weight_lb'].sum()],
+        #         [f"annualShort_haulMaximum takeoff weight", df_cargo[df_cargo['Long/Short_haul']== 'Short_haul' ]['operating_maximum_takeoff_weight_lb'].sum()],
                 
-        #         [f"연간유상탑재중량", df_cargo['maximum_payload_lb'].sum()], 
-        #         [f"연간Long_haul유상탑재중량", df_cargo[df_cargo['Long/Short_haul']== 'Long_haul' ]['maximum_payload_lb'].sum()],
-        #         [f"연간Short_haul유상탑재중량", df_cargo[df_cargo['Long/Short_haul']== 'Short_haul' ]['maximum_payload_lb'].sum()],
+        #         [f"Annual paid payload", df_cargo['maximum_payload_lb'].sum()], 
+        #         [f"annualLong_haulPaid payload", df_cargo[df_cargo['Long/Short_haul']== 'Long_haul' ]['maximum_payload_lb'].sum()],
+        #         [f"annualShort_haulPaid payload", df_cargo[df_cargo['Long/Short_haul']== 'Short_haul' ]['maximum_payload_lb'].sum()],
 
-        #         [f"대당최대이륙중량", FleetMix['operating_maximum_takeoff_weight_lb'].sum()/FleetMix['movement'].sum()], 
+        #         [f"Maximum takeoff weight per unit", FleetMix['operating_maximum_takeoff_weight_lb'].sum()/FleetMix['movement'].sum()], 
 
-        #         [f"대당택싱평균", FleetMix['actual_taxi_time'].sum()/FleetMix['movement'].sum()], 
-        #         [f"비행거리평균(km)", FleetMix['flight_distance_km'].sum()/FleetMix['movement'].sum()], 
-        #         [f"대당유상탑재중량", FleetMix['maximum_payload_lb'].sum()/FleetMix['movement'].sum()], 
+        #         [f"Taxi average per vehicle", FleetMix['actual_taxi_time'].sum()/FleetMix['movement'].sum()], 
+        #         [f"Flight distance average(km)", FleetMix['flight_distance_km'].sum()/FleetMix['movement'].sum()], 
+        #         [f"Paid payload per unit", FleetMix['maximum_payload_lb'].sum()/FleetMix['movement'].sum()], 
         #     ]
 
 
-        #     Analysis.append([f"항공사배치", list(df_cargo['operating_carrier_id'].unique())]) 
+        #     Analysis.append([f"Airline placement", list(df_cargo['operating_carrier_id'].unique())]) 
         #     result = pd.DataFrame(Analysis)
-        #     result.columns = ['변수명',year]
-        #     result=result.set_index('변수명')
+        #     result.columns = ['variable name',year]
+        #     result=result.set_index('variable name')
         #     result_list+=[result]
 
         # self.return_df_cargo=pd.concat(result_list, axis=1)
 
 
     def apply_return_df_to_excel(self):
-        with pd.ExcelWriter('data/raw/excel_utility/생산중_copy.xlsx', mode='a', if_sheet_exists='replace') as writer:
+        with pd.ExcelWriter('data/raw/excel_utility/In production_copy.xlsx', mode='a', if_sheet_exists='replace') as writer:
             self.final_predict.to_excel(writer, sheet_name=f"Final ({self.y_variable})")
             self.reg_df.to_excel(writer, sheet_name=f"Reg ({self.y_variable})")
             self.choice_df.to_excel(writer, sheet_name=f"Country Ratio ({self.y_variable})")
@@ -3333,13 +3333,13 @@ class MasterplanInput:
             self.return_df_pax.to_excel(writer, sheet_name='raw_data_pax')
             self.return_df_cargo.to_excel(writer, sheet_name='raw_data_cargo')
             self.ref_year_table.to_excel(writer, sheet_name='ref', 
-                                    startrow=11,  # A6의 row 위치 (0부터 시작)
-                                    startcol=0,  # A열 (0부터 시작) 
-                                    ) # index 열 제외
+                                    startrow=11,  # A6of row location (0starting from)
+                                    startcol=0,  # Aheat (0starting from) 
+                                    ) # index exclude columns
 
 
 
-        workbook = load_workbook('data/raw/excel_utility/생산중_copy.xlsx')
+        workbook = load_workbook('data/raw/excel_utility/In production_copy.xlsx')
         sheet = workbook['ref']
 
         sheet[f'A2'] = "iata_code"; sheet[f'B2'] = str(self.iata_code)
@@ -3347,7 +3347,7 @@ class MasterplanInput:
         sheet[f'A4'] = "end_year"; sheet[f'B4'] = self.end_year
         sheet[f'A5'] = "predict_end_year"; sheet[f'B5'] = self.predict_end_year
 
-        workbook.save('data/raw/excel_utility/생산중_copy.xlsx')
+        workbook.save('data/raw/excel_utility/In production_copy.xlsx')
 
 
     @st.fragment
@@ -3397,7 +3397,7 @@ class MasterplanInput:
         import io
         buffer = io.BytesIO()
         pred_df.to_parquet(buffer)
-        # 다운로드 버튼 생성
+        # Create download button
         st.download_button(
             label="Download Schedule",
             data=buffer.getvalue(),
@@ -3450,7 +3450,7 @@ class MasterplanInput:
             aci_demand = self.aci_airport[self.aci_airport["airport_code_iata"]==self.iata_code].groupby(["year"])[y_variable].agg("sum").to_frame()
             demand=aci_demand
         elif use_data=="OPEN_DATA":
-            # self.start_year부터 self.end_year까지의 기간에 해당하는 데이터만 필터링
+            # self.start_yearfrom self.end_yearFilter only data corresponding to the period up to
             start_year_mask = (self.df_orig['scheduled_gate_local'].dt.year >= self.start_year)
             end_year_mask = (self.df_orig['scheduled_gate_local'].dt.year <= self.end_year)
             filtered_df_orig = self.df_orig[start_year_mask & end_year_mask]
@@ -3531,53 +3531,53 @@ class MasterplanInput:
                         from sklearn.metrics import r2_score
                         def create_linear_regression(demand_df, x_variables, y_variable):
                             """
-                            선형 회귀 모델을 생성하고 예측을 수행하는 함수
+                            Function to create a linear regression model and make predictions
                             
                             Parameters:
-                            demand_df (DataFrame): 입력 데이터프레임
-                            x_variables (list): 독립변수들의 컬럼명 리스트
+                            demand_df (DataFrame): input data frame
+                            x_variables (list): Column name list of independent variables
                             
                             Returns:
-                            tuple: (모델, R² 점수, 예측값이 추가된 데이터프레임)
+                            tuple: (model, R² Data frame with added scores and predicted values)
                             """
 
-                            # 학습 데이터 준비
+                            # Prepare training data
                             train_mask = demand_df[y_variable].notna()
                             X_train = demand_df[train_mask][x_variables]
                             y_train = demand_df[train_mask][y_variable]
                             
-                            # 예측할 데이터 준비
+                            # Prepare your data for prediction
                             predict_mask = demand_df[y_variable].isna()
                             X_predict = demand_df[predict_mask][x_variables]
-                            # 모델 학습
+                            # model training
                             model = LinearRegression()
                             model.fit(X_train, y_train)
                             
-                            # 모델 성능 평가
+                            # Model performance evaluation
                             y_pred_train = model.predict(X_train)
                             r2 = r2_score(y_train, y_pred_train)
                             
-                            # 회귀식 생성
+                            # Create a regression equation
                             equation_terms = []
                             for coef, var in zip(model.coef_, x_variables):
                                 equation_terms.append(f"{coef:.2f} * ({var})")
                             equation = "y = " + " + ".join(equation_terms) + f" + {model.intercept_:.2f}"
                             
 
-                            # 미래 값 예측
+                            # predict future value
                             future_predictions = model.predict(X_predict)
                             
-                            # 예측값을 원본 데이터프레임에 추가
+                            # Add predicted values ​​to original dataframe
                             demand_df.loc[predict_mask, y_variable] = future_predictions//1
                             demand_df[y_variable]=demand_df[y_variable].fillna(demand_df[y_variable])
                             return model, r2, demand_df, equation, r2
 
-                        # 함수 사용 예시
+                        # Example of function usage
                         x_variables=demand_df.columns[:-1].tolist()
   
 
                         model, r2, reg_df, equation, r2 = create_linear_regression(demand_df, x_variables, y_variable)
-                        # 결과 출력
+                        # Result output
                         st.dataframe(reg_df[[y_variable]]//1, height=1800)
                     st.info(f"""
                     📊 Regression Model:
@@ -3586,27 +3586,27 @@ class MasterplanInput:
                     """)
                     
                     # data_guide = f"""
-                    # [제공 데이터] \n
-                    # {self.airport_iata_code_list} 의 미래 수요예측 표 입니다. \n
-                    # 변수와 최종 예측 수치를 나타냅니다. \n
+                    # [provided data] \n
+                    # {self.airport_iata_code_list} This is the future demand forecast table for. \n
+                    # Indicates variables and final predicted values. \n
                     # x_variables : {x_variables}\n
                     # y_variable : {y_variable} \n
-                    # r_square value : {r2} >> 일반적으로 0.85 이상이면 적절한 예측 수준 \n
-                    # equation : {equation} >> 예측 수식 \n
+                    # r_square value : {r2} >> Generally, anything above 0.85 is a good prediction level. \n
+                    # equation : {equation} >> prediction formula \n
 
-                    # [인사이트]
-                    # 1) 예측변수들이 최종 예측에 어떠한 영향을 미치는지
-                    # 2) 더미변수가 있다면 그 이유에 대한 설명
-                    # 3) 각 예측변수들의 추세 등 설명
-                    # 4) 해당 국가의 정치적 상황, 국가 정책 방향성을 넣을 수 있는 질적 변수를 더미로 추가할 필요성 있음
+                    # [Insight]
+                    # 1) How predictors affect the final prediction
+                    # 2) If there are dummy variables, an explanation of why.
+                    # 3) Description of trends of each predictor, etc.
+                    # 4) There is a need to add qualitative variables that can include the country's political situation and national policy direction as a dummy.
                     # """
                     # answer_guide="""
-                    # 보고서형태로 작성해줘, \n
-                    # 대상은 공항건설 및 성장률을 검토하는 공항근무자야 \n
+                    # Please write it in report form., \n
+                    # The target audience is airport workers who review airport construction and growth rates. \n
                     # """
                     # example_question=f"""
-                    # 1. 수요예측 과정과 결과에 대해 해설해줘 \n
-                    # 2. 추가적으로 고려되면 좋을것들이 무엇이 있을까?
+                    # 1. Explain the demand forecasting process and results. \n
+                    # 2. What are some additional things to consider??
                     # """
                     # self.ai_insight(system_prompt=self.system_prompt, 
                     #             data_list=[reg_df.reset_index()], 
@@ -3645,7 +3645,7 @@ class MasterplanInput:
             st.warning(f"Data for **{self.country}** is not available.")
             return pd.DataFrame()
 
-        # 마지막 연도의 성장률
+        # Growth rate in the last year
         last_growth_rate = watf_series.iloc[-1] / watf_series.iloc[-2]
         for year in range(watf_series.index[-1] + 1, self.predict_end_year + 1):
             watf_series.loc[year] = int(watf_series.loc[year - 1] * last_growth_rate)
@@ -3723,7 +3723,7 @@ class MasterplanInput:
                 reg_ratio=1
             else:
                 reg_ratio = st.number_input("regression ratio", 
-                                            value=0.25,  # 기본값을 0.5로 변경
+                                            value=0.25,  # Change default to 0.5
                                             min_value=0.0, 
                                             max_value=1.0,
                                             step=0.01,
@@ -3743,27 +3743,27 @@ class MasterplanInput:
 
             # data_guide = f"""
             # [Dataset1 : regression]
-            # {self.airport_iata_code_list} 의 미래 수요예측 표 입니다.
-            # 변수와 최종 예측 수치를 나타냅니다.
+            # {self.airport_iata_code_list} This is the future demand forecast table for.
+            # Indicates variables and final predicted values.
             # y_variable : {y_variable} \n
 
             # [Dataset2 : country ratio]
-            # {self.airport_iata_code_list} 의 미래 수요예측 표 입니다. 이 예측방법은 ACI(Airport Council International) 기관의 국가별 미래 수요예측을 기반으로 합니다. 
+            # {self.airport_iata_code_list} This is the future demand forecast table. This prediction method is ACI(Airport Council International) Based on the agency's forecast of future demand by country. 
 
-            # airport_traffic : {self.airport_iata_code_list} 공항의 실제 수요를 의미합니다
-            # country_traffic : ACI에서 발표하는 {self.country} 국가전체의 watf(world airport traffic forecast) 예측수치입니다
-            # ratio : airport_traffic / country_traffic 비율입니다
-            # y_variable : {y_variable} = country_traffic * ratio로 예측됩니다 \n
+            # airport_traffic : {self.airport_iata_code_list} refers to the actual demand at the airport
+            # country_traffic : ACIannounced in {self.country} whole country watf(world airport traffic forecast) These are predicted figures.
+            # ratio : airport_traffic / country_traffic It's a ratio
+            # y_variable : {y_variable} = country_traffic * ratioIt is predicted as \n
             
             # [Dataset3 : weighted average]
-            # regression 예측치와 country ratio 예측치를 가중평균하여 weighted_average 계산. regression  비율={reg_ratio}, country_ratio 비율={1-reg_ratio}(1-regression ratio) \n
+            # regression Forecast and country ratio Weighted average of forecasts weighted_average calculate. regression  ratio={reg_ratio}, country_ratio ratio={1-reg_ratio}(1-regression ratio) \n
             # """
             # answer_guide="""
-            # 예측치별 성장률의 차이와, 추세를 중심으로 설명해줘
-            # 보고서형태로 작성해줘, \n
+            # Please explain the difference in growth rate by forecast and the trend.
+            # Please write it in report form., \n
             # """
             # example_question=f"""
-            # 1. 이 예측 내용을 한장 보고서로 정리해줘
+            # 1. Please summarize this forecast into a one-page report.
             # """
             # self.ai_insight(system_prompt=self.system_prompt, 
             #             data_list=[reg_df.reset_index(), choice_df.reset_index(), final_predict.reset_index()], 
@@ -3773,37 +3773,37 @@ class MasterplanInput:
             #             key="final forecast")
 
     def ai_insight(self, system_prompt, data_list, data_guide, answer_guide, example_question, default_question="", key="default"):
-        # 리스트를 정렬하여 문자열로 변환 (일관된 비교를 위해)
+        # Sort a list and convert it to a string (For consistent comparison)
         current_codes = ','.join(sorted(self.airport_iata_code_list))
         
-        # 현재 선택된 airport_iata_code를 추적
+        # currently selected airport_iata_codetrack
         if 'current_airport_code' not in st.session_state:
             st.session_state.current_airport_code = current_codes
         
-        # airport_iata_code가 변경되었는지 확인
+        # airport_iata_codeCheck if has changed
         if st.session_state.current_airport_code != current_codes:
-            # 모든 관련 세션 상태 초기화
+            # Initialize all relevant session state
             keys_to_delete = [k for k in st.session_state.keys() if k.startswith('messages_')]
             for k in keys_to_delete:
                 del st.session_state[k]
             
-            # 입력 필드도 초기화
+            # Initialize the input fields as well
             if key in st.session_state:
                 del st.session_state[key]
                 
-            # 현재 공항 코드 업데이트
+            # Update current airport codes
             st.session_state.current_airport_code = current_codes
             
-            # 페이지 새로고침
+            # Refresh page
             st.rerun()
 
             
 
-        # data_list가 리스트가 아닌 경우 리스트로 변환
+        # data_listIf is not a list, convert it to a list
         if not isinstance(data_list, list):
             data_list = [data_list]
         
-        # 각 데이터프레임을 문자열로 변환하고 결합
+        # Convert each data frame to a string and join them
         data_string = ""
         for i, data in enumerate(data_list):
             data_string += f"\nDataset {i+1}:\n" + data.to_string(index=False) + "\n"
@@ -3820,7 +3820,7 @@ class MasterplanInput:
         def handle_input():
             user_question = st.session_state[key]  
             
-            if user_question:  # 입력값이 있을 때만 처리
+            if user_question:  # Process only when there is input
                 st.session_state[f"messages_{key}"].append(
                     {"role": "user", "content": user_question}
                 )
@@ -3837,7 +3837,7 @@ class MasterplanInput:
                     {"role": "assistant", "content": reply}
                 )
                 
-                st.session_state[key] = ""  # 입력 필드 초기화
+                st.session_state[key] = ""  # Initialize input fields
 
         container = st.container(border=True)
         with container:
@@ -3900,7 +3900,7 @@ class MasterplanInput:
                         key=f"scenario_name{idx+1}",
                     )
                     if scenario_file_object is not None : 
-                        sheet_names = ["filter_history", "ref", "Final (total_pax)"]  # 원하는 시트명 설정
+                        sheet_names = ["filter_history", "ref", "Final (total_pax)"]  # Set desired sheet name
                         dfs = pd.read_excel(scenario_file_object, sheet_name=sheet_names)
                         filter_series=dfs["filter_history"].set_index("Unnamed: 0").loc["unique_ratio_list"]
                         ref_series=dfs["ref"][["Unnamed: 0","Unnamed: 1"]].set_index("Unnamed: 0").head(4)
@@ -3918,9 +3918,9 @@ class MasterplanInput:
                             for index, value in zip(filter_series.index, filter_series.values):
                                 st.caption(f"**[{index}]** = {value}")
 
-                    # 이름 중복 검사
+                    # Check for name duplicates
                     if scenario_name in scenario_names:
-                        st.warning(f"'{scenario_name}' 이름이 중복되었습니다. 다른 이름을 입력해주세요.")
+                        st.warning(f"'{scenario_name}' Duplicate name. Please enter a different name.")
                     else:
                         scenario_names.add(scenario_name)
                     scenario_info = {
@@ -4011,13 +4011,13 @@ def economic_df(df, country, ref_country, already_selected_list, key):
             variable_list.insert(0, variable_list.pop(variable_list.index(var)))
 
     variable_list=variable_list+["Dummy"]
-    # 국가 선택
+    # Select country
     c1,c2,c3=st.columns(3)
     with c1:
         country = st.selectbox('**Predict Country**', country_list,country_list.index(country), key=f"country{key}")
     with c2:
         variable = st.selectbox('**Variable**', variable_list, index=0, key=f"variable{key}")
-    # 데이터 필터링
+    # data filtering
     if variable!="Dummy":
         filtered_df = df[
             (df['Country']==country) &
@@ -4063,7 +4063,7 @@ def economic_df(df, country, ref_country, already_selected_list, key):
         
         for year in future_years:
             filtered_df[year] = ref_df[year].values[0] * ratio
-    # 데이터 재구성
+    # Data reconstruction
     plot_df = filtered_df.melt(
         id_vars=['Scenario'], 
         value_vars=[col for col in filtered_df.columns if str(col).isdigit()],
@@ -4072,7 +4072,7 @@ def economic_df(df, country, ref_country, already_selected_list, key):
     )
     plot_df['Year'] = plot_df['Year'].astype(int)
 
-    # Plotly 그래프 생성
+    # Plotly Graph creation
     c1, c2=st.columns(2)
     with c1:
         st.write(variable)
@@ -4090,9 +4090,9 @@ def economic_df(df, country, ref_country, already_selected_list, key):
 
 @st.fragment
 def download_excel(scenario_name="Analysis"):
-    shutil.copy('data/raw/excel_utility/생산중_copy.xlsx', 'data/raw/excel_utility/download.xlsx')
+    shutil.copy('data/raw/excel_utility/In production_copy.xlsx', 'data/raw/excel_utility/download.xlsx')
 
-    # 다운로드 버튼 생성
+    # Create download button
     with open('data/raw/excel_utility/download.xlsx', 'rb') as f:
         excel_data = f.read()
 
@@ -4160,25 +4160,25 @@ def H_D(df, agg_col='movement', flight_io='all', peak_date_number=10, n_min=15, 
     for n in range(peak_date_number):
         df_target_date = df2[df2['scheduled_gate_date'] == target_date[n]]
         df_target_date['n_min'] = round(df_target_date['scheduled_gate_hour'] + (df_target_date['scheduled_gate_minute']//n_min) * (n_min/60),2)
-        df_누적 = pd.DataFrame([{'n_min':0}])
+        df_cumulative = pd.DataFrame([{'n_min':0}])
         for i in range(24*int(60/n_min)):
-            df_누적.loc[i] = [round(i*(n_min/60),2)]
-        df_누적 = df_누적.merge(df_target_date.groupby(['n_min'])[agg_col].sum().reset_index(name=agg_col), on='n_min', how='left').fillna(0)
-        df_누적[f'누적_{agg_col}']=0
+            df_cumulative.loc[i] = [round(i*(n_min/60),2)]
+        df_cumulative = df_cumulative.merge(df_target_date.groupby(['n_min'])[agg_col].sum().reset_index(name=agg_col), on='n_min', how='left').fillna(0)
+        df_cumulative[f'cumulative_{agg_col}']=0
         for i in range(int(60/n_min)):
-            df_누적[f'누적_{agg_col}'] += df_누적[agg_col].shift(i)
-        target_date_H_factor.append(df_target_date[agg_col].sum()/df_누적[f'누적_{agg_col}'].max())
+            df_cumulative[f'cumulative_{agg_col}'] += df_cumulative[agg_col].shift(i)
+        target_date_H_factor.append(df_target_date[agg_col].sum()/df_cumulative[f'cumulative_{agg_col}'].max())
     H_Factor = sum(target_date_H_factor)/peak_date_number
     df_month = df2.groupby(['scheduled_gate_month'])[default_cols].sum().reset_index()
     if len(df_month) !=12:
         return 0, 0, 0, 0
     df_month['scheduled_gate_date'] = [31,28,31,30,31,30,31,31,30,31,30,31]
     for col in (list(df_month.columns[1:])):
-        exec(f"df_month[col+'_일평균'] = df_month[col] / df_month['scheduled_gate_date']")
+        exec(f"df_month[col+'_daily average'] = df_month[col] / df_month['scheduled_gate_date']")
     
-    df_첨두월 = df_month.nlargest(2,[agg_col+'_일평균'])
-    첨두일평균운항수 = df_첨두월[agg_col].sum()/df_첨두월['scheduled_gate_date'].sum()
-    D_Factor = df2[agg_col].sum()/첨두일평균운항수
+    df_peak month = df_month.nlargest(2,[agg_col+'_daily average'])
+    Peak daily average number of flights = df_peak month[agg_col].sum()/df_peak month['scheduled_gate_date'].sum()
+    D_Factor = df2[agg_col].sum()/Peak daily average number of flights
     PHF = (H_Factor*D_Factor)**(-1)
     SUM = df2[agg_col].sum()
     return H_Factor, D_Factor, PHF, SUM

@@ -13,9 +13,9 @@ import os
 import sys
 import zipfile
 import io
-# Streamlit 페이지에서도 프로젝트 루트를 path에 넣어 utils 등 import 가능하게 함
+# Streamlit Project root on the page as well pathput in utils etc. import enable
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)  # pages/ 의 부모 = 프로젝트 루트
+_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)  # pages/ parents of = project root
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 from utils.masterplan import MasterplanInput
@@ -27,7 +27,7 @@ _build_scenario_report_html = None
 try:
     from utils.generate_scenario_report_rev2 import build_report_html as _build_scenario_report_html
 except Exception as _e:
-    # fallback: 파일 경로로 직접 로드 (Streamlit 등에서 sys.path 불일치 시)
+    # fallback: Load directly with file path (Streamlit from the back sys.path When there is a mismatch)
     try:
         import importlib.util
         _g = os.path.join(_PROJECT_ROOT, "utils", "generate_scenario_report_rev2.py")
@@ -47,13 +47,13 @@ except Exception as _e:
         logging.getLogger(__name__).debug("generate_scenario_report_rev2 import failed: %s", _e)
 
 def _percentile_rank_value(sorted_desc, p):
-    """Percentile을 보간하지 않고, 해당 순위의 실제 값을 반환.
-    sorted_desc: 내림차순 정렬된 1D 배열 (최대값이 인덱스 0).
-    p: 0~100 퍼센타일. 반환: (0-based 인덱스, 해당 위치의 값)."""
+    """PercentileReturns the actual value of that rank, without interpolating.
+    sorted_desc: sorted in descending order 1D arrangement (The maximum value is the index 0).
+    p: 0~100 Percentile. return: (0-based index, value at that position)."""
     n = len(sorted_desc)
     if n == 0:
         return 0, np.nan
-    rank_from_bottom = int(np.ceil(p / 100.0 * n))  # 1-based, 작은 쪽부터
+    rank_from_bottom = int(np.ceil(p / 100.0 * n))  # 1-based, From the small side
     idx = n - rank_from_bottom
     idx = max(0, min(idx, n - 1))
     return idx, float(sorted_desc[idx])
@@ -70,26 +70,26 @@ st.set_page_config(
 #     st.stop()
 
 
-# apply_css 함수 정의 (의존성 제거) — 라이트/다크 모드 대응
+# apply_css function definition (remove dependencies) — light/Dark mode support
 def apply_css():
     css = """
     <style>
-    /* 배경 — config.toml 테마 사용, 강제 검정 제거 */
+    /* background — config.toml Use theme, remove forced black */
     [data-testid="stAppViewContainer"] { padding: 0 !important; overflow: visible !important; }
     .block-container { background: transparent !important; padding: 1.5rem 2.5rem 1.5rem 2.5rem !important; max-width: 100% !important; overflow: visible !important; margin: 0 auto !important; position: relative !important; z-index: 1 !important; }
     div[data-testid="stVerticalBlock"] { background: transparent !important; }
     [data-testid="stExpander"], [data-testid="stExpander"] > div { background: transparent !important; }
     [data-testid="stTab"] { background: transparent !important; }
     
-    /* 사이드바·우측 영역 — config.toml 테마 사용 */
+    /* sidebar·right area — config.toml Use theme */
     
-    /* 글씨체: config.toml의 pretendard와 동일하게 유지 (홈페이지와 통일) */
+    /* font: config.tomlof pretendardremain the same as (Homepage and unification) */
     h3 { padding-top: 30px; }
     body, p, h1, h2, h3, h4, h5, h6, textarea {
         font-size: 20px;
     }
 
-    /* Card container — 투명하게 (배경 통일) */
+    /* Card container — transparently (background unity) */
     .card {
         border: 1px solid rgba(148, 163, 184, 0.12);
         background: rgba(15, 18, 25, 0.4);
@@ -154,7 +154,7 @@ def apply_css():
     }
     [data-theme="dark"] .card h3, [data-theme="dark"] .card h4,
     .stApp[data-theme="dark"] .card h3, .stApp[data-theme="dark"] .card h4 { color: #e2e8f0 !important; }
-    /* Scenario comparison card view (dark) — div/h4만 덮어쓰고 span(차이/개선 색) 유지 */
+    /* Scenario comparison card view (dark) — div/h4Just overwrite span(difference/improvement color) maintain */
     @media (prefers-color-scheme: dark) {
         .relocation-card { background: rgba(15, 18, 25, 0.5) !important; border-color: rgba(80, 90, 100, 0.4) !important; box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important; }
         .relocation-card h4, .relocation-card > div { color: #e2e8f0 !important; }
@@ -168,7 +168,7 @@ def apply_css():
     }
     [data-theme="dark"] .relocation-card h4, [data-theme="dark"] .relocation-card > div,
     .stApp[data-theme="dark"] .relocation-card h4, .stApp[data-theme="dark"] .relocation-card > div { color: #e2e8f0 !important; }
-    /* Streamlit dark theme (배경이 어두우면 body에 클래스 추가됨) */
+    /* Streamlit dark theme (If the background is dark bodyClass added to) */
     body.streamlit-dark .card {
         background: rgba(15, 18, 25, 0.4) !important; border-color: rgba(148, 163, 184, 0.12) !important; color: #e2e8f0 !important;
     }
@@ -178,7 +178,7 @@ def apply_css():
     }
     body.streamlit-dark .relocation-card h4, body.streamlit-dark .relocation-card > div { color: #e2e8f0 !important; }
     
-    /* number_input 공통 — Time Unit, Num of locations, Num of Scenarios 등 통일 */
+    /* number_input commonness — Time Unit, Num of locations, Num of Scenarios unification */
     [data-testid="stNumberInput"],
     div[data-testid="stNumberInput"] > div,
     div.row-widget.stNumberInput,
@@ -197,7 +197,7 @@ def apply_css():
         font-size: 0.95rem !important;
         padding: 6px 10px !important;
     }
-    /* +/- 버튼 아이콘 보이게 */
+    /* +/- Show button icon */
     [data-testid="stNumberInput"] button,
     div.row-widget.stNumberInput button {
         opacity: 1 !important;
@@ -249,7 +249,7 @@ def apply_css():
 
 
 def apply_button_css():
-    """Relocation Master 버튼(Load, Delete, Run, Save 등) 공통 스타일 - 작은 크기"""
+    """Relocation Master button(Load, Delete, Run, Save etc.) Common Style - Small Size"""
     btn_css = """
     <style>
     div.stButton > button,
@@ -273,7 +273,7 @@ def apply_button_css():
     div[data-testid="stButton"] {
         font-size: 15px !important;
     }
-    /* Streamlit button (kind 속성) + 다운로드 버튼 */
+    /* Streamlit button (kind attribute) + download button */
     button[kind="primary"],
     button[kind="secondary"],
     button[kind="primary"] *,
@@ -285,11 +285,11 @@ def apply_button_css():
     return st.markdown(btn_css, unsafe_allow_html=True)
 
 
-# 전역 랜덤 시드 설정
+# Global random seed setting
 RANDOM_SEED = 42
 np.random.seed(RANDOM_SEED)
 
-# 전역 category_dict 정의 (원본 컬럼명 기반, mean, sigma, min_max_clip 통합)
+# Global category_dict definition (Based on original column name, mean, sigma, min_max_clip integration)
 CATEGORY_DICT = {
     "departure movement": {
         "agg_col": "movement",
@@ -363,7 +363,7 @@ CATEGORY_DICT = {
     },
 }
 
-# 그룹화할 공통 컬럼 리스트 (공유 변수) - 전역적으로 사용
+# List of common columns to group by (shared variable) - Use globally
 BASE_COL_OPTIONS = [
     "terminal_carrier",
     "operating_carrier_name",
@@ -373,13 +373,13 @@ BASE_COL_OPTIONS = [
     "terminal_iata",
     "terminal_iata_int/dom",
     "terminal_iata_int/dom_dest",
-    # 추가 기본 컬럼들
+    # Additional default columns
     "flight_io",
     "terminal",
     "operating_carrier_iata",
 ]
 
-# Summary by Group 탭 목록 (label, column). 리포트/Streamlit에서 탭으로 표시
+# Summary by Group tab list (label, column). report/StreamlitShow as tab in
 SUMMARY_BY_GROUP_TABS = [
     ("Terminal Carrier", "terminal_carrier"),
     ("Destination", "dep/arr_airport"),
@@ -482,7 +482,7 @@ def render_relocation_schematic(loc_names: list, fixed_per_loc: dict, moving_uni
 
     fig.update_xaxes(visible=False, range=[0, width])
     fig.update_yaxes(visible=False, range=[0, height])
-    # Remove height limit to show all items; 배경 투명도 높임 (다크/라이트 테마 모두 자연스럽게)
+    # Remove height limit to show all items; Increase background transparency (dark/Light theme all naturally)
     fig.update_layout(
         height=height+60, width=None, margin=dict(l=10, r=10, t=20, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
@@ -503,26 +503,26 @@ def create_normal_dist_col_by_airline(
     datetime=False,
 ):
     """
-    항공사별로 독립적인 정규분포 랜덤값을 생성하여 새 컬럼을 추가
+    Add a new column by generating independent normal distribution random values ​​for each airline
     """
     # Check if the mean is within the clipping range
     assert (
         min_max_clip[0] <= mean <= min_max_clip[1]
-    ), "mean 값이 clipping 범위를 넘어서고 있습니다 >> min~max clipping 범위 내로 mean값을 재설정해주세요"
+    ), "mean value clipping It's going out of bounds. >> min~max clipping within range meanPlease reset the value"
     
-    # 결과를 저장할 배열 초기화
+    # Initialize an array to store the results
     df = df.copy()
     df[new_col] = 0.0
-    # 항공사별로 독립적인 랜덤 분포 생성
+    # Generate independent random distribution for each airline
     for unique in df[relocation_unit].unique():
         unique_mask = df[relocation_unit] == unique
         unique_count = unique_mask.sum()
         
         if unique_count > 0:
-            # 항공사 이름을 안정적인 시드로 활용 (런타임/세션 영향 제거)
+            # Use airline names as stable seeds (runtime/Remove session impact)
             rng = np.random.default_rng(np.random.PCG64(stable_unit_seed(str(unique))))
             
-            # 해당 항공사 승객들에 대한 랜덤값 생성
+            # Generate random values ​​for passengers of the airline
             random_arr = rng.normal(mean, sigma, size=unique_count)
             
             # Resample values outside the clipping range up to "iteration" times
@@ -547,15 +547,15 @@ def create_normal_dist_col_by_airline(
     return df
 
 def calculate_statistics(df, time_column="SHOW", unit_min=15):
-    """show_profile과 동일한 방식으로 통계값 계산"""
+    """show_profileCalculate statistical values ​​in the same way as"""
     
-    # 시간 단위로 그룹화
+    # Group by time
     df[time_column] = pd.to_datetime(df[time_column])
     df['hour'] = df[time_column].dt.hour
     df['minute'] = df[time_column].dt.minute
     df['n_min'] = round(df['hour'] + (df['minute']//unit_min) * (unit_min/60), 2)
     
-    # 시간대별 승객 수 집계
+    # Counting the number of passengers by time zone
     hourly_counts = df.groupby('n_min').size()
     
     if len(hourly_counts) == 0:
@@ -569,7 +569,7 @@ def calculate_statistics(df, time_column="SHOW", unit_min=15):
     return stats
 
 def _compute_avg_seat(filtered_data, dep_arr):
-    """aggregate base 상관없이 전체좌석수합/전체항공편합. dep_arr: Dep|Arr|Both."""
+    """aggregate base All seats are collected regardless./All flights included. dep_arr: Dep|Arr|Both."""
     if filtered_data is None or len(filtered_data) == 0:
         return None
     if "total_seat_count" not in filtered_data.columns:
@@ -590,10 +590,10 @@ def _compute_avg_seat(filtered_data, dep_arr):
 
 
 def make_count_df(df, start_date, end_date, time_col, group, buffer_day=True, freq_min=1):
-    """시간 단위(freq_min 분)로 SHOW를 집계하는 함수 (빈 슬롯 포함)."""
+    """unit of time(freq_min minute)as SHOWA function that aggregates (Includes empty slots)."""
     df_copied = df.copy()
 
-    # 전체 타임라인 생성 (freq_min 분 간격)
+    # Create a full timeline (freq_min minute interval)
     if buffer_day:
         time_range = pd.date_range(
             start=start_date - pd.to_timedelta(1, unit="d"),
@@ -609,19 +609,19 @@ def make_count_df(df, start_date, end_date, time_col, group, buffer_day=True, fr
 
     time_range_df = pd.DataFrame(time_range, columns=["Time"])
 
-    # SHOW(or time_col)을 freq_min 분 단위로 절단
+    # SHOW(or time_col)second freq_min Cut to the minute
     df_copied[time_col] = df_copied[time_col].dt.floor(f"{freq_min}T")
 
-    # 그룹별 카운트
+    # Count by group
     count_df = df_copied.groupby([time_col, group]).size().reset_index(name="index")
     count_df.columns = ["Time", group, "index"]
 
-    # 전체 타임라인과 매칭 (없는 슬롯은 0으로 채움)
+    # Matching the entire timeline (Fill empty slots with 0)
     count_df = pd.merge(time_range_df, count_df, on="Time", how="left")
     count_df["index"] = count_df["index"].fillna(0)
     count_df[group] = count_df[group].fillna("")
 
-    # 그룹별 순위 계산
+    # Calculate ranking by group
     ranking_df = count_df.groupby(group)["index"].sum().sort_values(ascending=False)
     ranking_order = ranking_df.index.tolist()
 
@@ -636,33 +636,33 @@ def compute_capacity_constraint_delay_hours(
     return_overflow_per_slot=False,
 ):
     """
-    용량 제약으로 인한 총 지연시간(시간)을 계산합니다.
-    캐스케이딩 오버플로우 로직: 이전 시간대의 미처리 분은 다음 시간대로 넘어가고,
-    각 오버플로우된 단위는 1 슬롯(예: 1시간)만큼 지연된 것으로 계산합니다.
+    Total latency due to capacity constraints(hour)Calculate .
+    Cascading overflow logic: Unprocessed minutes from the previous time zone are moved to the next time zone,
+    Each overflowed unit is 1 slot(Example: 1 hour)It is counted as delayed.
 
-    예시: 05시(12편), 06시(13편), 07시(4편), 용량 10
-    - 05시: 12편 수신, 10편 처리, 2편 overflow → 2 delay-hours
-    - 06시: 13+2=15편 수신, 10편 처리, 5편 overflow → 5 delay-hours
-    - 07시: 4+5=9편 수신, 9편 처리, 0 overflow
-    - 총 지연시간: 2+5 = 7 delay-hours
+    Example: 05:00(12side), 06city(13side), 07city(4side), Capacity 10
+    - 05:00: 12 flights received, 10 processed, 2 flights overflow → 2 delay-hours
+    - 06city: 13+2=15Episodes received, 10 episodes processed, 5 episodes overflow → 5 delay-hours
+    - 07city: 4+5=9Received part, processed part 9, 0 overflow
+    - total delay time: 2+5 = 7 delay-hours
 
     Parameters
     ----------
     values : array-like
-        시간 순서대로 정렬된 수요값 (편수 또는 승객수 등).
+        Demand values ​​sorted in chronological order (Number of flights or number of passengers, etc.).
     capacity : numeric
-        시간당 용량.
+        capacity per hour.
     slot_duration_minutes : int, default 60
-        각 슬롯의 길이(분). 지연시간을 시간 단위로 변환할 때 사용.
+        length of each slot(minute). Used to convert delay time into time units.
     return_overflow_per_slot : bool, default False
-        True이면 각 슬롯별 overflow 리스트도 반환.
+        TrueIf so, for each slot overflow Also returns a list.
 
     Returns
     -------
     total_delay_hours : float
-        총 지연시간(시간 단위).
+        total delay time(unit of time).
     overflow_per_slot : list, optional
-        return_overflow_per_slot=True일 때만 반환. 슬롯별 overflow 값 리스트.
+        return_overflow_per_slot=TrueReturn only. By slot overflow list of values.
     """
     values = np.asarray(values, dtype=float)
     if capacity <= 0 or len(values) == 0:
@@ -689,7 +689,7 @@ def compute_capacity_constraint_delay_hours(
 
 
 def _delay_stats_from_overflow(overflow_per_slot, capacity, slot_duration_minutes):
-    """overflow_per_slot로부터 max_delay_hours, p95_delay_hours 계산. FIFO 가정."""
+    """overflow_per_slotfrom max_delay_hours, p95_delay_hours calculate. FIFO home."""
     if not overflow_per_slot or capacity <= 0:
         return 0.0, 0.0
     hours_per_slot = slot_duration_minutes / 60.0
@@ -720,7 +720,7 @@ def _delay_stats_from_overflow(overflow_per_slot, capacity, slot_duration_minute
 
 
 def _fmt_delay_hours_min(delay_hours):
-    """예: 2.3 -> '2.3' (숫자만)"""
+    """yes: 2.3 -> '2.3' (numbers only)"""
     if delay_hours is None or (isinstance(delay_hours, float) and np.isnan(delay_hours)):
         return "0.0"
     h = float(delay_hours)
@@ -728,16 +728,16 @@ def _fmt_delay_hours_min(delay_hours):
 
 
 def show_bar(df, ranking_order, group, capa_df=None, max_y=None):
-    """show_profile과 동일한 바차트 생성 함수"""
+    """show_profileSame bar chart creation function as"""
     
-    # 상위 그룹만 선택 (최대 10개)
+    # Select only parent group (Up to 10)
     top_groups = ranking_order[:10]
     df_filtered = df[df[group].isin(top_groups)]
     
-    # 피벗 테이블 생성
+    # Create pivot table
     pivot_df = df_filtered.pivot(index='Time', columns=group, values='index').fillna(0)
     
-    # 바차트 생성
+    # Create a bar chart
     fig = px.bar(
         pivot_df,
         x=pivot_df.index,
@@ -765,10 +765,10 @@ def scenario_fingerprint(mapping: dict, index: int) -> str:
 
 
 class RelocationSetting:
-    """Relocation 설정을 관리하는 클래스"""
+    """Relocation Class that manages settings"""
     
     def __init__(self, df_orig):
-        """초기화 - 원본 데이터프레임 저장"""
+        """Initialize - Save the original dataframe"""
         self.df_orig = df_orig
         self.df_filtered = None
         self.start_date = None
@@ -781,14 +781,14 @@ class RelocationSetting:
         self.loc_count = 4
         self.max_sample_count = 50
         
-        # 결과 변수들
+        # outcome variables
         self.loc_names = []
         self.fixed_per_loc = {}
         self.moving_unit = []
         self.allowed_targets_map = {}
     
     def render_relocation_settings_tab(self):
-        """Relocation Settings 탭 렌더링"""
+        """Relocation Settings Tab Rendering"""
         filter_col, puff_group_col = st.columns([0.35,0.65])
         
         with filter_col:
@@ -799,13 +799,13 @@ class RelocationSetting:
                 "**Relocation Unit**",
                 options=BASE_COL_OPTIONS + ["Custom Group"],
                 key="relocation_unit_mnl",
-                help="Relocation 분석을 위한 단위를 설정합니다."
+                help="Relocation Set the units for analysis."
             )
             if self.relocation_unit == "Custom Group":
                 self._render_custom_group()
 
     def _render_date_method(self):
-        """Date & Method 섹션 렌더링"""
+        """Date & Method Section rendering"""
 
         
         # Select Date Range
@@ -824,13 +824,13 @@ class RelocationSetting:
             self.start_date = pd.to_datetime(date_range)
             self.end_date = self.start_date
         
-        # 기본 날짜 필터
+        # Basic date filter
         df_filtered = self.df_orig[
             (self.df_orig["scheduled_gate_local"].dt.date >= self.start_date.date()) & 
             (self.df_orig["scheduled_gate_local"].dt.date <= self.end_date.date())
         ]
 
-        # 추가 필터 UI (Select Date Range 바로 아래)
+        # Additional filters UI (Select Date Range right below)
         with st.expander("🔍 Filters", expanded=False):
             filter_cols = st.multiselect(
                 "Filter columns",
@@ -889,7 +889,7 @@ class RelocationSetting:
             )
         
         with c2:
-            # Select Aggregate base (원본 컬럼명 직접 사용)
+            # Select Aggregate base (Direct use of original column name)
             agg_options = []
             if "total_seat_count" in self.df_filtered.columns:
                 agg_options.append("total_seat_count")
@@ -902,13 +902,13 @@ class RelocationSetting:
             if "tr_pax" in self.df_filtered.columns:
                 agg_options.append("tr_pax")
             
-            # 원본 컬럼명을 직접 사용 (변환 없음) — 멀티 선택
+            # text 컬럼number of peoplesecond directly use (no conversion) — multi selection
             self.selected_agg_cols = st.multiselect(
                 "**Aggregate base**",
                 options=agg_options,
                 default=agg_options[:2] if agg_options else [],
                 key="agg_base_multiselect",
-                help="여러 개 선택 시 Run analysis에서 모든 선택 항목에 대해 분석합니다."
+                help="When selecting multiple Run analysisWe analyze all your choices at."
             )
             if not self.selected_agg_cols and agg_options:
                 self.selected_agg_cols = [agg_options[0]]
@@ -923,11 +923,11 @@ class RelocationSetting:
                 max_value=50000,
                 step=50,
                 key="max_sample_count_mnl",
-                help="전체 조합에서 최대 몇 개를 샘플링해서 분석할지 설정합니다."
+                help="Set the maximum number of samples to be analyzed from the total combination.."
             )
         # with c2:
             self.loc_count = st.number_input("**Num of locations**", min_value=1, max_value=8, value=2, step=1, key="loc_count",
-            help="몇개의 Location 으로 설정할지")
+            help="several Location Should I set it to")
         self.selected_metrics = {"97.5%", "Total"}
     
     def _render_custom_group(self):
@@ -938,7 +938,7 @@ class RelocationSetting:
             self.df_orig["Custom Group"] = "Others"
 
         with st.expander("Edit Custom Group", expanded=False):
-            # Base column selection (전역 BASE_COL_OPTIONS 사용)
+            # Base column selection (Global BASE_COL_OPTIONS use)
             base_options = [c for c in BASE_COL_OPTIONS if self.df_filtered is not None and c in self.df_filtered.columns] or BASE_COL_OPTIONS
             base_col = st.selectbox(
                 "**Base Column**",
@@ -1002,13 +1002,13 @@ class RelocationSetting:
                 # Create probability table: item -> list of checked groups
                 probability_mappings = {}
                 
-                # edited_df의 체크박스 값이 제대로 읽히도록 fillna(False) 적용
+                # edited_dfTo ensure that the checkbox value is read correctly, fillna(False) apply
                 edited_df_filled = edited_df.copy()
                 for group in group_list:
                     if group in edited_df_filled.columns:
                         edited_df_filled[group] = edited_df_filled[group].fillna(False).replace('', False).astype(bool)
                 
-                # iloc를 사용하여 인덱스 기반으로 안정적으로 처리
+                # ilocProcess reliably based on index using
                 for idx in range(len(edited_df_filled)):
                     item = edited_df_filled.iloc[idx]['Item']
                     checked_groups = []
@@ -1054,7 +1054,7 @@ class RelocationSetting:
     
 
     def render_assign_units_tab(self):
-        """Assign Units 탭 렌더링"""
+        """Assign Units Tab Rendering"""
         all_unit = sorted(self.df_filtered[self.relocation_unit].unique())
         
         # 1) Names in columns
@@ -1099,33 +1099,33 @@ class RelocationSetting:
         
         # Per-unit allowed targets (checkbox matrix)
         self.allowed_targets_map = {}
-        self.unassigned_units_map = {}  # 미배치 허용 유닛 맵
+        self.unassigned_units_map = {}  # Undeployable unit map
         if len(self.moving_unit) > 0 and len(self.loc_names) > 0:
             with st.expander("Per-unit allowed locations"):
                 # Build checkbox matrix dataframe
                 matrix_data = {"Unit": sorted(self.moving_unit)}
                 for loc in self.loc_names:
                     matrix_data[loc] = [True for _ in range(len(matrix_data["Unit"]))]
-                matrix_data["미배치"] = [False for _ in range(len(matrix_data["Unit"]))]  # 미배치 컬럼 추가
+                matrix_data["Not placed"] = [False for _ in range(len(matrix_data["Unit"]))]  # Add unplaced column
                 matrix_df = pd.DataFrame(matrix_data)
                 edited_df = st.data_editor(
                     matrix_df,
                     column_config={
                         "Unit": st.column_config.TextColumn("Unit", disabled=True, width="large"),
                         **{loc: st.column_config.CheckboxColumn(loc, default=True, width="small") for loc in self.loc_names},
-                        "미배치": st.column_config.CheckboxColumn("미배치", default=False, width="small")
+                        "Not placed": st.column_config.CheckboxColumn("Not placed", default=False, width="small")
                     },
                     use_container_width=True,
                     hide_index=True
                 )
-                # None 값을 0(False)으로 채우기
+                # None value 0(False)fill with
                 edited_df = edited_df.fillna(0)
                 for _, row in edited_df.iterrows():
                     unit = row["Unit"]
                     allowed_locs = [loc for loc in self.loc_names if bool(row[loc])]
                     self.allowed_targets_map[unit] = allowed_locs
-                    # 미배치 허용 여부 저장
-                    self.unassigned_units_map[unit] = bool(row.get("미배치", False))
+                    # Save whether to allow non-placement
+                    self.unassigned_units_map[unit] = bool(row.get("Not placed", False))
         
         # Inject JavaScript to style allocate Units multiselect
         st.markdown("""
@@ -1173,11 +1173,11 @@ class RelocationSetting:
 
 
 class RunAnalysis:
-    """Relocation 분석을 수행하고 결과를 관리하는 클래스"""
+    """Relocation Classes that perform analysis and manage results"""
     
     @classmethod
     def from_saved(cls, data: dict):
-        """저장된 JSON에서 로드. 재분석 없이 결과 복원."""
+        """saved JSONLoaded from. Restore results without reanalysis."""
         self = object.__new__(cls)
         self.df_filtered = data.get("df_filtered")
         self.results_df = data.get("results_df")
@@ -1208,7 +1208,7 @@ class RunAnalysis:
         self.arr_category = f"arrival {self.selected_agg_col}"
         self.dep_info = self.category_dict.get(self.dep_category, {})
         self.arr_info = self.category_dict.get(self.arr_category, {})
-        # session_state 동기화
+        # session_state synchronization
         st.session_state["relocation_results_df"] = self.results_df
         st.session_state["relocation_df_filtered"] = self.df_filtered
         st.session_state["relocation_start_date"] = self.start_date
@@ -1224,10 +1224,10 @@ class RunAnalysis:
                  allowed_targets_map, loc_names, unit_min, start_date, end_date,
                  selected_metrics, selected_agg_col, max_sample_count, unassigned_units_map=None,
                  selected_agg_cols=None):
-        """분석 실행 및 결과 저장. selected_agg_cols가 있으면 여러 agg에 대해 분석 후 결과 병합."""
+        """Run analysis and save results. selected_agg_colsIf there are several aggMerge the results after analyzing."""
         import time
         
-        # 입력 파라미터 저장
+        # Save input parameters
         self.df_filtered = df_filtered
         self.relocation_unit = relocation_unit
         self.fixed_per_loc = fixed_per_loc
@@ -1241,15 +1241,15 @@ class RunAnalysis:
         self.selected_agg_cols = selected_agg_cols if isinstance(selected_agg_cols, (list, tuple)) and len(selected_agg_cols) > 0 else [selected_agg_col]
         self.selected_agg_col = self.selected_agg_cols[0]
         
-        # Category dict 설정 (원본 컬럼명 직접 사용)
+        # Category dict setting (Direct use of original column name)
         self.category_dict = CATEGORY_DICT
         self.dep_category = f"departure {self.selected_agg_col}"
         self.arr_category = f"arrival {self.selected_agg_col}"
         self.dep_info = self.category_dict.get(self.dep_category, {})
         self.arr_info = self.category_dict.get(self.arr_category, {})
         
-        # 분석 실행
-        # LOC 기반 모든 조합 생성 (L^M)
+        # Run analysis
+        # LOC Create any combination based on (L^M)
         all_assignments = build_loc_assignments(
             fixed_per_loc,
             moving_unit,
@@ -1258,7 +1258,7 @@ class RunAnalysis:
         )
         total_combinations = len(all_assignments)
         
-        # 샘플링 적용
+        # Apply sampling
         if total_combinations > max_sample_count:
             import random
             random.seed(RANDOM_SEED)
@@ -1271,21 +1271,21 @@ class RunAnalysis:
             self.total_combinations = total_combinations
             self.is_sampled = False
         
-        # Progress bar 생성
+        # Progress bar generation
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # 시작 시간 기록
+        # Start time record
         start_time = time.time()
         
-        # 각 조합별 분석
+        # Analysis for each combination
         results = []
         for idx, loc_map in enumerate(all_assignments, 1):
-            # 진행률 업데이트
+            # Progress updates
             progress = idx / self.analysis_count
             progress_bar.progress(progress)
             
-            # 상태 텍스트 업데이트
+            # Update status text
             elapsed_time = time.time() - start_time
             if idx > 1:
                 avg_time_per_scenario = elapsed_time / (idx - 1)
@@ -1297,10 +1297,10 @@ class RunAnalysis:
             else:
                 status_text.text(f"📊 Progress {idx:,}/{self.analysis_count:,} ({progress*100:.1f}%)")
             
-            # LOC 기반 분석
+            # LOC based analysis
             per_loc_stats = self.run_scenario(loc_map)
             scenario_id = scenario_fingerprint(loc_map, idx)
-            # LOC 별 리스트 컬럼 구성 (리스트 그대로 보이게 유지)
+            # LOC Star list column configuration (Keep the list visible)
             loc_list_cols = {loc_name: sorted(units) for loc_name, units in sorted(loc_map.items(), key=lambda x: x[0])}
             results.append({
                 'Scenario_ID': scenario_id,
@@ -1308,22 +1308,22 @@ class RunAnalysis:
                 **per_loc_stats
             })
         
-        # 완료 메시지
+        # completion message
         total_elapsed_time = time.time() - start_time
         progress_bar.progress(1.0)
         status_text.text(f"✅ Done. {self.analysis_count:,} scenarios analyzed | Elapsed: {total_elapsed_time:.1f}s")
         
-        # 결과 DataFrame 생성 및 후처리
+        # result DataFrame Generation and post-processing
         self.results_df = pd.DataFrame(results)
         self._process_results()
     
     def process_passenger_data(self, df_filtered, category="departure od-passenger count", keep_cols=None):
-        """show_profile과 동일한 방식으로 승객 데이터 처리"""
+        """show_profileProcess passenger data in the same way as"""
         
-        # 전역 category_dict 사용
+        # Global category_dict use
         category_dict = CATEGORY_DICT
         
-        # category가 category_dict에 없으면 빈 DataFrame 반환
+        # categorygo category_dictempty if not in DataFrame return
         if category not in category_dict:
             return pd.DataFrame()
         
@@ -1333,32 +1333,32 @@ class RunAnalysis:
         sigma = category_dict[category]["sigma"]
         min_max_clip = category_dict[category]["min_max_clip"]
         
-        # flight_io 필터링
+        # flight_io filtering
         df_filtered = df_filtered[df_filtered["flight_io"] == flight_io]
         
-        # 안전 장치: 필요한 집계 컬럼이 없으면 total_seat_count로 대체, 그것도 없으면 빈 DF 반환
+        # Safeguard: If you don't have the required aggregate column, total_seat_countReplaced with, otherwise empty DF return
         if agg_col not in df_filtered.columns:
             if "total_seat_count" in df_filtered.columns:
                 agg_col = "total_seat_count"
             else:
                 return pd.DataFrame()
         
-        # 필요한 컬럼만 선택 (+ 추가로 유지할 컬럼들)
+        # Select only the columns you need (+ Additional columns to maintain)
         base_cols = ["scheduled_gate_local", agg_col] + BASE_COL_OPTIONS
         if keep_cols is None:
             keep_cols = []
-        # 존재하는 컬럼만 유지하고 중복은 제거
+        # Keep only existing columns and remove duplicates
         extra_cols = [c for c in keep_cols if c in df_filtered.columns and c not in base_cols]
         df_filtered = df_filtered[base_cols + extra_cols]
-        # 음수 또는 0인 승객 수 제거
+        # Remove negative or zero passenger counts
         df_filtered = df_filtered[df_filtered[agg_col] > 0]
         
         if len(df_filtered) == 0:
-            return pd.DataFrame()  # 빈 DataFrame 반환
+            return pd.DataFrame()  # bean DataFrame return
         
-        # 승객 수만큼 행 복제 (show_profile과 동일한 방식)
+        # Duplicate rows as many times as there are passengers (show_profileSame way as)
         df_filtered = df_filtered.loc[df_filtered.index.repeat(df_filtered[agg_col])].reset_index(drop=True)
-        # Show-up time 생성 (항공사별로 독립적인 분포)
+        # Show-up time generation (Independent distribution by airline)
         df_filtered[f"scheduled_gate_local(min)"] = 0
         df_filtered = create_normal_dist_col_by_airline(
             df=df_filtered,
@@ -1440,8 +1440,8 @@ class RunAnalysis:
         return per_loc_stats
 
     def _process_results(self):
-        """결과 DataFrame 후처리 (Distance, Rank, Final_Score 계산). 다중 agg 시 suffix별로 처리."""
-        # agg별 suffix: 단일이면 [""], 다중이면 ["", "_movement", ...] (첫 agg는 빈 suffix)
+        """result DataFrame Post-processing (Distance, Rank, Final_Score calculate). multiple agg city suffixNot much processing."""
+        # aggstar suffix: If it's single [""], If multiple ["", "_movement", ...] (first aggis empty suffix)
         suffixes = [""] if len(self.selected_agg_cols) == 1 else [f"_{a}" for a in self.selected_agg_cols]
 
         def calculate_distance_and_rank(df, metric_name, suffix):
@@ -1479,7 +1479,7 @@ class RunAnalysis:
                 for suf in suffixes:
                     self.results_df = calculate_terminal_ranks(self.results_df, metric, self.loc_names, suf)
         
-        # Rank가 들어간 모든 numeric 컬럼을 사용하여 Final_Score 계산
+        # RankEverything that went into numeric using columns Final_Score calculate
         numeric_cols_all = self.results_df.select_dtypes(include=[np.number]).columns.tolist()
         rank_cols = [c for c in numeric_cols_all if 'Rank' in c]
         if len(rank_cols) > 0:
@@ -1487,19 +1487,19 @@ class RunAnalysis:
             self.results_df['StdRank'] = self.results_df[rank_cols].std(axis=1)
             self.results_df['Final_Score'] = self.results_df['TotalRank'] + 0.5 * self.results_df['StdRank']
         
-        # 컬럼 순서 재정렬 (Location별로 그룹화)
+        # Reorder column order (Locationgroup by star)
         ordered_columns = []
         
         # 1. Scenario_ID
         if 'Scenario_ID' in self.results_df.columns:
             ordered_columns.append('Scenario_ID')
         
-        # 1.5 요청된 지표: TotalRank, StdRank, Final_Score (Scenario_ID 바로 옆)
+        # 1.5 Requested Metrics: TotalRank, StdRank, Final_Score (Scenario_ID right next to it)
         for col in ['TotalRank', 'StdRank', 'Final_Score']:
             if col in self.results_df.columns:
                 ordered_columns.append(col)
         
-        # 2. Distance와 Rank 컬럼들 (suffix별)
+        # 2. Distanceand Rank columns (suffixstar)
         for suf in suffixes:
             for metric in metric_order:
                 if metric in self.selected_metrics:
@@ -1508,11 +1508,11 @@ class RunAnalysis:
                             col_name = f'{col_suffix}_{process}_{metric}{suf}'
                             if col_name in self.results_df.columns:
                                 ordered_columns.append(col_name)
-        # 3. Location 컬럼들
+        # 3. Location columns
         for loc_name in self.loc_names:
             if loc_name in self.results_df.columns:
                 ordered_columns.append(loc_name)
-        # 4. Location별 통계 컬럼들 (suffix별)
+        # 4. LocationStar statistics columns (suffixstar)
         for suf in suffixes:
             for metric in metric_order:
                 if metric in self.selected_metrics:
@@ -1524,7 +1524,7 @@ class RunAnalysis:
                         arr_col = f"{loc_name}_Arr_{metric}{suf}"
                         if arr_col in self.results_df.columns:
                             ordered_columns.append(arr_col)
-        # 4.5. 터미널 단위 랭킹 컬럼들
+        # 4.5. Terminal-level ranking columns
         for suf in suffixes:
             for metric in metric_order:
                 if metric in self.selected_metrics:
@@ -1534,14 +1534,14 @@ class RunAnalysis:
                             if rank_col in self.results_df.columns:
                                 ordered_columns.append(rank_col)
         
-        # 5. 나머지 컬럼들 (Total 등)
+        # 5. the rest of the columns (Total etc.)
         remaining_cols = [col for col in self.results_df.columns if col not in ordered_columns]
         ordered_columns.extend(sorted(remaining_cols))
         
-        # 컬럼 순서대로 재정렬
+        # Reorder by column order
         self.results_df = self.results_df[ordered_columns]
         
-        # session_state에도 저장 (하위 호환성)
+        # session_stateSave Edo (backwards compatibility)
         st.session_state['relocation_results_df'] = self.results_df
         st.session_state['relocation_df_filtered'] = self.df_filtered
         st.session_state['relocation_start_date'] = self.start_date
@@ -1553,7 +1553,7 @@ class RunAnalysis:
         st.session_state['relocation_loc_names'] = self.loc_names
     
     def get_numeric_cols(self, chart_agg=None):
-        """numeric_cols 계산. chart_agg가 있으면 해당 agg의 컬럼만 반환 (다중 agg 시)."""
+        """numeric_cols calculate. chart_aggIf there is aggReturn only the columns of (multiple agg city)."""
         numeric_cols = self.results_df.select_dtypes(include=[np.number]).columns.tolist()
         exclude_patterns = ['Scenario_ID', 'Rank']
         numeric_cols = [col for col in numeric_cols if not any(pattern in col for pattern in exclude_patterns)]
@@ -1565,12 +1565,12 @@ class RunAnalysis:
         return numeric_cols
 
     def get_results_df_for_agg(self, agg):
-        """해당 agg에 해당하는 컬럼만 포함한 결과 DataFrame (suffix 제거). 차트용."""
+        """corresponding aggResults including only columns corresponding to DataFrame (suffix eliminate). For charts."""
         if not getattr(self, 'selected_agg_cols', None) or len(self.selected_agg_cols) <= 1:
             return self.results_df
         suffix = f"_{agg}"
         first_agg = self.selected_agg_cols[0]
-        # 해당 agg 컬럼: 첫 agg면 suffix 없는 것, 그 외는 _agg suffix 있는 것
+        # corresponding agg Column: First aggnoodle suffix Nothing else, nothing else _agg suffix What there is
         keep = [c for c in self.results_df.columns if c in self.loc_names or c == 'Scenario_ID' or (agg == first_agg and not any(c.endswith(f"_{a}") for a in self.selected_agg_cols[1:])) or (agg != first_agg and c.endswith(suffix))]
         out = self.results_df[keep].copy()
         if agg != first_agg:
@@ -1579,7 +1579,7 @@ class RunAnalysis:
 
     @staticmethod
     def _compute_cumulative_series(count_df_dep, count_df_arr, fallback_index=None):
-        """Relocation_Master에서 cumsum 1회만 계산. 결과를 JSON에 담고 Report는 그대로 사용.
+        """Relocation_Masterat cumsum 1Count only times. the result JSONPut it in ReportUse as is.
         Returns: (all_index, dep_ts, arr_ts, cum_dep, cum_arr, net_cum)"""
         dep_ts = count_df_dep.groupby("Time")["index"].sum().sort_index() if len(count_df_dep) > 0 else pd.Series(dtype=float)
         arr_ts = count_df_arr.groupby("Time")["index"].sum().sort_index() if len(count_df_arr) > 0 else pd.Series(dtype=float)
@@ -1595,7 +1595,7 @@ class RunAnalysis:
         return all_index, dep_ts, arr_ts, cum_dep, cum_arr, net_cum
 
     def build_scenario_export(self, scenario_idx, terminal, dep_arr, capacity, agg_col_override=None, puffing_factor=1.0):
-        """Headless build of one scenario export dict for report (no Streamlit). agg_col_override: use this agg instead of selected_agg_col. puffing_factor: 1.0=원본, 1.2=20% 증가(랜덤셔플 후 행 뻥튀기). Returns dict or None."""
+        """Headless build of one scenario export dict for report (no Streamlit). agg_col_override: use this agg instead of selected_agg_col. puffing_factor: 1.0=text, 1.2=20% increase(Row popping after random shuffling). Returns dict or None."""
         def _to_json_serializable(obj):
             if hasattr(obj, "tolist"):
                 return obj.tolist()
@@ -1646,7 +1646,7 @@ class RunAnalysis:
         filtered_data = self.df_filtered[mask].copy()
         if len(filtered_data) == 0:
             return None
-        # Puffing: frac=1 랜덤 셔플 후 puffing_factor배로 행 뻥튀기 (예: 1.35 → 35% 증가)
+        # Puffing: frac=1 After random shuffle puffing_factorJump on a boat (yes: 1.35 → 35% increase)
         pf = float(puffing_factor) if puffing_factor is not None else 1.0
         if pf > 0 and pf != 1.0:
             filtered_data = filtered_data.sample(frac=1)
@@ -1759,7 +1759,7 @@ class RunAnalysis:
                 _agg_df.reset_index().astype(object).where(pd.notnull(_agg_df.reset_index()), None).to_dict(orient="records")
             ),
             "description": f"Scenario detail: Terminal={terminal}, Dep/Arr={dep_arr}, Aggregate={agg_col}.",
-            # time_series: 시나리오 상세 Cumulative profile과 동일. 리포트 Cumulative comparison(Both)에서 time_index·values 그대로 사용
+            # time_series: Scenario Details Cumulative profileSame as. report Cumulative comparison(Both)at time_index·values Use as is
             "time_series": {
                 "time_index": [str(t) for t in time_series.index],
                 "values": _to_json_serializable(time_series.values),
@@ -1772,7 +1772,7 @@ class RunAnalysis:
             },
             "sorted_values": sorted_values_block,
         }
-        # Cumulative: Relocation_Master에서 cumsum 1회 계산 → JSON에 담음. Report는 그대로 사용 (두번계산 없음)
+        # Cumulative: Relocation_Masterat cumsum 1Times calculation → JSONput in. ReportUse as is (No double counting)
         if dep_arr == "Both":
             all_index, _dep_ts, _arr_ts, cum_dep, cum_arr, net_cum = self._compute_cumulative_series(count_df_dep, count_df_arr, fallback_index=time_series.index)
             time_index_cum = [str(t) for t in all_index]
@@ -1809,7 +1809,7 @@ class RunAnalysis:
                         "cumulative_arrival": [],
                         "net_cumulative": cum_list,
                     }
-        # Time Series pivot 데이터: 만들기 시 JSON에 포함되어 리포트 Time Series 섹션에서 사용
+        # Time Series pivot Data: On Creation JSONincluded in the report Time Series used in section
         try:
             count_df = count_df.copy()
             count_df["date"] = pd.to_datetime(count_df["Time"]).dt.date
@@ -1848,7 +1848,7 @@ class RunAnalysis:
                 group_percentages = (group_sums / total_sum_gr * 100) if total_sum_gr > 0 else group_sums * 0
                 summary_df = pd.DataFrame({"Sum": group_sums, "Percentage (%)": group_percentages.round(2)})
                 summary_df = summary_df.sort_values("Sum", ascending=False)
-                # df_proc for Summary by Group 탭: Both면 concat(df_proc_dep, df_proc_arr), Dep/Arr면 df_proc
+                # df_proc for Summary by Group tab: Bothnoodle concat(df_proc_dep, df_proc_arr), Dep/Arrnoodle df_proc
                 if dep_arr == "Both":
                     df_proc_sbg = pd.concat([df_proc_dep, df_proc_arr], ignore_index=True) if len(df_proc_dep) > 0 and len(df_proc_arr) > 0 else (df_proc_dep if len(df_proc_dep) > 0 else df_proc_arr)
                 else:
@@ -1881,7 +1881,7 @@ class RunAnalysis:
         return scenario_export
 
     def render_analysis_summary(self):
-        """분석 요약 5줄을 st.info로 표시"""
+        """5 lines of analysis summary st.infodisplayed as"""
         _sd = str(self.start_date)[:10] if self.start_date else "—"
         _ed = str(self.end_date)[:10] if self.end_date else "—"
         def _list(d, loc):
@@ -1921,7 +1921,7 @@ class RunAnalysis:
         st.code("\n".join(l for l in lines if l is not None), language=None)
 
     def render_statistics_table(self):
-        """Statistics table 렌더링"""
+        """Statistics table rendering"""
         df = self.results_df
         st.markdown("#### 📋 Statistics table")
         st.dataframe(df.set_index('Scenario_ID') if 'Scenario_ID' in df.columns else df, use_container_width=True, height=640)
@@ -2070,7 +2070,7 @@ class RunAnalysis:
         st.plotly_chart(fig_3d, use_container_width=True)
     
     def render_distance_visualization(self):
-        """Render distance visualization with 3 graphs (Bar, Scatter, 3D Scatter). 다중 agg 시 선택한 agg만 시각화."""
+        """Render distance visualization with 3 graphs (Bar, Scatter, 3D Scatter). multiple agg Poetry selected aggOnly visualization."""
         agg_options = getattr(self, 'selected_agg_cols', None) or [self.selected_agg_col]
         if len(agg_options) > 1:
             chart_agg = st.selectbox(
@@ -2078,7 +2078,7 @@ class RunAnalysis:
                 options=agg_options,
                 index=0,
                 key="distance_viz_agg_select",
-                help="차트에 표시할 집계 기준을 선택하세요.",
+                help="Select the aggregation criteria to display in the chart.",
             )
             self._chart_agg = chart_agg
             self._chart_df = self.get_results_df_for_agg(chart_agg)
@@ -2103,10 +2103,10 @@ class RunAnalysis:
         
         st.markdown("#### 📊 Radial Chart Visualization")
         
-        # 시나리오 선택 (Multiselect, 여러 개 선택 가능)
+        # Scenario selection (Multiselect, Multiple selection possible)
         scenario_options = self.results_df.index.tolist()
         
-        # 시나리오 표시 형식 준비
+        # Prepare scenario display format
         if 'Scenario_ID' in self.results_df.columns:
             scenario_display_map = {format_scenario_id(opt): opt for opt in scenario_options}
             scenario_display_options = sorted(scenario_display_map.keys())
@@ -2114,7 +2114,7 @@ class RunAnalysis:
             scenario_display_map = None
             scenario_display_options = None
         
-        # Radial Chart용 시나리오 선택
+        # Radial ChartChoose a dragon scenario
         if 'Scenario_ID' in self.results_df.columns:
             selected_scenarios_display = st.multiselect(
                 "Select Scenarios for Radial Chart",
@@ -2123,7 +2123,7 @@ class RunAnalysis:
                 key="radial_chart_scenario_select"
             )
             
-            # 선택한 표시 형식을 원래 시나리오 ID로 변환
+            # Original scenario with selected display format IDconvert to
             selected_scenarios = [scenario_display_map[disp] for disp in selected_scenarios_display]
         else:
             selected_scenarios = st.multiselect(
@@ -2133,7 +2133,7 @@ class RunAnalysis:
                 key="radial_chart_scenario_select"
             )
         
-        # Numeric 컬럼 선택 (Multiselect)
+        # Numeric Column selection (Multiselect)
         selected_radial_cols = st.multiselect(
             "Select Numeric Columns",
             options=numeric_cols,
@@ -2141,12 +2141,12 @@ class RunAnalysis:
             key="radial_chart_column_select"
         )
         
-        # 방사형 차트 생성
+        # Create a radar chart
         if len(selected_scenarios) > 0 and len(selected_radial_cols) > 0:
-            # 선택한 시나리오의 데이터 필터링
+            # Filter data for selected scenarios
             filtered_df = self.results_df.loc[selected_scenarios]
             
-            # 전체 시나리오에서 각 컬럼의 Min과 Max 계산
+            # of each column in the entire scenario. Minclass Max calculate
             col_min_max = {}
             for col in selected_radial_cols:
                 col_min_max[col] = {
@@ -2154,19 +2154,19 @@ class RunAnalysis:
                     'max': self.results_df[col].max()
                 }
             
-            # 좌/우 컬럼 구성: 좌=Actual, 우=Normalized
+            # left/Right column configuration: left=Actual, right=Normalized
             col_left, col_right = st.columns(2)
-            # 공통 팔레트
+            # common palette
             colors = (
                 px.colors.qualitative.Dark24
                 + px.colors.qualitative.Set1
                 + px.colors.qualitative.Bold
                 + px.colors.qualitative.D3
             )
-            # 실제값 플롯
+            # actual value plot
             with col_left:
                 fig_actual = go.Figure()
-                # 전체 축 범위 (모든 선택 컬럼 전역 Min/Max)
+                # full axis range (All selected columns global Min/Max)
                 global_min = min([col_min_max[col]['min'] for col in selected_radial_cols])
                 global_max = max([col_min_max[col]['max'] for col in selected_radial_cols])
                 if global_max == global_min:
@@ -2196,7 +2196,7 @@ class RunAnalysis:
                 )
                 st.plotly_chart(fig_actual, use_container_width=True)
                 
-            # 정규화 플롯
+            # Normalization plot
             with col_right:
                 fig_norm = go.Figure()
                 for idx, scenario in enumerate(selected_scenarios):
@@ -2243,16 +2243,16 @@ class RunAnalysis:
         
         C1, C2, C3, C4 = st.columns(4)
         with C1:
-            # 시나리오 선택 (results_df는 Scenario_ID를 index로 사용)
+            # Scenario selection (results_dfIs Scenario_IDcast indexused as)
             scenario_options = self.results_df.index.tolist()
             if len(scenario_options) == 0:
                 st.warning("No scenarios available")
                 return
             
-            # 시나리오 ID를 "Scenario_XXX" 형식으로 변환하는 함수
-            # selectbox에서 표시할 형식으로 변환 (이미 "Scenario_001" 형식이므로 문자열 정렬로 충분)
+            # scenario IDcast "Scenario_XXX" Function to convert to format
+            # selectboxConvert to format for display (already "Scenario_001" Since it is a format, string sorting is sufficient.)
             scenario_display_map = {format_scenario_id(opt): opt for opt in scenario_options}
-            scenario_display_options = sorted(scenario_display_map.keys())  # 문자열 정렬로 충분
+            scenario_display_options = sorted(scenario_display_map.keys())  # String sorting is sufficient
             
             selected_scenario_display = st.selectbox(
                 "Select Scenario",
@@ -2260,15 +2260,15 @@ class RunAnalysis:
                 key="calc_profile_scenario_select"
             )
             
-            # 선택한 표시 형식을 원래 시나리오 ID로 변환
+            # Original scenario with selected display format IDconvert to
             selected_scenario = scenario_display_map[selected_scenario_display]
             
-            # 선택한 시나리오의 터미널별 배치안 가져오기
+            # Import layout plan for each terminal of selected scenario
             scenario_row = self.results_df.loc[selected_scenario]
 
         with C2:
 
-            # Calculation Process: Relocation Settings에서 선택된 agg만 사용
+            # Calculation Process: Relocation Settingsselected from agguse only
             agg_options = list(getattr(self, "selected_agg_cols", None) or [self.selected_agg_col] if self.selected_agg_col else [])
             if len(agg_options) == 0:
                 agg_options = [self.selected_agg_col] if self.selected_agg_col is not None else []
@@ -2282,7 +2282,7 @@ class RunAnalysis:
                 help="This does not change existing results; it only controls the profile charts.",
             )
             
-            # 터미널별 배치안 추출
+            # Extract layout plan for each terminal
             terminal_assignments = {}
             for loc_name in self.loc_names:
                 if loc_name in scenario_row.index:
@@ -2290,7 +2290,7 @@ class RunAnalysis:
                     if isinstance(units, list):
                         terminal_assignments[loc_name] = units
                     elif pd.notna(units) and units != '':
-                        # 문자열로 저장된 리스트인 경우 처리
+                        # Processing if the list is stored as a string
                         if isinstance(units, str) and units.startswith('[') and units.endswith(']'):
                             try:
                                 import ast
@@ -2304,7 +2304,7 @@ class RunAnalysis:
                 else:
                     terminal_assignments[loc_name] = []
         with C3:
-            # 터미널 선택
+            # terminal selection
             available_terminals = [loc for loc in self.loc_names if len(terminal_assignments.get(loc, [])) > 0]
             if len(available_terminals) == 0:
                 st.warning("No terminals with assigned units in selected scenario")
@@ -2317,7 +2317,7 @@ class RunAnalysis:
             )
         
         with C4:
-            # Dep/Arr 선택
+            # Dep/Arr select
             selected_io = st.selectbox(
                 "Select Departure or Arrival",
                 options=["Dep", "Arr", "Both"],
@@ -2343,8 +2343,8 @@ class RunAnalysis:
                 "default_assignments": "Optional. Fixed/default units per terminal before relocation (location -> list of unit IDs). Same as Relocation Settings 'fixed units'.",
                 "selected_units_at_terminal": "Units at the selected terminal; the data below refers to these units only.",
             },
-            "scenario_result_table_row": "One row from the Scenario Result Table (Basic Info > 시나리오 결과 테이블): all metrics and terminal assignments for this scenario (e.g. Dist_Dep_95%, Dist_Arr_90%, rank columns, per-terminal unit lists). Same structure as the table visible in Basic Info.",
-            "statistics_table": "Full Statistics table (Basic Info > 시나리오 결과 테이블): all scenarios as rows with all columns (Scenario_ID, Dist_Dep_97.5%, per-terminal metrics, ranks, etc.). Use for cross-scenario comparison.",
+            "scenario_result_table_row": "One row from the Scenario Result Table (Basic Info > Scenario Results Table): all metrics and terminal assignments for this scenario (e.g. Dist_Dep_95%, Dist_Arr_90%, rank columns, per-terminal unit lists). Same structure as the table visible in Basic Info.",
+            "statistics_table": "Full Statistics table (Basic Info > Scenario Results Table): all scenarios as rows with all columns (Scenario_ID, Dist_Dep_97.5%, per-terminal metrics, ranks, etc.). Use for cross-scenario comparison.",
             "time_series": {
                 "time_index": "Ordered list of time slot labels (e.g. timestamps). Each position corresponds to one slot.",
                 "values": "Demand value (e.g. passengers or seats) per time slot, same order as time_index.",
@@ -2374,7 +2374,7 @@ class RunAnalysis:
             },
         }
         
-        # 선택한 터미널의 배치안에 해당하는 데이터 필터링
+        # Filter data corresponding to the selected terminal's layout
         selected_units = terminal_assignments[selected_terminal]
         if len(selected_units) == 0:
             st.warning(f"No units assigned to {selected_terminal} in selected scenario")
@@ -2387,30 +2387,30 @@ class RunAnalysis:
             st.warning(f"No data found for selected units in {selected_terminal}")
             return
         
-        # Dep, Arr, 또는 Both에 따라 처리
+        # Dep, Arr, or BothProcessed according to
         if selected_io == "Both":
-            # Dep와 Arr 모두 처리하여 합계
+            # Depand Arr Process all and add up
             dep_category = f"departure {getattr(self, 'calc_selected_agg_col', self.selected_agg_col)}"
             arr_category = f"arrival {getattr(self, 'calc_selected_agg_col', self.selected_agg_col)}"
             summary_extra_cols = ["dep/arr_airport", "A/C Code", "International/Domestic"]
             keep_for_summary = [self.relocation_unit] + [c for c in summary_extra_cols if c in filtered_data.columns]
             
-            # Departure 데이터 처리
+            # Departure data processing
             df_proc_dep = self.process_passenger_data(filtered_data, dep_category, keep_cols=keep_for_summary)
-            # Arrival 데이터 처리
+            # Arrival data processing
             df_proc_arr = self.process_passenger_data(filtered_data, arr_category, keep_cols=keep_for_summary)
             
             if len(df_proc_dep) == 0 and len(df_proc_arr) == 0:
                 st.warning(f"No processed data available for {selected_terminal} - Both")
                 return
             
-            # 시간별 집계 (Dep와 Arr 각각)
+            # Hourly tally (Depand Arr each)
             count_df_dep, _ = make_count_df(df_proc_dep, self.start_date, self.end_date, 'SHOW', self.relocation_unit, buffer_day=False, freq_min=self.unit_min) if len(df_proc_dep) > 0 else (pd.DataFrame(), None)
             count_df_arr, _ = make_count_df(df_proc_arr, self.start_date, self.end_date, 'SHOW', self.relocation_unit, buffer_day=False, freq_min=self.unit_min) if len(df_proc_arr) > 0 else (pd.DataFrame(), None)
             
-            # Dep와 Arr 데이터 합치기
+            # Depand Arr Combine data
             if len(count_df_dep) > 0 and len(count_df_arr) > 0:
-                # 두 DataFrame을 합치고 시간별로 합계
+                # two DataFrameCombine and total by time
                 count_df_combined = pd.concat([count_df_dep, count_df_arr], ignore_index=True)
                 count_df = count_df_combined.groupby(['Time', self.relocation_unit])['index'].sum().reset_index()
             elif len(count_df_dep) > 0:
@@ -2421,7 +2421,7 @@ class RunAnalysis:
                 st.warning(f"No data available for {selected_terminal} - Both")
                 return
             
-            # df_proc도 합치기 (stacked bar chart용)
+            # df_procCombine degrees (stacked bar chartdragon)
             if len(df_proc_dep) > 0 and len(df_proc_arr) > 0:
                 df_proc = pd.concat([df_proc_dep, df_proc_arr], ignore_index=True)
             elif len(df_proc_dep) > 0:
@@ -2429,28 +2429,28 @@ class RunAnalysis:
             else:
                 df_proc = df_proc_arr.copy()
         else:
-            # Dep 또는 Arr만 처리
+            # Dep or Arronly processing
             io_label = "departure" if selected_io == "Dep" else "arrival"
             agg_key = getattr(self, "calc_selected_agg_col", self.selected_agg_col)
             category = f"{io_label} {agg_key}"
             summary_extra_cols = ["dep/arr_airport", "A/C Code", "International/Domestic"]
             keep_for_summary = [self.relocation_unit] + [c for c in summary_extra_cols if c in filtered_data.columns]
             
-            # 승객 데이터 처리
+            # Passenger data processing
             df_proc = self.process_passenger_data(filtered_data, category, keep_cols=keep_for_summary)
             
             if len(df_proc) == 0:
                 st.warning(f"No processed data available for {selected_terminal} - {selected_io}")
                 return
             
-            # 시간별 집계
+            # Hourly tally
             count_df, _ = make_count_df(df_proc, self.start_date, self.end_date, 'SHOW', self.relocation_unit, buffer_day=False, freq_min=self.unit_min)
             
             if len(count_df) == 0:
                 st.warning(f"No data available for {selected_terminal} - {selected_io}")
                 return
         
-        # 시간별 합계 계산
+        # Calculate hourly totals
         time_series = count_df.groupby("Time")["index"].sum().sort_index()
 
         # JSON export payload for scenario detail (for GPT/Gemini comparison reports)
@@ -2477,7 +2477,7 @@ class RunAnalysis:
                 return None
             return obj
 
-        # One row from the Scenario Result Table (기본정보 > 시나리오 결과 테이블) for this scenario — all metrics and terminal assignments
+        # One row from the Scenario Result Table (Basic information > Scenario Results Table) for this scenario — all metrics and terminal assignments
         scenario_result_row = self.results_df.loc[selected_scenario]
         scenario_export = {
             "_usage": "Scenario detail export for comparison reports. Upload this JSON with other scenario JSONs to GPT or Gemini to generate a comparison report.",
@@ -2513,30 +2513,30 @@ class RunAnalysis:
 
 
         with time_series_tab:
-            # Capacity 입력창
+            # Capacity input window
             capacity = st.number_input(
                 "**Capacity**",
                 min_value=0,
                 value=100,
                 step=1,
                 key="capacity_input",
-                help="이 값 이상인 셀은 글씨색이 빨간색으로 표시됩니다."
+                help="Cells with values ​​above this value are displayed in red.."
             )
             
-            # Capacity 초과분 합계 및 비중 계산 (time_series: 시간별 합계)
+            # Capacity Calculate excess sum and proportion (time_series: Hourly total)
             total_sum = float(time_series.sum())
             excess_over_capacity = (time_series - capacity).clip(lower=0)
             excess_sum = float(excess_over_capacity.sum())
             excess_share_pct = (excess_sum / total_sum * 100) if total_sum > 0 else 0.0
 
-            # 용량 제약 지연시간 계산 (캐스케이딩 오버플로우)
+            # Capacity Constrained Latency Calculation (Cascading overflow)
             total_delay_hours, overflow_per_slot = compute_capacity_constraint_delay_hours(
                 time_series.values,
                 capacity,
                 slot_duration_minutes=self.unit_min,
                 return_overflow_per_slot=True,
             )
-            # 평균/최대/95% 지연시간
+            # average/maximum/95% delay time
             throughput = total_sum
             avg_delay_hours = (total_delay_hours / throughput) if throughput > 0 else 0.0
             max_delay_hours, p95_delay_hours = _delay_stats_from_overflow(
@@ -2544,13 +2544,13 @@ class RunAnalysis:
             )
             avg_seat_val = _compute_avg_seat(filtered_data, selected_io)
 
-            # KPI 카드 표시
+            # KPI card display
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
             with kpi1:
                 st.metric(
                     label="Throughput",
                     value=f"{total_sum:,.0f}",
-                    help="단순합계: 전체 기간 동안 모든 시간대 수요값의 합계."
+                    help="Simple sum: sum of demand values ​​at all times for the entire period."
                 )
             with kpi2:
                 st.metric(
@@ -2568,38 +2568,38 @@ class RunAnalysis:
                 st.metric(
                     label="Total Delay Hours (Capacity)",
                     value=f"{int(total_delay_hours):,}" if total_delay_hours == int(total_delay_hours) else f"{total_delay_hours:,.2f}",
-                    help="총 지연시간(시간). 용량 초과로 다음 시간대로 넘어가는 분이 누적되어 지연된 시간의 합계. "
-                         "예: 05시 2편 overflow + 06시 5편 overflow → 7 delay-hours (1h slot 기준)."
+                    help="total delay time(hour). Total amount of time delayed due to accumulated minutes moving to the next time zone due to capacity overflow. "
+                         "Example: Flight 2 at 05:00 overflow + 06Poem 5 overflow → 7 delay-hours (1h slot standard)."
                 )
 
-            # 평균/최대/95% 지연시간 카드
+            # average/maximum/95% delay time card
             kpi5, kpi6, kpi7, kpi8 = st.columns(4)
             with kpi5:
                 st.metric(
-                    label="Avg Delay (throughput당)",
+                    label="Avg Delay (throughputsugar)",
                     value=_fmt_delay_hours_min(avg_delay_hours),
-                    help="Total Delay Hours ÷ Throughput. 단위당 평균 지연시간."
+                    help="Total Delay Hours ÷ Throughput. Average delay per unit."
                 )
             with kpi6:
                 st.metric(
                     label="Max Delay",
                     value=_fmt_delay_hours_min(max_delay_hours),
-                    help="FIFO 가정 하에 가장 오래 대기한 단위의 지연시간."
+                    help="FIFO The delay time of the unit that waited the longest under the assumption."
                 )
             with kpi7:
                 st.metric(
                     label="95th Percentile Delay",
                     value=_fmt_delay_hours_min(p95_delay_hours),
-                    help="지연 단위 중 95%가 이 값 이하로 대기한 시간."
+                    help="The time 95% of delay units waited below this value."
                 )
-            # Avg seat KPI (aggregate base 상관없이 전체좌석수/전체항공편)
+            # Avg seat KPI (aggregate base Regardless of total number of seats/All flights)
             avg_seat_val = _compute_avg_seat(filtered_data, selected_io)
             if avg_seat_val is not None:
                 with kpi8:
                     st.metric(
                         label="Avg Seat",
                         value=f"{avg_seat_val:,.1f}",
-                        help="전체좌석수합 ÷ 전체항공편합. aggregate base와 무관하게 항상 계산."
+                        help="Total number of seats ÷ All flights included. aggregate baseAlways calculate regardless of."
                     )
             
             # Export: Time Series section
@@ -2612,18 +2612,18 @@ class RunAnalysis:
             if avg_seat_val is not None:
                 scenario_export["time_series"]["avg_seat"] = avg_seat_val
             
-            # 날짜와 시간 추출
+            # Date and time extraction
             count_df['date'] = pd.to_datetime(count_df['Time']).dt.date
             count_df['time_of_day'] = pd.to_datetime(count_df['Time']).dt.strftime('%H:%M')
             count_df['day_of_week'] = pd.to_datetime(count_df['Time']).dt.day_name()
             
-            # 요일별 시간대별 집계 (단위별 합계)
+            # Aggregation by day of the week and time zone (Total per unit)
             daily_hourly_table = count_df.groupby(['date', 'day_of_week', 'time_of_day'])[['index']].sum().reset_index()
             
-            # 시간대를 정렬하기 위한 변환 (HH:MM 문자열을 시간으로 변환하여 정렬)
+            # Transform to sort time zones (HH:MM Sort by converting string to time)
             daily_hourly_table['time_sort'] = pd.to_datetime(daily_hourly_table['time_of_day'], format='%H:%M').dt.time
             
-            # 피벗 테이블 생성 (시간대를 행으로, 날짜를 열로)
+            # Create pivot table (Time zone as row, date as column)
             daily_hourly_pivot = daily_hourly_table.pivot_table(
                 index='time_of_day',
                 columns=['date', 'day_of_week'],
@@ -2632,41 +2632,41 @@ class RunAnalysis:
                 fill_value=0
             )
             
-            # 시간대 인덱스를 시간 순서대로 정렬
+            # Sort time zone index in chronological order
             time_index_sorted = sorted(daily_hourly_pivot.index, key=lambda x: pd.to_datetime(x, format='%H:%M').time())
             daily_hourly_pivot = daily_hourly_pivot.reindex(time_index_sorted)
             
-            # 컬럼명을 날짜와 요일로 합치기
+            # Combining column names with date and day of the week
             daily_hourly_pivot.columns = [f"{date} ({day})" for date, day in daily_hourly_pivot.columns]
             
-            # 스타일링: Capacity 이상인 셀은 글씨색만 빨간색으로 표시 (배경은 채우지 않음)
+            # styling: Capacity Cells with above values ​​are displayed in red only. (Background is not filled)
             def highlight_capacity(val):
-                """Capacity 이상인 값에 글씨색 빨간색 적용"""
+                """Capacity Apply red font color to values ​​higher than or equal to"""
                 if pd.notna(val) and val >= capacity:
                     return 'color: #e53935'
                 return ''
             
             styled_df = daily_hourly_pivot.style.applymap(highlight_capacity).format("{:.0f}")
             
-            # 두 개의 컬럼으로 나란히 배치
+            # Arranged side by side in two columns
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("##### 📋 요일별 시간대별 데이터 테이블")
-                # 전체 시간대가 보이도록 높이를 충분히 크게 설정
+                st.markdown("##### 📋 Data table by day of the week and time zone")
+                # Set the height large enough to see the entire time zone
                 num_rows = len(daily_hourly_pivot)
                 table_height = max(400, min(num_rows * 35 + 150, 1000))
                 st.dataframe(styled_df, use_container_width=True, height=table_height)
             
             with col2:
-                st.markdown("##### 📊 요일별 시간대별 막대 그래프 (00:00~23:59)")
+                st.markdown("##### 📊 Bar graph by day of the week and time zone (00:00~23:59)")
                 
-                # 날짜별로 그룹화하여 막대 그래프 생성 (stack 되지 않게)
+                # Create a bar graph by grouping by date (stack Don't let it happen)
                 fig2 = go.Figure()
                 
-                # 각 날짜별로 막대 추가
+                # Add bars for each date
                 unique_dates = sorted(daily_hourly_table['date'].unique())
-                colors = px.colors.qualitative.Set3  # 색상 팔레트
+                colors = px.colors.qualitative.Set3  # color palette
                 
                 for idx, date_val in enumerate(unique_dates):
                     date_data = daily_hourly_table[daily_hourly_table['date'] == date_val].copy()
@@ -2682,7 +2682,7 @@ class RunAnalysis:
                         marker=dict(color=colors[idx % len(colors)])
                     ))
                 
-                # Capacity 값을 빨간색 점선으로 추가
+                # Capacity Add value as red dotted line
                 fig2.add_hline(
                     y=capacity,
                     line_dash="dash",
@@ -2698,11 +2698,11 @@ class RunAnalysis:
                     )
                 )
                 
-                # 모든 고유한 시간대를 가져와서 정렬
+                # Get all unique time zones and sort them
                 all_times = sorted(daily_hourly_table['time_of_day'].unique(), 
                                  key=lambda x: pd.to_datetime(x, format='%H:%M').time())
                 
-                # x축에 표시할 시간대 설정 (모든 시간대 또는 적절한 간격으로)
+                # xSet the time zone to display on the axis (Any time zone or at appropriate intervals)
                 if len(all_times) > 24:
                     tick_interval = max(1, len(all_times) // 12)
                     tickvals = all_times[::tick_interval]
@@ -2714,35 +2714,35 @@ class RunAnalysis:
                     xaxis_title='Time of Day (00:00~23:59)',
                     yaxis_title=f'{self.selected_agg_col.replace("_", " ").title()}',
                     height=750,
-                    barmode='group',  # stack 되지 않게 그룹 모드
+                    barmode='group',  # stack Avoid group mode
                     hovermode='x unified',
                     hoverlabel=dict(align='right', bgcolor='white', bordercolor='black', font_size=12),
                     legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02),
                     xaxis=dict(
-                        type='category',  # 카테고리 타입으로 설정
+                        type='category',  # Set as category type
                         tickmode='array',
-                        tickvals=tickvals,  # 표시할 시간대 지정
+                        tickvals=tickvals,  # Specify time zone to display
                         tickangle=45,
-                        tickfont=dict(size=10)  # 폰트 크기 조정
+                        tickfont=dict(size=10)  # Adjust font size
                     )
                 )
                 st.plotly_chart(fig2, use_container_width=True)
             
-            # 아래에 stacked bar 그래프 추가
-            st.markdown("#### 📊 시간대별 Group별 Stacked Bar Chart")
+            # below stacked bar Add graph
+            st.markdown("#### 📊 By time zone Groupstar Stacked Bar Chart")
             
-            # df_proc에서 사용 가능한 그룹 컬럼 확인 (전역 BASE_COL_OPTIONS 기반)
+            # df_procCheck available group columns in (Global BASE_COL_OPTIONS based)
             base_group_cols = BASE_COL_OPTIONS + ["Custom Group", "International/Domestic", "A/C Code"]
             available_group_cols = [c for c in base_group_cols if c in df_proc.columns]
             
-            # 기본값으로 relocation_unit 사용
+            # by default relocation_unit use
             default_group_col = self.relocation_unit if self.relocation_unit in available_group_cols else (available_group_cols[0] if available_group_cols else None)
             
             if default_group_col is None:
                 st.warning("No available group columns found for stacked bar chart")
                 return
             
-            # 그룹 컬럼 선택
+            # Select group column
             selected_group_col = st.selectbox(
                 "**Group by**",
                 options=available_group_cols,
@@ -2750,9 +2750,9 @@ class RunAnalysis:
                 key="calc_profile_stacked_bar_group_select"
             )
             
-            # 선택한 그룹 컬럼으로 count_df 재집계
+            # With selected group column count_df Recount
             if selected_group_col != self.relocation_unit:
-                # 선택한 컬럼이 df_proc에 있는지 확인하고, count_df를 재집계
+                # The selected column is df_procCheck if it is in, count_dfRecount
                 if selected_group_col in df_proc.columns:
                     count_df_grouped, _ = make_count_df(df_proc, self.start_date, self.end_date, 'SHOW', selected_group_col, buffer_day=False, freq_min=self.unit_min)
                 else:
@@ -2761,7 +2761,7 @@ class RunAnalysis:
             else:
                 count_df_grouped = count_df.copy()
             
-            # count_df를 시간대별, 선택한 그룹별로 pivot
+            # count_dfBy time zone, by selected group pivot
             stacked_pivot = count_df_grouped.pivot_table(
                 index='Time',
                 columns=selected_group_col,
@@ -2770,10 +2770,10 @@ class RunAnalysis:
                 fill_value=0
             )
             
-            # Stacked bar chart 생성
+            # Stacked bar chart generation
             fig3 = go.Figure()
             
-            # 각 그룹별로 막대 추가
+            # Add bars for each group
             for group_val in stacked_pivot.columns:
                 fig3.add_trace(go.Bar(
                     x=stacked_pivot.index,
@@ -2782,7 +2782,7 @@ class RunAnalysis:
                     hovertemplate=f'<b>{group_val}</b><br>Time: %{{x}}<br>Value: %{{y}}<extra></extra>'
                 ))
             
-            # Capacity 값을 빨간색 점선으로 추가
+            # Capacity Add value as red dotted line
             fig3.add_hline(
                 y=capacity,
                 line_dash="dash",
@@ -2803,26 +2803,26 @@ class RunAnalysis:
                 xaxis_title='Time',
                 yaxis_title=f'{self.selected_agg_col.replace("_", " ").title()}',
                 height=750,
-                barmode='stack',  # stacked bar 모드
+                barmode='stack',  # stacked bar mode
                 hovermode='x unified',
                 hoverlabel=dict(align='right', bgcolor='white', bordercolor='black', font_size=12),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
             st.plotly_chart(fig3, use_container_width=True)
             
-            # 각 그룹별 합계와 비중 계산
+            # Calculate total and proportion for each group
             group_sums = stacked_pivot.sum()
             total_sum = group_sums.sum()
             group_percentages = (group_sums / total_sum * 100) if total_sum > 0 else group_sums * 0
             
-            # 합계와 비중을 DataFrame으로 표시 (선택한 그룹 기준)
+            # Total and proportion DataFramedisplayed as (By selected group)
             summary_df = pd.DataFrame({
                 'Sum': group_sums,
                 'Percentage (%)': group_percentages.round(2)
             })
             summary_df = summary_df.sort_values('Sum', ascending=False)
             
-            # Summary by Group 탭용: 여러 그룹 기준별 summary 수집
+            # Summary by Group For tabs: By multiple group criteria summary collection
             summary_by_group_tabs = []
             for tab_label, group_col in SUMMARY_BY_GROUP_TABS:
                 if group_col not in df_proc.columns:
@@ -2868,13 +2868,13 @@ class RunAnalysis:
 
         
         with sorted_values_tab:
-            # 두 번째 그래프: 내림차순 정렬 그래프 (Max가 가장 왼쪽에)
+            # Second graph: Sort graph in descending order (Maxis on the far left)
             st.markdown(f"#### 📊 Sorted Values: {selected_terminal} - {selected_io}")
             sorted_values = time_series.values.copy()
-            # 내림차순으로 정렬하여 Max가 가장 왼쪽(인덱스 0)에 오도록
+            # Sort in descending order Maxis the leftmost(index 0)to come to
             sorted_values = np.sort(sorted_values)[::-1]
             
-            # 통계값 계산: 해당 퍼센타일 순위의 실제 값 사용 (보간 없음)
+            # Statistical calculation: use the actual value of the percentile rank (No interpolation)
             max_val = float(sorted_values[0]) if len(sorted_values) > 0 else 0.0
             _, p975 = _percentile_rank_value(sorted_values, 97.5)
             _, p95 = _percentile_rank_value(sorted_values, 95)
@@ -2903,12 +2903,12 @@ class RunAnalysis:
                 },
             }
             
-            # 레이아웃: 그래프 70%, 선택 박스 30%
+            # Layout: 70% graph, selection box 30%
             col_graph, col_settings = st.columns([0.7, 0.3])
             
             with col_graph:
                 fig2 = go.Figure()
-                # x축을 0부터 시작하여 왼쪽에서 오른쪽으로 그려지도록
+                # xSo that the axis starts at 0 and is drawn from left to right.
                 x_values = np.arange(len(sorted_values))
                 
                 fig2.add_trace(go.Scatter(
@@ -2920,7 +2920,7 @@ class RunAnalysis:
                     marker=dict(size=3)
                 ))
                 
-                # 통계값 표시: 해당 순위의 인덱스·값 사용 (보간 없음)
+                # Statistical display: index of the corresponding rank·Use value (No interpolation)
                 stats_labels = ['Max', '97.5%', '95%', '90%', 'Median', 'Mean']
                 stats_colors = ['red', 'orange', 'yellow', 'green', 'purple', 'cyan']
                 idx_max = 0
@@ -2937,7 +2937,7 @@ class RunAnalysis:
                     (np.argmin(np.abs(sorted_values - mean_val)) if len(sorted_values) > 0 else 0, mean_val),
                 ]
                 for (stat_idx, stat_val), stat_label, stat_color in zip(stats_indexed, stats_labels, stats_colors):
-                    # 라벨과 값을 함께 표시
+                    # Show labels and values ​​together
                     fig2.add_trace(go.Scatter(
                         x=[stat_idx],
                         y=[stat_val],
@@ -2949,7 +2949,7 @@ class RunAnalysis:
                         showlegend=True
                     ))
                 
-                # 설계기준값 선택 및 빨간 점선 표시
+                # Select design standard value and display red dotted line
                 design_criteria_map = {
                     'Max': max_val,
                     '97.5%': p975,
@@ -2959,12 +2959,12 @@ class RunAnalysis:
                     '80%': p80
                 }
                 
-                # 설계기준값을 우측 컬럼에서 선택하도록 함 (아래에서 처리)
-                # 여기서는 선택된 값을 사용하여 빨간 점선 추가
+                # Design standard values ​​can be selected from the right column. (Processed below)
+                # Here we add a red dotted line using the selected values
                 selected_design_criteria = st.session_state.get('design_criteria_select', '95%')
                 design_value = design_criteria_map.get(selected_design_criteria, p95)
                 
-                # 빨간 점선으로 설계기준값 표시
+                # Design standard values ​​indicated by red dotted lines
                 fig2.add_trace(go.Scatter(
                     x=x_values,
                     y=[design_value] * len(x_values),
@@ -2988,7 +2988,7 @@ class RunAnalysis:
             with col_settings:
                 st.markdown("#### ⚙️ Design Settings")
                 
-                # 설계기준값 선택
+                # Select design reference value
                 design_criteria_options = ['Max', '97.5%', '95%', '90%', '85%', '80%']
                 selected_design_criteria = st.selectbox(
                     "Select Design Criteria",
@@ -3007,7 +3007,7 @@ class RunAnalysis:
                 }
                 design_value = design_criteria_map.get(selected_design_criteria, p95)
 
-                # 대당 수용능력 입력
+                # Enter capacity per car
                 capacity_per_unit = st.number_input(
                     "Capacity per Unit (unit / hour)",
                     min_value=0.1,
@@ -3017,7 +3017,7 @@ class RunAnalysis:
                     help="Enter the capacity per unit per hour"
                 )
                 
-                # 필요한 시설 개수 계산
+                # Calculate the number of facilities needed
                 if capacity_per_unit > 0:
                     required_facilities = design_value / capacity_per_unit
                     st.markdown("#### 📊 Calculation Result")
@@ -3025,7 +3025,7 @@ class RunAnalysis:
                     st.markdown(f"**Capacity per Unit:** {capacity_per_unit:.1f} unit / hour")
                     st.markdown(f"**Required Facilities:** {required_facilities:.1f} facilities")
                     st.info(f"**{design_value:.1f} / {capacity_per_unit:.1f} = {required_facilities:.1f} facilities required**")
-                    # Export: design criteria only (facilities required 정보는 JSON에 포함하지 않음)
+                    # Export: design criteria only (facilities required The information is JSONNot included in)
                     if "sorted_values" in scenario_export:
                         scenario_export["sorted_values"]["design_criteria"] = selected_design_criteria
                         scenario_export["sorted_values"]["design_criteria_value"] = float(design_value)
@@ -3043,7 +3043,7 @@ class RunAnalysis:
                 help="If the cumulative curve goes below this value, it will be shifted upward so that its minimum equals this baseline.",
             )
 
-            # 항상 Dep/Arr 둘 다 계산해서 사용
+            # always Dep/Arr Calculate and use both
             dep_category = f"departure {getattr(self, 'calc_selected_agg_col', self.selected_agg_col)}"
             arr_category = f"arrival {getattr(self, 'calc_selected_agg_col', self.selected_agg_col)}"
             df_dep = self.process_passenger_data(filtered_data, dep_category, keep_cols=[self.relocation_unit])
@@ -3061,13 +3061,13 @@ class RunAnalysis:
                     self.relocation_unit, buffer_day=False, freq_min=self.unit_min
                 ) if len(df_arr) > 0 else (pd.DataFrame(), None)
 
-                # Relocation_Master에서 cumsum 1회만 계산 → JSON에 담고 Report는 그대로 사용
+                # Relocation_Masterat cumsum 1Calculate only one serving → JSONPut it in ReportUse as is
                 all_index, dep_ts, arr_ts, cum_dep, cum_arr, net_cum = self._compute_cumulative_series(dep_df, arr_df)
 
-                # 1) 상단 누적 그래프: Dep / Arr / Both에 따라 다른 시리즈 사용 (막대 그래프)
+                # 1) Top stacked graph: Dep / Arr / BothUse different series depending on (bar graph)
                 fig_cum = go.Figure()
 
-                # baseline shift 계산 (선택된 IO에 따라 한 개의 기준 시리즈만 사용)
+                # baseline shift calculate (selected IOUse only one reference series according to)
                 if selected_io == "Dep":
                     base_series = cum_dep
                 elif selected_io == "Arr":
@@ -3108,7 +3108,7 @@ class RunAnalysis:
                         marker_color="#00CC96",
                     ))
                     y_title = f"Cumulative {self.selected_agg_col.replace('_', ' ').title()} (Arrival)"
-                else:  # Both: 누적 Arr - 누적 Dep
+                else:  # Both: cumulative Arr - cumulative Dep
                     fig_cum.add_trace(go.Bar(
                         x=all_index,
                         y=(net_cum + offset).values,
@@ -3117,7 +3117,7 @@ class RunAnalysis:
                     ))
                     y_title = f"Net cumulative {self.selected_agg_col.replace('_', ' ').title()} (Arr - Dep)"
 
-                # y축 라벨에 baseline shift 여부를 명시적으로 표시
+                # yon axis label baseline shift explicitly indicate whether
                 if offset != 0.0:
                     y_title = y_title + f" (shifted ≥ {min_baseline:.0f})"
 
@@ -3131,7 +3131,7 @@ class RunAnalysis:
                 )
                 st.plotly_chart(fig_cum, use_container_width=True)
 
-                # 2) 슬롯별 Dep/Arr을 하나의 그래프에 (+ / -)로 표현
+                # 2) By slot Dep/Arrinto one graph (+ / -)Expressed as
                 st.markdown("#### 📊 Departure / Arrival counts per time slot (+ / -)")
                 fig_da = go.Figure()
                 fig_da.add_trace(go.Bar(
@@ -3150,7 +3150,7 @@ class RunAnalysis:
                     xaxis_title="Time",
                     yaxis_title=f"{self.selected_agg_col.replace('_', ' ').title()} per slot (+Dep / -Arr)",
                     height=525,
-                    barmode="relative",  # 위/아래로 보이도록
+                    barmode="relative",  # stomach/to look down
                     hovermode="x unified",
                     hoverlabel=dict(align='right', bgcolor='white', bordercolor='black', font_size=12),
                     legend=dict(
@@ -3208,7 +3208,7 @@ This JSON is a **scenario detail export** from a relocation/capacity analysis. E
 
 ## scenario_result_table_row (object)
 
-One row from the Scenario Result Table (Basic Info > 시나리오 결과 테이블). Keys and values match the table columns. Typical contents:
+One row from the Scenario Result Table (Basic Info > Scenario Results Table). Keys and values match the table columns. Typical contents:
 
 - **Scenario_ID**: Same as meta.scenario_id.
 - **Dist_Dep_XX%**, **Dist_Arr_XX%**: Euclidean distance of peak-load metrics (e.g. 95th percentile) from origin; lower often means better spread of load.
@@ -3280,7 +3280,7 @@ Interpretation: Steep slopes indicate high activity; compare slopes and net_cumu
             st.markdown(DATA_GUIDE_FOR_LLM)
         
         try:
-            # Build export payload: 모든 섹션 기본 포함 (Time Series, Sorted Values, Cumulative, Analysis & Comparison)
+            # Build export payload: All sections included by default (Time Series, Sorted Values, Cumulative, Analysis & Comparison)
             export_copy = {
                 "_usage": scenario_export["_usage"],
                 "data_guide_for_llm": DATA_GUIDE_FOR_LLM.strip(),
@@ -3303,7 +3303,7 @@ Interpretation: Steep slopes indicate high activity; compare slopes and net_cumu
                 export_copy["field_descriptions"]["cumulative"] = scenario_export["field_descriptions"]["cumulative"]
             if "scenario_result_table_row" in scenario_export["field_descriptions"]:
                 export_copy["field_descriptions"]["scenario_result_table_row"] = scenario_export["field_descriptions"]["scenario_result_table_row"]
-            # Analysis settings & Comparison (기본 포함)
+            # Analysis settings & Comparison (Included as standard)
             try:
                 numeric_cols = self.get_numeric_cols()
                 scenario_index_list = self.results_df.index.tolist()
@@ -3384,19 +3384,19 @@ Interpretation: Steep slopes indicate high activity; compare slopes and net_cumu
 
 
 def format_scenario_id(x):
-    """시나리오 ID를 "Scenario_XXX" 형식으로 변환 (001부터 시작)"""
+    """scenario IDcast "Scenario_XXX" convert to format (001starting from)"""
     x_str = str(x)
     if x_str.startswith('Scenario_'):
-        # Scenario_XXX 형식에서 숫자 추출
+        # Scenario_XXX Extract numbers from format
         parts = x_str.split('_')
         if len(parts) > 1 and parts[1].isdigit():
-            num = int(parts[1]) + 1  # 001부터 시작
+            num = int(parts[1]) + 1  # 001starting from
             return f"Scenario_{num:03d}"
         return x_str
     elif '_' in x_str:
         parts = x_str.split('_')
         if len(parts) > 1 and parts[1].isdigit():
-            num = int(parts[1]) + 1  # 001부터 시작
+            num = int(parts[1]) + 1  # 001starting from
             return f"Scenario_{num:03d}"
     try:
         num = int(x_str) + 1  # start from 001 instead of 000
@@ -3414,7 +3414,7 @@ def build_loc_assignments(
     """Generate all assignments mappings for moving units across allowed LOCs.
     - If allowed_targets_map is provided, each unit can have its own allowed location list.
     - Else, allowed_targets (global) is used for all units.
-    - If unassigned_units_map is provided, units can be left unassigned (미배치).
+    - If unassigned_units_map is provided, units can be left unassigned (Not placed).
     Returns list of {loc_name: [units...]}.
     """
     loc_names = [name for name in sorted(loc_fixed.keys())]
@@ -3423,7 +3423,7 @@ def build_loc_assignments(
     L = len(loc_names)
     # Determine allowed indices per unit
     sorted_units = sorted(moving_list)
-    UNASSIGNED = -1  # 미배치를 나타내는 특수 값
+    UNASSIGNED = -1  # Special value indicating unplaced
     
     if allowed_targets_map:
         allowed_idx_lists = []
@@ -3437,7 +3437,7 @@ def build_loc_assignments(
                 if len(idxs) == 0:
                     idxs = list(range(L))
             
-            # 미배치 옵션 추가 (미배치가 허용된 경우)
+            # Add unplaced option (When non-placement is allowed)
             if unassigned_units_map and unassigned_units_map.get(unit, False):
                 idxs.append(UNASSIGNED)
             
@@ -3451,7 +3451,7 @@ def build_loc_assignments(
             if len(idxs) == 0:
                 idxs = list(range(L))
         
-        # 미배치 옵션 추가 (전역적으로 미배치가 허용된 경우)
+        # Add unplaced option (When non-placement is allowed globally)
         if unassigned_units_map:
             for unit in sorted_units:
                 unit_idxs = list(idxs)
@@ -3468,7 +3468,7 @@ def build_loc_assignments(
         mapping = {name: list(base[name]) for name in loc_names}
         for idx, unit in enumerate(sorted_units):
             if choice[idx] == UNASSIGNED:
-                # 미배치: 해당 unit을 어떤 location에도 추가하지 않음
+                # Unplaced: Yes unitWhich locationAlso not added to
                 continue
             mapping[loc_names[choice[idx]]].append(unit)
         # sort units per loc for stability
@@ -3484,14 +3484,14 @@ def processing_data():
 
 
     # ##############################################
-    # # operating_carrier_iata가 5J이면서 domestic인 경우 변경
-    # # 1. 5J domestic이면서 ILO인 경우 → 5J*dom*20%
+    # # operating_carrier_iatago 5JWhile domesticchange if
+    # # 1. 5J domesticWhile ILOIf → 5J*dom*20%
     # mask_ilo = (df_orig["operating_carrier_iata"] == "5J") & (df_orig["International/Domestic"] == "domestic") & (df_orig["dep/arr_airport"].isin(
     #     ["DGT","GES","TUG","CYZ","OZC","PAG","RXS","DPL","KLO","LAO","SJI","VRC"]
     #     ))
     # df_orig.loc[mask_ilo, "operating_carrier_iata"] = "5Jdom20%"
     
-    # # 2. 5J domestic이지만 ILO가 아닌 경우 → 5J*dom*80%
+    # # 2. 5J domesticas ILOIf not → 5J*dom*80%
     # mask_dom_not_ilo = (df_orig["operating_carrier_iata"] == "5J") & (df_orig["International/Domestic"] == "domestic") & (df_orig["operating_carrier_iata"] != "5Jdom20%")
     # df_orig.loc[mask_dom_not_ilo, "operating_carrier_iata"] = "5Jdom80%"
     # ##############################################
@@ -3536,7 +3536,7 @@ def processing_data():
 
     df_orig = df_orig[df_orig["total_seat_count"]>0]
     df_orig["scheduled_gate_local"]=pd.to_datetime(df_orig["scheduled_gate_local"])
-    # terminal_carrier 컬럼 생성
+    # terminal_carrier Create column
     df_orig["terminal_carrier"] = "[" + df_orig["terminal"] + "] " + df_orig["operating_carrier_name"]
     df_orig["terminal_iata"] = "[" + df_orig["terminal"] + "] " + df_orig["operating_carrier_iata"]
 
@@ -3556,7 +3556,7 @@ def _render_puff_editor(self):
     """Helper to render puff factor editor and return puffed df based on current df_filtered."""
     df = (self.df_filtered if self.df_filtered is not None else self.df_orig).copy()
 
-    # 기준이 될 그룹 컬럼 선택 (stacked bar 색상도 동일 컬럼 사용)
+    # Select group column to be the standard (stacked bar Same color columns are used)
     candidate_group_cols = [
         c
         for c in [
@@ -3616,7 +3616,7 @@ def _render_puff_editor(self):
         df_puffed = df
     else:
         df["__puff_factor__"] = df[group_col].map(factor_map).fillna(1).astype(int)
-        # factor == 0 인 그룹은 제거
+        # factor == 0 group is removed
         df = df[df["__puff_factor__"] > 0]
         df_puffed = df.loc[df.index.repeat(df["__puff_factor__"])].copy()
         df_puffed.drop(columns=["__puff_factor__"], inplace=True, errors="ignore")
@@ -3753,7 +3753,7 @@ def _render_scenario_comparison_tab():
 
                 _ = st.form_submit_button("Apply")
 
-            # form 제출 후 처리: 추가/삭제 반영
+            # form Post-submission processing: Add/delete reflect
             if delete_clicked_idx is not None:
                 slots_after = st.session_state["report_scenario_slots"]
                 new_list = slots_after[:delete_clicked_idx] + slots_after[delete_clicked_idx + 1 :]
@@ -3854,7 +3854,7 @@ def _render_scenario_comparison_tab():
                         return 2000, 1800, 2200
 
                     combos_for_build = combos  # (sidx, display_name, agg, term)
-                    # 중복 display_name → (1), (2) 자동 부여 (슬롯 단위로만! 같은 슬롯의 여러 조합은 동일 이름 유지)
+                    # duplication display_name → (1), (2) automatic grant (Only by slot! Multiple combinations of the same slot retain the same name)
                     n_per_slot = len(selected_aggs) * len(selected_terminals)
                     display_name_counts: dict[str, int] = {}
                     slot_report_names = []
@@ -3968,7 +3968,7 @@ def _render_scenario_detail_tab(analysis):
 
 @st.fragment
 def show_result(analysis=None):
-    # session_state에서 최신 analysis 객체 가져오기 (항상 최신 값 사용)
+    # session_statelatest in analysis Get Object (Always use the latest value)
     if analysis is None or 'current_analysis' in st.session_state:
         analysis = st.session_state.get('current_analysis', analysis)
     
@@ -3994,7 +3994,7 @@ def show_result(analysis=None):
 
 
 def _render_result_section(settings, result_mode):
-    """Result 섹션 공통 UI: Run/Load, Save, show_result"""
+    """Result Section Common UI: Run/Load, Save, show_result"""
     if result_mode == "New":
         if st.button("🚀 Run analysis"):
             selected_aggs = getattr(settings, "selected_agg_cols", None) or ([settings.selected_agg_col] if settings.selected_agg_col else [])
@@ -4043,13 +4043,13 @@ def _render_result_section(settings, result_mode):
 
                         if delete_result and st.button("🗑️ Remove .", key=f"delete_result_btn_{i}", help="Delete Scenario"):
                             if delete_result(f["filepath"]):
-                                st.success("삭제됨")
+                                st.success("deleted")
                                 st.rerun()
                             else:
-                                st.error("삭제 실패")
+                                st.error("Deletion failed")
 
             else:
-                st.info("저장된 결과가 없습니다. **New Analysis**로 분석을 실행한 뒤 저장해주세요.")
+                st.info("No results saved. **New Analysis**Please run the analysis and save it..")
     
     analysis = st.session_state.get('current_analysis')
     if analysis and save_result and hasattr(analysis, 'results_df') and analysis.results_df is not None and len(analysis.results_df) > 0:
@@ -4075,16 +4075,16 @@ def _render_result_section(settings, result_mode):
 def main(df_orig):
     apply_css()
     apply_button_css()
-    # Mode 선택을 Relocation Settings 앞의 탭으로
-    # Load일 때는 Relocation Settings, Assign Units 탭 자체를 표시하지 않음
+    # Mode make a choice Relocation Settings to the previous tab
+    # LoadWhen Relocation Settings, Assign Units Don't show the tab itself
     load_mode = st.toggle("Load", value=True, key="result_mode_toggle", help="ON: Load saved results / OFF: New analysis")
     result_mode = "Load" if load_mode else "New"
 
-    # RelocationSetting 클래스 인스턴스 생성
+    # RelocationSetting Create class instance
     settings = RelocationSetting(df_orig)
 
     if result_mode == "New":
-        # New Analysis: Mode(선택됨) 뒤에 Relocation Settings, Assign Units, Result 탭
+        # New Analysis: Mode(selected) behind Relocation Settings, Assign Units, Result tab
         relocation_settings_tab, assign_units_tab, result_tab = st.tabs(["Relocation Settings", "Assign Units", "Result"])
         with relocation_settings_tab:
             settings.render_relocation_settings_tab()
@@ -4095,7 +4095,7 @@ def main(df_orig):
         for i in range(100):
             st.write("")
     else:
-        # Load: Relocation Settings, Assign Units 없음. Result만 표시
+        # Load: Relocation Settings, Assign Units doesn't exist. ResultShow only
         _render_result_section(settings, result_mode)
 
 def _run_relocation_page():

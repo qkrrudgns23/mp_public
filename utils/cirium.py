@@ -60,7 +60,7 @@ def make_ground_time_col(df):
             df[name] = df.groupby('aircraft_serial_number')[name].ffill(limit=1)
             df[name] = df[name].dt.total_seconds()//60
         
-        if name == 'standing_time':  # actual_gate_local 처리할 때 is_turnaround도 계산
+        if name == 'standing_time':  # actual_gate_local When processing is_turnarounddegree calculation
             df['is_turnaround'] = df.groupby('aircraft_serial_number').apply(lambda x:
                 ((x['io_num'] == 0) & (x['io_num'].shift(-1) == 1) & 
                 (x['gate'] == x['gate'].shift(-1))).astype(int)
@@ -164,14 +164,14 @@ def fill_ref_col(df, fill_col, ref_cols, method='mode', add_e=False):
 
 def fill_ref_cols(df, fill_cols, ref_cols, method='mode', add_e=False):
     """
-    여러 컬럼을 한번에 채우는 함수
+    Function to fill multiple columns at once
     
     Parameters:
     df: DataFrame
-    fill_cols: list - 채우고자 하는 컬럼들의 리스트
-    ref_cols: list - 참조할 컬럼들의 리스트
-    method: str - 'mode' 또는 'first'
-    add_e: bool - True일 경우 값 뒤에 " (E)" 추가
+    fill_cols: list - List of columns to fill
+    ref_cols: list - List of columns to reference
+    method: str - 'mode' or 'first'
+    add_e: bool - TrueIf the value is followed by " (E)" addition
     """
     df['ref_col'] = df[ref_cols].astype(str).agg('_'.join, axis=1)
     
@@ -230,11 +230,11 @@ def process_flight_extended_total_year(airport, df_orig):
     df['gate_delay']=np.where(dep_mask, df['gate_departure_delay'], df['gate_arrival_delay'])
 
 
-    # scheduled_gate_local과 actual_gate_local 상호 보완
+    # scheduled_gate_localclass actual_gate_local complement each other
     df['scheduled_gate_local'] = df['scheduled_gate_local'].fillna(df['actual_gate_local']) # Assumption
     df['actual_gate_local'] = df['actual_gate_local'].fillna(df['scheduled_gate_local']) # Assumption
 
-    # flight_io에 따른 actual_runway_local 계산
+    # flight_ioaccording to actual_runway_local calculate
     taxi_delta = pd.Timedelta(minutes=1) * df['actual_taxi_time']
     arrival_mask = (df['flight_io'] == 'a')& (df['actual_runway_local'].isna())
     departure_mask = (df['flight_io'] == 'd')& (df['actual_runway_local'].isna())
@@ -345,8 +345,8 @@ def process_flight_extended_total_year(airport, df_orig):
 
     after_primary_usage = df["primary_usage"].isna().sum()
     after_total_seat_count = df["total_seat_count"].isna().sum()
-    st.write(f"1차 : primary_usage before/after : {before_primary_usage}/{after_primary_usage}")
-    st.write(f"1차 : total_seat_count before/after : {before_total_seat_count}/{after_total_seat_count}")
+    st.write(f"1car : primary_usage before/after : {before_primary_usage}/{after_primary_usage}")
+    st.write(f"1car : total_seat_count before/after : {before_total_seat_count}/{after_total_seat_count}")
 
 
 
@@ -365,8 +365,8 @@ def process_flight_extended_total_year(airport, df_orig):
     df.loc[(df['primary_usage'] == 'Freight/Cargo'), 'total_seat_count'] = 0
     after_primary_usage = df["primary_usage"].isna().sum()
     after_total_seat_count = df["total_seat_count"].isna().sum()
-    st.write(f"2차 : primary_usage before/after : {before_primary_usage}/{after_primary_usage}")
-    st.write(f"2차 : total_seat_count before/after : {before_total_seat_count}/{after_total_seat_count}")
+    st.write(f"2car : primary_usage before/after : {before_primary_usage}/{after_primary_usage}")
+    st.write(f"2car : total_seat_count before/after : {before_total_seat_count}/{after_total_seat_count}")
 
 
     df = fill_ref_cols(df, fill_cols=['total_seat_count'], ref_cols=['primary_usage','aircraft_family'], method='mode', add_e=False)
@@ -376,8 +376,8 @@ def process_flight_extended_total_year(airport, df_orig):
     st.write(df["primary_usage"].value_counts())
     after_primary_usage = df["primary_usage"].isna().sum()
     after_total_seat_count = df["total_seat_count"].isna().sum()
-    st.write(f"3차 : primary_usage before/after : {before_primary_usage}/{after_primary_usage}")
-    st.write(f"3차 : total_seat_count before/after : {before_total_seat_count}/{after_total_seat_count}")
+    st.write(f"3car : primary_usage before/after : {before_primary_usage}/{after_primary_usage}")
+    st.write(f"3car : total_seat_count before/after : {before_total_seat_count}/{after_total_seat_count}")
     st.write('---')
 
     df.loc[(df['primary_usage'].isna()) & (df['total_seat_count'] == 0), 'primary_usage'] = 'UNKNOWN'
@@ -528,7 +528,7 @@ def process_airports(conn):
 
     df['category'] = np.select(conditions, choices, default='others')
 
-    # WKB 문자열을 위도/경도로 변환하는 함수
+    # WKB string lat/Function to convert to longitude
     def convert_wkb_to_latlong(wkb_str):
         import binascii
         from shapely import wkb
@@ -600,14 +600,14 @@ def connect_cirium():
     redshift_port = 5439
     redshift_database = "ciriumsky"
 
-    # Redshift에 연결
+    # Redshiftconnect to
     conn = psycopg2.connect(
         host=redshift_hostname,
         port=redshift_port,
         dbname=redshift_database,
         user=redshift_username,
         password=redshift_password,
-        sslmode="require"  # SSL 연결 강제
+        sslmode="require"  # SSL force connection
     )
     return conn
 
@@ -747,7 +747,7 @@ def process_oag_schedule(df_oag, airport_code):
     df_oag["Local Arr Time"] = pd.to_datetime(df_oag["Time series"].astype(str) + ' ' + df_oag["Local Arr Time"].str[:2] + ":" + df_oag["Local Arr Time"].str[2:]) + pd.to_timedelta(df_oag["Local Arr Day"], unit="d")
     df_oag["scheduled_gate_local"] = np.where(df_oag["Dep Airport Code"]==airport_code, df_oag["Local Dep Time"], df_oag["Local Arr Time"])
 
-    # 문자열을 분으로 변환
+    # Convert string to minutes
     df_oag['ground_time'] = df_oag['Ground Time'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
     df_oag['block_time'] = df_oag['Flying Time'].str.split(':').apply(lambda x: int(x[0]) * 60 + int(x[1]))
 
@@ -862,7 +862,7 @@ def process_oad_load_factor(df_schedule_orig, df_load_factor_orig, airport_code,
 
         # #####################################################################3
         df_tr=df_load_factor[df_load_factor["Gateway 1"]==airport_code]
-        st.write(int(df_tr["Estimated Pax"].sum()), f"원본TR")
+        st.write(int(df_tr["Estimated Pax"].sum()), f"textTR")
         df_tr["Estimated Pax"]=df_tr["Estimated Pax"]/2 *1.0 # Calibration
 
         df_tr["Destination"]=np.where(df_tr["Gateway 2"].notna(), df_tr["Gateway 2"], df_tr["Destination"])
@@ -878,10 +878,10 @@ def process_oad_load_factor(df_schedule_orig, df_load_factor_orig, airport_code,
 
         load_factor_year_df = pd.merge(load_factor_year_df, df_tr[["index","Estimated Pax"]], on="index",how="left")
         load_factor_year_df = load_factor_year_df.rename({"Estimated Pax":"tr_pax"},axis=1)
-        st.write(int(load_factor_year_df["tr_pax"].sum()),"1차 TR")
+        st.write(int(load_factor_year_df["tr_pax"].sum()),"1car TR")
         # #####################################################################3
         df_od=df_load_factor[(df_load_factor["Origin"]==airport_code)|(df_load_factor["Destination"]==airport_code)]
-        st.write(int(df_od["Estimated Pax"].sum()), "원본OD")
+        st.write(int(df_od["Estimated Pax"].sum()), "textOD")
         df_od["Estimated Pax"]=df_od["Estimated Pax"]*1.0 # Calibration
 
         df_od["Destination"]=np.where((df_od["Gateway 1"].notna() & (df_od["Origin"]==airport_code)),df_od["Gateway 1"],  df_od["Destination"])
@@ -904,7 +904,7 @@ def process_oad_load_factor(df_schedule_orig, df_load_factor_orig, airport_code,
 
         load_factor_year_df = pd.merge(load_factor_year_df, df_od[["index","Estimated Pax"]], on="index",how="left")
         load_factor_year_df = load_factor_year_df.rename({"Estimated Pax":"od_pax"},axis=1)
-        st.write(int(load_factor_year_df["od_pax"].sum()),"1차 OD")
+        st.write(int(load_factor_year_df["od_pax"].sum()),"1car OD")
         # #####################################################################3
 
         load_factor_year_df["total_pax"]=load_factor_year_df["od_pax"]+load_factor_year_df["tr_pax"]
@@ -922,10 +922,10 @@ def process_oad_load_factor(df_schedule_orig, df_load_factor_orig, airport_code,
         load_factor_year_df["tr_pax"]=load_factor_year_df["tr_lf"]*load_factor_year_df["total_seat_count"]
         load_factor_year_df["total_pax"]=load_factor_year_df["od_pax"]+load_factor_year_df["tr_pax"]
         # load_factor_year_df
-        st.write(int(load_factor_year_df["od_pax"].sum()), "3차 OD")
-        st.write(int(load_factor_year_df["tr_pax"].sum()),"3차 TR")
+        st.write(int(load_factor_year_df["od_pax"].sum()), "3car OD")
+        st.write(int(load_factor_year_df["tr_pax"].sum()),"3car TR")
 
-        st.write("총여객", int(load_factor_year_df["od_pax"].sum()+load_factor_year_df["tr_pax"].sum()))
+        st.write("total passengers", int(load_factor_year_df["od_pax"].sum()+load_factor_year_df["tr_pax"].sum()))
         if load_factor_year_df["total_pax"].sum()==0:
             load_factor_year_df["load_factor"]=0.77
             load_factor_year_df["od_lf"]=0.77

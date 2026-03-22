@@ -266,7 +266,7 @@
       ]
     }
   ],
-  "runwayPaths": [
+  "taxiways": [
     {
       "id": "id_to86fdah0",
       "name": "RW1",
@@ -282,6 +282,7 @@
       ],
       "width": 60,
       "directionModeId": "dm_cw",
+      "pathType": "runway",
       "start_point": {
         "col": 60,
         "row": 0
@@ -368,448 +369,8 @@
         }
       },
       "direction": "clockwise",
-      "avgMoveVelocity": 10,
-      "lineupDistM": 120,
-      "minArrVelocity": 15
-    }
-  ],
-  "runwayTaxiways": [
-    {
-      "id": "id_05a54g85p",
-      "name": "EXIT7",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 143
-        },
-        {
-          "col": 69,
-          "row": 147.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 143
-      },
-      "end_point": {
-        "col": 69,
-        "row": 147.5
-      },
       "avgMoveVelocity": 10
     },
-    {
-      "id": "id_mh8mf5bks",
-      "name": "EXIT6",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 136
-        },
-        {
-          "col": 69,
-          "row": 140
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 136
-      },
-      "end_point": {
-        "col": 69,
-        "row": 140
-      }
-    },
-    {
-      "id": "id_b19eziuhx",
-      "name": "EXIT5",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 129
-        },
-        {
-          "col": 69,
-          "row": 133
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 129
-      },
-      "end_point": {
-        "col": 69,
-        "row": 133
-      }
-    },
-    {
-      "id": "id_9rskm2uou",
-      "name": "EXIT4",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 122
-        },
-        {
-          "col": 69,
-          "row": 126
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 122
-      },
-      "end_point": {
-        "col": 69,
-        "row": 126
-      }
-    },
-    {
-      "id": "id_2ducvwnxr",
-      "name": "EXIT3",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 115
-        },
-        {
-          "col": 69,
-          "row": 119
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 115
-      },
-      "end_point": {
-        "col": 69,
-        "row": 119
-      }
-    },
-    {
-      "id": "id_wb2w4d43j",
-      "name": "EXIT2",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 110
-        },
-        {
-          "col": 69,
-          "row": 113.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 110
-      },
-      "end_point": {
-        "col": 69,
-        "row": 113.5
-      }
-    },
-    {
-      "id": "id_nf44a53hd",
-      "name": "EXIT1",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 101
-        },
-        {
-          "col": 69,
-          "row": 104.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 101
-      },
-      "end_point": {
-        "col": 69,
-        "row": 104.5
-      }
-    },
-    {
-      "id": "id_56exjlxny",
-      "name": "LINEUP_TX",
-      "vertices": [
-        {
-          "col": 78,
-          "row": 5
-        },
-        {
-          "col": 60,
-          "row": 5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 78,
-        "row": 5
-      },
-      "end_point": {
-        "col": 60,
-        "row": 5
-      }
-    },
-    {
-      "id": "id_874sf9s4r",
-      "name": "EXIT8",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 158
-        },
-        {
-          "col": 69,
-          "row": 161.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "start_point": {
-        "col": 60,
-        "row": 158
-      },
-      "end_point": {
-        "col": 69,
-        "row": 161.5
-      }
-    },
-    {
-      "id": "id_xc6iqii7a",
-      "name": "EXIT0",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 93
-        },
-        {
-          "col": 69,
-          "row": 96.5
-        }
-      ],
-      "width": 10,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 93
-      },
-      "end_point": {
-        "col": 69,
-        "row": 96.5
-      }
-    },
-    {
-      "id": "id_h0qtm44uv",
-      "name": "EXIT_B1",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 82.5
-        },
-        {
-          "col": 69,
-          "row": 86.5
-        }
-      ],
-      "width": 10,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 82.5
-      },
-      "end_point": {
-        "col": 69,
-        "row": 86.5
-      }
-    },
-    {
-      "id": "id_3yyb5632n",
-      "name": "EXIT_B2",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 69
-        },
-        {
-          "col": 69,
-          "row": 72.5
-        }
-      ],
-      "width": 10,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 69
-      },
-      "end_point": {
-        "col": 69,
-        "row": 72.5
-      }
-    },
-    {
-      "id": "id_5kiv3kntf",
-      "name": "EXIT_B3",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 61
-        },
-        {
-          "col": 69,
-          "row": 65
-        }
-      ],
-      "width": 10,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 61
-      },
-      "end_point": {
-        "col": 69,
-        "row": 65
-      }
-    },
-    {
-      "id": "id_v2wi3xdey",
-      "name": "EXIT9",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 164
-        },
-        {
-          "col": 69,
-          "row": 167.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 164
-      },
-      "end_point": {
-        "col": 69,
-        "row": 167.5
-      }
-    },
-    {
-      "id": "id_2gl88v7zh",
-      "name": "EXIT10",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 172
-        },
-        {
-          "col": 69,
-          "row": 176
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 172
-      },
-      "end_point": {
-        "col": 69,
-        "row": 176
-      }
-    },
-    {
-      "id": "id_11gcfx8k5",
-      "name": "EXIT11",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 184
-        },
-        {
-          "col": 69,
-          "row": 187
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 184
-      },
-      "end_point": {
-        "col": 69,
-        "row": 187
-      }
-    },
-    {
-      "id": "id_v9f5fs9vi",
-      "name": "RW1",
-      "vertices": [
-        {
-          "col": 60,
-          "row": 195
-        },
-        {
-          "col": 69,
-          "row": 198.5
-        }
-      ],
-      "width": 15,
-      "direction": "clockwise",
-      "maxExitVelocity": 30,
-      "avgMoveVelocity": 10,
-      "start_point": {
-        "col": 60,
-        "row": 195
-      },
-      "end_point": {
-        "col": 69,
-        "row": 198.5
-      }
-    }
-  ],
-  "taxiways": [
     {
       "id": "id_h8nto7prx",
       "name": "TX3",
@@ -841,6 +402,7 @@
       ],
       "width": 10,
       "directionModeId": "dm_cw",
+      "pathType": "taxiway",
       "start_point": {
         "col": 69,
         "row": 160
@@ -871,6 +433,7 @@
       ],
       "width": 10,
       "directionModeId": "dm_cw",
+      "pathType": "taxiway",
       "start_point": {
         "col": 69,
         "row": 63
@@ -881,6 +444,318 @@
       },
       "direction": "clockwise",
       "avgMoveVelocity": 10
+    },
+    {
+      "id": "id_05a54g85p",
+      "name": "EXIT7",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 143
+        },
+        {
+          "col": 69,
+          "row": 147.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "rwySepConfig": {
+        "standard": "ICAO",
+        "mode": "MIX",
+        "activeSeq": "ARR→ARR",
+        "seqData": {
+          "ARR→ARR": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "240"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "180"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "180"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "DEP→DEP": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "180"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "120"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "ARR→DEP": {
+            "J": "90",
+            "H": "80",
+            "M": "65",
+            "L": "50"
+          },
+          "DEP→ARR": {
+            "J": "60",
+            "H": "60",
+            "M": "70",
+            "L": "90"
+          }
+        },
+        "rot": {
+          "J": "70",
+          "H": "65",
+          "M": "55",
+          "L": "40"
+        }
+      },
+      "start_point": {
+        "col": 60,
+        "row": 143
+      },
+      "end_point": {
+        "col": 69,
+        "row": 147.5
+      },
+      "avgMoveVelocity": 10
+    },
+    {
+      "id": "id_mh8mf5bks",
+      "name": "EXIT6",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 136
+        },
+        {
+          "col": 69,
+          "row": 140
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 136
+      },
+      "end_point": {
+        "col": 69,
+        "row": 140
+      }
+    },
+    {
+      "id": "id_b19eziuhx",
+      "name": "EXIT5",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 129
+        },
+        {
+          "col": 69,
+          "row": 133
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 129
+      },
+      "end_point": {
+        "col": 69,
+        "row": 133
+      }
+    },
+    {
+      "id": "id_9rskm2uou",
+      "name": "EXIT4",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 122
+        },
+        {
+          "col": 69,
+          "row": 126
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 122
+      },
+      "end_point": {
+        "col": 69,
+        "row": 126
+      }
+    },
+    {
+      "id": "id_2ducvwnxr",
+      "name": "EXIT3",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 115
+        },
+        {
+          "col": 69,
+          "row": 119
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 115
+      },
+      "end_point": {
+        "col": 69,
+        "row": 119
+      }
+    },
+    {
+      "id": "id_wb2w4d43j",
+      "name": "EXIT2",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 110
+        },
+        {
+          "col": 69,
+          "row": 113.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 110
+      },
+      "end_point": {
+        "col": 69,
+        "row": 113.5
+      }
+    },
+    {
+      "id": "id_nf44a53hd",
+      "name": "EXIT1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 101
+        },
+        {
+          "col": 69,
+          "row": 104.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 101
+      },
+      "end_point": {
+        "col": 69,
+        "row": 104.5
+      }
+    },
+    {
+      "id": "id_56exjlxny",
+      "name": "LINEUP_TX",
+      "vertices": [
+        {
+          "col": 78,
+          "row": 5
+        },
+        {
+          "col": 60,
+          "row": 5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 78,
+        "row": 5
+      },
+      "end_point": {
+        "col": 60,
+        "row": 5
+      }
+    },
+    {
+      "id": "id_874sf9s4r",
+      "name": "EXIT8",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 158
+        },
+        {
+          "col": 69,
+          "row": 161.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "start_point": {
+        "col": 60,
+        "row": 158
+      },
+      "end_point": {
+        "col": 69,
+        "row": 161.5
+      }
     },
     {
       "id": "id_ucex4i5ow",
@@ -897,6 +772,7 @@
       ],
       "width": 10,
       "direction": "clockwise",
+      "pathType": "taxiway",
       "start_point": {
         "col": 69,
         "row": 146
@@ -912,6 +788,7 @@
       "vertices": [],
       "width": 10,
       "direction": "clockwise",
+      "pathType": "taxiway",
       "maxExitVelocity": null,
       "start_point": null,
       "end_point": null
@@ -931,9 +808,118 @@
       ],
       "width": 10,
       "direction": "both",
+      "pathType": "taxiway",
       "avgMoveVelocity": 10,
       "start_point": null,
       "end_point": null
+    },
+    {
+      "id": "id_xc6iqii7a",
+      "name": "EXIT0",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 93
+        },
+        {
+          "col": 69,
+          "row": 96.5
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 93
+      },
+      "end_point": {
+        "col": 69,
+        "row": 96.5
+      }
+    },
+    {
+      "id": "id_h0qtm44uv",
+      "name": "EXIT_B1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 82.5
+        },
+        {
+          "col": 69,
+          "row": 86.5
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 82.5
+      },
+      "end_point": {
+        "col": 69,
+        "row": 86.5
+      }
+    },
+    {
+      "id": "id_3yyb5632n",
+      "name": "EXIT_B2",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 69
+        },
+        {
+          "col": 69,
+          "row": 72.5
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 69
+      },
+      "end_point": {
+        "col": 69,
+        "row": 72.5
+      }
+    },
+    {
+      "id": "id_5kiv3kntf",
+      "name": "EXIT_B3",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 61
+        },
+        {
+          "col": 69,
+          "row": 65
+        }
+      ],
+      "width": 10,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 61
+      },
+      "end_point": {
+        "col": 69,
+        "row": 65
+      }
     },
     {
       "id": "id_8gepwuey6",
@@ -950,7 +936,85 @@
       ],
       "width": 10,
       "direction": "clockwise",
+      "pathType": "taxiway",
       "avgMoveVelocity": 10,
+      "rwySepConfig": {
+        "standard": "ICAO",
+        "mode": "MIX",
+        "activeSeq": "ARR→ARR",
+        "seqData": {
+          "ARR→ARR": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "240"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "180"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "180"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "DEP→DEP": {
+            "J": {
+              "J": "90",
+              "H": "120",
+              "M": "180",
+              "L": "180"
+            },
+            "H": {
+              "J": "90",
+              "H": "90",
+              "M": "120",
+              "L": "120"
+            },
+            "M": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            },
+            "L": {
+              "J": "90",
+              "H": "90",
+              "M": "90",
+              "L": "90"
+            }
+          },
+          "ARR→DEP": {
+            "J": "90",
+            "H": "80",
+            "M": "65",
+            "L": "50"
+          },
+          "DEP→ARR": {
+            "J": "60",
+            "H": "60",
+            "M": "70",
+            "L": "90"
+          }
+        },
+        "rot": {
+          "J": "70",
+          "H": "65",
+          "M": "55",
+          "L": "40"
+        }
+      },
       "start_point": {
         "col": 69,
         "row": 198.5
@@ -966,10 +1030,119 @@
       "vertices": [],
       "width": 15,
       "direction": "clockwise",
+      "pathType": "taxiway",
       "maxExitVelocity": null,
       "avgMoveVelocity": 10,
       "start_point": null,
       "end_point": null
+    },
+    {
+      "id": "id_v2wi3xdey",
+      "name": "EXIT9",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 164
+        },
+        {
+          "col": 69,
+          "row": 167.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 164
+      },
+      "end_point": {
+        "col": 69,
+        "row": 167.5
+      }
+    },
+    {
+      "id": "id_2gl88v7zh",
+      "name": "EXIT10",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 172
+        },
+        {
+          "col": 69,
+          "row": 176
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 172
+      },
+      "end_point": {
+        "col": 69,
+        "row": 176
+      }
+    },
+    {
+      "id": "id_11gcfx8k5",
+      "name": "EXIT11",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 184
+        },
+        {
+          "col": 69,
+          "row": 187
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 184
+      },
+      "end_point": {
+        "col": 69,
+        "row": 187
+      }
+    },
+    {
+      "id": "id_v9f5fs9vi",
+      "name": "RW1",
+      "vertices": [
+        {
+          "col": 60,
+          "row": 195
+        },
+        {
+          "col": 69,
+          "row": 198.5
+        }
+      ],
+      "width": 15,
+      "direction": "clockwise",
+      "pathType": "runway_exit",
+      "maxExitVelocity": 30,
+      "avgMoveVelocity": 10,
+      "start_point": {
+        "col": 60,
+        "row": 195
+      },
+      "end_point": {
+        "col": 69,
+        "row": 198.5
+      }
     }
   ],
   "apronLinks": [
@@ -1138,32 +1311,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 562.3266645106875,
+      "sldtMin_orig": 561.2433311773542,
       "sibtMin_orig": 563,
       "sobtMin_orig": 623,
       "stotMin_orig": 636.2675948371937,
-      "sldtMin_d": 562.3333333333334,
+      "sldtMin_d": 561.25,
       "sibtMin_d": 563,
       "sobtMin_d": 623,
       "stotMin_d": 636.2666666666667,
-      "sldtMin": 562.3266645106875,
+      "sldtMin": 561.2433311773542,
       "sibtMin": 563,
       "sobtMin": 623,
       "stotMin": 636.2675948371937,
-      "eldtMin": 562.3333333333334,
+      "eldtMin": 561.25,
       "eibtMin": 563,
       "eobtMin": 623,
       "etotMin": 636.2666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 65.55002472972315,
+      "arrRotSec": 50.39695348617991,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_874sf9s4r",
+      "sampledArrRet": "id_9rskm2uou",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 523.0604701485161,
-      "arrRetDistM": 3160,
-      "arrVTdMs": 70.71752102026467,
-      "arrVRetInMs": 22.763360439619916,
+      "arrTdDistM": 538.9645836214145,
+      "arrRetDistM": 2440,
+      "arrVTdMs": 68.0900271436592,
+      "arrVRetInMs": 25.11988903971421,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.3331412815744605,
       "token": {
@@ -1186,32 +1359,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 567.2903068451933,
+      "sldtMin_orig": 566.6903068451933,
       "sibtMin_orig": 570,
       "sobtMin_orig": 630,
       "stotMin_orig": 642.6979023997077,
-      "sldtMin_d": 567.2833333333333,
+      "sldtMin_d": 566.6833333333333,
       "sibtMin_d": 570,
       "sobtMin_d": 630,
       "stotMin_d": 642.7,
-      "sldtMin": 567.2903068451933,
+      "sldtMin": 566.6903068451933,
       "sibtMin": 570,
       "sobtMin": 630,
       "stotMin": 642.6979023997077,
-      "eldtMin": 567.2833333333333,
-      "eibtMin": 570,
-      "eobtMin": 630,
-      "etotMin": 642.7,
+      "eldtMin": 568.15,
+      "eibtMin": 571.4666666666667,
+      "eobtMin": 630.6666666666666,
+      "etotMin": 643.3666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 39.39426446866098,
+      "arrRotSec": 31.79548942069129,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_nf44a53hd",
+      "sampledArrRet": "id_h0qtm44uv",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 415.8475163776006,
-      "arrRetDistM": 2020.0000000000002,
-      "arrVTdMs": 71.29728152528226,
-      "arrVRetInMs": 22.324878507154494,
+      "arrTdDistM": 393.40807456180295,
+      "arrRetDistM": 1650,
+      "arrVTdMs": 67.60752402220356,
+      "arrVRetInMs": 20.311708158890177,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.9763598214733595,
       "token": {
@@ -1234,32 +1407,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 569.6394407046112,
+      "sldtMin_orig": 569.3061073712779,
       "sibtMin_orig": 572,
       "sobtMin_orig": 632,
       "stotMin_orig": 645.3138029958964,
-      "sldtMin_d": 569.6333333333333,
+      "sldtMin_d": 569.3,
       "sibtMin_d": 572,
       "sobtMin_d": 632,
       "stotMin_d": 645.3166666666667,
-      "sldtMin": 569.6394407046112,
+      "sldtMin": 569.3061073712779,
       "sibtMin": 572,
       "sobtMin": 632,
       "stotMin": 645.3138029958964,
-      "eldtMin": 569.6333333333333,
-      "eibtMin": 572,
-      "eobtMin": 632,
-      "etotMin": 645.3166666666667,
+      "eldtMin": 569.65,
+      "eibtMin": 572.35,
+      "eobtMin": 636.55,
+      "etotMin": 649.8666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 35.268527170960354,
+      "arrRotSec": 35.69654529171431,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_xc6iqii7a",
+      "sampledArrRet": "id_h0qtm44uv",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 400.37336710080484,
-      "arrRetDistM": 1860,
-      "arrVTdMs": 76.29993733210269,
-      "arrVRetInMs": 27.34502364824505,
+      "arrTdDistM": 353.9693061555936,
+      "arrRetDistM": 1650,
+      "arrVTdMs": 67.72436476214168,
+      "arrVRetInMs": 4.889423673303043,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.3605592953888124,
       "token": {
@@ -1282,37 +1455,37 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 569.9437233613877,
+      "sldtMin_orig": 570.4078512984519,
       "sibtMin_orig": 573,
       "sobtMin_orig": 633,
-      "stotMin_orig": 644.1680045335438,
-      "sldtMin_d": 569.95,
+      "stotMin_orig": 644.299445186779,
+      "sldtMin_d": 570.4,
       "sibtMin_d": 573,
       "sobtMin_d": 633,
-      "stotMin_d": 644.1666666666666,
-      "sldtMin": 569.9437233613877,
+      "stotMin_d": 644.3,
+      "sldtMin": 570.4078512984519,
       "sibtMin": 573,
       "sobtMin": 633,
-      "stotMin": 644.1680045335438,
-      "eldtMin": 569.95,
-      "eibtMin": 573,
-      "eobtMin": 633,
-      "etotMin": 644.1666666666666,
+      "stotMin": 644.299445186779,
+      "eldtMin": 571.15,
+      "eibtMin": 573.75,
+      "eobtMin": 635.0666666666667,
+      "etotMin": 646.3666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 65.41172189361839,
+      "arrRotSec": 54.4413068931247,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_2gl88v7zh",
+      "sampledArrRet": "id_9rskm2uou",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 541.8239281870647,
-      "arrRetDistM": 3440,
-      "arrVTdMs": 82.19980299180675,
-      "arrVRetInMs": 28.31973874988453,
+      "arrTdDistM": 469.58828956214415,
+      "arrRetDistM": 2440,
+      "arrVTdMs": 69.71462171172622,
+      "arrVRetInMs": 29.992010893926953,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.139609971945599,
       "token": {
         "arrRunwayId": "id_to86fdah0",
-        "apronId": "id_jja9cqwhd",
+        "apronId": "id_y7ylfufa3",
         "terminalId": null,
         "depRunwayId": "id_to86fdah0"
       }
@@ -1330,32 +1503,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 562.5001920517589,
+      "sldtMin_orig": 562.0168587184256,
       "sibtMin_orig": 563.3333333333334,
       "sobtMin_orig": 623.3333333333334,
       "stotMin_orig": 636.4411421675723,
-      "sldtMin_d": 562.5,
+      "sldtMin_d": 562.0166666666667,
       "sibtMin_d": 563.3333333333334,
       "sobtMin_d": 623.3333333333334,
       "stotMin_d": 636.4333333333333,
-      "sldtMin": 562.5001920517589,
+      "sldtMin": 562.0168587184256,
       "sibtMin": 563.3333333333334,
       "sobtMin": 623.3333333333334,
       "stotMin": 636.4411421675723,
-      "eldtMin": 562.5,
-      "eibtMin": 563.3333333333334,
-      "eobtMin": 623.3333333333334,
-      "etotMin": 636.4333333333333,
+      "eldtMin": 561.65,
+      "eibtMin": 562.9666666666667,
+      "eobtMin": 624.6666666666666,
+      "etotMin": 637.7666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 62.244920697826515,
+      "arrRotSec": 66.61225972494596,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_874sf9s4r",
+      "sampledArrRet": "id_2gl88v7zh",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 460.1637481637719,
-      "arrRetDistM": 3160,
-      "arrVTdMs": 74.13201681301716,
-      "arrVRetInMs": 19.1291428446507,
+      "arrTdDistM": 470.36710456444905,
+      "arrRetDistM": 3440,
+      "arrVTdMs": 82.8,
+      "arrVRetInMs": 28.472323493553787,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 1.2900021559791655,
       "token": {
@@ -1378,32 +1551,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 562.2255050220002,
+      "sldtMin_orig": 561.7588383553335,
       "sibtMin_orig": 563.8333333333334,
       "sobtMin_orig": 608.8333333333334,
       "stotMin_orig": 620.6497970454898,
-      "sldtMin_d": 562.2333333333333,
+      "sldtMin_d": 561.7666666666667,
       "sibtMin_d": 563.8333333333334,
       "sobtMin_d": 608.8333333333334,
       "stotMin_d": 620.65,
-      "sldtMin": 562.2255050220002,
+      "sldtMin": 561.7588383553335,
       "sibtMin": 563.8333333333334,
       "sobtMin": 608.8333333333334,
       "stotMin": 620.6497970454898,
-      "eldtMin": 562.2333333333333,
-      "eibtMin": 563.8333333333334,
+      "eldtMin": 564.65,
+      "eibtMin": 566.7166666666667,
       "eobtMin": 608.8333333333334,
       "etotMin": 620.65,
       "vttADelayMin": 0,
-      "arrRotSec": 60.37388628271613,
+      "arrRotSec": 50.854133458893,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_mh8mf5bks",
+      "sampledArrRet": "id_9rskm2uou",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 505.8837960312809,
-      "arrRetDistM": 2720,
-      "arrVTdMs": 69.88665982001662,
-      "arrVRetInMs": 29.29818099817303,
+      "arrTdDistM": 443.607087097878,
+      "arrRetDistM": 2440,
+      "arrVTdMs": 71.13415088212393,
+      "arrVRetInMs": 25.548459356071042,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 1.7641088792545243,
       "token": {
@@ -1426,32 +1599,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 562.5692244540788,
+      "sldtMin_orig": 562.3358911207455,
       "sibtMin_orig": 564.3333333333334,
       "sobtMin_orig": 609.3333333333334,
       "stotMin_orig": 620.993626417698,
-      "sldtMin_d": 562.5666666666667,
+      "sldtMin_d": 562.3333333333334,
       "sibtMin_d": 564.3333333333334,
       "sobtMin_d": 609.3333333333334,
       "stotMin_d": 621,
-      "sldtMin": 562.5692244540788,
+      "sldtMin": 562.3358911207455,
       "sibtMin": 564.3333333333334,
       "sobtMin": 609.3333333333334,
       "stotMin": 620.993626417698,
-      "eldtMin": 562.5666666666667,
-      "eibtMin": 564.3333333333334,
-      "eobtMin": 609.3333333333334,
-      "etotMin": 621,
+      "eldtMin": 566.15,
+      "eibtMin": 568.15,
+      "eobtMin": 610.4833333333333,
+      "etotMin": 622.15,
       "vttADelayMin": 0,
-      "arrRotSec": 55.43774940363524,
+      "arrRotSec": 53.77591632322632,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_mh8mf5bks",
+      "sampledArrRet": "id_b19eziuhx",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 493.0175912158251,
-      "arrRetDistM": 2720,
-      "arrVTdMs": 75.46922776719953,
-      "arrVRetInMs": 28.93789617169197,
+      "arrTdDistM": 545.4881877251614,
+      "arrRetDistM": 2580,
+      "arrVTdMs": 69.75024320029982,
+      "arrVRetInMs": 26.87655316738544,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 1.607828311333196,
       "token": {
@@ -1486,20 +1659,20 @@
       "sibtMin": 585.3333333333334,
       "sobtMin": 630.3333333333334,
       "stotMin": 641.861052702898,
-      "eldtMin": 581.65,
-      "eibtMin": 585.3333333333334,
+      "eldtMin": 581.9833333333333,
+      "eibtMin": 585.6666666666666,
       "eobtMin": 630.3333333333334,
       "etotMin": 641.8666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 30.122673183342645,
+      "arrRotSec": 31.131666387945657,
       "eOverlapPushed": false,
       "sampledArrRet": "id_h0qtm44uv",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 442.38863686390766,
+      "arrTdDistM": 361.015411623232,
       "arrRetDistM": 1650,
-      "arrVTdMs": 66.7858426302758,
-      "arrVRetInMs": 17.55513096409651,
+      "arrVTdMs": 68.41452686193692,
+      "arrVRetInMs": 16.042637260915292,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.079918350802971,
       "token": {
@@ -1534,20 +1707,20 @@
       "sibtMin": 586.3333333333334,
       "sobtMin": 631.3333333333334,
       "stotMin": 642.7554882967278,
-      "eldtMin": 582.55,
-      "eibtMin": 586.3333333333334,
-      "eobtMin": 631.3333333333334,
-      "etotMin": 642.75,
+      "eldtMin": 583.6333333333333,
+      "eibtMin": 587.4166666666666,
+      "eobtMin": 633.4333333333333,
+      "etotMin": 644.8666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 30.981526322007227,
+      "arrRotSec": 34.74816997429144,
       "eOverlapPushed": false,
       "sampledArrRet": "id_h0qtm44uv",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 390.13616364259667,
+      "arrTdDistM": 429.27295034489674,
       "arrRetDistM": 1650,
-      "arrVTdMs": 67.14171453145103,
-      "arrVRetInMs": 15,
+      "arrVTdMs": 65.60028855012264,
+      "arrVRetInMs": 27.352370229967836,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 4.2522012164668475,
       "token": {
@@ -1570,32 +1743,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 585.3078512984519,
+      "sldtMin_orig": 584.2578512984519,
       "sibtMin_orig": 588.8833333333333,
       "sobtMin_orig": 633.8833333333333,
       "stotMin_orig": 645.1827785201124,
-      "sldtMin_d": 585.3,
-      "sibtMin_d": 588.8833333333333,
-      "sobtMin_d": 633.8833333333333,
-      "stotMin_d": 645.1833333333333,
-      "sldtMin": 585.3078512984519,
+      "sldtMin_d": 584.25,
+      "sibtMin_d": 633,
+      "sobtMin_d": 653,
+      "stotMin_d": 664.3,
+      "sldtMin": 584.2578512984519,
       "sibtMin": 588.8833333333333,
-      "sobtMin": 633.8833333333333,
-      "stotMin": 645.1827785201124,
-      "eldtMin": 585.3,
-      "eibtMin": 588.8833333333333,
-      "eobtMin": 633.8833333333333,
-      "etotMin": 645.1833333333333,
-      "vttADelayMin": 0,
-      "arrRotSec": 36.31043576147995,
+      "sobtMin": 653,
+      "stotMin": 664.299445186779,
+      "eldtMin": 586.6333333333333,
+      "eibtMin": 635.3666666666667,
+      "eobtMin": 653,
+      "etotMin": 664.3,
+      "vttADelayMin": 44.116666666666674,
+      "arrRotSec": 23.26086956521739,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_xc6iqii7a",
+      "sampledArrRet": "id_5kiv3kntf",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 416.8370450956146,
-      "arrRetDistM": 1860,
-      "arrVTdMs": 71.23938995724592,
-      "arrVRetInMs": 24.58794540651348,
+      "arrTdDistM": 459.99999999999994,
+      "arrRetDistM": 1220,
+      "arrVTdMs": 57.8,
+      "arrVRetInMs": 23.324665056544756,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.908815368214789,
       "token": {
@@ -1618,32 +1791,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 585.1953270296902,
+      "sldtMin_orig": 587.2286603630237,
       "sibtMin_orig": 588.8333333333334,
       "sobtMin_orig": 633.8333333333334,
       "stotMin_orig": 646.1862778506197,
-      "sldtMin_d": 585.2,
+      "sldtMin_d": 587.2333333333333,
       "sibtMin_d": 588.8333333333334,
       "sobtMin_d": 633.8333333333334,
       "stotMin_d": 646.1833333333333,
-      "sldtMin": 585.1953270296902,
+      "sldtMin": 587.2286603630237,
       "sibtMin": 588.8333333333334,
       "sobtMin": 633.8333333333334,
       "stotMin": 646.1862778506197,
-      "eldtMin": 585.2,
-      "eibtMin": 588.8333333333334,
-      "eobtMin": 633.8333333333334,
-      "etotMin": 646.1833333333333,
+      "eldtMin": 588.1333333333333,
+      "eibtMin": 589.7333333333333,
+      "eobtMin": 639,
+      "etotMin": 651.3666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 25.36383710772447,
+      "arrRotSec": 46.4705882352941,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_5kiv3kntf",
+      "sampledArrRet": "id_9rskm2uou",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 400.29108156311236,
-      "arrRetDistM": 1220,
-      "arrVTdMs": 61.33409324370512,
-      "arrVRetInMs": 27.695107315448944,
+      "arrTdDistM": 404.63436438260504,
+      "arrRetDistM": 2440,
+      "arrVTdMs": 78.19999999999999,
+      "arrVRetInMs": 24.06336367012482,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.6380063036430808,
       "token": {
@@ -1678,20 +1851,20 @@
       "sibtMin": 588.8666666666667,
       "sobtMin": 633.8666666666667,
       "stotMin": 644.9449487445578,
-      "eldtMin": 583.8333333333334,
-      "eibtMin": 588.8666666666667,
-      "eobtMin": 633.8666666666667,
-      "etotMin": 644.95,
+      "eldtMin": 585.1333333333333,
+      "eibtMin": 590.1666666666666,
+      "eobtMin": 637.2833333333333,
+      "etotMin": 648.3666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 26.389333889824393,
+      "arrRotSec": 25.894543909834294,
       "eOverlapPushed": false,
       "sampledArrRet": "id_5kiv3kntf",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 374.62220439114714,
+      "arrTdDistM": 418.2453453296699,
       "arrRetDistM": 1220,
-      "arrVTdMs": 62.250815272974855,
-      "arrVRetInMs": 29.11735630247128,
+      "arrVTdMs": 59.44430207518706,
+      "arrVRetInMs": 27.954058022380675,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 4.311911410865388,
       "token": {
@@ -1714,32 +1887,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 935.8034149825304,
+      "sldtMin_orig": 936.1034149825304,
       "sibtMin_orig": 938.8833333333333,
       "sobtMin_orig": 998.8833333333333,
       "stotMin_orig": 1010.4110527028979,
-      "sldtMin_d": 935.8,
+      "sldtMin_d": 936.1,
       "sibtMin_d": 938.8833333333333,
       "sobtMin_d": 998.8833333333333,
       "stotMin_d": 1010.4166666666666,
-      "sldtMin": 935.8034149825304,
+      "sldtMin": 936.1034149825304,
       "sibtMin": 938.8833333333333,
       "sobtMin": 998.8833333333333,
       "stotMin": 1010.4110527028979,
       "eldtMin": 935.8,
-      "eibtMin": 938.8833333333333,
+      "eibtMin": 938.5833333333334,
       "eobtMin": 998.8833333333333,
       "etotMin": 1010.4166666666666,
       "vttADelayMin": 0,
-      "arrRotSec": 37.537305300809045,
+      "arrRotSec": 36.722143301503536,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_nf44a53hd",
+      "sampledArrRet": "id_wb2w4d43j",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 404.5695270042387,
-      "arrRetDistM": 2020.0000000000002,
+      "arrTdDistM": 459.99999999999994,
+      "arrRetDistM": 2200,
       "arrVTdMs": 80.5,
-      "arrVRetInMs": 29.02793894363258,
+      "arrVRetInMs": 16.525615393155228,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 4.146585017469638,
       "token": {
@@ -1762,32 +1935,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 945.4727740379445,
+      "sldtMin_orig": 946.7894407046111,
       "sibtMin_orig": 948.8833333333333,
       "sobtMin_orig": 1008.8833333333333,
       "stotMin_orig": 1022.1971363292297,
-      "sldtMin_d": 945.4666666666667,
+      "sldtMin_d": 946.7833333333333,
       "sibtMin_d": 948.8833333333333,
       "sobtMin_d": 1008.8833333333333,
       "stotMin_d": 1022.2,
-      "sldtMin": 945.4727740379445,
+      "sldtMin": 946.7894407046111,
       "sibtMin": 948.8833333333333,
       "sobtMin": 1008.8833333333333,
       "stotMin": 1022.1971363292297,
-      "eldtMin": 945.4666666666667,
-      "eibtMin": 948.8833333333333,
+      "eldtMin": 946.1833333333333,
+      "eibtMin": 948.2833333333333,
       "eobtMin": 1008.8833333333333,
       "etotMin": 1022.2,
       "vttADelayMin": 0,
-      "arrRotSec": 24.184782608695656,
+      "arrRotSec": 36.451596215858316,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_5kiv3kntf",
+      "sampledArrRet": "id_nf44a53hd",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 419.1566312604225,
-      "arrRetDistM": 1220,
-      "arrVTdMs": 59.5,
-      "arrVRetInMs": 24.35459716436211,
+      "arrTdDistM": 438.25504935699325,
+      "arrRetDistM": 2020.0000000000002,
+      "arrVTdMs": 80.5,
+      "arrVRetInMs": 28.209289168710406,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.693892628722146,
       "token": {
@@ -1810,32 +1983,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 956.4099978440208,
+      "sldtMin_orig": 956.1433311773542,
       "sibtMin_orig": 958.8833333333333,
       "sobtMin_orig": 1018.8833333333333,
       "stotMin_orig": 1032.150928170527,
-      "sldtMin_d": 956.4166666666666,
+      "sldtMin_d": 956.15,
       "sibtMin_d": 958.8833333333333,
       "sobtMin_d": 1018.8833333333333,
       "stotMin_d": 1032.15,
-      "sldtMin": 956.4099978440208,
+      "sldtMin": 956.1433311773542,
       "sibtMin": 958.8833333333333,
       "sobtMin": 1018.8833333333333,
       "stotMin": 1032.150928170527,
-      "eldtMin": 956.4166666666666,
-      "eibtMin": 958.8833333333333,
+      "eldtMin": 955.8166666666667,
+      "eibtMin": 958.55,
       "eobtMin": 1018.8833333333333,
       "etotMin": 1032.15,
       "vttADelayMin": 0,
-      "arrRotSec": 36.64659307489592,
+      "arrRotSec": 37.646311407439974,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_nf44a53hd",
+      "sampledArrRet": "id_xc6iqii7a",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 388.95233735138663,
-      "arrRetDistM": 2020.0000000000002,
-      "arrVTdMs": 79.54557521313728,
-      "arrVRetInMs": 24.124182818895203,
+      "arrTdDistM": 417.31090693940143,
+      "arrRetDistM": 1860,
+      "arrVTdMs": 72.24593886804391,
+      "arrVRetInMs": 28.842610970162045,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.0733354893124982,
       "token": {
@@ -1870,20 +2043,20 @@
       "sibtMin": 968.8833333333333,
       "sobtMin": 1028.8833333333332,
       "stotMin": 1040.3054882967276,
-      "eldtMin": 965.4333333333333,
-      "eibtMin": 968.8833333333333,
+      "eldtMin": 965.1,
+      "eibtMin": 968.55,
       "eobtMin": 1028.8833333333334,
       "etotMin": 1040.3,
       "vttADelayMin": 0,
-      "arrRotSec": 41.12659389261605,
+      "arrRotSec": 36.84615132578803,
       "eOverlapPushed": false,
       "sampledArrRet": "id_xc6iqii7a",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 340,
+      "arrTdDistM": 459.99999999999994,
       "arrRetDistM": 1860,
-      "arrVTdMs": 70.93216769395784,
-      "arrVRetInMs": 29.94949772139351,
+      "arrVTdMs": 70.54368603833268,
+      "arrVRetInMs": 27.48736150685205,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.885534549800181,
       "token": {
@@ -1906,32 +2079,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 975.9619936963569,
+      "sldtMin_orig": 975.4953270296902,
       "sibtMin_orig": 978.8833333333333,
       "sobtMin_orig": 1038.8833333333332,
       "stotMin_orig": 1051.2362778506197,
-      "sldtMin_d": 975.9666666666667,
+      "sldtMin_d": 975.5,
       "sibtMin_d": 978.8833333333333,
       "sobtMin_d": 1038.8833333333334,
       "stotMin_d": 1051.2333333333333,
-      "sldtMin": 975.9619936963569,
+      "sldtMin": 975.4953270296902,
       "sibtMin": 978.8833333333333,
       "sobtMin": 1038.8833333333332,
       "stotMin": 1051.2362778506197,
-      "eldtMin": 975.9666666666667,
+      "eldtMin": 975.5,
       "eibtMin": 978.8833333333333,
       "eobtMin": 1038.8833333333334,
       "etotMin": 1051.2333333333333,
       "vttADelayMin": 0,
-      "arrRotSec": 33.890229504334265,
+      "arrRotSec": 32.242712184251275,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_h0qtm44uv",
+      "sampledArrRet": "id_3yyb5632n",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 452.4788481238901,
-      "arrRetDistM": 1650,
-      "arrVTdMs": 61.819740202833685,
-      "arrVRetInMs": 22.647337720984225,
+      "arrTdDistM": 358.27508873518576,
+      "arrRetDistM": 1380,
+      "arrVTdMs": 62.09695304440236,
+      "arrVRetInMs": 29.51546952597998,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.588006303643081,
       "token": {
@@ -1966,20 +2139,20 @@
       "sibtMin": 988.8833333333333,
       "sobtMin": 1048.8833333333332,
       "stotMin": 1061.9911421675722,
-      "eldtMin": 985.65,
-      "eibtMin": 988.8833333333333,
+      "eldtMin": 986.25,
+      "eibtMin": 989.4833333333333,
       "eobtMin": 1048.8833333333334,
       "etotMin": 1061.9833333333333,
       "vttADelayMin": 0,
-      "arrRotSec": 32.8748651820543,
+      "arrRotSec": 34.04201420053503,
       "eOverlapPushed": false,
       "sampledArrRet": "id_h0qtm44uv",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 359.1202309382189,
+      "arrTdDistM": 406.56332390733445,
       "arrRetDistM": 1650,
-      "arrVTdMs": 67.02810283327935,
-      "arrVRetInMs": 15,
+      "arrVTdMs": 66.4649775964399,
+      "arrVRetInMs": 25.649933346664156,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.6331412815744604,
       "token": {
@@ -2002,32 +2175,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 995.3358911207455,
+      "sldtMin_orig": 994.6192244540788,
       "sibtMin_orig": 998.8833333333333,
       "sobtMin_orig": 1058.8833333333332,
       "stotMin_orig": 1070.5436264176979,
-      "sldtMin_d": 995.3333333333334,
+      "sldtMin_d": 994.6166666666667,
       "sibtMin_d": 998.8833333333333,
       "sobtMin_d": 1058.8833333333334,
       "stotMin_d": 1070.55,
-      "sldtMin": 995.3358911207455,
+      "sldtMin": 994.6192244540788,
       "sibtMin": 998.8833333333333,
       "sobtMin": 1058.8833333333332,
       "stotMin": 1070.5436264176979,
-      "eldtMin": 995.3333333333334,
-      "eibtMin": 998.8833333333333,
+      "eldtMin": 994.8666666666667,
+      "eibtMin": 999.1333333333333,
       "eobtMin": 1058.8833333333334,
       "etotMin": 1070.55,
       "vttADelayMin": 0,
-      "arrRotSec": 31.596404755550232,
+      "arrRotSec": 24.184782608695656,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_h0qtm44uv",
+      "sampledArrRet": "id_5kiv3kntf",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 340,
-      "arrRetDistM": 1650,
-      "arrVTdMs": 71.5257704802139,
-      "arrVRetInMs": 20.706816032916148,
+      "arrTdDistM": 388.0336033105526,
+      "arrRetDistM": 1220,
+      "arrVTdMs": 59.5,
+      "arrVRetInMs": 21.877240689420454,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.547442212587858,
       "token": {
@@ -2050,32 +2223,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1005.5736401785266,
+      "sldtMin_orig": 1006.4736401785266,
       "sibtMin_orig": 1008.8833333333333,
       "sobtMin_orig": 1068.8833333333332,
       "stotMin_orig": 1081.5812357330408,
-      "sldtMin_d": 1005.5666666666667,
+      "sldtMin_d": 1006.4666666666667,
       "sibtMin_d": 1008.8833333333333,
       "sobtMin_d": 1068.8833333333334,
       "stotMin_d": 1081.5833333333333,
-      "sldtMin": 1005.5736401785266,
+      "sldtMin": 1006.4736401785266,
       "sibtMin": 1008.8833333333333,
       "sobtMin": 1068.8833333333332,
       "stotMin": 1081.5812357330408,
-      "eldtMin": 1005.5666666666667,
-      "eibtMin": 1008.8833333333333,
+      "eldtMin": 1005.1,
+      "eibtMin": 1007.5166666666667,
       "eobtMin": 1068.8833333333334,
       "etotMin": 1081.5833333333333,
       "vttADelayMin": 0,
-      "arrRotSec": 36.8079950934456,
+      "arrRotSec": 40.49397030726158,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_h0qtm44uv",
+      "sampledArrRet": "id_wb2w4d43j",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 408.13665962977086,
-      "arrRetDistM": 1650,
-      "arrVTdMs": 65.05887332708602,
-      "arrVRetInMs": 29.236769876010605,
+      "arrTdDistM": 415.53632912658077,
+      "arrRetDistM": 2200,
+      "arrVTdMs": 80.01364616127226,
+      "arrVRetInMs": 25.92720358615329,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.9763598214733595,
       "token": {
@@ -2115,15 +2288,15 @@
       "eobtMin": 1078.8833333333334,
       "etotMin": 1090.4166666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 35.43117950278087,
+      "arrRotSec": 34.233717690292565,
       "eOverlapPushed": false,
       "sampledArrRet": "id_xc6iqii7a",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 392.2130737044337,
+      "arrTdDistM": 366.7839909720685,
       "arrRetDistM": 1860,
-      "arrVTdMs": 72.52935817609062,
-      "arrVRetInMs": 22.226944887771857,
+      "arrVTdMs": 73.75640575278794,
+      "arrVRetInMs": 17.728514979358714,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.6799183508029714,
       "token": {
@@ -2146,32 +2319,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1027.0894407046112,
+      "sldtMin_orig": 1026.5227740379446,
       "sibtMin_orig": 1028.8833333333334,
       "sobtMin_orig": 1088.8833333333334,
       "stotMin_orig": 1102.1971363292298,
-      "sldtMin_d": 1027.0833333333333,
+      "sldtMin_d": 1026.5166666666667,
       "sibtMin_d": 1028.8833333333334,
       "sobtMin_d": 1088.8833333333334,
       "stotMin_d": 1102.2,
-      "sldtMin": 1027.0894407046112,
+      "sldtMin": 1026.5227740379446,
       "sibtMin": 1028.8833333333334,
       "sobtMin": 1088.8833333333334,
       "stotMin": 1102.1971363292298,
-      "eldtMin": 1027.0833333333333,
+      "eldtMin": 1026.5166666666667,
       "eibtMin": 1028.8833333333334,
       "eobtMin": 1088.8833333333334,
       "etotMin": 1102.2,
       "vttADelayMin": 0,
-      "arrRotSec": 38.557883089945946,
+      "arrRotSec": 38.57200647491288,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_wb2w4d43j",
+      "sampledArrRet": "id_xc6iqii7a",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 444.65603255970836,
-      "arrRetDistM": 2200,
-      "arrVTdMs": 79.96515910900334,
-      "arrVRetInMs": 21.894320462200497,
+      "arrTdDistM": 340,
+      "arrRetDistM": 1860,
+      "arrVTdMs": 73.5535735178721,
+      "arrVRetInMs": 28.201210365439525,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.3605592953888124,
       "token": {
@@ -2194,32 +2367,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1035.6977987835332,
+      "sldtMin_orig": 1035.9977987835332,
       "sibtMin_orig": 1038.8833333333334,
       "sobtMin_orig": 1098.8833333333334,
       "stotMin_orig": 1110.3054882967278,
-      "sldtMin_d": 1035.7,
+      "sldtMin_d": 1036,
       "sibtMin_d": 1038.8833333333334,
       "sobtMin_d": 1098.8833333333334,
       "stotMin_d": 1110.3,
-      "sldtMin": 1035.6977987835332,
+      "sldtMin": 1035.9977987835332,
       "sibtMin": 1038.8833333333334,
       "sobtMin": 1098.8833333333334,
       "stotMin": 1110.3054882967278,
-      "eldtMin": 1035.7,
-      "eibtMin": 1038.8833333333334,
+      "eldtMin": 1035.1,
+      "eibtMin": 1037.9833333333333,
       "eobtMin": 1098.8833333333334,
       "etotMin": 1110.3,
       "vttADelayMin": 0,
-      "arrRotSec": 38.60419925566908,
+      "arrRotSec": 40.735462404786574,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_nf44a53hd",
+      "sampledArrRet": "id_wb2w4d43j",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 395.64649513075744,
-      "arrRetDistM": 2020.0000000000002,
-      "arrVTdMs": 77.76759015036949,
-      "arrVRetInMs": 27.670187859351067,
+      "arrTdDistM": 384.1385387691663,
+      "arrRetDistM": 2200,
+      "arrVTdMs": 80.5,
+      "arrVRetInMs": 25.311527807769952,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.185534549800181,
       "token": {
@@ -2254,20 +2427,20 @@
       "sibtMin": 1048.8833333333334,
       "sobtMin": 1108.8833333333334,
       "stotMin": 1120.1827785201124,
-      "eldtMin": 1045.3,
-      "eibtMin": 1048.8833333333334,
+      "eldtMin": 1044.9666666666667,
+      "eibtMin": 1048.55,
       "eobtMin": 1108.8833333333334,
       "etotMin": 1120.1833333333334,
       "vttADelayMin": 0,
-      "arrRotSec": 35.00419328415868,
+      "arrRotSec": 38.75777053912649,
       "eOverlapPushed": false,
       "sampledArrRet": "id_xc6iqii7a",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 416.49280167626216,
+      "arrTdDistM": 428.92261233154204,
       "arrRetDistM": 1860,
-      "arrVTdMs": 70.57912963862495,
-      "arrVRetInMs": 19.936290195945553,
+      "arrVTdMs": 70.690128393231,
+      "arrVRetInMs": 29.741072799011597,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.308815368214789,
       "token": {
@@ -2290,32 +2463,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1056.709997844021,
+      "sldtMin_orig": 1055.3433311773542,
       "sibtMin_orig": 1058.8833333333334,
       "sobtMin_orig": 1118.8833333333334,
       "stotMin_orig": 1132.150928170527,
-      "sldtMin_d": 1056.7166666666667,
+      "sldtMin_d": 1055.35,
       "sibtMin_d": 1058.8833333333334,
       "sobtMin_d": 1118.8833333333334,
       "stotMin_d": 1132.15,
-      "sldtMin": 1056.709997844021,
+      "sldtMin": 1055.3433311773542,
       "sibtMin": 1058.8833333333334,
       "sobtMin": 1118.8833333333334,
       "stotMin": 1132.150928170527,
-      "eldtMin": 1056.7166666666667,
-      "eibtMin": 1058.8833333333334,
+      "eldtMin": 1056.15,
+      "eibtMin": 1059.6833333333334,
       "eobtMin": 1118.8833333333334,
       "etotMin": 1132.15,
       "vttADelayMin": 0,
-      "arrRotSec": 44.31690408076946,
+      "arrRotSec": 31.084912264363453,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_wb2w4d43j",
+      "sampledArrRet": "id_3yyb5632n",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 420.65780831212226,
-      "arrRetDistM": 2200,
-      "arrVTdMs": 75.27098954984648,
-      "arrVRetInMs": 28.73866918321149,
+      "arrTdDistM": 404.50484160037644,
+      "arrRetDistM": 1380,
+      "arrVTdMs": 59.96072162697141,
+      "arrVRetInMs": 27.810193117949925,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.7400021559791647,
       "token": {
@@ -2338,32 +2511,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1065.0255050220003,
+      "sldtMin_orig": 1066.092171688667,
       "sibtMin_orig": 1068.8833333333334,
       "sobtMin_orig": 1128.8833333333334,
       "stotMin_orig": 1140.6997970454897,
-      "sldtMin_d": 1065.0333333333333,
+      "sldtMin_d": 1066.1,
       "sibtMin_d": 1068.8833333333334,
       "sobtMin_d": 1128.8833333333334,
       "stotMin_d": 1140.7,
-      "sldtMin": 1065.0255050220003,
+      "sldtMin": 1066.092171688667,
       "sibtMin": 1068.8833333333334,
       "sobtMin": 1128.8833333333334,
       "stotMin": 1140.6997970454897,
-      "eldtMin": 1065.0333333333333,
-      "eibtMin": 1068.8833333333334,
+      "eldtMin": 1065.5,
+      "eibtMin": 1068.2833333333333,
       "eobtMin": 1128.8833333333334,
       "etotMin": 1140.7,
       "vttADelayMin": 0,
-      "arrRotSec": 27.615295132660783,
+      "arrRotSec": 37.21409216799287,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_3yyb5632n",
+      "sampledArrRet": "id_nf44a53hd",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 384.50315824108185,
-      "arrRetDistM": 1380,
-      "arrVTdMs": 62.88537033290982,
-      "arrVRetInMs": 22.40880214793482,
+      "arrTdDistM": 432.3989336136797,
+      "arrRetDistM": 2020.0000000000002,
+      "arrVTdMs": 74.2397831021856,
+      "arrVRetInMs": 21.3788357423126,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.3911616446665294,
       "token": {
@@ -2386,32 +2559,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1075.8034149825305,
+      "sldtMin_orig": 1074.736748315864,
       "sibtMin_orig": 1078.8833333333334,
       "sobtMin_orig": 1138.8833333333334,
       "stotMin_orig": 1150.411052702898,
-      "sldtMin_d": 1075.8,
+      "sldtMin_d": 1074.7333333333333,
       "sibtMin_d": 1078.8833333333334,
       "sobtMin_d": 1138.8833333333334,
       "stotMin_d": 1150.4166666666667,
-      "sldtMin": 1075.8034149825305,
+      "sldtMin": 1074.736748315864,
       "sibtMin": 1078.8833333333334,
       "sobtMin": 1138.8833333333334,
       "stotMin": 1150.411052702898,
-      "eldtMin": 1075.8,
-      "eibtMin": 1078.8833333333334,
+      "eldtMin": 1076.1,
+      "eibtMin": 1080.25,
       "eobtMin": 1138.8833333333334,
       "etotMin": 1150.4166666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 40.6685379466054,
+      "arrRotSec": 32.720588235294116,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_nf44a53hd",
+      "sampledArrRet": "id_3yyb5632n",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 391.0932263303877,
-      "arrRetDistM": 2020.0000000000002,
-      "arrVTdMs": 70.30921160738335,
-      "arrVRetInMs": 22.644178335070198,
+      "arrTdDistM": 391.76645015560143,
+      "arrRetDistM": 1380,
+      "arrVTdMs": 59.5,
+      "arrVRetInMs": 29.193402412586913,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 4.146585017469638,
       "token": {
@@ -2434,32 +2607,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1086.2953270296903,
+      "sldtMin_orig": 1086.561993696357,
       "sibtMin_orig": 1088.8833333333334,
       "sobtMin_orig": 1148.8833333333334,
       "stotMin_orig": 1161.23627785062,
-      "sldtMin_d": 1086.3,
+      "sldtMin_d": 1086.5666666666666,
       "sibtMin_d": 1088.8833333333334,
       "sobtMin_d": 1148.8833333333334,
       "stotMin_d": 1161.2333333333333,
-      "sldtMin": 1086.2953270296903,
+      "sldtMin": 1086.561993696357,
       "sibtMin": 1088.8833333333334,
       "sobtMin": 1148.8833333333334,
       "stotMin": 1161.23627785062,
-      "eldtMin": 1086.3,
-      "eibtMin": 1088.8833333333334,
+      "eldtMin": 1087.2833333333333,
+      "eibtMin": 1089.6,
       "eobtMin": 1148.8833333333334,
       "etotMin": 1161.2333333333333,
       "vttADelayMin": 0,
-      "arrRotSec": 36.67746885764826,
+      "arrRotSec": 35.38505125684524,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_xc6iqii7a",
+      "sampledArrRet": "id_nf44a53hd",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 375.05379001507623,
-      "arrRetDistM": 1860,
-      "arrVTdMs": 72.73802732558859,
-      "arrVRetInMs": 24.811028946705783,
+      "arrTdDistM": 399.0653249739126,
+      "arrRetDistM": 2020.0000000000002,
+      "arrVTdMs": 80.10849431259524,
+      "arrVRetInMs": 21.268080706427224,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.021339636976414,
       "token": {
@@ -2482,32 +2655,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1096.1736401785267,
+      "sldtMin_orig": 1095.90697351186,
       "sibtMin_orig": 1098.8833333333334,
       "sobtMin_orig": 1158.8833333333334,
       "stotMin_orig": 1171.581235733041,
-      "sldtMin_d": 1096.1666666666667,
+      "sldtMin_d": 1095.9,
       "sibtMin_d": 1098.8833333333334,
       "sobtMin_d": 1158.8833333333334,
       "stotMin_d": 1171.5833333333333,
-      "sldtMin": 1096.1736401785267,
+      "sldtMin": 1095.90697351186,
       "sibtMin": 1098.8833333333334,
       "sobtMin": 1158.8833333333334,
       "stotMin": 1171.581235733041,
-      "eldtMin": 1096.1666666666667,
+      "eldtMin": 1095.9,
       "eibtMin": 1098.8833333333334,
       "eobtMin": 1158.8833333333334,
       "etotMin": 1171.5833333333333,
       "vttADelayMin": 0,
-      "arrRotSec": 38.812300055769796,
+      "arrRotSec": 37.43715658075011,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_nf44a53hd",
+      "sampledArrRet": "id_xc6iqii7a",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 397.4834363813015,
-      "arrRetDistM": 2020.0000000000002,
-      "arrVTdMs": 76.2818305400102,
-      "arrVRetInMs": 26.367474932680942,
+      "arrTdDistM": 424.47978412568744,
+      "arrRetDistM": 1860,
+      "arrVTdMs": 71.96814385183538,
+      "arrVRetInMs": 28.470155688782807,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.309693154806693,
       "token": {
@@ -2530,32 +2703,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1105.3358911207456,
+      "sldtMin_orig": 1104.869224454079,
       "sibtMin_orig": 1108.8833333333334,
       "sobtMin_orig": 1168.8833333333334,
       "stotMin_orig": 1180.543626417698,
-      "sldtMin_d": 1105.3333333333333,
+      "sldtMin_d": 1104.8666666666666,
       "sibtMin_d": 1108.8833333333334,
       "sobtMin_d": 1168.8833333333334,
       "stotMin_d": 1180.55,
-      "sldtMin": 1105.3358911207456,
+      "sldtMin": 1104.869224454079,
       "sibtMin": 1108.8833333333334,
       "sobtMin": 1168.8833333333334,
       "stotMin": 1180.543626417698,
-      "eldtMin": 1105.3333333333333,
-      "eibtMin": 1108.8833333333334,
+      "eldtMin": 1106.2333333333333,
+      "eibtMin": 1110.25,
       "eobtMin": 1168.8833333333334,
       "etotMin": 1180.55,
       "vttADelayMin": 0,
-      "arrRotSec": 35.97146312202361,
+      "arrRotSec": 26.821822069524757,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_h0qtm44uv",
+      "sampledArrRet": "id_3yyb5632n",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 344.8180257827486,
-      "arrRetDistM": 1650,
-      "arrVTdMs": 69.5997902479039,
-      "arrVRetInMs": 29.697697562763597,
+      "arrTdDistM": 442.92120326747204,
+      "arrRetDistM": 1380,
+      "arrVTdMs": 62.619311321992434,
+      "arrVRetInMs": 24.368203679689024,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.9474422125878577,
       "token": {
@@ -2578,32 +2751,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1114.6311321168666,
+      "sldtMin_orig": 1115.6977987835332,
       "sibtMin_orig": 1118.8833333333334,
       "sobtMin_orig": 1178.8833333333334,
       "stotMin_orig": 1190.3054882967278,
-      "sldtMin_d": 1114.6333333333334,
+      "sldtMin_d": 1115.7,
       "sibtMin_d": 1118.8833333333334,
       "sobtMin_d": 1178.8833333333334,
       "stotMin_d": 1190.3,
-      "sldtMin": 1114.6311321168666,
+      "sldtMin": 1115.6977987835332,
       "sibtMin": 1118.8833333333334,
       "sobtMin": 1178.8833333333334,
       "stotMin": 1190.3054882967278,
-      "eldtMin": 1114.6333333333334,
-      "eibtMin": 1118.8833333333334,
+      "eldtMin": 1115.1,
+      "eibtMin": 1118.2833333333333,
       "eobtMin": 1178.8833333333334,
       "etotMin": 1190.3,
       "vttADelayMin": 0,
-      "arrRotSec": 27.361994381939304,
+      "arrRotSec": 41.10256472539083,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_3yyb5632n",
+      "sampledArrRet": "id_nf44a53hd",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 340,
-      "arrRetDistM": 1380,
-      "arrVTdMs": 65.34606966276831,
-      "arrVRetInMs": 21.04539903093714,
+      "arrTdDistM": 349.85236041574376,
+      "arrRetDistM": 2020.0000000000002,
+      "arrVTdMs": 70.89948802653153,
+      "arrVRetInMs": 21.998541377898427,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.785534549800181,
       "token": {
@@ -2626,32 +2799,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1125.307851298452,
+      "sldtMin_orig": 1126.057851298452,
       "sibtMin_orig": 1128.8833333333334,
       "sobtMin_orig": 1188.8833333333334,
       "stotMin_orig": 1200.1827785201124,
-      "sldtMin_d": 1125.3,
+      "sldtMin_d": 1126.05,
       "sibtMin_d": 1128.8833333333334,
       "sobtMin_d": 1188.8833333333334,
       "stotMin_d": 1200.1833333333334,
-      "sldtMin": 1125.307851298452,
+      "sldtMin": 1126.057851298452,
       "sibtMin": 1128.8833333333334,
       "sobtMin": 1188.8833333333334,
       "stotMin": 1200.1827785201124,
-      "eldtMin": 1125.3,
-      "eibtMin": 1128.8833333333334,
+      "eldtMin": 1126.2833333333333,
+      "eibtMin": 1129.1166666666666,
       "eobtMin": 1188.8833333333334,
       "etotMin": 1200.1833333333334,
       "vttADelayMin": 0,
-      "arrRotSec": 37.81178151057985,
+      "arrRotSec": 42.67141339777531,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_xc6iqii7a",
+      "sampledArrRet": "id_2ducvwnxr",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 443.67810673296157,
-      "arrRetDistM": 1860,
-      "arrVTdMs": 66.58820648173322,
-      "arrVRetInMs": 23.85988240670909,
+      "arrTdDistM": 436.8944148734597,
+      "arrRetDistM": 2300,
+      "arrVTdMs": 80.5,
+      "arrVRetInMs": 27.57843280916827,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.5754820348814556,
       "token": {
@@ -2674,32 +2847,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1136.250192051759,
+      "sldtMin_orig": 1135.1835253850923,
       "sibtMin_orig": 1138.8833333333334,
       "sobtMin_orig": 1198.8833333333334,
       "stotMin_orig": 1211.9911421675724,
-      "sldtMin_d": 1136.25,
+      "sldtMin_d": 1135.1833333333334,
       "sibtMin_d": 1138.8833333333334,
       "sobtMin_d": 1198.8833333333334,
       "stotMin_d": 1211.9833333333333,
-      "sldtMin": 1136.250192051759,
+      "sldtMin": 1135.1835253850923,
       "sibtMin": 1138.8833333333334,
       "sobtMin": 1198.8833333333334,
       "stotMin": 1211.9911421675724,
-      "eldtMin": 1136.25,
-      "eibtMin": 1138.8833333333334,
+      "eldtMin": 1135.65,
+      "eibtMin": 1139.35,
       "eobtMin": 1198.8833333333334,
       "etotMin": 1211.9833333333333,
       "vttADelayMin": 0,
-      "arrRotSec": 39.646792742569026,
+      "arrRotSec": 27.25003725582246,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_nf44a53hd",
+      "sampledArrRet": "id_3yyb5632n",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 428.59485172275936,
-      "arrRetDistM": 2020.0000000000002,
-      "arrVTdMs": 75.90339665525885,
-      "arrVRetInMs": 29.530552225725362,
+      "arrTdDistM": 391.0212378388654,
+      "arrRetDistM": 1380,
+      "arrVTdMs": 63.0924953561982,
+      "arrVRetInMs": 22.1324477973727,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.899807948241127,
       "token": {
@@ -2734,20 +2907,20 @@
       "sibtMin": 1148.8833333333334,
       "sobtMin": 1208.8833333333334,
       "stotMin": 1222.1971363292298,
-      "eldtMin": 1146.1833333333334,
-      "eibtMin": 1148.8833333333334,
+      "eldtMin": 1145.7166666666667,
+      "eibtMin": 1148.4166666666667,
       "eobtMin": 1208.8833333333334,
       "etotMin": 1222.2,
       "vttADelayMin": 0,
-      "arrRotSec": 31.835201588176517,
+      "arrRotSec": 31.715806300421974,
       "eOverlapPushed": false,
       "sampledArrRet": "id_h0qtm44uv",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 393.5302463221528,
+      "arrTdDistM": 380.7045997882767,
       "arrRetDistM": 1650,
-      "arrVTdMs": 70.36717976683867,
-      "arrVRetInMs": 24.105667020000435,
+      "arrVTdMs": 65.65801081505853,
+      "arrVRetInMs": 16.006720295541545,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.921339636976414,
       "token": {
@@ -2770,32 +2943,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1155.492171688667,
+      "sldtMin_orig": 1156.5755050220002,
       "sibtMin_orig": 1158.8833333333334,
       "sobtMin_orig": 1218.8833333333334,
       "stotMin_orig": 1230.6997970454897,
-      "sldtMin_d": 1155.5,
+      "sldtMin_d": 1156.5833333333333,
       "sibtMin_d": 1158.8833333333334,
       "sobtMin_d": 1218.8833333333334,
       "stotMin_d": 1230.7,
-      "sldtMin": 1155.492171688667,
+      "sldtMin": 1156.5755050220002,
       "sibtMin": 1158.8833333333334,
       "sobtMin": 1218.8833333333334,
       "stotMin": 1230.6997970454897,
       "eldtMin": 1155.5,
-      "eibtMin": 1158.8833333333334,
+      "eibtMin": 1157.8,
       "eobtMin": 1218.8833333333334,
       "etotMin": 1230.7,
       "vttADelayMin": 0,
-      "arrRotSec": 34.073223892872555,
+      "arrRotSec": 46.20182767887305,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_h0qtm44uv",
+      "sampledArrRet": "id_2ducvwnxr",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 411.16297620340333,
-      "arrRetDistM": 1650,
-      "arrVTdMs": 67.33179948987235,
-      "arrVRetInMs": 26.98524865792997,
+      "arrTdDistM": 364.2169265908574,
+      "arrRetDistM": 2300,
+      "arrVTdMs": 77.83448564326736,
+      "arrVRetInMs": 28.158075141584593,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.3911616446665294,
       "token": {
@@ -2830,20 +3003,20 @@
       "sibtMin": 1168.8833333333334,
       "sobtMin": 1228.8833333333334,
       "stotMin": 1240.411052702898,
-      "eldtMin": 1165.2,
-      "eibtMin": 1168.8833333333334,
+      "eldtMin": 1166.1,
+      "eibtMin": 1169.7833333333333,
       "eobtMin": 1228.8833333333334,
       "etotMin": 1240.4166666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 34.89570594142508,
+      "arrRotSec": 33.3665111598789,
       "eOverlapPushed": false,
       "sampledArrRet": "id_h0qtm44uv",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 340,
+      "arrTdDistM": 398.5123110600934,
       "arrRetDistM": 1650,
-      "arrVTdMs": 66.05527029041677,
-      "arrVRetInMs": 15,
+      "arrVTdMs": 68.70325992248937,
+      "arrVRetInMs": 26.298470288596924,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.6799183508029714,
       "token": {
@@ -2866,32 +3039,32 @@
       "minDwellMin": 20,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1175.5736401785268,
+      "sldtMin_orig": 1175.1069735118601,
       "sibtMin_orig": 1178.8833333333334,
       "sobtMin_orig": 1238.8833333333334,
       "stotMin_orig": 1251.581235733041,
-      "sldtMin_d": 1175.5666666666666,
+      "sldtMin_d": 1175.1,
       "sibtMin_d": 1178.8833333333334,
       "sobtMin_d": 1238.8833333333334,
       "stotMin_d": 1251.5833333333333,
-      "sldtMin": 1175.5736401785268,
+      "sldtMin": 1175.1069735118601,
       "sibtMin": 1178.8833333333334,
       "sobtMin": 1238.8833333333334,
       "stotMin": 1251.581235733041,
-      "eldtMin": 1175.5666666666666,
-      "eibtMin": 1178.8833333333334,
+      "eldtMin": 1174.85,
+      "eibtMin": 1178.6333333333334,
       "eobtMin": 1238.8833333333334,
       "etotMin": 1251.5833333333333,
       "vttADelayMin": 0,
-      "arrRotSec": 32.973363392900254,
+      "arrRotSec": 30.79223567149672,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_h0qtm44uv",
+      "sampledArrRet": "id_3yyb5632n",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 347.6246356353607,
-      "arrRetDistM": 1650,
-      "arrVTdMs": 70.46274819752047,
-      "arrVRetInMs": 24.15958687481253,
+      "arrTdDistM": 389.0091226686127,
+      "arrRetDistM": 1380,
+      "arrVTdMs": 59.5,
+      "arrVRetInMs": 25.999046282795007,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 2.709693154806693,
       "token": {
@@ -2926,20 +3099,20 @@
       "sibtMin": 1188.8833333333334,
       "sobtMin": 1248.8833333333334,
       "stotMin": 1260.543626417698,
-      "eldtMin": 1185.3333333333333,
-      "eibtMin": 1188.8833333333334,
+      "eldtMin": 1184.8666666666666,
+      "eibtMin": 1188.4166666666667,
       "eobtMin": 1248.8833333333334,
       "etotMin": 1260.55,
       "vttADelayMin": 0,
-      "arrRotSec": 32.648772422932005,
+      "arrRotSec": 31.425196750201202,
       "eOverlapPushed": false,
       "sampledArrRet": "id_h0qtm44uv",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 404.0299854076192,
+      "arrTdDistM": 459.99999999999994,
       "arrRetDistM": 1650,
-      "arrVTdMs": 65.71179533179856,
-      "arrVRetInMs": 15,
+      "arrVTdMs": 68.61445874897777,
+      "arrVRetInMs": 25.444669529438343,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.2141088792545243,
       "token": {
@@ -2974,20 +3147,20 @@
       "sibtMin": 1198.8833333333334,
       "sobtMin": 1258.8833333333334,
       "stotMin": 1272.150928170527,
-      "eldtMin": 1196.15,
-      "eibtMin": 1198.8833333333334,
+      "eldtMin": 1195.8166666666666,
+      "eibtMin": 1198.55,
       "eobtMin": 1258.8833333333334,
       "etotMin": 1272.15,
       "vttADelayMin": 0,
-      "arrRotSec": 35.07972676443587,
+      "arrRotSec": 34.78194960272823,
       "eOverlapPushed": false,
       "sampledArrRet": "id_xc6iqii7a",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 410.6677967551659,
+      "arrTdDistM": 384.3382089414884,
       "arrRetDistM": 1860,
-      "arrVTdMs": 70.74876704158505,
-      "arrVRetInMs": 19.9706076523601,
+      "arrVTdMs": 73.1394987318837,
+      "arrVRetInMs": 20.399121967216672,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.5400021559791655,
       "token": {
@@ -3009,32 +3182,32 @@
       "minDwellMin": 50,
       "noWayArr": false,
       "noWayDep": false,
-      "sldtMin_orig": 1224.988787298595,
+      "sldtMin_orig": 1224.5221206319286,
       "sibtMin_orig": 1228.8833333333334,
       "sobtMin_orig": 1288.8833333333334,
       "stotMin_orig": 1301.472134732261,
-      "sldtMin_d": 1224.9833333333333,
+      "sldtMin_d": 1224.5166666666667,
       "sibtMin_d": 1228.8833333333334,
       "sobtMin_d": 1288.8833333333334,
       "stotMin_d": 1301.4666666666667,
-      "sldtMin": 1224.988787298595,
+      "sldtMin": 1224.5221206319286,
       "sibtMin": 1228.8833333333334,
       "sobtMin": 1288.8833333333334,
       "stotMin": 1301.472134732261,
-      "eldtMin": 1224.9833333333333,
-      "eibtMin": 1228.8833333333334,
+      "eldtMin": 1225.3166666666666,
+      "eibtMin": 1229.6833333333334,
       "eobtMin": 1288.8833333333334,
       "etotMin": 1301.4666666666667,
       "vttADelayMin": 0,
-      "arrRotSec": 35.195663935481846,
+      "arrRotSec": 29.501246402936836,
       "eOverlapPushed": false,
-      "sampledArrRet": "id_h0qtm44uv",
+      "sampledArrRet": "id_3yyb5632n",
       "arrRetFailed": false,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 396.3030580787217,
-      "arrRetDistM": 1650,
-      "arrVTdMs": 62.86610295225532,
-      "arrVRetInMs": 23.282852453633936,
+      "arrTdDistM": 340,
+      "arrRetDistM": 1380,
+      "arrVTdMs": 65.3390891707796,
+      "arrVRetInMs": 26.83307923059564,
       "arrVRetOutMs": 15,
       "vttArrMin_base": 3.8945460347382777,
       "token": {
@@ -3073,16 +3246,16 @@
       "eobtMin": 1298.8833333333334,
       "etotMin": 1310.05,
       "vttADelayMin": 0,
-      "arrRotSec": 33.49768486609715,
+      "arrRotSec": 32.25341039325288,
       "eOverlapPushed": false,
       "sampledArrRet": "id_xc6iqii7a",
       "arrRetFailed": false,
       "vttArrMin_base": 0,
       "arrRunwayIdUsed": "id_to86fdah0",
-      "arrTdDistM": 419.100198523687,
+      "arrTdDistM": 459.99999999999994,
       "arrRetDistM": 1860,
-      "arrVTdMs": 76.33364894250725,
-      "arrVRetInMs": 23.45854944766561,
+      "arrVTdMs": 73.07940012225873,
+      "arrVRetInMs": 13.73312499867345,
       "arrVRetOutMs": 15,
       "token": {
         "arrRunwayId": "id_to86fdah0",

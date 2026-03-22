@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-시나리오 JSON을 받아 Plotly 그래프만 생성해 HTML 보고서에 담는 rev2.
-- 입력: JSON (dict, list of dicts, 또는 JSON 파일 경로)
-- 처리: JSON → 요약 추출 → Plotly 차트 일괄 생성 → HTML 보고서 조립
-- 출력: HTML 문자열 또는 파일 저장
+scenario JSONtake it Plotly Just create a graph HTML included in the report rev2.
+- input: JSON (dict, list of dicts, or JSON file path)
+- treatment: JSON → Summary Extract → Plotly Batch creation of charts → HTML Report assembly
+-Output: HTML Save string or file
 
-사용 예:
+Example usage:
   from utils.generate_scenario_report_rev2 import load_scenarios_from_json, build_report_html
-  data = load_scenarios_from_json("path/to/scenarios.json")  # 또는 dict / list
+  data = load_scenarios_from_json("path/to/scenarios.json")  # or dict / list
   html = build_report_html(data)
-  # 저장: open("report.html","w",encoding="utf-8").write(html)
+  # save: open("report.html","w",encoding="utf-8").write(html)
 """
 
 import html as _html
@@ -28,10 +28,10 @@ _THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = _THIS_DIR.parent
 SCENARIOS_DIR = PROJECT_ROOT / "Scenarios"
 
-# 시나리오별 통일 색상 (전체 리포트에서 동일 시나리오 = 동일 색)
+# Unified color for each scenario (Same scenario across all reports = same color)
 REPORT_SCENARIO_PALETTE = ["#2563eb", "#059669", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#ca8a04", "#c026d3"]
 
-# 위치 이름을 JSON에서 못 읽었을 때만 사용 (코드 내 T1/T2 하드코딩 제거)
+# location name JSONUse only when you can't read from (my code T1/T2 Remove hardcoding)
 _FALLBACK_LOCATION_NAMES = ["Location_1", "Location_2"]
 
 
@@ -47,7 +47,7 @@ def _hex_to_rgba(hex_color, alpha=0.25):
 
 
 def _fmt_delay_hours(v, decimals=2):
-    """Delay hours 포맷: 정수면 .00 제거 (7 not 7.00), 소수 있으면 decimals까지."""
+    """Delay hours Format: Remove .00 if integer (7 not 7.00), If there are few decimalsuntil."""
     if v is None:
         return "—"
     try:
@@ -92,7 +92,7 @@ def extract_summary(s):
     row = s.get("scenario_result_table_row") or {}
     ts = s.get("time_series") or {}
     sv = s.get("sorted_values") or {}
-    # 터미널(위치) 이름: 시나리오 JSON에서 우선 읽기
+    # terminal(location) Name: Scenario JSONRead first at
     term_names = []
     if isinstance(meta, dict):
         for key in ("terminal_names", "terminals", "locations"):
@@ -125,7 +125,7 @@ def extract_summary(s):
     focus_dep_arr = (meta.get("dep_arr") or "Dep").strip()
     term_assign = (meta.get("terminal_assignments") or {}) if isinstance(meta, dict) else {}
     default_assign = meta.get("default_assignments") or meta.get("fixed_assignments") or {}
-    # 이 행의 (focus_terminal, focus_dep_arr)에 해당하는 값만 사용
+    # in this line (focus_terminal, focus_dep_arr)Use only values ​​corresponding to
     key_97 = f"{focus_terminal}_{'Dep' if focus_dep_arr.upper() == 'DEP' else 'Arr'}_97.5%"
     key_95 = f"{focus_terminal}_{'Dep' if focus_dep_arr.upper() == 'DEP' else 'Arr'}_95%"
     value_97 = row.get(key_97) if isinstance(row, dict) else None
@@ -144,14 +144,14 @@ def extract_summary(s):
     stk_index = stk.get("index", []) if isinstance(stk, dict) else []
     stk_columns = stk.get("columns", []) if isinstance(stk, dict) else []
     sbg_raw = (ts.get("summary_by_group") or {}) if isinstance(ts, dict) else {}
-    # 지원 형식: (1) tabs: [{label, data: {index,columns,data}}], (2) 레거시: {index, columns, data}
+    # Supported Format: (1) tabs: [{label, data: {index,columns,data}}], (2) legacy: {index, columns, data}
     if isinstance(sbg_raw, dict) and sbg_raw.get("tabs"):
-        sbg = sbg_raw  # 탭 형식 그대로 전달
+        sbg = sbg_raw  # Passed as tab format
     else:
         sbg = {"index": sbg_raw.get("index", []) if isinstance(sbg_raw, dict) else [],
                "columns": sbg_raw.get("columns", []) if isinstance(sbg_raw, dict) else [],
                "data": sbg_raw.get("data", []) if isinstance(sbg_raw, dict) else []}
-    # 모든 위치에 대한 Dep/Arr별 97.5%, 95%, capacity, total_sum, excess_%
+    # for all locations Dep/Arrstar 97.5%, 95%, capacity, total_sum, excess_%
     by_location = {}
     for loc in term_names:
         ul = row.get(loc) if isinstance(row, dict) and isinstance(row.get(loc), list) else term_assign.get(loc) or []
@@ -300,7 +300,7 @@ def _plotly_bar_html(scenario_ids, values, title, yaxis_title, colors=None):
 
 
 def _combo_pattern(ci):
-    """조합 순서별 막대 구분. Dep/Arr/Both × 여러 location 구분용 패턴 확장."""
+    """Separate bars by combination order. Dep/Arr/Both × several location Expansion of patterns for distinction."""
     patterns = [
         {},  # 0: solid
         {"marker_pattern": dict(shape="/", solidity=0.35, fgopacity=0.9, size=12)},   # 1: slash
@@ -315,7 +315,7 @@ def _combo_pattern(ci):
 
 
 def _plotly_excess_grouped_bar_html(scenario_ids, combos, get_excess_fn, colors=None):
-    """터미널×출도착 조합별 용량 초과 %. 시나리오별 동일 색, 조합은 사선/닷/투명으로 구분."""
+    """terminal×% excess capacity by departure/arrival combination. Same color for each scenario, combination is diagonal/dot/Separated by transparency."""
     if not _HAS_PLOTLY or not scenario_ids or not combos:
         return ""
     colors = colors or REPORT_SCENARIO_PALETTE
@@ -337,7 +337,7 @@ def _plotly_excess_grouped_bar_html(scenario_ids, combos, get_excess_fn, colors=
 
 
 def _plotly_delay_hours_grouped_bar_html(scenario_ids, combos, get_delay_fn, colors=None, title=None, yaxis_title=None, text_fmt=None):
-    """터미널×출도착 조합별 Delay Hours. 시나리오별 동일 색, 조합은 사선/닷/투명으로 구분."""
+    """terminal×By departure/arrival combination Delay Hours. Same color for each scenario, combination is diagonal/dot/Separated by transparency."""
     if not _HAS_PLOTLY or not scenario_ids or not combos:
         return ""
     colors = colors or REPORT_SCENARIO_PALETTE
@@ -362,7 +362,7 @@ def _plotly_delay_hours_grouped_bar_html(scenario_ids, combos, get_delay_fn, col
 
 
 def _plotly_dep_arr_single_grouped_bar_html(scenario_ids, rep_summaries, report_labels, colors=None, percentile="97.5%", capacity_per_series=None, aggregate_base=None, combos=None):
-    """출발(Dep) + 도착(Arr) 피크를 그룹 막대로. combos가 있으면 해당 조합만 표시(Both 미선택 시 제외). capacity_per_series: Dep/Arr/(Both) per loc."""
+    """depart(Dep) + arrive(Arr) Peaks to Group Bars. combosIf present, only that combination is displayed(Both Excluded if not selected). capacity_per_series: Dep/Arr/(Both) per loc."""
     if not _HAS_PLOTLY or not scenario_ids or not rep_summaries:
         return ""
     colors = colors or REPORT_SCENARIO_PALETTE
@@ -375,7 +375,7 @@ def _plotly_dep_arr_single_grouped_bar_html(scenario_ids, rep_summaries, report_
     scenario_colors = [colors[i % len(colors)] for i in range(n)]
     key = "95%" if percentile == "95%" else "97.5%"
     label_suffix = "95%" if percentile == "95%" else "97.5%"
-    # combos가 있으면 실제 export된 조합만 사용 (Both 미선택 시 Both 제외). 없으면 Dep/Arr만 기본
+    # combosIf there is actual exportUse only combinations (Both When not selected Both exception). If there is no Dep/Arronly basic
     if combos:
         series_order = list(combos)
     else:
@@ -389,8 +389,8 @@ def _plotly_dep_arr_single_grouped_bar_html(scenario_ids, rep_summaries, report_
         fig.add_trace(go.Bar(name=f"{loc} {da} {label_suffix}", x=x_labels, y=vals, marker_color=scenario_colors,
             text=[f"{v:,.0f}" for v in vals], textposition="outside", textfont=dict(size=10), **extra))
 
-    # Capacity: 각 막대(시리즈)와 동일한 위계로 라인 위치 매칭.
-    # capacity_per_series 순서: Dep(loc0..), Arr(loc0..), Both(loc0..) | series_order: Dep(all locs), Arr(all locs), Both(all locs)
+    # Capacity: each bar(series)Line position matching with the same hierarchy as.
+    # capacity_per_series order: Dep(loc0..), Arr(loc0..), Both(loc0..) | series_order: Dep(all locs), Arr(all locs), Both(all locs)
     shapes = []
     n_series = len(series_order)
     n_locs = len(terminal_names)
@@ -497,7 +497,7 @@ def _build_capacity_per_series(rep_summaries, terminal_names, agg, include_both=
 
 
 def _format_agg_for_axis(aggregate_base):
-    """aggregate_base 값을 Y축/제목용 읽기 쉬운 문자열로. 예: total_seat_count -> 'seat', total_pax -> 'pax'."""
+    """aggregate_base value Yaxis/An easy-to-read string for the title. yes: total_seat_count -> 'seat', total_pax -> 'pax'."""
     if not aggregate_base or not isinstance(aggregate_base, str):
         return "value"
     agg = aggregate_base.strip().lower()
@@ -511,7 +511,7 @@ def _format_agg_for_axis(aggregate_base):
 
 
 def _yaxis_unit(aggregate_base):
-    """차트 Y축/제목 단위. movement -> movement/hour, 그 외 seat -> seat/hour."""
+    """chart Yaxis/title unit. movement -> movement/hour, Others seat -> seat/hour."""
     if not aggregate_base or not isinstance(aggregate_base, str):
         return "seat/hour"
     agg = aggregate_base.strip().lower()
@@ -521,12 +521,12 @@ def _yaxis_unit(aggregate_base):
 
 
 def _total_metric_label(aggregate_base):
-    """Scenario summary 테이블 헤더용: Count로 통일."""
+    """Scenario summary For table header: Countunification."""
     return "Count"
 
 
 def _plotly_timeseries_both_by_terminal_html(scenarios, unique_ids, colors, agg_filter=None):
-    """Both 전용: 시나리오 상세 Cumulative profile에 사용한 time_series(time_index, values)를 그대로 그림. agg_filter 해당 agg만. Returns [(title, html), ...]."""
+    """Both Exclusive: Scenario Details Cumulative profileused in time_series(time_index, values)picture as is. agg_filter corresponding aggonly. Returns [(title, html), ...]."""
     if not _HAS_PLOTLY or not scenarios or not unique_ids:
         return []
     from collections import defaultdict
@@ -599,7 +599,7 @@ def _plotly_timeseries_both_by_terminal_html(scenarios, unique_ids, colors, agg_
 
 
 def _plotly_cumulative_by_terminal_html(scenarios, unique_ids, colors, agg_filter=None, series_type=None):
-    """터미널별 cumulative. agg_filter: 해당 agg만; series_type: 'Dep'|'Arr'|'Both' 중 하나만. None이면 모두. Returns [(title, html), ...]."""
+    """By terminal cumulative. agg_filter: corresponding aggonly; series_type: 'Dep'|'Arr'|'Both' just one of. NoneEverything behind it. Returns [(title, html), ...]."""
     if not _HAS_PLOTLY or not scenarios or not unique_ids:
         return []
     from collections import defaultdict
@@ -611,7 +611,7 @@ def _plotly_cumulative_by_terminal_html(scenarios, unique_ids, colors, agg_filte
         agg = (meta.get("aggregate_base") or "").strip() or None
         if agg_filter is not None and agg_filter != agg:
             continue
-        # cumulative: Relocation_Master에서 cumsum 1회 계산 후 JSON에 담은 값. Report는 두번계산 없이 그대로 사용
+        # cumulative: Relocation_Masterat cumsum 1After counting times JSONThe value contained in. Reportis used as is without calculating twice.
         cum = s.get("cumulative")
         if not cum or not isinstance(cum, dict):
             continue
@@ -645,7 +645,7 @@ def _plotly_cumulative_by_terminal_html(scenarios, unique_ids, colors, agg_filte
             agg_label = "value"
         y_title = f"Cumulative ({agg_label})"
         fig = go.Figure()
-        # Both를 그리기 위해 같은 시나리오 ID의 Dep와 Arr를 매칭
+        # Bothto draw the same scenario IDof Depand Arrmatching
         dep_by_sid = {}
         arr_by_sid = {}
         net_by_sid = {}
@@ -656,7 +656,7 @@ def _plotly_cumulative_by_terminal_html(scenarios, unique_ids, colors, agg_filte
                 arr_by_sid[sid] = (time_index, arr)
             elif dep_arr.upper() == "BOTH" and net is not None:
                 net_by_sid[sid] = (time_index, net)
-        # Dep 시리즈 그리기
+        # Dep drawing series
         if show_dep and series_type != "Both":
             for sid, (time_index, dep) in dep_by_sid.items():
                 idx = id_to_idx.get(sid, 0)
@@ -673,7 +673,7 @@ def _plotly_cumulative_by_terminal_html(scenarios, unique_ids, colors, agg_filte
                         line=dict(color=c, width=2, dash="solid"),
                         mode="lines",
                     ))
-        # Arr 시리즈 그리기
+        # Arr drawing series
         if show_arr and series_type != "Both":
             for sid, (time_index, arr) in arr_by_sid.items():
                 idx = id_to_idx.get(sid, 0)
@@ -690,9 +690,9 @@ def _plotly_cumulative_by_terminal_html(scenarios, unique_ids, colors, agg_filte
                         line=dict(color=c, width=2, dash="dash"),
                         mode="lines",
                     ))
-        # Both 시리즈 그리기: Relocation Master와 동일 - 시나리오당 1개 선만. N개 시나리오 = N개 선
+        # Both drawing series: Relocation MasterSame as - only 1 line per scenario. Ndog scenario = Nimprovement
         if show_both:
-            # series_type=="Both"일 때: net_by_sid만 사용 (Dep+Arr 매칭 없음). unique_ids 순서로 1개씩만
+            # series_type=="Both"When: net_by_siduse only (Dep+Arr No matching). unique_ids Only 1 in each order
             if series_type == "Both":
                 def _sid_match(a, b):
                     sa, sb = str(a).strip(), str(b).strip()
@@ -765,13 +765,13 @@ def _plotly_cumulative_by_terminal_html(scenarios, unique_ids, colors, agg_filte
 
 
 def _plotly_radial_dep_arr_97_html(statistics_table, report_labels, unique_ids, rep_summaries, colors, capacity_per_series=None, aggregate_base=None):
-    """방사형 차트: 위치별 출발/도착 97.5%. N개 위치 지원. Capacity는 빨간 점선. aggregate_base가 있으면 테이블 컬럼명을 {loc}_Dep/Arr_97.5%_{aggregate_base} 형식으로 해석."""
+    """Radar Chart: Departures by Location/arrive 97.5%. Ndog location support. Capacityis the red dotted line. aggregate_baseIf present, the table column name is {loc}_Dep/Arr_97.5%_{aggregate_base} interpreted in format."""
     if not _HAS_PLOTLY:
         return ""
     terminal_names = report_labels.get("terminal_names") or []
     if not terminal_names:
         return ""
-    # agg별 테이블은 컬럼명이 {loc}_Dep_97.5%_{aggregate_base} 형식일 수 있음
+    # aggFor star tables, the column names are {loc}_Dep_97.5%_{aggregate_base} may be of the form
     first_row = (statistics_table or [{}])[0] if statistics_table and len(statistics_table) > 0 else {}
     first_keys = set(first_row.keys()) if isinstance(first_row, dict) else set()
     def _col_raw(loc, dep_arr):
@@ -791,7 +791,7 @@ def _plotly_radial_dep_arr_97_html(statistics_table, report_labels, unique_ids, 
                 id_set.add(s)
                 id_set.add(s.replace("Scenario_", "S"))
 
-    # statistics_table에서 해당 agg의 모든 시나리오(selected + others) 수집 — seat/movement 등 agg 공통
+    # statistics_tablecorresponding to aggAll scenarios of(selected + others) collection — seat/movement etc. agg commonness
     rows_for_radial = []
     if statistics_table and isinstance(statistics_table, list) and len(statistics_table) > 0:
         for row in statistics_table:
@@ -817,7 +817,7 @@ def _plotly_radial_dep_arr_97_html(statistics_table, report_labels, unique_ids, 
                     return (0, order_map.get(r["scenario_id"], 999))
                 return (1, 0)
             rows_for_radial.sort(key=_sort_key)
-            # Radar: 선택된 시나리오만 표시 (other 제외)
+            # Radar: Show only selected scenarios (other exception)
             rows_for_radial = [r for r in rows_for_radial if r.get("is_selected")]
     if not rows_for_radial and unique_ids and rep_summaries:
         series_order = [(loc, "Dep") for loc in terminal_names] + [(loc, "Arr") for loc in terminal_names]
@@ -898,7 +898,7 @@ _SCATTER_OTHER_COLOR = "rgba(148, 163, 184, 0.22)"
 
 
 def _plotly_dep_arr_scatter_by_terminal_html(statistics_table, report_labels, unique_ids, rep_summaries, colors, capacity_per_series=None, aggregate_base=None):
-    """Per-location scatter: 97.5% Dep (x) vs 97.5% Arr (y). N개 위치 지원. aggregate_base에 따라 축 단위(seat/hour vs movement/hour) 적용. Returns [(title, html), ...]."""
+    """Per-location scatter: 97.5% Dep (x) vs 97.5% Arr (y). Ndog location support. aggregate_baseDepending on the axis unit(seat/hour vs movement/hour) apply. Returns [(title, html), ...]."""
     if not _HAS_PLOTLY:
         return []
     terminal_names = report_labels.get("terminal_names") or []
@@ -929,7 +929,7 @@ def _plotly_dep_arr_scatter_by_terminal_html(statistics_table, report_labels, un
                 dep_col, arr_col = suffixed_dep, suffixed_arr
         points = []
         selected_points_from_reps = []
-        # 선택된 시나리오(unique_ids)는 rep_summaries에서 먼저 구함 — 커스텀 표시명(S35_Y2026 등) 사용 시 statistics_table의 Scenario_ID와 불일치하여 Other로 분류되는 문제 방지
+        # selected scenario(unique_ids)Is rep_summariesFirst sought from — custom display name(S35_Y2026 etc.) When used statistics_tableof Scenario_IDIn disagreement with OtherAvoid problems classified as
         if unique_ids and rep_summaries:
             for i, sid in enumerate(unique_ids):
                 rep = rep_summaries[i] if i < len(rep_summaries) else {}
@@ -942,7 +942,7 @@ def _plotly_dep_arr_scatter_by_terminal_html(statistics_table, report_labels, un
                         continue
                     sid_str = str(sid).strip()
                     selected_points_from_reps.append({"scenario_id": sid_str, "x": x_f, "y": y_f, "idx": i})
-        # statistics_table에서 others용 포인트 가져오기 (선택된 시나리오 제외)
+        # statistics_tableat othersGet Dragon Points (Excluding selected scenarios)
         if statistics_table and isinstance(statistics_table, list):
             for row in statistics_table:
                 if not isinstance(row, dict):
@@ -952,7 +952,7 @@ def _plotly_dep_arr_scatter_by_terminal_html(statistics_table, report_labels, un
                     continue
                 sid_str = str(sid).strip().replace("Scenario_", "S")
                 if sid_str in id_set:
-                    continue  # rep_summaries에서 이미 처리된 선택 시나리오는 제외
+                    continue  # rep_summariesExcludes selection scenarios that have already been processed in
                 x_val = row.get(dep_col)
                 y_val = row.get(arr_col)
                 try:
@@ -962,15 +962,15 @@ def _plotly_dep_arr_scatter_by_terminal_html(statistics_table, report_labels, un
                     x_f, y_f = None, None
                 if x_f is not None and y_f is not None:
                     points.append({"scenario_id": sid_str, "x": x_f, "y": y_f})
-        # rep_summaries에서 선택된 포인트가 있으면 사용, 없으면 기존 statistics_table 기반 분류
+        # rep_summariesIf there is a point selected in , use it. If not, use the existing point. statistics_table based classification
         if selected_points_from_reps:
             selected_points = [(p, p["scenario_id"], p["idx"]) for p in selected_points_from_reps]
             gray_x = [p["x"] for p in points]
             gray_y = [p["y"] for p in points]
             gray_text = [p["scenario_id"] for p in points]
-            points = selected_points_from_reps + points  # zone/축 범위 계산용
+            points = selected_points_from_reps + points  # zone/For calculating axis range
         else:
-            # rep_summaries fallback 없을 때: statistics_table 전체를 points로 사용 후 분류
+            # rep_summaries fallback When there is no: statistics_table the whole pointsClassified after use
             if not points and statistics_table and isinstance(statistics_table, list):
                 for row in statistics_table:
                     if not isinstance(row, dict):
@@ -1018,7 +1018,7 @@ def _plotly_dep_arr_scatter_by_terminal_html(statistics_table, report_labels, un
                 all_y = [p["y"] for p in points]
                 x_max = max(all_x) if all_x else dep_cap * 2
                 y_max = max(all_y) if all_y else arr_cap * 2
-                # 배율로 x/y 경계 계산 (0 = 0, 1 = cap, 그 외 = cap*ratio; 'max' = x_max/y_max)
+                # by magnification x/y Boundary calculation (0 = 0, 1 = cap, Others = cap*ratio; 'max' = x_max/y_max)
                 def _x(v):
                     return 0 if v == 0 else (x_max if v == "max" else dep_cap * v)
                 def _y(v):
@@ -1051,12 +1051,12 @@ def _plotly_dep_arr_scatter_by_terminal_html(statistics_table, report_labels, un
                 shapes.append(dict(type="line", x0=dep_cap, x1=dep_cap, y0=0, y1=arr_cap, xref="x", yref="y", line=cap_line))
                 shapes.append(dict(type="line", x0=0, x1=dep_cap, y0=arr_cap, y1=arr_cap, xref="x", yref="y", line=cap_line))
         axis_unit = _yaxis_unit(aggregate_base)
-        # 축 범위 계산 (0부터 시작)
+        # Axis range calculation (0starting from)
         all_x_vals = [p["x"] for p in points]
         all_y_vals = [p["y"] for p in points]
         x_max_val = max(all_x_vals) if all_x_vals else 100
         y_max_val = max(all_y_vals) if all_y_vals else 100
-        # 약간의 여백 추가
+        # add some space
         x_range_max = x_max_val * 1.1 if x_max_val > 0 else 100
         y_range_max = y_max_val * 1.1 if y_max_val > 0 else 100
         
@@ -1075,7 +1075,7 @@ def _plotly_dep_arr_scatter_by_terminal_html(statistics_table, report_labels, un
             shapes=shapes,
         )
         # Draw gray points first, then selected scenario points last so they render on top and stay sharp
-        # others가 있으면 항상 그리기
+        # othersAlways draw if you have it
         if gray_x and gray_y:
             fig.add_trace(go.Scatter(
                 x=gray_x, y=gray_y, mode="markers", name="Other",
@@ -1162,7 +1162,7 @@ def _scenario_dep_arr_score_table(unique_ids, rep_summaries, report_labels, capa
 
 
 def _sorted_values_percentile_x_positions(n, x_use):
-    """Sorted values가 내림차순(rank 0=max)일 때 max, 97.5%, 95%, 90% 위치. 방향: 왼쪽=max, 오른쪽=90%."""
+    """Sorted valuesin descending order(rank 0=max)When max, 97.5%, 95%, 90% location. Direction: Left=max, right=90%."""
     if n <= 0 or not x_use:
         return []
     try:
@@ -1182,7 +1182,7 @@ def _sorted_values_percentile_x_positions(n, x_use):
 
 
 def _plotly_sorted_values_line_html(summaries_with_graph_data, colors, id_list=None):
-    """터미널별·출발/도착별로 각각 Sorted Values 차트 생성. 세로선=회색 점선, 가로선=Capacity 빨간 선. 반환: [(title, html), ...]"""
+    """By terminal·depart/Each by arrival Sorted Values Create chart. vertical line=gray dotted, horizontal lines=Capacity red line. return: [(title, html), ...]"""
     if not _HAS_PLOTLY or not summaries_with_graph_data:
         return []
     from collections import defaultdict
@@ -1194,9 +1194,9 @@ def _plotly_sorted_values_line_html(summaries_with_graph_data, colors, id_list=N
             term = (sm.get("focus_terminal") or "").strip()
             da = (sm.get("dep_arr") or "Dep").strip()
             agg = (sm.get("aggregate_base") or "").strip() or ""
-            # agg도 키에 포함하여 같은 터미널·Dep/Arr라도 다른 agg는 분리
+            # aggsame terminal including also key·Dep/ArrEven if it's different aggis separated
             by_combo[(term, da, agg)].append(sm)
-    # 순서: T1 Dep, T2 Dep, T1 Arr, T2 Arr (agg는 이미 필터링되어 있으므로 정렬에 포함 안 함)
+    # order: T1 Dep, T2 Dep, T1 Arr, T2 Arr (aggis already filtered so don't include it in the sort)
     combos = sorted(by_combo.keys(), key=lambda x: (0 if (x[1].upper() == "DEP") else 1, x[0], x[2]))
     out = []
     for (term, dep_arr, agg) in combos:
@@ -1266,7 +1266,7 @@ def _plotly_sorted_values_line_html(summaries_with_graph_data, colors, id_list=N
                 break
         if cap is not None:
             shapes.append(dict(type="line", x0=0, x1=1, y0=cap, y1=cap, xref="paper", yref="y", line=dict(dash="solid", color="rgba(239,68,68,0.9)", width=1.5)))
-        # agg는 이미 루프 변수에서 가져옴
+        # aggis already taken from the loop variable
         agg_label = _format_agg_for_axis(agg) if agg else "value"
         yaxis_title = f"Demand ({agg_label}/hour)"
         title = f"Sorted Values · {term} {dep_arr}"
@@ -1283,13 +1283,13 @@ def _plotly_sorted_values_line_html(summaries_with_graph_data, colors, id_list=N
 
 def load_scenarios_from_json(origin: Union[str, Path, dict, list]) -> List[dict]:
     """
-    JSON을 시나리오 dict 리스트로 로드합니다.
-    - origin: JSON 파일 경로(str/Path), 단일 시나리오 dict, 또는 시나리오 dict 리스트
+    JSONScenario dict Load into list.
+    - origin: JSON file path(str/Path), single scenario dict, or scenario dict list
     """
     if origin is None:
         return []
 
-    # 파일 경로
+    # file path
     if isinstance(origin, (str, Path)):
         path = Path(origin)
         if not path.exists():
@@ -1301,12 +1301,12 @@ def load_scenarios_from_json(origin: Union[str, Path, dict, list]) -> List[dict]
             return []
         return _normalize_to_scenario_list(data)
 
-    # 이미 dict 또는 list
+    # already dict or list
     return _normalize_to_scenario_list(origin)
 
 
 def _normalize_to_scenario_list(data: Any) -> List[dict]:
-    """단일 dict / list of dict / 그 외 → 시나리오 dict 리스트."""
+    """single dict / list of dict / Others → scenario dict list."""
     if data is None:
         return []
     if isinstance(data, list):
@@ -1331,7 +1331,7 @@ def _minimal_html_no_data():
 
 
 def _html_common_indicators_chart_wrap(kind, chart_html):
-    """Common Indicators 섹션 내 단일 차트 wrap. kind: '97.5' | '95' | 'excess'. 출력 동일 유지."""
+    """Common Indicators Single chart within section wrap. kind: '97.5' | '95' | 'excess'. output remains the same."""
     if kind == "97.5":
         return """
       <div class="chart-wrap">
@@ -1417,7 +1417,7 @@ def _html_table_from_split(split_dict, capacity=None, table_class="report-table"
 
 
 def _plotly_daily_hourly_bars_html(summary, yaxis_title="Value"):
-    """요일별 시간대별 막대 그래프 (grouped bars). summary has daily_hourly_pivot (index=time_of_day, columns=date (day), data). Returns HTML or empty string."""
+    """Bar graph by day of the week and time zone (grouped bars). summary has daily_hourly_pivot (index=time_of_day, columns=date (day), data). Returns HTML or empty string."""
     if not _HAS_PLOTLY:
         return ""
     pivot = summary.get("daily_hourly_pivot") or {}
@@ -1459,7 +1459,7 @@ def _plotly_daily_hourly_bars_html(summary, yaxis_title="Value"):
 
 
 def _plotly_stacked_by_group_html(summary, group_col_label="Group", yaxis_title="Value"):
-    """시간대별 Group별 Stacked Bar. summary has stacked_pivot (index=Time, columns=group names, data). Returns HTML or empty string."""
+    """By time zone Groupstar Stacked Bar. summary has stacked_pivot (index=Time, columns=group names, data). Returns HTML or empty string."""
     if not _HAS_PLOTLY:
         return ""
     pivot = summary.get("stacked_pivot") or {}
@@ -1507,12 +1507,12 @@ def _plotly_stacked_by_group_html(summary, group_col_label="Group", yaxis_title=
 
 
 def _render_summary_by_group_html(sbg):
-    """summary_by_group → HTML. sbg: {tabs: [{label, data}]} 또는 {index, columns, data}."""
+    """summary_by_group → HTML. sbg: {tabs: [{label, data}]} or {index, columns, data}."""
     if not sbg or not isinstance(sbg, dict):
         return ""
     tabs = sbg.get("tabs")
     if tabs and isinstance(tabs, list) and len(tabs) >= 2:
-        # 탭 UI로 렌더
+        # tab UIraw render
         container_id = "sbg_tabs_" + str(id(sbg) % 100000)
         out = [f'<div class="tabs-container" id="{container_id}">\n', '  <div class="tabs-header">\n']
         for i, t in enumerate(tabs):
@@ -1550,7 +1550,7 @@ def _render_time_series_panel(summary, agg_label):
 
 
 def _html_radar_chart_wrap(radial_html):
-    """Radar 섹션 단일 차트 wrap."""
+    """Radar section single chart wrap."""
     return """
         <div class="chart-wrap">
           <div class="plotly-embed">""" + radial_html + """</div>
@@ -1569,7 +1569,7 @@ _SCATTER_ZONE_DESC = (
 
 
 def _html_scatter_chart_wrap(chart_title, chart_html, use_zone_desc=True):
-    """Dep 97.5% vs Arr 97.5% scatter 단일 차트 wrap. use_zone_desc=False면 짧은 설명(탭 패널용)."""
+    """Dep 97.5% vs Arr 97.5% scatter single chart wrap. use_zone_desc=FalseShort Description(For tab panel)."""
     desc = _SCATTER_ZONE_DESC if use_zone_desc else "Scatter from statistics table. Compared scenarios use palette colors; other scenarios in light gray."
     return """
       <div class="chart-wrap">
@@ -1581,7 +1581,7 @@ def _html_scatter_chart_wrap(chart_title, chart_html, use_zone_desc=True):
 
 
 def _html_scatter_score_table(score_rows_agg, tns):
-    """Scenario score by location and Dep/Arr 테이블 HTML."""
+    """Scenario score by location and Dep/Arr table HTML."""
     header_cells = "".join(
         f'<th class="num">{_html.escape(str(loc))} Dep</th><th class="num">{_html.escape(str(loc))} Arr</th>' for loc in tns
     ) + '<th class="num">Total</th>'
@@ -1607,7 +1607,7 @@ def _html_scatter_score_table(score_rows_agg, tns):
 
 def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     """
-    시나리오 JSON(리스트/dict/경로)을 받아 Plotly 차트만 사용한 HTML 보고서를 생성합니다.
+    scenario JSON(list/dict/channel)take it Plotly using only charts HTML Generate a report.
     """
     if not isinstance(scenarios, list):
             scenarios = load_scenarios_from_json(scenarios)
@@ -1623,7 +1623,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     if not summaries:
         return _minimal_html_no_data()
 
-    # 시나리오 ID 기준 유일 목록 및 by_id 그룹
+    # scenario ID Based on the unique list and by_id group
     def _sid(s):
         return s.get("id") if s.get("id") else "_anonymous_%s" % id(s)
 
@@ -1639,7 +1639,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     for sid in by_id:
         by_id[sid] = sorted(by_id[sid], key=_sort_key)
 
-    # agg별로 시나리오 그룹 (같은 시나리오가 여러 agg에 나타날 수 있음 → agg 탭마다 해당 agg 데이터만 사용)
+    # aggNot much scenario group (Multiple of the same scenario aggMay appear in → agg Each tab agg data only)
     by_agg = defaultdict(lambda: defaultdict(list))
     for s in summaries:
         sid = _sid(s)
@@ -1649,13 +1649,13 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
         for sid in by_agg[agg]:
             by_agg[agg][sid] = sorted(by_agg[agg][sid], key=_sort_key)
 
-    # 시나리오별 병합 rep (한 시나리오당 하나: id, terminal_names, by_location)
+    # Merge by scenario rep (One per scenario: id, terminal_names, by_location)
     rep_summaries = [_merge_rep_from_group(by_id.get(sid) or [], sid) for sid in unique_ids]
     n_scenarios = len(unique_ids)
     if not rep_summaries:
         return _minimal_html_no_data()
 
-    # 라벨 — 위치 이름은 병합된 rep의 terminal_names 통합 (코드 내 T1/T2 없음)
+    # Label — The location name is the merged repof terminal_names integration (my code T1/T2 doesn't exist)
     seen_order = []
     for sm in rep_summaries:
         tns = sm.get("terminal_names") or []
@@ -1677,19 +1677,19 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     colors = [REPORT_SCENARIO_PALETTE[i % len(REPORT_SCENARIO_PALETTE)] for i in range(max(n_scenarios, 1))]
     id_list = unique_ids
 
-    # ——— Plotly 차트 일괄 생성 ———
+    # ——— Plotly Batch creation of charts ———
     plotly_charts = _build_comparison_bar_charts_plotly(id_list, rep_summaries, report_labels, colors)
     summaries_with_graph_data = [s for s in summaries if (s.get("graph_data") or {}).get("x_index") and (s.get("graph_data") or {}).get("y_sorted_values")]
     plotly_sorted_by_combo = _plotly_sorted_values_line_html(summaries_with_graph_data, colors, id_list) if summaries_with_graph_data else []
 
-    # 방사형 차트: statistics_table·capacity_per_series는 아래(by_id 이후)에서 생성 후 호출
+    # radial chart: statistics_table·capacity_per_seriesbelow(by_id since)Called after creation in
     plotly_radial_dep_arr_97 = ""
 
     date_range0 = (summaries[0] or {}).get("date_range") or {}
     date_start = (date_range0.get("start") or "")[:10] if isinstance(date_range0, dict) else ""
     date_end = (date_range0.get("end") or "")[:10] if isinstance(date_range0, dict) else ""
 
-    # ——— HTML 조립 (Plotly만 사용) ———
+    # ——— HTML assembly (Plotlyuse only) ———
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1761,7 +1761,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     <p class="subtitle">{n_scenarios} scenario(s) · Analysis period: {date_start} ~ {date_end}</p>
 """
 
-    # 비교 개요: Aggregate base 개수·종류, 터미널, 시나리오 목록
+    # Comparison Overview: Aggregate base count·List of types, terminals, scenarios
     aggregate_bases = sorted(set(s.get("aggregate_base") or "" for s in summaries if s.get("aggregate_base")))
     n_agg = len(aggregate_bases)
     agg_text = ", ".join(aggregate_bases) if aggregate_bases else "—"
@@ -1777,7 +1777,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     </div>
 """
 
-    # 터미널×출도착 조합 목록 (용량 초과 비율 등 표시용) — summaries 기준. Common Indicators: Dep, Arr, Both 포함
+    # terminal×List of departure and arrival combinations (For displaying capacity overage ratio, etc.) — summaries standard. Common Indicators: Dep, Arr, Both include
     _combo_key = lambda s: (s.get("focus_terminal") or "", (s.get("dep_arr") or s.get("focus_dep_arr") or "Dep").strip())
     _all_combos = set(_combo_key(s) for s in summaries)
     _dep_arr_order = {"Dep": 0, "Arr": 1, "Both": 2}
@@ -1824,7 +1824,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
                     return float(v)
         return None
 
-    # 공통 지표: Excess as % of total, Total Delay Hours, Avg Delay, Avg Seat
+    # common indicators: Excess as % of total, Total Delay Hours, Avg Delay, Avg Seat
     plotly_excess_grouped = _plotly_excess_grouped_bar_html(unique_ids, combos, _excess_for, colors) if combos else ""
     plotly_delay_grouped = _plotly_delay_hours_grouped_bar_html(unique_ids, combos, _delay_for, colors) if combos else ""
     _avg_fmt = lambda v: f"{float(v):.3f}" if v is not None and abs(float(v)) < 10 else (f"{float(v):,.1f}" if v is not None else "0")
@@ -1857,7 +1857,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
         if t and isinstance(t, list) and len(t) > 0:
             if statistics_table is None:
                 statistics_table = t
-            # agg별 시나리오 결과 테이블은 해당 agg의 export 한 번분만 사용 (전체 시나리오 행 포함, 중복 방지)
+            # aggThe star scenario results table corresponds to aggof export Use only once (Includes entire scenario rows, avoids duplication)
             if agg not in statistics_tables_by_agg:
                 statistics_tables_by_agg[agg] = [dict(row) for row in t if isinstance(row, dict)]
     plotly_radial_dep_arr_97 = _plotly_radial_dep_arr_97_html(
@@ -1869,7 +1869,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     dep_arr_score_table = _scenario_dep_arr_score_table(
         unique_ids, rep_summaries, report_labels, capacity_per_series
     )
-    # agg별 탭용: 해당 agg를 가진 시나리오만 필터 (by_agg 사용)
+    # aggFor star tab: yes aggFilter only scenarios with (by_agg use)
     def _unique_ids_and_reps_for_agg(agg):
         sids = [sid for sid in unique_ids if (by_agg.get(agg) or {}).get(sid)]
         reps = [_merge_rep_from_group((by_agg.get(agg) or {}).get(sid) or [], sid) for sid in sids]
@@ -1891,7 +1891,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
             if items_agg:
                 sorted_values_by_agg.append((agg, _format_agg_for_axis(agg) if agg else "value", items_agg))
 
-    # Time Series (요일별 테이블, 요일별 막대, Group별 Stacked Bar, Summary by Group) — agg별, 시나리오별, term·dep_arr별 패널
+    # Time Series (Table by day of the week, bar by day of the week, Groupstar Stacked Bar, Summary by Group) — aggBy star, by scenario, term·dep_arrstar panel
     time_series_by_agg = []
     agg_keys_ts = [a for a in aggregate_bases if (a or "").strip()] if aggregate_bases else [""]
     _dep_arr_order = {"Dep": 0, "Arr": 1, "Both": 2}
@@ -1947,7 +1947,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     plotly_dep_arr_97_5 = _plotly_dep_arr_single_grouped_bar_html(unique_ids, rep_summaries, report_labels, colors, percentile="97.5%", capacity_per_series=capacity_per_series, combos=combos)
     plotly_dep_arr_95 = _plotly_dep_arr_single_grouped_bar_html(unique_ids, rep_summaries, report_labels, colors, percentile="95%", capacity_per_series=capacity_per_series, combos=combos)
 
-    # Cumulative comparison: JSON Both 시나리오의 net_cumulative (Relocation_Master Cumulative profile Net cumulative와 동일)
+    # Cumulative comparison: JSON Both of the scenario net_cumulative (Relocation_Master Cumulative profile Net cumulativeSame as)
     both_scenarios = [s for s in scenarios if isinstance(s, dict) and (s.get("meta") or {}).get("dep_arr", "").strip().upper() == "BOTH" and (s.get("time_series") or s.get("cumulative"))]
     cumulative_aggs = sorted(set((s.get("meta") or {}).get("aggregate_base") or "" for s in both_scenarios))
     cumulative_aggs = [a for a in cumulative_aggs if (a or "").strip()] or [""]
@@ -1958,7 +1958,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
         if charts:
             cumulative_tabs.append((f"{agg_label} · Both (Net cumulative)", charts))
 
-    # Common Indicators: agg별로 차트 묶음 (탭용)
+    # Common Indicators: aggA lot of charts (For tabs)
     common_indicators_by_agg = []
     agg_tab_keys = [a for a in aggregate_bases if (a or "").strip()] if aggregate_bases else []
     if not agg_tab_keys and (plotly_dep_arr_97_5 or plotly_dep_arr_95 or plotly_excess_grouped or plotly_delay_grouped):
@@ -1970,7 +1970,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
         indices_agg = [unique_ids.index(sid) for sid in unique_ids_agg]
         _combos_agg_set = set(_combo_key(s) for s in summaries if (s.get("aggregate_base") or "").strip() == agg)
         combos_agg = sorted(_combos_agg_set, key=lambda x: (_dep_arr_order.get(str(x[1]).strip(), 3), x[0]))
-        # Both가 combos에 있을 때만 capacity에 Both 포함
+        # Bothgo combosonly when in capacityto Both include
         include_both_agg = any(str(c[1]).strip().upper() == "BOTH" for c in combos_agg)
         capacity_per_series_agg = _build_capacity_per_series(rep_summaries_agg, terminal_names, agg, include_both=include_both_agg)
         colors_agg = [colors[i % len(colors)] for i in indices_agg]
@@ -2043,7 +2043,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
         ) if combos_agg else ""
         common_indicators_by_agg.append((_format_agg_for_axis(agg) if agg else "value", html_97_5, html_95, html_excess, html_delay, html_avg_delay, html_avg_seat))
 
-    # Radar comparison: agg별로 차트 묶음 (탭용)
+    # Radar comparison: aggA lot of charts (For tabs)
     radar_by_agg = []
     radar_agg_keys = [a for a in aggregate_bases if (a or "").strip()] if aggregate_bases else []
     if not radar_agg_keys and plotly_radial_dep_arr_97:
@@ -2065,7 +2065,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
                 return sid in id_set_agg or sid_alt in id_set_agg
             stat_table_agg = [r for r in statistics_table if isinstance(r, dict) and _sid_in_set(r)]
         colors_agg = [colors[i % len(colors)] for i in indices_agg]
-        # agg별 statistics table 사용 — seat 포함 해당 agg 시나리오 전체(selected + others) 표시
+        # aggstar statistics table use — seat Includes applicable agg full scenario(selected + others) mark
         table_for_radial = stat_table_agg if stat_table_agg else None
         radial_html = _plotly_radial_dep_arr_97_html(
             table_for_radial, report_labels, unique_ids_agg, rep_summaries_agg, colors_agg, capacity_per_series=capacity_per_series_agg, aggregate_base=agg
@@ -2073,7 +2073,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
         if radial_html:
             radar_by_agg.append((_format_agg_for_axis(agg) if agg else "value", radial_html))
 
-    # Dep 97.5% vs Arr 97.5% scatter: agg별 탭용
+    # Dep 97.5% vs Arr 97.5% scatter: aggFor star tab
     scatter_by_agg = []
     scatter_agg_keys = [a for a in aggregate_bases if (a or "").strip()] if aggregate_bases else []
     if not scatter_agg_keys and plotly_dep_arr_scatter_by_terminal:
@@ -2081,14 +2081,14 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     for agg in scatter_agg_keys:
         unique_ids_agg, rep_summaries_agg = _unique_ids_and_reps_for_agg(agg)
         stat_table_agg = statistics_tables_by_agg.get(agg)
-        # 해당 agg에 선택된 시나리오가 없어도 statistics_table에 데이터가 있으면 scatter 그림 (전부 other로 표시)
+        # corresponding aggEven if there is no scenario selected in statistics_tableIf there is data in scatter painting (entire otherdisplayed as)
         has_selected = bool(unique_ids_agg)
         has_table = bool(stat_table_agg and len(stat_table_agg) > 0)
         if not has_selected and not has_table:
             continue
         indices_agg = [unique_ids.index(sid) for sid in unique_ids_agg] if unique_ids_agg else []
         capacity_per_series_agg = _build_capacity_per_series(rep_summaries_agg, terminal_names, agg, include_both=True)
-        # 해당 agg의 statistics_table 전체 사용 → scatter에서 선택된 시나리오(팔레트) + 나머지(other, 회색) 모두 표시
+        # corresponding aggof statistics_table full use → scatterScenario selected from(palette) + remain(other, gray) show all
         table_for_scatter = stat_table_agg if stat_table_agg else None
         colors_agg = [colors[i % len(colors)] for i in indices_agg]
         scatter_list = _plotly_dep_arr_scatter_by_terminal_html(
@@ -2122,7 +2122,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
             return "".join(parts)
 
         if len(ids_list) >= 2:
-            # 공통 테이블: Location, Dep/Arr 한 번만 왼쪽에, 시나리오별로 컬럼 묶음
+            # common table: Location, Dep/Arr Group columns by scenario, once on the left
             header_cells = "<th>Location</th><th>Dep/Arr</th>"
             for i, sid in enumerate(ids_list):
                 c = colors_list[i % len(colors_list)]
@@ -2149,7 +2149,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
                             peak_97 = float(peak_97) if peak_97 is not None else 0
                         except (TypeError, ValueError):
                             peak_97 = 0
-                        # Directional: Both 있을 때만. Dep=Dep/Both, Arr=Arr/Both, Both=1
+                        # Directional: Both Only when there is. Dep=Dep/Both, Arr=Arr/Both, Both=1
                         both_97_val = both_d.get("97.5%")
                         try:
                             both_97_val = float(both_97_val) if both_97_val is not None else 0
@@ -2196,7 +2196,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
         </div>""")
             return "\n".join(out)
 
-        # 시나리오 1개: 기존 카드 형태 (Location, Dep/Arr 포함 테이블 1개)
+        # 1 scenario: existing card format (Location, Dep/Arr Includes 1 table)
         for i, sid in enumerate(ids_list):
             c = colors_list[i % len(colors_list)]
             rep = reps_list[i] if i < len(reps_list) else {}
@@ -2239,7 +2239,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
                         peak_97 = float(peak_97) if peak_97 is not None else 0
                     except (TypeError, ValueError):
                         peak_97 = 0
-                    # Directional: Both 있을 때만
+                    # Directional: Both Only when there is
                     if da == "Both":
                         directional_str = "1"
                     elif both_97_val > 0:
@@ -2292,7 +2292,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     use_top_agg_tabs = len(summary_agg_keys) >= 2
 
     def _render_single_agg_body(agg_idx, agg):
-        """단일 agg에 대한 전체 리포트 본문(섹션들) HTML. 상단 agg 탭용."""
+        """single aggFull report text about(sections) HTML. top agg For tabs."""
         out = []
         agg_fmt = _format_agg_for_axis(agg) if (agg or "").strip() else "value"
         uids_agg, reps_agg = _unique_ids_and_reps_for_agg(agg)
@@ -2309,7 +2309,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
         out.append("""      </div>
     </section>
 """)
-        # 2. Common Indicators (섹션은 내용이 있을 때만)
+        # 2. Common Indicators (Sections only have content)
         common_97_5 = common_95 = common_excess = common_delay = common_avg_delay = common_avg_seat = None
         for _item in common_indicators_by_agg:
             if _item[0] == agg_fmt:
@@ -2336,7 +2336,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
             if html_avg_seat:
                 out.append(_html_common_indicators_chart_wrap("avg_seat", html_avg_seat))
             out.append("    </section>\n")
-        # 3. Time Series (요일별 테이블, 요일별 막대, Group Stacked Bar, Summary by Group) — 시나리오별 탭, 각 시나리오 내 term·dep_arr 탭
+        # 3. Time Series (Table by day of the week, bar by day of the week, Group Stacked Bar, Summary by Group) — Scenario-specific tabs, within each scenario term·dep_arr tab
         ts_scenario_list = None
         for _agg, _label, _scenario_list in time_series_by_agg:
             if _label == agg_fmt or _agg == agg:
@@ -2545,7 +2545,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
       </div>
 """)
             out.append("    </section>\n")
-        # 7. Scatter (내용 있을 때만 섹션·차트 출력, 빈 프레임 방지)
+        # 7. Scatter (Section only when there is content·Chart output, avoid blank frames)
         scatter_list, score_rows_agg = None, None
         for _al, _sl, _sr in scatter_by_agg:
             if _al == agg_fmt:
@@ -2623,7 +2623,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     </section>
 """
 
-        # ——— Common Indicators (비탭 레이아웃) ———
+        # ——— Common Indicators (Non-tab layout) ———
         html += """
         <section class="section">
           <h2 class="section-title">Common Indicators (bar charts)</h2>
@@ -2801,14 +2801,14 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     """
         html += "        </section>\n"
 
-        # ——— Time Series: agg별 탭, 각 agg 내 location·Dep/Arr별 패널 ———
+        # ——— Time Series: aggstar tab, each agg my location·Dep/Arrstar panel ———
         if time_series_by_agg:
             # #region agent log
             try:
                 import time as _t
                 _ts_layout = "multi_agg" if len(time_series_by_agg) >= 2 else "single_agg"
                 _ts_scenario_counts = [len(sc_list) for _, _, sc_list in time_series_by_agg]
-                with open(r"c:\Users\qkrru\Desktop\바탕 화면\creative_code\DMK_레포지토리\simulation_module\yeah_construction - 20250118\.cursor\debug.log", "a", encoding="utf-8") as _f:
+                with open(r"c:\Users\qkrru\Desktop\desktop\creative_code\DMK_repository\simulation_module\yeah_construction - 20250118\.cursor\debug.log", "a", encoding="utf-8") as _f:
                     _f.write(json.dumps({"id":"log_ts_section","timestamp":int(_t.time()*1000),"location":"generate_scenario_report_rev2:Time_Series","message":"Time Series section build","data":{"layout":_ts_layout,"agg_count":len(time_series_by_agg),"scenario_counts":_ts_scenario_counts},"hypothesisId":"H3"}) + "\n")
             except Exception:
                 pass
@@ -3028,7 +3028,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     </section>
 """
 
-        # ——— Sorted Values: agg별 탭, 각 agg 내 Dep/Arr/Both 탭 ———
+        # ——— Sorted Values: aggstar tab, each agg my Dep/Arr/Both tab ———
         if len(sorted_values_by_agg) >= 2:
             html += """
     <section class="section">
@@ -3209,7 +3209,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
           </script>
         </section>
     """
-    # 방사형 비교: agg별 탭 (상단 movement|seat 탭 사용 시에는 각 패널 안에 이미 있으므로 여기서는 생략)
+    # Radial comparison: aggstar tab (top movement|seat When using tabs, they are already inside each panel, so they are omitted here.)
     if not use_top_agg_tabs and radar_by_agg:
         html += """
     <section class="section">
@@ -3255,7 +3255,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     </section>
 """
 
-    # Cumulative 비교: Both가 있을 때만 (상단 agg 탭 사용 시에는 각 패널 안에 있으므로 생략)
+    # Cumulative comparison: BothOnly when there is (top agg When using tabs, they are omitted as they are within each panel.)
     if not use_top_agg_tabs and cumulative_tabs:
         html += """
     <section class="section">
@@ -3302,7 +3302,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
     </section>
 """
 
-    # Dep vs Arr 97.5% scatter per terminal — agg별 탭 (상단 agg 탭 사용 시에는 각 패널 안에 있으므로 생략)
+    # Dep vs Arr 97.5% scatter per terminal — aggstar tab (top agg When using tabs, they are omitted as they are within each panel.)
     if not use_top_agg_tabs and (scatter_by_agg or plotly_dep_arr_scatter_by_terminal):
         html += """
     <section class="section">
@@ -3340,7 +3340,7 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
       </div>
 """
         else:
-            # 단일 agg 또는 fallback: 탭 없이 한 블록
+            # single agg or fallback: One block without tabs
             if scatter_by_agg:
                 _agg_label, scatter_list, score_rows_agg = scatter_by_agg[0]
                 for chart_title, chart_html in scatter_list:
@@ -3404,14 +3404,14 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
 
 
 def main():
-    """CLI: 인자로 JSON 경로를 받거나, 없으면 Scenarios 폴더에서 *.json 로드 후 보고서 생성."""
+    """CLI: By the Son of Man JSON Receives a path or doesn't have it Scenarios in folder *.json Generate report after loading."""
     import sys
 
     if len(sys.argv) >= 2:
         origin = sys.argv[1]
         scenarios = load_scenarios_from_json(origin)
     else:
-        # Scenarios 폴더에서 JSON 파일들 로드 (원본 모듈 의존 없음)
+        # Scenarios in folder JSON load files (No dependency on original modules)
         scenarios = []
         if SCENARIOS_DIR.exists():
             for path in sorted(SCENARIOS_DIR.glob("*.json")):
@@ -3432,8 +3432,8 @@ if __name__ == "__main__":
 
 
 
-# 클로드에게 학습시킨 자료
-# 이 html 리포트를 학습하고, 여기서 찾을수 있는 인사이트를 찾고, 
-# 이 리포트 html 구조를 그대로 유지한채로 이 그래프들에 대한 인사이트를 그래프별로 추가해주고
-# 종합 인사이트를 아래쪽에 추가해줘!
-# 그리고 이 html을 기반으로 종합 인사이트를 적을때 너가 추가로 그래프를 생성해도 되! 다만 실제 데이터를 기반으로 잘 써야해
+# Materials taught to Claude
+# this html Study the report and discover the insights you can find here., 
+# this report html Adds insight into these graphs for each graph while maintaining the structure.
+# Add comprehensive insights below!
+# And this htmlWhen writing comprehensive insights based on , you can create additional graphs! However, it must be written well based on actual data.
