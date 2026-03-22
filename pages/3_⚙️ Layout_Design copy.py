@@ -254,6 +254,7 @@ def _style_root_css_from_information(info: dict) -> str:
     _gv_bg = _grid_view_background(info)
     _rp_bg_op = _right_panel_background_opacity(info)
     _rp_mix_pct = f"{round(_rp_bg_op * 100)}%"
+    rp_style = st.get("rightPanel") if isinstance(st.get("rightPanel"), dict) else {}
 
     def _emit(name: str, value) -> str | None:
         if value is None:
@@ -301,6 +302,7 @@ def _style_root_css_from_information(info: dict) -> str:
         ("--style-fs-col-s", fs.get("colS")),
         ("--style-fs-col-sd", fs.get("colSd")),
         ("--style-fs-col-e", fs.get("colE")),
+        ("--style-fs-col-rot", fs.get("colRot")),
     ]
     rwy = st.get("rwySepTimeline") if isinstance(st.get("rwySepTimeline"), dict) else {}
     pairs_rwy = [
@@ -347,13 +349,36 @@ def _style_root_css_from_information(info: dict) -> str:
             row = _emit(name, val)
             if row:
                 lines.append(row)
+    def _rp_px(var_name: str, key: str, default: int) -> None:
+        raw = rp_style.get(key, default)
+        try:
+            n = int(float(raw))
+        except (TypeError, ValueError):
+            n = default
+        row = _emit(var_name, f"{max(0, n)}px")
+        if row:
+            lines.append(row)
+
     for name, val in (
         ("--style-grid-view-bg", _gv_bg),
         ("--style-right-panel-bg-mix-percent", _rp_mix_pct),
+        ("--style-right-panel-toggle-bg", rp_style.get("panelToggleBg")),
+        ("--style-right-panel-toggle-color", rp_style.get("panelToggleColor")),
+        ("--style-right-panel-toggle-border", rp_style.get("panelToggleBorder")),
+        ("--style-right-panel-width-half", rp_style.get("panelWidthHalf")),
+        ("--style-right-panel-width-full", rp_style.get("panelWidthFull")),
+        (
+            "--layout-toolbar-right",
+            rp_style.get("panelWidthFull") or "50vw",
+        ),
     ):
         row = _emit(name, val)
         if row:
             lines.append(row)
+    _rp_px("--style-right-panel-resize-collapsed", "panelResizeCollapsedPx", 44)
+    _rp_px("--style-right-panel-resize-collapse-below", "panelResizeCollapseBelowPx", 96)
+    _rp_px("--style-right-panel-resize-min-expanded", "panelResizeMinExpandedPx", 220)
+    _rp_px("--style-right-panel-resize-viewport-margin", "panelResizeViewportMarginPx", 8)
     lines.append("}")
     return "\n".join(lines)
 
@@ -403,7 +428,7 @@ html = f"""
     #app {{ position: absolute; inset: 0; width: 100%; height: 100%; }}
     #canvas-container {{ position: absolute; inset: 0; cursor: crosshair; background: var(--style-grid-view-bg, #252525); }}
     #grid-canvas {{ width: 100%; height: 100%; display: block; }}
-    #toolbar {{ position: absolute; bottom: 56px; right: 50vw; left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 30; pointer-events: auto; }}
+    #toolbar {{ position: absolute; bottom: 56px; right: var(--layout-toolbar-right, var(--style-right-panel-width-full, 50vw)); left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 30; pointer-events: auto; transition: right 0.2s cubic-bezier(0.16, 1, 0.3, 1); }}
     #sim-controls-container {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-elevated); transition: var(--ui-transition); }}
     #sim-controls-container .tool-btn {{ margin: 0; border: none; border-radius: 4px; font-size: 11px; font-weight: 500; padding: 6px 12px; background: var(--ui-bg-overlay); color: var(--ui-text-primary); cursor: pointer; transition: var(--ui-transition); }}
     #sim-controls-container .tool-btn:hover {{ background: var(--ui-bg-surface); }}
@@ -418,8 +443,9 @@ html = f"""
     #view-toggle .tool-btn:not(.active) {{ background: transparent; color: var(--ui-text-secondary); }}
     #view-toggle .tool-btn:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
     #info-bar {{ display: none; position: absolute; bottom: 8px; left: 10px; right: 10px; padding: 8px 12px; min-height: 2.2em; border-radius: 8px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); color: var(--ui-text-secondary); font-size: 12px; align-items: center; pointer-events: none; z-index: 5; }}
-    #right-panel {{ position: absolute; top: 0; right: 0; bottom: 0; width: 50vw; background: color-mix(in srgb, var(--ui-bg-surface) var(--style-right-panel-bg-mix-percent, 95%), transparent); border-left: 1px solid var(--ui-border-default); padding: 12px; font-size: 12px; overflow-y: auto; z-index: 20; transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1); }}
-    #right-panel.collapsed {{ width: 44px; min-width: 44px; padding: 8px; overflow: hidden; }}
+    #right-panel {{ position: absolute; top: 0; right: 0; bottom: 0; width: var(--style-right-panel-width-full, 50vw); max-width: calc(100vw - var(--style-right-panel-resize-viewport-margin, 8px)); background: color-mix(in srgb, var(--ui-bg-surface) var(--style-right-panel-bg-mix-percent, 95%), transparent); border-left: 1px solid var(--ui-border-default); padding: 12px; font-size: 12px; overflow-y: auto; z-index: 20; transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1); }}
+    #right-panel.panel-resize-dragging {{ transition: none !important; }}
+    #right-panel.collapsed {{ width: var(--style-right-panel-resize-collapsed, 44px) !important; min-width: var(--style-right-panel-resize-collapsed, 44px); max-width: none; padding: 8px; overflow: hidden; }}
     #right-panel.collapsed .panel-content {{ display: none; }}
     #panel-toggle {{
       position: absolute;
@@ -429,22 +455,27 @@ html = f"""
       width: 32px;
       height: 84px;
       border-radius: 9999px 0 0 9999px;
-      background: var(--ui-bg-elevated);
-      color: var(--ui-text-primary);
-      cursor: pointer;
+      background: var(--style-right-panel-toggle-bg, #3d3d44);
+      color: var(--style-right-panel-toggle-color, #ffffff);
+      border: 1px solid var(--style-right-panel-toggle-border, rgba(255,255,255,0.28));
+      cursor: ew-resize;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
       font-size: 16px;
       font-weight: 600;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.45);
       backdrop-filter: blur(8px);
       z-index: 30;
       transition: var(--ui-transition);
     }}
     #panel-toggle:hover {{
-      background: var(--ui-bg-overlay);
+      background: var(--ui-accent-muted);
       color: var(--ui-accent);
+      border-color: var(--ui-accent-ring);
     }}
     #panel-toggle:focus-visible {{ outline: none; box-shadow: 0 0 0 2px var(--ui-accent-muted), 0 0 0 1px var(--ui-accent-ring); }}
     .section-title {{ font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ui-text-secondary); margin: 12px 0 4px 0; }}
@@ -495,6 +526,8 @@ html = f"""
     .flight-schedule-table th.flight-col-s {{ color: var(--style-fs-col-s, #22c55e); }}
     .flight-schedule-table th.flight-col-sd {{ color: var(--style-fs-col-sd, #007aff); }}
     .flight-schedule-table th.flight-col-e {{ color: var(--style-fs-col-e, #ff69b4); }}
+    .flight-schedule-table th.flight-col-e.flight-col-rot,
+    .flight-schedule-table td.flight-col-e.flight-col-rot {{ color: var(--style-fs-col-rot, #ffffff); }}
     .flight-schedule-table .flight-td-reg {{ font-weight:500; min-width:72px; }}
     .flight-schedule-table .flight-td-time {{ min-width:1em; }}
     .flight-schedule-table .flight-td-select {{ padding:4px 6px 4px 0; min-width:0; }}
@@ -503,6 +536,10 @@ html = f"""
     .flight-config-input {{ width:72px; font-size:11px; text-align:right; }}
     .flight-config-table th.sticky-col,
     .flight-config-table td.sticky-col {{ position:sticky; left:0; z-index:2; background:rgba(17,24,39,0.98); }}
+    .flight-config-table thead tr th:nth-child(2),
+    .flight-config-table thead tr th:nth-child(3) {{ background: var(--ui-bg-elevated); color: var(--ui-text-primary); }}
+    .flight-config-table tbody tr td:nth-child(2),
+    .flight-config-table tbody tr td:nth-child(3) {{ background: transparent; color: var(--ui-text-primary); }}
     /* Allocation Gantt (Apron × Time, 10% height increase)
        - Fixed height makes horizontal scrollbar always appear at bottom of viewport (Scroll only the right column)
        - vertical scroll: .alloc-gantt-scroll-col + .alloc-gantt-label-col (JSsync with)
@@ -692,11 +729,68 @@ html = f"""
     .rwysep-table th, .rwysep-table td {{ border:1px solid var(--ui-border-subtle); padding:4px 6px; text-align:center; }}
     .rwysep-table th {{ background:var(--ui-bg-elevated); color:var(--ui-text-secondary); font-size:10px; letter-spacing:0.04em; text-transform:uppercase; }}
     .rwysep-table input {{ width:56px; background:var(--ui-bg-input); border:1px solid var(--ui-border-default); color:var(--ui-text-primary); font-size:10px; padding:2px 4px; text-align:center; border-radius:4px; }}
+    .kpi-shell {{ display:flex; flex-direction:column; gap:12px; margin-top:8px; }}
+    .kpi-toolbar {{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:linear-gradient(180deg, rgba(124, 106, 247, 0.16), rgba(28, 28, 31, 0.92)); }}
+    .kpi-toolbar-copy {{ min-width:0; }}
+    .kpi-toolbar-eyebrow {{ font-size:10px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:#c4b5fd; }}
+    .kpi-toolbar-title {{ margin-top:6px; font-size:18px; font-weight:600; line-height:1.3; color:var(--ui-text-primary); }}
+    .kpi-toolbar-subtitle {{ margin-top:6px; font-size:11px; line-height:1.55; color:var(--ui-text-secondary); max-width:520px; }}
+    .kpi-status-chip {{ flex-shrink:0; display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border-radius:9999px; background:rgba(13, 13, 15, 0.55); border:1px solid rgba(255,255,255,0.12); color:var(--ui-text-primary); font-size:10px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }}
+    .kpi-status-chip::before {{ content:''; width:8px; height:8px; border-radius:9999px; background:var(--ui-accent); box-shadow:0 0 0 4px rgba(124, 106, 247, 0.16); }}
+    #kpiDashboard {{ display:flex; flex-direction:column; gap:12px; }}
+    .kpi-summary-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; }}
+    .kpi-card {{ position:relative; overflow:hidden; padding:16px; border-radius:14px; border:1px solid rgba(124, 106, 247, 0.24); background:linear-gradient(180deg, rgba(124, 106, 247, 0.20), rgba(44, 33, 73, 0.58) 42%, rgba(20, 20, 22, 0.98)); box-shadow:0 8px 24px rgba(0,0,0,0.18); }}
+    .kpi-card::after {{ content:''; position:absolute; inset:0 auto auto 0; width:100%; height:1px; background:linear-gradient(90deg, rgba(255,255,255,0.16), rgba(255,255,255,0)); pointer-events:none; }}
+    .kpi-card.accent {{ background:linear-gradient(180deg, rgba(124, 106, 247, 0.22), rgba(44, 33, 73, 0.60) 42%, rgba(20, 20, 22, 0.98)); border-color:rgba(124, 106, 247, 0.26); }}
+    .kpi-card.success {{ background:linear-gradient(180deg, rgba(124, 106, 247, 0.20), rgba(44, 33, 73, 0.56) 42%, rgba(20, 20, 22, 0.98)); border-color:rgba(124, 106, 247, 0.22); }}
+    .kpi-card.warning {{ background:linear-gradient(180deg, rgba(124, 106, 247, 0.20), rgba(44, 33, 73, 0.56) 42%, rgba(20, 20, 22, 0.98)); border-color:rgba(124, 106, 247, 0.22); }}
+    .kpi-card.danger {{ background:linear-gradient(180deg, rgba(124, 106, 247, 0.20), rgba(44, 33, 73, 0.56) 42%, rgba(20, 20, 22, 0.98)); border-color:rgba(124, 106, 247, 0.22); }}
+    .kpi-card-label {{ font-size:10px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--ui-text-secondary); }}
+    .kpi-card-value {{ margin-top:8px; font-size:24px; font-weight:700; line-height:1.1; color:var(--ui-text-primary); }}
+    .kpi-card-meta {{ margin-top:8px; font-size:11px; line-height:1.55; color:var(--ui-text-secondary); }}
+    .kpi-card-submeta {{ margin-top:6px; font-size:10px; color:var(--ui-text-muted); }}
+    .kpi-panel-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }}
+    .kpi-panel {{ padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
+    .kpi-panel-header {{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }}
+    .kpi-panel-title {{ font-size:13px; font-weight:600; color:var(--ui-text-primary); }}
+    .kpi-panel-badge {{ padding:4px 8px; border-radius:9999px; background:var(--ui-bg-overlay); border:1px solid var(--ui-border-subtle); color:var(--ui-text-secondary); font-size:10px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }}
+    .kpi-metric-list {{ display:flex; flex-direction:column; gap:10px; }}
+    .kpi-metric-row {{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding-top:10px; border-top:1px solid var(--ui-border-subtle); }}
+    .kpi-metric-row:first-child {{ padding-top:0; border-top:none; }}
+    .kpi-metric-label {{ font-size:11px; color:var(--ui-text-secondary); line-height:1.45; }}
+    .kpi-metric-values {{ text-align:right; }}
+    .kpi-metric-primary {{ font-size:15px; font-weight:700; color:#ffffff; }}
+    .kpi-metric-secondary {{ margin-top:4px; font-size:10px; color:var(--ui-text-muted); }}
+    .kpi-chart-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px; }}
+    .kpi-chart-card {{ padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
+    .kpi-chart-head {{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }}
+    .kpi-chart-title {{ font-size:13px; font-weight:600; color:var(--ui-text-primary); }}
+    .kpi-chart-subtitle {{ margin-top:4px; font-size:11px; line-height:1.45; color:var(--ui-text-secondary); }}
+    .kpi-chart-legend {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }}
+    .kpi-legend-item {{ display:inline-flex; align-items:center; gap:6px; font-size:10px; color:var(--ui-text-secondary); }}
+    .kpi-legend-swatch {{ width:10px; height:10px; border-radius:9999px; }}
+    .kpi-chart-scroll {{ overflow-x:auto; overflow-y:hidden; padding-bottom:4px; }}
+    .kpi-chart-frame {{ min-width:100%; }}
+    .kpi-chart-frame text {{ font-family:var(--ui-font); }}
+    .kpi-chart-axis {{ fill:var(--ui-text-secondary); font-size:10px; }}
+    .kpi-chart-grid-line {{ stroke:rgba(255,255,255,0.08); stroke-width:1; }}
+    .kpi-chart-dot {{ fill:#f0f0f2; stroke:#0d0d0f; stroke-width:2; }}
+    .kpi-detail-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px; }}
+    .kpi-table-card {{ padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
+    .kpi-table-wrap {{ margin-top:12px; max-height:340px; overflow:auto; border-radius:12px; border:1px solid var(--ui-border-subtle); }}
+    .kpi-table {{ width:100%; min-width:100%; border-collapse:collapse; }}
+    .kpi-table th {{ position:sticky; top:0; z-index:1; padding:10px 12px; background:var(--ui-bg-surface); color:var(--ui-text-secondary); font-size:10px; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; text-align:left; border-bottom:1px solid var(--ui-border-default); }}
+    .kpi-table td {{ padding:10px 12px; font-size:11px; color:var(--ui-text-primary); border-bottom:1px solid var(--ui-border-subtle); white-space:nowrap; }}
+    .kpi-table tr:hover td {{ background:rgba(255,255,255,0.02); }}
+    .kpi-table tr.kpi-row-highlight td {{ background:rgba(124, 106, 247, 0.08); }}
+    .kpi-badge {{ display:inline-flex; align-items:center; padding:4px 8px; border-radius:9999px; font-size:10px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase; border:1px solid transparent; }}
+    .kpi-badge.ok {{ background:rgba(61, 214, 140, 0.14); border-color:rgba(61, 214, 140, 0.3); color:#b8f0d0; }}
+    .kpi-badge.fail {{ background:rgba(248, 113, 113, 0.14); border-color:rgba(248, 113, 113, 0.3); color:#fca5a5; }}
+    .kpi-empty-state {{ padding:28px 16px; border-radius:14px; border:1px dashed var(--ui-border-default); background:rgba(255,255,255,0.02); text-align:center; color:var(--ui-text-secondary); font-size:11px; line-height:1.6; }}
     #api-warning-banner {{ display: none; background: var(--ui-error-bg); color: var(--ui-error-text); padding: 10px 12px; font-size: 11px; border-radius: 8px; margin-bottom: 12px; line-height: 1.45; border: 1px solid var(--ui-error-border); }}
     #api-warning-banner strong {{ color: var(--ui-text-primary); font-weight: 600; }}
     #flight-tooltip {{ position: absolute; pointer-events: none; padding: 4px 8px; font-size: 11px; border-radius: 6px; background: var(--ui-bg-elevated); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); display: none; z-index: 40; box-shadow: 0 1px 3px rgba(0,0,0,0.4); max-width: 280px; }}
-    #btnRunSimulation {{ background: var(--ui-accent) !important; color: var(--ui-bg-base) !important; font-weight: 600; }}
-    #btnRunSimulation:hover {{ background: var(--ui-accent-hover) !important; filter: brightness(1.06); }}
+    #btnRunSimulation {{ margin-left: 8px; }}
     #remoteTerminalAccess {{ margin-top: 4px; padding: 8px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-input); font-size: 11px; color: var(--ui-text-primary); max-height: 120px; overflow: auto; }}
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -721,6 +815,7 @@ html = f"""
         <button class="tool-btn" id="btnView3D" title="3D orbit view">3D</button>
         <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
         <button class="tool-btn" id="btnGlobalUpdate" title="Refresh all views and calculations" style="margin-left:8px;">Update</button>
+        <button type="button" class="tool-btn" id="btnRunSimulation" title="Run simulation (requires API)">Run Sim</button>
       </div>
     </div>
     <div id="canvas-container">
@@ -732,7 +827,7 @@ html = f"""
     </div>
     <div id="flight-tooltip"></div>
     <div id="right-panel">
-      <button id="panel-toggle" title="Toggle panel">◀</button>
+      <button type="button" id="panel-toggle" title="Drag to resize; click toggles open/closed">◀</button>
       <div class="panel-content">
         <div id="api-warning-banner">
           <strong>API Not connected</strong><br/>
@@ -744,7 +839,7 @@ html = f"""
           <button type="button" class="right-panel-tab" data-tab="flight">Flight</button>
           <button type="button" class="right-panel-tab" data-tab="rwysep">Runway</button>
           <button type="button" class="right-panel-tab" data-tab="allocation">Apron</button>
-          <button type="button" class="right-panel-tab" data-tab="simulation">Simulation</button>
+          <button type="button" class="right-panel-tab" data-tab="simulation">KPI</button>
           <button type="button" class="right-panel-tab" data-tab="saveload">Save/Load</button>
         </div>
 
@@ -760,6 +855,7 @@ html = f"""
           <option value="runwayTaxiway">Runway Taxiway</option>
           <option value="taxiway">Taxiway</option>
           <option value="apronTaxiway">Apron Taxiway</option>
+          <option value="edge">Edge</option>
         </select>
 
         <div id="settings-grid" class="settings-pane">
@@ -808,6 +904,9 @@ html = f"""
             <!-- Terminal checkboxes are rendered dynamically -->
           </div>
           <button class="small draw-toggle-btn" id="btnRemoteDraw">Draw</button>
+        </div>
+        <div id="settings-edge" class="settings-pane" style="display:none;">
+          <p style="font-size:11px;color:#9ca3af;line-height:1.45;margin:0;">Graph edges are derived from the current taxiway network (path graph). They are not saved in layout JSON. Click a segment on the map or pick an item in the list. Names 001–999 are assigned in stable graph order.</p>
         </div>
         <div id="settings-taxiway" class="settings-pane" style="display:none;">
           <label>Name</label>
@@ -866,7 +965,7 @@ html = f"""
           <div class="section-title">Flight</div>
           <div class="layout-save-load-tabs" style="margin-top:4px;">
             <button type="button" class="layout-save-load-tab flight-subtab active" data-flight-subtab="schedule">Flight Schedule</button>
-            <button type="button" class="layout-save-load-tab flight-subtab" data-flight-subtab="config">Flight Configuration</button>
+            <button type="button" class="layout-save-load-tab flight-subtab" data-flight-subtab="config">Arrival Configuration</button>
           </div>
           <!-- Arr / Dep The choice is reserved for internal compatibility., UIhidden in -->
           <label style="display:none;">Arr / Dep</label>
@@ -898,7 +997,7 @@ html = f"""
           </div>
 
           <div id="flightPaneConfig" style="display:none;margin-top:8px;">
-            <div class="section-title">Flight Configuration</div>
+            <div class="section-title">Arrival Configuration</div>
             <div id="flightConfigList" class="obj-list"></div>
           </div>
         </div>
@@ -935,8 +1034,18 @@ html = f"""
         </div>
 
         <div id="tab-simulation" class="tab-content">
-          <div class="section-title">Simulation</div>
-          <button type="button" class="small" id="btnRunSimulation">Run Simulation</button>
+          <div class="section-title">KPI</div>
+          <div class="kpi-shell">
+            <div class="kpi-toolbar">
+              <div class="kpi-toolbar-copy">
+                <div class="kpi-toolbar-eyebrow">Operations Dashboard</div>
+                <div class="kpi-toolbar-title">High-impact KPI snapshot for apron, runway, and delay performance</div>
+                <div class="kpi-toolbar-subtitle">This dashboard is rendered only on the initial page load and when you click <strong>Update</strong>, so the KPI view stays stable while you edit schedules and layouts.</div>
+              </div>
+              <div class="kpi-status-chip" id="kpiSnapshotStatus">Initializing snapshot</div>
+            </div>
+            <div id="kpiDashboard"></div>
+          </div>
         </div>
 
         <div id="tab-saveload" class="tab-content">
@@ -1129,6 +1238,8 @@ html = f"""
       apronLinkDrawing: false,
       apronLinkTemp: null,
       hoverCell: null,
+      vttArrCacheRev: 0,
+      derivedGraphEdges: [],
     }};
     let hookSyncFlightPanelFromSelection = null;
     const DEFAULT_AIRLINE_CODES = (function() {{
@@ -1213,16 +1324,39 @@ html = f"""
       if (typ === 'remote') return state.remoteStands.find(r => r.id === idr);
       if (typ === 'taxiway') return state.taxiways.find(tw => tw.id === idr);
       if (typ === 'apronLink') return state.apronLinks.find(lk => lk.id === idr);
+      if (typ === 'layoutEdge') return (state.derivedGraphEdges || []).find(function(e) {{ return e.id === idr; }});
       if (typ === 'flight') return state.flights.find(f => f.id === idr);
       return null;
     }}
     function removeLayoutObjectFromState(type, id) {{
+      const removedTaxiway = (type === 'taxiway')
+        ? (state.taxiways || []).find(function(tw) {{ return tw.id === id; }})
+        : null;
       if (type === 'terminal') state.terminals = state.terminals.filter(t => t.id !== id);
       else if (type === 'pbb') state.pbbStands = state.pbbStands.filter(p => p.id !== id);
       else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
       else if (type === 'taxiway') state.taxiways = state.taxiways.filter(tw => tw.id !== id);
       else if (type === 'apronLink') state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
       else if (type === 'flight') state.flights = state.flights.filter(f => f.id !== id);
+      else if (type === 'layoutEdge') {{}}
+      if (removedTaxiway) {{
+        if (removedTaxiway.pathType === 'runway_exit') {{
+          (state.flights || []).forEach(function(f) {{
+            if (!f || f.sampledArrRet !== id) return;
+            f.sampledArrRet = null;
+            f.arrRetFailed = false;
+            f.arrRotSec = null;
+            f.arrRetDistM = null;
+            f.arrVRetInMs = null;
+            f.arrVRetOutMs = null;
+            f.__schedRetRotRev = null;
+            f.__schedVttArrRev = null;
+            f.__schedVttArrMin = null;
+            f.noWayArr = false;
+          }});
+        }}
+        if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
+      }}
     }}
     function syncPathFieldVisibilityForPathType(pt) {{
       const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
@@ -2316,6 +2450,7 @@ html = f"""
 
     function syncSettingsPaneToMode() {{
       const mode = settingModeSelect ? settingModeSelect.value : 'grid';
+      if (mode !== 'edge' && state.selectedObject && state.selectedObject.type === 'layoutEdge') state.selectedObject = null;
       document.querySelectorAll('.settings-pane').forEach(el => {{ el.style.display = 'none'; }});
       const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
       const pane = document.getElementById('settings-' + paneKey);
@@ -2959,9 +3094,23 @@ html = f"""
       return opts.join('');
     }}
 
+    // VTT(Arr) + RET/ROT(arrRotSec) share state.vttArrCacheRev; bump on Update / forced RET resample only.
+    function bumpVttArrCacheRev() {{
+      state.vttArrCacheRev = (state.vttArrCacheRev | 0) + 1;
+    }}
     // Flight Schedule and S(d) same in calculation VTT(Arr) Helpers for using definitions
-    // ※ Always recalculate based on the current route,/Apron/Cache is not used so that path changes are reflected immediately.
+    // ※ Path/RET change: bump revision (Update or renderFlightList force RET) so VTT is recomputed once per flight.
     function getBaseVttArrMinutes(f) {{
+      if (!f) return 0;
+      const rev = state.vttArrCacheRev | 0;
+      if (f.__schedVttArrRev === rev && f.__schedVttArrMin != null && isFinite(f.__schedVttArrMin)) {{
+        return f.__schedVttArrMin;
+      }}
+      if (typeof sampleArrRetRotForFlightIfNeeded === 'function') {{
+        const retStatsAll = getScheduleRetStatsAll();
+        const rotCfgMap = {{}};
+        sampleArrRetRotForFlightIfNeeded(f, retStatsAll, rotCfgMap, false);
+      }}
       const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
       const arrPts = (typeof getPathForFlight === 'function') ? getPathForFlight(f) : null;
       let vttArrMin = 0;
@@ -2987,7 +3136,13 @@ html = f"""
         for (let i = startIdx; i < arrPts.length - 1; i++) dist += pathDist(arrPts[i], arrPts[i+1]);
         vttArrMin = dist / v / 60;
       }}
+      f.__schedVttArrMin = vttArrMin;
+      f.__schedVttArrRev = rev;
       return vttArrMin;
+    }}
+    function getArrRotMinutes(f) {{
+      const rotSec = f && f.arrRotSec;
+      return (rotSec != null && isFinite(rotSec) && rotSec >= 0) ? rotSec / 60 : 0;
     }}
     function getBaseVttDepMinutes(f) {{
       const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
@@ -2999,7 +3154,7 @@ html = f"""
     }}
 
     // By runway SLDT(d)The earliest arrival flight is ELDT = SLDT(d).
-    // renderFlightListat SIBT−VTTas SLDT(d)After adjusting again, call Flight Schedule·Save·JSONMake sure this matches.
+    // renderFlightList: SLDT=SIBT−VTT(Arr)−ROT(min); EIBT=ELDT+ROT+VTT+vttADelay (symmetric).
     function pinEarliestEldtToSldtPerRunway(flights) {{
       if (!Array.isArray(flights)) return;
       const byRwy = {{}};
@@ -3062,91 +3217,115 @@ html = f"""
         : getScheduleRetStatsAll();
     }}
 
-    // RET selection + ROT(arrRotSec) only. Caller must have warmed paths. Uses getScheduleRetStatsAll().
+    function mutRotCfgEntryForType(configByType, f) {{
+      const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+      const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
+      if (!typeKey) return null;
+      if (configByType[typeKey]) return configByType[typeKey];
+      const tdMu = (typeof ac?.touchdown_zone_avg_m === 'number') ? ac.touchdown_zone_avg_m : 900;
+      const vMu = (typeof ac?.touchdown_speed_avg_ms === 'number') ? ac.touchdown_speed_avg_ms : 70;
+      const aMu = (typeof ac?.deceleration_avg_ms2 === 'number') ? ac.deceleration_avg_ms2 : 2.5;
+      const tdSigma = Math.round(tdMu * 0.1);
+      const vSigma = Math.round(vMu * 0.1);
+      const aSigma = Math.round(aMu * 0.1 * 10) / 10;
+      configByType[typeKey] = {{ tdMu, tdSigma, vMu, vSigma, aMu, aSigma }};
+      return configByType[typeKey];
+    }}
+    function isValidSampledArrRetForFlight(f, retStatsAll) {{
+      if (!f || f.sampledArrRet == null) return false;
+      if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
+      const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+      return retStatsAll.some(function(r) {{
+        if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
+        if (arrRunwayId == null) return true;
+        return !!(r.runway && r.runway.id === arrRunwayId);
+      }});
+    }}
+    // RET + ROT(arrRotSec) for one flight; skipped if f.__schedRetRotRev matches vttArrCacheRev unless forceResample.
+    function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {{
+      if (!f || f.noWayArr) return;
+      const rev = state.vttArrCacheRev | 0;
+      if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
+      if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
+          f.sampledArrRet != null && f.arrRetFailed === false && f.arrRotSec != null && isFinite(f.arrRotSec) &&
+          isValidSampledArrRetForFlight(f, retStatsAll)) {{
+        f.__schedRetRotRev = rev;
+        return;
+      }}
+      if (f.sampledArrRet != null && !isValidSampledArrRetForFlight(f, retStatsAll)) {{
+        f.sampledArrRet = null;
+        f.arrRetFailed = false;
+        f.arrRotSec = null;
+      }}
+      const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+      const cfg = mutRotCfgEntryForType(configByType, f);
+      if (!cfg || !retStatsAll || !retStatsAll.length || arrRunwayId == null) {{
+        f.__schedRetRotRev = rev;
+        return;
+      }}
+      const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
+      const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
+      const tdMin = cfg.tdMu * 0.85;
+      const tdMax = cfg.tdMu * 1.15;
+      const dTd = clamp(tdSample, Math.max(0, tdMin), Math.max(0, tdMax));
+      const vSample = sampleNormal(cfg.vMu, cfg.vSigma);
+      const vMin = cfg.vMu * 0.85;
+      const vMax = cfg.vMu * 1.15;
+      const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
+      const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
+      const aMin = Math.max(0.1, cfg.aMu * 0.85);
+      const aMax = Math.min(6,   cfg.aMu * 1.15);
+      const aDec = clamp(aSample, aMin, aMax);
+      const candidates = retStatsAll.filter(r => r.runway && r.runway.id === arrRunwayId);
+      if (!candidates.length) {{
+        f.__schedRetRotRev = rev;
+        return;
+      }}
+      let chosen = null;
+      candidates.forEach(r => {{
+        if (chosen) return;
+        const distFromTd = Math.max(0, r.distM - dTd);
+        const vAt = runwayArrSpeedAndTimeToRet(v0, aDec, distFromTd, minArrVelRwy).vAtRet;
+        if (vAt <= r.maxExitVelocity) {{ chosen = r; }}
+      }});
+      if (chosen) {{
+        f.sampledArrRet = chosen.exit && chosen.exit.id || null;
+        f.arrRetFailed = false;
+        const MAX_DECEL_MS2 = 15;
+        const distFromTdChosen = Math.max(0, chosen.distM - dTd);
+        const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
+        const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
+        const vAtChosen = rtRunway.vAtRet;
+        const tToRetEntrance = rtRunway.tSec;
+        const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
+          ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
+          : 15;
+        let tExit = 0;
+        if (vAtChosen > minExitVel) {{
+          tExit = (vAtChosen - minExitVel) / aDecRot;
+        }}
+        f.arrRotSec = tToRetEntrance + tExit;
+        f.arrRunwayIdUsed = arrRunwayId;
+        f.arrTdDistM = dTd;
+        f.arrRetDistM = chosen.distM;
+        f.arrVTdMs = v0;
+        f.arrVRetInMs = vAtChosen;
+        f.arrVRetOutMs = minExitVel;
+      }} else {{
+        f.sampledArrRet = null;
+        f.arrRetFailed = true;
+        f.arrRotSec = null;
+      }}
+      f.__schedRetRotRev = rev;
+    }}
+    // RET selection + ROT(arrRotSec). Caller must have warmed paths. Uses getScheduleRetStatsAll(); same cache rev as VTT(Arr).
     function ensureArrRetRotSampled(flights, forceResampleRet) {{
       if (!Array.isArray(flights) || !flights.length) return [];
       const configByType = {{}};
-      const seenTypeCfg = new Set();
-      flights.forEach(f => {{
-        const acInfo = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-        const typeKey = f.aircraftType || (acInfo && acInfo.id) || (acInfo && acInfo.name) || '';
-        if (!typeKey || seenTypeCfg.has(typeKey)) return;
-        seenTypeCfg.add(typeKey);
-        const tdMu = (typeof acInfo?.touchdown_zone_avg_m === 'number') ? acInfo.touchdown_zone_avg_m : 900;
-        const vMu = (typeof acInfo?.touchdown_speed_avg_ms === 'number') ? acInfo.touchdown_speed_avg_ms : 70;
-        const aMu = (typeof acInfo?.deceleration_avg_ms2 === 'number') ? acInfo.deceleration_avg_ms2 : 2.5;
-        const tdSigma = Math.round(tdMu * 0.1);
-        const vSigma = Math.round(vMu * 0.1);
-        const aSigma = Math.round(aMu * 0.1 * 10) / 10;
-        configByType[typeKey] = {{ tdMu, tdSigma, vMu, vSigma, aMu, aSigma }};
-      }});
+      flights.forEach(f => {{ mutRotCfgEntryForType(configByType, f); }});
       const retStatsAll = getScheduleRetStatsAll();
       flights.forEach(function(f) {{
-        const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
-        const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-        const alreadySampled =
-          !forceResampleRet &&
-          f.sampledArrRet !== undefined &&
-          f.sampledArrRet !== null &&
-          f.arrRetFailed === false;
-
-        if (!alreadySampled && retStatsAll && retStatsAll.length && arrRunwayId != null) {{
-          const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
-          const cfg = typeKey ? configByType[typeKey] : null;
-          if (cfg) {{
-            const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
-            const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
-            const tdMin = cfg.tdMu * 0.85;
-            const tdMax = cfg.tdMu * 1.15;
-            const dTd = clamp(tdSample, Math.max(0, tdMin), Math.max(0, tdMax));
-            const vSample = sampleNormal(cfg.vMu, cfg.vSigma);
-            const vMin = cfg.vMu * 0.85;
-            const vMax = cfg.vMu * 1.15;
-            const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
-            const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
-            const aMin = Math.max(0.1, cfg.aMu * 0.85);
-            const aMax = Math.min(6,   cfg.aMu * 1.15);
-            const aDec = clamp(aSample, aMin, aMax);
-            const candidates = retStatsAll.filter(r => r.runway && r.runway.id === arrRunwayId);
-            if (candidates.length) {{
-              let chosen = null;
-              candidates.forEach(r => {{
-                if (chosen) return;
-                const distFromTd = Math.max(0, r.distM - dTd);
-                const vAt = runwayArrSpeedAndTimeToRet(v0, aDec, distFromTd, minArrVelRwy).vAtRet;
-                if (vAt <= r.maxExitVelocity) {{ chosen = r; }}
-              }});
-              if (chosen) {{
-                f.sampledArrRet = chosen.exit && chosen.exit.id || null;
-                f.arrRetFailed = false;
-                const MAX_DECEL_MS2 = 15;
-                const distFromTdChosen = Math.max(0, chosen.distM - dTd);
-                const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
-                const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
-                const vAtChosen = rtRunway.vAtRet;
-                const tToRetEntrance = rtRunway.tSec;
-                const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
-                  ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
-                  : 15;
-                let tExit = 0;
-                if (vAtChosen > minExitVel) {{
-                  tExit = (vAtChosen - minExitVel) / aDecRot;
-                }}
-                f.arrRotSec = tToRetEntrance + tExit;
-                f.arrRunwayIdUsed = arrRunwayId;
-                f.arrTdDistM = dTd;
-                f.arrRetDistM = chosen.distM;
-                f.arrVTdMs = v0;
-                f.arrVRetInMs = vAtChosen;
-                f.arrVRetOutMs = minExitVel;
-              }} else if (!alreadySampled) {{
-                f.sampledArrRet = null;
-                f.arrRetFailed = true;
-                f.arrRotSec = null;
-              }}
-            }}
-          }}
-        }}
+        sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, !!forceResampleRet);
       }});
       return retStatsAll;
     }}
@@ -3172,6 +3351,8 @@ html = f"""
         if (typeof getPathForFlightDeparture === 'function') getPathForFlightDeparture(f);
         if (f.noWayArr || f.noWayDep) f.timeline = null;
       }});
+      // Bump rev first so RET/ROT + VTT share the same generation (matches Global Update flow).
+      if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
       // Paths (above) → RET/ROT → S(d)+E (compute* below). Order matches schedule dependency.
       const retStatsAll = (typeof ensureArrRetRotSampled === 'function')
         ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
@@ -3194,10 +3375,10 @@ html = f"""
           '<th class="flight-col-e">EIBT</th>' +
           '<th class="flight-col-e">EOBT</th>' +
           '<th class="flight-col-e">ETOT</th>' +
-          '<th class="flight-col-e">ROT</th>' +
-          '<th>VTT(Arr)</th>' +
-          '<th>VTT(A-Delay)</th>' +
-          '<th>VTT(Dep)</th>' +
+          '<th class="flight-col-e flight-col-rot">ROT</th>' +
+          '<th>ARR_TAXI_TIME</th>' +
+          '<th>ARR_TAXI_DELAY</th>' +
+          '<th>DEP_TAXI_TIME</th>' +
           '<th>Aircraft Type</th>' +
           '<th>Code(ICAO)</th>' +
           '<th>ICAO(J/H/M/L)</th>' +
@@ -3228,8 +3409,9 @@ html = f"""
         const dwell = f.dwellMin != null ? f.dwellMin : 0;
         const tDepMin = tArrMin + dwell;
         const vttArrMin = getBaseVttArrMinutes(f);
+        const rotArrMin = getArrRotMinutes(f);
         const vttDepMin = getBaseVttDepMinutes(f);
-        const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin));
+        const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin - rotArrMin));
         const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
         const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
         const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + vttDepMin);
@@ -3247,7 +3429,7 @@ html = f"""
         const tArr = formatMinutesToHHMMSS(tArrMin);
         const tDep = formatMinutesToHHMMSS(tDepMin);
         const vttADelayMin = f.vttADelayMin != null ? f.vttADelayMin : 0;
-        const eibtMin = eldtMin + vttArrMin + vttADelayMin;
+        const eibtMin = eldtMin + rotArrMin + vttArrMin + vttADelayMin;
         const eobtMin = etotMin - vttDepMin;
         // Flight Schedule Original standard S/E Save the series time, and then GanttIn *_orig Reference as standard
         if (f.sobtMin_orig == null) {{
@@ -3301,7 +3483,7 @@ html = f"""
             '<td class="flight-td-time flight-col-e">' + eibtStr + '</td>' +
             '<td class="flight-td-time flight-col-e">' + eobtStr + '</td>' +
             '<td class="flight-td-time flight-col-e">' + etotStr + '</td>' +
-            '<td class="flight-td-time flight-col-e">' + (f.arrRotSec != null && isFinite(f.arrRotSec) ? (Math.round(f.arrRotSec) + ' s') : '—') + '</td>' +
+            '<td class="flight-td-time flight-col-e flight-col-rot">' + (f.arrRotSec != null && isFinite(f.arrRotSec) ? (Math.round(f.arrRotSec) + ' s') : '—') + '</td>' +
             '<td class="flight-td-time">' + vttArrStr + '</td>' +
             '<td class="flight-td-time">' + vttADelayStr + '</td>' +
             '<td class="flight-td-time">' + vttDepStr + '</td>' +
@@ -4603,6 +4785,485 @@ html = f"""
       return cellCol + ',' + cellRow;
     }}
 
+    function kpiToNumber(value) {{
+      const n = Number(value);
+      return isFinite(n) ? n : null;
+    }}
+
+    function kpiRound(value, digits) {{
+      const n = kpiToNumber(value);
+      if (n == null) return null;
+      const pow = Math.pow(10, digits || 0);
+      return Math.round(n * pow) / pow;
+    }}
+
+    function kpiFormatCount(value) {{
+      const n = kpiToNumber(value);
+      return n == null ? '—' : String(Math.round(n));
+    }}
+
+    function kpiFormatMinutesCompact(value) {{
+      const n = kpiToNumber(value);
+      if (n == null) return '—';
+      const totalSec = Math.max(0, Math.round(n * 60));
+      const hours = Math.floor(totalSec / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      const secs = totalSec % 60;
+      if (hours > 0) return hours + 'h ' + mins + 'm';
+      if (mins > 0) return mins + 'm' + (secs > 0 ? ' ' + secs + 's' : '');
+      return secs + 's';
+    }}
+
+    function kpiFormatSecondsCompact(value) {{
+      const n = kpiToNumber(value);
+      if (n == null) return '—';
+      const totalSec = Math.max(0, Math.round(n));
+      const mins = Math.floor(totalSec / 60);
+      const secs = totalSec % 60;
+      if (mins > 0) return mins + 'm ' + secs + 's';
+      return secs + 's';
+    }}
+
+    function kpiFormatMinutesValue(value) {{
+      const n = kpiToNumber(value);
+      if (n == null) return '—';
+      return n.toFixed(1) + ' min';
+    }}
+
+    function kpiFormatSecondsValue(value) {{
+      const n = kpiToNumber(value);
+      if (n == null) return '—';
+      return kpiRound(n, 0) + ' sec';
+    }}
+
+    function kpiFormatClockBucket(minute) {{
+      const n = kpiToNumber(minute);
+      if (n == null) return '—';
+      const total = Math.floor(n);
+      const hh = ((Math.floor(total / 60) % 24) + 24) % 24;
+      return String(hh).padStart(2, '0') + ':00';
+    }}
+
+    function kpiFormatClock(minute) {{
+      const n = kpiToNumber(minute);
+      if (n == null) return '—';
+      return formatMinutesToHHMMSS(n);
+    }}
+
+    function kpiFormatSnapshotTime() {{
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      return hh + ':' + mm + ':' + ss;
+    }}
+
+    function kpiSum(items, selector) {{
+      return (items || []).reduce(function(acc, item) {{
+        const value = selector(item);
+        return acc + (kpiToNumber(value) || 0);
+      }}, 0);
+    }}
+
+    function kpiAverage(items, selector) {{
+      const vals = (items || []).map(selector).map(kpiToNumber).filter(v => v != null);
+      if (!vals.length) return null;
+      return kpiSum(vals, function(v) {{ return v; }}) / vals.length;
+    }}
+
+    function kpiStandLabelById(standId) {{
+      const stands = (state.pbbStands || []).concat(state.remoteStands || []);
+      const stand = stands.find(function(s) {{ return s && s.id === standId; }});
+      return stand ? ((stand.name && stand.name.trim()) || stand.id || 'Stand') : 'Unassigned';
+    }}
+
+    function kpiBuildMetricRow(label, primary, secondary) {{
+      return '' +
+        '<div class="kpi-metric-row">' +
+          '<div class="kpi-metric-label">' + escapeHtml(label) + '</div>' +
+          '<div class="kpi-metric-values">' +
+            '<div class="kpi-metric-primary">' + escapeHtml(primary) + '</div>' +
+            '<div class="kpi-metric-secondary">' + escapeHtml(secondary) + '</div>' +
+          '</div>' +
+        '</div>';
+    }}
+
+    function kpiBuildSummaryCard(label, value, meta, tone, submeta) {{
+      return '' +
+        '<div class="kpi-card ' + escapeHtml(tone || '') + '">' +
+          '<div class="kpi-card-label">' + escapeHtml(label) + '</div>' +
+          '<div class="kpi-card-value">' + escapeHtml(value) + '</div>' +
+          '<div class="kpi-card-meta">' + escapeHtml(meta) + '</div>' +
+          '<div class="kpi-card-submeta">' + escapeHtml(submeta || '') + '</div>' +
+        '</div>';
+    }}
+
+    function kpiBuildPanel(title, badge, rows) {{
+      return '' +
+        '<div class="kpi-panel">' +
+          '<div class="kpi-panel-header">' +
+            '<div class="kpi-panel-title">' + escapeHtml(title) + '</div>' +
+            '<div class="kpi-panel-badge">' + escapeHtml(badge) + '</div>' +
+          '</div>' +
+          '<div class="kpi-metric-list">' + rows.join('') + '</div>' +
+        '</div>';
+    }}
+
+    function kpiBuildOccupancyChart(buckets) {{
+      if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No gate occupancy data is available for the current snapshot.</div>';
+      const width = Math.max(720, buckets.length * 54);
+      const height = 240;
+      const padL = 44, padR = 20, padT = 18, padB = 34;
+      const innerW = width - padL - padR;
+      const innerH = height - padT - padB;
+      const maxY = Math.max(1, buckets.reduce(function(acc, bucket) {{ return Math.max(acc, bucket.occupancy || 0); }}, 0));
+      const xFor = function(idx) {{
+        return buckets.length === 1 ? (padL + innerW / 2) : (padL + (idx / (buckets.length - 1)) * innerW);
+      }};
+      const yFor = function(value) {{
+        return padT + innerH - ((value || 0) / maxY) * innerH;
+      }};
+      let linePath = '';
+      let areaPath = '';
+      let dots = '';
+      buckets.forEach(function(bucket, idx) {{
+        const x = xFor(idx);
+        const y = yFor(bucket.occupancy || 0);
+        linePath += (idx === 0 ? 'M ' : ' L ') + x + ' ' + y;
+        areaPath += (idx === 0 ? ('M ' + x + ' ' + (padT + innerH) + ' L ' + x + ' ' + y) : (' L ' + x + ' ' + y));
+        dots += '<circle class="kpi-chart-dot" cx="' + x + '" cy="' + y + '" r="4"></circle>';
+      }});
+      areaPath += ' L ' + xFor(buckets.length - 1) + ' ' + (padT + innerH) + ' Z';
+      const yLines = [];
+      for (let i = 0; i < 4; i++) {{
+        const ratio = i / 3;
+        const y = padT + innerH - ratio * innerH;
+        const label = kpiRound(maxY * ratio, 0);
+        yLines.push('<line class="kpi-chart-grid-line" x1="' + padL + '" y1="' + y + '" x2="' + (padL + innerW) + '" y2="' + y + '"></line>');
+        yLines.push('<text class="kpi-chart-axis" x="' + (padL - 8) + '" y="' + (y + 4) + '" text-anchor="end">' + escapeHtml(String(label)) + '</text>');
+      }}
+      const step = Math.max(1, Math.ceil(buckets.length / 8));
+      const xLabels = buckets.map(function(bucket, idx) {{
+        if (idx % step !== 0 && idx !== buckets.length - 1) return '';
+        return '<text class="kpi-chart-axis" x="' + xFor(idx) + '" y="' + (height - 8) + '" text-anchor="middle">' + escapeHtml(bucket.label) + '</text>';
+      }}).join('');
+      return '' +
+        '<div class="kpi-chart-scroll">' +
+          '<svg class="kpi-chart-frame" viewBox="0 0 ' + width + ' ' + height + '" width="' + width + '" height="' + height + '" aria-label="Hourly gate occupancy chart">' +
+            '<defs>' +
+              '<linearGradient id="kpiOccFill" x1="0" y1="0" x2="0" y2="1">' +
+                '<stop offset="0%" stop-color="rgba(124,106,247,0.42)"></stop>' +
+                '<stop offset="100%" stop-color="rgba(124,106,247,0.03)"></stop>' +
+              '</linearGradient>' +
+            '</defs>' +
+            yLines.join('') +
+            '<path d="' + areaPath + '" fill="url(#kpiOccFill)"></path>' +
+            '<path d="' + linePath + '" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>' +
+            dots +
+            xLabels +
+          '</svg>' +
+        '</div>';
+    }}
+
+    function kpiBuildTrafficChart(buckets) {{
+      if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No arrival or departure events are available for the current snapshot.</div>';
+      const width = Math.max(720, buckets.length * 56);
+      const height = 240;
+      const padL = 44, padR = 20, padT = 18, padB = 34;
+      const innerW = width - padL - padR;
+      const innerH = height - padT - padB;
+      const maxY = Math.max(1, buckets.reduce(function(acc, bucket) {{
+        return Math.max(acc, bucket.arrivals || 0, bucket.departures || 0, bucket.total || 0);
+      }}, 0));
+      const slotW = innerW / buckets.length;
+      const barW = Math.max(8, Math.min(14, slotW * 0.22));
+      const yFor = function(value) {{
+        return padT + innerH - ((value || 0) / maxY) * innerH;
+      }};
+      const yLines = [];
+      for (let i = 0; i < 4; i++) {{
+        const ratio = i / 3;
+        const y = padT + innerH - ratio * innerH;
+        const label = kpiRound(maxY * ratio, 0);
+        yLines.push('<line class="kpi-chart-grid-line" x1="' + padL + '" y1="' + y + '" x2="' + (padL + innerW) + '" y2="' + y + '"></line>');
+        yLines.push('<text class="kpi-chart-axis" x="' + (padL - 8) + '" y="' + (y + 4) + '" text-anchor="end">' + escapeHtml(String(label)) + '</text>');
+      }}
+      let bars = '';
+      let linePath = '';
+      let dots = '';
+      buckets.forEach(function(bucket, idx) {{
+        const cx = padL + slotW * idx + slotW / 2;
+        const arrH = innerH - (yFor(bucket.arrivals || 0) - padT);
+        const depH = innerH - (yFor(bucket.departures || 0) - padT);
+        const arrY = yFor(bucket.arrivals || 0);
+        const depY = yFor(bucket.departures || 0);
+        const totalY = yFor(bucket.total || 0);
+        bars += '<rect x="' + (cx - barW - 2) + '" y="' + arrY + '" width="' + barW + '" height="' + Math.max(2, arrH) + '" rx="4" fill="#38bdf8"></rect>';
+        bars += '<rect x="' + (cx + 2) + '" y="' + depY + '" width="' + barW + '" height="' + Math.max(2, depH) + '" rx="4" fill="#fb923c"></rect>';
+        linePath += (idx === 0 ? 'M ' : ' L ') + cx + ' ' + totalY;
+        dots += '<circle class="kpi-chart-dot" cx="' + cx + '" cy="' + totalY + '" r="4" fill="#c4b5fd"></circle>';
+      }});
+      const step = Math.max(1, Math.ceil(buckets.length / 8));
+      const xLabels = buckets.map(function(bucket, idx) {{
+        if (idx % step !== 0 && idx !== buckets.length - 1) return '';
+        const cx = padL + slotW * idx + slotW / 2;
+        return '<text class="kpi-chart-axis" x="' + cx + '" y="' + (height - 8) + '" text-anchor="middle">' + escapeHtml(bucket.label) + '</text>';
+      }}).join('');
+      return '' +
+        '<div class="kpi-chart-scroll">' +
+          '<svg class="kpi-chart-frame" viewBox="0 0 ' + width + ' ' + height + '" width="' + width + '" height="' + height + '" aria-label="Hourly traffic chart">' +
+            yLines.join('') +
+            bars +
+            '<path d="' + linePath + '" fill="none" stroke="#c4b5fd" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>' +
+            dots +
+            xLabels +
+          '</svg>' +
+        '</div>';
+    }}
+
+    function collectKpiSnapshot() {{
+      const flights = Array.isArray(state.flights) ? state.flights.slice() : [];
+      const rows = flights.map(function(f) {{
+        const arrTaxiMin = kpiToNumber(typeof getBaseVttArrMinutes === 'function' ? getBaseVttArrMinutes(f) : null);
+        const depTaxiMin = kpiToNumber(typeof getBaseVttDepMinutes === 'function' ? getBaseVttDepMinutes(f) : null);
+        const rotSec = kpiToNumber(f && f.arrRotSec != null ? f.arrRotSec : (typeof getArrRotMinutes === 'function' ? getArrRotMinutes(f) * 60 : null));
+        const sibt = kpiToNumber(f && f.sibtMin_orig != null ? f.sibtMin_orig : (f && f.timeMin != null ? f.timeMin : null));
+        const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiMin != null && rotSec != null ? Math.max(0, sibt - arrTaxiMin - rotSec / 60) : null));
+        const dwellMin = kpiToNumber(f && f.dwellMin != null ? f.dwellMin : null);
+        const sobt = kpiToNumber(f && f.sobtMin_orig != null ? f.sobtMin_orig : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
+        const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depTaxiMin != null ? sobt + depTaxiMin : null));
+        const eldt = kpiToNumber(f && f.eldtMin != null ? f.eldtMin : (f && f.sldtMin_d != null ? f.sldtMin_d : sldt));
+        const eibt = kpiToNumber(f && f.eibtMin != null ? f.eibtMin : (eldt != null && arrTaxiMin != null && rotSec != null ? eldt + arrTaxiMin + rotSec / 60 + (kpiToNumber(f.vttADelayMin) || 0) : sibt));
+        const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
+        const etot = kpiToNumber(f && f.etotMin != null ? f.etotMin : (f && f.stotMin_d != null ? f.stotMin_d : stot));
+        const failed = !!(f && (f.noWayArr || f.noWayDep || f.arrRetFailed));
+        const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
+        const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
+        const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
+        const acDepDelay = (etot != null && stot != null) ? Math.max(0, etot - stot) : null;
+        return {{
+          flight: f,
+          id: f && f.id ? f.id : '',
+          reg: f && f.reg ? f.reg : '',
+          flightNumber: f && f.flightNumber ? f.flightNumber : '',
+          standId: f && f.standId ? f.standId : null,
+          standName: kpiStandLabelById(f && f.standId ? f.standId : null),
+          arrTaxiMin,
+          depTaxiMin,
+          rotSec,
+          sibt,
+          sobt,
+          sldt,
+          stot,
+          eldt,
+          eibt,
+          eobt,
+          etot,
+          failed,
+          paxArrDelay,
+          paxDepDelay,
+          acArrDelay,
+          acDepDelay
+        }};
+      }});
+      const timeValues = [];
+      rows.forEach(function(row) {{
+        [row.sldt, row.sibt, row.sobt, row.stot, row.eldt, row.eibt, row.eobt, row.etot].forEach(function(value) {{
+          if (kpiToNumber(value) != null) timeValues.push(value);
+        }});
+      }});
+      const minT = timeValues.length ? Math.min.apply(null, timeValues) : null;
+      const maxT = timeValues.length ? Math.max.apply(null, timeValues) : null;
+      const buckets = [];
+      if (minT != null && maxT != null) {{
+        const startHour = Math.floor(minT / 60) * 60;
+        let endHour = Math.ceil((maxT + 1) / 60) * 60;
+        if (endHour <= startHour) endHour = startHour + 60;
+        for (let bucketStart = startHour; bucketStart < endHour; bucketStart += 60) {{
+          const bucketEnd = bucketStart + 60;
+          const activeStands = new Set();
+          let arrivals = 0;
+          let departures = 0;
+          rows.forEach(function(row) {{
+            const occStart = row.eibt != null ? row.eibt : row.sibt;
+            const occEnd = row.eobt != null ? row.eobt : row.sobt;
+            if (row.standId && occStart != null && occEnd != null && occEnd > bucketStart && occStart < bucketEnd) activeStands.add(row.standId);
+            const arrMoment = row.eldt != null ? row.eldt : row.eibt;
+            const depMoment = row.etot != null ? row.etot : row.eobt;
+            if (arrMoment != null && arrMoment >= bucketStart && arrMoment < bucketEnd) arrivals += 1;
+            if (depMoment != null && depMoment >= bucketStart && depMoment < bucketEnd) departures += 1;
+          }});
+          buckets.push({{
+            label: kpiFormatClockBucket(bucketStart),
+            occupancy: activeStands.size,
+            arrivals: arrivals,
+            departures: departures,
+            total: arrivals + departures,
+            bucketStart: bucketStart
+          }});
+        }}
+      }}
+      const failedFlights = rows.filter(function(row) {{ return row.failed; }});
+      const operationalFlights = rows.filter(function(row) {{ return !row.failed; }});
+      const peakBucket = buckets.reduce(function(best, bucket) {{
+        if (!best) return bucket;
+        return (bucket.occupancy || 0) > (best.occupancy || 0) ? bucket : best;
+      }}, null);
+      const busiestBucket = buckets.reduce(function(best, bucket) {{
+        if (!best) return bucket;
+        return (bucket.total || 0) > (best.total || 0) ? bucket : best;
+      }}, null);
+      const detailRows = rows.slice().sort(function(a, b) {{
+        const delayA = (a.paxArrDelay || 0) + (a.paxDepDelay || 0) + (a.acArrDelay || 0) + (a.acDepDelay || 0);
+        const delayB = (b.paxArrDelay || 0) + (b.paxDepDelay || 0) + (b.acArrDelay || 0) + (b.acDepDelay || 0);
+        return delayB - delayA;
+      }});
+      return {{
+        rows: rows,
+        buckets: buckets,
+        totalFlights: rows.length,
+        failedFlights: failedFlights.length,
+        operationalFlights: operationalFlights.length,
+        peakBucket: peakBucket,
+        busiestBucket: busiestBucket,
+        rotTotalSec: kpiSum(rows, function(row) {{ return row.rotSec; }}),
+        rotAvgSec: kpiAverage(rows, function(row) {{ return row.rotSec; }}),
+        arrTaxiTotalMin: kpiSum(rows, function(row) {{ return row.arrTaxiMin; }}),
+        arrTaxiAvgMin: kpiAverage(rows, function(row) {{ return row.arrTaxiMin; }}),
+        depTaxiTotalMin: kpiSum(rows, function(row) {{ return row.depTaxiMin; }}),
+        depTaxiAvgMin: kpiAverage(rows, function(row) {{ return row.depTaxiMin; }}),
+        paxArrDelayTotalMin: kpiSum(rows, function(row) {{ return row.paxArrDelay; }}),
+        paxArrDelayAvgMin: kpiAverage(rows, function(row) {{ return row.paxArrDelay; }}),
+        paxDepDelayTotalMin: kpiSum(rows, function(row) {{ return row.paxDepDelay; }}),
+        paxDepDelayAvgMin: kpiAverage(rows, function(row) {{ return row.paxDepDelay; }}),
+        acArrDelayTotalMin: kpiSum(rows, function(row) {{ return row.acArrDelay; }}),
+        acArrDelayAvgMin: kpiAverage(rows, function(row) {{ return row.acArrDelay; }}),
+        acDepDelayTotalMin: kpiSum(rows, function(row) {{ return row.acDepDelay; }}),
+        acDepDelayAvgMin: kpiAverage(rows, function(row) {{ return row.acDepDelay; }}),
+        detailRows: detailRows
+      }};
+    }}
+
+    function renderKpiDashboard(reasonLabel) {{
+      const host = document.getElementById('kpiDashboard');
+      const status = document.getElementById('kpiSnapshotStatus');
+      if (!host) return;
+      const snapshot = collectKpiSnapshot();
+      if (!snapshot.totalFlights) {{
+        host.innerHTML = '<div class="kpi-empty-state">No flights are available yet. Add or load a schedule, then click <strong>Update</strong> to refresh the KPI snapshot.</div>';
+        if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
+        return;
+      }}
+      const failureRate = snapshot.totalFlights > 0 ? ((snapshot.failedFlights / snapshot.totalFlights) * 100) : 0;
+      const peakGateText = snapshot.peakBucket ? (kpiFormatCount(snapshot.peakBucket.occupancy) + ' gates') : '—';
+      const peakGateMeta = snapshot.peakBucket ? (snapshot.peakBucket.label + ' peak occupancy') : 'No occupancy data';
+      const busiestText = snapshot.busiestBucket ? (kpiFormatCount(snapshot.busiestBucket.total) + ' ops') : '—';
+      const busiestMeta = snapshot.busiestBucket ? (snapshot.busiestBucket.label + ' arrivals + departures') : 'No movement data';
+      const summaryCards = [
+        kpiBuildSummaryCard('Total Flights', kpiFormatCount(snapshot.totalFlights), kpiFormatCount(snapshot.operationalFlights) + ' operational flights in snapshot', 'accent', 'Includes all loaded flights in the current layout'),
+        kpiBuildSummaryCard('Failed Flights', kpiFormatCount(snapshot.failedFlights), kpiRound(failureRate, 1) + '% of total flights flagged as failed', snapshot.failedFlights > 0 ? 'danger' : 'success', 'Failed = no way or RET sampling failure'),
+        kpiBuildSummaryCard('Average ROT', kpiFormatSecondsCompact(snapshot.rotAvgSec), 'Total ROT ' + kpiFormatSecondsCompact(snapshot.rotTotalSec), 'warning', 'Calculated from available ROT samples'),
+        kpiBuildSummaryCard('Average Arr Taxi', kpiFormatMinutesCompact(snapshot.arrTaxiAvgMin), 'Total Arr Taxi ' + kpiFormatMinutesCompact(snapshot.arrTaxiTotalMin), '', 'Based on current arrival taxi path estimates'),
+        kpiBuildSummaryCard('Average Dep Taxi', kpiFormatMinutesCompact(snapshot.depTaxiAvgMin), 'Total Dep Taxi ' + kpiFormatMinutesCompact(snapshot.depTaxiTotalMin), '', 'Based on current departure taxi path estimates'),
+        kpiBuildSummaryCard('Peak Gate Occupancy', peakGateText, peakGateMeta, 'accent', 'Measured from EIBT–EOBT stand occupancy by hour')
+      ].join('');
+      const panelHtml = [
+        kpiBuildPanel('Surface Movement', 'ROT + Taxi', [
+          kpiBuildMetricRow('ROT time', 'Avg ' + kpiFormatSecondsValue(snapshot.rotAvgSec), 'Total ' + kpiFormatSecondsValue(snapshot.rotTotalSec)),
+          kpiBuildMetricRow('Arrival taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.arrTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.arrTaxiTotalMin)),
+          kpiBuildMetricRow('Departure taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.depTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.depTaxiTotalMin))
+        ]),
+        kpiBuildPanel('Passenger Delay', 'Gate View', [
+          kpiBuildMetricRow('EIBT - SIBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxArrDelayTotalMin)),
+          kpiBuildMetricRow('EOBT - SOBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxDepDelayTotalMin)),
+          kpiBuildMetricRow('Busiest movement hour', busiestText, busiestMeta)
+        ]),
+        kpiBuildPanel('Aircraft Delay', 'Runway View', [
+          kpiBuildMetricRow('ELDT - SLDT', 'Avg ' + kpiFormatMinutesValue(snapshot.acArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acArrDelayTotalMin)),
+          kpiBuildMetricRow('ETOT - STOT', 'Avg ' + kpiFormatMinutesValue(snapshot.acDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acDepDelayTotalMin)),
+          kpiBuildMetricRow('Snapshot basis', kpiFormatCount(snapshot.totalFlights) + ' flights', 'Rendered only on initial load and Update')
+        ])
+      ].join('');
+      const hourlyTableRows = (snapshot.buckets || []).map(function(bucket) {{
+        const highlight = snapshot.peakBucket && bucket.bucketStart === snapshot.peakBucket.bucketStart ? ' class="kpi-row-highlight"' : '';
+        return '' +
+          '<tr' + highlight + '>' +
+            '<td>' + escapeHtml(bucket.label) + '</td>' +
+            '<td>' + escapeHtml(kpiFormatCount(bucket.occupancy)) + '</td>' +
+            '<td>' + escapeHtml(kpiFormatCount(bucket.arrivals)) + '</td>' +
+            '<td>' + escapeHtml(kpiFormatCount(bucket.departures)) + '</td>' +
+            '<td>' + escapeHtml(kpiFormatCount(bucket.total)) + '</td>' +
+          '</tr>';
+      }}).join('');
+      const topDelayRows = snapshot.detailRows.slice(0, 10).map(function(row) {{
+        const statusClass = row.failed ? 'fail' : 'ok';
+        const statusLabel = row.failed ? 'Failed' : 'Normal';
+        return '' +
+          '<tr>' +
+            '<td>' + escapeHtml((row.reg || row.flightNumber || row.id || '—')) + '</td>' +
+            '<td>' + escapeHtml(row.standName || 'Unassigned') + '</td>' +
+            '<td>' + escapeHtml(kpiFormatMinutesValue(row.paxArrDelay)) + '</td>' +
+            '<td>' + escapeHtml(kpiFormatMinutesValue(row.paxDepDelay)) + '</td>' +
+            '<td>' + escapeHtml(kpiFormatMinutesValue((row.acArrDelay || 0) + (row.acDepDelay || 0))) + '</td>' +
+            '<td><span class="kpi-badge ' + statusClass + '">' + escapeHtml(statusLabel) + '</span></td>' +
+          '</tr>';
+      }}).join('');
+      host.innerHTML = '' +
+        '<div class="kpi-summary-grid">' + summaryCards + '</div>' +
+        '<div class="kpi-panel-grid">' + panelHtml + '</div>' +
+        '<div class="kpi-chart-grid">' +
+          '<div class="kpi-chart-card">' +
+            '<div class="kpi-chart-head">' +
+              '<div>' +
+                '<div class="kpi-chart-title">Hourly Gate Occupancy</div>' +
+                '<div class="kpi-chart-subtitle">Unique occupied stands by hour based on EIBT–EOBT occupancy windows.</div>' +
+              '</div>' +
+              '<div class="kpi-chart-legend">' +
+                '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#a78bfa;"></span>Gate occupancy</span>' +
+              '</div>' +
+            '</div>' +
+            kpiBuildOccupancyChart(snapshot.buckets) +
+          '</div>' +
+          '<div class="kpi-chart-card">' +
+            '<div class="kpi-chart-head">' +
+              '<div>' +
+                '<div class="kpi-chart-title">Hourly Traffic Mix</div>' +
+                '<div class="kpi-chart-subtitle">Arrival and departure counts by hour with total hourly movement overlay.</div>' +
+              '</div>' +
+              '<div class="kpi-chart-legend">' +
+                '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#38bdf8;"></span>Arrivals</span>' +
+                '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#fb923c;"></span>Departures</span>' +
+                '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#c4b5fd;"></span>Total</span>' +
+              '</div>' +
+            '</div>' +
+            kpiBuildTrafficChart(snapshot.buckets) +
+          '</div>' +
+        '</div>' +
+        '<div class="kpi-detail-grid">' +
+          '<div class="kpi-table-card">' +
+            '<div class="kpi-chart-title">Hourly Detail Table</div>' +
+            '<div class="kpi-chart-subtitle">Quick lookup for gate occupancy and movement volume by hour.</div>' +
+            '<div class="kpi-table-wrap">' +
+              '<table class="kpi-table">' +
+                '<thead><tr><th>Hour</th><th>Gate Occupancy</th><th>Arrivals</th><th>Departures</th><th>Total</th></tr></thead>' +
+                '<tbody>' + hourlyTableRows + '</tbody>' +
+              '</table>' +
+            '</div>' +
+          '</div>' +
+          '<div class="kpi-table-card">' +
+            '<div class="kpi-chart-title">Top Delay Flights</div>' +
+            '<div class="kpi-chart-subtitle">Flights with the largest combined passenger and aircraft delay footprint.</div>' +
+            '<div class="kpi-table-wrap">' +
+              '<table class="kpi-table">' +
+                '<thead><tr><th>Flight</th><th>Stand</th><th>Pax Arr Delay</th><th>Pax Dep Delay</th><th>Aircraft Delay</th><th>Status</th></tr></thead>' +
+                '<tbody>' + topDelayRows + '</tbody>' +
+              '</table>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
+    }}
+
     // S(d) Series: First S(d)=S(Original), Takes precedence when the same parking lot overlaps SOBT(d)-trailing SIBT(d) trailing as much as S(d) push. SLDT(d)=SLDT, SOBT(d)to Min Dwell reflect.
     // Original S The series is not referenced anywhere after being copied in this function. All calculations are S(d)use only.
     function computeScheduledDisplayTimes(flights) {{
@@ -4620,8 +5281,9 @@ html = f"""
         f.minDwellMin = minDwell;
         // VTT(Arr)Is Flight ScheduleReuse the same calculated value as the definition used in
         let vttArrMin = getBaseVttArrMinutes(f);
+        const rotArrMin = getArrRotMinutes(f);
         const vttDepMin = getBaseVttDepMinutes(f);
-        const sldtOrig = Math.max(0, tArrMin - vttArrMin);
+        const sldtOrig = Math.max(0, tArrMin - vttArrMin - rotArrMin);
         const sobtOrig = tArrMin + dwell;
         const stotOrig = sobtOrig + vttDepMin;
         // SLDT/SIBT/SOBT/STOT(orig)is always updated with the internal calculated value.,
@@ -4715,7 +5377,8 @@ html = f"""
           let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
           const etotSep = Math.max(ev.time, minFromArr, minFromDep);
           const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
-          const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + (ev.vttArrMin || 0) + vttADelay;
+          const rotM = (ev.rotArrMin != null && isFinite(ev.rotArrMin)) ? ev.rotArrMin : getArrRotMinutes(ev.flight);
+          const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + rotM + (ev.vttArrMin || 0) + vttADelay;
           const vttDep = ev.vttDepMin || 0;
           const etotMin = etotSep;
           const eobtMin = etotMin - vttDep;
@@ -4759,10 +5422,11 @@ html = f"""
         const stotMin_d = f.stotMin_d != null ? f.stotMin_d : 0;
         const sobtMin_d = f.sobtMin_d != null ? f.sobtMin_d : 0;
         const vttArrMin = getBaseVttArrMinutes(f);
+        const rotArrMin = getArrRotMinutes(f);
         const vttDepMin = getBaseVttDepMinutes(f);
-        if (arrRwy === rwy.id) events.push({{ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, index: eventIndex++ }});
+        if (arrRwy === rwy.id) events.push({{ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ }});
         if (depRwy === rwy.id) {{
-          events.push({{ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, sobtMin: sobtMin_d, index: eventIndex++ }});
+          events.push({{ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin_d, index: eventIndex++ }});
         }}
       }});
       return {{ cfg, events }};
@@ -4850,9 +5514,10 @@ html = f"""
       flights.forEach(f => {{
         if (f.noWayArr || f.noWayDep) return;
         const vttArrMin = getBaseVttArrMinutes(f);
+        const rotArrMin = getArrRotMinutes(f);
         const vttDepMin = getBaseVttDepMinutes(f);
         const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
-        f.eibtMin = (f.eldtMin != null ? f.eldtMin : 0) + vttArrMin + vttADelay;
+        f.eibtMin = (f.eldtMin != null ? f.eldtMin : 0) + rotArrMin + vttArrMin + vttADelay;
         f.eobtMin = (f.etotMin != null ? f.etotMin : 0) - vttDepMin;
       }});
       const standToFlightsE = {{}};
@@ -4870,6 +5535,7 @@ html = f"""
         list.forEach(f => {{
           const vttDepMin = getBaseVttDepMinutes(f);
           const vttArrMin = getBaseVttArrMinutes(f);
+          const rotArrMin = getArrRotMinutes(f);
           const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
           const eibtMin = f.eibtMin != null ? f.eibtMin : 0;
           const overlap = Math.max(0, prevEOBT - eibtMin);
@@ -4881,11 +5547,15 @@ html = f"""
             : (f.dwellMin != null ? f.dwellMin : 0);
           const runwayEtot = f.etotMin != null ? f.etotMin : (f.eobtMin + vttDepMin);
           f.eobtMin = f.eibtMin + dwellSd;        // ✅ EOBT = EIBT + S(d) dwell
-          f.eldtMin = f.eibtMin - vttArrMin - vttADelay;
+          f.eldtMin = f.eibtMin - rotArrMin - vttArrMin - vttADelay;
           // ELDTis physically SLDT(d)Hard clamp to prevent it from getting ahead of you
           const sldtBase = (f.sldtMin_d != null ? f.sldtMin_d
                            : (f.sldtMin_orig != null ? f.sldtMin_orig : 0));
-          if (f.eldtMin < sldtBase) f.eldtMin = sldtBase;
+          if (f.eldtMin < sldtBase) {{
+            f.eldtMin = sldtBase;
+            f.eibtMin = f.eldtMin + rotArrMin + vttArrMin + vttADelay;
+            f.eobtMin = f.eibtMin + dwellSd;
+          }}
           // IMPORTANT: keep ETOT fixed to the runway-based value, do not let apron overlap/dwell push ETOT further
           f.etotMin = runwayEtot;
           prevEOBT = f.eobtMin;
@@ -5289,6 +5959,69 @@ html = f"""
       return {{ nodes, edges, adj, getOrAdd, junctions: junctionsForDraw, standIdToNodeIndex }};
     }}
 
+    function rebuildDerivedGraphEdges() {{
+      state.derivedGraphEdges = [];
+      if (!state.taxiways || !state.taxiways.length) return;
+      let g;
+      try {{
+        g = buildPathGraph(null);
+      }} catch (err) {{
+        return;
+      }}
+      if (!g || !g.edges || !g.nodes) return;
+      const seen = new Set();
+      const raw = [];
+      g.edges.forEach(function(e) {{
+        if (e.dist >= REVERSE_COST || e.dist < 1e-6) return;
+        const a = e.from, b = e.to;
+        const lo = a < b ? a : b, hi = a < b ? b : a;
+        const k = lo + ':' + hi;
+        if (seen.has(k)) return;
+        seen.add(k);
+        const p0 = g.nodes[a], p1 = g.nodes[b];
+        if (!p0 || !p1) return;
+        raw.push({{ x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1], dist: e.dist, fromIdx: a, toIdx: b }});
+      }});
+      raw.sort(function(u, v) {{
+        if (u.fromIdx !== v.fromIdx) return u.fromIdx - v.fromIdx;
+        return u.toIdx - v.toIdx;
+      }});
+      const maxN = Math.min(raw.length, 999);
+      for (let i = 0; i < maxN; i++) {{
+        const label = String(i + 1).padStart(3, '0');
+        const r = raw[i];
+        state.derivedGraphEdges.push({{
+          id: 'layout-edge-' + label,
+          label: label,
+          x1: r.x1, y1: r.y1, x2: r.x2, y2: r.y2,
+          dist: r.dist,
+          fromIdx: r.fromIdx,
+          toIdx: r.toIdx
+        }});
+      }}
+      if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {{
+        const sid = state.selectedObject.id;
+        const fresh = (state.derivedGraphEdges || []).find(function(e) {{ return e.id === sid; }});
+        if (fresh) state.selectedObject.obj = fresh;
+        else state.selectedObject = null;
+      }}
+    }}
+
+    function hitTestLayoutGraphEdge(wx, wy) {{
+      if (!state.derivedGraphEdges || !state.derivedGraphEdges.length) return null;
+      const click = [wx, wy];
+      const tol = CELL_SIZE * 0.4;
+      const tol2 = tol * tol;
+      let best = null, bestD2 = tol2;
+      state.derivedGraphEdges.forEach(function(ed) {{
+        const near = closestPointOnSegment([ed.x1, ed.y1], [ed.x2, ed.y2], click);
+        if (!near) return;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2) {{ bestD2 = d2; best = ed; }}
+      }});
+      return best;
+    }}
+
     class MinHeap {{
       constructor() {{ this.h = []; }}
       push(item) {{
@@ -5382,7 +6115,15 @@ html = f"""
       const stand = (state.pbbStands || []).find(s => s.id === apronId) || (state.remoteStands || []).find(s => s.id === apronId);
       if (!stand) return null;
       const selectedArrRetId = f.sampledArrRet != null ? f.sampledArrRet : null;
-      const g = buildPathGraph(selectedArrRetId);
+      const validSelectedArrRetId = (selectedArrRetId != null && (state.taxiways || []).some(function(t) {{
+        return t && t.id === selectedArrRetId && t.pathType === 'runway_exit';
+      }})) ? selectedArrRetId : null;
+      if (selectedArrRetId != null && validSelectedArrRetId == null) {{
+        f.sampledArrRet = null;
+        f.arrRetFailed = false;
+        f.arrRotSec = null;
+      }}
+      const g = buildPathGraph(validSelectedArrRetId);
       state.pathGraphJunctions = g.junctions || [];
       const endIdx = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
       if (endIdx == null) {{
@@ -5553,6 +6294,47 @@ html = f"""
         const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
         ctx.fillText(Math.round(e.dist).toString(), mx, my);
       }});
+      ctx.restore();
+    }}
+
+    function drawSelectedLayoutEdge() {{
+      const sel = state.selectedObject;
+      if (!sel || sel.type !== 'layoutEdge' || !sel.obj) return;
+      const e = sel.obj;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.translate(state.panX, state.panY);
+      ctx.scale(state.scale, state.scale);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      function layoutEdgePath() {{
+        ctx.beginPath();
+        ctx.moveTo(e.x1, e.y1);
+        ctx.lineTo(e.x2, e.y2);
+      }}
+      layoutEdgePath();
+      ctx.save();
+      ctx.setLineDash([]);
+      ctx.lineWidth = Math.max(7, CELL_SIZE * 0.2);
+      ctx.strokeStyle = c2dObjectSelectedStroke();
+      ctx.shadowColor = c2dObjectSelectedGlow();
+      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.stroke();
+      ctx.restore();
+      layoutEdgePath();
+      ctx.setLineDash([]);
+      ctx.lineWidth = Math.max(4, CELL_SIZE * 0.12);
+      ctx.strokeStyle = c2dObjectSelectedStroke();
+      ctx.stroke();
+      layoutEdgePath();
+      ctx.save();
+      ctx.setLineDash([8, 6]);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = c2dObjectSelectedDashStroke();
+      ctx.stroke();
+      ctx.restore();
       ctx.restore();
     }}
 
@@ -5946,6 +6728,7 @@ html = f"""
             if (typeof syncPanelFromState === 'function') syncPanelFromState();
             if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
             else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+            if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
             // Do all calculations first
             if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
             if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
@@ -5954,6 +6737,7 @@ html = f"""
             if (typeof renderFlightGantt === 'function') renderFlightGantt();
             // at the end Flight schedule Render the table only once (RET/ELDT Full-length resampling)
             if (typeof renderFlightList === 'function') renderFlightList(false, true);
+            if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
             if (typeof draw === 'function') draw();
           }} catch (e) {{
             console.error('Global update error', e);
@@ -6731,10 +7515,155 @@ html = f"""
       toggleLayoutDrawMode('apronLinkDrawing', null, 'apronLinkTemp');
     }});
 
-    panelToggle.addEventListener('click', function() {{
-      panel.classList.toggle('collapsed');
-      this.textContent = panel.classList.contains('collapsed') ? '▶' : '◀';
-    }});
+    (function setupRightPanelDragResize() {{
+      if (!panel || !panelToggle) return;
+      const rootStyle = () => getComputedStyle(document.documentElement);
+      function readPxVar(name, fallback) {{
+        const v = parseFloat(rootStyle().getPropertyValue(name));
+        return Number.isFinite(v) ? v : fallback;
+      }}
+      function readLenVar(name, fallback) {{
+        const t = (rootStyle().getPropertyValue(name) || '').trim();
+        return t || fallback;
+      }}
+      function parseCssLenToPx(s, vwBase) {{
+        const str = String(s || '').trim().toLowerCase();
+        const n = parseFloat(str);
+        if (!Number.isFinite(n)) return vwBase * 0.5;
+        if (str.endsWith('vw')) return (n / 100) * vwBase;
+        if (str.endsWith('vh')) return (n / 100) * (typeof window !== 'undefined' ? window.innerHeight : 800);
+        if (str.endsWith('%')) return (n / 100) * vwBase;
+        if (str.endsWith('px')) return n;
+        return n;
+      }}
+      function maxPanelPx() {{
+        const m = readPxVar('--style-right-panel-resize-viewport-margin', 8);
+        return Math.max(120, window.innerWidth - m);
+      }}
+      function collapsedPx() {{ return readPxVar('--style-right-panel-resize-collapsed', 44); }}
+      function collapseBelowPx() {{ return readPxVar('--style-right-panel-resize-collapse-below', 96); }}
+      function minExpandedPx() {{ return readPxVar('--style-right-panel-resize-min-expanded', 220); }}
+      let lastExpandedWidthPx = Math.round(parseCssLenToPx(readLenVar('--style-right-panel-width-full', '50vw'), window.innerWidth));
+      lastExpandedWidthPx = Math.min(maxPanelPx(), Math.max(minExpandedPx(), lastExpandedWidthPx));
+      function syncToolbar(px) {{
+        document.documentElement.style.setProperty('--layout-toolbar-right', Math.round(px) + 'px');
+      }}
+      function applyCollapsed() {{
+        panel.classList.add('collapsed');
+        panel.style.width = '';
+        syncToolbar(collapsedPx());
+        panelToggle.textContent = '▶';
+      }}
+      function applyExpandedWidthPx(px) {{
+        const cap = maxPanelPx();
+        let w = Math.min(cap, Math.round(px));
+        w = Math.max(minExpandedPx(), w);
+        panel.classList.remove('collapsed');
+        panel.style.width = w + 'px';
+        lastExpandedWidthPx = w;
+        syncToolbar(w);
+        panelToggle.textContent = '◀';
+      }}
+      function applyDragWidthPx(rawPx) {{
+        const cap = maxPanelPx();
+        const c0 = collapsedPx();
+        const below = collapseBelowPx();
+        let w = Math.min(cap, Math.max(c0, Math.round(rawPx)));
+        if (w < below) {{
+          panel.classList.add('collapsed');
+          panel.style.width = '';
+          syncToolbar(c0);
+          panelToggle.textContent = '▶';
+          return;
+        }}
+        panel.classList.remove('collapsed');
+        panel.style.width = w + 'px';
+        syncToolbar(w);
+        panelToggle.textContent = '◀';
+      }}
+      function finishDragWidthPx(rawPx) {{
+        const below = collapseBelowPx();
+        const cap = maxPanelPx();
+        let w = Math.min(cap, Math.max(collapsedPx(), Math.round(rawPx)));
+        if (w < below) {{
+          applyCollapsed();
+          return;
+        }}
+        w = Math.min(cap, Math.max(minExpandedPx(), w));
+        applyExpandedWidthPx(w);
+      }}
+      applyExpandedWidthPx(lastExpandedWidthPx);
+      let dragStartClientX = 0;
+      let dragStartWidth = 0;
+      let lastMoveClientX = 0;
+      let dragMoved = false;
+      let resizePointerActive = false;
+      let suppressToggleClick = false;
+      const CLICK_MAX_MOVE = 6;
+      function onResizeWindow() {{
+        if (panel.classList.contains('collapsed')) {{
+          syncToolbar(collapsedPx());
+          return;
+        }}
+        const rw = panel.getBoundingClientRect().width;
+        const cap = maxPanelPx();
+        if (rw > cap) applyExpandedWidthPx(cap);
+        else syncToolbar(rw);
+      }}
+      window.addEventListener('resize', onResizeWindow);
+      panelToggle.addEventListener('click', function(ev) {{
+        if (suppressToggleClick) {{
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+          suppressToggleClick = false;
+        }}
+      }}, true);
+      panelToggle.addEventListener('pointerdown', function(ev) {{
+        if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+        ev.preventDefault();
+        dragMoved = false;
+        resizePointerActive = true;
+        dragStartClientX = ev.clientX;
+        lastMoveClientX = ev.clientX;
+        const c0 = collapsedPx();
+        dragStartWidth = panel.classList.contains('collapsed') ? c0 : panel.getBoundingClientRect().width;
+        panel.classList.add('panel-resize-dragging');
+        try {{ panelToggle.setPointerCapture(ev.pointerId); }} catch (e) {{}}
+      }});
+      panelToggle.addEventListener('pointermove', function(ev) {{
+        if (!resizePointerActive) return;
+        if (Math.abs(ev.clientX - dragStartClientX) > CLICK_MAX_MOVE) dragMoved = true;
+        lastMoveClientX = ev.clientX;
+        const w = dragStartWidth + (dragStartClientX - ev.clientX);
+        applyDragWidthPx(w);
+      }});
+      function endPointerDrag(ev) {{
+        if (!resizePointerActive) return;
+        resizePointerActive = false;
+        panel.classList.remove('panel-resize-dragging');
+        try {{ if (ev && ev.pointerId != null) panelToggle.releasePointerCapture(ev.pointerId); }} catch (e) {{}}
+        if (!dragMoved) {{
+          if (panel.classList.contains('collapsed')) {{
+            applyExpandedWidthPx(lastExpandedWidthPx);
+          }} else {{
+            lastExpandedWidthPx = Math.max(minExpandedPx(), Math.min(maxPanelPx(), panel.getBoundingClientRect().width));
+            applyCollapsed();
+          }}
+          dragMoved = false;
+          return;
+        }}
+        suppressToggleClick = true;
+        const endX = ev && Number.isFinite(ev.clientX) ? ev.clientX : lastMoveClientX;
+        const w = dragStartWidth + (dragStartClientX - endX);
+        finishDragWidthPx(w);
+        dragMoved = false;
+      }}
+      panelToggle.addEventListener('pointerup', endPointerDrag);
+      panelToggle.addEventListener('pointercancel', endPointerDrag);
+      panelToggle.addEventListener('lostpointercapture', function(ev) {{
+        if (resizePointerActive) endPointerDrag(ev);
+      }});
+    }})();
 
     function renderObjectList() {{
       if (!objectListEl) return;
@@ -6886,6 +7815,21 @@ html = f"""
             details
           }});
         }});
+      }} else if (mode === 'edge') {{
+        rebuildDerivedGraphEdges();
+        (state.derivedGraphEdges || []).forEach(function(ed) {{
+          items.push({{
+            type: 'layoutEdge',
+            id: ed.id,
+            title: 'Edge | ' + ed.label,
+            tag: 'Graph',
+            details:
+              'Length (graph): ' + Math.round(ed.dist) +
+              '<br>Pixel segment: (' + ed.x1.toFixed(0) + ', ' + ed.y1.toFixed(0) + ') → (' + ed.x2.toFixed(0) + ', ' + ed.y2.toFixed(0) + ')' +
+              '<br>Node indices: ' + ed.fromIdx + ' → ' + ed.toIdx,
+            noDelete: true
+          }});
+        }});
       }}
       if (!items.length) {{
         objectListEl.innerHTML = '<div class="obj-item">No objects yet.</div>';
@@ -6896,7 +7840,7 @@ html = f"""
           '<div class="obj-item-header">' +
             '<span class="obj-item-title">' + it.title + '</span>' +
             '<span class="obj-item-tag">' + it.tag + '</span>' +
-            '<button type="button" class="obj-item-delete" title="Delete">×</button>' +
+            '<button type="button" class="obj-item-delete" title="Delete"' + (it.noDelete ? ' style="display:none" tabindex="-1" aria-hidden="true"' : '') + '>×</button>' +
           '</div>' +
           '<div class="obj-item-details">' + it.details + '</div>' +
         '</div>'
@@ -6924,6 +7868,7 @@ html = f"""
           if (ev.target.classList.contains('obj-item-delete')) return;
           const typ = this.getAttribute('data-type');
           const idr = this.getAttribute('data-id');
+          if (typ === 'layoutEdge') rebuildDerivedGraphEdges();
           const obj = findLayoutObjectByListType(typ, idr);
           if (!obj) return;
           const wasExpanded = this.classList.contains('expanded');
@@ -7008,6 +7953,14 @@ html = f"""
             (minEx != null ? '<br>Min exit velocity: ' + minEx + ' m/s' : '') +
             '<br>Points: ' + (o.vertices ? o.vertices.length : 0) +
             '<br>Start point: ' + startStr + '<br>End point: ' + endStr;
+        }} else if (state.selectedObject.type === 'layoutEdge') {{
+          const ed = state.selectedObject.obj;
+          objectInfoEl.innerHTML =
+            '<strong>Edge (derived)</strong><br>' +
+            'Name: ' + (ed && ed.label ? ed.label : '—') +
+            '<br>Graph length: ' + (ed && ed.dist != null ? Math.round(ed.dist) : '—') +
+            '<br>Nodes: ' + (ed ? ed.fromIdx + ' → ' + ed.toIdx : '—') +
+            '<br>Segment (px): (' + (ed ? ed.x1.toFixed(0) : '—') + ', ' + (ed ? ed.y1.toFixed(0) : '—') + ') → (' + (ed ? ed.x2.toFixed(0) : '—') + ', ' + (ed ? ed.y2.toFixed(0) : '—') + ')';
         }} else if (state.selectedObject.type === 'flight') {{
           const dir = o.arrDep === 'Dep' ? 'Departure' : 'Arrival';
           const sibt = formatMinutesToHHMMSS(o.sibtMin_d != null ? o.sibtMin_d : (o.timeMin != null ? o.timeMin : 0));
@@ -8156,6 +9109,7 @@ html = f"""
       drawApronTaxiwayLinks();
       drawStandPreview();
       drawPathJunctions();
+      drawSelectedLayoutEdge();
       drawFlightPathHighlight();
       drawDeparturePathHighlight();
       drawFlights2D();
@@ -8426,8 +9380,22 @@ html = f"""
       }}
       if (!state.dragStart) return;
       if (!state.isPanning) {{
-        const hit = hitTest(wx, wy);
         const mode = settingModeSelect.value;
+        if (mode === 'edge') {{
+          rebuildDerivedGraphEdges();
+          const eh = hitTestLayoutGraphEdge(wx, wy);
+          if (eh) {{
+            state.selectedObject = {{ type: 'layoutEdge', id: eh.id, obj: eh }};
+          }} else {{
+            state.selectedObject = null;
+          }}
+          syncPanelFromState();
+          updateObjectInfo();
+          draw();
+          state.dragStart = null;
+          return;
+        }}
+        const hit = hitTest(wx, wy);
         if (mode === 'apronTaxiway' && state.apronLinkDrawing) {{
           const pbbHit = hitTestPbbEnd(wx, wy);
           const twHit = hitTestAnyTaxiwayVertex(wx, wy);
@@ -9086,6 +10054,7 @@ html = f"""
     syncPanelFromState();
     if (typeof draw === 'function') draw();
     if (typeof update3DScene === 'function') update3DScene();
+    if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Initial load');
   }})();
   </script>
 </body>

@@ -1,0 +1,2 @@
+{"id": "log_airside_1774179895499", "timestamp": 1774179895499, "location": "utils/airside_sim.py:run_simulation", "message": "airside timelines", "data": {"layoutName": "default_layout", "flightCount": 41, "withTimeline": 0}, "runId": "sim_debug", "hypothesisId": "A"}
+{"id": "log_airside_1774180282834", "timestamp": 1774180282834, "location": "utils/airside_sim.py:run_simulation", "message": "airside timelines", "data": {"layoutName": "default_layout", "flightCount": 41, "withTimeline": 0}, "runId": "sim_debug", "hypothesisId": "A"}

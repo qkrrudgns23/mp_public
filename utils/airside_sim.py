@@ -615,30 +615,6 @@ def run_simulation(
         out_flights.append(out)
 
     base_layout["flights"] = out_flights
-    # region agent log
-    try:
-        ts = int(__import__("time").time() * 1000)
-        log_path = Path(__file__).resolve().parents[1] / ".cursor" / "debug.log"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        non_empty = sum(1 for fl in out_flights if fl.get("timeline"))
-        payload = {
-            "id": f"log_airside_{ts}",
-            "timestamp": ts,
-            "location": "utils/airside_sim.py:run_simulation",
-            "message": "airside timelines",
-            "data": {
-                "layoutName": layout_name,
-                "flightCount": len(out_flights),
-                "withTimeline": non_empty,
-            },
-            "runId": "sim_debug",
-            "hypothesisId": "A",
-        }
-        with log_path.open("a", encoding="utf-8") as fp:
-            fp.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-    # endregion
 
     return base_layout
 

@@ -2803,16 +2803,6 @@ def build_report_html(scenarios: Union[List[dict], dict, str, Path]) -> str:
 
         # ——— Time Series: aggstar tab, each agg my location·Dep/Arrstar panel ———
         if time_series_by_agg:
-            # #region agent log
-            try:
-                import time as _t
-                _ts_layout = "multi_agg" if len(time_series_by_agg) >= 2 else "single_agg"
-                _ts_scenario_counts = [len(sc_list) for _, _, sc_list in time_series_by_agg]
-                with open(r"c:\Users\qkrru\Desktop\desktop\creative_code\DMK_repository\simulation_module\yeah_construction - 20250118\.cursor\debug.log", "a", encoding="utf-8") as _f:
-                    _f.write(json.dumps({"id":"log_ts_section","timestamp":int(_t.time()*1000),"location":"generate_scenario_report_rev2:Time_Series","message":"Time Series section build","data":{"layout":_ts_layout,"agg_count":len(time_series_by_agg),"scenario_counts":_ts_scenario_counts},"hypothesisId":"H3"}) + "\n")
-            except Exception:
-                pass
-            # #endregion
             html += """
     <section class="section">
       <h2 class="section-title">Time Series</h2>

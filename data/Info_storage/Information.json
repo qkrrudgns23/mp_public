@@ -1091,7 +1091,16 @@
       },
       "rightPanel": {
         "description": "Layout designer right settings panel surface opacity (0–1, blended with transparent over grid)",
-        "backgroundOpacity": 0.95
+        "backgroundOpacity": 0.95,
+        "panelToggleBg": "#3d3d44",
+        "panelToggleColor": "#ffffff",
+        "panelToggleBorder": "rgba(255,255,255,0.28)",
+        "panelWidthHalf": "26vw",
+        "panelWidthFull": "50vw",
+        "panelResizeCollapsedPx": 44,
+        "panelResizeCollapseBelowPx": 96,
+        "panelResizeMinExpandedPx": 220,
+        "panelResizeViewportMarginPx": 8
       },
       "gantt": {
         "sBar": "#007aff",
@@ -1120,7 +1129,8 @@
       "flightScheduleTable": {
         "colS": "#22c55e",
         "colSd": "#007aff",
-        "colE": "#ff69b4"
+        "colE": "#ff69b4",
+        "colRot": "#ffffff"
       },
       "rwySepTimeline": {
         "lineS": "#38bdf8",
