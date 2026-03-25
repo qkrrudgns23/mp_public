@@ -65,35 +65,73 @@ def _info_path(*keys, default=None):
     return d if d is not None else default
 
 
-_layout_info = _info_path("tiers", "layout") or {}
-_grid_info = (_layout_info.get("grid") or {}) if isinstance(_layout_info, dict) else {}
-_grid_img_info = (_grid_info.get("layoutImageOverlay") or {}) if isinstance(_grid_info, dict) else {}
-if isinstance(_grid_info, dict):
-    try:
-        if _grid_info.get("cols") is not None:
-            GRID_COLS = max(1, int(_grid_info["cols"]))
-    except (TypeError, ValueError):
-        pass
-    try:
-        if _grid_info.get("rows") is not None:
-            GRID_ROWS = max(1, int(_grid_info["rows"]))
-    except (TypeError, ValueError):
-        pass
-    try:
-        if _grid_info.get("cellSize") is not None:
-            CELL_SIZE = float(_grid_info["cellSize"])
-    except (TypeError, ValueError):
-        pass
+def _dict_or_empty(value) -> dict:
+    return value if isinstance(value, dict) else {}
 
-_term_ui = (_layout_info.get("terminal") or {}) if isinstance(_layout_info, dict) else {}
-_tw_ui = (_layout_info.get("taxiway") or {}) if isinstance(_layout_info, dict) else {}
-_rw_path_ui = (_layout_info.get("runwayPath") or {}) if isinstance(_layout_info, dict) else {}
-_rw_exit_ui = (_layout_info.get("runwayExit") or {}) if isinstance(_layout_info, dict) else {}
-_rw_exit_allowed_default_raw = _rw_exit_ui.get("allowedRwDirectionsDefault", ["clockwise", "counter_clockwise"]) if isinstance(_rw_exit_ui, dict) else ["clockwise", "counter_clockwise"]
 
-_flight_info = _info_path("tiers", "flight_schedule") or _info_path("tiers", "flight") or {}
-_algo_info = _info_path("tiers", "algorithm") or {}
-_sim_step = (_algo_info.get("simulation") or {}).get("timeStepSec") if isinstance(_algo_info, dict) else None
+def _cfg_cast(section: dict, key: str, default, cast):
+    if not isinstance(section, dict):
+        return default
+    raw = section.get(key)
+    if raw is None:
+        return default
+    try:
+        return cast(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _cfg_int(section: dict, key: str, default: int) -> int:
+    return int(_cfg_cast(section, key, default, int))
+
+
+def _cfg_float(section: dict, key: str, default: float) -> float:
+    return float(_cfg_cast(section, key, default, float))
+
+
+def _cfg_str(section: dict, key: str, default: str) -> str:
+    value = default if not isinstance(section, dict) else section.get(key, default)
+    return str(value)
+
+
+def _cfg_list(section: dict, key: str, default: list):
+    if not isinstance(section, dict):
+        return default
+    value = section.get(key)
+    return value if isinstance(value, list) else default
+
+
+def _cfg_bundle(section: dict, specs: list[tuple[str, str, object, object]]) -> dict:
+    values: dict[str, object] = {}
+    for name, key, default, reader in specs:
+        values[name] = reader(section, key, default)
+    return values
+
+
+_layout_info = _dict_or_empty(_info_path("tiers", "layout"))
+_grid_info = _dict_or_empty(_layout_info.get("grid"))
+_grid_img_info = _dict_or_empty(_grid_info.get("layoutImageOverlay"))
+
+if _grid_info.get("cols") is not None:
+    GRID_COLS = max(1, _cfg_int(_grid_info, "cols", GRID_COLS))
+if _grid_info.get("rows") is not None:
+    GRID_ROWS = max(1, _cfg_int(_grid_info, "rows", GRID_ROWS))
+if _grid_info.get("cellSize") is not None:
+    CELL_SIZE = _cfg_float(_grid_info, "cellSize", CELL_SIZE)
+
+_term_ui = _dict_or_empty(_layout_info.get("terminal"))
+_tw_ui = _dict_or_empty(_layout_info.get("taxiway"))
+_rw_path_ui = _dict_or_empty(_layout_info.get("runwayPath"))
+_rw_exit_ui = _dict_or_empty(_layout_info.get("runwayExit"))
+_rw_exit_allowed_default_raw = _cfg_list(
+    _rw_exit_ui,
+    "allowedRwDirectionsDefault",
+    ["clockwise", "counter_clockwise"],
+)
+
+_flight_info = _dict_or_empty(_info_path("tiers", "flight_schedule") or _info_path("tiers", "flight"))
+_algo_info = _dict_or_empty(_info_path("tiers", "algorithm"))
+_sim_step = _dict_or_empty(_algo_info.get("simulation")).get("timeStepSec")
 
 if not DEFAULT_LAYOUT_PATH.is_file() and _fallback_default.is_file():
     shutil.copy2(_fallback_default, DEFAULT_LAYOUT_PATH)
@@ -136,86 +174,108 @@ except (TypeError, ValueError):
     pass
 
 # HTML / iframe initial value (Layout tab, Flight tab — tiers.flight_schedule)
-_ui_g_min_cs = int(_grid_info.get("minCellSize", 5)) if isinstance(_grid_info, dict) else 5
-_ui_g_max_cs = int(_grid_info.get("maxCellSize", 1000)) if isinstance(_grid_info, dict) else 1000
-_ui_g_cs_step = int(_grid_info.get("cellSizeStep", 5)) if isinstance(_grid_info, dict) else 5
-_ui_g_min_dim = int(_grid_info.get("minDim", 5)) if isinstance(_grid_info, dict) else 5
-_ui_g_max_dim = int(_grid_info.get("maxDim", 1000)) if isinstance(_grid_info, dict) else 1000
-try:
-    _ui_g_img_opacity = float(_grid_img_info.get("defaultOpacity", 0.45)) if isinstance(_grid_img_info, dict) else 0.45
-except (TypeError, ValueError):
-    _ui_g_img_opacity = 0.45
-try:
-    _ui_g_img_opacity_min = float(_grid_img_info.get("minOpacity", 0.0)) if isinstance(_grid_img_info, dict) else 0.0
-except (TypeError, ValueError):
-    _ui_g_img_opacity_min = 0.0
-try:
-    _ui_g_img_opacity_max = float(_grid_img_info.get("maxOpacity", 1.0)) if isinstance(_grid_img_info, dict) else 1.0
-except (TypeError, ValueError):
-    _ui_g_img_opacity_max = 1.0
-try:
-    _ui_g_img_opacity_step = float(_grid_img_info.get("opacityStep", 0.05)) if isinstance(_grid_img_info, dict) else 0.05
-except (TypeError, ValueError):
-    _ui_g_img_opacity_step = 0.05
-try:
-    _ui_g_img_width_m = float(_grid_img_info.get("defaultWidthM", 200)) if isinstance(_grid_img_info, dict) else 200.0
-except (TypeError, ValueError):
-    _ui_g_img_width_m = 200.0
-try:
-    _ui_g_img_height_m = float(_grid_img_info.get("defaultHeightM", 200)) if isinstance(_grid_img_info, dict) else 200.0
-except (TypeError, ValueError):
-    _ui_g_img_height_m = 200.0
-try:
-    _ui_g_img_size_step = float(_grid_img_info.get("sizeStepM", 1.0)) if isinstance(_grid_img_info, dict) else 1.0
-except (TypeError, ValueError):
-    _ui_g_img_size_step = 1.0
-try:
-    _ui_g_img_point_step = float(_grid_img_info.get("pointStep", 0.5)) if isinstance(_grid_img_info, dict) else 0.5
-except (TypeError, ValueError):
-    _ui_g_img_point_step = 0.5
-try:
-    _ui_g_img_top_left_col = float(_grid_img_info.get("defaultTopLeftCol", 0)) if isinstance(_grid_img_info, dict) else 0.0
-except (TypeError, ValueError):
-    _ui_g_img_top_left_col = 0.0
-try:
-    _ui_g_img_top_left_row = float(_grid_img_info.get("defaultTopLeftRow", 0)) if isinstance(_grid_img_info, dict) else 0.0
-except (TypeError, ValueError):
-    _ui_g_img_top_left_row = 0.0
+_grid_ui_defaults = _cfg_bundle(_grid_info, [
+    ("min_cs", "minCellSize", 5, _cfg_int),
+    ("max_cs", "maxCellSize", 1000, _cfg_int),
+    ("cs_step", "cellSizeStep", 5, _cfg_int),
+    ("min_dim", "minDim", 5, _cfg_int),
+    ("max_dim", "maxDim", 1000, _cfg_int),
+    ("major_interval", "majorInterval", 10, _cfg_int),
+    ("major_line_w", "majorLineWidth", 1.2, _cfg_float),
+    ("minor_line_w", "minorLineWidth", 1.0, _cfg_float),
+    ("major_line_rgb", "majorLineBaseRgb", "255,255,255", _cfg_str),
+    ("minor_line_rgb", "minorLineBaseRgb", "140,140,140", _cfg_str),
+])
+_grid_img_ui_defaults = _cfg_bundle(_grid_img_info, [
+    ("opacity", "defaultOpacity", 0.45, _cfg_float),
+    ("opacity_min", "minOpacity", 0.0, _cfg_float),
+    ("opacity_max", "maxOpacity", 1.0, _cfg_float),
+    ("opacity_step", "opacityStep", 0.05, _cfg_float),
+    ("width_m", "defaultWidthM", 200.0, _cfg_float),
+    ("height_m", "defaultHeightM", 200.0, _cfg_float),
+    ("size_step", "sizeStepM", 1.0, _cfg_float),
+    ("point_step", "pointStep", 0.5, _cfg_float),
+    ("top_left_col", "defaultTopLeftCol", 0.0, _cfg_float),
+    ("top_left_row", "defaultTopLeftRow", 0.0, _cfg_float),
+])
+_term_ui_defaults = _cfg_bundle(_term_ui, [
+    ("floors", "floorsDefault", 1, _cfg_int),
+    ("floors_min", "floorsMin", 1, _cfg_int),
+    ("floors_max", "floorsMax", 20, _cfg_int),
+    ("f2f", "floorToFloor", 4.0, _cfg_float),
+    ("f2f_min", "floorToFloorMin", 1.0, _cfg_float),
+    ("f2f_max", "floorToFloorMax", 10.0, _cfg_float),
+    ("f2f_step", "floorToFloorStep", 0.5, _cfg_float),
+    ("dep", "departureCapacity", 0, _cfg_int),
+    ("arr", "arrivalCapacity", 0, _cfg_int),
+])
+_taxiway_ui_defaults = _cfg_bundle(_tw_ui, [
+    ("width", "width", 15, _cfg_int),
+    ("avg", "avgMoveVelocity", 10.0, _cfg_float),
+])
+_runway_path_ui_defaults = _cfg_bundle(_rw_path_ui, [
+    ("min_arr", "minArrVelocity", 15, _cfg_int),
+    ("lineup", "lineupDistM", 0, _cfg_int),
+    ("disp_start", "startDisplacedThresholdM", 100, _cfg_int),
+    ("blast_start", "startBlastPadM", 100, _cfg_int),
+    ("disp_end", "endDisplacedThresholdM", 100, _cfg_int),
+    ("blast_end", "endBlastPadM", 100, _cfg_int),
+])
+_runway_exit_ui_defaults = _cfg_bundle(_rw_exit_ui, [
+    ("ex_max", "maxExitVelocity", 30, _cfg_int),
+    ("ex_min", "minExitVelocity", 15, _cfg_int),
+])
+_flight_ui_defaults = _cfg_bundle(_flight_info, [
+    ("dwell", "defaultDwellMin", 60, _cfg_int),
+    ("min_dwell", "defaultMinDwellMin", 0, _cfg_int),
+    ("dwell_max", "dwellInputMax", 600, _cfg_int),
+    ("dwell_step", "dwellStep", 5, _cfg_int),
+    ("default_sim_speed", "defaultSimSpeed", 20.0, _cfg_float),
+])
 
-_ui_term_floors = int(_term_ui.get("floorsDefault", 1)) if isinstance(_term_ui, dict) else 1
-_ui_term_floors_min = int(_term_ui.get("floorsMin", 1)) if isinstance(_term_ui, dict) else 1
-_ui_term_floors_max = int(_term_ui.get("floorsMax", 20)) if isinstance(_term_ui, dict) else 20
-_ui_term_f2f = float(_term_ui.get("floorToFloor", 4)) if isinstance(_term_ui, dict) else 4.0
-_ui_term_f2f_min = float(_term_ui.get("floorToFloorMin", 1)) if isinstance(_term_ui, dict) else 1.0
-_ui_term_f2f_max = float(_term_ui.get("floorToFloorMax", 10)) if isinstance(_term_ui, dict) else 10.0
-_ui_term_f2f_step = float(_term_ui.get("floorToFloorStep", 0.5)) if isinstance(_term_ui, dict) else 0.5
-_ui_term_dep = int(_term_ui.get("departureCapacity", 0)) if isinstance(_term_ui, dict) else 0
-_ui_term_arr = int(_term_ui.get("arrivalCapacity", 0)) if isinstance(_term_ui, dict) else 0
+_ui_g_min_cs = _grid_ui_defaults["min_cs"]
+_ui_g_max_cs = _grid_ui_defaults["max_cs"]
+_ui_g_cs_step = _grid_ui_defaults["cs_step"]
+_ui_g_min_dim = _grid_ui_defaults["min_dim"]
+_ui_g_max_dim = _grid_ui_defaults["max_dim"]
+_ui_g_img_opacity = _grid_img_ui_defaults["opacity"]
+_ui_g_img_opacity_min = _grid_img_ui_defaults["opacity_min"]
+_ui_g_img_opacity_max = _grid_img_ui_defaults["opacity_max"]
+_ui_g_img_opacity_step = _grid_img_ui_defaults["opacity_step"]
+_ui_g_img_width_m = _grid_img_ui_defaults["width_m"]
+_ui_g_img_height_m = _grid_img_ui_defaults["height_m"]
+_ui_g_img_size_step = _grid_img_ui_defaults["size_step"]
+_ui_g_img_point_step = _grid_img_ui_defaults["point_step"]
+_ui_g_img_top_left_col = _grid_img_ui_defaults["top_left_col"]
+_ui_g_img_top_left_row = _grid_img_ui_defaults["top_left_row"]
 
-_ui_tw_w = int(_tw_ui.get("width", 15)) if isinstance(_tw_ui, dict) else 15
-_ui_tw_avg = float(_tw_ui.get("avgMoveVelocity", 10)) if isinstance(_tw_ui, dict) else 10.0
-_ui_rw_min_arr = int(_rw_path_ui.get("minArrVelocity", 15)) if isinstance(_rw_path_ui, dict) else 15
-_ui_rw_lineup = int(_rw_path_ui.get("lineupDistM", 0)) if isinstance(_rw_path_ui, dict) else 0
-_ui_rw_disp_start = int(_rw_path_ui.get("startDisplacedThresholdM", 100)) if isinstance(_rw_path_ui, dict) else 100
-_ui_rw_blast_start = int(_rw_path_ui.get("startBlastPadM", 100)) if isinstance(_rw_path_ui, dict) else 100
-_ui_rw_disp_end = int(_rw_path_ui.get("endDisplacedThresholdM", 100)) if isinstance(_rw_path_ui, dict) else 100
-_ui_rw_blast_end = int(_rw_path_ui.get("endBlastPadM", 100)) if isinstance(_rw_path_ui, dict) else 100
-_ui_ex_max = int(_rw_exit_ui.get("maxExitVelocity", 30)) if isinstance(_rw_exit_ui, dict) else 30
-_ui_ex_min = int(_rw_exit_ui.get("minExitVelocity", 15)) if isinstance(_rw_exit_ui, dict) else 15
+_ui_term_floors = _term_ui_defaults["floors"]
+_ui_term_floors_min = _term_ui_defaults["floors_min"]
+_ui_term_floors_max = _term_ui_defaults["floors_max"]
+_ui_term_f2f = _term_ui_defaults["f2f"]
+_ui_term_f2f_min = _term_ui_defaults["f2f_min"]
+_ui_term_f2f_max = _term_ui_defaults["f2f_max"]
+_ui_term_f2f_step = _term_ui_defaults["f2f_step"]
+_ui_term_dep = _term_ui_defaults["dep"]
+_ui_term_arr = _term_ui_defaults["arr"]
 
-_ui_flight_dwell = int(_flight_info.get("defaultDwellMin", 60)) if isinstance(_flight_info, dict) else 60
-_ui_flight_min_dwell = int(_flight_info.get("defaultMinDwellMin", 0)) if isinstance(_flight_info, dict) else 0
-_ui_flight_dwell_max = int(_flight_info.get("dwellInputMax", 600)) if isinstance(_flight_info, dict) else 600
-_ui_flight_dwell_step = int(_flight_info.get("dwellStep", 5)) if isinstance(_flight_info, dict) else 5
-_ui_sim_speeds = (
-    _flight_info.get("simSpeedOptions")
-    if isinstance(_flight_info, dict) and isinstance(_flight_info.get("simSpeedOptions"), list)
-    else [0.5, 1, 5, 10, 20, 50, 100, 200]
-)
-try:
-    _ui_default_sim_speed = float(_flight_info.get("defaultSimSpeed", 20)) if isinstance(_flight_info, dict) else 20.0
-except (TypeError, ValueError):
-    _ui_default_sim_speed = 20.0
+_ui_tw_w = _taxiway_ui_defaults["width"]
+_ui_tw_avg = _taxiway_ui_defaults["avg"]
+_ui_rw_min_arr = _runway_path_ui_defaults["min_arr"]
+_ui_rw_lineup = _runway_path_ui_defaults["lineup"]
+_ui_rw_disp_start = _runway_path_ui_defaults["disp_start"]
+_ui_rw_blast_start = _runway_path_ui_defaults["blast_start"]
+_ui_rw_disp_end = _runway_path_ui_defaults["disp_end"]
+_ui_rw_blast_end = _runway_path_ui_defaults["blast_end"]
+_ui_ex_max = _runway_exit_ui_defaults["ex_max"]
+_ui_ex_min = _runway_exit_ui_defaults["ex_min"]
+
+_ui_flight_dwell = _flight_ui_defaults["dwell"]
+_ui_flight_min_dwell = _flight_ui_defaults["min_dwell"]
+_ui_flight_dwell_max = _flight_ui_defaults["dwell_max"]
+_ui_flight_dwell_step = _flight_ui_defaults["dwell_step"]
+_ui_sim_speeds = _cfg_list(_flight_info, "simSpeedOptions", [0.5, 1, 5, 10, 20, 50, 100, 200])
+_ui_default_sim_speed = _flight_ui_defaults["default_sim_speed"]
 _flight_speed_options_html = "".join(
     f'<option value="{v}"{" selected" if float(v) == float(_ui_default_sim_speed) else ""}>{v}x</option>'
     for v in _ui_sim_speeds
@@ -274,11 +334,18 @@ except Exception:
 layout_names = list_layout_names()
 
 
+def _tiers_style_dict(info: dict) -> dict:
+    tiers = _dict_or_empty(info).get("tiers")
+    return _dict_or_empty(_dict_or_empty(tiers).get("style"))
+
+
+def _tiers_style_section(info: dict, key: str) -> dict:
+    return _dict_or_empty(_tiers_style_dict(info).get(key))
+
+
 def _grid_view_background(info: dict) -> str:
     """tiers.style.gridView.background → 2D/3D workspace fill color."""
-    tiers = info.get("tiers") if isinstance(info, dict) else None
-    st = (tiers.get("style") if isinstance(tiers, dict) else None) or {}
-    gv = st.get("gridView") if isinstance(st.get("gridView"), dict) else {}
+    gv = _tiers_style_section(info, "gridView")
     bg = str(gv.get("background", "#252525")).strip()
     if not bg.startswith("#") or len(bg) not in (4, 7):
         bg = "#252525"
@@ -287,9 +354,7 @@ def _grid_view_background(info: dict) -> str:
 
 def _grid_view_line_opacity(info: dict, key: str, default: float) -> float:
     """tiers.style.gridView.(majorLineOpacity|minorLineOpacity) → 0–1."""
-    tiers = info.get("tiers") if isinstance(info, dict) else None
-    st = (tiers.get("style") if isinstance(tiers, dict) else None) or {}
-    gv = st.get("gridView") if isinstance(st.get("gridView"), dict) else {}
+    gv = _tiers_style_section(info, "gridView")
     try:
         value = float(gv.get(key, default))
     except (TypeError, ValueError):
@@ -299,9 +364,7 @@ def _grid_view_line_opacity(info: dict, key: str, default: float) -> float:
 
 def _right_panel_background_opacity(info: dict) -> float:
     """tiers.style.rightPanel.backgroundOpacity → 0–1 for color-mix over transparent."""
-    tiers = info.get("tiers") if isinstance(info, dict) else None
-    st = (tiers.get("style") if isinstance(tiers, dict) else None) or {}
-    rp = st.get("rightPanel") if isinstance(st.get("rightPanel"), dict) else {}
+    rp = _tiers_style_section(info, "rightPanel")
     try:
         op = float(rp.get("backgroundOpacity", 0.95))
     except (TypeError, ValueError):
@@ -311,14 +374,11 @@ def _right_panel_background_opacity(info: dict) -> float:
 
 def _style_root_css_from_information(info: dict) -> str:
     """tiers.style → :root CSS variables (Gantt, tables, canvas, 3D theme)."""
-    tiers = info.get("tiers") if isinstance(info, dict) else None
-    st = (tiers.get("style") if isinstance(tiers, dict) else None) or {}
-    if not isinstance(st, dict):
-        st = {}
+    st = _tiers_style_dict(info)
     _gv_bg = _grid_view_background(info)
     _rp_bg_op = _right_panel_background_opacity(info)
     _rp_mix_pct = f"{round(_rp_bg_op * 100)}%"
-    rp_style = st.get("rightPanel") if isinstance(st.get("rightPanel"), dict) else {}
+    rp_style = _dict_or_empty(st.get("rightPanel"))
 
     def _emit(name: str, value) -> str | None:
         if value is None:
@@ -491,11 +551,11 @@ _GRID_VIEW_BG = _grid_view_background(INFORMATION)
 _GRID_MAJOR_LINE_OPACITY = _grid_view_line_opacity(INFORMATION, "majorLineOpacity", 0.35)
 _GRID_MINOR_LINE_OPACITY = _grid_view_line_opacity(INFORMATION, "minorLineOpacity", 0.2)
 
-_ui_g_major_interval = int(_grid_info.get("majorInterval", 10)) if isinstance(_grid_info, dict) else 10
-_ui_g_major_line_w = float(_grid_info.get("majorLineWidth", 1.2)) if isinstance(_grid_info, dict) else 1.2
-_ui_g_minor_line_w = float(_grid_info.get("minorLineWidth", 1.0)) if isinstance(_grid_info, dict) else 1.0
-_ui_g_major_line_rgb = str(_grid_info.get("majorLineBaseRgb", "255,255,255")) if isinstance(_grid_info, dict) else "255,255,255"
-_ui_g_minor_line_rgb = str(_grid_info.get("minorLineBaseRgb", "140,140,140")) if isinstance(_grid_info, dict) else "140,140,140"
+_ui_g_major_interval = _grid_ui_defaults["major_interval"]
+_ui_g_major_line_w = _grid_ui_defaults["major_line_w"]
+_ui_g_minor_line_w = _grid_ui_defaults["minor_line_w"]
+_ui_g_major_line_rgb = _grid_ui_defaults["major_line_rgb"]
+_ui_g_minor_line_rgb = _grid_ui_defaults["minor_line_rgb"]
 
 # Layout name to display at the top of the grid
 layout_display_name = "default_layout"
@@ -539,38 +599,101 @@ def _top_panel_tab_html(tab_id: str, label: str, icon_filename: str, active: boo
     )
 
 
-_layout_mode_tabs_primary_html = "".join(
-    [
-        _layout_mode_button_html("grid", "Grid", "layout_mode_grid.svg"),
-        _layout_mode_button_html("runwayPath", "Runway", "layout_mode_runway.svg"),
-        _layout_mode_button_html("runwayTaxiway", "Runway Taxiway", "layout_mode_runway_taxiway.svg"),
-        _layout_mode_button_html("taxiway", "Taxiway", "layout_mode_taxiway.svg"),
-        _layout_mode_button_html("edge", "Edge", "layout_mode_edge.svg"),
-    ]
-)
+def _build_layout_mode_tabs_html() -> tuple[str, str]:
+    primary_html = "".join(
+        [
+            _layout_mode_button_html("grid", "Grid", "layout_mode_grid.svg"),
+            _layout_mode_button_html("runwayPath", "Runway", "layout_mode_runway.svg"),
+            _layout_mode_button_html("runwayTaxiway", "Runway Taxiway", "layout_mode_runway_taxiway.svg"),
+            _layout_mode_button_html("taxiway", "Taxiway", "layout_mode_taxiway.svg"),
+            _layout_mode_button_html("edge", "Edge", "layout_mode_edge.svg"),
+        ]
+    )
+    secondary_html = "".join(
+        [
+            _layout_mode_button_html("terminal", "Terminal", "layout_mode_terminal.svg"),
+            _layout_mode_button_html("pbb", "Contact Stand", "layout_mode_pbb.svg"),
+            _layout_mode_button_html("remote", "Remote Stand", "layout_mode_remote.svg"),
+            _layout_mode_button_html("apronTaxiway", "Apron Taxiway", "layout_mode_apron_taxiway.svg"),
+            _layout_mode_button_html("groundAccess", "Ground Access", "layout_mode_ground_access.svg"),
+        ]
+    )
+    return primary_html, secondary_html
 
-_layout_mode_tabs_secondary_html = "".join(
-    [
-        _layout_mode_button_html("terminal", "Terminal", "layout_mode_terminal.svg"),
-        _layout_mode_button_html("pbb", "Contact Stand", "layout_mode_pbb.svg"),
-        _layout_mode_button_html("remote", "Remote Stand", "layout_mode_remote.svg"),
-        _layout_mode_button_html("apronTaxiway", "Apron Taxiway", "layout_mode_apron_taxiway.svg"),
-        _layout_mode_button_html("groundAccess", "Ground Access", "layout_mode_ground_access.svg"),
-    ]
-)
 
-_top_panel_tabs_html = "".join(
-    [
-        _top_panel_tab_html("settings", "Layout", "top_tab_layout.svg", active=True),
-        _top_panel_tab_html("flight", "Flight", "top_tab_flight.svg"),
-        _top_panel_tab_html("rwysep", "Runway", "top_tab_runway.svg"),
-        _top_panel_tab_html("allocation", "Apron", "top_tab_apron.svg"),
-        _top_panel_tab_html("simulation", "KPI", "top_tab_kpi.svg"),
-        _top_panel_tab_html("saveload", "Save", "top_tab_saveload.svg"),
-    ]
-)
+def _build_top_panel_tabs_html() -> str:
+    return "".join(
+        [
+            _top_panel_tab_html("settings", "Layout", "top_tab_layout.svg", active=True),
+            _top_panel_tab_html("flight", "Flight", "top_tab_flight.svg"),
+            _top_panel_tab_html("rwysep", "Runway", "top_tab_runway.svg"),
+            _top_panel_tab_html("allocation", "Apron", "top_tab_apron.svg"),
+            _top_panel_tab_html("simulation", "KPI", "top_tab_kpi.svg"),
+            _top_panel_tab_html("saveload", "Save", "top_tab_saveload.svg"),
+        ]
+    )
 
-html = f"""
+
+_layout_mode_tabs_primary_html, _layout_mode_tabs_secondary_html = _build_layout_mode_tabs_html()
+_top_panel_tabs_html = _build_top_panel_tabs_html()
+_PANEL_FORM_SCOPE_SELECTORS = """
+    #tab-settings .settings-pane,
+    #flightPaneSchedule,
+    #flightPaneConfig
+""".strip()
+_PANEL_FORM_LABEL_SELECTORS = """
+    #tab-settings .settings-pane label,
+    #flightPaneSchedule label,
+    #flightPaneConfig label
+""".strip()
+_PANEL_FORM_LABEL_FIRST_SELECTORS = """
+    #tab-settings .settings-pane label:first-child,
+    #flightPaneSchedule label:first-child,
+    #flightPaneConfig label:first-child
+""".strip()
+_PANEL_FORM_CONTROL_SELECTORS = """
+    #tab-settings .settings-pane input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    #tab-settings .settings-pane select,
+    #flightPaneSchedule input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    #flightPaneSchedule select,
+    #flightPaneConfig input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    #flightPaneConfig select
+""".strip()
+_PANEL_FORM_SELECT_SELECTORS = """
+    #tab-settings .settings-pane select,
+    #flightPaneSchedule select,
+    #flightPaneConfig select
+""".strip()
+_PANEL_FORM_FOCUS_SELECTORS = """
+    #tab-settings .settings-pane input:focus,
+    #tab-settings .settings-pane select:focus,
+    #flightPaneSchedule input:focus,
+    #flightPaneSchedule select:focus,
+    #flightPaneConfig input:focus,
+    #flightPaneConfig select:focus
+""".strip()
+_PANEL_FORM_SMALL_BUTTON_SELECTORS = """
+    #tab-settings .settings-pane button.small,
+    #flightPaneSchedule button.small,
+    #flightPaneConfig button.small
+""".strip()
+
+def _build_designer_context() -> dict:
+    return {
+        "style_root_css": _style_root_css,
+        "layout_mode_tabs_primary_html": _layout_mode_tabs_primary_html,
+        "layout_mode_tabs_secondary_html": _layout_mode_tabs_secondary_html,
+        "top_panel_tabs_html": _top_panel_tabs_html,
+    }
+
+
+def _build_designer_html() -> str:
+    context = _build_designer_context()
+    _style_root_css = context["style_root_css"]
+    _layout_mode_tabs_primary_html = context["layout_mode_tabs_primary_html"]
+    _layout_mode_tabs_secondary_html = context["layout_mode_tabs_secondary_html"]
+    _top_panel_tabs_html = context["top_panel_tabs_html"]
+    return f"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -653,9 +776,7 @@ html = f"""
     .layout-mode-icon {{ width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }}
     .layout-mode-icon svg {{ width:18px; height:18px; display:block; }}
     .layout-mode-label {{ display:block; line-height:1.15; }}
-    #tab-settings .settings-pane,
-    #flightPaneSchedule,
-    #flightPaneConfig {{
+    {_PANEL_FORM_SCOPE_SELECTORS} {{
       --form-label-width: 136px;
       --settings-row-gap: 10px;
       margin-top: 8px;
@@ -664,9 +785,7 @@ html = f"""
       border: 1px solid var(--ui-border-default);
       background: var(--ui-bg-elevated);
     }}
-    #tab-settings .settings-pane label,
-    #flightPaneSchedule label,
-    #flightPaneConfig label {{
+    {_PANEL_FORM_LABEL_SELECTORS} {{
       font-size: 10px;
       font-weight: 400;
       letter-spacing: 0;
@@ -674,17 +793,10 @@ html = f"""
       color: var(--ui-text-secondary);
       margin-top: 0;
     }}
-    #tab-settings .settings-pane label:first-child,
-    #flightPaneSchedule label:first-child,
-    #flightPaneConfig label:first-child {{
+    {_PANEL_FORM_LABEL_FIRST_SELECTORS} {{
       margin-top: 0;
     }}
-    #tab-settings .settings-pane input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-    #tab-settings .settings-pane select,
-    #flightPaneSchedule input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-    #flightPaneSchedule select,
-    #flightPaneConfig input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-    #flightPaneConfig select {{
+    {_PANEL_FORM_CONTROL_SELECTORS} {{
       margin-top: 6px;
       min-height: 26px;
       border-radius: 6px;
@@ -696,9 +808,7 @@ html = f"""
       line-height: 1.2;
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
     }}
-    #tab-settings .settings-pane select,
-    #flightPaneSchedule select,
-    #flightPaneConfig select {{
+    {_PANEL_FORM_SELECT_SELECTORS} {{
       appearance: none;
       -webkit-appearance: none;
       -moz-appearance: none;
@@ -708,12 +818,7 @@ html = f"""
       background-position: right 12px center;
       background-size: 12px 8px;
     }}
-    #tab-settings .settings-pane input:focus,
-    #tab-settings .settings-pane select:focus,
-    #flightPaneSchedule input:focus,
-    #flightPaneSchedule select:focus,
-    #flightPaneConfig input:focus,
-    #flightPaneConfig select:focus {{
+    {_PANEL_FORM_FOCUS_SELECTORS} {{
       outline: none;
       border-color: var(--ui-accent-ring);
       box-shadow: 0 0 0 2px var(--ui-accent-muted);
@@ -787,9 +892,7 @@ html = f"""
       margin-top: 0 !important;
       margin-bottom: 0 !important;
     }}
-    #tab-settings .settings-pane button.small,
-    #flightPaneSchedule button.small,
-    #flightPaneConfig button.small {{
+    {_PANEL_FORM_SMALL_BUTTON_SELECTORS} {{
       min-height: 26px;
       padding: 4px 9px;
       font-size: 10px;
@@ -1522,6 +1625,7 @@ html = f"""
 
   <script>
   (function() {{
+    // ---- Bootstrapped context and designer defaults ----
     const LAYOUT_API_URL = {json.dumps(LAYOUT_API_URL)};
     const LAYOUT_NAMES = {json.dumps(layout_names)};
     const INITIAL_LAYOUT = {json.dumps(layout_for_html)};
@@ -2382,22 +2486,28 @@ html = f"""
     function rsepGetSeqMeta(seq) {{
       return RSEP_SEQ_META[seq] || null;
     }}
-    function rsepMakeMatrix(cats, src) {{
-      const m = {{}};
-      cats.forEach(l => {{
-        m[l] = {{}};
-        cats.forEach(t => {{
-          m[l][t] = src && src[l] && src[l][t] != null ? String(src[l][t]) : '';
+    function _rsepStringValue(value) {{
+      return value != null ? String(value) : '';
+    }}
+    function _rsepMakeCategoryValues(cats, src, asMatrix) {{
+      const out = {{}};
+      cats.forEach(leadCat => {{
+        if (!asMatrix) {{
+          out[leadCat] = _rsepStringValue(src && src[leadCat]);
+          return;
+        }}
+        out[leadCat] = {{}};
+        cats.forEach(trailCat => {{
+          out[leadCat][trailCat] = _rsepStringValue(src && src[leadCat] && src[leadCat][trailCat]);
         }});
       }});
-      return m;
+      return out;
+    }}
+    function rsepMakeMatrix(cats, src) {{
+      return _rsepMakeCategoryValues(cats, src, true);
     }}
     function rsepMake1D(cats, src) {{
-      const d = {{}};
-      cats.forEach(c => {{
-        d[c] = src && src[c] != null ? String(src[c]) : '';
-      }});
-      return d;
+      return _rsepMakeCategoryValues(cats, src, false);
     }}
     function rsepMakeSeqData(stdKey) {{
       const cats = RSEP_STD_CATS[stdKey] || [];
@@ -2953,11 +3063,31 @@ html = f"""
       for (let i = 0; i < existing.length; i++) if (rectsOverlap(bounds, existing[i])) return true;
       return false;
     }}
+    // ---- Shared math and formatting helpers ----
     function dist2(a, b) {{ const dx = a[0]-b[0], dy = a[1]-b[1]; return dx*dx+dy*dy; }}
+    function _normalizeTimeToSeconds(value, unit, roundingMode) {{
+      const raw = Number(value || 0);
+      const scaled = unit === 'minutes' ? raw * 60 : raw;
+      const rounded = roundingMode === 'round' ? Math.round(scaled) : Math.floor(scaled);
+      return Math.max(0, rounded);
+    }}
+    function _splitTotalSeconds(totalSec) {{
+      const safeSec = Math.max(0, Math.floor(totalSec || 0));
+      const h = Math.floor(safeSec / 3600);
+      const m = Math.floor((safeSec % 3600) / 60);
+      const s = safeSec % 60;
+      return {{
+        h,
+        m,
+        s,
+        hh: (h < 10 ? '0' : '') + h,
+        mm: (m < 10 ? '0' : '') + m,
+        ss: (s < 10 ? '0' : '') + s,
+      }};
+    }}
     function formatMinutesToHHMM(m) {{
-      const hh = Math.floor(m / 60);
-      const mm = Math.floor(m % 60);
-      return hh + ':' + (mm < 10 ? '0' : '') + mm;
+      const parts = _splitTotalSeconds(_normalizeTimeToSeconds(m, 'minutes', 'floor'));
+      return parts.h + ':' + parts.mm;
     }}
     function findNearestItem(candidates, getPoint, wx, wy, maxD2) {{
       const click = [wx, wy];
@@ -4163,21 +4293,14 @@ html = f"""
     }}
 
     function formatTotalSecondsToHHMMSS(totalSec) {{
-      const h = Math.floor(totalSec / 3600);
-      const m = Math.floor((totalSec % 3600) / 60);
-      const s = totalSec % 60;
-      const hh = (h < 10 ? '0' : '') + h;
-      const mm = (m < 10 ? '0' : '') + m;
-      const ss = (s < 10 ? '0' : '') + s;
-      return hh + ':' + mm + ':' + ss;
+      const parts = _splitTotalSeconds(totalSec);
+      return parts.hh + ':' + parts.mm + ':' + parts.ss;
     }}
     function formatMinutesToHHMMSS(minsRaw) {{
-      const totalSec = Math.max(0, Math.round((minsRaw || 0) * 60));
-      return formatTotalSecondsToHHMMSS(totalSec);
+      return formatTotalSecondsToHHMMSS(_normalizeTimeToSeconds(minsRaw, 'minutes', 'round'));
     }}
     function formatSecondsToHHMMSS(secRaw) {{
-      const totalSec = Math.max(0, Math.floor(secRaw || 0));
-      return formatTotalSecondsToHHMMSS(totalSec);
+      return formatTotalSecondsToHHMMSS(_normalizeTimeToSeconds(secRaw, 'seconds', 'floor'));
     }}
 
     function getStandBusyIntervals(standId, ignoreFlightId) {{
@@ -4677,30 +4800,19 @@ html = f"""
       return retStatsAll;
     }}
 
-    function renderFlightList(skipAutoAllocate, forceResampleRet) {{
-      const listEl = document.getElementById('flightList');
-      const cfgEl = document.getElementById('flightConfigList');
-      if (!listEl) return;
-      if (!state.flights.length) {{
-        listEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights yet.</div>';
-        if (cfgEl) cfgEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights yet.</div>';
-        const ganttEl = document.getElementById('allocationGantt');
-        if (ganttEl) {{
-          ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
-        }}
-        return;
-      }}
-      // Alignment uses display copies only. state.flights Maintain the order Allocation bar chart/Ensure that the parking lot layout does not change when route is updated.
-      const flightsSorted = state.flights.slice();
-      flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
-      flightsSorted.forEach(function(f) {{ ensureFlightPaths(f); }});
-      // Bump rev first so RET/ROT + VTT share the same generation (matches Global Update flow).
-      if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
-      // Paths (above) → RET/ROT → S(d)+E (compute* below). Order matches schedule dependency.
-      const retStatsAll = (typeof ensureArrRetRotSampled === 'function')
-        ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
-        : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
-      const headerRow = '' +
+    function _flightListEmptyHtml(message) {{
+      return '<div style="font-size:11px;color:#9ca3af;">' + message + '</div>';
+    }}
+
+    function _renderEmptyFlightListState(listEl, cfgEl) {{
+      listEl.innerHTML = _flightListEmptyHtml('No flights yet.');
+      if (cfgEl) cfgEl.innerHTML = _flightListEmptyHtml('No flights yet.');
+      const ganttEl = document.getElementById('allocationGantt');
+      if (ganttEl) ganttEl.innerHTML = _flightListEmptyHtml('No flights for Gantt.');
+    }}
+
+    function _buildFlightListHeaderHtml() {{
+      return '' +
         '<table class="flight-schedule-table">' +
         '<thead><tr>' +
           '<th>Reg</th>' +
@@ -4736,394 +4848,407 @@ html = f"""
           '<th class="flight-td-del"></th>' +
         '</tr></thead>' +
         '<tbody>';
+    }}
+
+    function _buildFlightListRowHtml(f, retStatsAll) {{
+      const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+      const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+      let sampledRetName = '—';
+      if (f.arrRetFailed) sampledRetName = 'Failed';
+      else if (f.sampledArrRet != null && retStatsAll && retStatsAll.length) {{
+        const retInfo = retStatsAll.find(r => r.exit && r.exit.id === f.sampledArrRet);
+        sampledRetName = retInfo ? (retInfo.name || 'RET') : 'RET';
+      }}
+      const tArrMin = f.timeMin != null ? f.timeMin : 0;
+      const dwell = f.dwellMin != null ? f.dwellMin : 0;
+      const tDepMin = tArrMin + dwell;
+      const vttArrMin = getBaseVttArrMinutes(f);
+      const rotArrMin = getArrRotMinutes(f);
+      const vttDepMin = getBaseVttDepMinutes(f);
+      const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin - rotArrMin));
+      const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
+      const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
+      const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + vttDepMin);
+      const sldtStr = formatMinutesToHHMMSS(f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc);
+      const stotStr = formatMinutesToHHMMSS(stotOrig);
+      const sldtStr_d = formatMinutesToHHMMSS(f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
+      const sibtStr_d = formatMinutesToHHMMSS(f.sibtMin_d != null ? f.sibtMin_d : tArrMin);
+      const sobtStr_d = formatMinutesToHHMMSS(f.sobtMin_d != null ? f.sobtMin_d : tDepMin);
+      const stotStr_d = formatMinutesToHHMMSS(f.stotMin_d != null ? f.stotMin_d : stotOrig);
+      const eldtMin = f.eldtMin != null ? f.eldtMin : (f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
+      const etotMin = f.etotMin != null ? f.etotMin : (f.stotMin_d != null ? f.stotMin_d : stotOrig);
+      f.eldtMin = eldtMin;
+      f.etotMin = etotMin;
+      const tArr = formatMinutesToHHMMSS(tArrMin);
+      const tDep = formatMinutesToHHMMSS(tDepMin);
+      const vttADelayMin = f.vttADelayMin != null ? f.vttADelayMin : 0;
+      const eibtMin = eldtMin + rotArrMin + vttArrMin + vttADelayMin;
+      const eobtMin = etotMin - vttDepMin;
+      if (f.sobtMin_orig == null) {{
+        f.sldtMin_orig = sldtOrig;
+        f.sibtMin_orig = tArrMin;
+        f.sobtMin_orig = sobtOrig;
+        f.stotMin_orig = stotOrig;
+        f.eldtMin_orig = eldtMin;
+        f.eibtMin_orig = eibtMin;
+        f.eobtMin_orig = eobtMin;
+        f.etotMin_orig = etotMin;
+      }}
+      f.eibtMin = eibtMin;
+      f.eobtMin = eobtMin;
+      const eldtStr = formatMinutesToHHMMSS(eldtMin);
+      const etotStr = formatMinutesToHHMMSS(etotMin);
+      const eibtStr = formatMinutesToHHMMSS(eibtMin);
+      const eobtStr = formatMinutesToHHMMSS(eobtMin);
+      const dwellS = dwell;
+      const dwellE = Math.max(0, eobtMin - eibtMin);
+      const vttArrStr = formatMinutesToHHMMSS(vttArrMin);
+      const vttADelayStr = formatMinutesToHHMMSS(vttADelayMin);
+      const vttDepStr = formatMinutesToHHMMSS(vttDepMin);
+      const arrOpt = buildRunwayOptionsHtml(arrRunwayId);
+      const termOpt = buildTerminalOptionsHtml(f.terminalId || (f.token && f.token.terminalId));
+      const depOpt = buildRunwayOptionsHtml(f.depRunwayId || (f.token && f.token.depRunwayId));
+      const noWayBadge = (f.noWayArr || f.noWayDep) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ No Way</span>' : '';
+      const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
+      const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
+      const icaoJhl = (ac && ac.icaoJHL) ? ac.icaoJHL : '—';
+      const recatEu = (ac && ac.recatEu) ? ac.recatEu : '—';
+      const arrRetFailedBadge = (f.arrRetFailed || sampledRetName === 'Failed') ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
+      return '' +
+        '<tr class="flight-data-row obj-item" data-id="' + f.id + '">' +
+          '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + arrRetFailedBadge + '</td>' +
+          '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
+          '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
+          '<td class="flight-td-time flight-col-s flight-col-s-start">' + sldtStr + '</td>' +
+          '<td class="flight-td-time flight-td-sibt flight-col-s">' + tArr + '</td>' +
+          '<td class="flight-td-time flight-col-s">' + tDep + '</td>' +
+          '<td class="flight-td-time flight-col-s flight-col-s-last">' + stotStr + '</td>' +
+          '<td class="flight-td-time flight-col-sd flight-col-sd-start">' + sldtStr_d + '</td>' +
+          '<td class="flight-td-time flight-col-sd">' + sibtStr_d + '</td>' +
+          '<td class="flight-td-time flight-col-sd">' + sobtStr_d + '</td>' +
+          '<td class="flight-td-time flight-col-sd flight-col-sd-last">' + stotStr_d + '</td>' +
+          '<td class="flight-td-time flight-col-e flight-col-e-start">' + eldtStr + '</td>' +
+          '<td class="flight-td-time flight-col-e">' + eibtStr + '</td>' +
+          '<td class="flight-td-time flight-col-e">' + eobtStr + '</td>' +
+          '<td class="flight-td-time flight-col-e">' + etotStr + '</td>' +
+          '<td class="flight-td-time flight-col-e flight-col-rot">' + (f.arrRotSec != null && isFinite(f.arrRotSec) ? (Math.round(f.arrRotSec) + ' s') : '—') + '</td>' +
+          '<td class="flight-td-time">' + vttArrStr + '</td>' +
+          '<td class="flight-td-time">' + vttADelayStr + '</td>' +
+          '<td class="flight-td-time">' + vttDepStr + '</td>' +
+          '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
+          '<td>' + escapeHtml(codeIcao) + '</td>' +
+          '<td>' + escapeHtml(icaoJhl) + '</td>' +
+          '<td>' + escapeHtml(recatEu) + '</td>' +
+          '<td>' + (dwellS != null ? dwellS : 0) + '</td>' +
+          '<td>' + (typeof dwellE === 'number' ? Math.round(dwellE * 10) / 10 : '—') + '</td>' +
+          '<td class="flight-td-select"><select class="flight-assign-select" data-role="arr" data-id="' + f.id + '">' + arrOpt + '</select></td>' +
+          '<td>' + escapeHtml(sampledRetName) + '</td>' +
+          '<td class="flight-td-select"><select class="flight-assign-select" data-role="term" data-id="' + f.id + '">' + termOpt + '</select></td>' +
+          '<td class="flight-td-reg">' + (function() {{ var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); }})() + '</td>' +
+          '<td class="flight-td-select"><select class="flight-assign-select" data-role="dep" data-id="' + f.id + '">' + depOpt + '</select></td>' +
+          '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
+        '</tr>';
+    }}
+
+    function _buildFlightListRowsHtml(flightsSorted, retStatsAll) {{
+      return flightsSorted.map(function(f) {{
+        return _buildFlightListRowHtml(f, retStatsAll);
+      }});
+    }}
+
+    // ---- Flight schedule list ----
+    function renderFlightList(skipAutoAllocate, forceResampleRet) {{
+      const listEl = document.getElementById('flightList');
+      const cfgEl = document.getElementById('flightConfigList');
+      if (!listEl) return;
+      if (!state.flights.length) {{
+        _renderEmptyFlightListState(listEl, cfgEl);
+        return;
+      }}
+      // Alignment uses display copies only. state.flights Maintain the order Allocation bar chart/Ensure that the parking lot layout does not change when route is updated.
+      const flightsSorted = state.flights.slice();
+      flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+      flightsSorted.forEach(function(f) {{ ensureFlightPaths(f); }});
+      // Bump rev first so RET/ROT + VTT share the same generation (matches Global Update flow).
+      if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
+      // Paths (above) → RET/ROT → S(d)+E (compute* below). Order matches schedule dependency.
+      const retStatsAll = (typeof ensureArrRetRotSampled === 'function')
+        ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
+        : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
+      const headerRow = _buildFlightListHeaderHtml();
       if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
       if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
       pinEarliestEldtToSldtPerRunway(flightsSorted);
-      const dataRows = flightsSorted.map(function(f) {{
-        const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
-        const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-        let sampledRetName = '—';
-        if (f.arrRetFailed) sampledRetName = 'Failed';
-        else if (f.sampledArrRet != null && retStatsAll && retStatsAll.length) {{
-          const retInfo = retStatsAll.find(r => r.exit && r.exit.id === f.sampledArrRet);
-          sampledRetName = retInfo ? (retInfo.name || 'RET') : 'RET';
-        }}
-        const tArrMin = f.timeMin != null ? f.timeMin : 0;
-        const dwell = f.dwellMin != null ? f.dwellMin : 0;
-        const tDepMin = tArrMin + dwell;
-        const vttArrMin = getBaseVttArrMinutes(f);
-        const rotArrMin = getArrRotMinutes(f);
-        const vttDepMin = getBaseVttDepMinutes(f);
-        const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin - rotArrMin));
-        const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
-        const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-        const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + vttDepMin);
-        const sldtStr = formatMinutesToHHMMSS(f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc);
-        const stotStr = formatMinutesToHHMMSS(stotOrig);
-        const sldtStr_d = formatMinutesToHHMMSS(f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
-        const sibtStr_d = formatMinutesToHHMMSS(f.sibtMin_d != null ? f.sibtMin_d : tArrMin);
-        const sobtStr_d = formatMinutesToHHMMSS(f.sobtMin_d != null ? f.sobtMin_d : tDepMin);
-        const stotStr_d = formatMinutesToHHMMSS(f.stotMin_d != null ? f.stotMin_d : stotOrig);
-        const eldtMin = f.eldtMin != null ? f.eldtMin : (f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
-        const etotMin = f.etotMin != null ? f.etotMin : (f.stotMin_d != null ? f.stotMin_d : stotOrig);
-        f.eldtMin = eldtMin;
-        f.etotMin = etotMin;
-
-        const tArr = formatMinutesToHHMMSS(tArrMin);
-        const tDep = formatMinutesToHHMMSS(tDepMin);
-        const vttADelayMin = f.vttADelayMin != null ? f.vttADelayMin : 0;
-        const eibtMin = eldtMin + rotArrMin + vttArrMin + vttADelayMin;
-        const eobtMin = etotMin - vttDepMin;
-        // Flight Schedule Original standard S/E Save the series time, and then GanttIn *_orig Reference as standard
-        if (f.sobtMin_orig == null) {{
-          f.sldtMin_orig = sldtOrig;
-          f.sibtMin_orig = tArrMin;
-          f.sobtMin_orig = sobtOrig;
-          f.stotMin_orig = stotOrig;
-          f.eldtMin_orig = eldtMin;
-          f.eibtMin_orig = eibtMin;
-          f.eobtMin_orig = eobtMin;
-          f.etotMin_orig = etotMin;
-        }}
-        // Flight to object EIBT/EOBT save (Apron Gantt Direct reference from etc.)
-        f.eibtMin = eibtMin;
-        f.eobtMin = eobtMin;
-
-        const eldtStr = formatMinutesToHHMMSS(eldtMin);
-        const etotStr = formatMinutesToHHMMSS(etotMin);
-        const eibtStr = formatMinutesToHHMMSS(eibtMin);
-        const eobtStr = formatMinutesToHHMMSS(eobtMin);
-        const dwellS = dwell;
-        const dwellE = Math.max(0, eobtMin - eibtMin);
-        const vttArrStr = formatMinutesToHHMMSS(vttArrMin);
-        const vttADelayStr = formatMinutesToHHMMSS(vttADelayMin);
-        const vttDepStr = formatMinutesToHHMMSS(vttDepMin);
-        // Arr Runway / options / No Way badge (arrRunwayId, acabove RET Already defined in the sampling step)
-        const arrOpt = buildRunwayOptionsHtml(arrRunwayId);
-        const termOpt = buildTerminalOptionsHtml(f.terminalId || (f.token && f.token.terminalId));
-        const depOpt = buildRunwayOptionsHtml(f.depRunwayId || (f.token && f.token.depRunwayId));
-        const noWayBadge = (f.noWayArr || f.noWayDep) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ No Way</span>' : '';
-        const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
-        const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
-        const icaoJhl = (ac && ac.icaoJHL) ? ac.icaoJHL : '—';
-        const recatEu = (ac && ac.recatEu) ? ac.recatEu : '—';
-
-        const arrRetFailedBadge = (f.arrRetFailed || sampledRetName === 'Failed') ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
-        return '' +
-          '<tr class="flight-data-row obj-item" data-id="' + f.id + '">' +
-            '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + arrRetFailedBadge + '</td>' +
-            '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
-            '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
-            '<td class="flight-td-time flight-col-s flight-col-s-start">' + sldtStr + '</td>' +
-            '<td class="flight-td-time flight-td-sibt flight-col-s">' + tArr + '</td>' +
-            '<td class="flight-td-time flight-col-s">' + tDep + '</td>' +
-            '<td class="flight-td-time flight-col-s flight-col-s-last">' + stotStr + '</td>' +
-            '<td class="flight-td-time flight-col-sd flight-col-sd-start">' + sldtStr_d + '</td>' +
-            '<td class="flight-td-time flight-col-sd">' + sibtStr_d + '</td>' +
-            '<td class="flight-td-time flight-col-sd">' + sobtStr_d + '</td>' +
-            '<td class="flight-td-time flight-col-sd flight-col-sd-last">' + stotStr_d + '</td>' +
-            '<td class="flight-td-time flight-col-e flight-col-e-start">' + eldtStr + '</td>' +
-            '<td class="flight-td-time flight-col-e">' + eibtStr + '</td>' +
-            '<td class="flight-td-time flight-col-e">' + eobtStr + '</td>' +
-            '<td class="flight-td-time flight-col-e">' + etotStr + '</td>' +
-            '<td class="flight-td-time flight-col-e flight-col-rot">' + (f.arrRotSec != null && isFinite(f.arrRotSec) ? (Math.round(f.arrRotSec) + ' s') : '—') + '</td>' +
-            '<td class="flight-td-time">' + vttArrStr + '</td>' +
-            '<td class="flight-td-time">' + vttADelayStr + '</td>' +
-            '<td class="flight-td-time">' + vttDepStr + '</td>' +
-            '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
-            '<td>' + escapeHtml(codeIcao) + '</td>' +
-            '<td>' + escapeHtml(icaoJhl) + '</td>' +
-            '<td>' + escapeHtml(recatEu) + '</td>' +
-            '<td>' + (dwellS != null ? dwellS : 0) + '</td>' +
-            '<td>' + (typeof dwellE === 'number' ? Math.round(dwellE * 10) / 10 : '—') + '</td>' +
-            '<td class="flight-td-select"><select class="flight-assign-select" data-role="arr" data-id="' + f.id + '">' + arrOpt + '</select></td>' +
-            '<td>' + escapeHtml(sampledRetName) + '</td>' +
-            '<td class="flight-td-select"><select class="flight-assign-select" data-role="term" data-id="' + f.id + '">' + termOpt + '</select></td>' +
-            '<td class="flight-td-reg">' + (function() {{ var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); }})() + '</td>' +
-            '<td class="flight-td-select"><select class="flight-assign-select" data-role="dep" data-id="' + f.id + '">' + depOpt + '</select></td>' +
-            '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
-          '</tr>';
-      }});
+      const dataRows = _buildFlightListRowsHtml(flightsSorted, retStatsAll);
       listEl.innerHTML = headerRow + dataRows.join('') + '</tbody></table>';
-      // Flight Configuration tab: Aircraft type Setting table of units (input UIHowever, it is not connected to other logic)
-      if (cfgEl) {{
-        const seenType = new Set();
-        const unique = [];
-        flightsSorted.forEach(f => {{
-          const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-          const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
-          if (!typeKey || seenType.has(typeKey)) return;
-          seenType.add(typeKey);
-          unique.push({{
-            key: typeKey,
-            label: ac ? (ac.name || ac.id || typeKey) : typeKey
-          }});
-        }});
-        if (!unique.length) {{
-          cfgEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights yet.</div>';
-        }} else {{
-          // If there is an existing table, the values ​​modified by the user are first read and maintained.
-          const prevConfigByType = {{}};
-          const prevInputs = cfgEl.querySelectorAll('.flight-config-input[data-ac][data-param]');
-          prevInputs.forEach(inp => {{
-            const acKey = inp.getAttribute('data-ac');
-            const param = inp.getAttribute('data-param');
-            if (!acKey || !param) return;
-            const valNum = Number(inp.value);
-            if (!isFinite(valNum)) return;
-            if (!prevConfigByType[acKey]) prevConfigByType[acKey] = {{}};
-            prevConfigByType[acKey][param] = valNum;
-          }});
-          const headerCols = unique.map(info =>
-            '<th>' + escapeHtml(info.label) + '</th>'
-          ).join('');
-          const cfgHeader = '' +
-            '<div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">' +
-              'Landing configuration per aircraft type (unit and statistic: mean μ / spread σ).' +
-            '</div>' +
-            '<table class="flight-schedule-table flight-config-table">' +
-            '<thead><tr>' +
-              '<th class="sticky-col">Parameter</th>' +
-              '<th>Unit</th>' +
-              '<th>Stat</th>' +
-              headerCols +
-            '</tr></thead><tbody>';
-          const rows = [];
-          // per-aircraft default: Information.jsonof static Use the value, but if there is a value modified by the user in the existing table, use it first
-          const tdMeans = unique.map(info => {{
-            const acKey = info.key;
-            const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['td-mean'];
-            if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
-            const ac = getAircraftInfoByType(acKey) || {{}};
-            return (typeof ac.touchdown_zone_avg_m === 'number') ? ac.touchdown_zone_avg_m : 900;
-          }});
-          const vtdMeans = unique.map(info => {{
-            const acKey = info.key;
-            const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['vtd-mean'];
-            if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
-            const ac = getAircraftInfoByType(acKey) || {{}};
-            return (typeof ac.touchdown_speed_avg_ms === 'number') ? ac.touchdown_speed_avg_ms : 70;
-          }});
-          const aMeans = unique.map(info => {{
-            const acKey = info.key;
-            const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['a-mean'];
-            if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
-            const ac = getAircraftInfoByType(acKey) || {{}};
-            return (typeof ac.deceleration_avg_ms2 === 'number') ? ac.deceleration_avg_ms2 : 2.5;
-          }});
-          // σIs μset to 10% of (User editable), If the value has been modified from an existing table, use it first.
-          const tdSigmas = unique.map((info, idx) => {{
-            const acKey = info.key;
-            const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['td-sigma'];
-            if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
-            const v = tdMeans[idx];
-            return Math.round(v * 0.1);
-          }});
-          const vtdSigmas = unique.map((info, idx) => {{
-            const acKey = info.key;
-            const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['vtd-sigma'];
-            if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
-            const v = vtdMeans[idx];
-            return Math.round(v * 0.1);
-          }});
-          const aSigmas = unique.map((info, idx) => {{
-            const acKey = info.key;
-            const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['a-sigma'];
-            if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
-            const v = aMeans[idx];
-            return Math.round(v * 0.1 * 10) / 10;
-          }});
-          // Deceleration a and VTDof mean from value, 26 m/s position to reach (thresholddistance from, m)
-          const vTarget = 26;
-          const aMeanStopDists = aMeans.map((aMu, idx) => {{
-            const vMu = vtdMeans[idx];
-            const tdMu = tdMeans[idx];
-            if (!(aMu > 0) || !(vMu > vTarget)) return Math.max(0, Math.round(tdMu || 0));
-            const dFromTouchdown = (vMu*vMu - vTarget*vTarget) / (2 * aMu);
-            const dTotal = (tdMu || 0) + (dFromTouchdown > 0 ? dFromTouchdown : 0);
-            return dTotal > 0 ? Math.round(dTotal) : 0;
-          }});
-
-          rows.push(
-            '<tr>' +
-              '<td class="sticky-col">Touchdown zone distance from threshold</td>' +
-              '<td>m</td>' +
-              '<td>mean μ</td>' +
-              unique.map((info, idx) =>
-                '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="td-mean" type="number" min="0" max="10000" step="10" value="' + tdMeans[idx] + '" /></td>'
-              ).join('') +
-            '</tr>'
-          );
-          rows.push(
-            '<tr>' +
-              '<td class="sticky-col"></td>' +
-              '<td>m</td>' +
-              '<td>spread σ</td>' +
-              unique.map((info, idx) =>
-                '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="td-sigma" type="number" min="0" max="10000" step="10" value="' + tdSigmas[idx] + '" /></td>'
-              ).join('') +
-            '</tr>'
-          );
-          rows.push(
-            '<tr>' +
-              '<td class="sticky-col">Touchdown speed VTD</td>' +
-              '<td>m/s</td>' +
-              '<td>mean μ</td>' +
-              unique.map((info, idx) =>
-                '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="vtd-mean" type="number" min="0" max="150" step="1" value="' + vtdMeans[idx] + '" /></td>'
-              ).join('') +
-            '</tr>'
-          );
-          rows.push(
-            '<tr>' +
-              '<td class="sticky-col"></td>' +
-              '<td>m/s</td>' +
-              '<td>spread σ</td>' +
-              unique.map((info, idx) =>
-                '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="vtd-sigma" type="number" min="0" max="150" step="1" value="' + vtdSigmas[idx] + '" /></td>'
-              ).join('') +
-            '</tr>'
-          );
-          rows.push(
-            '<tr>' +
-              '<td class="sticky-col">Deceleration a</td>' +
-              '<td>m/s²</td>' +
-              '<td>mean μ</td>' +
-              unique.map((info, idx) =>
-                '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="a-mean" type="number" min="0" max="10" step="0.1" value="' + aMeans[idx] + '" /></td>'
-              ).join('') +
-            '</tr>'
-          );
-          rows.push(
-            '<tr>' +
-              '<td class="sticky-col"></td>' +
-              '<td>m/s²</td>' +
-              '<td>spread σ</td>' +
-              unique.map((info, idx) =>
-                '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="a-sigma" type="number" min="0" max="10" step="0.1" value="' + aSigmas[idx] + '" /></td>'
-              ).join('') +
-            '</tr>'
-          );
-          // Deceleration a: mean(μ) When only values ​​are used 26 m/s Distance to reach (threshold Baseline, read-only)
-          rows.push(
-            '<tr>' +
-              '<td class="sticky-col" style="background:rgba(124,106,247,0.14);">Distance to 26 m/s (from threshold)</td>' +
-              '<td style="background:rgba(124,106,247,0.14);">m</td>' +
-              '<td style="background:rgba(124,106,247,0.14);">mean-based</td>' +
-              unique.map((info, idx) =>
-                '<td style="background:rgba(124,106,247,0.14);font-weight:600;color:#ede9fe;">' + aMeanStopDists[idx] + '</td>'
-              ).join('') +
-            '</tr>'
-          );
-          // Runway Taxiway (RET) location table: thresholddistance from + Flight scheduleselected from RETstar model count
-          const retStats = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-          if (retStats && retStats.length) {{
-            // Section header row
-            rows.push(
-              '<tr>' +
-                '<td class="sticky-col" style="padding-top:10px;">Runway exits (distance from threshold)</td>' +
-                '<td></td>' +
-                '<td></td>' +
-                unique.map(() => '<td></td>').join('') +
-              '</tr>'
-            );
-            retStats.forEach((r, idx) => {{
-              const rwLabel = r.runway && (r.runway.name || ('Runway ' + (idx + 1)));
-              // each RETAbout, Flight scheduleselected from RETCalculate star model count
-              const counts = unique.map(info => {{
-                const typeKey = info.key;
-                return (state.flights || []).filter(f =>
-                  f.sampledArrRet === (r.exit && r.exit.id) &&
-                  (f.aircraftType || '') === typeKey
-                ).length;
-              }});
-              // most models(1stomach), 2~3color coded above
-              const sortedIdx = counts
-                .map((c, i) => [c, i])
-                .filter(([c]) => c > 0)
-                .sort((a, b) => b[0] - a[0]);
-              const top1 = sortedIdx[0] ? sortedIdx[0][1] : -1;
-              const top2 = sortedIdx[1] ? sortedIdx[1][1] : -1;
-              const top3 = sortedIdx[2] ? sortedIdx[2][1] : -1;
-              rows.push(
-                '<tr>' +
-                  '<td class="sticky-col">' +
-                    '<span style="display:inline-flex;align-items:center;gap:4px;">' +
-                      (rwLabel ? ('<span style="font-size:9px;color:#9ca3af;">' + escapeHtml(rwLabel) + '</span>') : '') +
-                      '<span style="padding:2px 6px;border-radius:9999px;background:rgba(124,106,247,0.16);border:1px solid rgba(124,106,247,0.35);font-size:10px;color:#ede9fe;font-weight:600;">' +
-                        escapeHtml(r.name) +
-                      '</span>' +
-                    '</span>' +
-                  '</td>' +
-                  '<td>m</td>' +
-                  '<td>' + Math.round(r.distM) + '</td>' +
-                  unique.map((info, colIdx) => {{
-                    const cnt = counts[colIdx] || 0;
-                    if (!cnt) return '<td></td>';
-                    let bg = 'rgba(39,29,61,0.72)';
-                    let color = '#ede9fe';
-                    if (colIdx === top1) {{
-                      bg = 'rgba(124,106,247,0.36)';
-                      color = '#f5f3ff';
-                    }} else if (colIdx === top2 || colIdx === top3) {{
-                      bg = 'rgba(124,106,247,0.22)';
-                      color = '#ede9fe';
-                    }}
-                    return '<td style="background:' + bg + ';color:' + color + ';font-weight:600;text-align:center;">' + cnt + '</td>';
-                  }}).join('') +
-                '</tr>'
-              );
-            }});
-            // RETFlights that could not be escaped by(Condition not met)Separately Failed Summarize by row
-            const failedCounts = unique.map(info => {{
-              const typeKey = info.key;
-              return (state.flights || []).filter(f =>
-                (f.sampledArrRet === null || typeof f.sampledArrRet === 'undefined') &&
-                (f.aircraftType || '') === typeKey
-              ).length;
-            }});
-            const anyFailed = failedCounts.some(c => c > 0);
-            if (anyFailed) {{
-              const sortedFailed = failedCounts
-                .map((c, i) => [c, i])
-                .filter(([c]) => c > 0)
-                .sort((a, b) => b[0] - a[0]);
-              const fTop1 = sortedFailed[0] ? sortedFailed[0][1] : -1;
-              const fTop2 = sortedFailed[1] ? sortedFailed[1][1] : -1;
-              const fTop3 = sortedFailed[2] ? sortedFailed[2][1] : -1;
-              rows.push(
-                '<tr>' +
-                  '<td class="sticky-col">' +
-                    '<span style="padding:2px 6px;border-radius:9999px;background:rgba(127,29,29,0.9);border:1px solid #b91c1c;font-size:10px;color:#fee2e2;font-weight:600;">Failed</span>' +
-                  '</td>' +
-                  '<td></td>' +
-                  '<td></td>' +
-                  unique.map((info, colIdx) => {{
-                    const cnt = failedCounts[colIdx] || 0;
-                    if (!cnt) return '<td></td>';
-                    let bg = 'rgba(30,30,30,0.9)';
-                    let color = '#fecaca';
-                    if (colIdx === fTop1) {{
-                      bg = 'rgba(220,38,38,0.65)'; // 1Stomach failure: dark red
-                      color = '#fee2e2';
-                    }} else if (colIdx === fTop2 || colIdx === fTop3) {{
-                      bg = 'rgba(239,68,68,0.45)'; // 2,3Stomach failure: light red
-                      color = '#fee2e2';
-                    }}
-                    return '<td style="background:' + bg + ';color:' + color + ';font-weight:600;text-align:center;">' + cnt + '</td>';
-                  }}).join('') +
-                '</tr>'
-              );
-            }}
-          }}
-          cfgEl.innerHTML = cfgHeader + rows.join('') + '</tbody></table>' +
-            '<div style="font-size:10px;color:#6b7280;margin-top:4px;">' +
-              'Note: sampling is clipped to stay within ±15% of each mean value.' +
-            '</div>';
-        }}
-      }}
+      _renderFlightConfigTable(cfgEl, flightsSorted);
       _flightListWireEvents(listEl, state);
       if (typeof renderFlightGantt === 'function') renderFlightGantt();
+    }}
+
+    function _renderFlightConfigTable(cfgEl, flightsSorted) {{
+      if (!cfgEl) return;
+      const seenType = new Set();
+      const unique = [];
+      flightsSorted.forEach(f => {{
+        const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+        const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
+        if (!typeKey || seenType.has(typeKey)) return;
+        seenType.add(typeKey);
+        unique.push({{
+          key: typeKey,
+          label: ac ? (ac.name || ac.id || typeKey) : typeKey
+        }});
+      }});
+      if (!unique.length) {{
+        cfgEl.innerHTML = _flightListEmptyHtml('No flights yet.');
+        return;
+      }}
+      const prevConfigByType = {{}};
+      const prevInputs = cfgEl.querySelectorAll('.flight-config-input[data-ac][data-param]');
+      prevInputs.forEach(inp => {{
+        const acKey = inp.getAttribute('data-ac');
+        const param = inp.getAttribute('data-param');
+        if (!acKey || !param) return;
+        const valNum = Number(inp.value);
+        if (!isFinite(valNum)) return;
+        if (!prevConfigByType[acKey]) prevConfigByType[acKey] = {{}};
+        prevConfigByType[acKey][param] = valNum;
+      }});
+      const headerCols = unique.map(info => '<th>' + escapeHtml(info.label) + '</th>').join('');
+      const cfgHeader = '' +
+        '<div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">' +
+          'Landing configuration per aircraft type (unit and statistic: mean μ / spread σ).' +
+        '</div>' +
+        '<table class="flight-schedule-table flight-config-table">' +
+        '<thead><tr>' +
+          '<th class="sticky-col">Parameter</th>' +
+          '<th>Unit</th>' +
+          '<th>Stat</th>' +
+          headerCols +
+        '</tr></thead><tbody>';
+      const rows = [];
+      const tdMeans = unique.map(info => {{
+        const acKey = info.key;
+        const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['td-mean'];
+        if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
+        const ac = getAircraftInfoByType(acKey) || {{}};
+        return (typeof ac.touchdown_zone_avg_m === 'number') ? ac.touchdown_zone_avg_m : 900;
+      }});
+      const vtdMeans = unique.map(info => {{
+        const acKey = info.key;
+        const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['vtd-mean'];
+        if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
+        const ac = getAircraftInfoByType(acKey) || {{}};
+        return (typeof ac.touchdown_speed_avg_ms === 'number') ? ac.touchdown_speed_avg_ms : 70;
+      }});
+      const aMeans = unique.map(info => {{
+        const acKey = info.key;
+        const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['a-mean'];
+        if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
+        const ac = getAircraftInfoByType(acKey) || {{}};
+        return (typeof ac.deceleration_avg_ms2 === 'number') ? ac.deceleration_avg_ms2 : 2.5;
+      }});
+      const tdSigmas = unique.map((info, idx) => {{
+        const acKey = info.key;
+        const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['td-sigma'];
+        if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
+        const v = tdMeans[idx];
+        return Math.round(v * 0.1);
+      }});
+      const vtdSigmas = unique.map((info, idx) => {{
+        const acKey = info.key;
+        const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['vtd-sigma'];
+        if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
+        const v = vtdMeans[idx];
+        return Math.round(v * 0.1);
+      }});
+      const aSigmas = unique.map((info, idx) => {{
+        const acKey = info.key;
+        const fromUser = prevConfigByType[acKey] && prevConfigByType[acKey]['a-sigma'];
+        if (typeof fromUser === 'number' && isFinite(fromUser)) return fromUser;
+        const v = aMeans[idx];
+        return Math.round(v * 0.1 * 10) / 10;
+      }});
+      const vTarget = 26;
+      const aMeanStopDists = aMeans.map((aMu, idx) => {{
+        const vMu = vtdMeans[idx];
+        const tdMu = tdMeans[idx];
+        if (!(aMu > 0) || !(vMu > vTarget)) return Math.max(0, Math.round(tdMu || 0));
+        const dFromTouchdown = (vMu*vMu - vTarget*vTarget) / (2 * aMu);
+        const dTotal = (tdMu || 0) + (dFromTouchdown > 0 ? dFromTouchdown : 0);
+        return dTotal > 0 ? Math.round(dTotal) : 0;
+      }});
+
+      rows.push(
+        '<tr>' +
+          '<td class="sticky-col">Touchdown zone distance from threshold</td>' +
+          '<td>m</td>' +
+          '<td>mean μ</td>' +
+          unique.map((info, idx) =>
+            '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="td-mean" type="number" min="0" max="10000" step="10" value="' + tdMeans[idx] + '" /></td>'
+          ).join('') +
+        '</tr>'
+      );
+      rows.push(
+        '<tr>' +
+          '<td class="sticky-col"></td>' +
+          '<td>m</td>' +
+          '<td>spread σ</td>' +
+          unique.map((info, idx) =>
+            '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="td-sigma" type="number" min="0" max="10000" step="10" value="' + tdSigmas[idx] + '" /></td>'
+          ).join('') +
+        '</tr>'
+      );
+      rows.push(
+        '<tr>' +
+          '<td class="sticky-col">Touchdown speed VTD</td>' +
+          '<td>m/s</td>' +
+          '<td>mean μ</td>' +
+          unique.map((info, idx) =>
+            '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="vtd-mean" type="number" min="0" max="150" step="1" value="' + vtdMeans[idx] + '" /></td>'
+          ).join('') +
+        '</tr>'
+      );
+      rows.push(
+        '<tr>' +
+          '<td class="sticky-col"></td>' +
+          '<td>m/s</td>' +
+          '<td>spread σ</td>' +
+          unique.map((info, idx) =>
+            '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="vtd-sigma" type="number" min="0" max="150" step="1" value="' + vtdSigmas[idx] + '" /></td>'
+          ).join('') +
+        '</tr>'
+      );
+      rows.push(
+        '<tr>' +
+          '<td class="sticky-col">Deceleration a</td>' +
+          '<td>m/s²</td>' +
+          '<td>mean μ</td>' +
+          unique.map((info, idx) =>
+            '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="a-mean" type="number" min="0" max="10" step="0.1" value="' + aMeans[idx] + '" /></td>'
+          ).join('') +
+        '</tr>'
+      );
+      rows.push(
+        '<tr>' +
+          '<td class="sticky-col"></td>' +
+          '<td>m/s²</td>' +
+          '<td>spread σ</td>' +
+          unique.map((info, idx) =>
+            '<td><input class="flight-config-input" data-ac="' + info.key + '" data-param="a-sigma" type="number" min="0" max="10" step="0.1" value="' + aSigmas[idx] + '" /></td>'
+          ).join('') +
+        '</tr>'
+      );
+      rows.push(
+        '<tr>' +
+          '<td class="sticky-col" style="background:rgba(124,106,247,0.14);">Distance to 26 m/s (from threshold)</td>' +
+          '<td style="background:rgba(124,106,247,0.14);">m</td>' +
+          '<td style="background:rgba(124,106,247,0.14);">mean-based</td>' +
+          unique.map((info, idx) =>
+            '<td style="background:rgba(124,106,247,0.14);font-weight:600;color:#ede9fe;">' + aMeanStopDists[idx] + '</td>'
+          ).join('') +
+        '</tr>'
+      );
+      const retStats = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+      if (retStats && retStats.length) {{
+        rows.push(
+          '<tr>' +
+            '<td class="sticky-col" style="padding-top:10px;">Runway exits (distance from threshold)</td>' +
+            '<td></td>' +
+            '<td></td>' +
+            unique.map(() => '<td></td>').join('') +
+          '</tr>'
+        );
+        retStats.forEach((r, idx) => {{
+          const rwLabel = r.runway && (r.runway.name || ('Runway ' + (idx + 1)));
+          const counts = unique.map(info => {{
+            const typeKey = info.key;
+            return (state.flights || []).filter(f =>
+              f.sampledArrRet === (r.exit && r.exit.id) &&
+              (f.aircraftType || '') === typeKey
+            ).length;
+          }});
+          const sortedIdx = counts
+            .map((c, i) => [c, i])
+            .filter(([c]) => c > 0)
+            .sort((a, b) => b[0] - a[0]);
+          const top1 = sortedIdx[0] ? sortedIdx[0][1] : -1;
+          const top2 = sortedIdx[1] ? sortedIdx[1][1] : -1;
+          const top3 = sortedIdx[2] ? sortedIdx[2][1] : -1;
+          rows.push(
+            '<tr>' +
+              '<td class="sticky-col">' +
+                '<span style="display:inline-flex;align-items:center;gap:4px;">' +
+                  (rwLabel ? ('<span style="font-size:9px;color:#9ca3af;">' + escapeHtml(rwLabel) + '</span>') : '') +
+                  '<span style="padding:2px 6px;border-radius:9999px;background:rgba(124,106,247,0.16);border:1px solid rgba(124,106,247,0.35);font-size:10px;color:#ede9fe;font-weight:600;">' +
+                    escapeHtml(r.name) +
+                  '</span>' +
+                '</span>' +
+              '</td>' +
+              '<td>m</td>' +
+              '<td>' + Math.round(r.distM) + '</td>' +
+              unique.map((info, colIdx) => {{
+                const cnt = counts[colIdx] || 0;
+                if (!cnt) return '<td></td>';
+                let bg = 'rgba(39,29,61,0.72)';
+                let color = '#ede9fe';
+                if (colIdx === top1) {{
+                  bg = 'rgba(124,106,247,0.36)';
+                  color = '#f5f3ff';
+                }} else if (colIdx === top2 || colIdx === top3) {{
+                  bg = 'rgba(124,106,247,0.22)';
+                  color = '#ede9fe';
+                }}
+                return '<td style="background:' + bg + ';color:' + color + ';font-weight:600;text-align:center;">' + cnt + '</td>';
+              }}).join('') +
+            '</tr>'
+          );
+        }});
+        const failedCounts = unique.map(info => {{
+          const typeKey = info.key;
+          return (state.flights || []).filter(f =>
+            (f.sampledArrRet === null || typeof f.sampledArrRet === 'undefined') &&
+            (f.aircraftType || '') === typeKey
+          ).length;
+        }});
+        if (failedCounts.some(c => c > 0)) {{
+          const sortedFailed = failedCounts
+            .map((c, i) => [c, i])
+            .filter(([c]) => c > 0)
+            .sort((a, b) => b[0] - a[0]);
+          const fTop1 = sortedFailed[0] ? sortedFailed[0][1] : -1;
+          const fTop2 = sortedFailed[1] ? sortedFailed[1][1] : -1;
+          const fTop3 = sortedFailed[2] ? sortedFailed[2][1] : -1;
+          rows.push(
+            '<tr>' +
+              '<td class="sticky-col">' +
+                '<span style="padding:2px 6px;border-radius:9999px;background:rgba(127,29,29,0.9);border:1px solid #b91c1c;font-size:10px;color:#fee2e2;font-weight:600;">Failed</span>' +
+              '</td>' +
+              '<td></td>' +
+              '<td></td>' +
+              unique.map((info, colIdx) => {{
+                const cnt = failedCounts[colIdx] || 0;
+                if (!cnt) return '<td></td>';
+                let bg = 'rgba(30,30,30,0.9)';
+                let color = '#fecaca';
+                if (colIdx === fTop1) {{
+                  bg = 'rgba(220,38,38,0.65)';
+                  color = '#fee2e2';
+                }} else if (colIdx === fTop2 || colIdx === fTop3) {{
+                  bg = 'rgba(239,68,68,0.45)';
+                  color = '#fee2e2';
+                }}
+                return '<td style="background:' + bg + ';color:' + color + ';font-weight:600;text-align:center;">' + cnt + '</td>';
+              }}).join('') +
+            '</tr>'
+          );
+        }}
+      }}
+      cfgEl.innerHTML = cfgHeader + rows.join('') + '</tbody></table>' +
+        '<div style="font-size:10px;color:#6b7280;margin-top:4px;">' +
+          'Note: sampling is clipped to stay within ±15% of each mean value.' +
+        '</div>';
     }}
 
     function _flightListWireEvents(listEl, st) {{
@@ -5328,6 +5453,36 @@ html = f"""
 
       const tickPositions = buildTimeAxisTicks(minT, maxT, baseMinT, baseSpan, zoom);
 
+      function allocLeftPct(t) {{
+        return ((t - baseMinT) / baseSpan) * 100 * zoom;
+      }}
+      function allocTrackSpanHtml(cls, leftPct, widthPct, minWidthPct) {{
+        return '<div class="' + cls + '" style="left:' + leftPct + '%;width:' + Math.max(minWidthPct, widthPct) + '%;"></div>';
+      }}
+      function allocTrackMarkerHtml(cls, leftPct) {{
+        return '<div class="' + cls + '" style="left:' + leftPct + '%;"></div>';
+      }}
+      function allocGridLinesHtml() {{
+        return tickPositions.map(function(tp) {{
+          return allocTrackMarkerHtml('alloc-time-grid-line', tp.leftPct);
+        }}).join('');
+      }}
+      function pushAllocDot(arr, t, cls) {{
+        if (!arr || !isFinite(t) || t < baseMinT || t > baseMaxT) return;
+        arr.push(allocTrackMarkerHtml('alloc-time-dot ' + cls, allocLeftPct(t)));
+      }}
+      function pushAllocSpan(arr, startT, endT, cls, minWidthPct) {{
+        if (!arr || !isFinite(startT) || !isFinite(endT) || endT <= startT) return;
+        const clippedStart = Math.max(startT, baseMinT);
+        const clippedEnd = Math.min(endT, baseMaxT);
+        if (clippedEnd <= clippedStart) return;
+        arr.push(allocTrackSpanHtml(cls, allocLeftPct(clippedStart), ((clippedEnd - clippedStart) / baseSpan) * 100 * zoom, minWidthPct));
+      }}
+      function pushAllocTriangle(arr, t, cls) {{
+        if (!arr || !isFinite(t) || t < baseMinT || t > baseMaxT) return;
+        arr.push(allocTrackMarkerHtml(cls, allocLeftPct(t)));
+      }}
+
       function buildRowHtml(label, standId) {{
         const showSPointsEl = document.getElementById('chkShowSPoints');
         const showSPoints = !showSPointsEl || showSPointsEl.checked;
@@ -5370,11 +5525,6 @@ html = f"""
         const sDots = showSDots ? [] : null;
         const sdDots = showSdDots ? [] : null;
         const eDots = showEDots ? [] : null;
-        function pushDot(arr, t, cls) {{
-          if (!arr || !isFinite(t) || t < baseMinT || t > baseMaxT) return;
-          const leftPct = ((t - baseMinT) / baseSpan) * 100 * zoom;
-          arr.push('<div class="alloc-time-dot ' + cls + '" style="left:' + leftPct + '%;"></div>');
-        }}
         const sLines = showSPoints ? [] : null;      // SOBT(orig) vertical line
         const sTrisDown = showSPoints ? [] : null;   // SLDTtriangle under dragon
         const sTrisUp = showSPoints ? [] : null;     // STOTtriangle above dragon
@@ -5418,135 +5568,43 @@ html = f"""
             '\\nReg: ' + (f.reg || '') +
             '\\nAirline: ' + (f.airlineCode || '') + ' ' + (f.flightNumber || '');
           if (showEibtBars && eBars && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {{
-            const eStart = Math.max(eibt, baseMinT);
-            const eEnd = Math.min(eobt, baseMaxT);
-            if (eEnd > eStart) {{
-              const eLeft = ((eStart - baseMinT) / baseSpan) * 100 * zoom;
-              const eWidth = ((eEnd - eStart) / baseSpan) * 100 * zoom;
-              eBars.push(
-                '<div class="alloc-e-bar" style="left:' + eLeft + '%;width:' + Math.max(2, eWidth) + '%;"></div>'
-              );
-            }}
+            pushAllocSpan(eBars, eibt, eobt, 'alloc-e-bar', 2);
           }}
           const hasOverlap = (f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed;
           const ovlpBadgeHtml = hasOverlap ? '<span class="alloc-flight-ovlp-badge">OVLP</span>' : '';
           if (showEldtBars && e2Bars) {{
             // ELDT~EIBT (pre-block, Center aligned thin hot pink bar)
-            if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) {{
-              const s1 = Math.max(eldt, baseMinT);
-              const s2 = Math.min(eibt, baseMaxT);
-              if (s2 > s1) {{
-                const preLeft = ((s1 - baseMinT) / baseSpan) * 100 * zoom;
-                const preWidth = ((s2 - s1) / baseSpan) * 100 * zoom;
-              e2Bars.push(
-                '<div class="alloc-e2-bar" style="left:' +
-                  preLeft +
-                  '%;width:' +
-                  Math.max(0.5, preWidth) +
-                  '%;"></div>'
-              );
-              }}
-            }}
+            if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) pushAllocSpan(e2Bars, eldt, eibt, 'alloc-e2-bar', 0.5);
             // EOBT~ETOT (post-block, Center aligned thin hot pink bar)
-            if (isFinite(eobt) && isFinite(etot) && etot >= eobt) {{
-              const s1 = Math.max(eobt, baseMinT);
-              const s2 = Math.min(etot, baseMaxT);
-              if (s2 > s1) {{
-                const postLeft = ((s1 - baseMinT) / baseSpan) * 100 * zoom;
-                const postWidth = ((s2 - s1) / baseSpan) * 100 * zoom;
-              e2Bars.push(
-                '<div class="alloc-e2-bar" style="left:' +
-                  postLeft +
-                  '%;width:' +
-                  Math.max(0.5, postWidth) +
-                  '%;"></div>'
-              );
-              }}
-            }}
+            if (isFinite(eobt) && isFinite(etot) && etot >= eobt) pushAllocSpan(e2Bars, eobt, etot, 'alloc-e2-bar', 0.5);
           }}
           if (showAuxBars && sBars) {{
             // SLDT~SIBT (pre-block) auxiliary bar
-            if (isFinite(sldt) && sldt <= t0) {{
-              const s1 = Math.max(sldt, baseMinT);
-              const s2 = Math.min(t0, baseMaxT);
-              if (s2 > s1) {{
-                const preLeft = ((s1 - baseMinT) / baseSpan) * 100 * zoom;
-                const preWidth = ((s2 - s1) / baseSpan) * 100 * zoom;
-              sBars.push(
-                '<div class="alloc-s-bar" style="left:' +
-                  preLeft +
-                  '%;width:' +
-                  Math.max(0.5, preWidth) +
-                  '%;"></div>'
-              );
-              }}
-            }}
+            if (isFinite(sldt) && sldt <= t0) pushAllocSpan(sBars, sldt, t0, 'alloc-s-bar', 0.5);
             // SOBT~STOT (post-block) Auxiliary bar: Attached to the top of the main bar
-            if (isFinite(stot) && stot >= t1) {{
-              const s1 = Math.max(t1, baseMinT);
-              const s2 = Math.min(stot, baseMaxT);
-              if (s2 > s1) {{
-                const postLeft = ((s1 - baseMinT) / baseSpan) * 100 * zoom;
-                const postWidth = ((s2 - s1) / baseSpan) * 100 * zoom;
-              sBars.push(
-                '<div class="alloc-s-bar" style="left:' +
-                  postLeft +
-                  '%;width:' +
-                  Math.max(0.5, postWidth) +
-                  '%;"></div>'
-              );
-              }}
-            }}
+            if (isFinite(stot) && stot >= t1) pushAllocSpan(sBars, t1, stot, 'alloc-s-bar', 0.5);
           }}
           if (showSDots && sDots) {{
             // S-Point: auxiliary bar(sBars)same as S(d) series time(SLDT(d)/STOT(d))Show only circles
-            pushDot(sDots, sldt, 'alloc-time-dot-s');
-            pushDot(sDots, stot, 'alloc-time-dot-s');
+            pushAllocDot(sDots, sldt, 'alloc-time-dot-s');
+            pushAllocDot(sDots, stot, 'alloc-time-dot-s');
           }}
           if (showSdDots && sdDots) {{
             // S(d) The series is also represented by the same blue dot.
-            pushDot(sdDots, sldt, 'alloc-time-dot-sd');
-            pushDot(sdDots, stot, 'alloc-time-dot-sd');
+            pushAllocDot(sdDots, sldt, 'alloc-time-dot-sd');
+            pushAllocDot(sdDots, stot, 'alloc-time-dot-sd');
           }}
           if (showEDots && eDots) {{
             // E-Point: ELDT/ETOT dot + triangle (pink)
-            pushDot(eDots, eldt, 'alloc-time-dot-e');
-            pushDot(eDots, etot, 'alloc-time-dot-e');
-            if (eTrisDown && isFinite(eldt) && eldt >= baseMinT && eldt <= baseMaxT) {{
-              const leftPct = ((eldt - baseMinT) / baseSpan) * 100 * zoom;
-              eTrisDown.push(
-                '<div class="alloc-e-tri alloc-e-tri-down" style="left:' +
-                  leftPct +
-                  '%;"></div>'
-              );
-            }}
-            if (eTrisUp && isFinite(etot) && etot >= baseMinT && etot <= baseMaxT) {{
-              const leftPct2 = ((etot - baseMinT) / baseSpan) * 100 * zoom;
-              eTrisUp.push(
-                '<div class="alloc-e-tri alloc-e-tri-up" style="left:' +
-                  leftPct2 +
-                  '%;"></div>'
-              );
-            }}
+            pushAllocDot(eDots, eldt, 'alloc-time-dot-e');
+            pushAllocDot(eDots, etot, 'alloc-time-dot-e');
+            pushAllocTriangle(eTrisDown, eldt, 'alloc-e-tri alloc-e-tri-down');
+            pushAllocTriangle(eTrisUp, etot, 'alloc-e-tri alloc-e-tri-up');
           }}
         // S-Point: SLDT/STOTunder Edo/Add top triangle (E-PointSame design and color as GANTT_COLORS.S_BAR)
           if (showSPoints) {{
-            if (sTrisDown && isFinite(sldt) && sldt >= baseMinT && sldt <= baseMaxT) {{
-              const leftPctS1 = ((sldt - baseMinT) / baseSpan) * 100 * zoom;
-              sTrisDown.push(
-                '<div class="alloc-s-tri alloc-s-tri-down" style="left:' +
-                  leftPctS1 +
-                  '%;"></div>'
-              );
-            }}
-            if (sTrisUp && isFinite(stot) && stot >= baseMinT && stot <= baseMaxT) {{
-              const leftPctS2 = ((stot - baseMinT) / baseSpan) * 100 * zoom;
-              sTrisUp.push(
-                '<div class="alloc-s-tri alloc-s-tri-up" style="left:' +
-                  leftPctS2 +
-                  '%;"></div>'
-              );
-            }}
+            pushAllocTriangle(sTrisDown, sldt, 'alloc-s-tri alloc-s-tri-down');
+            pushAllocTriangle(sTrisUp, stot, 'alloc-s-tri alloc-s-tri-up');
           }}
         // The black vertical dotted line is SOBT(orig)It is placed in,
         // "OVERLAP"Although it is an aircraft SOBT(orig) ≠ SOBT(d) Show only if
@@ -5567,9 +5625,7 @@ html = f"""
             '</div>';
         }}).join('');
         const sidAttr = standId ? String(standId) : '';
-        const gridLines = tickPositions.map(tp =>
-          '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>'
-        ).join('');
+        const gridLines = allocGridLinesHtml();
         // time axis and time axis "between"Place background text in the center of
         const bgSlots = (tickPositions.length > 1)
           ? tickPositions.slice(0, -1).map((tp, idx) => {{
@@ -5609,21 +5665,14 @@ html = f"""
       }}
       // Unassigned Above: All flights SLDT/STOT·ELDT/ETOT Only dots (S/E Same class as point·Coordinate formula, existing row logic unchanged)
       function buildRunwayLegendPair() {{
-        const gridLines = tickPositions.map(function(tp) {{
-          return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
-        }}).join('');
-        function pushLegendDot(arr, t, cls) {{
-          if (!isFinite(t) || t < baseMinT || t > baseMaxT) return;
-          const leftPct = ((t - baseMinT) / baseSpan) * 100 * zoom;
-          arr.push('<div class="alloc-time-dot ' + cls + '" style="left:' + leftPct + '%;"></div>');
-        }}
+        const gridLines = allocGridLinesHtml();
         const sDotsHtml = [];
         const eDotsHtml = [];
         intervals.forEach(function(it) {{
-          pushLegendDot(sDotsHtml, it.sldt, 'alloc-time-dot-s');
-          pushLegendDot(sDotsHtml, it.stot, 'alloc-time-dot-s');
-          pushLegendDot(eDotsHtml, it.eldt, 'alloc-time-dot-e');
-          pushLegendDot(eDotsHtml, it.etot, 'alloc-time-dot-e');
+          pushAllocDot(sDotsHtml, it.sldt, 'alloc-time-dot-s');
+          pushAllocDot(sDotsHtml, it.stot, 'alloc-time-dot-s');
+          pushAllocDot(eDotsHtml, it.eldt, 'alloc-time-dot-e');
+          pushAllocDot(eDotsHtml, it.etot, 'alloc-time-dot-e');
         }});
         const sLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('S(LDT, TOT)') + '</div>';
         const sTrackHtml =
@@ -6082,38 +6131,42 @@ html = f"""
       return n == null ? '—' : String(Math.round(n));
     }}
 
-    function kpiFormatMinutesCompact(value) {{
+    function _kpiDurationSeconds(value, unit) {{
       const n = kpiToNumber(value);
-      if (n == null) return '—';
-      const totalSec = Math.max(0, Math.round(n * 60));
+      if (n == null) return null;
+      return unit === 'minutes' ? Math.max(0, Math.round(n * 60)) : Math.max(0, Math.round(n));
+    }}
+
+    function _kpiFormatCompactDuration(totalSec, allowHours) {{
+      if (totalSec == null) return '—';
       const hours = Math.floor(totalSec / 3600);
       const mins = Math.floor((totalSec % 3600) / 60);
       const secs = totalSec % 60;
-      if (hours > 0) return hours + 'h ' + mins + 'm';
-      if (mins > 0) return mins + 'm' + (secs > 0 ? ' ' + secs + 's' : '');
+      if (allowHours && hours > 0) return hours + 'h ' + mins + 'm';
+      if (mins > 0) return mins + 'm' + (secs > 0 ? ' ' + secs + 's' : (allowHours ? '' : ' 0s'));
       return secs + 's';
+    }}
+
+    function _kpiFormatValueWithUnit(value, digits, unitLabel) {{
+      const n = kpiToNumber(value);
+      if (n == null) return '—';
+      return (digits > 0 ? n.toFixed(digits) : kpiRound(n, digits)) + ' ' + unitLabel;
+    }}
+
+    function kpiFormatMinutesCompact(value) {{
+      return _kpiFormatCompactDuration(_kpiDurationSeconds(value, 'minutes'), true);
     }}
 
     function kpiFormatSecondsCompact(value) {{
-      const n = kpiToNumber(value);
-      if (n == null) return '—';
-      const totalSec = Math.max(0, Math.round(n));
-      const mins = Math.floor(totalSec / 60);
-      const secs = totalSec % 60;
-      if (mins > 0) return mins + 'm ' + secs + 's';
-      return secs + 's';
+      return _kpiFormatCompactDuration(_kpiDurationSeconds(value, 'seconds'), false);
     }}
 
     function kpiFormatMinutesValue(value) {{
-      const n = kpiToNumber(value);
-      if (n == null) return '—';
-      return n.toFixed(1) + ' min';
+      return _kpiFormatValueWithUnit(value, 1, 'min');
     }}
 
     function kpiFormatSecondsValue(value) {{
-      const n = kpiToNumber(value);
-      if (n == null) return '—';
-      return kpiRound(n, 0) + ' sec';
+      return _kpiFormatValueWithUnit(value, 0, 'sec');
     }}
 
     function kpiFormatClockBucket(minute) {{
@@ -9968,6 +10021,7 @@ html = f"""
       ctx.restore();
     }}
 
+    // ---- Runway separation panel ----
     function renderRunwaySeparation() {{
       const panel = document.getElementById('rwySepPanel');
       if (!panel) return;
@@ -11644,6 +11698,7 @@ html = f"""
       }});
     }}
 
+    // ---- 3D scene rendering ----
     function update3DScene() {{
       if (!scene3d) return;
       while (scene3d.children.length > 1) scene3d.remove(scene3d.children[scene3d.children.length - 1]);
@@ -11887,12 +11942,19 @@ html = f"""
 </html>
 """
 
+
+html = _build_designer_html()
+
 # Homeof home_globelike in full screen HTML mark (position: fixed, 100vw x 100vh)
-_ui_theme = (_info_path("tiers", "style", "uiTheme") or {}) if isinstance(INFORMATION, dict) else {}
-_UI_BG_BASE = str(_ui_theme.get("bgBase", "#0d0d0f")) if isinstance(_ui_theme, dict) else "#0d0d0f"
-st.markdown("""
+def _designer_background_base() -> str:
+    ui_theme = _dict_or_empty(_info_path("tiers", "style", "uiTheme"))
+    return _cfg_str(ui_theme, "bgBase", "#0d0d0f")
+
+
+def _build_streamlit_shell_css(ui_bg_base: str) -> str:
+    return """
   <style>
-    .stApp, [data-testid="stAppViewContainer"], section.main { background-color: """  + _UI_BG_BASE + """ !important; }
+    .stApp, [data-testid="stAppViewContainer"], section.main { background-color: """ + ui_bg_base + """ !important; }
     [data-testid="stHeader"], header[data-testid="stHeader"] { display: none !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; overflow: hidden !important; }
     [data-testid="stAppViewContainer"] { padding: 0 !important; }
     .block-container { padding: 0 !important; max-width: 100% !important; overflow: visible !important; min-height: 100vh !important; margin: 0 !important; }
@@ -11909,10 +11971,17 @@ st.markdown("""
       z-index: 0 !important;
     }
   </style>
-""", unsafe_allow_html=True)
-components.html(
-    html,
-    height=2000,
-    scrolling=False,
-)
+"""
+
+
+def _mount_designer_component(component_html: str) -> None:
+    st.markdown(_build_streamlit_shell_css(_designer_background_base()), unsafe_allow_html=True)
+    components.html(
+        component_html,
+        height=2000,
+        scrolling=False,
+    )
+
+
+_mount_designer_component(html)
 
