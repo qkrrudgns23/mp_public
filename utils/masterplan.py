@@ -3061,53 +3061,53 @@ class MasterplanInput:
 
             
             if len(df_one_year) >100 : 
-                DepartureArrival = ['all',"d","a"]
+                departure_arrival_list = ['all',"d","a"]
                 # The reason for setting two start and end points is as follows.
                 # 1, 30If set to 1~30on average SBRThis comes out
-                starting point = 140 
-                end point = 160
+                start_point = 140 
+                end_point = 160
                 df_glance = df_one_year.groupby(['scheduled_gate_date','scheduled_gate_hour'])[peak_list_1].sum().sort_values(by=peak_list_1[0], ascending=False).reset_index()
                 df_glance2 = df_one_year.groupby(['scheduled_gate_date','scheduled_gate_hour','flight_io'])[peak_list_1].sum().sort_values(by=peak_list_1[0], ascending=False).reset_index()
 
                 Peak_list = []
-                Peak_list.append([f"SBR/start(Nth)",f"{starting point}th"]) 
-                Peak_list.append([f"SBR/end(Nth)",f"{end point}th"]) 
-                for standard in (peak_list_1):
-                    for Departure and Arrival in (DepartureArrival):
-                        H_Factor, D_Factor, PHF, SUM = H_D(df_one_year, Standard, departure and arrival)
-                        Peak_list.append([f"ADPM/{standard}/{Departure and Arrival}/Hfactor",H_Factor]) 
-                        Peak_list.append([f"ADPM/{standard}/{Departure and Arrival}/Dfactor",D_Factor]) 
-                        Peak_list.append([f"ADPM/{standard}/{Departure and Arrival}/PHF",PHF]) 
-                        Peak_list.append([f"ADPM/{standard}/{Departure and Arrival}/peak hour",PHF*SUM]) 
-                        if Departure and Arrival=='all':
-                            df_ranking = df_glance.nlargest(End point, reference point)[Start point-1:End point]
+                Peak_list.append([f"SBR/start(Nth)",f"{start_point}th"]) 
+                Peak_list.append([f"SBR/end(Nth)",f"{end_point}th"]) 
+                for standard in peak_list_1:
+                    for departure_arrival in departure_arrival_list:
+                        H_Factor, D_Factor, PHF, SUM = H_D(df_one_year, standard, departure_arrival)
+                        Peak_list.append([f"ADPM/{standard}/{departure_arrival}/Hfactor",H_Factor]) 
+                        Peak_list.append([f"ADPM/{standard}/{departure_arrival}/Dfactor",D_Factor]) 
+                        Peak_list.append([f"ADPM/{standard}/{departure_arrival}/PHF",PHF]) 
+                        Peak_list.append([f"ADPM/{standard}/{departure_arrival}/peak hour",PHF*SUM]) 
+                        if departure_arrival=='all':
+                            df_ranking = df_glance.nlargest(end_point, standard)[start_point-1:end_point]
                             entire = df_glance[standard].sum()
-                            Nth = df_glance.sort_values(standard, ascending=False)
+                            nth = df_glance.sort_values(standard, ascending=False)
                         else:
-                            df_glance3 = df_glance2[df_glance2['flight_io'] == Departure and Arrival]
-                            df_ranking = df_glance3.nlargest(End point, reference point)[Start point-1:End point]
+                            df_glance3 = df_glance2[df_glance2['flight_io'] == departure_arrival]
+                            df_ranking = df_glance3.nlargest(end_point, standard)[start_point-1:end_point]
                             entire = df_glance3[standard].sum()
-                            Nth = df_glance2.sort_values(standard, ascending=False)
-                        peak = df_ranking[standard].sum() / (End point-start point+1)
-                        Peak_list.append([f"SBR/{standard}/{Departure and Arrival}/PHF",peak/entire]) 
-                        Peak_list.append([f"SBR/{standard}/{Departure and Arrival}/peak hour",peak]) 
-                        Peak_list.append([f"ADPM_SBR/{standard}/{Departure and Arrival}/peak hour_Nth",len(Nth[Nth[standard] > PHF*SUM]) if PHF!=0 else 0]) 
+                            nth = df_glance3.sort_values(standard, ascending=False)
+                        peak = df_ranking[standard].sum() / (end_point-start_point+1)
+                        Peak_list.append([f"SBR/{standard}/{departure_arrival}/PHF",peak/entire if entire !=0 else 0]) 
+                        Peak_list.append([f"SBR/{standard}/{departure_arrival}/peak hour",peak]) 
+                        Peak_list.append([f"ADPM_SBR/{standard}/{departure_arrival}/peak hour_Nth",len(nth[nth[standard] > PHF*SUM]) if PHF!=0 else 0]) 
                 Analysis += Peak_list
                 result = pd.DataFrame(Analysis)
 
                 result.columns = ['variable name','result']
-                middle direction = []
-                for Target in (peak_list_2):
-                    for standard in (['ADPM']): # ['ADPM','SBR']
-                        if (Target !='movement') & (Target !='total_pax'):
-                            middle direction molecule = result.loc[result['variable name']==f'{standard}/{Target}/all/peak hour']['result'].values[0] 
-                            middle directional denominator = result.loc[result['variable name']==f'{standard}/total_pax/all/peak hour']['result'].values[0] 
-                            middle direction.append([f"{standard}/{Target}/all/Middle direction coefficient",middle direction molecule/middle directional denominator if middle directional denominator !=0 else 0]) 
-                        for Departure and Arrival in (["d","a"]):
-                            middle direction molecule = result.loc[result['variable name']==f'{standard}/{Target}/{Departure and Arrival}/peak hour']['result'].values[0] 
-                            middle directional denominator = result.loc[result['variable name']==f'{standard}/{Target}/all/peak hour']['result'].values[0] 
-                            middle direction.append([f"{standard}/{Target}/{Departure and Arrival}/Middle direction coefficient",middle direction molecule/middle directional denominator if middle directional denominator !=0 else 0]) 
-                Analysis += middle direction
+                middle_direction = []
+                for target in peak_list_2:
+                    for standard in ['ADPM']: # ['ADPM','SBR']
+                        if (target !='movement') and (target !='total_pax'):
+                            middle_direction_numerator = result.loc[result['variable name']==f'{standard}/{target}/all/peak hour']['result'].values[0] 
+                            middle_direction_denominator = result.loc[result['variable name']==f'{standard}/total_pax/all/peak hour']['result'].values[0] 
+                            middle_direction.append([f"{standard}/{target}/all/Middle direction coefficient",middle_direction_numerator/middle_direction_denominator if middle_direction_denominator !=0 else 0]) 
+                        for departure_arrival in ["d","a"]:
+                            middle_direction_numerator = result.loc[result['variable name']==f'{standard}/{target}/{departure_arrival}/peak hour']['result'].values[0] 
+                            middle_direction_denominator = result.loc[result['variable name']==f'{standard}/{target}/all/peak hour']['result'].values[0] 
+                            middle_direction.append([f"{standard}/{target}/{departure_arrival}/Middle direction coefficient",middle_direction_numerator/middle_direction_denominator if middle_direction_denominator !=0 else 0]) 
+                Analysis += middle_direction
             else : 
                 pass
 
@@ -4176,9 +4176,9 @@ def H_D(df, agg_col='movement', flight_io='all', peak_date_number=10, n_min=15, 
     for col in (list(df_month.columns[1:])):
         exec(f"df_month[col+'_daily average'] = df_month[col] / df_month['scheduled_gate_date']")
     
-    df_peak month = df_month.nlargest(2,[agg_col+'_daily average'])
-    Peak daily average number of flights = df_peak month[agg_col].sum()/df_peak month['scheduled_gate_date'].sum()
-    D_Factor = df2[agg_col].sum()/Peak daily average number of flights
+    df_peak_month = df_month.nlargest(2,[agg_col+'_daily average'])
+    peak_daily_average_number_of_flights = df_peak_month[agg_col].sum()/df_peak_month['scheduled_gate_date'].sum()
+    D_Factor = df2[agg_col].sum()/peak_daily_average_number_of_flights
     PHF = (H_Factor*D_Factor)**(-1)
     SUM = df2[agg_col].sum()
     return H_Factor, D_Factor, PHF, SUM

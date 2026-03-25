@@ -64,6 +64,7 @@ def _info_path(*keys, default=None):
 
 _layout_info = _info_path("tiers", "layout") or {}
 _grid_info = (_layout_info.get("grid") or {}) if isinstance(_layout_info, dict) else {}
+_grid_img_info = (_grid_info.get("layoutImageOverlay") or {}) if isinstance(_grid_info, dict) else {}
 if isinstance(_grid_info, dict):
     try:
         if _grid_info.get("cols") is not None:
@@ -131,11 +132,51 @@ except (TypeError, ValueError):
     pass
 
 # HTML / iframe initial value (Layout tab, Flight tab — tiers.flight_schedule)
-_ui_g_min_cs = int(_grid_info.get("minCellSize", 10)) if isinstance(_grid_info, dict) else 10
+_ui_g_min_cs = int(_grid_info.get("minCellSize", 5)) if isinstance(_grid_info, dict) else 5
 _ui_g_max_cs = int(_grid_info.get("maxCellSize", 1000)) if isinstance(_grid_info, dict) else 1000
-_ui_g_cs_step = int(_grid_info.get("cellSizeStep", 10)) if isinstance(_grid_info, dict) else 10
+_ui_g_cs_step = int(_grid_info.get("cellSizeStep", 5)) if isinstance(_grid_info, dict) else 5
 _ui_g_min_dim = int(_grid_info.get("minDim", 5)) if isinstance(_grid_info, dict) else 5
-_ui_g_max_dim = int(_grid_info.get("maxDim", 500)) if isinstance(_grid_info, dict) else 500
+_ui_g_max_dim = int(_grid_info.get("maxDim", 1000)) if isinstance(_grid_info, dict) else 1000
+try:
+    _ui_g_img_opacity = float(_grid_img_info.get("defaultOpacity", 0.45)) if isinstance(_grid_img_info, dict) else 0.45
+except (TypeError, ValueError):
+    _ui_g_img_opacity = 0.45
+try:
+    _ui_g_img_opacity_min = float(_grid_img_info.get("minOpacity", 0.0)) if isinstance(_grid_img_info, dict) else 0.0
+except (TypeError, ValueError):
+    _ui_g_img_opacity_min = 0.0
+try:
+    _ui_g_img_opacity_max = float(_grid_img_info.get("maxOpacity", 1.0)) if isinstance(_grid_img_info, dict) else 1.0
+except (TypeError, ValueError):
+    _ui_g_img_opacity_max = 1.0
+try:
+    _ui_g_img_opacity_step = float(_grid_img_info.get("opacityStep", 0.05)) if isinstance(_grid_img_info, dict) else 0.05
+except (TypeError, ValueError):
+    _ui_g_img_opacity_step = 0.05
+try:
+    _ui_g_img_width_m = float(_grid_img_info.get("defaultWidthM", 200)) if isinstance(_grid_img_info, dict) else 200.0
+except (TypeError, ValueError):
+    _ui_g_img_width_m = 200.0
+try:
+    _ui_g_img_height_m = float(_grid_img_info.get("defaultHeightM", 200)) if isinstance(_grid_img_info, dict) else 200.0
+except (TypeError, ValueError):
+    _ui_g_img_height_m = 200.0
+try:
+    _ui_g_img_size_step = float(_grid_img_info.get("sizeStepM", 1.0)) if isinstance(_grid_img_info, dict) else 1.0
+except (TypeError, ValueError):
+    _ui_g_img_size_step = 1.0
+try:
+    _ui_g_img_point_step = float(_grid_img_info.get("pointStep", 0.5)) if isinstance(_grid_img_info, dict) else 0.5
+except (TypeError, ValueError):
+    _ui_g_img_point_step = 0.5
+try:
+    _ui_g_img_top_left_col = float(_grid_img_info.get("defaultTopLeftCol", 0)) if isinstance(_grid_img_info, dict) else 0.0
+except (TypeError, ValueError):
+    _ui_g_img_top_left_col = 0.0
+try:
+    _ui_g_img_top_left_row = float(_grid_img_info.get("defaultTopLeftRow", 0)) if isinstance(_grid_img_info, dict) else 0.0
+except (TypeError, ValueError):
+    _ui_g_img_top_left_row = 0.0
 
 _ui_term_floors = int(_term_ui.get("floorsDefault", 1)) if isinstance(_term_ui, dict) else 1
 _ui_term_floors_min = int(_term_ui.get("floorsMin", 1)) if isinstance(_term_ui, dict) else 1
@@ -151,6 +192,10 @@ _ui_tw_w = int(_tw_ui.get("width", 15)) if isinstance(_tw_ui, dict) else 15
 _ui_tw_avg = float(_tw_ui.get("avgMoveVelocity", 10)) if isinstance(_tw_ui, dict) else 10.0
 _ui_rw_min_arr = int(_rw_path_ui.get("minArrVelocity", 15)) if isinstance(_rw_path_ui, dict) else 15
 _ui_rw_lineup = int(_rw_path_ui.get("lineupDistM", 0)) if isinstance(_rw_path_ui, dict) else 0
+_ui_rw_disp_start = int(_rw_path_ui.get("startDisplacedThresholdM", 100)) if isinstance(_rw_path_ui, dict) else 100
+_ui_rw_blast_start = int(_rw_path_ui.get("startBlastPadM", 100)) if isinstance(_rw_path_ui, dict) else 100
+_ui_rw_disp_end = int(_rw_path_ui.get("endDisplacedThresholdM", 100)) if isinstance(_rw_path_ui, dict) else 100
+_ui_rw_blast_end = int(_rw_path_ui.get("endBlastPadM", 100)) if isinstance(_rw_path_ui, dict) else 100
 _ui_ex_max = int(_rw_exit_ui.get("maxExitVelocity", 30)) if isinstance(_rw_exit_ui, dict) else 30
 _ui_ex_min = int(_rw_exit_ui.get("minExitVelocity", 15)) if isinstance(_rw_exit_ui, dict) else 15
 
@@ -231,6 +276,18 @@ def _grid_view_background(info: dict) -> str:
     if not bg.startswith("#") or len(bg) not in (4, 7):
         bg = "#252525"
     return bg
+
+
+def _grid_view_line_opacity(info: dict, key: str, default: float) -> float:
+    """tiers.style.gridView.(majorLineOpacity|minorLineOpacity) → 0–1."""
+    tiers = info.get("tiers") if isinstance(info, dict) else None
+    st = (tiers.get("style") if isinstance(tiers, dict) else None) or {}
+    gv = st.get("gridView") if isinstance(st.get("gridView"), dict) else {}
+    try:
+        value = float(gv.get(key, default))
+    except (TypeError, ValueError):
+        value = default
+    return max(0.0, min(1.0, value))
 
 
 def _right_panel_background_opacity(info: dict) -> float:
@@ -361,6 +418,7 @@ def _style_root_css_from_information(info: dict) -> str:
 
     for name, val in (
         ("--style-grid-view-bg", _gv_bg),
+        ("--style-right-panel-bg", rp_style.get("backgroundColor")),
         ("--style-right-panel-bg-mix-percent", _rp_mix_pct),
         ("--style-right-panel-toggle-bg", rp_style.get("panelToggleBg")),
         ("--style-right-panel-toggle-color", rp_style.get("panelToggleColor")),
@@ -385,9 +443,81 @@ def _style_root_css_from_information(info: dict) -> str:
 
 _style_root_css = _style_root_css_from_information(INFORMATION)
 _GRID_VIEW_BG = _grid_view_background(INFORMATION)
+_GRID_MAJOR_LINE_OPACITY = _grid_view_line_opacity(INFORMATION, "majorLineOpacity", 0.35)
+_GRID_MINOR_LINE_OPACITY = _grid_view_line_opacity(INFORMATION, "minorLineOpacity", 0.2)
 
 # Layout name to display at the top of the grid
 layout_display_name = "default_layout"
+
+_IMAGE_DIR = _data_dir / "image"
+
+
+def _read_svg_icon(filename: str) -> str:
+    path = _IMAGE_DIR / filename
+    try:
+        if path.is_file():
+            return path.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" '
+        'viewBox="0 0 64 64" fill="none">'
+        '<rect x="12" y="12" width="40" height="40" rx="10" stroke="white" stroke-width="4"/>'
+        "</svg>"
+    )
+
+
+def _layout_mode_button_html(mode: str, label: str, icon_filename: str) -> str:
+    icon_svg = _read_svg_icon(icon_filename)
+    return (
+        f'<button type="button" class="layout-mode-tab" data-mode="{mode}">'
+        f'<span class="layout-mode-icon" aria-hidden="true">{icon_svg}</span>'
+        f'<span class="layout-mode-label">{label}</span>'
+        "</button>"
+    )
+
+
+def _top_panel_tab_html(tab_id: str, label: str, icon_filename: str, active: bool = False) -> str:
+    icon_svg = _read_svg_icon(icon_filename)
+    active_class = " active" if active else ""
+    return (
+        f'<button type="button" class="right-panel-tab{active_class}" data-tab="{tab_id}">'
+        f'<span class="right-panel-tab-icon" aria-hidden="true">{icon_svg}</span>'
+        f'<span class="right-panel-tab-label">{label}</span>'
+        "</button>"
+    )
+
+
+_layout_mode_tabs_primary_html = "".join(
+    [
+        _layout_mode_button_html("grid", "Grid", "layout_mode_grid.svg"),
+        _layout_mode_button_html("runwayPath", "Runway", "layout_mode_runway.svg"),
+        _layout_mode_button_html("runwayTaxiway", "Runway Taxiway", "layout_mode_runway_taxiway.svg"),
+        _layout_mode_button_html("taxiway", "Taxiway", "layout_mode_taxiway.svg"),
+        _layout_mode_button_html("edge", "Edge", "layout_mode_edge.svg"),
+    ]
+)
+
+_layout_mode_tabs_secondary_html = "".join(
+    [
+        _layout_mode_button_html("terminal", "Terminal", "layout_mode_terminal.svg"),
+        _layout_mode_button_html("pbb", "Contact Stand", "layout_mode_pbb.svg"),
+        _layout_mode_button_html("remote", "Remote Stand", "layout_mode_remote.svg"),
+        _layout_mode_button_html("apronTaxiway", "Apron Taxiway", "layout_mode_apron_taxiway.svg"),
+        _layout_mode_button_html("groundAccess", "Ground Access", "layout_mode_ground_access.svg"),
+    ]
+)
+
+_top_panel_tabs_html = "".join(
+    [
+        _top_panel_tab_html("settings", "Layout", "top_tab_layout.svg", active=True),
+        _top_panel_tab_html("flight", "Flight", "top_tab_flight.svg"),
+        _top_panel_tab_html("rwysep", "Runway", "top_tab_runway.svg"),
+        _top_panel_tab_html("allocation", "Apron", "top_tab_apron.svg"),
+        _top_panel_tab_html("simulation", "KPI", "top_tab_kpi.svg"),
+        _top_panel_tab_html("saveload", "Save", "top_tab_saveload.svg"),
+    ]
+)
 
 html = f"""
 <!DOCTYPE html>
@@ -399,8 +529,9 @@ html = f"""
     :root {{
       --ui-bg-base: #0d0d0f;
       --ui-bg-surface: #141416;
-      --ui-bg-elevated: #1c1c1f;
+      --ui-bg-elevated: #242428;
       --ui-bg-overlay: #242428;
+      --ui-bg-control: #27272b;
       --ui-bg-input: #1a1a1d;
       --ui-border-subtle: rgba(255, 255, 255, 0.06);
       --ui-border-default: rgba(255, 255, 255, 0.10);
@@ -420,10 +551,20 @@ html = f"""
       --ui-error-text: #fca5a5;
       --ui-font: 'Inter', 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
       --ui-transition: border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s cubic-bezier(0.16, 1, 0.3, 1), filter 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      --ui-scrollbar-track: rgba(0, 0, 0, 0.78);
+      --ui-scrollbar-thumb: rgba(255, 255, 255, 0.16);
+      --ui-scrollbar-thumb-hover: rgba(255, 255, 255, 0.24);
+      --ui-scrollbar-border: rgba(255, 255, 255, 0.06);
     }}
     * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     button {{ border: none; }}
     #right-panel button {{ appearance: none; -webkit-appearance: none; }}
+    * {{ scrollbar-width: thin; scrollbar-color: var(--ui-scrollbar-thumb) var(--ui-scrollbar-track); }}
+    *::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+    *::-webkit-scrollbar-track {{ background: var(--ui-scrollbar-track); border-radius: 9999px; }}
+    *::-webkit-scrollbar-thumb {{ background: var(--ui-scrollbar-thumb); border-radius: 9999px; border: 1px solid var(--ui-scrollbar-border); }}
+    *::-webkit-scrollbar-thumb:hover {{ background: var(--ui-scrollbar-thumb-hover); }}
+    *::-webkit-scrollbar-corner {{ background: transparent; }}
     html, body {{ width: 100%; min-height: 100%; height: 100%; background: var(--ui-bg-base); color: var(--ui-text-primary); font-family: var(--ui-font); font-size: 14px; line-height: 1.5; overflow: hidden; -webkit-font-smoothing: antialiased; }}
     #app {{ position: absolute; inset: 0; width: 100%; height: 100%; }}
     #canvas-container {{ position: absolute; inset: 0; cursor: crosshair; background: var(--style-grid-view-bg, #252525); }}
@@ -437,13 +578,14 @@ html = f"""
     #sim-controls-container label {{ margin: 0 4px 0 0; font-size: 11px; color: var(--ui-text-secondary); }}
     #sim-controls-container #flightSimSlider {{ width: 120px; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); }}
     #sim-controls-container #flightSimTimeLabel {{ font-size: 11px; color: var(--ui-text-primary); min-width: 72px; display: inline-block; }}
-    #view-toggle {{ display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--ui-border-default); background: var(--ui-bg-elevated); transition: var(--ui-transition); }}
+    #view-toggle-stack {{ display:flex; align-items:center; justify-content:flex-end; gap:8px; }}
+    #view-toggle {{ display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--ui-border-default); background: var(--ui-bg-control); transition: var(--ui-transition); }}
     #view-toggle .tool-btn {{ margin: 0; border: none; border-radius: 0; font-size: 11px; font-weight: 500; padding: 6px 12px; transition: var(--ui-transition); }}
     #view-toggle .tool-btn.active {{ background: var(--ui-accent-muted); color: var(--ui-accent); }}
     #view-toggle .tool-btn:not(.active) {{ background: transparent; color: var(--ui-text-secondary); }}
     #view-toggle .tool-btn:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
     #info-bar {{ display: none; position: absolute; bottom: 8px; left: 10px; right: 10px; padding: 8px 12px; min-height: 2.2em; border-radius: 8px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); color: var(--ui-text-secondary); font-size: 12px; align-items: center; pointer-events: none; z-index: 5; }}
-    #right-panel {{ position: absolute; top: 0; right: 0; bottom: 0; width: var(--style-right-panel-width-full, 50vw); max-width: calc(100vw - var(--style-right-panel-resize-viewport-margin, 8px)); background: color-mix(in srgb, var(--ui-bg-surface) var(--style-right-panel-bg-mix-percent, 95%), transparent); border-left: 1px solid var(--ui-border-default); padding: 12px; font-size: 12px; overflow-y: auto; z-index: 20; transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1); }}
+    #right-panel {{ position: absolute; top: 0; right: 0; bottom: 0; width: var(--style-right-panel-width-full, 50vw); max-width: calc(100vw - var(--style-right-panel-resize-viewport-margin, 8px)); background: color-mix(in srgb, var(--style-right-panel-bg, color-mix(in srgb, var(--ui-bg-surface) 86%, var(--ui-bg-elevated) 14%)) var(--style-right-panel-bg-mix-percent, 95%), transparent); border-left: 1px solid var(--ui-border-default); padding: 12px; font-size: 12px; overflow-y: auto; z-index: 20; transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1); }}
     #right-panel.panel-resize-dragging {{ transition: none !important; }}
     #right-panel.collapsed {{ width: var(--style-right-panel-resize-collapsed, 44px) !important; min-width: var(--style-right-panel-resize-collapsed, 44px); max-width: none; padding: 8px; overflow: hidden; }}
     #right-panel.collapsed .panel-content {{ display: none; }}
@@ -480,18 +622,185 @@ html = f"""
     #panel-toggle:focus-visible {{ outline: none; box-shadow: 0 0 0 2px var(--ui-accent-muted), 0 0 0 1px var(--ui-accent-ring); }}
     .section-title {{ font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ui-text-secondary); margin: 12px 0 4px 0; }}
     .section-title:first-child {{ margin-top: 0; }}
+    .layout-mode-tabs {{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }}
+    .layout-mode-tabs-row {{ display:grid; gap:6px; }}
+    .layout-mode-tabs-row.primary {{ grid-template-columns:repeat(5, minmax(0, 1fr)); }}
+    .layout-mode-tabs-row.secondary {{ grid-template-columns:repeat(5, minmax(0, 1fr)); }}
+    .layout-mode-tab {{ min-height:51px; padding:6px 6px; border-radius:8px; border:1px solid var(--ui-border-default); background:var(--ui-bg-control); color:var(--ui-text-secondary); font-size:10px; font-weight:500; cursor:pointer; transition:var(--ui-transition); text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }}
+    .layout-mode-tab:hover {{ background:var(--ui-bg-overlay); color:var(--ui-text-primary); }}
+    .layout-mode-tab.active {{ background:var(--ui-accent-muted); color:var(--ui-accent); border-color:var(--ui-accent-ring); }}
+    .layout-mode-icon {{ width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }}
+    .layout-mode-icon svg {{ width:18px; height:18px; display:block; }}
+    .layout-mode-label {{ display:block; line-height:1.15; }}
+    #tab-settings .settings-pane,
+    #flightPaneSchedule,
+    #flightPaneConfig {{
+      --form-label-width: 136px;
+      --settings-row-gap: 10px;
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--ui-border-default);
+      background: var(--ui-bg-elevated);
+    }}
+    #tab-settings .settings-pane label,
+    #flightPaneSchedule label,
+    #flightPaneConfig label {{
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--ui-text-secondary);
+      margin-top: 0;
+    }}
+    #tab-settings .settings-pane label:first-child,
+    #flightPaneSchedule label:first-child,
+    #flightPaneConfig label:first-child {{
+      margin-top: 0;
+    }}
+    #tab-settings .settings-pane input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    #tab-settings .settings-pane select,
+    #flightPaneSchedule input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    #flightPaneSchedule select,
+    #flightPaneConfig input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    #flightPaneConfig select {{
+      margin-top: 6px;
+      min-height: 26px;
+      border-radius: 6px;
+      border: 1px solid var(--ui-border-default);
+      background: var(--ui-bg-input);
+      color: var(--ui-text-primary);
+      padding: 4px 8px;
+      font-size: 10px;
+      line-height: 1.2;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }}
+    #tab-settings .settings-pane select,
+    #flightPaneSchedule select,
+    #flightPaneConfig select {{
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding-right: 34px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1.25 1.5L6 6.25L10.75 1.5' stroke='%23b9bcc8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 12px 8px;
+    }}
+    #tab-settings .settings-pane input:focus,
+    #tab-settings .settings-pane select:focus,
+    #flightPaneSchedule input:focus,
+    #flightPaneSchedule select:focus,
+    #flightPaneConfig input:focus,
+    #flightPaneConfig select:focus {{
+      outline: none;
+      border-color: var(--ui-accent-ring);
+      box-shadow: 0 0 0 2px var(--ui-accent-muted);
+    }}
+    .compact-form {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      row-gap: var(--settings-row-gap, 10px);
+      column-gap: 10px;
+      align-items: end;
+    }}
+    #flightPaneSchedule.compact-form,
+    #flightPaneConfig.compact-form {{
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }}
+    .compact-field,
+    .inline-field {{
+      min-width: 0;
+      display: grid;
+      grid-template-columns: var(--form-label-width) minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+    }}
+    .compact-field.wide,
+    .inline-field.wide,
+    .compact-form > p,
+    .compact-form > div:not(.compact-field),
+    .compact-form > button,
+    .compact-form > .section-title {{
+      grid-column: 1 / -1;
+    }}
+    .compact-field label,
+    .inline-field label {{
+      margin-top: 0 !important;
+      font-weight: 400 !important;
+      line-height: 1.2;
+      width: var(--form-label-width);
+    }}
+    .compact-field input,
+    .compact-field select,
+    .inline-field input,
+    .inline-field select,
+    .inline-field > div {{
+      width: 100%;
+      margin-top: 0 !important;
+    }}
+    .inline-field-stack {{
+      display: grid;
+      row-gap: var(--settings-row-gap, 10px);
+    }}
+    #tab-settings .compact-form > .compact-field,
+    #tab-settings .compact-form > .inline-field,
+    #tab-settings .compact-form > .inline-field-stack,
+    #tab-settings .compact-form > button.small,
+    #tab-settings .compact-form > p {{
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }}
+    #flightPaneSchedule.compact-form > .compact-field,
+    #flightPaneSchedule.compact-form > .inline-field,
+    #flightPaneSchedule.compact-form > .inline-field-stack,
+    #flightPaneSchedule.compact-form > button.small,
+    #flightPaneSchedule.compact-form > p,
+    #flightPaneSchedule.compact-form > div,
+    #flightPaneConfig.compact-form > .compact-field,
+    #flightPaneConfig.compact-form > .inline-field,
+    #flightPaneConfig.compact-form > .inline-field-stack,
+    #flightPaneConfig.compact-form > button.small,
+    #flightPaneConfig.compact-form > p,
+    #flightPaneConfig.compact-form > div {{
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }}
+    #tab-settings .settings-pane button.small,
+    #flightPaneSchedule button.small,
+    #flightPaneConfig button.small {{
+      min-height: 26px;
+      padding: 4px 9px;
+      font-size: 10px;
+      border-radius: 6px;
+    }}
+    #tab-settings .settings-pane button.small {{
+      margin-top: 0;
+    }}
+    #flightPaneSchedule button.small,
+    #flightPaneConfig button.small {{
+      margin-top: 0;
+    }}
+    #flightPaneSchedule .section-title,
+    #flightPaneConfig .section-title {{
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }}
     label {{ font-size: 11px; color: var(--ui-text-secondary); display: block; margin-top: 8px; }}
     input, select {{ width: 100%; background: var(--ui-bg-input); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); border-radius: 4px; padding: 6px 8px; font-size: 11px; margin-top: 4px; transition: var(--ui-transition); }}
     input:focus, select:focus {{ outline: none; border-color: var(--ui-accent-ring); box-shadow: 0 0 0 2px var(--ui-accent-muted); }}
-    button.small {{ padding: 6px 12px; font-size: 11px; font-weight: 500; margin-top: 4px; cursor: pointer; border-radius: 4px; background: var(--ui-bg-elevated); color: var(--ui-text-primary); transition: var(--ui-transition); }}
+    button.small {{ padding: 6px 12px; font-size: 11px; font-weight: 500; margin-top: 4px; cursor: pointer; border-radius: 4px; background: var(--ui-bg-control); color: var(--ui-text-primary); transition: var(--ui-transition); }}
     button.small:hover {{ background: var(--ui-bg-overlay); }}
     button.small:focus-visible {{ outline: none; box-shadow: 0 0 0 2px var(--ui-accent-muted); }}
+    #btnAddFlight {{ border: 1px solid rgba(255,255,255,0.42); }}
+    .draw-toggle-btn {{ border: 1px solid rgba(255,255,255,0.42); }}
     .draw-toggle-btn.drawing {{ background: var(--ui-success-bg); color: var(--ui-success-text); }}
     .draw-toggle-btn.drawing:hover {{ filter: brightness(1.12); }}
     .obj-list {{ max-height: 160px; overflow-y: auto; margin-top: 6px; }}
     /* Layout of tab object The list extends to the panel height,
        Use right panel scrolling only if it exceeds the total panel height */
-    #object-list.obj-list {{ max-height: none; }}
+    .layout-objects-pane {{ margin-top:8px; padding:10px; border-radius:8px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); max-height:380px; overflow-y:auto; }}
+    #object-list.obj-list {{ max-height: none; overflow-y: visible; margin-top: 0; }}
     /* Flight scheduleThe height is expanded to show about 12 basic episodes. (10% increase) */
     #flightList.obj-list {{ max-height: 418px; }}
     /* Flight ConfigurationMore than 20 items can be displayed without vertical scrolling, and horizontal scrolling is possible. */
@@ -535,7 +844,7 @@ html = f"""
     .flight-schedule-table .flight-td-del {{ width:36px; text-align:center; padding:2px 0; }}
     .flight-config-input {{ width:72px; font-size:11px; text-align:right; }}
     .flight-config-table th.sticky-col,
-    .flight-config-table td.sticky-col {{ position:sticky; left:0; z-index:2; background:rgba(17,24,39,0.98); }}
+    .flight-config-table td.sticky-col {{ position:sticky; left:0; z-index:2; background:rgba(8,10,12,0.98); }}
     .flight-config-table thead tr th:nth-child(2),
     .flight-config-table thead tr th:nth-child(3) {{ background: var(--ui-bg-elevated); color: var(--ui-text-primary); }}
     .flight-config-table tbody tr td:nth-child(2),
@@ -676,16 +985,21 @@ html = f"""
     .direction-mode-row select.direction-mode-dir {{ flex-shrink: 0; width: auto; min-width: 95px; }}
     .direction-mode-row .direction-mode-delete {{ flex-shrink: 0; padding: 2px 8px; font-size: 12px; cursor: pointer; border-radius: 4px; background: transparent; color: var(--ui-text-secondary); transition: var(--ui-transition); }}
     .direction-mode-row .direction-mode-delete:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
-    #object-info {{ margin-top: 10px; padding: 8px; border-radius: 8px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-default); font-size: 11px; display: none; color: var(--ui-text-secondary); }}
+    #object-info {{ margin-top: 8px; padding: 8px; border-radius: 8px; background: var(--ui-bg-input); border: 1px solid var(--ui-border-default); font-size: 11px; display: none; color: var(--ui-text-secondary); }}
     #view3d-container {{ position: absolute; inset: 0; z-index: 10; display: none; pointer-events: auto; }}
     #view3d-container.active {{ display: block; }}
-    #layout-name-bar {{ position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8; pointer-events: none; font-size: 11px; font-weight: 500; color: var(--ui-text-secondary); background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); padding: 6px 12px; border-radius: 8px; letter-spacing: 0.02em; }}
-    .right-panel-tabs {{ display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }}
-    .right-panel-tab {{ flex: 1; min-width: 0; padding: 8px 8px; font-size: 11px; font-weight: 500; cursor: pointer; background: var(--ui-bg-elevated); color: var(--ui-text-secondary); border-radius: 6px; transition: var(--ui-transition); }}
+    #layout-name-bar {{ display:inline-flex; align-items:center; gap:6px; max-width:220px; min-height:26px; padding:0 10px; border-radius:9999px; border:1px solid rgba(255,255,255,0.08); background:rgba(20, 20, 22, 0.62); color:#ffffff; font-size:10px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none; }}
+    #layout-name-bar::before {{ content:''; width:7px; height:7px; border-radius:9999px; background:var(--style-fs-col-s, #22c55e); box-shadow:0 0 0 3px rgba(34,197,94,0.12); flex-shrink:0; }}
+    .right-panel-tabs {{ display: flex; gap: 3px; margin-bottom: 12px; flex-wrap: wrap; justify-content:flex-start; align-items:flex-start; overflow: visible; border-radius: 4px; }}
+    .right-panel-tab {{ flex: 0 0 48px; width: 48px; min-width: 48px; height: 48px; min-height: 48px; padding: 3px 2px; font-size: 8px; font-weight: 500; cursor: pointer; background: var(--ui-bg-control); color: var(--ui-text-secondary); border-radius: 4px; border:none; transition: var(--ui-transition); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; box-shadow:none; text-align:center; }}
     .right-panel-tab:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
-    .right-panel-tab.active {{ background: var(--ui-accent-muted); color: var(--ui-accent); }}
+    .right-panel-tab.active {{ background: rgba(124, 106, 247, 0.88); color: #ffffff; box-shadow:none; }}
     .right-panel-tab.active:hover {{ filter: brightness(1.1); }}
+    .right-panel-tab-icon {{ width:12px; height:12px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }}
+    .right-panel-tab-icon svg {{ width:12px; height:12px; display:block; }}
+    .right-panel-tab-label {{ line-height:1; white-space:nowrap; font-size:8px; }}
     .tab-content {{ display: none; width: 100%; }}
+    #tab-simulation.active {{ display:flex; flex-direction:column; height:calc(100vh - 104px); min-height:0; overflow:hidden; }}
     .token-nodes {{ display: flex; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 8px; }}
     .token-nodes .token-node {{ display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ui-text-secondary); cursor: pointer; }}
     .token-nodes .token-node input {{ margin: 0; }}
@@ -695,7 +1009,7 @@ html = f"""
     .token-auto-label {{ font-size: 11px; color: var(--ui-text-muted); }}
     .tab-content.active {{ display: block; }}
     .layout-save-load-tabs {{ display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }}
-    .layout-save-load-tab {{ flex: 1; min-width: 0; padding: 6px 8px; font-size: 10px; font-weight: 500; letter-spacing: 0.04em; cursor: pointer; background: var(--ui-bg-elevated); color: var(--ui-text-secondary); border-radius: 6px; transition: var(--ui-transition); }}
+    .layout-save-load-tab {{ flex: 1; min-width: 0; padding: 6px 8px; font-size: 10px; font-weight: 500; letter-spacing: 0.04em; cursor: pointer; background: var(--ui-bg-control); color: var(--ui-text-secondary); border-radius: 6px; transition: var(--ui-transition); }}
     .layout-save-load-tab:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
     .layout-save-load-tab.active {{ background: var(--ui-accent-muted); color: var(--ui-accent); }}
     .layout-save-load-tab.active:hover {{ filter: brightness(1.1); }}
@@ -729,7 +1043,8 @@ html = f"""
     .rwysep-table th, .rwysep-table td {{ border:1px solid var(--ui-border-subtle); padding:4px 6px; text-align:center; }}
     .rwysep-table th {{ background:var(--ui-bg-elevated); color:var(--ui-text-secondary); font-size:10px; letter-spacing:0.04em; text-transform:uppercase; }}
     .rwysep-table input {{ width:56px; background:var(--ui-bg-input); border:1px solid var(--ui-border-default); color:var(--ui-text-primary); font-size:10px; padding:2px 4px; text-align:center; border-radius:4px; }}
-    .kpi-shell {{ display:flex; flex-direction:column; gap:12px; margin-top:8px; }}
+    .kpi-pane {{ margin-top:8px; padding:10px; border-radius:8px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); flex:1; height:100%; min-height:0; overflow-y:auto; }}
+    .kpi-shell {{ display:flex; flex-direction:column; gap:12px; margin-top:0; min-height:0; }}
     .kpi-toolbar {{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:linear-gradient(180deg, rgba(124, 106, 247, 0.16), rgba(28, 28, 31, 0.92)); }}
     .kpi-toolbar-copy {{ min-width:0; }}
     .kpi-toolbar-eyebrow {{ font-size:10px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:#c4b5fd; }}
@@ -739,16 +1054,14 @@ html = f"""
     .kpi-status-chip::before {{ content:''; width:8px; height:8px; border-radius:9999px; background:var(--ui-accent); box-shadow:0 0 0 4px rgba(124, 106, 247, 0.16); }}
     #kpiDashboard {{ display:flex; flex-direction:column; gap:12px; }}
     .kpi-summary-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; }}
-    .kpi-card {{ position:relative; overflow:hidden; padding:16px; border-radius:14px; border:1px solid rgba(124, 106, 247, 0.24); background:linear-gradient(180deg, rgba(124, 106, 247, 0.20), rgba(44, 33, 73, 0.58) 42%, rgba(20, 20, 22, 0.98)); box-shadow:0 8px 24px rgba(0,0,0,0.18); }}
-    .kpi-card::after {{ content:''; position:absolute; inset:0 auto auto 0; width:100%; height:1px; background:linear-gradient(90deg, rgba(255,255,255,0.16), rgba(255,255,255,0)); pointer-events:none; }}
-    .kpi-card.accent {{ background:linear-gradient(180deg, rgba(124, 106, 247, 0.22), rgba(44, 33, 73, 0.60) 42%, rgba(20, 20, 22, 0.98)); border-color:rgba(124, 106, 247, 0.26); }}
-    .kpi-card.success {{ background:linear-gradient(180deg, rgba(124, 106, 247, 0.20), rgba(44, 33, 73, 0.56) 42%, rgba(20, 20, 22, 0.98)); border-color:rgba(124, 106, 247, 0.22); }}
-    .kpi-card.warning {{ background:linear-gradient(180deg, rgba(124, 106, 247, 0.20), rgba(44, 33, 73, 0.56) 42%, rgba(20, 20, 22, 0.98)); border-color:rgba(124, 106, 247, 0.22); }}
-    .kpi-card.danger {{ background:linear-gradient(180deg, rgba(124, 106, 247, 0.20), rgba(44, 33, 73, 0.56) 42%, rgba(20, 20, 22, 0.98)); border-color:rgba(124, 106, 247, 0.22); }}
+    .kpi-card {{ position:relative; overflow:hidden; padding:16px; border-radius:12px; border:1px solid var(--ui-accent-ring); background:var(--ui-accent-muted); box-shadow:none; }}
+    .kpi-card.accent,
+    .kpi-card.success,
+    .kpi-card.warning,
+    .kpi-card.danger {{ background:var(--ui-accent-muted); border-color:var(--ui-accent-ring); }}
     .kpi-card-label {{ font-size:10px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--ui-text-secondary); }}
     .kpi-card-value {{ margin-top:8px; font-size:24px; font-weight:700; line-height:1.1; color:var(--ui-text-primary); }}
     .kpi-card-meta {{ margin-top:8px; font-size:11px; line-height:1.55; color:var(--ui-text-secondary); }}
-    .kpi-card-submeta {{ margin-top:6px; font-size:10px; color:var(--ui-text-muted); }}
     .kpi-panel-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }}
     .kpi-panel {{ padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
     .kpi-panel-header {{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }}
@@ -798,7 +1111,6 @@ html = f"""
 </head>
 <body>
   <div id="app">
-    <div id="layout-name-bar"></div>
     <div id="toolbar">
       <div id="sim-controls-container" style="display:none;">
         <button type="button" class="tool-btn" id="btnPlayFlights" title="Play">▶ Play</button>
@@ -810,12 +1122,17 @@ html = f"""
         <input type="range" id="flightSimSlider" min="0" max="100" value="0" step="1" />
         <span id="flightSimTimeLabel">00:00:00</span>
       </div>
-      <div id="view-toggle">
-        <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
-        <button class="tool-btn" id="btnView3D" title="3D orbit view">3D</button>
-        <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
-        <button class="tool-btn" id="btnGlobalUpdate" title="Refresh all views and calculations" style="margin-left:8px;">Update</button>
-        <button type="button" class="tool-btn" id="btnRunSimulation" title="Run simulation (requires API)">Run Sim</button>
+      <div id="view-toggle-stack">
+        <div id="layout-name-bar"></div>
+        <div id="view-toggle">
+          <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
+          <button class="tool-btn" id="btnView3D" title="3D orbit view">3D</button>
+          <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
+          <button class="tool-btn active" id="btnGridToggle" title="Toggle grid visibility">Grid</button>
+          <button class="tool-btn active" id="btnImageToggle" title="Toggle background image visibility">Image</button>
+          <button class="tool-btn" id="btnGlobalUpdate" title="Refresh all views and calculations" style="margin-left:8px;">Update</button>
+          <button type="button" class="tool-btn" id="btnRunSimulation" title="Run simulation (requires API)">Run Sim</button>
+        </div>
       </div>
     </div>
     <div id="canvas-container">
@@ -835,134 +1152,213 @@ html = f"""
           <strong>http://127.0.0.1:8501</strong> Please access. (streamlit run Doesn't work when used)
         </div>
         <div class="right-panel-tabs">
-          <button type="button" class="right-panel-tab active" data-tab="settings">Layout</button>
-          <button type="button" class="right-panel-tab" data-tab="flight">Flight</button>
-          <button type="button" class="right-panel-tab" data-tab="rwysep">Runway</button>
-          <button type="button" class="right-panel-tab" data-tab="allocation">Apron</button>
-          <button type="button" class="right-panel-tab" data-tab="simulation">KPI</button>
-          <button type="button" class="right-panel-tab" data-tab="saveload">Save/Load</button>
+          {_top_panel_tabs_html}
         </div>
 
         <div id="tab-settings" class="tab-content active">
-        <div class="section-title">Layout</div>
-        <label>Mode</label>
-        <select id="settingMode">
+        <div class="layout-mode-tabs" id="layoutModeTabs">
+          <div class="layout-mode-tabs-row primary">
+            {_layout_mode_tabs_primary_html}
+          </div>
+          <div class="layout-mode-tabs-row secondary">
+            {_layout_mode_tabs_secondary_html}
+          </div>
+        </div>
+        <select id="settingMode" style="display:none;">
           <option value="grid">Grid</option>
-          <option value="terminal">Terminal</option>
-          <option value="pbb">Contact Stand</option>
-          <option value="remote">Remote stand</option>
           <option value="runwayPath">Runway</option>
           <option value="runwayTaxiway">Runway Taxiway</option>
           <option value="taxiway">Taxiway</option>
+          <option value="terminal">Terminal</option>
+          <option value="pbb">Contact Stand</option>
+          <option value="remote">Remote Stand</option>
           <option value="apronTaxiway">Apron Taxiway</option>
+          <option value="groundAccess">Ground Access</option>
           <option value="edge">Edge</option>
         </select>
 
-        <div id="settings-grid" class="settings-pane">
-          <label>Cell size (m)</label>
-          <input type="number" id="gridCellSize" min="{_ui_g_min_cs}" max="{_ui_g_max_cs}" value="{CELL_SIZE}" step="{_ui_g_cs_step}" />
-          <label>Columns</label>
-          <input type="number" id="gridCols" min="{_ui_g_min_dim}" max="{_ui_g_max_dim}" value="{GRID_COLS}" />
-          <label>Rows</label>
-          <input type="number" id="gridRows" min="{_ui_g_min_dim}" max="{_ui_g_max_dim}" value="{GRID_ROWS}" />
+        <div id="settings-grid" class="settings-pane compact-form">
+          <div class="compact-field">
+            <label>Cell size (m)</label>
+            <input type="number" id="gridCellSize" min="{_ui_g_min_cs}" max="{_ui_g_max_cs}" value="{CELL_SIZE}" step="{_ui_g_cs_step}" />
+          </div>
+          <div class="compact-field">
+            <label>Columns</label>
+            <input type="number" id="gridCols" min="{_ui_g_min_dim}" max="{_ui_g_max_dim}" value="{GRID_COLS}" />
+          </div>
+          <div class="compact-field">
+            <label>Rows</label>
+            <input type="number" id="gridRows" min="{_ui_g_min_dim}" max="{_ui_g_max_dim}" value="{GRID_ROWS}" />
+          </div>
+          <div class="compact-field wide">
+            <label>Upload Layout file</label>
+            <input type="file" id="gridLayoutImageFile" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" />
+            <div id="gridLayoutImageMeta" style="margin-top:6px;font-size:11px;color:#9ca3af;">No file selected.</div>
+          </div>
+          <div class="compact-field">
+            <label>Opacity</label>
+            <input type="number" id="gridLayoutImageOpacity" min="{_ui_g_img_opacity_min}" max="{_ui_g_img_opacity_max}" step="{_ui_g_img_opacity_step}" value="{_ui_g_img_opacity}" />
+          </div>
+          <div class="compact-field">
+            <label>Width (m)</label>
+            <input type="number" id="gridLayoutImageWidthM" min="1" step="{_ui_g_img_size_step}" value="{_ui_g_img_width_m}" />
+          </div>
+          <div class="compact-field">
+            <label>Height (m)</label>
+            <input type="number" id="gridLayoutImageHeightM" min="1" step="{_ui_g_img_size_step}" value="{_ui_g_img_height_m}" />
+          </div>
+          <div class="compact-field">
+            <label>Top-left X (pt)</label>
+            <input type="number" id="gridLayoutImageCol" step="{_ui_g_img_point_step}" value="{_ui_g_img_top_left_col}" />
+          </div>
+          <div class="compact-field">
+            <label>Top-left Y (pt)</label>
+            <input type="number" id="gridLayoutImageRow" step="{_ui_g_img_point_step}" value="{_ui_g_img_top_left_row}" />
+          </div>
+          <button class="small" id="btnClearGridLayoutImage">Clear image</button>
         </div>
-        <div id="settings-terminal" class="settings-pane" style="display:none;">
-          <label>Building name</label>
-          <input type="text" id="terminalName" placeholder="e.g. T1" />
-          <label>Floors</label>
-          <input type="number" id="terminalFloors" min="{_ui_term_floors_min}" max="{_ui_term_floors_max}" value="{_ui_term_floors}" step="1" />
-          <label>Floor-to-floor height (m)</label>
-          <input type="number" id="terminalFloorToFloor" min="{_ui_term_f2f_min}" max="{_ui_term_f2f_max}" value="{_ui_term_f2f}" step="{_ui_term_f2f_step}" />
-          <label>Departure capacity</label>
-          <input type="number" id="terminalDepartureCapacity" min="0" value="{_ui_term_dep}" step="1" />
-          <label>Arrival capacity</label>
-          <input type="number" id="terminalArrivalCapacity" min="0" value="{_ui_term_arr}" step="1" />
+        <div id="settings-terminal" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Building name</label>
+            <input type="text" id="terminalName" placeholder="e.g. T1" />
+          </div>
+          <div class="compact-field">
+            <label>Floors</label>
+            <input type="number" id="terminalFloors" min="{_ui_term_floors_min}" max="{_ui_term_floors_max}" value="{_ui_term_floors}" step="1" />
+          </div>
+          <div class="compact-field">
+            <label>Floor-to-floor height (m)</label>
+            <input type="number" id="terminalFloorToFloor" min="{_ui_term_f2f_min}" max="{_ui_term_f2f_max}" value="{_ui_term_f2f}" step="{_ui_term_f2f_step}" />
+          </div>
+          <div class="compact-field">
+            <label>Departure capacity</label>
+            <input type="number" id="terminalDepartureCapacity" min="0" value="{_ui_term_dep}" step="1" />
+          </div>
+          <div class="compact-field">
+            <label>Arrival capacity</label>
+            <input type="number" id="terminalArrivalCapacity" min="0" value="{_ui_term_arr}" step="1" />
+          </div>
           <button class="small draw-toggle-btn" id="btnTerminalDraw">Draw</button>
         </div>
-        <div id="settings-pbb" class="settings-pane" style="display:none;">
-          <label>Name</label>
-          <input type="text" id="standName" placeholder="e.g. Gate 1" />
-          <label>Category (ICAO)</label>
-          <select id="standCategory">
-            <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
-            <option value="D">D</option><option value="E">E</option><option value="F">F</option>
-          </select>
-          <label>Contact Stand length (cells)</label>
-          <select id="pbbLength"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select>
+        <div id="settings-pbb" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="standName" placeholder="e.g. Gate 1" />
+          </div>
+          <div class="compact-field">
+            <label>Category (ICAO)</label>
+            <select id="standCategory">
+              <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
+              <option value="D">D</option><option value="E">E</option><option value="F">F</option>
+            </select>
+          </div>
+          <div class="compact-field">
+            <label>Contact Stand length</label>
+            <select id="pbbLength"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select>
+          </div>
           <button class="small draw-toggle-btn" id="btnPbbDraw">Draw</button>
         </div>
-        <div id="settings-remote" class="settings-pane" style="display:none;">
-          <label>Name</label>
-          <input type="text" id="remoteName" placeholder="e.g. R001" />
-          <label>Category (ICAO)</label>
-          <select id="remoteCategory">
-            <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
-            <option value="D">D</option><option value="E">E</option><option value="F">F</option>
-          </select>
-          <label style="margin-top:6px;">Available terminals</label>
-          <div id="remoteTerminalAccess">
-            <!-- Terminal checkboxes are rendered dynamically -->
+        <div id="settings-remote" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="remoteName" placeholder="e.g. R001" />
+          </div>
+          <div class="compact-field">
+            <label>Category (ICAO)</label>
+            <select id="remoteCategory">
+              <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
+              <option value="D">D</option><option value="E">E</option><option value="F">F</option>
+            </select>
+          </div>
+          <div class="inline-field wide">
+            <label>Available terminals</label>
+            <div id="remoteTerminalAccess">
+              <!-- Terminal checkboxes are rendered dynamically -->
+            </div>
           </div>
           <button class="small draw-toggle-btn" id="btnRemoteDraw">Draw</button>
         </div>
-        <div id="settings-edge" class="settings-pane" style="display:none;">
-          <p style="font-size:11px;color:#9ca3af;line-height:1.45;margin:0;">Graph edges are derived from the current taxiway network (path graph). They are not saved in layout JSON. Click a segment on the map or pick an item in the list. Names 001–999 are assigned in stable graph order.</p>
+        <div id="settings-edge" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="edgeName" placeholder="e.g. Edge 001" />
+          </div>
         </div>
-        <div id="settings-taxiway" class="settings-pane" style="display:none;">
-          <label>Name</label>
-          <input type="text" id="taxiwayName" placeholder="e.g. Taxiway A" />
-          <label>Width (m)</label>
-          <input type="number" id="taxiwayWidth" min="10" max="100" value="{_ui_tw_w}" step="1" />
-          <div id="runwayMinArrVelocityWrap" style="display:none;margin-top:6px;">
+        <div id="settings-taxiway" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="taxiwayName" placeholder="e.g. Taxiway A" />
+          </div>
+          <div class="compact-field">
+            <label>Width (m)</label>
+            <input type="number" id="taxiwayWidth" min="5" max="100" value="{_ui_tw_w}" step="1" />
+          </div>
+          <div id="runwayMinArrVelocityWrap" class="inline-field wide" style="display:none;">
             <label>Min Arr Velocity (m/s)</label>
             <input type="number" id="runwayMinArrVelocity" min="1" max="150" value="{_ui_rw_min_arr}" step="1" />
-            <p style="font-size:10px;color:#9ca3af;margin-top:2px;">Arrival airspeed on a runway segment will not drop below this value..</p>
-            <div id="runwayLineupDistWrap" style="margin-top:8px;">
-              <label>Line up Point (m, start → end)</label>
-              <input type="number" id="runwayLineupDistM" min="0" max="500000" value="{_ui_rw_lineup}" step="1" />
-              <p style="font-size:10px;color:#9ca3af;margin-top:2px;">Startat End directionby this distance(m) spot. The departure route passes through this point and continues to the end of the runway..</p>
-            </div>
           </div>
-          <div id="taxiwayAvgVelocityWrap" style="display:none;">
+          <div id="runwayLineupDistWrap" class="inline-field wide" style="display:none;">
+            <label>Line up Point</label>
+            <input type="number" id="runwayLineupDistM" min="0" max="500000" value="{_ui_rw_lineup}" step="1" />
+          </div>
+          <div id="runwayStartDisplacedThresholdWrap" class="inline-field wide" style="display:none;">
+            <label>Start Displaced Threshold (m)</label>
+            <input type="number" id="runwayStartDisplacedThresholdM" min="0" max="500000" value="{_ui_rw_disp_start}" step="1" />
+          </div>
+          <div id="runwayStartBlastPadWrap" class="inline-field wide" style="display:none;">
+            <label>Start Blast Pad (m)</label>
+            <input type="number" id="runwayStartBlastPadM" min="0" max="500000" value="{_ui_rw_blast_start}" step="1" />
+          </div>
+          <div id="runwayEndDisplacedThresholdWrap" class="inline-field wide" style="display:none;">
+            <label>End Displaced Threshold (m)</label>
+            <input type="number" id="runwayEndDisplacedThresholdM" min="0" max="500000" value="{_ui_rw_disp_end}" step="1" />
+          </div>
+          <div id="runwayEndBlastPadWrap" class="inline-field wide" style="display:none;">
+            <label>End Blast Pad (m)</label>
+            <input type="number" id="runwayEndBlastPadM" min="0" max="500000" value="{_ui_rw_blast_end}" step="1" />
+          </div>
+          <div id="taxiwayAvgVelocityWrap" class="inline-field wide" style="display:none;">
             <label>Avg Move Velocity (m/s)</label>
             <input type="number" id="taxiwayAvgMoveVelocity" min="1" max="50" value="{_ui_tw_avg}" step="0.5" />
           </div>
-          <div id="runwayExitExtras" style="display:none;margin-top:6px;">
+          <div id="runwayMaxExitVelWrap" class="inline-field wide" style="display:none;">
             <label>Max Exit Velocity</label>
             <input type="number" id="taxiwayMaxExitVel" min="1" max="150" value="{_ui_ex_max}" step="1" />
-            <label style="margin-top:4px;">Min Exit Velocity</label>
+          </div>
+          <div id="runwayMinExitVelWrap" class="inline-field wide" style="display:none;">
+            <label>Min Exit Velocity</label>
             <input type="number" id="taxiwayMinExitVel" min="1" max="150" value="{_ui_ex_min}" step="1" />
           </div>
-          <label style="margin-top:10px;">Taxiway Direction Mode</label>
-          <select id="taxiwayDirectionMode">
-            <option value="clockwise">CW</option>
-            <option value="counter_clockwise">CCW</option>
-            <option value="both" selected>Both</option>
-          </select>
-          <div id="runwayDirectionWrap" style="display:none;margin-top:10px;">
-            <label>Direction</label>
-            <select id="runwayDirectionInTaxiwayPane">
-              <option value="clockwise">Clockwise</option>
-              <option value="counter_clockwise">Counter CW</option>
+          <div class="compact-field">
+            <label>Taxiway Direction Mode</label>
+            <select id="taxiwayDirectionMode">
+              <option value="clockwise">CW</option>
+              <option value="counter_clockwise">CCW</option>
               <option value="both" selected>Both</option>
             </select>
           </div>
           <button class="small draw-toggle-btn" id="btnTaxiwayDraw">Draw</button>
         </div>
-        <div id="settings-apronTaxiway" class="settings-pane" style="display:none;">
-          <p style="font-size:11px;color:#9ca3af;margin-top:4px;">
-            Click a Contact Stand (PBB end) and a Taxiway point to create an Apron–Taxiway link.
-          </p>
+        <div id="settings-apronTaxiway" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="apronLinkName" placeholder="e.g. Apron Taxiway 1" />
+          </div>
           <button class="small draw-toggle-btn" id="btnApronLinkDraw">Draw</button>
+          <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Click a stand or taxiway to start, then grid cells for corners, then the opposite end to finish. Turn off Draw and click the line to select. Drag yellow handles to move corners or the taxiway end (snaps to path). Backspace removes the last corner or selected midpoint.</p>
+        </div>
+        <div id="settings-groundAccess" class="settings-pane" style="display:none;">
+          <p style="font-size:11px;color:#9ca3af;line-height:1.45;margin:0;">Ground Access mode is reserved for access transport related layout elements.</p>
         </div>
 
         <div class="section-title">Objects</div>
-        <div id="object-list" class="obj-list"></div>
-        <div id="object-info">Select an object on the grid or from the list.</div>
+        <div class="layout-objects-pane">
+          <div id="object-list" class="obj-list"></div>
+          <div id="object-info">Select an object on the grid or from the list.</div>
+        </div>
         </div>
 
         <div id="tab-flight" class="tab-content">
-          <div class="section-title">Flight</div>
           <div class="layout-save-load-tabs" style="margin-top:4px;">
             <button type="button" class="layout-save-load-tab flight-subtab active" data-flight-subtab="schedule">Flight Schedule</button>
             <button type="button" class="layout-save-load-tab flight-subtab" data-flight-subtab="config">Arrival Configuration</button>
@@ -973,23 +1369,37 @@ html = f"""
             <option value="Arr" selected>Arr (Arrival)</option>
             <option value="Dep">Dep (Departure)</option>
           </select>
-          <div id="flightPaneSchedule">
-            <label>SIBT (Scheduled In Block Time)</label>
-            <input type="text" id="flightTime" placeholder="yes: 0, 12:30, 09:23:45 (minute / HH:MM:SS)" />
-            <label>Aircraft type</label>
-            <select id="flightAircraftType">
-              <!-- Populated from INFORMATION.tiers.aircraft.types -->
-            </select>
-            <label>Reg. number</label>
-            <input type="text" id="flightReg" placeholder="yes: HL1234" />
-            <label>Airline Code</label>
-            <input type="text" id="flightAirlineCode" placeholder="yes: KE" />
-            <label>Flight Number</label>
-            <input type="text" id="flightFlightNumber" placeholder="yes: KE0081" />
-            <label>Dwell time (minutes, stand occupancy time)</label>
-            <input type="number" id="flightDwell" min="0" max="{_ui_flight_dwell_max}" value="{_ui_flight_dwell}" step="{_ui_flight_dwell_step}" />
-            <label>Min Dwell (minutes, minimum dwell·Turnaround guarantee)</label>
-            <input type="number" id="flightMinDwell" min="0" max="{_ui_flight_dwell_max}" value="{_ui_flight_min_dwell}" step="{_ui_flight_dwell_step}" title="In case of delayed arrival EOBT = EIBT + Min Dwell Adjust to (0Not applicable to this side)" />
+          <div id="flightPaneSchedule" class="compact-form">
+            <div class="compact-field wide">
+              <label>SIBT (Scheduled In Block)</label>
+              <input type="text" id="flightTime" placeholder="e.g. 0, 12:30, 09:23:45 (minute / HH:MM:SS)" />
+            </div>
+            <div class="compact-field">
+              <label>Aircraft type</label>
+              <select id="flightAircraftType">
+                <!-- Populated from INFORMATION.tiers.aircraft.types -->
+              </select>
+            </div>
+            <div class="compact-field">
+              <label>Reg. number</label>
+              <input type="text" id="flightReg" placeholder="e.g. HL1234" />
+            </div>
+            <div class="compact-field">
+              <label>Airline Code</label>
+              <input type="text" id="flightAirlineCode" placeholder="e.g. KE" />
+            </div>
+            <div class="compact-field">
+              <label>Flight Number</label>
+              <input type="text" id="flightFlightNumber" placeholder="e.g. KE0081" />
+            </div>
+            <div class="compact-field">
+              <label>Stand dwell (min)</label>
+              <input type="number" id="flightDwell" min="0" max="{_ui_flight_dwell_max}" value="{_ui_flight_dwell}" step="{_ui_flight_dwell_step}" />
+            </div>
+            <div class="compact-field">
+              <label>Min dwell (min)</label>
+              <input type="number" id="flightMinDwell" min="0" max="{_ui_flight_dwell_max}" value="{_ui_flight_min_dwell}" step="{_ui_flight_dwell_step}" title="In case of delayed arrival EOBT = EIBT + Min Dwell Adjust to (0Not applicable to this side)" />
+            </div>
             <button class="small" id="btnAddFlight">+ Add Flight</button>
             <div id="flightError" style="color:#f97316;font-size:11px;margin-top:4px;"></div>
             <div class="section-title" style="margin-top:10px;">Flight schedule</div>
@@ -1003,12 +1413,10 @@ html = f"""
         </div>
 
         <div id="tab-rwysep" class="tab-content">
-          <div class="section-title">Runway</div>
           <div id="rwySepPanel" style="margin-top:6px;"></div>
         </div>
 
         <div id="tab-allocation" class="tab-content">
-          <div class="section-title">Apron</div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
             <div style="font-size:11px;color:#9ca3af;">Stand allocation (Apron × Time)</div>
             <div style="display:flex;align-items:center;gap:8px;">
@@ -1034,22 +1442,20 @@ html = f"""
         </div>
 
         <div id="tab-simulation" class="tab-content">
-          <div class="section-title">KPI</div>
-          <div class="kpi-shell">
-            <div class="kpi-toolbar">
-              <div class="kpi-toolbar-copy">
-                <div class="kpi-toolbar-eyebrow">Operations Dashboard</div>
-                <div class="kpi-toolbar-title">High-impact KPI snapshot for apron, runway, and delay performance</div>
-                <div class="kpi-toolbar-subtitle">This dashboard is rendered only on the initial page load and when you click <strong>Update</strong>, so the KPI view stays stable while you edit schedules and layouts.</div>
+          <div class="kpi-pane">
+            <div class="kpi-shell">
+              <div class="kpi-toolbar">
+                <div class="kpi-toolbar-copy">
+                  <div class="kpi-toolbar-eyebrow">Operations Dashboard</div>
+                </div>
+                <div class="kpi-status-chip" id="kpiSnapshotStatus">Initializing snapshot</div>
               </div>
-              <div class="kpi-status-chip" id="kpiSnapshotStatus">Initializing snapshot</div>
+              <div id="kpiDashboard"></div>
             </div>
-            <div id="kpiDashboard"></div>
           </div>
         </div>
 
         <div id="tab-saveload" class="tab-content">
-          <div class="section-title">Layout Save / Load</div>
           <div class="layout-save-load-tabs">
             <button type="button" class="layout-save-load-tab active" data-sltab="saveas">Save as</button>
             <button type="button" class="layout-save-load-tab" data-sltab="save">Save</button>
@@ -1084,24 +1490,66 @@ html = f"""
     const INITIAL_LAYOUT_DISPLAY_NAME = {json.dumps(layout_display_name)};
     const INFORMATION = {json.dumps(INFORMATION)};
     const GRID_VIEW_BG = {json.dumps(_GRID_VIEW_BG)};
+    const GRID_MAJOR_LINE_OPACITY = {json.dumps(_GRID_MAJOR_LINE_OPACITY)};
+    const GRID_MINOR_LINE_OPACITY = {json.dumps(_GRID_MINOR_LINE_OPACITY)};
     let GRID_COLS = {GRID_COLS};
     let GRID_ROWS = {GRID_ROWS};
     let CELL_SIZE = {CELL_SIZE};
 
     const _tiers = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers) ? INFORMATION.tiers : {{}};
     const _layoutTier = _tiers.layout || {{}};
+    const _taxiwayTier = _layoutTier.taxiway || {{}};
+    const _runwayPathTier = _layoutTier.runwayPath || {{}};
+    const _runwayExitTier = _layoutTier.runwayExit || {{}};
     const _flightTier = _tiers.flight_schedule || _tiers.flight || {{}};
     const _algoTier = _tiers.algorithm || {{}};
     const _styleTier = _tiers.style || {{}};
     const _ganttStyle = _styleTier.gantt || {{}};
     const _canvas2dStyle = _styleTier.canvas2d || {{}};
-    function c2dObjectSelectedStroke() {{ return _canvas2dStyle.objectSelectedStroke || '#e9d5ff'; }}
-    function c2dObjectSelectedFill() {{ return _canvas2dStyle.objectSelectedFill || 'rgba(196, 181, 253, 0.42)'; }}
-    function c2dObjectSelectedDashStroke() {{ return _canvas2dStyle.objectSelectedDashStroke || 'rgba(255, 252, 255, 0.95)'; }}
-    function c2dObjectSelectedGlow() {{ return _canvas2dStyle.objectSelectedGlow || 'rgba(167, 139, 250, 0.9)'; }}
+    const TAXIWAY_DEFAULT_WIDTH = Math.max(5, Math.min(100, Number(_taxiwayTier.width) || 5));
+    const RUNWAY_PATH_DEFAULT_WIDTH = Math.max(5, Math.min(100, Number(_runwayPathTier.width) || 60));
+    const RUNWAY_EXIT_DEFAULT_WIDTH = Math.max(5, Math.min(100, Number(_runwayExitTier.width) || 5));
+    const RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.startDisplacedThresholdM) || 100);
+    const RUNWAY_START_BLAST_PAD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.startBlastPadM) || 100);
+    const RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.endDisplacedThresholdM) || 100);
+    const RUNWAY_END_BLAST_PAD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.endBlastPadM) || 100);
+    function c2dObjectSelectedStroke() {{ return _canvas2dStyle.objectSelectedStroke || 'rgba(233, 213, 255, 0.62)'; }}
+    function c2dObjectSelectedFill() {{ return _canvas2dStyle.objectSelectedFill || 'rgba(196, 181, 253, 0.28)'; }}
+    function c2dObjectSelectedDashStroke() {{ return _canvas2dStyle.objectSelectedDashStroke || 'rgba(255, 252, 255, 0.55)'; }}
+    function c2dObjectSelectedGlow() {{ return _canvas2dStyle.objectSelectedGlow || 'rgba(167, 139, 250, 0.45)'; }}
+    function c2dRunwayStroke() {{ return _canvas2dStyle.runwayStroke || 'rgba(156, 163, 175, 0.78)'; }}
+    function c2dRunwayFill() {{ return _canvas2dStyle.runwayFill || 'rgba(75, 85, 99, 0.78)'; }}
+    function c2dRunwayOutline() {{ return _canvas2dStyle.runwayOutline || '#cbd5e1'; }}
+    function c2dRunwayMarkingColor() {{ return _canvas2dStyle.runwayMarkingColor || '#f8fafc'; }}
+    function c2dRunwayThresholdColor() {{ return _canvas2dStyle.runwayThresholdColor || c2dRunwayMarkingColor(); }}
+    function c2dRunwayCenterlineColor() {{ return _canvas2dStyle.runwayCenterlineColor || c2dRunwayMarkingColor(); }}
+    function c2dRunwayTouchdownColor() {{ return _canvas2dStyle.runwayTouchdownColor || c2dRunwayMarkingColor(); }}
+    function c2dRunwayAimingPointColor() {{ return _canvas2dStyle.runwayAimingPointColor || c2dRunwayMarkingColor(); }}
+    function c2dRunwayExtensionFill() {{ return _canvas2dStyle.runwayExtensionFill || 'rgba(55, 65, 81, 0.78)'; }}
+    function c2dRunwayBlastChevronColor() {{ return _canvas2dStyle.runwayBlastChevronColor || '#facc15'; }}
     function c2dObjectSelectedGlowBlur() {{
       const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
       return (isFinite(n) && n >= 0) ? n : 22;
+    }}
+    function c2dPathDrawStartMarkerRadiusPx() {{
+      const n = Number(_canvas2dStyle.pathDrawStartMarkerRadiusPx);
+      const base = (isFinite(n) && n > 0) ? n : 3.5;
+      return base * LAYOUT_VERTEX_DOT_SCALE;
+    }}
+    function c2dPathDrawStartMarkerStrokePx() {{
+      const n = Number(_canvas2dStyle.pathDrawStartMarkerStrokePx);
+      const base = (isFinite(n) && n > 0) ? n : 1;
+      return Math.max(0.5, base * LAYOUT_VERTEX_DOT_SCALE);
+    }}
+    function c2dPathDrawStartLabelFontPx() {{
+      const n = Number(_canvas2dStyle.pathDrawStartLabelFontPx);
+      const base = (isFinite(n) && n >= 6) ? n : 8;
+      return Math.max(6, Math.round(base * LAYOUT_VERTEX_DOT_SCALE));
+    }}
+    function c2dPathDrawStartLabelOffsetY() {{
+      const n = Number(_canvas2dStyle.pathDrawStartLabelOffsetY);
+      const base = isFinite(n) ? n : -6;
+      return base * LAYOUT_VERTEX_DOT_SCALE;
     }}
     const _threeDStyle = _styleTier.threeD || {{}};
     const GANTT_COLORS = {{
@@ -1172,9 +1620,31 @@ html = f"""
       const v = Number(_ix[k]);
       return (isFinite(v) && v >= 0) ? v : def;
     }}
+    function _ixBool(k, def) {{
+      const v = _ix[k];
+      if (typeof v === 'boolean') return v;
+      if (typeof v === 'number') return v !== 0;
+      if (typeof v === 'string') {{
+        const s = v.trim().toLowerCase();
+        if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+        if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+      }}
+      return !!def;
+    }}
+    const LAYOUT_VERTEX_DOT_SCALE = Math.max(0.25, Math.min(1.5, _ixNum('layoutVertexDotScale', 0.7)));
+    const GRID_VISIBLE_DEFAULT = _ixBool('showGridDefault', true);
+    const IMAGE_VISIBLE_DEFAULT = _ixBool('showImageDefault', true);
+    function layoutPathVertexRadiusPx(vertexSelected, pathSelected) {{
+      if (vertexSelected) return 6 * LAYOUT_VERTEX_DOT_SCALE;
+      if (pathSelected) return 5 * LAYOUT_VERTEX_DOT_SCALE;
+      return 4 * LAYOUT_VERTEX_DOT_SCALE;
+    }}
+    function layoutTerminalVertexRadiusPx(vertexSelected) {{
+      return vertexSelected ? 5.5 * LAYOUT_VERTEX_DOT_SCALE : 4 * LAYOUT_VERTEX_DOT_SCALE;
+    }}
     const DRAG_THRESH = _ixNum('dragThresholdPx', 5);
-    const HIT_TERM_VTX_CF = _ixNum('hitTerminalVertexCellFactor', 0.6);
-    const HIT_TW_VTX_CF = _ixNum('hitTaxiwayVertexCellFactor', 0.6);
+    const HIT_TERM_VTX_CF = _ixNum('hitTerminalVertexCellFactor', 0.6) * LAYOUT_VERTEX_DOT_SCALE;
+    const HIT_TW_VTX_CF = _ixNum('hitTaxiwayVertexCellFactor', 0.6) * LAYOUT_VERTEX_DOT_SCALE;
     const HIT_TW_SEG_CF = _ixNum('hitTaxiwayAlongCellFactor', 0.8);
     const HIT_PBB_END_CF = _ixNum('hitPbbEndCellFactor', 0.8);
     const TRY_PBB_MAX_EDGE_CF = _ixNum('tryPlacePbbMaxEdgeCellFactor', 1.0);
@@ -1189,9 +1659,23 @@ html = f"""
     const objectListEl = document.getElementById('object-list');
     const flightTooltip = document.getElementById('flight-tooltip');
     const settingModeSelect = document.getElementById('settingMode');
+    const layoutModeTabs = document.getElementById('layoutModeTabs');
     const panel = document.getElementById('right-panel');
     const panelToggle = document.getElementById('panel-toggle');
     const resetViewBtn = document.getElementById('btnResetView');
+    const gridToggleBtn = document.getElementById('btnGridToggle');
+    const imageToggleBtn = document.getElementById('btnImageToggle');
+    const GRID_LAYOUT_IMAGE_DEFAULTS = {{
+      opacity: {json.dumps(_ui_g_img_opacity)},
+      opacityMin: {json.dumps(_ui_g_img_opacity_min)},
+      opacityMax: {json.dumps(_ui_g_img_opacity_max)},
+      widthM: {json.dumps(_ui_g_img_width_m)},
+      heightM: {json.dumps(_ui_g_img_height_m)},
+      topLeftCol: {json.dumps(_ui_g_img_top_left_col)},
+      topLeftRow: {json.dumps(_ui_g_img_top_left_row)}
+    }};
+    let layoutImageBitmap = null;
+    let layoutImageBitmapSrc = '';
 
     function id() {{ return 'id_' + Math.random().toString(36).slice(2, 11); }}
     function escapeHtml(str) {{
@@ -1209,6 +1693,7 @@ html = f"""
       remoteStands: [],
       taxiways: [],
       apronLinks: [],
+      layoutEdgeNames: {{}},
       directionModes: [],
       // current selection/Loaded layout name (Simulation Available upon request)
       currentLayoutName: String(INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout'),
@@ -1220,23 +1705,30 @@ html = f"""
       simPlaying: false,
       simSpeed: {json.dumps(float(_ui_default_sim_speed))},
       hasSimulationResult: false,
+      showGrid: GRID_VISIBLE_DEFAULT,
+      showImage: IMAGE_VISIBLE_DEFAULT,
       currentTerminalId: null,
       selectedObject: null,
       terminalDrawingId: null,
       taxiwayDrawingId: null,
       dragVertex: null,
       dragTaxiwayVertex: null,
+      dragApronLinkVertex: null,
+      selectedVertex: null,
       scale: 1,
       panX: 0,
       panY: 0,
       isPanning: false,
       dragStart: null,
+      layoutImageOverlay: null,
       previewRemote: null,
       previewPbb: null,
       pbbDrawing: false,
       remoteDrawing: false,
       apronLinkDrawing: false,
       apronLinkTemp: null,
+      apronLinkMidpoints: [],
+      apronLinkPointerWorld: null,
       hoverCell: null,
       vttArrCacheRev: 0,
       derivedGraphEdges: [],
@@ -1274,6 +1766,9 @@ html = f"""
       state.pbbDrawing = false;
       state.remoteDrawing = false;
       state.apronLinkDrawing = false;
+      state.apronLinkTemp = null;
+      state.apronLinkMidpoints = [];
+      state.apronLinkPointerWorld = null;
       state.previewPbb = null;
       state.previewRemote = null;
     }}
@@ -1283,16 +1778,119 @@ html = f"""
       btn.textContent = isDrawing ? 'Drawing' : 'Draw';
       btn.classList.toggle('drawing', isDrawing);
     }}
+    function syncGridToggleButton() {{
+      if (!gridToggleBtn) return;
+      const on = !!state.showGrid;
+      gridToggleBtn.classList.toggle('active', on);
+      gridToggleBtn.title = on ? 'Grid visible (click to hide)' : 'Grid hidden (click to show)';
+    }}
+    function syncImageToggleButton() {{
+      if (!imageToggleBtn) return;
+      const on = !!state.showImage;
+      imageToggleBtn.classList.toggle('active', on);
+      imageToggleBtn.title = on ? 'Image visible (click to hide)' : 'Image hidden (click to show)';
+    }}
+    function clampLayoutImageOpacity(value) {{
+      const n = Number(value);
+      if (!isFinite(n)) return GRID_LAYOUT_IMAGE_DEFAULTS.opacity;
+      return Math.max(GRID_LAYOUT_IMAGE_DEFAULTS.opacityMin, Math.min(GRID_LAYOUT_IMAGE_DEFAULTS.opacityMax, n));
+    }}
+    function clampLayoutImageSize(value, fallback) {{
+      const n = Number(value);
+      if (!isFinite(n) || n <= 0) return fallback;
+      return n;
+    }}
+    function clampLayoutImagePoint(value, fallback) {{
+      const n = Number(value);
+      return isFinite(n) ? n : fallback;
+    }}
+    function getLayoutImageAspectRatio(overlay) {{
+      if (!overlay || typeof overlay !== 'object') return 1;
+      const ow = Number(overlay.originalWidthPx);
+      const oh = Number(overlay.originalHeightPx);
+      if (isFinite(ow) && ow > 0 && isFinite(oh) && oh > 0) return oh / ow;
+      const w = Number(overlay.widthM);
+      const h = Number(overlay.heightM);
+      if (isFinite(w) && w > 0 && isFinite(h) && h > 0) return h / w;
+      return 1;
+    }}
+    function applyLayoutImageWidthByAspect(widthM) {{
+      if (!state.layoutImageOverlay) return;
+      const nextWidth = clampLayoutImageSize(widthM, state.layoutImageOverlay.widthM);
+      const aspect = getLayoutImageAspectRatio(state.layoutImageOverlay);
+      state.layoutImageOverlay.widthM = nextWidth;
+      state.layoutImageOverlay.heightM = clampLayoutImageSize(nextWidth * aspect, state.layoutImageOverlay.heightM);
+    }}
+    function applyLayoutImageHeightByAspect(heightM) {{
+      if (!state.layoutImageOverlay) return;
+      const nextHeight = clampLayoutImageSize(heightM, state.layoutImageOverlay.heightM);
+      const aspect = getLayoutImageAspectRatio(state.layoutImageOverlay);
+      state.layoutImageOverlay.heightM = nextHeight;
+      state.layoutImageOverlay.widthM = clampLayoutImageSize(nextHeight / Math.max(aspect, 1e-9), state.layoutImageOverlay.widthM);
+    }}
+    function normalizeLayoutImageOverlay(raw) {{
+      if (!raw || typeof raw !== 'object' || !raw.dataUrl) return null;
+      const widthM = clampLayoutImageSize(raw.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM);
+      const heightM = clampLayoutImageSize(raw.heightM, GRID_LAYOUT_IMAGE_DEFAULTS.heightM);
+      const originalWidthPx = clampLayoutImageSize(raw.originalWidthPx, widthM);
+      const originalHeightPx = clampLayoutImageSize(raw.originalHeightPx, heightM);
+      return {{
+        name: String(raw.name || 'Layout image'),
+        type: String(raw.type || 'image/png'),
+        dataUrl: String(raw.dataUrl || ''),
+        opacity: clampLayoutImageOpacity(raw.opacity),
+        widthM: widthM,
+        heightM: heightM,
+        originalWidthPx: originalWidthPx,
+        originalHeightPx: originalHeightPx,
+        topLeftCol: clampLayoutImagePoint(raw.topLeftCol, GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol),
+        topLeftRow: clampLayoutImagePoint(raw.topLeftRow, GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow)
+      }};
+    }}
+    function syncLayoutImageBitmap() {{
+      const overlay = state.layoutImageOverlay;
+      if (!overlay || !overlay.dataUrl) {{
+        layoutImageBitmap = null;
+        layoutImageBitmapSrc = '';
+        return;
+      }}
+      if (layoutImageBitmap && layoutImageBitmapSrc === overlay.dataUrl) return;
+      layoutImageBitmap = null;
+      layoutImageBitmapSrc = '';
+      const img = new Image();
+      const src = overlay.dataUrl;
+      img.onload = function() {{
+        if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
+        layoutImageBitmap = img;
+        layoutImageBitmapSrc = src;
+        safeDraw();
+      }};
+      img.onerror = function() {{
+        if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
+        layoutImageBitmap = null;
+        layoutImageBitmapSrc = '';
+        safeDraw();
+      }};
+      img.src = src;
+    }}
     function toggleLayoutDrawMode(flagKey, previewKey, tempKey) {{
       state.selectedObject = null;
       if (state[flagKey]) {{
         state[flagKey] = false;
         if (previewKey) state[previewKey] = null;
         if (tempKey) state[tempKey] = null;
+        if (flagKey === 'apronLinkDrawing') {{
+          state.apronLinkMidpoints = [];
+          state.apronLinkPointerWorld = null;
+        }}
       }} else {{
         state[flagKey] = true;
         if (previewKey) state[previewKey] = null;
         if (tempKey) state[tempKey] = null;
+        if (flagKey === 'apronLinkDrawing') {{
+          state.apronLinkMidpoints = [];
+          state.apronLinkPointerWorld = null;
+        }}
       }}
       syncPanelFromState();
       draw();
@@ -1361,12 +1959,22 @@ html = f"""
     function syncPathFieldVisibilityForPathType(pt) {{
       const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
       const runwayMinArrWrap = document.getElementById('runwayMinArrVelocityWrap');
-      const exitWrap = document.getElementById('runwayExitExtras');
-      const rwDirWrap = document.getElementById('runwayDirectionWrap');
-      if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway') ? 'block' : 'none';
-      if (runwayMinArrWrap) runwayMinArrWrap.style.display = (pt === 'runway') ? 'block' : 'none';
-      if (exitWrap) exitWrap.style.display = (pt === 'runway_exit') ? 'block' : 'none';
-      if (rwDirWrap) rwDirWrap.style.display = (pt === 'runway') ? 'block' : 'none';
+      const runwayLineupWrap = document.getElementById('runwayLineupDistWrap');
+      const runwayStartDispWrap = document.getElementById('runwayStartDisplacedThresholdWrap');
+      const runwayStartBlastWrap = document.getElementById('runwayStartBlastPadWrap');
+      const runwayEndDispWrap = document.getElementById('runwayEndDisplacedThresholdWrap');
+      const runwayEndBlastWrap = document.getElementById('runwayEndBlastPadWrap');
+      const maxExitWrap = document.getElementById('runwayMaxExitVelWrap');
+      const minExitWrap = document.getElementById('runwayMinExitVelWrap');
+      if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway') ? 'grid' : 'none';
+      if (runwayMinArrWrap) runwayMinArrWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+      if (runwayLineupWrap) runwayLineupWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+      if (runwayStartDispWrap) runwayStartDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+      if (runwayStartBlastWrap) runwayStartBlastWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+      if (runwayEndDispWrap) runwayEndDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+      if (runwayEndBlastWrap) runwayEndBlastWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+      if (maxExitWrap) maxExitWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
+      if (minExitWrap) minExitWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
     }}
     function mergeTaxiwaysFromLayoutObject(obj) {{
       if (!obj || typeof obj !== 'object') return [];
@@ -1403,6 +2011,10 @@ html = f"""
         if (typeof obj.grid.rows === 'number') GRID_ROWS = obj.grid.rows;
         if (typeof obj.grid.cellSize === 'number') CELL_SIZE = obj.grid.cellSize;
       }}
+      state.layoutImageOverlay = normalizeLayoutImageOverlay(
+        (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
+      );
+      syncLayoutImageBitmap();
       if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.slice();
       if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.slice();
       if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.slice();
@@ -1436,6 +2048,22 @@ html = f"""
             terminalId: f.terminalId || null,
             depRunwayId: f.depRunwayId || null,
           }};
+          // Route / RET / No-way values are derived from the current graph, so reset them on load.
+          f.noWayArr = false;
+          f.noWayDep = false;
+          f.arrRetFailed = false;
+          f.sampledArrRet = null;
+          f.arrRotSec = null;
+          f.arrRunwayIdUsed = null;
+          f.arrTdDistM = null;
+          f.arrRetDistM = null;
+          f.arrVTdMs = null;
+          f.arrVRetInMs = null;
+          f.arrVRetOutMs = null;
+          f.timeline = null;
+          f.__schedRetRotRev = null;
+          f.__schedVttArrRev = null;
+          f.__schedVttArrMin = null;
           if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
           if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
         }});
@@ -1446,7 +2074,9 @@ html = f"""
       // Do not autoplay simulation
       state.simPlaying = false;
       // flightsWhen the path changes·Simulation length after timeline calculation·List update (to be playable)
-      if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+      if (typeof updateAllFlightPaths === 'function') {{
+        updateAllFlightPaths();
+      }}
       else {{
         if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
         if (typeof renderFlightList === 'function') renderFlightList();
@@ -1462,6 +2092,68 @@ html = f"""
       state.currentLayoutName = n || state.currentLayoutName || 'default_layout';
       const bar = document.getElementById('layout-name-bar');
       if (bar) bar.textContent = n || state.currentLayoutName;
+    }}
+    function uniqueNameAgainstSet(baseName, usedNames) {{
+      const base = (baseName && String(baseName).trim()) || 'Untitled';
+      const used = usedNames instanceof Set ? usedNames : new Set();
+      if (!used.has(base)) return base;
+      let idx = 1;
+      while (used.has(base + ' (' + idx + ')')) idx++;
+      return base + ' (' + idx + ')';
+    }}
+    function zeroPadNumber(num, width) {{
+      return String(Math.max(0, Number(num) || 0)).padStart(width, '0');
+    }}
+    function getDefaultPathName(pathType, currentId) {{
+      const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : 'TX');
+      const sameType = (state.taxiways || []).filter(function(tw) {{ return tw && tw.id !== currentId && tw.pathType === pathType; }});
+      const used = new Set(sameType.map(function(tw) {{ return (tw.name && String(tw.name).trim()) || ''; }}).filter(Boolean));
+      return uniqueNameAgainstSet(prefix + String(sameType.length + 1), used);
+    }}
+    function getDefaultPbbStandName(currentId) {{
+      const stands = (state.pbbStands || []).filter(function(st) {{ return st && st.id !== currentId; }});
+      const used = new Set(stands.map(function(st) {{ return (st.name && String(st.name).trim()) || ''; }}).filter(Boolean));
+      return uniqueNameAgainstSet('C' + zeroPadNumber(stands.length + 1, 3), used);
+    }}
+    function getDefaultRemoteStandName(currentId) {{
+      const stands = (state.remoteStands || []).filter(function(st) {{ return st && st.id !== currentId; }});
+      const used = new Set(stands.map(function(st) {{ return (st.name && String(st.name).trim()) || ''; }}).filter(Boolean));
+      return uniqueNameAgainstSet('R' + zeroPadNumber(stands.length + 1, 3), used);
+    }}
+    function getApronLinkDefaultName(linkOrId) {{
+      const linkId = (typeof linkOrId === 'object' && linkOrId) ? linkOrId.id : linkOrId;
+      const idx = (state.apronLinks || []).findIndex(function(lk) {{ return lk && lk.id === linkId; }});
+      return 'Apron Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
+    }}
+    function getApronLinkDisplayName(link) {{
+      if (!link) return 'Apron Taxiway';
+      return (link.name && String(link.name).trim()) || getApronLinkDefaultName(link);
+    }}
+    function ensureUniqueApronLinkName(rawName, currentId) {{
+      const fallbackBase = getApronLinkDefaultName(currentId);
+      const baseName = (rawName && String(rawName).trim()) || fallbackBase;
+      const used = new Set((state.apronLinks || [])
+        .filter(function(lk) {{ return lk && lk.id !== currentId; }})
+        .map(function(lk) {{ return (lk.name && String(lk.name).trim()) || getApronLinkDefaultName(lk); }})
+        .filter(Boolean));
+      return uniqueNameAgainstSet(baseName, used);
+    }}
+    function getLayoutEdgeDefaultName(edge) {{
+      if (!edge) return 'Edge';
+      return 'Edge ' + (edge.label || '001');
+    }}
+    function getLayoutEdgeDisplayName(edge) {{
+      if (!edge) return 'Edge';
+      return (edge.name && String(edge.name).trim()) || getLayoutEdgeDefaultName(edge);
+    }}
+    function ensureUniqueLayoutEdgeName(rawName, currentId, fallbackEdge) {{
+      const fallbackBase = getLayoutEdgeDefaultName(fallbackEdge || {{ label: '001' }});
+      const baseName = (rawName && String(rawName).trim()) || fallbackBase;
+      const used = new Set(Object.keys(state.layoutEdgeNames || {{}})
+        .filter(function(id) {{ return id !== currentId; }})
+        .map(function(id) {{ return state.layoutEdgeNames[id]; }})
+        .filter(Boolean));
+      return uniqueNameAgainstSet(baseName, used);
     }}
     function ensureDefaultDirectionModes() {{
       if (state.directionModes.length === 0) {{
@@ -1481,6 +2173,8 @@ html = f"""
         remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
         taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
         apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
+        layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
+        layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {{}})),
         directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
         flights: JSON.parse(JSON.stringify(state.flights || []))
       }};
@@ -1495,6 +2189,9 @@ html = f"""
       state.remoteStands = snap.remoteStands;
       state.taxiways = snap.taxiways;
       state.apronLinks = snap.apronLinks;
+      state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
+      syncLayoutImageBitmap();
+      state.layoutEdgeNames = snap.layoutEdgeNames || {{}};
       state.directionModes = snap.directionModes;
       state.flights = snap.flights;
       state.selectedObject = null;
@@ -1836,7 +2533,7 @@ html = f"""
       pushUndo();
       state.pbbStands.push({{
         id: id(),
-        name: document.getElementById('standName').value.trim() || ('Contact Stand ' + (state.pbbStands.length + 1)),
+        name: document.getElementById('standName').value.trim() || getDefaultPbbStandName(),
         x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx,
         category: newPbb.category, edgeCol: bestEdge.col, edgeRow: bestEdge.row
       }});
@@ -1850,7 +2547,7 @@ html = f"""
       const bounds = getStandBoundsRect(cx, cy, size);
       if (standOverlapsExisting(bounds)) return false;
       pushUndo();
-      const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || 'R001';
+      const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
       const usedNames = new Set((state.remoteStands || []).map(s => (s.name || '').trim()).filter(Boolean));
       let finalName = baseName;
       if (usedNames.has(finalName)) {{
@@ -1951,6 +2648,14 @@ html = f"""
       if (tw.pathType === 'runway') {{
         if (typeof tw.lineupDistM === 'number' && isFinite(tw.lineupDistM) && tw.lineupDistM >= 0) copy.lineupDistM = tw.lineupDistM;
         else delete copy.lineupDistM;
+        if (typeof tw.startDisplacedThresholdM === 'number' && isFinite(tw.startDisplacedThresholdM) && tw.startDisplacedThresholdM >= 0) copy.startDisplacedThresholdM = tw.startDisplacedThresholdM;
+        else delete copy.startDisplacedThresholdM;
+        if (typeof tw.startBlastPadM === 'number' && isFinite(tw.startBlastPadM) && tw.startBlastPadM >= 0) copy.startBlastPadM = tw.startBlastPadM;
+        else delete copy.startBlastPadM;
+        if (typeof tw.endDisplacedThresholdM === 'number' && isFinite(tw.endDisplacedThresholdM) && tw.endDisplacedThresholdM >= 0) copy.endDisplacedThresholdM = tw.endDisplacedThresholdM;
+        else delete copy.endDisplacedThresholdM;
+        if (typeof tw.endBlastPadM === 'number' && isFinite(tw.endBlastPadM) && tw.endBlastPadM >= 0) copy.endBlastPadM = tw.endBlastPadM;
+        else delete copy.endBlastPadM;
         delete copy.lineup_point;
         delete copy.dep_point;
         delete copy.depPointPos;
@@ -1979,7 +2684,8 @@ html = f"""
         grid: {{
           cols: GRID_COLS,
           rows: GRID_ROWS,
-          cellSize: CELL_SIZE
+          cellSize: CELL_SIZE,
+          layoutImageOverlay: state.layoutImageOverlay ? Object.assign({{}}, state.layoutImageOverlay) : null
         }},
         // In case of duplicate names Objects Shape visible on the panel(yes: "Stand 1 (2)")Save as
         terminals: makeUniqueNamedCopy(state.terminals, 'name'),
@@ -2158,6 +2864,41 @@ html = f"""
       return inside;
     }}
 
+    function getApronLinkStandEndPx(lk) {{
+      if (!lk || !lk.pbbId) return null;
+      const stand = (state.pbbStands || []).find(p => p.id === lk.pbbId) ||
+        (state.remoteStands || []).find(st => st.id === lk.pbbId);
+      if (!stand) return null;
+      if (stand.x2 != null && stand.y2 != null) return [Number(stand.x2), Number(stand.y2)];
+      return cellToPixel(stand.col || 0, stand.row || 0);
+    }}
+    function getApronLinkPolylineWorldPts(lk) {{
+      if (!lk || lk.tx == null || lk.ty == null) return [];
+      const a = getApronLinkStandEndPx(lk);
+      if (!a) return [];
+      const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) {{
+        return cellToPixel(Number(v.col), Number(v.row));
+      }});
+      const b = [Number(lk.tx), Number(lk.ty)];
+      return [a].concat(mids).concat([b]);
+    }}
+    function hitTestApronLink(wx, wy) {{
+      const click = [wx, wy];
+      const hitD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
+      const list = state.apronLinks || [];
+      for (let i = list.length - 1; i >= 0; i--) {{
+        const lk = list[i];
+        const poly = getApronLinkPolylineWorldPts(lk);
+        if (poly.length < 2) continue;
+        for (let j = 0; j < poly.length - 1; j++) {{
+          const near = closestPointOnSegment(poly[j], poly[j + 1], click);
+          if (!near) continue;
+          if (dist2(near, click) < hitD2) return {{ type: 'apronLink', id: lk.id, obj: lk }};
+        }}
+      }}
+      return null;
+    }}
+
     function hitTest(wx, wy) {{
       const click = [wx, wy];
       for (let i = state.remoteStands.length - 1; i >= 0; i--) {{
@@ -2178,6 +2919,8 @@ html = f"""
         if (t.closed && t.vertices.length >= 3 && pointInPolygon(click, t.vertices))
           return {{ type: 'terminal', id: t.id, obj: t }};
       }}
+      const apronLkHit = hitTestApronLink(wx, wy);
+      if (apronLkHit) return apronLkHit;
       if (!state.taxiwayDrawingId) {{
         for (let i = state.taxiways.length - 1; i >= 0; i--) {{
           const tw = state.taxiways[i];
@@ -2226,6 +2969,139 @@ html = f"""
       return best;
     }}
 
+    function snapWorldPointToTaxiwayPolyline(wx, wy, taxiwayId) {{
+      const tw = (state.taxiways || []).find(t => t.id === taxiwayId);
+      if (!tw || !tw.vertices || tw.vertices.length < 2) return null;
+      const click = [wx, wy];
+      let best = null;
+      let bestD2 = Infinity;
+      for (let i = 0; i < tw.vertices.length - 1; i++) {{
+        const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+        const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
+        const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2) {{ bestD2 = d2; best = near; }}
+      }}
+      return best;
+    }}
+
+    function hitTestApronLinkVertex(wx, wy) {{
+      if (!state.selectedObject || state.selectedObject.type !== 'apronLink') return null;
+      const lk = state.selectedObject.obj;
+      if (!lk || lk.id !== state.selectedObject.id) return null;
+      const click = [wx, wy];
+      const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
+      let best = null;
+      let bestD2 = maxD2;
+      const tx = Number(lk.tx), ty = Number(lk.ty);
+      if (isFinite(tx) && isFinite(ty)) {{
+        const d2 = dist2([tx, ty], click);
+        if (d2 < bestD2) {{ bestD2 = d2; best = {{ linkId: lk.id, kind: 'taxiway' }}; }}
+      }}
+      (lk.midVertices || []).forEach((v, idx) => {{
+        const [vx, vy] = cellToPixel(Number(v.col), Number(v.row));
+        const d2 = dist2([vx, vy], click);
+        if (d2 < bestD2) {{ bestD2 = d2; best = {{ linkId: lk.id, kind: 'mid', midIndex: idx }}; }}
+      }});
+      return best;
+    }}
+
+    function isSelectedVertex(type, objectId, index) {{
+      const sv = state.selectedVertex;
+      return !!(sv && sv.type === type && sv.id === objectId && sv.index === index);
+    }}
+
+    function removeSelectedVertex() {{
+      const sv = state.selectedVertex;
+      if (!sv) return false;
+      if (sv.type === 'terminal') {{
+        const term = state.terminals.find(t => t.id === sv.id);
+        if (!term || !Array.isArray(term.vertices) || sv.index < 0 || sv.index >= term.vertices.length) return false;
+        if (term.closed && term.vertices.length <= 3) return false;
+        pushUndo();
+        term.vertices.splice(sv.index, 1);
+        if (term.vertices.length < 3) term.closed = false;
+        state.selectedVertex = null;
+        if (state.currentTerminalId === term.id) syncPanelFromState();
+        updateObjectInfo();
+        draw();
+        return true;
+      }}
+      if (sv.type === 'taxiway') {{
+        const tw = state.taxiways.find(t => t.id === sv.id);
+        if (!tw || !Array.isArray(tw.vertices) || sv.index < 0 || sv.index >= tw.vertices.length) return false;
+        if (tw.vertices.length <= 2) return false;
+        pushUndo();
+        tw.vertices.splice(sv.index, 1);
+        if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
+        state.selectedVertex = null;
+        syncPanelFromState();
+        updateObjectInfo();
+        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+        if (scene3d) update3DScene();
+        return true;
+      }}
+      if (sv.type === 'apronLink') {{
+        if (sv.kind !== 'mid') return false;
+        const lk = state.apronLinks.find(l => l.id === sv.id);
+        if (!lk || !Array.isArray(lk.midVertices) || sv.midIndex < 0 || sv.midIndex >= lk.midVertices.length) return false;
+        pushUndo();
+        lk.midVertices.splice(sv.midIndex, 1);
+        if (!lk.midVertices.length) delete lk.midVertices;
+        state.selectedVertex = null;
+        updateObjectInfo();
+        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+        if (scene3d) update3DScene();
+        return true;
+      }}
+      return false;
+    }}
+
+    function removeLastDrawingVertex() {{
+      if (state.terminalDrawingId) {{
+        const term = state.terminals.find(t => t.id === state.terminalDrawingId);
+        if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return false;
+        pushUndo();
+        term.vertices.pop();
+        state.selectedVertex = null;
+        syncPanelFromState();
+        updateObjectInfo();
+        draw();
+        return true;
+      }}
+      if (state.taxiwayDrawingId) {{
+        const tw = state.taxiways.find(t => t.id === state.taxiwayDrawingId);
+        if (!tw || !Array.isArray(tw.vertices) || !tw.vertices.length) return false;
+        pushUndo();
+        tw.vertices.pop();
+        if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
+        else {{
+          tw.start_point = null;
+          tw.end_point = null;
+        }}
+        state.selectedVertex = null;
+        syncPanelFromState();
+        updateObjectInfo();
+        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+        if (scene3d) update3DScene();
+        return true;
+      }}
+      if (settingModeSelect.value === 'apronTaxiway' && state.apronLinkDrawing && state.apronLinkTemp) {{
+        if (state.apronLinkMidpoints && state.apronLinkMidpoints.length) {{
+          state.apronLinkMidpoints.pop();
+          draw();
+          return true;
+        }}
+        state.apronLinkTemp = null;
+        state.apronLinkMidpoints = [];
+        state.apronLinkPointerWorld = null;
+        draw();
+        return true;
+      }}
+      return false;
+    }}
+
     function getCurrentTerminal() {{
       if (state.currentTerminalId) {{
         const t = state.terminals.find(x => x.id === state.currentTerminalId);
@@ -2250,6 +3126,23 @@ html = f"""
       document.getElementById('gridCellSize').value = CELL_SIZE;
       document.getElementById('gridCols').value = GRID_COLS;
       document.getElementById('gridRows').value = GRID_ROWS;
+      const gridImageOpacityEl = document.getElementById('gridLayoutImageOpacity');
+      const gridImageWidthEl = document.getElementById('gridLayoutImageWidthM');
+      const gridImageHeightEl = document.getElementById('gridLayoutImageHeightM');
+      const gridImageColEl = document.getElementById('gridLayoutImageCol');
+      const gridImageRowEl = document.getElementById('gridLayoutImageRow');
+      const gridImageMetaEl = document.getElementById('gridLayoutImageMeta');
+      const gridImageClearBtn = document.getElementById('btnClearGridLayoutImage');
+      const gridImageFileEl = document.getElementById('gridLayoutImageFile');
+      const overlay = state.layoutImageOverlay;
+      if (gridImageOpacityEl) gridImageOpacityEl.value = overlay ? String(overlay.opacity) : String(GRID_LAYOUT_IMAGE_DEFAULTS.opacity);
+      if (gridImageWidthEl) gridImageWidthEl.value = overlay ? String(overlay.widthM) : String(GRID_LAYOUT_IMAGE_DEFAULTS.widthM);
+      if (gridImageHeightEl) gridImageHeightEl.value = overlay ? String(overlay.heightM) : String(GRID_LAYOUT_IMAGE_DEFAULTS.heightM);
+      if (gridImageColEl) gridImageColEl.value = overlay ? String(overlay.topLeftCol) : String(GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol);
+      if (gridImageRowEl) gridImageRowEl.value = overlay ? String(overlay.topLeftRow) : String(GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow);
+      if (gridImageMetaEl) gridImageMetaEl.textContent = overlay ? ('Loaded: ' + (overlay.name || 'Layout image')) : 'No file selected.';
+      if (gridImageClearBtn) gridImageClearBtn.disabled = !overlay;
+      if (!overlay && gridImageFileEl) gridImageFileEl.value = '';
       if (state.terminals.length && (!state.currentTerminalId || !state.terminals.some(t => t.id === state.currentTerminalId)))
         state.currentTerminalId = state.terminals[0].id;
       const term = getCurrentTerminal();
@@ -2319,7 +3212,9 @@ html = f"""
         const maxExitInput = document.getElementById('taxiwayMaxExitVel');
         const minExitInput = document.getElementById('taxiwayMinExitVel');
         if (nameInput) nameInput.value = tw.name || '';
-        const widthDefault = tw.pathType === 'runway' ? 60 : 15;
+        const widthDefault = tw.pathType === 'runway'
+          ? RUNWAY_PATH_DEFAULT_WIDTH
+          : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
         if (widthInput) widthInput.value = tw.width != null ? tw.width : widthDefault;
         const avgVelInput = document.getElementById('taxiwayAvgMoveVelocity');
         if (avgVelInput) avgVelInput.value = (tw.avgMoveVelocity != null ? tw.avgMoveVelocity : 10);
@@ -2336,6 +3231,14 @@ html = f"""
           const lv = getEffectiveRunwayLineupDistM(tw);
           runwayLineupInput.value = String(lv);
         }}
+        const runwayStartDispInput = document.getElementById('runwayStartDisplacedThresholdM');
+        if (runwayStartDispInput && tw.pathType === 'runway') runwayStartDispInput.value = String(getEffectiveRunwayStartDisplacedThresholdM(tw));
+        const runwayStartBlastInput = document.getElementById('runwayStartBlastPadM');
+        if (runwayStartBlastInput && tw.pathType === 'runway') runwayStartBlastInput.value = String(getEffectiveRunwayStartBlastPadM(tw));
+        const runwayEndDispInput = document.getElementById('runwayEndDisplacedThresholdM');
+        if (runwayEndDispInput && tw.pathType === 'runway') runwayEndDispInput.value = String(getEffectiveRunwayEndDisplacedThresholdM(tw));
+        const runwayEndBlastInput = document.getElementById('runwayEndBlastPadM');
+        if (runwayEndBlastInput && tw.pathType === 'runway') runwayEndBlastInput.value = String(getEffectiveRunwayEndBlastPadM(tw));
         if (maxExitInput) maxExitInput.value = tw.maxExitVelocity != null ? tw.maxExitVelocity : 30;
         if (minExitInput) {{
           const minVal = (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
@@ -2346,21 +3249,41 @@ html = f"""
         const modeSel = document.getElementById('taxiwayDirectionMode');
         const d = getTaxiwayDirection(tw);
         if (modeSel) modeSel.value = d;
-        const rwDirInPane = document.getElementById('runwayDirectionInTaxiwayPane');
-        if (rwDirInPane) rwDirInPane.value = d;
+      }} else if (state.selectedObject && state.selectedObject.type === 'apronLink') {{
+        const lk = state.selectedObject.obj;
+        const nameInput = document.getElementById('apronLinkName');
+        if (nameInput) nameInput.value = getApronLinkDisplayName(lk);
+      }} else if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {{
+        const ed = state.selectedObject.obj;
+        const nameInput = document.getElementById('edgeName');
+        if (nameInput) nameInput.value = getLayoutEdgeDisplayName(ed);
       }} else {{
         const rm = settingModeSelect ? settingModeSelect.value : '';
         if (isPathLayoutMode(rm)) syncPathFieldVisibilityForPathType(pathTypeFromLayoutMode(rm));
         else {{
-          const rwWrap = document.getElementById('runwayDirectionWrap');
-          if (rwWrap) rwWrap.style.display = 'none';
-          const exitWrap = document.getElementById('runwayExitExtras');
-          if (exitWrap) exitWrap.style.display = 'none';
+          const maxExitWrap = document.getElementById('runwayMaxExitVelWrap');
+          if (maxExitWrap) maxExitWrap.style.display = 'none';
+          const minExitWrap = document.getElementById('runwayMinExitVelWrap');
+          if (minExitWrap) minExitWrap.style.display = 'none';
           const runwayMinArrWrap = document.getElementById('runwayMinArrVelocityWrap');
           if (runwayMinArrWrap) runwayMinArrWrap.style.display = 'none';
+          const runwayLineupWrap = document.getElementById('runwayLineupDistWrap');
+          if (runwayLineupWrap) runwayLineupWrap.style.display = 'none';
+          const runwayStartDispWrap = document.getElementById('runwayStartDisplacedThresholdWrap');
+          if (runwayStartDispWrap) runwayStartDispWrap.style.display = 'none';
+          const runwayStartBlastWrap = document.getElementById('runwayStartBlastPadWrap');
+          if (runwayStartBlastWrap) runwayStartBlastWrap.style.display = 'none';
+          const runwayEndDispWrap = document.getElementById('runwayEndDisplacedThresholdWrap');
+          if (runwayEndDispWrap) runwayEndDispWrap.style.display = 'none';
+          const runwayEndBlastWrap = document.getElementById('runwayEndBlastPadWrap');
+          if (runwayEndBlastWrap) runwayEndBlastWrap.style.display = 'none';
           const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
           if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = 'none';
         }}
+        const apronLinkNameInput = document.getElementById('apronLinkName');
+        if (apronLinkNameInput && rm === 'apronTaxiway') apronLinkNameInput.value = '';
+        const edgeNameInput = document.getElementById('edgeName');
+        if (edgeNameInput && rm === 'edge') edgeNameInput.value = '';
       }}
       syncDrawToggleButton('btnTaxiwayDraw', !!state.taxiwayDrawingId);
       syncDrawToggleButton('btnApronLinkDraw', !!state.apronLinkDrawing);
@@ -2371,9 +3294,16 @@ html = f"""
 
     function syncStateFromPanel() {{
       var el = function(id) {{ return document.getElementById(id); }};
-      if (el('gridCellSize')) CELL_SIZE = Math.max(10, Number(el('gridCellSize').value) || 10);
-      if (el('gridCols')) GRID_COLS = Math.max(5, Math.min(500, parseInt(el('gridCols').value, 10) || 200));
-      if (el('gridRows')) GRID_ROWS = Math.max(5, Math.min(500, parseInt(el('gridRows').value, 10) || 200));
+      if (el('gridCellSize')) CELL_SIZE = Math.max(5, Number(el('gridCellSize').value) || 5);
+      if (el('gridCols')) GRID_COLS = Math.max(5, Math.min(1000, parseInt(el('gridCols').value, 10) || 200));
+      if (el('gridRows')) GRID_ROWS = Math.max(5, Math.min(1000, parseInt(el('gridRows').value, 10) || 200));
+      if (state.layoutImageOverlay) {{
+        state.layoutImageOverlay.opacity = clampLayoutImageOpacity(el('gridLayoutImageOpacity') ? el('gridLayoutImageOpacity').value : state.layoutImageOverlay.opacity);
+        state.layoutImageOverlay.widthM = clampLayoutImageSize(el('gridLayoutImageWidthM') ? el('gridLayoutImageWidthM').value : state.layoutImageOverlay.widthM, state.layoutImageOverlay.widthM);
+        state.layoutImageOverlay.heightM = clampLayoutImageSize(el('gridLayoutImageHeightM') ? el('gridLayoutImageHeightM').value : state.layoutImageOverlay.heightM, state.layoutImageOverlay.heightM);
+        state.layoutImageOverlay.topLeftCol = clampLayoutImagePoint(el('gridLayoutImageCol') ? el('gridLayoutImageCol').value : state.layoutImageOverlay.topLeftCol, state.layoutImageOverlay.topLeftCol);
+        state.layoutImageOverlay.topLeftRow = clampLayoutImagePoint(el('gridLayoutImageRow') ? el('gridLayoutImageRow').value : state.layoutImageOverlay.topLeftRow, state.layoutImageOverlay.topLeftRow);
+      }}
       var t = getCurrentTerminal();
       if (t) {{
         if (el('terminalName')) t.name = (el('terminalName').value || '').trim() || t.name;
@@ -2408,7 +3338,7 @@ html = f"""
       if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
         var tw = state.selectedObject.obj;
         if (el('taxiwayName')) tw.name = (el('taxiwayName').value || '').trim();
-        if (el('taxiwayWidth')) tw.width = Math.max(10, Math.min(100, Number(el('taxiwayWidth').value) || 15));
+        if (el('taxiwayWidth')) tw.width = Math.max(5, Math.min(100, Number(el('taxiwayWidth').value) || (tw.pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH))));
         if (el('taxiwayMaxExitVel')) {{
           const mv = Number(el('taxiwayMaxExitVel').value);
           if (tw.pathType === 'runway_exit') tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
@@ -2422,9 +3352,7 @@ html = f"""
         }} else if (tw.pathType !== 'runway_exit') {{
           delete tw.minExitVelocity;
         }}
-        if (tw.pathType === 'runway' && el('runwayDirectionInTaxiwayPane')) {{
-          tw.direction = el('runwayDirectionInTaxiwayPane').value || 'both';
-        }} else if (el('taxiwayDirectionMode')) {{
+        if (el('taxiwayDirectionMode')) {{
           tw.direction = el('taxiwayDirectionMode').value || 'both';
         }}
         if (el('taxiwayAvgMoveVelocity')) {{
@@ -2445,17 +3373,58 @@ html = f"""
         }} else if (tw.pathType !== 'runway') {{
           delete tw.lineupDistM;
         }}
+        if (tw.pathType === 'runway') {{
+          const startDisp = Number(el('runwayStartDisplacedThresholdM') ? el('runwayStartDisplacedThresholdM').value : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
+          const startBlast = Number(el('runwayStartBlastPadM') ? el('runwayStartBlastPadM').value : RUNWAY_START_BLAST_PAD_DEFAULT_M);
+          const endDisp = Number(el('runwayEndDisplacedThresholdM') ? el('runwayEndDisplacedThresholdM').value : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
+          const endBlast = Number(el('runwayEndBlastPadM') ? el('runwayEndBlastPadM').value : RUNWAY_END_BLAST_PAD_DEFAULT_M);
+          tw.startDisplacedThresholdM = (typeof startDisp === 'number' && isFinite(startDisp) && startDisp >= 0) ? startDisp : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
+          tw.startBlastPadM = (typeof startBlast === 'number' && isFinite(startBlast) && startBlast >= 0) ? startBlast : RUNWAY_START_BLAST_PAD_DEFAULT_M;
+          tw.endDisplacedThresholdM = (typeof endDisp === 'number' && isFinite(endDisp) && endDisp >= 0) ? endDisp : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
+          tw.endBlastPadM = (typeof endBlast === 'number' && isFinite(endBlast) && endBlast >= 0) ? endBlast : RUNWAY_END_BLAST_PAD_DEFAULT_M;
+        }} else {{
+          delete tw.startDisplacedThresholdM;
+          delete tw.startBlastPadM;
+          delete tw.endDisplacedThresholdM;
+          delete tw.endBlastPadM;
+        }}
       }}
     }}
 
     function syncSettingsPaneToMode() {{
       const mode = settingModeSelect ? settingModeSelect.value : 'grid';
       if (mode !== 'edge' && state.selectedObject && state.selectedObject.type === 'layoutEdge') state.selectedObject = null;
+      if (layoutModeTabs) {{
+        layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {{
+          btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+        }});
+      }}
       document.querySelectorAll('.settings-pane').forEach(el => {{ el.style.display = 'none'; }});
       const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
       const pane = document.getElementById('settings-' + paneKey);
       if (pane) pane.style.display = 'block';
-      if (isPathLayoutMode(mode)) syncPathFieldVisibilityForPathType(pathTypeFromLayoutMode(mode));
+      if (isPathLayoutMode(mode)) {{
+        const pt = pathTypeFromLayoutMode(mode);
+        syncPathFieldVisibilityForPathType(pt);
+        if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {{
+          const widthInput = document.getElementById('taxiwayWidth');
+          if (widthInput) {{
+            widthInput.value = pt === 'runway'
+              ? RUNWAY_PATH_DEFAULT_WIDTH
+              : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+          }}
+          if (pt === 'runway') {{
+            const startDispInput = document.getElementById('runwayStartDisplacedThresholdM');
+            if (startDispInput) startDispInput.value = String(RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
+            const startBlastInput = document.getElementById('runwayStartBlastPadM');
+            if (startBlastInput) startBlastInput.value = String(RUNWAY_START_BLAST_PAD_DEFAULT_M);
+            const endDispInput = document.getElementById('runwayEndDisplacedThresholdM');
+            if (endDispInput) endDispInput.value = String(RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
+            const endBlastInput = document.getElementById('runwayEndBlastPadM');
+            if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
+          }}
+        }}
+      }}
       if (typeof renderObjectList === 'function') renderObjectList();
     }}
 
@@ -2463,6 +3432,20 @@ html = f"""
       cancelActiveLayoutDrawingState();
       syncSettingsPaneToMode();
     }});
+    if (layoutModeTabs && settingModeSelect) {{
+      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {{
+        btn.addEventListener('click', function() {{
+          const mode = this.getAttribute('data-mode') || 'grid';
+          if (settingModeSelect.value === mode) {{
+            cancelActiveLayoutDrawingState();
+            syncSettingsPaneToMode();
+            return;
+          }}
+          settingModeSelect.value = mode;
+          settingModeSelect.dispatchEvent(new Event('change'));
+        }});
+      }});
+    }}
     syncSettingsPaneToMode();
 
     let activeTab = 'settings';
@@ -2494,9 +3477,123 @@ html = f"""
       }});
     }});
 
-    document.getElementById('gridCellSize').addEventListener('change', function() {{ CELL_SIZE = Math.max(10, Number(this.value) || 10); draw(); }});
-    document.getElementById('gridCols').addEventListener('change', function() {{ GRID_COLS = Math.max(5, Math.min(500, parseInt(this.value,10)||400)); draw(); }});
-    document.getElementById('gridRows').addEventListener('change', function() {{ GRID_ROWS = Math.max(5, Math.min(500, parseInt(this.value,10)||400)); draw(); }});
+    document.getElementById('gridCellSize').addEventListener('change', function() {{ CELL_SIZE = Math.max(5, Number(this.value) || 5); draw(); }});
+    document.getElementById('gridCols').addEventListener('change', function() {{ GRID_COLS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); draw(); }});
+    document.getElementById('gridRows').addEventListener('change', function() {{ GRID_ROWS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); draw(); }});
+    function commitGridLayoutImageNumericChange(inputId, applyFn) {{
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      input.addEventListener('change', function() {{
+        if (!state.layoutImageOverlay) {{
+          syncPanelFromState();
+          return;
+        }}
+        const before = JSON.stringify(state.layoutImageOverlay);
+        const snapshot = JSON.parse(before);
+        applyFn(this);
+        const after = JSON.stringify(state.layoutImageOverlay);
+        if (before === after) {{
+          syncPanelFromState();
+          draw();
+          return;
+        }}
+        undoStack.push({{
+          terminals: JSON.parse(JSON.stringify(state.terminals || [])),
+          pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
+          remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+          taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
+          apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
+          layoutImageOverlay: snapshot,
+          layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {{}})),
+          directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
+          flights: JSON.parse(JSON.stringify(state.flights || []))
+        }});
+        if (undoStack.length > maxUndoLevels) undoStack.shift();
+        syncPanelFromState();
+        draw();
+      }});
+    }}
+    const gridLayoutImageFileEl = document.getElementById('gridLayoutImageFile');
+    if (gridLayoutImageFileEl) {{
+      gridLayoutImageFileEl.addEventListener('change', function() {{
+        const file = this.files && this.files[0];
+        if (!file) return;
+        const fileType = String(file.type || '').toLowerCase();
+        const fileName = String(file.name || 'Layout image');
+        const accepted = fileType === 'image/png' || fileType === 'image/jpeg' || fileType === 'image/svg+xml' ||
+          /\.(png|jpe?g|svg)$/i.test(fileName);
+        if (!accepted) {{
+          alert('Only PNG, JPG, JPEG, and SVG files are supported.');
+          this.value = '';
+          return;
+        }}
+        const reader = new FileReader();
+        reader.onload = function(ev) {{
+          const dataUrl = ev && ev.target ? String(ev.target.result || '') : '';
+          if (!dataUrl) return;
+          const img = new Image();
+          img.onload = function() {{
+            const widthM = state.layoutImageOverlay ? clampLayoutImageSize(state.layoutImageOverlay.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM) : GRID_LAYOUT_IMAGE_DEFAULTS.widthM;
+            const aspect = (img.naturalWidth > 0 && img.naturalHeight > 0)
+              ? (img.naturalHeight / img.naturalWidth)
+              : (GRID_LAYOUT_IMAGE_DEFAULTS.heightM / Math.max(GRID_LAYOUT_IMAGE_DEFAULTS.widthM, 1e-9));
+            const heightM = state.layoutImageOverlay
+              ? clampLayoutImageSize(state.layoutImageOverlay.heightM, Math.max(1, widthM * aspect))
+              : Math.max(1, widthM * aspect);
+            pushUndo();
+            state.layoutImageOverlay = normalizeLayoutImageOverlay({{
+              name: fileName,
+              type: fileType || 'image/png',
+              dataUrl: dataUrl,
+              opacity: state.layoutImageOverlay ? state.layoutImageOverlay.opacity : GRID_LAYOUT_IMAGE_DEFAULTS.opacity,
+              widthM: widthM,
+              heightM: heightM,
+              originalWidthPx: img.naturalWidth || widthM,
+              originalHeightPx: img.naturalHeight || heightM,
+              topLeftCol: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftCol : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol,
+              topLeftRow: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftRow : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow
+            }});
+            syncLayoutImageBitmap();
+            syncPanelFromState();
+            draw();
+          }};
+          img.onerror = function() {{
+            alert('Failed to read the selected layout image.');
+            gridLayoutImageFileEl.value = '';
+          }};
+          img.src = dataUrl;
+        }};
+        reader.readAsDataURL(file);
+      }});
+    }}
+    const clearGridLayoutImageBtn = document.getElementById('btnClearGridLayoutImage');
+    if (clearGridLayoutImageBtn) {{
+      clearGridLayoutImageBtn.addEventListener('click', function() {{
+        if (!state.layoutImageOverlay) return;
+        pushUndo();
+        state.layoutImageOverlay = null;
+        layoutImageBitmap = null;
+        layoutImageBitmapSrc = '';
+        if (gridLayoutImageFileEl) gridLayoutImageFileEl.value = '';
+        syncPanelFromState();
+        draw();
+      }});
+    }}
+    commitGridLayoutImageNumericChange('gridLayoutImageOpacity', function(input) {{
+      state.layoutImageOverlay.opacity = clampLayoutImageOpacity(input.value);
+    }});
+    commitGridLayoutImageNumericChange('gridLayoutImageWidthM', function(input) {{
+      applyLayoutImageWidthByAspect(input.value);
+    }});
+    commitGridLayoutImageNumericChange('gridLayoutImageHeightM', function(input) {{
+      applyLayoutImageHeightByAspect(input.value);
+    }});
+    commitGridLayoutImageNumericChange('gridLayoutImageCol', function(input) {{
+      state.layoutImageOverlay.topLeftCol = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftCol);
+    }});
+    commitGridLayoutImageNumericChange('gridLayoutImageRow', function(input) {{
+      state.layoutImageOverlay.topLeftRow = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftRow);
+    }});
 
     document.getElementById('terminalName').addEventListener('change', function() {{
       const t = getCurrentTerminal();
@@ -2616,12 +3713,42 @@ html = f"""
         draw();
       }}
     }});
+    const apronLinkNameInputEl = document.getElementById('apronLinkName');
+    if (apronLinkNameInputEl) {{
+      apronLinkNameInputEl.addEventListener('change', function() {{
+        if (state.selectedObject && state.selectedObject.type === 'apronLink') {{
+          const lk = state.selectedObject.obj;
+          lk.name = ensureUniqueApronLinkName(this.value, lk.id);
+          this.value = lk.name;
+          updateObjectInfo();
+          renderObjectList();
+          draw();
+        }}
+      }});
+    }}
+    const edgeNameInputEl = document.getElementById('edgeName');
+    if (edgeNameInputEl) {{
+      edgeNameInputEl.addEventListener('change', function() {{
+        if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {{
+          const ed = state.selectedObject.obj;
+          const nextName = ensureUniqueLayoutEdgeName(this.value, ed.id, ed);
+          state.layoutEdgeNames[ed.id] = nextName;
+          ed.name = nextName;
+          this.value = nextName;
+          updateObjectInfo();
+          renderObjectList();
+          draw();
+        }}
+      }});
+    }}
     document.getElementById('taxiwayWidth').addEventListener('change', function() {{
       if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
         const tw = state.selectedObject.obj;
-        const baseWidth = tw.pathType === 'runway' ? 60 : 15;
+        const baseWidth = tw.pathType === 'runway'
+          ? RUNWAY_PATH_DEFAULT_WIDTH
+          : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
         const val = Number(this.value);
-        tw.width = Math.max(10, Math.min(100, val || baseWidth));
+        tw.width = Math.max(5, Math.min(100, val || baseWidth));
         this.value = tw.width;
         updateObjectInfo();
         draw();
@@ -2727,13 +3854,33 @@ html = f"""
         }}
       }});
     }}
+    [
+      ['runwayStartDisplacedThresholdM', 'startDisplacedThresholdM', function(tw) {{ return getEffectiveRunwayStartDisplacedThresholdM(tw); }}],
+      ['runwayStartBlastPadM', 'startBlastPadM', function(tw) {{ return getEffectiveRunwayStartBlastPadM(tw); }}],
+      ['runwayEndDisplacedThresholdM', 'endDisplacedThresholdM', function(tw) {{ return getEffectiveRunwayEndDisplacedThresholdM(tw); }}],
+      ['runwayEndBlastPadM', 'endBlastPadM', function(tw) {{ return getEffectiveRunwayEndBlastPadM(tw); }}]
+    ].forEach(function(item) {{
+      const el = document.getElementById(item[0]);
+      if (!el) return;
+      el.addEventListener('change', function() {{
+        if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
+          const tw = state.selectedObject.obj;
+          if (tw.pathType !== 'runway') return;
+          const val = Number(this.value);
+          const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : item[2](tw);
+          tw[item[1]] = v;
+          this.value = String(v);
+          updateObjectInfo();
+          draw();
+        }}
+      }});
+    }});
 
     // ---- Flight helpers ----
     function getMinArrVelocityMpsForRunwayId(runwayId) {{
       if (runwayId == null || runwayId === '') return 15;
       const list = state.taxiways || [];
       let tw = list.find(t => t.id === runwayId && t.pathType === 'runway');
-      if (!tw) tw = list.find(t => t.id === runwayId && (t.name || '').toLowerCase().includes('runway'));
       if (!tw) return 15;
       const v = tw.minArrVelocity;
       if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, Math.min(150, v));
@@ -3054,7 +4201,7 @@ html = f"""
 
     function getRunwayOptions() {{
       const list = [];
-      (state.taxiways || []).filter(t => t.pathType === 'runway' || (t.name || '').toLowerCase().includes('runway'))
+      (state.taxiways || []).filter(t => t.pathType === 'runway')
         .forEach(t => list.push({{ id: t.id, name: (t.name || '').trim() || 'Runway' }}));
       return list;
     }}
@@ -3664,11 +4811,11 @@ html = f"""
           // Deceleration a: mean(μ) When only values ​​are used 26 m/s Distance to reach (threshold Baseline, read-only)
           rows.push(
             '<tr>' +
-              '<td class="sticky-col" style="background:rgba(22,163,74,0.14);">Distance to 26 m/s (from threshold)</td>' +
-              '<td style="background:rgba(22,163,74,0.14);">m</td>' +
-              '<td style="background:rgba(22,163,74,0.14);">mean-based</td>' +
+              '<td class="sticky-col" style="background:rgba(124,106,247,0.14);">Distance to 26 m/s (from threshold)</td>' +
+              '<td style="background:rgba(124,106,247,0.14);">m</td>' +
+              '<td style="background:rgba(124,106,247,0.14);">mean-based</td>' +
               unique.map((info, idx) =>
-                '<td style="background:rgba(22,163,74,0.14);font-weight:600;color:#bbf7d0;">' + aMeanStopDists[idx] + '</td>'
+                '<td style="background:rgba(124,106,247,0.14);font-weight:600;color:#ede9fe;">' + aMeanStopDists[idx] + '</td>'
               ).join('') +
             '</tr>'
           );
@@ -3707,7 +4854,7 @@ html = f"""
                   '<td class="sticky-col">' +
                     '<span style="display:inline-flex;align-items:center;gap:4px;">' +
                       (rwLabel ? ('<span style="font-size:9px;color:#9ca3af;">' + escapeHtml(rwLabel) + '</span>') : '') +
-                      '<span style="padding:2px 6px;border-radius:9999px;background:rgba(15,23,42,0.95);border:1px solid #4b5563;font-size:10px;color:#f9fafb;font-weight:600;">' +
+                      '<span style="padding:2px 6px;border-radius:9999px;background:rgba(124,106,247,0.16);border:1px solid rgba(124,106,247,0.35);font-size:10px;color:#ede9fe;font-weight:600;">' +
                         escapeHtml(r.name) +
                       '</span>' +
                     '</span>' +
@@ -3717,14 +4864,14 @@ html = f"""
                   unique.map((info, colIdx) => {{
                     const cnt = counts[colIdx] || 0;
                     if (!cnt) return '<td></td>';
-                    let bg = 'rgba(15,23,42,0.9)';
-                    let color = '#e5e7eb';
+                    let bg = 'rgba(39,29,61,0.72)';
+                    let color = '#ede9fe';
                     if (colIdx === top1) {{
-                      bg = 'rgba(22,163,74,0.35)'; // 1Above: green
-                      color = '#bbf7d0';
+                      bg = 'rgba(124,106,247,0.36)';
+                      color = '#f5f3ff';
                     }} else if (colIdx === top2 || colIdx === top3) {{
-                      bg = 'rgba(251,146,60,0.3)'; // 2,3Above: Orange
-                      color = '#fed7aa';
+                      bg = 'rgba(124,106,247,0.22)';
+                      color = '#ede9fe';
                     }}
                     return '<td style="background:' + bg + ';color:' + color + ';font-weight:600;text-align:center;">' + cnt + '</td>';
                   }}).join('') +
@@ -4710,7 +5857,7 @@ html = f"""
 
     function validateNetworkForFlights() {{
       const msgs = [];
-      const hasRunwayPath = state.taxiways && state.taxiways.some(tw => tw.pathType === 'runway' || (tw.name || '').toLowerCase().includes('runway'));
+      const hasRunwayPath = state.taxiways && state.taxiways.some(tw => tw.pathType === 'runway');
       if (!hasRunwayPath) msgs.push('RunwayThere is no.');
       if (!state.taxiways || !state.taxiways.length) msgs.push('TaxiwayThere is no.');
       const stands = (state.pbbStands || []).concat(state.remoteStands || []);
@@ -4894,7 +6041,6 @@ html = f"""
           '<div class="kpi-card-label">' + escapeHtml(label) + '</div>' +
           '<div class="kpi-card-value">' + escapeHtml(value) + '</div>' +
           '<div class="kpi-card-meta">' + escapeHtml(meta) + '</div>' +
-          '<div class="kpi-card-submeta">' + escapeHtml(submeta || '') + '</div>' +
         '</div>';
     }}
 
@@ -5584,9 +6730,8 @@ html = f"""
 
     function getRunwayPath(runwayId) {{
       const taxiways = state.taxiways || [];
-      let rw = runwayId ? taxiways.find(t => t.id === runwayId && (t.pathType === 'runway' || (t.name||'').toLowerCase().includes('runway')) && t.vertices && t.vertices.length >= 2) : null;
+      let rw = runwayId ? taxiways.find(t => t.id === runwayId && t.pathType === 'runway' && t.vertices && t.vertices.length >= 2) : null;
       if (!rw) rw = taxiways.find(t => t.pathType === 'runway' && t.vertices && t.vertices.length >= 2);
-      if (!rw) rw = taxiways.find(t => (t.name||'').toLowerCase().includes('runway') && t.vertices && t.vertices.length >= 2);
       if (!rw || !rw.vertices.length) return null;
       const pts = rw.vertices.map(v => cellToPixel(v.col, v.row));
       const sp = rw.start_point, ep = rw.end_point;
@@ -5628,11 +6773,255 @@ html = f"""
       return 0;
     }}
 
+    function getEffectiveRunwayStartDisplacedThresholdM(tw) {{
+      if (!tw || tw.pathType !== 'runway') return RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
+      const v = tw.startDisplacedThresholdM;
+      return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
+    }}
+
+    function getEffectiveRunwayStartBlastPadM(tw) {{
+      if (!tw || tw.pathType !== 'runway') return RUNWAY_START_BLAST_PAD_DEFAULT_M;
+      const v = tw.startBlastPadM;
+      return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_START_BLAST_PAD_DEFAULT_M;
+    }}
+
+    function getEffectiveRunwayEndDisplacedThresholdM(tw) {{
+      if (!tw || tw.pathType !== 'runway') return RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
+      const v = tw.endDisplacedThresholdM;
+      return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
+    }}
+
+    function getEffectiveRunwayEndBlastPadM(tw) {{
+      if (!tw || tw.pathType !== 'runway') return RUNWAY_END_BLAST_PAD_DEFAULT_M;
+      const v = tw.endBlastPadM;
+      return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_END_BLAST_PAD_DEFAULT_M;
+    }}
+
     function runwayPolylineLengthPx(pts) {{
       if (!pts || pts.length < 2) return 0;
       let s = 0;
       for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
       return s;
+    }}
+
+    function getPolylinePointAndFrameAtDistance(pts, distPx) {{
+      if (!pts || pts.length < 2) return null;
+      const total = runwayPolylineLengthPx(pts);
+      const d = Math.max(0, Math.min(typeof distPx === 'number' ? distPx : 0, total));
+      let acc = 0;
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const p1 = pts[i], p2 = pts[i + 1];
+        const segLen = pathDist(p1, p2);
+        if (!(segLen > 1e-6)) continue;
+        if (acc + segLen >= d - 1e-6) {{
+          const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+          const ux = (p2[0] - p1[0]) / segLen;
+          const uy = (p2[1] - p1[1]) / segLen;
+          return {{
+            point: [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t],
+            tangent: [ux, uy],
+            normal: [-uy, ux]
+          }};
+        }}
+        acc += segLen;
+      }}
+      const last = pts[pts.length - 1], prev = pts[pts.length - 2];
+      const segLen = pathDist(prev, last);
+      if (!(segLen > 1e-6)) return null;
+      const ux = (last[0] - prev[0]) / segLen;
+      const uy = (last[1] - prev[1]) / segLen;
+      return {{ point: [last[0], last[1]], tangent: [ux, uy], normal: [-uy, ux] }};
+    }}
+
+    function drawRunwayDecorations(tw, pts, widthPx) {{
+      if (!tw || tw.pathType !== 'runway' || !tw.start_point || !tw.end_point) return;
+      if (!pts || pts.length < 2) return;
+      const totalLen = runwayPolylineLengthPx(pts);
+      const runwayWidth = Math.max(24, Number(widthPx) || RUNWAY_PATH_DEFAULT_WIDTH);
+      if (totalLen < Math.max(220, runwayWidth * 3)) return;
+      const startDisp = getEffectiveRunwayStartDisplacedThresholdM(tw);
+      const startBlast = getEffectiveRunwayStartBlastPadM(tw);
+      const endDisp = getEffectiveRunwayEndDisplacedThresholdM(tw);
+      const endBlast = getEffectiveRunwayEndBlastPadM(tw);
+      const startFrame = getPolylinePointAndFrameAtDistance(pts, 0);
+      const endFrame = getPolylinePointAndFrameAtDistance(pts, totalLen);
+      if (!startFrame || !endFrame) return;
+
+      function drawRectWithFrame(frame, alongOffsetPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle, strokeStyle, lineWidth) {{
+        if (!frame) return;
+        const cx = frame.point[0] + frame.tangent[0] * alongOffsetPx + frame.normal[0] * lateralOffsetPx;
+        const cy = frame.point[1] + frame.tangent[1] * alongOffsetPx + frame.normal[1] * lateralOffsetPx;
+        const hx = frame.tangent[0] * alongLenPx * 0.5;
+        const hy = frame.tangent[1] * alongLenPx * 0.5;
+        const wx = frame.normal[0] * acrossLenPx * 0.5;
+        const wy = frame.normal[1] * acrossLenPx * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - hx - wx, cy - hy - wy);
+        ctx.lineTo(cx + hx - wx, cy + hy - wy);
+        ctx.lineTo(cx + hx + wx, cy + hy + wy);
+        ctx.lineTo(cx - hx + wx, cy - hy + wy);
+        ctx.closePath();
+        if (fillStyle) {{
+          ctx.fillStyle = fillStyle;
+          ctx.fill();
+        }}
+        if (strokeStyle && lineWidth > 0) {{
+          ctx.lineWidth = lineWidth;
+          ctx.strokeStyle = strokeStyle;
+          ctx.stroke();
+        }}
+      }}
+
+      function drawRectAtDistance(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle) {{
+        const frame = getPolylinePointAndFrameAtDistance(pts, distPx);
+        if (!frame) return;
+        drawRectWithFrame(frame, 0, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle, null, 0);
+      }}
+
+      function drawRectAtBothEnds(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle) {{
+        if (!(distPx > 0) || distPx >= totalLen - 1) return;
+        drawRectAtDistance(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle);
+        drawRectAtDistance(totalLen - distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle);
+      }}
+
+      function drawSymmetricPairAtBothEnds(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle) {{
+        drawRectAtBothEnds(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle);
+        if (Math.abs(lateralOffsetPx) > 1e-6) {{
+          drawRectAtBothEnds(distPx, -lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle);
+        }}
+      }}
+
+      ctx.save();
+      const thresholdColor = c2dRunwayThresholdColor();
+      const centerlineColor = c2dRunwayCenterlineColor();
+      const touchdownColor = c2dRunwayTouchdownColor();
+      const aimingPointColor = c2dRunwayAimingPointColor();
+      const extensionFill = c2dRunwayExtensionFill();
+      const extensionOutline = c2dRunwayOutline();
+      const blastChevronColor = c2dRunwayBlastChevronColor();
+
+      function drawExtensionSegment(frame, directionSign, innerOffsetPx, segLenPx) {{
+        if (!(segLenPx > 0)) return;
+        drawRectWithFrame(
+          frame,
+          directionSign * (innerOffsetPx + segLenPx * 0.5),
+          0,
+          segLenPx,
+          runwayWidth,
+          extensionFill,
+          extensionOutline,
+          1.2
+        );
+      }}
+
+      function drawDisplacedThresholdArrows(frame, positionSign, arrowDirectionSign, innerOffsetPx, segLenPx) {{
+        if (!(segLenPx > 0)) return;
+        const count = Math.max(2, Math.min(8, Math.round(segLenPx / 30)));
+        const arrowSpan = Math.min(Math.max(segLenPx * 0.22, runwayWidth * 0.42), segLenPx * 0.42);
+        const usableLen = Math.max(0, segLenPx - arrowSpan);
+        const shaftHalf = Math.max(3, runwayWidth * 0.055);
+        const headLen = Math.min(Math.max(16, arrowSpan * 0.32), arrowSpan * 0.48);
+        ctx.fillStyle = thresholdColor;
+        for (let i = 0; i < count; i++) {{
+          const along = innerOffsetPx + (arrowSpan * 0.5) + (usableLen * (i + 0.5) / count);
+          const framePoint = [frame.point[0] + frame.tangent[0] * positionSign * along, frame.point[1] + frame.tangent[1] * positionSign * along];
+          const tipX = framePoint[0] + frame.tangent[0] * arrowDirectionSign * (arrowSpan * 0.5);
+          const tipY = framePoint[1] + frame.tangent[1] * arrowDirectionSign * (arrowSpan * 0.5);
+          const tailX = framePoint[0] - frame.tangent[0] * arrowDirectionSign * (arrowSpan * 0.5);
+          const tailY = framePoint[1] - frame.tangent[1] * arrowDirectionSign * (arrowSpan * 0.5);
+          const neckX = tipX - frame.tangent[0] * arrowDirectionSign * headLen;
+          const neckY = tipY - frame.tangent[1] * arrowDirectionSign * headLen;
+          const halfWidth = Math.max(7, runwayWidth * 0.13);
+          ctx.beginPath();
+          ctx.moveTo(tailX - frame.normal[0] * shaftHalf, tailY - frame.normal[1] * shaftHalf);
+          ctx.lineTo(neckX - frame.normal[0] * shaftHalf, neckY - frame.normal[1] * shaftHalf);
+          ctx.lineTo(neckX - frame.normal[0] * halfWidth, neckY - frame.normal[1] * halfWidth);
+          ctx.lineTo(tipX, tipY);
+          ctx.lineTo(neckX + frame.normal[0] * halfWidth, neckY + frame.normal[1] * halfWidth);
+          ctx.lineTo(neckX + frame.normal[0] * shaftHalf, neckY + frame.normal[1] * shaftHalf);
+          ctx.lineTo(tailX + frame.normal[0] * shaftHalf, tailY + frame.normal[1] * shaftHalf);
+          ctx.closePath();
+          ctx.fill();
+        }}
+      }}
+
+      function drawBlastPadChevrons(frame, positionSign, innerOffsetPx, segLenPx) {{
+        if (!(segLenPx > 0)) return;
+        const count = Math.max(2, Math.min(7, Math.round(segLenPx / 35)));
+        const sideReach = Math.max(12, runwayWidth * 0.46);
+        const chevronDepth = Math.max(14, sideReach / Math.tan(Math.PI / 3));
+        const usableLen = Math.max(0, segLenPx - chevronDepth);
+        ctx.save();
+        ctx.lineWidth = Math.max(3, runwayWidth * 0.075);
+        ctx.lineCap = 'square';
+        ctx.lineJoin = 'miter';
+        ctx.strokeStyle = blastChevronColor;
+        for (let i = 0; i < count; i++) {{
+          const along = innerOffsetPx + (chevronDepth * 0.5) + (usableLen * (i + 0.5) / count);
+          const apexX = frame.point[0] + frame.tangent[0] * positionSign * along;
+          const apexY = frame.point[1] + frame.tangent[1] * positionSign * along;
+          const outerAlong = along + chevronDepth;
+          const leftX = frame.point[0] + frame.tangent[0] * positionSign * outerAlong + frame.normal[0] * sideReach;
+          const leftY = frame.point[1] + frame.tangent[1] * positionSign * outerAlong + frame.normal[1] * sideReach;
+          const rightX = frame.point[0] + frame.tangent[0] * positionSign * outerAlong - frame.normal[0] * sideReach;
+          const rightY = frame.point[1] + frame.tangent[1] * positionSign * outerAlong - frame.normal[1] * sideReach;
+          ctx.beginPath();
+          ctx.moveTo(leftX, leftY);
+          ctx.lineTo(apexX, apexY);
+          ctx.lineTo(rightX, rightY);
+          ctx.stroke();
+        }}
+        ctx.restore();
+      }}
+
+      drawExtensionSegment(startFrame, -1, 0, startDisp);
+      drawExtensionSegment(startFrame, -1, startDisp, startBlast);
+      drawExtensionSegment(endFrame, 1, 0, endDisp);
+      drawExtensionSegment(endFrame, 1, endDisp, endBlast);
+      drawDisplacedThresholdArrows(startFrame, -1, 1, 0, startDisp);
+      drawDisplacedThresholdArrows(endFrame, 1, -1, 0, endDisp);
+      drawBlastPadChevrons(startFrame, -1, startDisp, startBlast);
+      drawBlastPadChevrons(endFrame, 1, endDisp, endBlast);
+
+      const thresholdInset = Math.min(Math.max(runwayWidth * 0.58, 26), totalLen * 0.12);
+      const thresholdStripeLen = Math.min(Math.max(runwayWidth * 0.54, 20), 34);
+      const thresholdStripeWidth = Math.max(3, runwayWidth * 0.085);
+      [-runwayWidth * 0.30, -runwayWidth * 0.18, -runwayWidth * 0.06, runwayWidth * 0.06, runwayWidth * 0.18, runwayWidth * 0.30].forEach(function(offset) {{
+        drawRectAtBothEnds(thresholdInset, offset, thresholdStripeLen, thresholdStripeWidth, thresholdColor);
+      }});
+
+      const centerlineInset = Math.min(Math.max(runwayWidth * 1.0, 44), totalLen * 0.18);
+      const centerlineDashLen = Math.min(Math.max(runwayWidth * 0.42, 14), 28);
+      const centerlineDashWidth = Math.max(2, runwayWidth * 0.05);
+      const centerlineGap = centerlineDashLen * 0.8;
+      for (let d = centerlineInset; d <= totalLen - centerlineInset; d += centerlineDashLen + centerlineGap) {{
+        drawRectAtDistance(d, 0, centerlineDashLen, centerlineDashWidth, centerlineColor);
+      }}
+
+      const aimingDist = Math.min(Math.max(300, runwayWidth * 3.5), totalLen * 0.28);
+      if (aimingDist < (totalLen * 0.5) - (runwayWidth * 0.6)) {{
+        drawSymmetricPairAtBothEnds(
+          aimingDist,
+          runwayWidth * 0.20,
+          Math.min(Math.max(runwayWidth * 1.2, 54), 92),
+          Math.max(6, runwayWidth * 0.12),
+          aimingPointColor
+        );
+      }}
+
+      [150, 450].forEach(function(distPx) {{
+        if (distPx >= (totalLen * 0.5) - (runwayWidth * 0.8)) return;
+        [runwayWidth * 0.14, runwayWidth * 0.28].forEach(function(offsetPx) {{
+          drawSymmetricPairAtBothEnds(
+            distPx,
+            offsetPx,
+            Math.min(Math.max(runwayWidth * 0.52, 22), 42),
+            Math.max(4, runwayWidth * 0.08),
+            touchdownColor
+          );
+        }});
+      }});
+      ctx.restore();
     }}
 
     /** On the runway centerline distPx Row of pixel coordinates from point to end (starting point dist branch included). */
@@ -5675,7 +7064,7 @@ html = f"""
     }}
     function getOrderedPoints(obj) {{
       if (!obj || !obj.vertices || obj.vertices.length < 2) return null;
-      const isRunway = obj.pathType === 'runway' || (obj.name||'').toLowerCase().includes('runway');
+      const isRunway = obj.pathType === 'runway';
       if (isRunway) {{ const r = getRunwayPath(obj.id); return r && r.pts ? r.pts : null; }}
       return getTaxiwayOrderedPoints(obj);
     }}
@@ -5704,6 +7093,66 @@ html = f"""
     function pointOnSegmentStrict(a, b, q) {{
       const {{ p }} = projectOnSegment(a, b, q);
       return pathDist2(p, q) <= SPLIT_TOL_D2;
+    }}
+    function dedupePathPoints(pts) {{
+      const out = [];
+      (pts || []).forEach(function(p) {{
+        if (!p || p.length < 2) return;
+        if (!out.length || pathDist2(out[out.length - 1], p) > SPLIT_TOL_D2) out.push([p[0], p[1]]);
+      }});
+      return out;
+    }}
+    function polylineDistanceBetweenAlong(pts, startAlong, endAlong) {{
+      if (!pts || pts.length < 2) return 0;
+      const a0 = Math.max(0, Number(startAlong) || 0);
+      const a1 = Math.max(a0, Number(endAlong) || 0);
+      let dist = 0;
+      for (let seg = Math.floor(a0); seg <= Math.min(pts.length - 2, Math.floor(a1)); seg++) {{
+        const segStart = Math.max(seg, a0);
+        const segEnd = Math.min(seg + 1, a1);
+        if (segEnd <= segStart) continue;
+        const segLen = pathDist(pts[seg], pts[seg + 1]);
+        if (!(segLen > 1e-9)) continue;
+        dist += segLen * (segEnd - segStart);
+      }}
+      return dist;
+    }}
+    function polylinePointsBetweenAlong(pts, startAlong, endAlong) {{
+      if (!pts || pts.length < 2) return [];
+      const a0 = Math.max(0, Number(startAlong) || 0);
+      const a1 = Math.max(a0, Number(endAlong) || 0);
+      const startSeg = Math.max(0, Math.min(pts.length - 2, Math.floor(a0)));
+      const endSeg = Math.max(0, Math.min(pts.length - 2, Math.floor(a1)));
+      const startT = a0 - startSeg;
+      const endT = a1 - endSeg;
+      const startPt = [
+        pts[startSeg][0] + (pts[startSeg + 1][0] - pts[startSeg][0]) * startT,
+        pts[startSeg][1] + (pts[startSeg + 1][1] - pts[startSeg][1]) * startT
+      ];
+      const endPt = [
+        pts[endSeg][0] + (pts[endSeg + 1][0] - pts[endSeg][0]) * endT,
+        pts[endSeg][1] + (pts[endSeg + 1][1] - pts[endSeg][1]) * endT
+      ];
+      const out = [[startPt[0], startPt[1]]];
+      for (let i = startSeg + 1; i <= endSeg; i++) out.push([pts[i][0], pts[i][1]]);
+      out.push([endPt[0], endPt[1]]);
+      return dedupePathPoints(out);
+    }}
+    function buildPathFromIndices(g, pathIndices) {{
+      if (!g || !Array.isArray(pathIndices) || pathIndices.length < 2) return null;
+      const out = [];
+      for (let i = 0; i < pathIndices.length - 1; i++) {{
+        const key = pathIndices[i] + ':' + pathIndices[i + 1];
+        const edge = g.edgeMap ? g.edgeMap[key] : null;
+        const pts = (edge && Array.isArray(edge.pts) && edge.pts.length >= 2)
+          ? edge.pts
+          : [g.nodes[pathIndices[i]], g.nodes[pathIndices[i + 1]]];
+        pts.forEach(function(p) {{
+          if (!p || p.length < 2) return;
+          if (!out.length || pathDist2(out[out.length - 1], p) > SPLIT_TOL_D2) out.push([p[0], p[1]]);
+        }});
+      }}
+      return out;
     }}
 
     // Runwaynot very connected Runway Taxiway(RET)of thresholddistance from(m)calculate
@@ -5766,7 +7215,7 @@ html = f"""
     }}
 
     function buildPathGraph(selectedArrRetId) {{
-      const nodes = [], keyToIdx = {{}}, edges = [], adj = [], junctionPts = [], junctionKeys = {{}};
+      const nodes = [], keyToIdx = {{}}, edges = [], adj = [], junctionPts = [], junctionKeys = {{}}, edgeMap = {{}};
       function addJunction(p) {{
         const k = pathPointKey(p);
         if (junctionKeys[k]) return;
@@ -5782,22 +7231,35 @@ html = f"""
         adj[idx] = [];
         return idx;
       }}
-      function addEdgeWithDirection(pFrom, pTo, dir, cost) {{
+      function registerDirectedEdge(fromIdx, toIdx, cost, rawDist, pts) {{
+        const edge = {{
+          from: fromIdx,
+          to: toIdx,
+          dist: cost,
+          rawDist: rawDist,
+          pts: dedupePathPoints(pts)
+        }};
+        edges.push(edge);
+        edgeMap[fromIdx + ':' + toIdx] = edge;
+      }}
+      function addEdgeWithDirection(pFrom, pTo, dir, cost, rawDist, ptsForward) {{
         const i = getOrAdd(pFrom), j = getOrAdd(pTo);
         if (i === j || cost < 1e-6) return;
-        edges.push({{ from: i, to: j, dist: cost }});
+        const forwardPts = dedupePathPoints(ptsForward && ptsForward.length ? ptsForward : [pFrom, pTo]);
+        const reversePts = forwardPts.slice().reverse();
+        registerDirectedEdge(i, j, cost, rawDist, forwardPts);
         if (dir === 'both') {{
           adj[i].push([j, cost]);
           adj[j].push([i, cost]);
-          edges.push({{ from: j, to: i, dist: cost }});
+          registerDirectedEdge(j, i, cost, rawDist, reversePts);
         }} else if (dir === 'counter_clockwise') {{
           adj[j].push([i, cost]);
           adj[i].push([j, REVERSE_COST]);
-          edges.push({{ from: i, to: j, dist: REVERSE_COST }});
+          registerDirectedEdge(i, j, REVERSE_COST, rawDist, forwardPts);
         }} else {{
           adj[i].push([j, cost]);
           adj[j].push([i, REVERSE_COST]);
-          edges.push({{ from: j, to: i, dist: REVERSE_COST }});
+          registerDirectedEdge(j, i, REVERSE_COST, rawDist, reversePts);
         }}
       }}
 
@@ -5836,7 +7298,7 @@ html = f"""
               junctions.push({{ tAlong: seg + t, p: proj }});
             }});
           }});
-          const isRunway = obj.pathType === 'runway' || (obj.name||'').toLowerCase().includes('runway');
+          const isRunway = obj.pathType === 'runway';
           if (!isRunway) {{
             (state.apronLinks || []).forEach(lk => {{
               if (lk.taxiwayId !== obj.id || lk.tx == null || lk.ty == null) return;
@@ -5845,7 +7307,12 @@ html = f"""
               if (t >= 0 && t <= 1 && pathDist2(p, linkPt) <= SPLIT_TOL_D2) {{
                 junctions.push({{ tAlong: seg + t, p }});
                 const pbb = (state.pbbStands || []).find(s => s.id === lk.pbbId) || (state.remoteStands || []).find(s => s.id === lk.pbbId);
-                if (pbb) apronNodeStand.push({{ nodeP: p, standPt: (pbb.x2 != null && pbb.y2 != null) ? [Number(pbb.x2), Number(pbb.y2)] : cellToPixel(pbb.col || 0, pbb.row || 0), standId: lk.pbbId }});
+                if (pbb) {{
+                  const standPt = (pbb.x2 != null && pbb.y2 != null) ? [Number(pbb.x2), Number(pbb.y2)] : cellToPixel(pbb.col || 0, pbb.row || 0);
+                  const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) {{ return cellToPixel(Number(v.col), Number(v.row)); }});
+                  const chain = [standPt].concat(mids).concat([p]);
+                  apronNodeStand.push({{ nodeP: p, standPt, standId: lk.pbbId, chain }});
+                }}
               }}
             }});
           }}
@@ -5874,46 +7341,54 @@ html = f"""
             }}
           }}
         }}
-        const waypoints = [];
-        for (let i = 0; i < pts.length; i++) waypoints.push({{ tAlong: i, p: pts[i], isJunction: false }});
+        const waypoints = [
+          {{ tAlong: 0, p: pts[0], isJunction: false }},
+          {{ tAlong: pts.length - 1, p: pts[pts.length - 1], isJunction: false }}
+        ];
         junctions.forEach(({{ tAlong, p }}) => waypoints.push({{ tAlong, p, isJunction: true }}));
         waypoints.sort((x, y) => x.tAlong - y.tAlong);
         const chain = [];
-        waypoints.forEach(({{ p, isJunction }}) => {{
-          if (chain.length && pathDist2(p, chain[chain.length-1]) < minD2) {{
-            if (isJunction) addJunction(p);
+        waypoints.forEach(function(wp) {{
+          if (chain.length && Math.abs(wp.tAlong - chain[chain.length - 1].tAlong) < 1e-9 && pathDist2(wp.p, chain[chain.length - 1].p) < minD2) {{
+            if (wp.isJunction) addJunction(wp.p);
             return;
           }}
-          chain.push(p);
-          if (isJunction) addJunction(p);
+          chain.push({{ tAlong: wp.tAlong, p: wp.p, isJunction: !!wp.isJunction }});
+          if (wp.isJunction) addJunction(wp.p);
         }});
         const dir = getTaxiwayDirection(obj);
         const isRunwayExit = obj.pathType === 'runway_exit';
         const isTaxiway = obj.pathType === 'taxiway';
         for (let i = 0; i < chain.length - 1; i++) {{
-          let d = pathDist(chain[i], chain[i+1]);
+          const segPts = polylinePointsBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
+          let d = polylineDistanceBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
           let cost = d;
           if (selectedArrRetId != null) {{
             if (isRunwayExit && obj.id !== selectedArrRetId) cost = REVERSE_COST;
             else if (isTaxiway) cost = d + TAXIWAY_HEURISTIC_COST;
           }}
-          addEdgeWithDirection(chain[i], chain[i+1], dir, cost);
+          addEdgeWithDirection(chain[i].p, chain[i + 1].p, dir, cost, d, segPts);
         }}
       }});
 
       const standNodeIndices = [];
       const standIdToNodeIndex = {{}};
-      apronNodeStand.forEach(({{ nodeP, standPt, standId }}) => {{
-        const i = getOrAdd(nodeP), j = getOrAdd(standPt);
+      apronNodeStand.forEach(({{ nodeP, standPt, standId, chain }}) => {{
+        const j = getOrAdd(standPt);
         standNodeIndices.push(j);
         if (standId != null) standIdToNodeIndex[standId] = j;
-        if (i === j) return;
-        const d = pathDist(nodes[i], nodes[j]);
-        if (d < 1e-6) return;
-        adj[i].push([j, d]);
-        adj[j].push([i, d]);
-        edges.push({{ from: i, to: j, dist: d }});
-        edges.push({{ from: j, to: i, dist: d }});
+        const pts = (chain && chain.length >= 2) ? chain : [nodeP, standPt];
+        for (let k = 0; k < pts.length - 1; k++) {{
+          const a = pts[k], b = pts[k + 1];
+          const ia = getOrAdd(a), ib = getOrAdd(b);
+          if (ia === ib) continue;
+          const d = pathDist(nodes[ia], nodes[ib]);
+          if (d < 1e-6) continue;
+          adj[ia].push([ib, d]);
+          adj[ib].push([ia, d]);
+          registerDirectedEdge(ia, ib, d, d, [nodes[ia], nodes[ib]]);
+          registerDirectedEdge(ib, ia, d, d, [nodes[ib], nodes[ia]]);
+        }}
       }});
       // BFS: cost < REVERSE_COSTA set of nodes that can be reached only along an edge.
       function bfsReachable(startIndices) {{
@@ -5939,24 +7414,44 @@ html = f"""
         return best;
       }}
       const runwayNodeIndices = [];
-      const runways = (state.taxiways || []).filter(function(t) {{ return t.pathType === 'runway' || (t.name||'').toLowerCase().indexOf('runway') >= 0; }});
-      if (runways.length) {{
-        const r = getRunwayPath(runways[0].id);
-        if (r) {{
-          runwayNodeIndices.push(nearestNode(r.startPx));
-          runwayNodeIndices.push(nearestNode(r.endPx));
-        }}
-      }}
+      const runwayNodeSeen = new Set();
+      const runways = (state.taxiways || []).filter(function(t) {{ return t.pathType === 'runway'; }});
+      runways.forEach(function(rw) {{
+        const r = getRunwayPath(rw.id);
+        if (!r) return;
+        [r.startPx, r.endPx].forEach(function(p) {{
+          if (!p) return;
+          const idx = nearestNode(p);
+          if (idx == null || runwayNodeSeen.has(idx)) return;
+          runwayNodeSeen.add(idx);
+          runwayNodeIndices.push(idx);
+        }});
+      }});
       const runwayReachable = runwayNodeIndices.length ? bfsReachable(runwayNodeIndices) : new Set();
       const standReachable = standNodeIndices.length ? bfsReachable(standNodeIndices) : new Set();
       const connected = new Set();
       runwayReachable.forEach(function(i) {{ if (standReachable.has(i)) connected.add(i); }});
-      // Runway-park Junction within a connected section within reach of each other(degree>=2)Only marked with green junctions
-      const junctionsForDraw = junctionPts.filter(function(p) {{
+      // Valid junction: any path junction with degree >= 2, regardless of apron connectivity.
+      const validJunctionsForDraw = junctionPts.filter(function(p) {{
         const i = keyToIdx[pathPointKey(p)];
-        return i != null && adj[i] && adj[i].length >= 2 && connected.has(i);
+        return i != null && adj[i] && adj[i].length >= 2;
       }});
-      return {{ nodes, edges, adj, getOrAdd, junctions: junctionsForDraw, standIdToNodeIndex }};
+      // Connected junction: valid junction that is also reachable from a stand-side graph.
+      const connectedJunctionsForDraw = validJunctionsForDraw.filter(function(p) {{
+        const i = keyToIdx[pathPointKey(p)];
+        return i != null && connected.has(i);
+      }});
+      return {{
+        nodes,
+        edges,
+        adj,
+        edgeMap,
+        getOrAdd,
+        junctions: connectedJunctionsForDraw,
+        validJunctions: validJunctionsForDraw,
+        connectedJunctions: connectedJunctionsForDraw,
+        standIdToNodeIndex
+      }};
     }}
 
     function rebuildDerivedGraphEdges() {{
@@ -5980,25 +7475,40 @@ html = f"""
         seen.add(k);
         const p0 = g.nodes[a], p1 = g.nodes[b];
         if (!p0 || !p1) return;
-        raw.push({{ x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1], dist: e.dist, fromIdx: a, toIdx: b }});
+        raw.push({{
+          x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
+          pts: Array.isArray(e.pts) ? e.pts.map(function(p) {{ return [p[0], p[1]]; }}) : [[p0[0], p0[1]], [p1[0], p1[1]]],
+          dist: e.rawDist != null ? e.rawDist : e.dist,
+          fromIdx: a, toIdx: b
+        }});
       }});
       raw.sort(function(u, v) {{
         if (u.fromIdx !== v.fromIdx) return u.fromIdx - v.fromIdx;
         return u.toIdx - v.toIdx;
       }});
       const maxN = Math.min(raw.length, 999);
+      const nextEdgeNames = {{}};
+      const usedEdgeNames = new Set();
       for (let i = 0; i < maxN; i++) {{
         const label = String(i + 1).padStart(3, '0');
         const r = raw[i];
+        const edgeId = 'layout-edge-' + label;
+        const preferredName = (state.layoutEdgeNames && state.layoutEdgeNames[edgeId]) || ('Edge ' + label);
+        const finalName = uniqueNameAgainstSet(preferredName, usedEdgeNames);
+        usedEdgeNames.add(finalName);
+        nextEdgeNames[edgeId] = finalName;
         state.derivedGraphEdges.push({{
-          id: 'layout-edge-' + label,
+          id: edgeId,
           label: label,
+          name: finalName,
           x1: r.x1, y1: r.y1, x2: r.x2, y2: r.y2,
+          pts: r.pts,
           dist: r.dist,
           fromIdx: r.fromIdx,
           toIdx: r.toIdx
         }});
       }}
+      state.layoutEdgeNames = nextEdgeNames;
       if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {{
         const sid = state.selectedObject.id;
         const fresh = (state.derivedGraphEdges || []).find(function(e) {{ return e.id === sid; }});
@@ -6014,10 +7524,13 @@ html = f"""
       const tol2 = tol * tol;
       let best = null, bestD2 = tol2;
       state.derivedGraphEdges.forEach(function(ed) {{
-        const near = closestPointOnSegment([ed.x1, ed.y1], [ed.x2, ed.y2], click);
-        if (!near) return;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2) {{ bestD2 = d2; best = ed; }}
+        const pts = (ed.pts && ed.pts.length >= 2) ? ed.pts : [[ed.x1, ed.y1], [ed.x2, ed.y2]];
+        for (let i = 0; i < pts.length - 1; i++) {{
+          const near = closestPointOnSegment(pts[i], pts[i + 1], click);
+          if (!near) continue;
+          const d2 = dist2(near, click);
+          if (d2 < bestD2) {{ bestD2 = d2; best = ed; }}
+        }}
       }});
       return best;
     }}
@@ -6093,7 +7606,7 @@ html = f"""
       let d = 0;
       for (let i = 0; i < pathIndices.length - 1; i++) {{
         const a = g.nodes[pathIndices[i]], b = g.nodes[pathIndices[i+1]];
-        const e = g.edges.find(x => x.from === pathIndices[i] && x.to === pathIndices[i+1]);
+        const e = g.edgeMap ? g.edgeMap[pathIndices[i] + ':' + pathIndices[i+1]] : null;
         if (e) d += e.dist; else d += pathDist(a, b);
       }}
       return d;
@@ -6106,7 +7619,7 @@ html = f"""
       const apronId = f.standId != null ? f.standId : (token.apronId || null);
       if (!apronId) return null;
       if (!runwayId && state.taxiways && state.taxiways.length) {{
-        const runways = state.taxiways.filter(t => (t.pathType === 'runway' || (t.name||'').toLowerCase().includes('runway')) && t.vertices && t.vertices.length >= 2);
+        const runways = state.taxiways.filter(t => t.pathType === 'runway' && t.vertices && t.vertices.length >= 2);
         if (runways.length) runwayId = runways[Math.floor(Math.random() * runways.length)].id;
       }}
       if (!runwayId) return null;
@@ -6144,7 +7657,7 @@ html = f"""
         return null;
       }}
       f.noWayArr = false;
-      return pathIndices.map(i => g.nodes[i]);
+      return buildPathFromIndices(g, pathIndices);
     }}
 
     function graphPathDeparture(f) {{
@@ -6153,14 +7666,13 @@ html = f"""
       const apronId = f.standId != null ? f.standId : (token.apronId || null);
       if (!apronId) return null;
       if (!runwayId && state.taxiways && state.taxiways.length) {{
-        const runways = state.taxiways.filter(t => (t.pathType === 'runway' || (t.name||'').toLowerCase().includes('runway')) && t.vertices && t.vertices.length >= 2);
+        const runways = state.taxiways.filter(t => t.pathType === 'runway' && t.vertices && t.vertices.length >= 2);
         if (runways.length) runwayId = runways[Math.floor(Math.random() * runways.length)].id;
       }}
       if (!runwayId) return null;
       const r = getRunwayPath(runwayId);
       if (!r) return null;
-      const rwTw = (state.taxiways || []).find(t => t.id === runwayId && t.pathType === 'runway')
-        || (state.taxiways || []).find(t => t.id === runwayId && (t.name||'').toLowerCase().includes('runway'));
+      const rwTw = (state.taxiways || []).find(t => t.id === runwayId && t.pathType === 'runway');
       const stand = (state.pbbStands || []).find(s => s.id === apronId) || (state.remoteStands || []).find(s => s.id === apronId);
       if (!stand) return null;
       const g = buildPathGraph();
@@ -6187,7 +7699,11 @@ html = f"""
           return null;
         }}
         f.noWayDep = false;
-        let pts = pathIndices.map(i => g.nodes[i]);
+        let pts = buildPathFromIndices(g, pathIndices);
+        if (!pts || pts.length < 2) {{
+          f.noWayDep = true;
+          return null;
+        }}
         const tail = polylineTailFromDistancePx(r.pts, dPx);
         if (tail.length) {{
           const last = pts[pts.length - 1];
@@ -6213,7 +7729,11 @@ html = f"""
         return null;
       }}
       f.noWayDep = false;
-      const pts = pathIndices.map(i => g.nodes[i]);
+      const pts = buildPathFromIndices(g, pathIndices);
+      if (!pts || pts.length < 2) {{
+        f.noWayDep = true;
+        return null;
+      }}
       if (r && r.endPx && Array.isArray(r.endPx) && r.endPx.length === 2) {{
         const last = pts[pts.length - 1];
         const dx = r.endPx[0] - last[0];
@@ -6268,16 +7788,27 @@ html = f"""
       if (state.taxiways && state.taxiways.length) {{
         g = buildPathGraph();
       }}
-      if (!g || !g.junctions.length) return;
+      if (!g) return;
+      const validJunctions = g.validJunctions || [];
+      const connectedJunctions = g.connectedJunctions || g.junctions || [];
+      if (!validJunctions.length && !connectedJunctions.length) return;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.translate(state.panX, state.panY);
       ctx.scale(state.scale, state.scale);
-      const r = Math.max(4, CELL_SIZE * 0.35);
+      const r = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
+      ctx.lineWidth = 1.5;
+      ctx.fillStyle = '#ef4444';
+      ctx.strokeStyle = '#7f1d1d';
+      validJunctions.forEach(p => {{
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }});
       ctx.fillStyle = '#22c55e';
       ctx.strokeStyle = '#14532d';
-      ctx.lineWidth = 1.5;
-      g.junctions.forEach(p => {{
+      connectedJunctions.forEach(p => {{
         ctx.beginPath();
         ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
         ctx.fill();
@@ -6301,6 +7832,7 @@ html = f"""
       const sel = state.selectedObject;
       if (!sel || sel.type !== 'layoutEdge' || !sel.obj) return;
       const e = sel.obj;
+      const edgePts = (e.pts && e.pts.length >= 2) ? e.pts : [[e.x1, e.y1], [e.x2, e.y2]];
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.translate(state.panX, state.panY);
@@ -6309,8 +7841,8 @@ html = f"""
       ctx.lineJoin = 'round';
       function layoutEdgePath() {{
         ctx.beginPath();
-        ctx.moveTo(e.x1, e.y1);
-        ctx.lineTo(e.x2, e.y2);
+        ctx.moveTo(edgePts[0][0], edgePts[0][1]);
+        for (let i = 1; i < edgePts.length; i++) ctx.lineTo(edgePts[i][0], edgePts[i][1]);
       }}
       layoutEdgePath();
       ctx.save();
@@ -6345,8 +7877,6 @@ html = f"""
       if (f.noWayArr) return;
       const pathPts = getPathForFlight(f);
       if (!pathPts || pathPts.length < 2) return;
-      let totalDist = 0;
-      for (let i = 0; i < pathPts.length - 1; i++) totalDist += pathDist(pathPts[i], pathPts[i+1]);
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.translate(state.panX, state.panY);
@@ -6360,35 +7890,6 @@ html = f"""
       ctx.moveTo(pathPts[0][0], pathPts[0][1]);
       for (let i = 1; i < pathPts.length; i++) ctx.lineTo(pathPts[i][0], pathPts[i][1]);
       ctx.stroke();
-      let cx = 0, cy = 0;
-      pathPts.forEach(p => {{ cx += p[0]; cy += p[1]; }});
-      cx /= pathPts.length; cy /= pathPts.length;
-      const badgeText = 'VTT: ' + Math.round(totalDist);
-      ctx.font = 'bold ' + Math.max(10, CELL_SIZE * 0.4) + 'px system-ui';
-      const tw = ctx.measureText(badgeText).width;
-      const bh = CELL_SIZE * 0.5, pad = CELL_SIZE * 0.2, r = 4;
-      const bw = tw + pad*2;
-      const bx = cx - bw/2, by = cy - bh/2 - 4;
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.95)';
-      ctx.strokeStyle = '#b91c1c';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(bx + r, by);
-      ctx.lineTo(bx + bw - r, by);
-      ctx.arcTo(bx + bw, by, bx + bw, by + r, r);
-      ctx.lineTo(bx + bw, by + bh - r);
-      ctx.arcTo(bx + bw, by + bh, bx + bw - r, by + bh, r);
-      ctx.lineTo(bx + r, by + bh);
-      ctx.arcTo(bx, by + bh, bx, by + bh - r, r);
-      ctx.lineTo(bx, by + r);
-      ctx.arcTo(bx, by, bx + r, by, r);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(badgeText, cx, cy - 4);
 
       // --- Touch Down / RET entrance / RET outlet speed label ---
       ctx.font = 'bold ' + Math.max(9, CELL_SIZE * 0.35) + 'px system-ui';
@@ -6464,8 +7965,6 @@ html = f"""
       if (f.noWayDep) return;
       const pathPts = getPathForFlightDeparture(f);
       if (!pathPts || pathPts.length < 2) return;
-      let totalDist = 0;
-      for (let i = 0; i < pathPts.length - 1; i++) totalDist += pathDist(pathPts[i], pathPts[i+1]);
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.translate(state.panX, state.panY);
@@ -6479,35 +7978,6 @@ html = f"""
       ctx.moveTo(pathPts[0][0], pathPts[0][1]);
       for (let i = 1; i < pathPts.length; i++) ctx.lineTo(pathPts[i][0], pathPts[i][1]);
       ctx.stroke();
-      let cx = 0, cy = 0;
-      pathPts.forEach(p => {{ cx += p[0]; cy += p[1]; }});
-      cx /= pathPts.length; cy /= pathPts.length;
-      const badgeText = 'VTT: ' + Math.round(totalDist);
-      ctx.font = 'bold ' + Math.max(10, CELL_SIZE * 0.4) + 'px system-ui';
-      const tw = ctx.measureText(badgeText).width;
-      const bh = CELL_SIZE * 0.5, pad = CELL_SIZE * 0.2, r = 4;
-      const bw = tw + pad*2;
-      const bx = cx - bw/2, by = cy - bh/2 - 4;
-      ctx.fillStyle = _canvas2dStyle.vttBadgeBg || 'rgba(15, 23, 42, 0.95)';
-      ctx.strokeStyle = _canvas2dStyle.vttBadgeStroke || '#000000';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(bx + r, by);
-      ctx.lineTo(bx + bw - r, by);
-      ctx.arcTo(bx + bw, by, bx + bw, by + r, r);
-      ctx.lineTo(bx + bw, by + bh - r);
-      ctx.arcTo(bx + bw, by + bh, bx + bw - r, by + bh, r);
-      ctx.lineTo(bx + r, by + bh);
-      ctx.arcTo(bx, by + bh, bx, by + bh - r, r);
-      ctx.lineTo(bx, by + r);
-      ctx.arcTo(bx, by, bx + r, by, r);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = _canvas2dStyle.vttBadgeText || '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(badgeText, cx, cy - 4);
       ctx.restore();
     }}
 
@@ -7448,12 +8918,12 @@ html = f"""
       const layoutMode = settingModeSelect ? settingModeSelect.value : 'taxiway';
       const pathType = pathTypeFromLayoutMode(isPathLayoutMode(layoutMode) ? layoutMode : 'taxiway');
       const rawName = document.getElementById('taxiwayName').value.trim();
-      const nameBase = rawName || (pathType === 'runway'
-        ? 'Runway'
-        : (pathType === 'runway_exit' ? 'Runway Exit TW' : ('Taxiway ' + (state.taxiways.length + 1))));
+      const nameBase = rawName || getDefaultPathName(pathType);
       const inputWidth = Number(document.getElementById('taxiwayWidth').value);
-      const baseWidth = pathType === 'runway' ? 60 : 15;
-      const widthVal = Math.max(10, Math.min(100, inputWidth || baseWidth));
+      const baseWidth = pathType === 'runway'
+        ? RUNWAY_PATH_DEFAULT_WIDTH
+        : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+      const widthVal = Math.max(5, Math.min(100, inputWidth || baseWidth));
       const modeVal = document.getElementById('taxiwayDirectionMode').value || 'both';
       const maxExitInput = document.getElementById('taxiwayMaxExitVel');
       const minExitInput = document.getElementById('taxiwayMinExitVel');
@@ -7479,28 +8949,39 @@ html = f"""
       const lineupDistM = (pathType === 'runway' && lineupEl)
         ? (function() {{ const x = Number(lineupEl.value); return (isFinite(x) && x >= 0) ? x : 0; }})()
         : undefined;
+      const runwayStartDispEl = document.getElementById('runwayStartDisplacedThresholdM');
+      const startDisplacedThresholdM = (pathType === 'runway' && runwayStartDispEl)
+        ? (function() {{ const x = Number(runwayStartDispEl.value); return (isFinite(x) && x >= 0) ? x : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M; }})()
+        : undefined;
+      const runwayStartBlastEl = document.getElementById('runwayStartBlastPadM');
+      const startBlastPadM = (pathType === 'runway' && runwayStartBlastEl)
+        ? (function() {{ const x = Number(runwayStartBlastEl.value); return (isFinite(x) && x >= 0) ? x : RUNWAY_START_BLAST_PAD_DEFAULT_M; }})()
+        : undefined;
+      const runwayEndDispEl = document.getElementById('runwayEndDisplacedThresholdM');
+      const endDisplacedThresholdM = (pathType === 'runway' && runwayEndDispEl)
+        ? (function() {{ const x = Number(runwayEndDispEl.value); return (isFinite(x) && x >= 0) ? x : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M; }})()
+        : undefined;
+      const runwayEndBlastEl = document.getElementById('runwayEndBlastPadM');
+      const endBlastPadM = (pathType === 'runway' && runwayEndBlastEl)
+        ? (function() {{ const x = Number(runwayEndBlastEl.value); return (isFinite(x) && x >= 0) ? x : RUNWAY_END_BLAST_PAD_DEFAULT_M; }})()
+        : undefined;
       const taxiway = {{ id: id(), name: nameBase, vertices: [], width: widthVal, direction: modeVal, pathType, maxExitVelocity, minExitVelocity, minArrVelocity, lineupDistM, avgMoveVelocity: (function() {{
         const el = document.getElementById('taxiwayAvgMoveVelocity');
         const v = el ? Number(el.value) : 10;
         return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
-      }})() }};
+      }})(), startDisplacedThresholdM, startBlastPadM, endDisplacedThresholdM, endBlastPadM }};
       if (pathType !== 'runway') delete taxiway.minArrVelocity;
       if (pathType !== 'runway') delete taxiway.lineupDistM;
+      if (pathType !== 'runway') delete taxiway.startDisplacedThresholdM;
+      if (pathType !== 'runway') delete taxiway.startBlastPadM;
+      if (pathType !== 'runway') delete taxiway.endDisplacedThresholdM;
+      if (pathType !== 'runway') delete taxiway.endBlastPadM;
       if (pathType !== 'runway_exit') {{ delete taxiway.maxExitVelocity; delete taxiway.minExitVelocity; }}
       pushUndo();
       state.taxiways.push(taxiway);
       state.taxiwayDrawingId = taxiway.id;
       syncPanelFromState();
       if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-    }});
-    const runwayDirInPaneEl = document.getElementById('runwayDirectionInTaxiwayPane');
-    if (runwayDirInPaneEl) runwayDirInPaneEl.addEventListener('change', function() {{
-      if (state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.obj.pathType === 'runway') {{
-        state.selectedObject.obj.direction = this.value || 'both';
-        updateObjectInfo();
-        draw();
-        if (typeof scene3d !== 'undefined' && scene3d) update3DScene();
-      }}
     }});
     const btnPbbDrawEl = document.getElementById('btnPbbDraw');
     if (btnPbbDrawEl) btnPbbDrawEl.addEventListener('click', function() {{
@@ -7762,7 +9243,9 @@ html = f"""
               lengthM += CELL_SIZE * Math.hypot(dx, dy);
             }}
           }}
-          const widthDefault = tw.pathType === 'runway' ? 60 : 15;
+          const widthDefault = tw.pathType === 'runway'
+            ? RUNWAY_PATH_DEFAULT_WIDTH
+            : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
           const widthVal = tw.width != null ? tw.width : widthDefault;
           const serTw = serializeTaxiwayWithEndpoints(tw);
           const startStr = serTw.start_point != null ? '(' + serTw.start_point.col + ',' + serTw.start_point.row + ')' : '—';
@@ -7803,7 +9286,7 @@ html = f"""
           const stand = (state.pbbStands.find(p => p.id === lk.pbbId) ||
                          state.remoteStands.find(st => st.id === lk.pbbId));
           const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
-          const title = 'Link ' + (idx + 1);
+          const title = getApronLinkDisplayName(lk);
           const standLabel = stand && stand.name ? stand.name : lk.pbbId;
           const details = 'Stand: ' + standLabel +
             ', Taxiway: ' + (tw && tw.name ? tw.name : lk.taxiwayId);
@@ -7821,11 +9304,12 @@ html = f"""
           items.push({{
             type: 'layoutEdge',
             id: ed.id,
-            title: 'Edge | ' + ed.label,
+            title: 'Edge | ' + getLayoutEdgeDisplayName(ed),
             tag: 'Graph',
             details:
               'Length (graph): ' + Math.round(ed.dist) +
-              '<br>Pixel segment: (' + ed.x1.toFixed(0) + ', ' + ed.y1.toFixed(0) + ') → (' + ed.x2.toFixed(0) + ', ' + ed.y2.toFixed(0) + ')' +
+              '<br>Pixel span: (' + ed.x1.toFixed(0) + ', ' + ed.y1.toFixed(0) + ') → (' + ed.x2.toFixed(0) + ', ' + ed.y2.toFixed(0) + ')' +
+              '<br>Polyline points: ' + ((ed.pts && ed.pts.length) ? ed.pts.length : 2) +
               '<br>Node indices: ' + ed.fromIdx + ' → ' + ed.toIdx,
             noDelete: true
           }});
@@ -7953,14 +9437,26 @@ html = f"""
             (minEx != null ? '<br>Min exit velocity: ' + minEx + ' m/s' : '') +
             '<br>Points: ' + (o.vertices ? o.vertices.length : 0) +
             '<br>Start point: ' + startStr + '<br>End point: ' + endStr;
+        }} else if (state.selectedObject.type === 'apronLink') {{
+          const lk = o;
+          const stand = (state.pbbStands.find(function(p) {{ return p.id === lk.pbbId; }}) ||
+                        state.remoteStands.find(function(st) {{ return st.id === lk.pbbId; }}));
+          const tw = state.taxiways.find(function(t) {{ return t.id === lk.taxiwayId; }});
+          objectInfoEl.innerHTML =
+            '<strong>Apron Taxiway</strong><br>' +
+            'Name: ' + getApronLinkDisplayName(lk) +
+            '<br>Stand: ' + (stand && stand.name ? stand.name : lk.pbbId) +
+            '<br>Taxiway: ' + (tw && tw.name ? tw.name : lk.taxiwayId) +
+            '<br>Link point: (' + Number(lk.tx).toFixed(0) + ', ' + Number(lk.ty).toFixed(0) + ')';
         }} else if (state.selectedObject.type === 'layoutEdge') {{
           const ed = state.selectedObject.obj;
           objectInfoEl.innerHTML =
             '<strong>Edge (derived)</strong><br>' +
-            'Name: ' + (ed && ed.label ? ed.label : '—') +
+            'Name: ' + getLayoutEdgeDisplayName(ed) +
             '<br>Graph length: ' + (ed && ed.dist != null ? Math.round(ed.dist) : '—') +
             '<br>Nodes: ' + (ed ? ed.fromIdx + ' → ' + ed.toIdx : '—') +
-            '<br>Segment (px): (' + (ed ? ed.x1.toFixed(0) : '—') + ', ' + (ed ? ed.y1.toFixed(0) : '—') + ') → (' + (ed ? ed.x2.toFixed(0) : '—') + ', ' + (ed ? ed.y2.toFixed(0) : '—') + ')';
+            '<br>Span (px): (' + (ed ? ed.x1.toFixed(0) : '—') + ', ' + (ed ? ed.y1.toFixed(0) : '—') + ') → (' + (ed ? ed.x2.toFixed(0) : '—') + ', ' + (ed ? ed.y2.toFixed(0) : '—') + ')' +
+            '<br>Polyline points: ' + (ed && ed.pts ? ed.pts.length : 2);
         }} else if (state.selectedObject.type === 'flight') {{
           const dir = o.arrDep === 'Dep' ? 'Departure' : 'Arrival';
           const sibt = formatMinutesToHHMMSS(o.sibtMin_d != null ? o.sibtMin_d : (o.timeMin != null ? o.timeMin : 0));
@@ -8036,11 +9532,33 @@ html = f"""
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.translate(state.panX, state.panY);
       ctx.scale(state.scale, state.scale);
+      if (state.layoutImageOverlay && layoutImageBitmap) {{
+        const overlay = state.layoutImageOverlay;
+        const [imgX, imgY] = cellToPixel(overlay.topLeftCol, overlay.topLeftRow);
+        ctx.save();
+        // Keep logic simple: when off, treat image opacity as 0.
+        ctx.globalAlpha = state.showImage ? clampLayoutImageOpacity(overlay.opacity) : 0;
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(
+          layoutImageBitmap,
+          imgX,
+          imgY,
+          clampLayoutImageSize(overlay.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM),
+          clampLayoutImageSize(overlay.heightM, GRID_LAYOUT_IMAGE_DEFAULTS.heightM)
+        );
+        ctx.restore();
+      }}
+      if (!state.showGrid) {{
+        ctx.restore();
+        return;
+      }}
       const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
       const GRID_MAJOR = 10;
       for (let c = 0; c <= GRID_COLS; c++) {{
         const x = c * CELL_SIZE;
-        ctx.strokeStyle = (c % GRID_MAJOR === 0) ? 'rgba(255,255,255,0.35)' : 'rgba(140,140,140,0.2)';
+        ctx.strokeStyle = (c % GRID_MAJOR === 0)
+          ? ('rgba(255,255,255,' + GRID_MAJOR_LINE_OPACITY + ')')
+          : ('rgba(140,140,140,' + GRID_MINOR_LINE_OPACITY + ')');
         ctx.lineWidth = (c % GRID_MAJOR === 0) ? 1.2 : 1;
         ctx.beginPath();
         ctx.moveTo(x, 0);
@@ -8049,7 +9567,9 @@ html = f"""
       }}
       for (let r = 0; r <= GRID_ROWS; r++) {{
         const y = r * CELL_SIZE;
-        ctx.strokeStyle = (r % GRID_MAJOR === 0) ? 'rgba(255,255,255,0.35)' : 'rgba(140,140,140,0.2)';
+        ctx.strokeStyle = (r % GRID_MAJOR === 0)
+          ? ('rgba(255,255,255,' + GRID_MAJOR_LINE_OPACITY + ')')
+          : ('rgba(140,140,140,' + GRID_MINOR_LINE_OPACITY + ')');
         ctx.lineWidth = (r % GRID_MAJOR === 0) ? 1.2 : 1;
         ctx.beginPath();
         ctx.moveTo(0, y);
@@ -8138,10 +9658,16 @@ html = f"""
         }}
         term.vertices.forEach((v, i) => {{
           const [x,y] = cellToPixel(v.col, v.row);
+          const vertexSelected = isSelectedVertex('terminal', term.id, i);
           ctx.beginPath();
-          ctx.fillStyle = i === 0 ? '#f97316' : '#e5e7eb';
-          ctx.arc(x, y, 4, 0, Math.PI*2);
+          ctx.fillStyle = vertexSelected ? '#f43f5e' : (i === 0 ? '#f97316' : '#e5e7eb');
+          ctx.arc(x, y, layoutTerminalVertexRadiusPx(vertexSelected), 0, Math.PI*2);
           ctx.fill();
+          if (vertexSelected) {{
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }}
         }});
       }});
       ctx.restore();
@@ -8251,7 +9777,7 @@ html = f"""
           ctx.save();
           ctx.fillStyle = sel ? '#f97316' : '#e5e7eb';
           ctx.beginPath();
-          ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+          ctx.arc(cx, cy, 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
         }}
@@ -8842,23 +10368,23 @@ html = f"""
         if (tw.vertices.length < 2 && !drawing) return;
         const isRunwayPath = tw.pathType === 'runway';
         const isRunwayExit = tw.pathType === 'runway_exit';
-        const widthDefault = isRunwayPath ? 60 : 15;
+        const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
         const width = tw.width != null ? tw.width : widthDefault;
         const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
+        const pathLineCap = 'butt';
         if (sel) {{
           ctx.strokeStyle = c2dObjectSelectedStroke();
           ctx.fillStyle = c2dObjectSelectedFill();
         }} else if (isRunwayPath || isRunwayExit) {{
-          // Runway and Runway Taxiway: One tone darker gray
-          ctx.strokeStyle = '#374151';
-          ctx.fillStyle = 'rgba(31,41,55,0.32)';
+          ctx.strokeStyle = c2dRunwayStroke();
+          ctx.fillStyle = c2dRunwayFill();
         }} else {{
           // common Taxiway: brighter yellow color (Arrow colors remain separate)
-          ctx.strokeStyle = drawing ? '#facc15' : '#fbbf24';
+          ctx.strokeStyle = drawing ? 'rgba(250, 204, 21, 0.78)' : 'rgba(251, 191, 36, 0.72)';
           ctx.fillStyle = 'rgba(251,191,36,0.18)';
         }}
         ctx.lineWidth = width;
-        ctx.lineCap = 'round';
+        ctx.lineCap = pathLineCap;
         ctx.lineJoin = 'round';
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {{
@@ -8875,7 +10401,7 @@ html = f"""
           }} else ctx.stroke();
         }}
         ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : ((isRunwayPath || isRunwayExit) ? '#52525b' : '#facc15');
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : ((isRunwayPath || isRunwayExit) ? c2dRunwayOutline() : '#facc15');
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {{
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
@@ -8886,6 +10412,7 @@ html = f"""
           ctx.save();
           ctx.setLineDash([8, 6]);
           ctx.lineWidth = 3;
+          ctx.lineCap = pathLineCap;
           ctx.strokeStyle = c2dObjectSelectedDashStroke();
           ctx.beginPath();
           for (let i = 0; i < tw.vertices.length; i++) {{
@@ -8894,6 +10421,10 @@ html = f"""
           }}
           ctx.stroke();
           ctx.restore();
+        }}
+        if (isRunwayPath && tw.vertices.length >= 2) {{
+          const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
+          drawRunwayDecorations(tw, runwayPts, width);
         }}
         const dir = getTaxiwayDirection(tw);
         if (dir !== 'both' && tw.vertices.length >= 2) {{
@@ -8941,7 +10472,7 @@ html = f"""
               ctx.strokeStyle = '#450a0a';
               ctx.lineWidth = 1.2;
               ctx.beginPath();
-              ctx.arc(lp[0], lp[1], 5, 0, Math.PI * 2);
+              ctx.arc(lp[0], lp[1], 5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
               ctx.fill();
               ctx.stroke();
               ctx.fillStyle = '#fecaca';
@@ -8956,26 +10487,27 @@ html = f"""
         if ((drawing || sel) && tw.vertices.length >= 1) {{
           tw.vertices.forEach((v, i) => {{
             const [x, y] = cellToPixel(v.col, v.row);
+            const vertexSelected = isSelectedVertex('taxiway', tw.id, i);
             if (i === 0 && drawing) {{
               ctx.fillStyle = '#f97316';
               ctx.beginPath();
-              ctx.arc(x, y, 7, 0, Math.PI*2);
+              ctx.arc(x, y, c2dPathDrawStartMarkerRadiusPx(), 0, Math.PI*2);
               ctx.fill();
               ctx.strokeStyle = '#ea580c';
-              ctx.lineWidth = 2;
+              ctx.lineWidth = c2dPathDrawStartMarkerStrokePx();
               ctx.stroke();
               ctx.fillStyle = '#fff';
-              ctx.font = 'bold 9px system-ui';
+              ctx.font = 'bold ' + c2dPathDrawStartLabelFontPx() + 'px system-ui';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              ctx.fillText('Start', x, y - 11);
+              ctx.fillText('Start', x, y + c2dPathDrawStartLabelOffsetY());
             }} else {{
-              ctx.fillStyle = (i === 0 && sel) ? '#f97316' : '#e5e7eb';
+              ctx.fillStyle = vertexSelected ? '#f43f5e' : ((i === 0 && sel) ? '#f97316' : '#e5e7eb');
               ctx.beginPath();
-              ctx.arc(x, y, sel ? 5 : 4, 0, Math.PI*2);
+              ctx.arc(x, y, layoutPathVertexRadiusPx(vertexSelected, sel), 0, Math.PI*2);
               ctx.fill();
-              if (sel) {{
-                ctx.strokeStyle = c2dObjectSelectedStroke();
+              if (sel || vertexSelected) {{
+                ctx.strokeStyle = vertexSelected ? '#ffffff' : c2dObjectSelectedStroke();
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
               }}
@@ -8998,15 +10530,12 @@ html = f"""
                        state.remoteStands.find(st => st.id === lk.pbbId));
         const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
         if (!stand || !tw || lk.tx == null || lk.ty == null) return;
-        const [ax, ay] = (stand.x2 != null && stand.y2 != null)
-          ? [stand.x2, stand.y2]
-          : cellToPixel(stand.col || 0, stand.row || 0);
-        const [bx, by] = [lk.tx, lk.ty];
-        // Link line uses taxiway yellow tone
+        const poly = getApronLinkPolylineWorldPts(lk);
+        if (poly.length < 2) return;
         ctx.strokeStyle = '#facc15';
         ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
+        ctx.moveTo(poly[0][0], poly[0][1]);
+        for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
         ctx.stroke();
         if (state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id) {{
           ctx.save();
@@ -9016,18 +10545,42 @@ html = f"""
           ctx.shadowBlur = c2dObjectSelectedGlowBlur();
           ctx.strokeStyle = c2dObjectSelectedDashStroke();
           ctx.beginPath();
-          ctx.moveTo(ax, ay);
-          ctx.lineTo(bx, by);
+          ctx.moveTo(poly[0][0], poly[0][1]);
+          for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
           ctx.stroke();
           ctx.restore();
           ctx.setLineDash([6,6]);
         }}
-        // endpoint markers
         ctx.setLineDash([]);
-        // Endpoint markers use same taxiway yellow
-        ctx.fillStyle = '#facc15';
-        ctx.beginPath(); ctx.arc(ax, ay, CELL_SIZE * 0.18, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(bx, by, CELL_SIZE * 0.18, 0, Math.PI*2); ctx.fill();
+        const svApron = state.selectedVertex;
+        const selApron = state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id;
+        for (let pi = 0; pi < poly.length; pi++) {{
+          const [px, py] = poly[pi];
+          const isStandEnd = (pi === 0);
+          const isTaxiEnd = (pi === poly.length - 1);
+          const midIdx = isStandEnd || isTaxiEnd ? -1 : (pi - 1);
+          let vtxSel = false;
+          let draggable = false;
+          if (selApron) {{
+            if (isTaxiEnd) {{
+              draggable = true;
+              vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'taxiway');
+            }} else if (!isStandEnd) {{
+              draggable = true;
+              vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'mid' && svApron.midIndex === midIdx);
+            }}
+          }}
+          const r = layoutPathVertexRadiusPx(vtxSel, draggable);
+          ctx.fillStyle = vtxSel ? '#f43f5e' : (draggable ? '#fde68a' : '#facc15');
+          ctx.beginPath();
+          ctx.arc(px, py, r, 0, Math.PI*2);
+          ctx.fill();
+          if (vtxSel || (draggable && selApron)) {{
+            ctx.strokeStyle = vtxSel ? '#ffffff' : c2dObjectSelectedStroke();
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }}
+        }}
         ctx.setLineDash([6,6]);
       }});
       ctx.setLineDash([]);
@@ -9035,17 +10588,35 @@ html = f"""
       if (state.apronLinkTemp) {{
         ctx.fillStyle = '#facc15';
         const t = state.apronLinkTemp;
-        let px = null, py = null;
-        if (t.kind === 'pbb') {{
-          const pbb = state.pbbStands.find(p => p.id === t.pbbId);
-          if (pbb) {{ px = pbb.x2; py = pbb.y2; }}
+        const draft = [];
+        if (t.kind === 'pbb' || t.kind === 'remote') {{
+          const st = state.pbbStands.find(p => p.id === t.standId) || state.remoteStands.find(s => s.id === t.standId);
+          if (st) {{
+            if (st.x2 != null && st.y2 != null) draft.push([st.x2, st.y2]);
+            else draft.push(cellToPixel(st.col || 0, st.row || 0));
+          }}
         }} else if (t.kind === 'taxiway') {{
-          px = t.x; py = t.y;
+          draft.push([t.x, t.y]);
         }}
-        if (px != null && py != null) {{
+        (state.apronLinkMidpoints || []).forEach(function(c) {{
+          draft.push(cellToPixel(c.col, c.row));
+        }});
+        if (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2) draft.push(state.apronLinkPointerWorld);
+        if (draft.length >= 1) {{
+          ctx.save();
+          ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+          ctx.setLineDash([4, 6]);
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.arc(px, py, CELL_SIZE * 0.22, 0, Math.PI*2);
-          ctx.fill();
+          ctx.moveTo(draft[0][0], draft[0][1]);
+          for (let di = 1; di < draft.length; di++) ctx.lineTo(draft[di][0], draft[di][1]);
+          if (draft.length >= 2) ctx.stroke();
+          ctx.restore();
+          draft.forEach(function(pt) {{
+            ctx.beginPath();
+            ctx.arc(pt[0], pt[1], CELL_SIZE * 0.2 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI*2);
+            ctx.fill();
+          }});
         }}
       }}
       ctx.restore();
@@ -9124,6 +10695,14 @@ html = f"""
       }}
       if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
       if (inInput) return;
+      if (removeLastDrawingVertex()) {{
+        ev.preventDefault();
+        return;
+      }}
+      if (removeSelectedVertex()) {{
+        ev.preventDefault();
+        return;
+      }}
       if (!state.selectedObject) return;
       const type = state.selectedObject.type;
       const id = state.selectedObject.id;
@@ -9131,6 +10710,7 @@ html = f"""
       pushUndo();
       removeLayoutObjectFromState(type, id);
       state.selectedObject = null;
+      state.selectedVertex = null;
       if (type === 'terminal' && state.currentTerminalId === id) {{
         state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
         if (state.terminalDrawingId === id) state.terminalDrawingId = null;
@@ -9153,6 +10733,7 @@ html = f"""
         if (vhit) {{
           pushUndo();
           state.dragVertex = vhit;
+          state.selectedVertex = {{ type: 'terminal', id: vhit.terminalId, index: vhit.index }};
           const term = state.terminals.find(t => t.id === vhit.terminalId);
           if (term) {{
             state.selectedObject = {{ type: 'terminal', id: term.id, obj: term }};
@@ -9169,10 +10750,24 @@ html = f"""
         if (thit && thit.taxiwayId === state.selectedObject.id) {{
           pushUndo();
           state.dragTaxiwayVertex = thit;
+          state.selectedVertex = {{ type: 'taxiway', id: thit.taxiwayId, index: thit.index }};
           draw();
           return;
         }}
       }}
+      if (state.selectedObject && state.selectedObject.type === 'apronLink' && !state.apronLinkDrawing) {{
+        const ah = hitTestApronLinkVertex(wx, wy);
+        if (ah && ah.linkId === state.selectedObject.id) {{
+          pushUndo();
+          state.dragApronLinkVertex = ah;
+          state.selectedVertex = ah.kind === 'mid'
+            ? {{ type: 'apronLink', id: ah.linkId, kind: 'mid', midIndex: ah.midIndex }}
+            : {{ type: 'apronLink', id: ah.linkId, kind: 'taxiway' }};
+          draw();
+          return;
+        }}
+      }}
+      state.selectedVertex = null;
       if ((mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing)) return;
       state.dragStart = {{ sx, sy, panX: state.panX, panY: state.panY }};
       state.isPanning = false;
@@ -9187,6 +10782,16 @@ html = f"""
       state.hoverCell = {{ col, row }};
       const hoverChanged = !prev || prev.col !== col || prev.row !== row;
       let drewThisMove = false;
+      if (settingModeSelect.value === 'apronTaxiway' && state.apronLinkDrawing && state.apronLinkTemp) {{
+        const pw = state.apronLinkPointerWorld;
+        if (!pw || pw[0] !== wx || pw[1] !== wy) {{
+          state.apronLinkPointerWorld = [wx, wy];
+          safeDraw(); drewThisMove = true;
+        }}
+      }} else if (state.apronLinkPointerWorld) {{
+        state.apronLinkPointerWorld = null;
+        safeDraw(); drewThisMove = true;
+      }}
       if (state.dragVertex) {{
         const term = state.terminals.find(t => t.id === state.dragVertex.terminalId);
         if (term && term.vertices[state.dragVertex.index]) {{
@@ -9205,6 +10810,30 @@ html = f"""
           v.row = row;
           safeDraw(); drewThisMove = true;
           if (scene3d) update3DScene();
+        }}
+        return;
+      }}
+      if (state.dragApronLinkVertex) {{
+        const lk = state.apronLinks.find(l => l.id === state.dragApronLinkVertex.linkId);
+        if (!lk) {{
+          state.dragApronLinkVertex = null;
+        }} else if (state.dragApronLinkVertex.kind === 'mid') {{
+          const mi = state.dragApronLinkVertex.midIndex;
+          if (lk.midVertices && mi >= 0 && mi < lk.midVertices.length &&
+              col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {{
+            lk.midVertices[mi].col = col;
+            lk.midVertices[mi].row = row;
+            safeDraw(); drewThisMove = true;
+            if (scene3d) update3DScene();
+          }}
+        }} else if (state.dragApronLinkVertex.kind === 'taxiway') {{
+          const snap = snapWorldPointToTaxiwayPolyline(wx, wy, lk.taxiwayId);
+          if (snap) {{
+            lk.tx = snap[0];
+            lk.ty = snap[1];
+            safeDraw(); drewThisMove = true;
+            if (scene3d) update3DScene();
+          }}
         }}
         return;
       }}
@@ -9274,7 +10903,7 @@ html = f"""
       if (flightTooltip && !state.isPanning) {{
         const hit = hitTest(wx, wy);
         if (hit && hit.obj) {{
-          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Terminal' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type);
+          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Terminal' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type);
           flightTooltip.style.display = 'block';
           flightTooltip.textContent = name;
           flightTooltip.style.left = (ev.clientX + 12) + 'px';
@@ -9311,6 +10940,7 @@ html = f"""
       state.hoverCell = null;
       state.previewPbb = null;
       state.previewRemote = null;
+      state.apronLinkPointerWorld = null;
       safeDraw();
     }});
     function hitTestPbbEnd(wx, wy) {{
@@ -9352,6 +10982,7 @@ html = f"""
 
     container.addEventListener('mouseup', function(ev) {{
       if (ev.button !== 0) return;
+      const wasPanning = !!state.isPanning;
       state.isPanning = false;
       if (state.dragVertex) {{
         state.dragVertex = null;
@@ -9362,6 +10993,14 @@ html = f"""
         if (tw && typeof syncStartEndFromVertices === 'function') syncStartEndFromVertices(tw);
         state.dragTaxiwayVertex = null;
         if (typeof syncPanelFromState === 'function') syncPanelFromState();
+        if (typeof updateObjectInfo === 'function') updateObjectInfo();
+        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+        if (scene3d) update3DScene();
+        draw();
+        return;
+      }}
+      if (state.dragApronLinkVertex) {{
+        state.dragApronLinkVertex = null;
         if (typeof updateObjectInfo === 'function') updateObjectInfo();
         if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
         if (scene3d) update3DScene();
@@ -9379,7 +11018,7 @@ html = f"""
         return;
       }}
       if (!state.dragStart) return;
-      if (!state.isPanning) {{
+      if (!wasPanning) {{
         const mode = settingModeSelect.value;
         if (mode === 'edge') {{
           rebuildDerivedGraphEdges();
@@ -9404,29 +11043,49 @@ html = f"""
           if (endpoint) {{
             if (!state.apronLinkTemp) {{
               state.apronLinkTemp = endpoint;
+              state.apronLinkMidpoints = [];
             }} else {{
               const first = state.apronLinkTemp;
               if (first.kind !== endpoint.kind) {{
-                let standId, taxiwayId, tx, ty;
+                let standId, taxiwayId, tx, ty, midVertices;
                 if (first.kind === 'taxiway') {{
                   taxiwayId = first.taxiwayId;
                   standId = endpoint.standId;
                   tx = first.x;
                   ty = first.y;
+                  midVertices = (state.apronLinkMidpoints || []).slice().reverse();
                 }} else {{
                   taxiwayId = endpoint.taxiwayId;
                   standId = first.standId;
                   tx = endpoint.x;
                   ty = endpoint.y;
+                  midVertices = (state.apronLinkMidpoints || []).slice();
                 }}
                 if (standId && taxiwayId) {{
                   pushUndo();
-                  state.apronLinks.push({{ id: id(), pbbId: standId, taxiwayId, tx, ty }});                  
+                  const newId = id();
+                  const inputName = document.getElementById('apronLinkName');
+                  const linkName = ensureUniqueApronLinkName(inputName && inputName.value, newId);
+                  const linkRec = {{ id: newId, name: linkName, pbbId: standId, taxiwayId, tx, ty }};
+                  if (midVertices && midVertices.length) linkRec.midVertices = midVertices;
+                  state.apronLinks.push(linkRec);
                   syncPanelFromState();
                   if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+                  if (scene3d) update3DScene();
                 }}
               }}
               state.apronLinkTemp = null;
+              state.apronLinkMidpoints = [];
+              state.apronLinkPointerWorld = null;
+            }}
+            draw();
+          }} else if (state.apronLinkTemp) {{
+            const [col, row] = pixelToCell(wx, wy);
+            if (col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {{
+              const last = state.apronLinkMidpoints[state.apronLinkMidpoints.length - 1];
+              if (!last || last.col !== col || last.row !== row) {{
+                state.apronLinkMidpoints.push({{ col, row }});
+              }}
             }}
             draw();
           }}
@@ -9555,6 +11214,22 @@ html = f"""
           try {{ draw(); }} catch(e) {{}}
           if (typeof update3DScene === 'function') update3DScene();
         }} catch (e) {{ console.error('Fit button error:', e); }}
+      }});
+    }}
+    if (gridToggleBtn) {{
+      syncGridToggleButton();
+      gridToggleBtn.addEventListener('click', function() {{
+        state.showGrid = !state.showGrid;
+        syncGridToggleButton();
+        draw();
+      }});
+    }}
+    if (imageToggleBtn) {{
+      syncImageToggleButton();
+      imageToggleBtn.addEventListener('click', function() {{
+        state.showImage = !state.showImage;
+        syncImageToggleButton();
+        draw();
       }});
     }}
 
@@ -9849,10 +11524,10 @@ html = f"""
       }});
       state.taxiways.forEach(tw => {{
         if (tw.vertices.length < 2) return;
-        const w = tw.width != null ? tw.width : (tw.pathType === 'runway' ? 60 : 15);
+        const w = tw.width != null ? tw.width : (tw.pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH));
         const isRunwayPath = tw.pathType === 'runway';
         const isRunwayExit3d = tw.pathType === 'runway_exit';
-        const rwGrayHex = _threeDStyle.runwayPath || '#374151';
+        const rwGrayHex = _threeDStyle.runwayPath || '#9ca3af';
         const h = CELL_SIZE * 0.04;
         // 2Dsame as vertex Connect with straight segments between,
         // Additional patches are added to the corner points to give a visual roundness..
@@ -9949,27 +11624,31 @@ html = f"""
       }});
       // Apron–Taxiway links in 3D, matching 2D links
       const linkH = CELL_SIZE * 0.05;
+      const apronLink3dMat = new THREE.MeshPhongMaterial({{
+        color: hexToThreeColor(_threeDStyle.apronLink || '#22d3ee'),
+        transparent: true,
+        opacity: threeOpacity(_threeDStyle.apronLinkOpacity, 0.9),
+      }});
+      const linkWidth = CELL_SIZE * 0.4;
       state.apronLinks.forEach(lk => {{
-        const pbb = state.pbbStands.find(p => p.id === lk.pbbId);
+        const stand = state.pbbStands.find(p => p.id === lk.pbbId) || state.remoteStands.find(s => s.id === lk.pbbId);
         const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
-        if (!pbb || !tw || lk.tx == null || lk.ty == null) return;
-        const start = grid3DMapper.worldFromPixel(pbb.x2, pbb.y2, linkH);
-        const end = grid3DMapper.worldFromPixel(lk.tx, lk.ty, linkH);
-        const dirVec = new THREE.Vector3().subVectors(end, start);
-        const length = dirVec.length() || 1;
-        dirVec.normalize();
-        const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        const linkWidth = CELL_SIZE * 0.4;
-        const linkGeo = new THREE.BoxGeometry(length, linkH * 0.5, linkWidth);
-        const linkMat = new THREE.MeshPhongMaterial({{
-          color: hexToThreeColor(_threeDStyle.apronLink || '#22d3ee'),
-          transparent: true,
-          opacity: threeOpacity(_threeDStyle.apronLinkOpacity, 0.9),
-        }});
-        const linkMesh = new THREE.Mesh(linkGeo, linkMat);
-        linkMesh.position.copy(mid);
-        linkMesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dirVec);
-        scene3d.add(linkMesh);
+        if (!stand || !tw || lk.tx == null || lk.ty == null) return;
+        const poly = getApronLinkPolylineWorldPts(lk);
+        if (poly.length < 2) return;
+        for (let si = 0; si < poly.length - 1; si++) {{
+          const start = grid3DMapper.worldFromPixel(poly[si][0], poly[si][1], linkH);
+          const end = grid3DMapper.worldFromPixel(poly[si + 1][0], poly[si + 1][1], linkH);
+          const dirVec = new THREE.Vector3().subVectors(end, start);
+          const length = dirVec.length() || 1;
+          dirVec.normalize();
+          const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+          const linkGeo = new THREE.BoxGeometry(length, linkH * 0.5, linkWidth);
+          const linkMesh = new THREE.Mesh(linkGeo, apronLink3dMat);
+          linkMesh.position.copy(mid);
+          linkMesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dirVec);
+          scene3d.add(linkMesh);
+        }}
       }});
       // Flights in 3D: simple airplane-shaped meshes following 2D timeline
       if (state.flights && state.flights.length) {{
@@ -10031,7 +11710,7 @@ html = f"""
       const wx = (mx - state.panX) / state.scale, wy = (my - state.panY) / state.scale;
       const factor = 1 - ev.deltaY * 0.002;
       state.scale *= factor;
-      state.scale = Math.max(0.2, Math.min(5, state.scale));
+      state.scale = Math.max(0.05, Math.min(5, state.scale));
       state.panX = mx - wx * state.scale;
       state.panY = my - wy * state.scale;
       try {{ draw(); }} catch(e) {{}}

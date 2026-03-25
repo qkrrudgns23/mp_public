@@ -966,13 +966,33 @@
         "cellSize": 20,
         "cols": 200,
         "rows": 200,
-        "minCellSize": 10,
+        "minCellSize": 5,
         "maxCellSize": 1000,
-        "cellSizeStep": 10,
+        "cellSizeStep": 5,
         "minDim": 5,
-        "maxDim": 500
+        "maxDim": 1000,
+        "majorInterval": 10,
+        "majorLineWidth": 1.2,
+        "minorLineWidth": 1.0,
+        "majorLineBaseRgb": "255,255,255",
+        "minorLineBaseRgb": "140,140,140",
+        "layoutImageOverlay": {
+          "defaultOpacity": 0.45,
+          "minOpacity": 0.0,
+          "maxOpacity": 1.0,
+          "opacityStep": 0.05,
+          "defaultWidthM": 200,
+          "defaultHeightM": 200,
+          "sizeStepM": 1.0,
+          "pointStep": 0.5,
+          "defaultTopLeftCol": 0,
+          "defaultTopLeftRow": 0
+        }
       },
       "interaction": {
+        "layoutVertexDotScale": 0.7,
+        "showGridDefault": true,
+        "showImageDefault": true,
         "dragThresholdPx": 5,
         "hitTerminalVertexCellFactor": 0.6,
         "hitTaxiwayVertexCellFactor": 0.6,
@@ -981,7 +1001,9 @@
         "tryPlacePbbMaxEdgeCellFactor": 1.0,
         "flightTooltipCellFactor": 1.2,
         "terminalClosePolygonCellFactor": 0.6,
-        "pbbPreviewLengthCellFactor": 0.9
+        "pbbPreviewLengthCellFactor": 0.9,
+        "maxUndoLevels": 50,
+        "clickMaxMovePx": 6
       },
       "standSizesMByIcaoCategory": {
         "A": 20,
@@ -1012,19 +1034,27 @@
         "defaultNameTemplate": "R001"
       },
       "taxiway": {
-        "width": 15,
+        "width": 5,
         "avgMoveVelocity": 10,
         "direction": "both"
       },
       "runwayPath": {
         "width": 60,
         "minArrVelocity": 15,
-        "direction": "both"
+        "direction": "both",
+        "startDisplacedThresholdM": 100,
+        "startBlastPadM": 100,
+        "endDisplacedThresholdM": 100,
+        "endBlastPadM": 100
       },
       "runwayExit": {
-        "width": 15,
+        "width": 5,
         "maxExitVelocity": 30,
-        "minExitVelocity": 15
+        "minExitVelocity": 15,
+        "allowedRwDirectionsDefault": [
+          "clockwise",
+          "counter_clockwise"
+        ]
       },
       "apronAircraft": {
         "description": "Apron flight glyph on 2D canvas and simple 3D mesh (ICAO category scales)",
@@ -1084,13 +1114,47 @@
       ]
     },
     "style": {
-      "description": "Theme colors and opacities (Gantt, schedule table, runway timeline, canvas, 3D)",
+      "description": "Theme colors and opacities (UI base, Gantt, schedule table, runway timeline, canvas, 3D)",
+      "uiTheme": {
+        "description": "Base UI design-system tokens: backgrounds, borders, text, accent, feedback, font, transition, scrollbar",
+        "bgBase": "#0d0d0f",
+        "bgSurface": "#141416",
+        "bgElevated": "#242428",
+        "bgOverlay": "#242428",
+        "bgControl": "#27272b",
+        "bgInput": "#1a1a1d",
+        "borderSubtle": "rgba(255, 255, 255, 0.06)",
+        "borderDefault": "rgba(255, 255, 255, 0.10)",
+        "borderStrong": "rgba(255, 255, 255, 0.18)",
+        "textPrimary": "#f0f0f2",
+        "textSecondary": "#8b8b96",
+        "textMuted": "#5c5c68",
+        "accent": "#7c6af7",
+        "accentHover": "#9181f8",
+        "accentMuted": "rgba(124, 106, 247, 0.16)",
+        "accentRing": "rgba(124, 106, 247, 0.35)",
+        "successBg": "rgba(61, 214, 140, 0.14)",
+        "successBorder": "rgba(61, 214, 140, 0.45)",
+        "successText": "#b8f0d0",
+        "errorBg": "rgba(248, 113, 113, 0.12)",
+        "errorBorder": "rgba(248, 113, 113, 0.35)",
+        "errorText": "#fca5a5",
+        "font": "'Inter', 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif",
+        "transition": "border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s cubic-bezier(0.16, 1, 0.3, 1), filter 0.15s cubic-bezier(0.16, 1, 0.3, 1)",
+        "scrollbarTrack": "rgba(0, 0, 0, 0.78)",
+        "scrollbarThumb": "rgba(255, 255, 255, 0.16)",
+        "scrollbarThumbHover": "rgba(255, 255, 255, 0.24)",
+        "scrollbarBorder": "rgba(255, 255, 255, 0.06)"
+      },
       "gridView": {
         "description": "2D/3D workspace: grid/canvas fill color",
-        "background": "#252525"
+        "background": "#2b2b2b",
+        "majorLineOpacity": 0.45,
+        "minorLineOpacity": 0.3
       },
       "rightPanel": {
         "description": "Layout designer right settings panel surface opacity (0–1, blended with transparent over grid)",
+        "backgroundColor": "#1f1f1f",
         "backgroundOpacity": 0.95,
         "panelToggleBg": "#3d3d44",
         "panelToggleColor": "#ffffff",
@@ -1139,23 +1203,37 @@
       },
       "canvas2d": {
         "pathDepartureStroke": "#000000",
+        "runwayStroke": "rgba(75, 85, 99, 0.78)",
+        "runwayFill": "rgba(75, 85, 99, 0.78)",
+        "runwayOutline": "#d1d5db",
+        "runwayMarkingColor": "#f8fafc",
+        "runwayThresholdColor": "#f8fafc",
+        "runwayCenterlineColor": "#f8fafc",
+        "runwayTouchdownColor": "#f8fafc",
+        "runwayAimingPointColor": "#f8fafc",
+        "runwayExtensionFill": "rgba(55, 65, 81, 0.78)",
+        "runwayBlastChevronColor": "#facc15",
         "vttBadgeBg": "rgba(15, 23, 42, 0.95)",
         "vttBadgeStroke": "#000000",
         "vttBadgeText": "#ffffff",
         "noWayFill": "rgba(220, 38, 38, 0.92)",
         "noWayStroke": "rgba(185, 28, 28, 0.9)",
         "noWayText": "#ffffff",
-        "terminalStrokeSelected": "#e9d5ff",
+        "terminalStrokeSelected": "rgba(233, 213, 255, 0.62)",
         "terminalStrokeDefault": "#38bdf8",
         "terminalFillSelected": "rgba(196,181,253,0.38)",
         "terminalFillDefault": "rgba(56,189,248,0.12)",
         "terminalLabelFill": "rgba(56,189,248,0.95)",
         "terminalSelectedDash": "rgba(255,252,255,0.95)",
-        "objectSelectedStroke": "#e9d5ff",
-        "objectSelectedFill": "rgba(196, 181, 253, 0.42)",
-        "objectSelectedDashStroke": "rgba(255, 252, 255, 0.95)",
-        "objectSelectedGlow": "rgba(167, 139, 250, 0.9)",
-        "objectSelectedGlowBlur": 22
+        "objectSelectedStroke": "rgba(233, 213, 255, 0.62)",
+        "objectSelectedFill": "rgba(196, 181, 253, 0.28)",
+        "objectSelectedDashStroke": "rgba(255, 252, 255, 0.55)",
+        "objectSelectedGlow": "rgba(167, 139, 250, 0.45)",
+        "objectSelectedGlowBlur": 22,
+        "pathDrawStartMarkerRadiusPx": 3.5,
+        "pathDrawStartMarkerStrokePx": 1,
+        "pathDrawStartLabelFontPx": 8,
+        "pathDrawStartLabelOffsetY": -6
       },
       "threeD": {
         "remoteApron": "#22c55e",
@@ -1185,7 +1263,8 @@
         "maxTicksShown": 6
       },
       "pathSearch": {
-        "taxiwayHeuristicCost": 200
+        "taxiwayHeuristicCost": 200,
+        "reverseCost": 1000000
       },
       "simulation": {
         "timeStepSec": 5

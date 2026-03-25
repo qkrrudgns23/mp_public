@@ -1,0 +1,55 @@
+{
+  "grid": {
+    "cols": 500,
+    "rows": 500,
+    "cellSize": 10,
+    "layoutImageOverlay": null
+  },
+  "terminals": [],
+  "pbbStands": [],
+  "remoteStands": [],
+  "runwayPaths": [],
+  "runwayTaxiways": [],
+  "taxiways": [
+    {
+      "id": "id_wqg929p1m",
+      "name": "TX2",
+      "vertices": [],
+      "width": 10,
+      "direction": "clockwise",
+      "maxExitVelocity": null,
+      "start_point": null,
+      "end_point": null
+    },
+    {
+      "id": "id_zivlo2p0v",
+      "name": "RW1",
+      "vertices": [],
+      "width": 15,
+      "direction": "clockwise",
+      "maxExitVelocity": null,
+      "avgMoveVelocity": 10,
+      "start_point": null,
+      "end_point": null
+    }
+  ],
+  "apronLinks": [],
+  "directionModes": [
+    {
+      "id": "dm_cw",
+      "name": "CW",
+      "direction": "clockwise"
+    },
+    {
+      "id": "dm_ccw",
+      "name": "CCW",
+      "direction": "counter_clockwise"
+    },
+    {
+      "id": "dm_both",
+      "name": "Both",
+      "direction": "both"
+    }
+  ],
+  "flights": []
+}
