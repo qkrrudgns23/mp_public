@@ -19,7 +19,6 @@ from utils.layout_receiver import (
     start_layout_receiver,
 )
 
-# run_app.py When used(LAYOUT_SAME_PORT=1): 8501 From proxy API treatment. Others: layout_receiver(8765) movement.
 if os.environ.get("LAYOUT_SAME_PORT") == "1":
     LAYOUT_API_URL = os.environ.get("LAYOUT_API_BASE_URL", "http://127.0.0.1:8501")
 else:
@@ -32,17 +31,14 @@ st.set_page_config(
 )
 
 
-# Default grid; all settings (Grid / Terminal / Contact Stand / Remote) are in the right panel inside the iframe
 GRID_COLS = 200
 GRID_ROWS = 200
 CELL_SIZE = 20.0
 
-# data/Layout_storage use only. data/ Directly below current_layout/default_layout generation·Disabled
 _data_dir = Path(__file__).resolve().parents[1] / "data"
 _fallback_default = _data_dir / "default_layout.json"
 LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
-# Info_storage: Information.json (runway separation, aircraft types, etc.)
 INFO_STORAGE_DIR = _data_dir / "Info_storage"
 INFO_FILE = INFO_STORAGE_DIR / "Information.json"
 INFORMATION: dict = {}
@@ -147,7 +143,6 @@ _flight_info = _dict_or_empty(_info_path("tiers", "flight_schedule") or _info_pa
 if not DEFAULT_LAYOUT_PATH.is_file() and _fallback_default.is_file():
     shutil.copy2(_fallback_default, DEFAULT_LAYOUT_PATH)
 
-# Load initial layout: Layout_storage/default_layout.json First of all, if there is no data/default_layout.json
 DEFAULT_LAYOUT: dict = {}
 try:
     for _layout_path in (DEFAULT_LAYOUT_PATH, _fallback_default):
@@ -175,7 +170,6 @@ def _ensure_random_regs(layout: dict) -> None:
 
 _ensure_random_regs(DEFAULT_LAYOUT)
 
-# HTML / iframe initial value (Layout tab, Flight tab — tiers.flight_schedule)
 _grid_ui_defaults = _cfg_bundle(_grid_info, [
     ("min_cs", "minCellSize", 5, _cfg_int),
     ("max_cs", "maxCellSize", 1000, _cfg_int),
@@ -294,8 +288,6 @@ _flight_speed_options_html = "".join(
     for v in _ui_sim_speeds
 )
 
-# query parameters: load_layout=name → Layout_storagecorresponding to JSON Load and display (API/without port)
-# The basics are DEFAULT_LAYOUT; load_layout If there is one, overwrite it with that file.
 layout_for_html = DEFAULT_LAYOUT
 
 
@@ -330,7 +322,6 @@ try:
 except Exception:
     _logger.exception("Failed to load layout from query param")
 
-# Layout_storage The file list is injected when the page is rendered. (API no call)
 layout_names = list_layout_names()
 
 
@@ -546,7 +537,6 @@ _ui_g_minor_line_rgb = _grid_ui_defaults["minor_line_rgb"]
 _ui_g_draw_viewport_margin_cells = max(0, _cfg_int(_grid_info, "drawViewportMarginCells", 2))
 _ui_g_minor_grid_min_scale = max(0.0, _cfg_float(_grid_info, "minorGridMinScale", 0.0))
 
-# Layout name to display at the top of the grid
 layout_display_name = "default_layout"
 
 _IMAGE_DIR = _data_dir / "image"
@@ -626,47 +616,38 @@ def _build_top_panel_tabs_html() -> str:
 
 _layout_mode_tabs_primary_html, _layout_mode_tabs_secondary_html = _build_layout_mode_tabs_html()
 _top_panel_tabs_html = _build_top_panel_tabs_html()
-_PANEL_FORM_SCOPE_SELECTORS = """
-    #tab-settings .settings-pane,
-    #flightPaneSchedule,
-    #flightPaneConfig
-""".strip()
-_PANEL_FORM_LABEL_SELECTORS = """
-    #tab-settings .settings-pane label,
-    #flightPaneSchedule label,
-    #flightPaneConfig label
-""".strip()
-_PANEL_FORM_LABEL_FIRST_SELECTORS = """
-    #tab-settings .settings-pane label:first-child,
-    #flightPaneSchedule label:first-child,
-    #flightPaneConfig label:first-child
-""".strip()
-_PANEL_FORM_CONTROL_SELECTORS = """
-    #tab-settings .settings-pane input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-    #tab-settings .settings-pane select,
-    #flightPaneSchedule input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-    #flightPaneSchedule select,
-    #flightPaneConfig input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-    #flightPaneConfig select
-""".strip()
-_PANEL_FORM_SELECT_SELECTORS = """
-    #tab-settings .settings-pane select,
-    #flightPaneSchedule select,
-    #flightPaneConfig select
-""".strip()
-_PANEL_FORM_FOCUS_SELECTORS = """
-    #tab-settings .settings-pane input:focus,
-    #tab-settings .settings-pane select:focus,
-    #flightPaneSchedule input:focus,
-    #flightPaneSchedule select:focus,
-    #flightPaneConfig input:focus,
-    #flightPaneConfig select:focus
-""".strip()
-_PANEL_FORM_SMALL_BUTTON_SELECTORS = """
-    #tab-settings .settings-pane button.small,
-    #flightPaneSchedule button.small,
-    #flightPaneConfig button.small
-""".strip()
+_PANEL_FORM_PREFIXES: tuple[str, ...] = (
+    "#tab-settings .settings-pane",
+    "#flightPaneSchedule",
+    "#flightPaneConfig",
+)
+
+
+def _panel_form_join(lines: list[str]) -> str:
+    return ",\n    ".join(lines)
+
+
+_PANEL_FORM_SCOPE_SELECTORS = _panel_form_join(list(_PANEL_FORM_PREFIXES))
+_PANEL_FORM_LABEL_SELECTORS = _panel_form_join([p + " label" for p in _PANEL_FORM_PREFIXES])
+_PANEL_FORM_LABEL_FIRST_SELECTORS = _panel_form_join([p + " label:first-child" for p in _PANEL_FORM_PREFIXES])
+_PANEL_FORM_CONTROL_SELECTORS = _panel_form_join([
+        '#tab-settings .settings-pane input:not([type="checkbox"]):not([type="radio"]):not([type="range"])',
+        '#tab-settings .settings-pane select',
+        '#flightPaneSchedule input:not([type="checkbox"]):not([type="radio"]):not([type="range"])',
+        '#flightPaneSchedule select',
+        '#flightPaneConfig input:not([type="checkbox"]):not([type="radio"]):not([type="range"])',
+        '#flightPaneConfig select',
+    ])
+_PANEL_FORM_SELECT_SELECTORS = _panel_form_join([p + " select" for p in _PANEL_FORM_PREFIXES])
+_PANEL_FORM_FOCUS_SELECTORS = _panel_form_join([
+        '#tab-settings .settings-pane input:focus',
+        '#tab-settings .settings-pane select:focus',
+        '#flightPaneSchedule input:focus',
+        '#flightPaneSchedule select:focus',
+        '#flightPaneConfig input:focus',
+        '#flightPaneConfig select:focus',
+    ])
+_PANEL_FORM_SMALL_BUTTON_SELECTORS = _panel_form_join([p + " button.small" for p in _PANEL_FORM_PREFIXES])
 
 def _build_designer_context() -> dict:
     return {
@@ -990,13 +971,12 @@ def _build_designer_html() -> str:
     .draw-toggle-btn.drawing {{ background: var(--ui-success-bg); color: var(--ui-success-text); }}
     .draw-toggle-btn.drawing:hover {{ filter: brightness(1.12); }}
     .obj-list {{ max-height: 160px; overflow-y: auto; margin-top: 6px; }}
-    /* Layout of tab object The list extends to the panel height,
-       Use right panel scrolling only if it exceeds the total panel height */
+    
     .layout-objects-pane {{ margin-top:8px; padding:10px; border-radius:8px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); max-height:380px; overflow-y:auto; }}
     #object-list.obj-list {{ max-height: none; overflow-y: visible; margin-top: 0; }}
-    /* Flight scheduleThe height is expanded to show about 12 basic episodes. (10% increase) */
+    
     #flightList.obj-list {{ max-height: 418px; }}
-    /* Flight ConfigurationMore than 20 items can be displayed without vertical scrolling, and horizontal scrolling is possible. */
+    
     #flightConfigList.obj-list {{ max-height: none; overflow-y: visible; overflow-x: auto; }}
     .obj-item {{ padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); font-size: 11px; cursor: pointer; transition: var(--ui-transition); }}
     .obj-item:hover {{ background: var(--ui-bg-overlay); border-color: var(--ui-border-default); }}
@@ -1020,7 +1000,7 @@ def _build_designer_html() -> str:
     .flight-assign-col-dep {{ width:110px; }}
     .flight-assign-label {{ font-size:10px; color:var(--ui-text-secondary); letter-spacing:0.04em; }}
     .flight-assign-select {{ min-width:90px; padding:4px 8px; font-size:11px; background:var(--ui-bg-input); color:var(--ui-text-primary); border-radius:4px; border:1px solid var(--ui-border-default); }}
-    /* Flight schedule Table: The columns are wide, the columns are as wide as the font size, and all the text in the selected column is visible. */
+    
     .flight-schedule-table {{ width:100%; border-collapse:collapse; font-size:11px; margin-top:4px; table-layout:auto; }}
     .flight-schedule-table thead {{ position:sticky; top:0; z-index:1; }}
     .flight-schedule-table th {{ text-align:left; padding:6px 8px 6px 0; font-weight:600; color:var(--ui-text-primary); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; border-bottom:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
@@ -1043,29 +1023,26 @@ def _build_designer_html() -> str:
     .flight-config-table thead tr th:nth-child(3) {{ background: var(--ui-bg-elevated); color: var(--ui-text-primary); }}
     .flight-config-table tbody tr td:nth-child(2),
     .flight-config-table tbody tr td:nth-child(3) {{ background: transparent; color: var(--ui-text-primary); }}
-    /* Allocation Gantt (Apron × Time, 10% height increase)
-       - Fixed height makes horizontal scrollbar always appear at bottom of viewport (Scroll only the right column)
-       - vertical scroll: .alloc-gantt-scroll-col + .alloc-gantt-label-col (JSsync with)
-       - horizontal scroll: .alloc-gantt-scroll-col Only in → Scrollbar is always at the bottom */
+    
     #allocationGantt {{ margin-top: 10px; padding: 10px 12px 10px 0; background: var(--ui-bg-elevated); border-radius: 12px; border: 1px solid var(--ui-border-default); width: 100%; max-width: 100%; min-width: 0; height: 700px; max-height: 700px; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; }}
     .alloc-gantt-root {{ display:flex; align-items:stretch; width:100%; flex:1; min-height:0; }}
     .alloc-gantt-label-col {{ flex-shrink:0; width:122px; padding-left:12px; padding-right:8px; box-sizing:border-box; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; min-height:0; scrollbar-width:none; -ms-overflow-style:none; background:var(--ui-bg-surface); border-right:1px solid var(--ui-border-default); }}
     .alloc-gantt-label-col::-webkit-scrollbar {{ display:none; }}
     .alloc-gantt-scroll-col {{ flex:1; overflow:auto; min-height:0; }}
-    /* Zoom Horizontal reflecting magnification inner wrapper (Full timeline width = 100% × zoom) */
+    
     .alloc-gantt-inner {{ position:relative; min-width:100%; height:100%; }}
     .alloc-gantt-inner > .alloc-gantt-grid-overlay {{ position:absolute; left:0; top:0; right:0; bottom:24px; pointer-events:none; z-index:0; }}
     .rwysep-rows > .alloc-gantt-grid-overlay {{ position:absolute; left:0; top:0; right:0; bottom:0; pointer-events:none; z-index:0; }}
     .alloc-gantt-inner > .alloc-row {{ position:relative; z-index:1; }}
-    /* Right dummy track(24px)and vertical 1:1 alignment — margin doesn't exist */
+    
     .alloc-terminal-header {{ margin:0; height:24px; min-height:24px; line-height:24px; font-size: 11px; font-weight: 600; color: var(--ui-text-primary); text-transform: uppercase; letter-spacing: 0.06em; flex-shrink:0; display:flex; align-items:center; gap:4px; box-sizing:border-box; }}
     .alloc-section-toggle-icon {{ display:inline-block; width:12px; text-align:center; font-size:10px; color:var(--ui-text-secondary); }}
     .alloc-row {{ display:flex; align-items:stretch; margin:0; font-size:11px; }}
-    /* Only used in the left fixed label column. sticky Instead, it is separated into a separate column.. */
-    /* bar height 70%(40→28px), spacing between bars 1/4(4px→1px) */
+    
+    
     .alloc-row-label {{ height:28px; line-height:28px; margin:0; color:var(--ui-text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }}
     .alloc-row-track {{ flex:1; position:relative; height:28px; margin:0; border-radius:6px; background:transparent; border:none; overflow:visible; z-index:1; }}
-    /* Apron top runway LDT/TOT Overview row: Exclude drop targets */
+    
     .alloc-row-track[data-runway-legend="1"] {{ pointer-events: none; }}
     .alloc-runway-legend-label {{ font-size:10px; color:var(--ui-text-secondary); letter-spacing:0.02em; }}
     .alloc-time-grid-line {{ position:absolute; top:0; bottom:0; width:1px; background:var(--ui-border-strong); opacity:var(--style-gantt-grid-opacity, 0.4); transform:translateX(-0.5px); pointer-events:none; }}
@@ -1076,15 +1053,14 @@ def _build_designer_html() -> str:
       color:var(--style-gantt-conflict-text, #fee2e2);
       border:1px solid var(--style-gantt-conflict-border, #f87171);
     }}
-    /* S‑Bar When checking SIBT‑SOBT For adjusting basic bar chart transparency */
+    
     .alloc-flight.alloc-flight-sbar-dim {{ opacity:var(--style-gantt-flight-dim-opacity, 0.4); }}
     .alloc-flight.alloc-flight-selected {{ outline:1px solid var(--style-gantt-selected, #fbbf24); outline-offset:1px; box-shadow:0 0 0 1px var(--style-gantt-selected-ring, #0f172a), 0 1px 4px var(--style-gantt-selected-glow, rgba(251,191,36,0.4)); z-index:2; }}
     .alloc-flight-ovlp-badge {{ position:absolute; top:0; right:1px; font-size:3px; font-weight:700; padding:0 1px; border-radius:1px; background:var(--style-gantt-ovlp-bg, #e879f9); color:var(--style-gantt-ovlp-fg, #0f172a); pointer-events:none; line-height:1.1; }}
     .alloc-apron-tag {{ font-size:3px; font-weight:500; padding:0 1px; border-radius:9999px; background:var(--ui-bg-overlay); color:var(--ui-text-primary); border:1px solid var(--ui-border-default); align-self:flex-start; margin-bottom:0; white-space:nowrap; }}
     .alloc-flight-reg {{ font-weight:600; font-size:9px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; }}
     .alloc-flight-meta {{ font-size:9px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; opacity:0.95; }}
-    /* SLDT/SIBT/SOBT/STOT Auxiliary bar chart (S-Pointdragon)
-       - vertical position/height S series point(.alloc-time-dot-s)and fit */
+    
     .alloc-s-bar {{
       position:absolute;
       top:calc(29% + 3px);
@@ -1095,10 +1071,10 @@ def _build_designer_html() -> str:
       pointer-events:none;
       z-index:5;
     }}
-    /* EOBT(orig) vertical baseline (Remove transparency, fully opaque) */
+    
     .alloc-s-line-orig {{ position:absolute; top:2px; bottom:2px; width:0; border-left:1px dashed #0f172a; pointer-events:none; z-index:2; }}
     .alloc-s-line-orig-solid {{ border-left-style:solid; }}
-    /* EIBT/EOBT Auxiliary bar chart (E-Bar) : Margins adjusted to 70% row height */
+    
     .alloc-e-bar {{
       position:absolute;
       top:3px;
@@ -1109,8 +1085,7 @@ def _build_designer_html() -> str:
       pointer-events:none;
       z-index:6;
     }}
-    /* ELDT/EIBT, EOBT/ETOT Auxiliary bar chart (E-Pointdragon highlights)
-       - vertical position/height E series point(.alloc-time-dot-e)and fit */
+    
     .alloc-e2-bar {{
       position:absolute;
       top:calc(71% + 1px);
@@ -1121,14 +1096,12 @@ def _build_designer_html() -> str:
       pointer-events:none;
       z-index:7;
     }}
-    /* SLDT/STOT viewpoint marker point (on the rock)
-       - S-Point: Place in the area above the row
-       - E-Point: Place in bottom area of ​​row */
+    
     .alloc-time-dot {{ position:absolute; width:6px; height:6px; border-radius:50%; pointer-events:none; z-index:8; transform:translateX(-50%); }}
     .alloc-time-dot-s {{ top:32%; background:var(--style-gantt-s-bar, #007aff) !important; }}
     .alloc-time-dot-sd {{ top:32%; background:var(--style-gantt-s-bar, #007aff) !important; }}
     .alloc-time-dot-e {{ top:68%; background:var(--style-gantt-e-bar, #fb37c5); }}
-    /* S-Point / E-Point triangle (under: LDT, stomach: TOT) - 20% The degree is smaller, and only the colors are different for each series. */
+    
     .alloc-s-tri,
     .alloc-e-tri {{
       position:absolute;
@@ -1140,23 +1113,20 @@ def _build_designer_html() -> str:
       pointer-events:none;
       z-index:9;
     }}
-    /* The triangle below is S/E Each award based on series/placed in lower area */
+    
     .alloc-s-tri-down {{ border-top:5px solid var(--style-gantt-s-bar, #007aff); top:44%; }}
     .alloc-e-tri-down {{ border-top:5px solid var(--style-gantt-e-bar, #fb37c5); top:76%; }}
-    /* The upper triangle is S/E Each award based on series/placed in lower area */
+    
     .alloc-s-tri-up {{ border-bottom:5px solid var(--style-gantt-s-bar, #007aff); top:20%; }}
-    /* STOT(orig)dragon black upward triangle (S-Point top area) */
+    
     .alloc-s-tri-orig-up {{ border-bottom:5px solid #0d0d0f; top:20%; }}
     .alloc-e-tri-up {{ border-bottom:5px solid var(--style-gantt-e-bar, #fb37c5); top:60%; }}
-    /* Time axis overlay (Apron/Runway Common, at the bottom of the Gantt sticky)
-       - Right timeline column(.alloc-gantt-scroll-col) Only inside sticky action
-       - Use a scroll context independent of the left label column
-       - height 24px Fixed to maintain visual alignment with left spacer */
+    
     .alloc-time-axis-overlay {{ position:sticky; bottom:0; z-index:4; background:var(--ui-bg-elevated); border-top:1px solid var(--ui-border-subtle); height:24px; min-height:24px; max-height:24px; overflow:hidden; box-sizing:border-box; padding:0; }}
     .alloc-label-axis-spacer {{ height:24px; min-height:24px; flex-shrink:0; box-sizing:border-box; }}
-    /* Remote Margin above section: left·Right paired with a row of equal height spacers */
+    
     .alloc-gantt-section-spacer {{ height:8px; min-height:8px; flex-shrink:0; box-sizing:border-box; }}
-    /* Remote Header: Existing margin-bottom 2px Contain effect within height → Right dummy track(20px)Same as */
+    
     .alloc-remote-header {{ margin:0; height:20px; min-height:20px; line-height:18px; font-size:11px; font-weight:600; color:var(--ui-text-secondary); display:flex; align-items:center; gap:4px; flex-shrink:0; box-sizing:border-box; padding-bottom:2px; }}
     .alloc-time-axis-inner {{ position:relative; height:24px; min-height:24px; max-height:24px; min-width:100%; font-size:9px; line-height:24px; color:var(--ui-text-secondary); overflow:hidden; box-sizing:border-box; padding:0; }}
     .rwysep-timeline-root {{ display:flex; align-items:stretch; width:100%; }}
@@ -1167,15 +1137,14 @@ def _build_designer_html() -> str:
     .alloc-time-tick {{ position:absolute; bottom:0; transform:translateX(-50%); text-align:center; }}
     .alloc-time-tick-line {{ display:none; }}
     .alloc-time-tick-label {{ white-space:nowrap; }}
-    /* Runway Separation Timeline exclusive (Reg × Time) */
+    
     .rwysep-line-s {{ position:absolute; height:7%; top:26%; background:var(--style-rwysep-line-s, #38bdf8); border-radius:9999px; opacity:var(--style-rwysep-line-opacity, 0.55); pointer-events:none; }}
     .rwysep-line-e {{ position:absolute; height:7%; top:60%; background:var(--style-rwysep-line-e, #fb923c); border-radius:9999px; opacity:var(--style-rwysep-line-opacity, 0.55); pointer-events:none; }}
     .rwysep-tri {{ position:absolute; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; transform:translateX(-50%); pointer-events:none; }}
     .rwysep-rows {{ position:relative; }}
     .rwysep-rows > .alloc-row {{ position:relative; z-index:1; }}
     .rwysep-head-row {{ display:flex; align-items:center; font-size:9px; color:var(--ui-text-secondary); margin-bottom:2px; }}
-    /* Runway Separation Timeline header label width Apron Gantt label(alloc-row-label)Match the same as
-       top S/E header track and angle Reg Ensure that the vertical scales of the row and lower time axes are accurately aligned.. */
+    
     .rwysep-head-label {{ width:122px; padding:0 8px 0 12px; text-align:left; position:sticky; left:0; z-index:10; background:var(--ui-bg-elevated); }}
     .rwysep-head-track {{ flex:1; position:relative; height:14px; z-index:1; }}
     #directionModesList {{ width: 100%; }}
@@ -1223,7 +1192,7 @@ def _build_designer_html() -> str:
     #layoutLoadList .layout-load-delete {{ flex-shrink: 0; padding: 2px 6px; font-size: 12px; cursor: pointer; border: none; background: transparent; color: var(--ui-text-secondary); border-radius: 3px; transition: var(--ui-transition); }}
     #layoutLoadList .layout-load-delete:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
 
-    /* Runway Separation tab */
+    
     #rwySepPanel {{ font-size: 11px; color: var(--ui-text-primary); }}
     .rwysep-rwy-bar {{ display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:8px; flex-wrap:wrap; }}
     .rwysep-rwy-tabs {{ display:flex; flex-wrap:wrap; gap:4px; }}
@@ -1769,7 +1738,6 @@ def _build_designer_html() -> str:
 
   <script>
   (function() {{
-    // ---- Bootstrapped context and designer defaults ----
     const LAYOUT_API_URL = {json.dumps(LAYOUT_API_URL)};
     const LAYOUT_NAMES = {json.dumps(layout_names)};
     const INITIAL_LAYOUT = {json.dumps(layout_for_html)};
@@ -1788,6 +1756,11 @@ def _build_designer_html() -> str:
     let GRID_COLS = {GRID_COLS};
     let GRID_ROWS = {GRID_ROWS};
     let CELL_SIZE = {CELL_SIZE};
+    function readCheckedDataItemIds(rootOrId, selectorClass) {{
+      const root = typeof rootOrId === 'string' ? document.getElementById(rootOrId) : rootOrId;
+      const scope = root || document;
+      return Array.from(scope.querySelectorAll(selectorClass)).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean);
+    }}
 
     const _tiers = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers) ? INFORMATION.tiers : {{}};
     const _layoutTier = _tiers.layout || {{}};
@@ -1965,7 +1938,6 @@ def _build_designer_html() -> str:
     }})();
     const TIME_AXIS_CFG = _algoTier.timeAxis || {{}};
     const DOM_OPT_CFG = (_algoTier.domOptimization && typeof _algoTier.domOptimization === 'object') ? _algoTier.domOptimization : {{}};
-    const DOM_DIAGNOSTIC_LOG = DOM_OPT_CFG.diagnosticLogDomCount === true;
     const DOM_OPT_FLIGHT_VIRT_ENABLE = DOM_OPT_CFG.flightListVirtualScroll !== false;
     const DOM_OPT_FLIGHT_VIRT_MIN = (function() {{
       const v = Math.floor(Number(DOM_OPT_CFG.flightListVirtualMinRows));
@@ -1979,7 +1951,6 @@ def _build_designer_html() -> str:
       const v = Number(DOM_OPT_CFG.flightListVirtualRowHeightPx);
       return (isFinite(v) && v >= 18) ? v : 28;
     }})();
-    const DOM_COMPOSITION_REPORT = DOM_OPT_CFG.diagnosticDomCompositionReport === true;
     const FLIGHT_SCHED_PAGE_SIZE = (function() {{
       const v = Math.floor(Number(DOM_OPT_CFG.flightSchedulePageSize));
       if (!isFinite(v) || v < 0) return 20;
@@ -1995,126 +1966,6 @@ def _build_designer_html() -> str:
       if (!isFinite(v) || v < 1) return 24;
       return v;
     }})();
-    const DOM_REGION_META = {{
-      'app': {{ label: '루트 #app', source: '기본 레이아웃' }},
-      'toolbar': {{ label: '상단 툴바', source: '정적 HTML' }},
-      'canvas-container': {{ label: '2D 캔버스 영역', source: 'draw() / Canvas' }},
-      'view3d-container': {{ label: '3D 뷰', source: 'update3DScene / Three.js' }},
-      'right-panel': {{ label: '우측 패널(미세분류 없음)', source: '정적 HTML' }},
-      'tab-settings': {{ label: '탭: Settings', source: '정적 HTML' }},
-      'tab-flight': {{ label: '탭: Flight', source: '정적 HTML' }},
-      'tab-rwysep': {{ label: '탭: Runway sep', source: '정적 HTML' }},
-      'tab-allocation': {{ label: '탭: Allocation', source: '정적 HTML' }},
-      'tab-simulation': {{ label: '탭: Simulation/KPI', source: '정적 HTML' }},
-      'tab-saveload': {{ label: '탭: Save/Load', source: '정적 HTML' }},
-      'settings-grid': {{ label: '그리드 설정 폼', source: '정적 HTML' }},
-      'flightPaneSchedule': {{ label: '항공편 입력 폼', source: '정적 HTML' }},
-      'flightList': {{ label: '항공편 스케줄 표', source: 'renderFlightList' }},
-      'flightConfigList': {{ label: '기종별 착륙 설정 표', source: '_renderFlightConfigTable' }},
-      'allocationGantt': {{ label: 'Stand allocation 간트', source: 'renderFlightGantt' }},
-      'rwySepPanel': {{ label: '활주로 분리 패널', source: 'renderRunwaySeparation' }},
-      'rwysep-subtab-input': {{ label: '활주로 분리 입력 서브탭', source: 'renderRunwaySeparation' }},
-      'rwysep-subtab-timeline': {{ label: '활주로 분리 타임라인 서브탭', source: 'renderRunwaySeparation' }},
-      'rwySepTimeWrap': {{ label: '활주로 분리 Reg×Time', source: 'drawRwySeparationTimeline' }},
-      'kpiDashboard': {{ label: 'KPI 대시보드', source: 'renderKpiDashboard' }},
-      'object-list': {{ label: '그리드 객체 목록', source: 'object list sync' }},
-      'layoutLoadList': {{ label: '레이아웃 로드 목록', source: 'load list API' }},
-      'globalUpdateOverlay': {{ label: 'Update 오버레이', source: 'setGlobalUpdateProgressUi' }},
-      'layout-name-bar': {{ label: '레이아웃 이름 바', source: 'updateLayoutNameBar' }},
-      'info-bar': {{ label: '하단 힌트 바', source: '정적 HTML' }},
-      'flight-tooltip': {{ label: '항공편 툴팁', source: '동적' }},
-      'api-warning-banner': {{ label: 'API 경고 배너', source: '정적 HTML' }}
-    }};
-    function reportLayoutDesignerDomComposition(runId) {{
-      const appEl = document.getElementById('app');
-      const docTotal = document.getElementsByTagName('*').length;
-      const rows = [];
-      const counts = {{}};
-      let appTotal = 0;
-      if (appEl) {{
-        appTotal = 1 + appEl.getElementsByTagName('*').length;
-        const allEls = [appEl].concat(Array.prototype.slice.call(appEl.getElementsByTagName('*')));
-        allEls.forEach(function(el) {{
-          let cur = el;
-          let key = '_other_under_app';
-          while (cur) {{
-            if (cur.id && DOM_REGION_META[cur.id]) {{
-              key = cur.id;
-              break;
-            }}
-            cur = cur.parentElement;
-          }}
-          counts[key] = (counts[key] || 0) + 1;
-        }});
-      }}
-      const keys = Object.keys(counts).sort(function(a, b) {{ return (counts[b] || 0) - (counts[a] || 0); }});
-      keys.forEach(function(k) {{
-        const meta = DOM_REGION_META[k] || {{ label: k, source: '—' }};
-        rows.push({{
-          regionId: k,
-          label: meta.label,
-          sourceFn: meta.source,
-          nodeCount: counts[k]
-        }});
-      }});
-      const summary = {{
-        runId: runId || '',
-        documentElementCount: docTotal,
-        appSubtreeElementCount: appTotal,
-        rows: rows,
-        scheduleTableDetail: null,
-        configTableDetail: null
-      }};
-      const flRoot = document.getElementById('flightList');
-      if (flRoot) {{
-        const dataRows = flRoot.querySelectorAll('tr.flight-data-row').length;
-        const virt = !!(flRoot.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]'));
-        let rwN = 0, termN = 0;
-        try {{
-          rwN = (typeof getRunwayOptions === 'function') ? getRunwayOptions().length : 0;
-        }} catch (eR) {{}}
-        try {{
-          termN = (state.terminals || []).length;
-        }} catch (eT) {{}}
-        const optN = flRoot.querySelectorAll('option').length;
-        const selN = flRoot.querySelectorAll('select').length;
-        const tdN = flRoot.querySelectorAll('td').length;
-        summary.scheduleTableDetail = {{
-          dataRowCount: dataRows,
-          selectElements: selN,
-          optionElements: optN,
-          tdElements: tdN,
-          virtualScrollActive: virt,
-          runwayCountForSelects: rwN,
-          terminalCountForSelects: termN,
-          note: 'Each row: 3 selects (Arr Rw, Building, Dep Rw); option lists duplicated per row ≈ rows × (2×runways + terminals + 1)'
-        }};
-      }}
-      const fcRoot = document.getElementById('flightConfigList');
-      if (fcRoot) {{
-        summary.configTableDetail = {{
-          trCount: fcRoot.querySelectorAll('tr').length,
-          inputCount: fcRoot.querySelectorAll('input').length,
-          tdCount: fcRoot.querySelectorAll('td').length
-        }};
-      }}
-      try {{
-        console.log('[layout-designer] DOM composition (nearest-region bucketing; sums to #app subtree nodes)');
-        console.table(rows.map(function(r) {{ return {{ region: r.regionId, label: r.label, source: r.sourceFn, nodes: r.nodeCount }}; }}));
-        if (summary.scheduleTableDetail) {{
-          console.log('[layout-designer] Flight schedule table detail (options dominate DOM)', summary.scheduleTableDetail);
-        }}
-      }} catch (e2) {{}}
-      return summary;
-    }}
-    function scheduleDomCompositionReport(runId) {{
-      if (!DOM_COMPOSITION_REPORT) return;
-      requestAnimationFrame(function() {{
-        requestAnimationFrame(function() {{
-          try {{ reportLayoutDesignerDomComposition(runId || 'after-update'); }} catch (e) {{ console.error(e); }}
-        }});
-      }});
-    }}
     function _taNum(k, def) {{
       const v = Number(TIME_AXIS_CFG[k]);
       return (isFinite(v) && v >= 0) ? v : def;
@@ -2361,9 +2212,7 @@ def _build_designer_html() -> str:
       apronLinks: [],
       layoutEdgeNames: {{}},
       directionModes: [],
-      // current selection/Loaded layout name (Simulation Available upon request)
       currentLayoutName: String(INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout'),
-      // Flight / simulation state
       flights: [],
       simTimeSec: 0,
       simStartSec: 0,
@@ -2459,7 +2308,6 @@ def _build_designer_html() -> str:
       }}
       if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
     }}
-    // Layout edits: refresh 2D/3D only; paths·schedule·KPI on Update (pushUndo may already mark stale).
     function redrawLayoutAfterEdit() {{
       if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
       if (typeof draw === 'function') draw();
@@ -2849,18 +2697,15 @@ def _build_designer_html() -> str:
         state.flights = obj.flights.slice();
         state.flights.forEach(f => {{
           const t = f.token || {{}};
-          // aircraftType/code: legacy JSONIn codeThere can only be. aircraftTypeIf there is code Judo, if there is no codeas aircraftType matching
           if (f.aircraftType && typeof getCodeForAircraft === 'function') {{
             f.code = getCodeForAircraft(f.aircraftType);
           }} else if (f.code && typeof AIRCRAFT_TYPES !== 'undefined') {{
             const match = AIRCRAFT_TYPES.find(a => a.icao === f.code);
             f.aircraftType = match ? match.id : (AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320';
           }}
-          // JSONMinimum saved at token form: arrRunwayId, apronId, terminalId, depRunwayId
           f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
           f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
           f.terminalId = f.terminalId || t.terminalId || null;
-          // Flight-parking areaID matching: JSON token.apronIdUsed only as a source. If this value holds Allocationalso maintained
           const apronId = t.apronId != null ? t.apronId : (f.standId != null ? f.standId : null);
           f.standId = apronId;
           f.token = {{
@@ -2870,7 +2715,6 @@ def _build_designer_html() -> str:
             terminalId: f.terminalId || null,
             depRunwayId: f.depRunwayId || null,
           }};
-          // Route / RET / No-way values are derived from the current graph, so reset them on load.
           f.noWayArr = false;
           f.noWayDep = false;
           delete f._noWayArrDetail;
@@ -2900,8 +2744,6 @@ def _build_designer_html() -> str:
         state.flights = [];
       }}
       if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
-      // The layout of the parking lot is JSON(apronId)Restored only. timeline/No route-based automatic reassignment
-      // Do not autoplay simulation
       state.simPlaying = false;
       state.layoutPathDrawPointer = null;
       state.hasSimulationResult = false;
@@ -3130,14 +2972,12 @@ def _build_designer_html() -> str:
     }}
     function getTaxiwayDirection(tw) {{
       if (!tw) return 'both';
-      // bird UI: taxiwayDirectionModedirectly from tw.directionSave to (clockwise / counter_clockwise / both)
       if (tw.direction != null) {{
         const d = tw.direction;
         if (d === 'topToBottom') return 'clockwise';
         if (d === 'bottomToTop') return 'counter_clockwise';
         return d || 'both';
       }}
-      // Old version JSON compatible: directionModeId + state.directionModes use
       if (tw.directionModeId) {{
         const m = state.directionModes.find(d => d.id === tw.directionModeId);
         if (m && m.direction) return m.direction;
@@ -3183,7 +3023,6 @@ def _build_designer_html() -> str:
       return out;
     }}
 
-    // ---- Runway Separation config (from Information.json) ----
     const _rwy = _tiers.runway || {{}};
     const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {{}};
     const RSEP_COLOR_THRESHOLDS = (function() {{
@@ -3339,7 +3178,6 @@ def _build_designer_html() -> str:
       if (!rw.rwySepConfig) {{
         rw.rwySepConfig = rsepMakeConfig('ICAO');
       }}
-      // standards have changed JSONBecause it may come in cats If the number does not match, reset
       const cfg = rw.rwySepConfig;
       if (!RSEP_STD_CATS[cfg.standard]) {{
         rw.rwySepConfig = rsepMakeConfig('ICAO');
@@ -3437,8 +3275,6 @@ def _build_designer_html() -> str:
       ];
     }}
     function rectsOverlap(a, b) {{
-      // Treat only positive-area intersection as overlap.
-      // If When two squares touch only by a line or point(When sides overlap or only edges touch)is not considered overlap..
       return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
     }}
     function getPbbAnchorPx(pbb) {{
@@ -3584,7 +3420,7 @@ def _build_designer_html() -> str:
         x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx,
         category: newPbb.category,
         categoryMode: categoryMode,
-        allowedAircraftTypes: Array.from((document.getElementById('standAircraftAccess') || document).querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean),
+        allowedAircraftTypes: readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check'),
         pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
         angleDeg: normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI),
         edgeCol: bestEdge.col,
@@ -3622,7 +3458,7 @@ def _build_designer_html() -> str:
         name: baseName,
         angleDeg,
         categoryMode: categoryMode,
-        allowedAircraftTypes: Array.from((document.getElementById('remoteAircraftAccess') || document).querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean),
+        allowedAircraftTypes: readCheckedDataItemIds('remoteAircraftAccess', '.aircraft-type-check'),
         allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean)
       }}));
       return true;
@@ -3630,7 +3466,6 @@ def _build_designer_html() -> str:
     function taxiwayOverlapsAnyTerminal(tw) {{
       if (!tw || !tw.vertices || tw.vertices.length < 2) return false;
       const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-      // each vertex Check which terminal is in
       for (let t = 0; t < state.terminals.length; t++) {{
         const term = state.terminals[t];
         if (!term.closed || term.vertices.length < 3) continue;
@@ -3638,7 +3473,6 @@ def _build_designer_html() -> str:
         for (let i = 0; i < vertsPix.length; i++) {{
           if (pointInPolygonXY(vertsPix[i], termPix)) return true;
         }}
-        // Segments vs terminal polygon edges Check for intersection
         for (let i = 0; i < vertsPix.length - 1; i++) {{
           const a1 = vertsPix[i], a2 = vertsPix[i+1];
           for (let j = 0; j < termPix.length; j++) {{
@@ -3657,11 +3491,9 @@ def _build_designer_html() -> str:
         const tw = state.taxiways[i];
         if (!tw.vertices || tw.vertices.length < 2) continue;
         const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-        // Taxiway vertex is in the terminal
         for (let k = 0; k < vertsPix.length; k++) {{
           if (pointInPolygonXY(vertsPix[k], termPix)) return true;
         }}
-        // Taxiway Whether the segment intersects the terminal edge
         for (let a = 0; a < vertsPix.length - 1; a++) {{
           const a1 = vertsPix[a], a2 = vertsPix[a+1];
           for (let b = 0; b < termPix.length; b++) {{
@@ -3707,7 +3539,6 @@ def _build_designer_html() -> str:
           copy.end_point = null;
         }}
       }}
-      // Avg move velocityis individual Taxiway Serialize the settings as is
       if (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) {{
         copy.avgMoveVelocity = tw.avgMoveVelocity;
       }}
@@ -3729,7 +3560,6 @@ def _build_designer_html() -> str:
         delete copy.dep_point;
         delete copy.depPointPos;
       }}
-      // Runway separationsilver physics runway(runway path)Meaning only; exit/common TWKeys attached to are not saved.
       if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
       else delete copy.rwySepConfig;
       return copy;
@@ -3758,7 +3588,6 @@ def _build_designer_html() -> str:
           showImage: !!state.showImage,
           layoutImageOverlay: state.layoutImageOverlay ? Object.assign({{}}, state.layoutImageOverlay) : null
         }},
-        // In case of duplicate names Objects Shape visible on the panel(yes: "Stand 1 (2)")Save as
         terminals: makeUniqueNamedCopy(state.terminals, 'name'),
         pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
         remoteStands: state.remoteStands.slice(),
@@ -3769,12 +3598,8 @@ def _build_designer_html() -> str:
         }})(),
         apronLinks: state.apronLinks.slice(),
         directionModes: state.directionModes.slice(),
-        // Flight-parking areaID matching(apronId)second JSONIf you include it in , when loading AllocationRestored as is
         flights: state.flights.map(function(f) {{
           const copy = {{ }};
-          // First the basics·Order in which you want time-related fields(S(orig) > S(d) > S(final) > E(final), Each group ldt > ibt > obt > tot net)Fill with
-          // NOTE: E(orig) line(eldtMin_orig/eibtMin_orig/eobtMin_orig/etotMin_orig)silver
-          //       JSONwithout saving to final Eline(eldtMin/eibtMin/eobtMin/etotMin)save only.
           const orderedKeys = [
             'id',
             'reg',
@@ -3788,27 +3613,22 @@ def _build_designer_html() -> str:
             'minDwellMin',
             'noWayArr',
             'noWayDep',
-            // S (orig): SLDT, SIBT, SOBT, STOT
             'sldtMin_orig',
             'sibtMin_orig',
             'sobtMin_orig',
             'stotMin_orig',
-            // S (d): SLDT(d), SIBT(d), SOBT(d), STOT(d)
             'sldtMin_d',
             'sibtMin_d',
             'sobtMin_d',
             'stotMin_d',
-            // S (final): SLDT, SIBT, SOBT, STOT
             'sldtMin',
             'sibtMin',
             'sobtMin',
             'stotMin',
-            // E (final): ELDT, EIBT, EOBT, ETOT
             'eldtMin',
             'eibtMin',
             'eobtMin',
             'etotMin',
-            // Other indicators
             'depTaxiDelayMin',
             'vttADelayMin',
             'arrRotSec',
@@ -3826,8 +3646,6 @@ def _build_designer_html() -> str:
             'depRunwayDirUsed'
           ];
           orderedKeys.forEach(function(k) {{
-            // sibtMinis explicitly final SIBTto leave a,
-            // If there is no original field sibtMin_dMake a copy of.
             if (k === 'sibtMin') {{
               if (
                 Object.prototype.hasOwnProperty.call(f, 'sibtMin') &&
@@ -3859,7 +3677,6 @@ def _build_designer_html() -> str:
               copy[k] = f[k];
             }}
           }});
-          // The remaining fields are appended in the original order.
           for (const k in f) {{
             if (
               k === 'timeline' ||
@@ -3916,7 +3733,6 @@ def _build_designer_html() -> str:
       for (let i = 0; i < existing.length; i++) if (rectsOverlap(bounds, existing[i])) return true;
       return false;
     }}
-    // ---- Shared math and formatting helpers ----
     function dist2(a, b) {{ const dx = a[0]-b[0], dy = a[1]-b[1]; return dx*dx+dy*dy; }}
     function _normalizeTimeToSeconds(value, unit, roundingMode) {{
       const raw = Number(value || 0);
@@ -4662,7 +4478,7 @@ def _build_designer_html() -> str:
         }}
         pbb.categoryMode = normalizeStandCategoryMode(el('standCategoryMode') ? el('standCategoryMode').value : pbb.categoryMode, _pbbTier.defaultCategoryMode || 'icao');
         if (el('standCategory')) pbb.category = el('standCategory').value || 'C';
-        pbb.allowedAircraftTypes = Array.from((document.getElementById('standAircraftAccess') || document).querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean);
+        pbb.allowedAircraftTypes = readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check');
       }}
       if (state.selectedObject && state.selectedObject.type === 'remote') {{
         var st = state.selectedObject.obj;
@@ -4677,7 +4493,7 @@ def _build_designer_html() -> str:
         }}
         st.categoryMode = normalizeStandCategoryMode(el('remoteCategoryMode') ? el('remoteCategoryMode').value : st.categoryMode, _remoteTier.defaultCategoryMode || 'icao');
         if (el('remoteCategory')) st.category = el('remoteCategory').value || 'C';
-        st.allowedAircraftTypes = Array.from((document.getElementById('remoteAircraftAccess') || document).querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean);
+        st.allowedAircraftTypes = readCheckedDataItemIds('remoteAircraftAccess', '.aircraft-type-check');
         const accWrap = document.getElementById('remoteTerminalAccess');
         if (accWrap) {{
           const checks = accWrap.querySelectorAll('.remote-term-check');
@@ -4815,7 +4631,6 @@ def _build_designer_html() -> str:
 
     settingModeSelect.addEventListener('change', function() {{
       cancelActiveLayoutDrawingState();
-      // Clear selection only when mode actually changes.
       state.selectedObject = null;
       syncSettingsPaneToMode();
     }});
@@ -4868,7 +4683,6 @@ def _build_designer_html() -> str:
       btn.addEventListener('click', function() {{ switchToTab(this.getAttribute('data-tab')); }});
     }});
 
-    // Apron tab: S-Point / S-Bar / E-Bar / E-Point toggle
     ['chkShowSPoints', 'chkShowEBar', 'chkShowEPoints', 'chkShowSBars'].forEach(function(chkId) {{
       const el = document.getElementById(chkId);
       if (el) el.addEventListener('change', function() {{
@@ -5163,7 +4977,7 @@ def _build_designer_html() -> str:
         if (!target || !target.classList.contains('aircraft-type-check')) return;
         syncChoiceChipStates(standAircraftAccessEl);
         if (!state.selectedObject || state.selectedObject.type !== 'pbb') return;
-        state.selectedObject.obj.allowedAircraftTypes = Array.from(standAircraftAccessEl.querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean);
+        state.selectedObject.obj.allowedAircraftTypes = readCheckedDataItemIds(standAircraftAccessEl, '.aircraft-type-check');
         updateObjectInfo();
         renderObjectList();
         draw();
@@ -5277,7 +5091,7 @@ def _build_designer_html() -> str:
         if (!target || !target.classList.contains('aircraft-type-check')) return;
         syncChoiceChipStates(remoteAircraftAccessEl);
         if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
-        state.selectedObject.obj.allowedAircraftTypes = Array.from(remoteAircraftAccessEl.querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean);
+        state.selectedObject.obj.allowedAircraftTypes = readCheckedDataItemIds(remoteAircraftAccessEl, '.aircraft-type-check');
         updateObjectInfo();
         renderObjectList();
         draw();
@@ -5377,7 +5191,6 @@ def _build_designer_html() -> str:
         const val = Number(this.value);
         if (tw.pathType === 'runway_exit') {{
           tw.maxExitVelocity = isFinite(val) && val > 0 ? val : null;
-          // minExitVelocityIs maxExitVelocityAdjusted not to exceed
           if (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.maxExitVelocity != null && tw.minExitVelocity > tw.maxExitVelocity) {{
             tw.minExitVelocity = tw.maxExitVelocity;
           }}
@@ -5496,7 +5309,6 @@ def _build_designer_html() -> str:
       }});
     }});
 
-    // ---- Flight helpers ----
     function getMinArrVelocityMpsForRunwayId(runwayId) {{
       if (runwayId == null || runwayId === '') return 15;
       const list = state.taxiways || [];
@@ -5506,7 +5318,7 @@ def _build_designer_html() -> str:
       if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, Math.min(150, v));
       return 15;
     }}
-    /** v0deceleration from a(m/s²)as distM(m) When moving RET entrance speed·time taken. The speed is vFloor(m/s) Do not go below. */
+    
     function runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn) {{
       const vf0 = Math.max(1, Math.min(150, vFloorIn));
       const vf = Math.min(vf0, v0);
@@ -5555,7 +5367,7 @@ def _build_designer_html() -> str:
       const t = state.simTimeSec;
       if (label) label.textContent = formatSecondsToHHMMSS(t);
     }}
-    /** 도착편 중 스케줄상 가장 이른 ELDT(초). 없으면 null */
+    
     function minFirstArrivalTouchdownSecAmongFlights() {{
       let minS = Infinity;
       (state.flights || []).forEach(function(f) {{
@@ -5708,9 +5520,7 @@ def _build_designer_html() -> str:
         const t = state.terminals[i];
         if (!t.vertices || t.vertices.length < 1) continue;
         const termPix = t.vertices.map(v => cellToPixel(v.col, v.row));
-        // 1) First check if it is inside the polygon (Closed terminal only)
         if (t.closed && termPix.length >= 3 && pointInPolygonXY([px, py], termPix)) return t;
-        // 2) Or remember the nearest terminal
         let cx = 0, cy = 0;
         termPix.forEach(p => {{ cx += p[0]; cy += p[1]; }});
         cx /= termPix.length;
@@ -5722,7 +5532,6 @@ def _build_designer_html() -> str:
           nearest = t;
         }}
       }}
-      // If it does not belong to any polygon, return the nearest terminal
       return nearest;
     }}
 
@@ -5913,7 +5722,7 @@ def _build_designer_html() -> str:
       return null;
     }}
 
-    /** 2D 시뮬: 타임라인 구간마다 선형 보간해 재생·슬라이더에서 연속적으로 이동합니다. */
+    
     function getFlightPoseAtTimeForDraw(flight, tSec) {{
       const tl = flight && flight.timeline;
       if (!tl || !tl.length) return null;
@@ -5947,7 +5756,7 @@ def _build_designer_html() -> str:
       return t >= m.etotSec - 1e-3;
     }}
 
-    /** 현재 시각이 타임라인에서 위치 거의 변하지 않는 구간(게이트 체류·ROT 대기 등)이면 true */
+    
     function isFlightTimelineStationaryAtSimTime(f, tSec) {{
       const tl = f && f.timeline;
       if (!tl || tl.length < 2) return false;
@@ -6220,13 +6029,10 @@ def _build_designer_html() -> str:
       }}
     }}
 
-    // VTT(Arr) + RET/ROT(arrRotSec) share state.vttArrCacheRev; bump on Update / forced RET resample only.
     function bumpVttArrCacheRev() {{
       state.vttArrCacheRev = (state.vttArrCacheRev | 0) + 1;
       bumpRwySepSnapshotStaleGen();
     }}
-    // Flight Schedule and S(d) same in calculation VTT(Arr) Helpers for using definitions
-    // ※ Path/RET change: bump revision (Update or renderFlightList force RET) so VTT is recomputed once per flight.
     function getBaseVttArrMinutes(f) {{
       if (!f) return 0;
       const rev = state.vttArrCacheRev | 0;
@@ -6289,7 +6095,7 @@ def _build_designer_html() -> str:
       }}
       return sec / 60;
     }}
-    /** DEP_TAXI_TIME 표시용: 스탠드→라인업(활주로 상 lineupDistM 지점) 그래프 경로만. 활주로 이륙 방향 꼬리 구간은 제외. */
+    
     function getBaseVttDepMinutesToLineup(f) {{
       const depPts = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, {{ onlyToLineup: true }}) : null;
       if (!depPts || depPts.length < 2) return 0;
@@ -6303,12 +6109,12 @@ def _build_designer_html() -> str:
       }}
       return sec / 60;
     }}
-    /** STOT−SOBT·EOBT역산에 사용: 라인업 택시(분) + 출발 ROT(분, SCHED_DEP_ROT_MIN). */
+    
     function getDepBlockOutMin(f) {{
       const taxi = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
       return taxi + SCHED_DEP_ROT_MIN;
     }}
-    /** computeScheduledDisplayTimes와 동일 규칙: dwell 상한·minDwell 하한. */
+    
     function getNormalizedStandDwellBounds(f) {{
       let dwell = f.dwellMin != null ? f.dwellMin : 0;
       let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
@@ -6317,11 +6123,7 @@ def _build_designer_html() -> str:
       if (minDwell > dwell) minDwell = dwell;
       return {{ dwell, minDwell }};
     }}
-    /**
-     * 전진 모델: SOBT(d) 선호를 [EIBT+minDwell, EIBT+dwell]에 클램프한 EOBT → ETOT 초안 = EOBT + DEP_TAXI(라인업) + DEP_ROT.
-     * 활주로 SEP 후보 etotRunwayCandidateMin(이미 간격 반영된 ETOT)이 있으면 ETOT = max(후보, 초안).
-     * depTaxiDelayMin = ETOT − ETOT초안 ≥ 0 (SEP·물리 하한으로 벌어진 분만).
-     */
+    
     function applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotRunwayCandidateMin) {{
       if (!f) return;
       const eibt = eibtMin != null && isFinite(eibtMin) ? eibtMin : 0;
@@ -6345,8 +6147,6 @@ def _build_designer_html() -> str:
       f.depTaxiDelayMin = Math.max(0, etot - etotDraft);
     }}
 
-    // By runway SLDT(d)The earliest arrival flight is ELDT = SLDT(d).
-    // renderFlightList: SLDT=SIBT−VTT(Arr)−ROT(min); EIBT=ELDT+ROT+VTT+vttADelay (symmetric).
     function pinEarliestEldtToSldtPerRunway(flights) {{
       if (!Array.isArray(flights)) return;
       const byRwy = {{}};
@@ -6371,7 +6171,6 @@ def _build_designer_html() -> str:
       }});
     }}
 
-    // One computeRunwayExitDistances() per user action when wrapped in begin/end (e.g. Global Update).
     var __schedRetStatsBatchActive = false;
     var __schedRetStatsCached = null;
     function beginScheduleRetStatsBatch() {{
@@ -6397,7 +6196,6 @@ def _build_designer_html() -> str:
       flights.forEach(function(f) {{ ensureFlightPaths(f); }});
     }}
 
-    // Warm paths + RET/ROT sampling (single place; uses batched runway-exit stats when active).
     function warmPathsEnsureArrRetRot(flights, forceResampleRet) {{
       warmFlightPathsForSchedule(flights);
       return (typeof ensureArrRetRotSampled === 'function')
@@ -6434,7 +6232,6 @@ def _build_designer_html() -> str:
         return true;
       }});
     }}
-    // RET + ROT(arrRotSec) for one flight; skipped if f.__schedRetRotRev matches vttArrCacheRev unless forceResample.
     function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {{
       if (!f) return;
       const rev = state.vttArrCacheRev | 0;
@@ -6518,7 +6315,6 @@ def _build_designer_html() -> str:
       }}
       f.__schedRetRotRev = rev;
     }}
-    // RET selection + ROT(arrRotSec). Caller must have warmed paths. Uses getScheduleRetStatsAll(); same cache rev as VTT(Arr).
     function ensureArrRetRotSampled(flights, forceResampleRet) {{
       if (!Array.isArray(flights) || !flights.length) return [];
       const configByType = {{}};
@@ -6760,16 +6556,8 @@ def _build_designer_html() -> str:
       }}
       _renderFlightConfigTable(cfgEl, flightsSorted);
       if (!skipGanttRefresh && typeof renderFlightGantt === 'function') renderFlightGantt({{ skipPathPrep: true }});
-      if (DOM_DIAGNOSTIC_LOG) {{
-        requestAnimationFrame(function() {{
-          try {{
-            console.log('[layout-designer] DOM node count:', document.getElementsByTagName('*').length);
-          }} catch (e) {{}}
-        }});
-      }}
     }}
     function _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl) {{
-      // Bump rev first so RET/ROT + VTT share the same generation (matches Global Update flow).
       if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
       let retStatsAll = [];
       if (schedFull) {{
@@ -6786,9 +6574,6 @@ def _build_designer_html() -> str:
       _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, null);
     }}
 
-    // ---- Flight schedule list ----
-    // scheduleOpts: {{ scheduleMode:'incremental', dirtyFlightIds, touchedStandIds }}
-    // onDone: optional; Global Update passes this to yield the main thread between ensureFlightPaths chunks (schedFull only, length ≥ FLIGHT_LIST_ASYNC_PATH_MIN).
     function renderFlightList(skipAutoAllocate, forceResampleRet, scheduleOpts, onDone) {{
       const listEl = document.getElementById('flightList');
       const cfgEl = document.getElementById('flightConfigList');
@@ -6824,7 +6609,6 @@ def _build_designer_html() -> str:
         if (dirtySet.size === 0 && standSet.size === 0) schedFull = true;
       }}
       if (forceResampleRet) schedFull = true;
-      // Alignment uses display copies only. state.flights Maintain the order Allocation bar chart/Ensure that the parking lot layout does not change when route is updated.
       const flightsSorted = state.flights.slice();
       flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
       function runTail() {{
@@ -7186,7 +6970,6 @@ def _build_designer_html() -> str:
       }});
     }}
 
-    // GANTT_COLORS: from the top INFORMATION.tiers.style.gantt defined as
 
     function _ganttSaveViewState(ganttEl) {{
       let scrollLeft = 0, scrollTop = 0;
@@ -7214,8 +6997,6 @@ def _build_designer_html() -> str:
       return {{ scrollLeft: scrollLeft, scrollTop: scrollTop, collapsedTerminals: collapsedTerminals, remoteCollapsed: remoteCollapsed }};
     }}
 
-    // Allocation Gantt (length: Apron/Stand, horizontal: time)
-    // opt.skipPathPrep: when true, skip ensureFlightPaths / RET sample / schedule prep (caller already did it, e.g. end of renderFlightList).
     function renderFlightGantt(opt) {{
       const skipPathPrep = opt && opt.skipPathPrep;
       const ganttEl = document.getElementById('allocationGantt');
@@ -7238,8 +7019,6 @@ def _build_designer_html() -> str:
       if (!skipPathPrep) {{
         flights.forEach(function(f) {{ ensureFlightPaths(f); }});
         if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(flights, false);
-        // S(d)/E The series is Flight Schedule The values ​​shown in the table **directly** Read and use.
-        // (Only if the table does not exist or is not rendered state.flights using value fallback)
         if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
         if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
       }}
@@ -7256,11 +7035,6 @@ def _build_designer_html() -> str:
           if (!f) return;
           const tds = Array.from(row.querySelectorAll('td'));
           if (tds.length < 15) return;
-          // Flight Schedule column index:
-          // 0 Reg, 1 Airline, 2 FlightNo,
-          // 3 SLDT, 4 SIBT, 5 SOBT, 6 STOT,
-          // 7 SLDT(d), 8 SIBT(d), 9 SOBT(d), 10 STOT(d),
-          // 11 ELDT, 12 EIBT, 13 EOBT, 14 ETOT, ...
           const getMin = (idx) => {{
             const txt = (tds[idx] && tds[idx].textContent || '').trim();
             if (!txt) return 0;
@@ -7289,7 +7063,6 @@ def _build_designer_html() -> str:
         }});
       }}
       if (!intervals.length) {{
-        // If the table cannot be found or parsing fails, the existing state with based logic fallback
         intervals = flights.map(f => {{
           const t0 = f.sibtMin_d != null ? f.sibtMin_d : (f.timeMin != null ? f.timeMin : 0);
           const t1 = f.sobtMin_d != null ? f.sobtMin_d : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
@@ -7306,7 +7079,6 @@ def _build_designer_html() -> str:
         }});
       }}
 
-      // common time base: Flight Scheduleof min(SLDT) - pad, max(ETOT) + pad (algorithm.timeAxis)
       let minS = Infinity;
       let maxE = -Infinity;
       intervals.forEach(it => {{
@@ -7314,7 +7086,6 @@ def _build_designer_html() -> str:
         const etot0 = (it.f && it.f.etotMin != null) ? it.f.etotMin : it.stot;
         if (etot0 > maxE) maxE = etot0;
       }});
-      // 빈 칸/파싱 실패로 sldt==0 만 섞이면 축이 00:00부터 과대하게 잡힘 → 실제 양수 SLDT만 있으면 그 최소로 보정
       if (minS <= 0 && intervals.length) {{
         const posSldt = intervals.map(function(it) {{ return it.sldt; }}).filter(function(v) {{ return isFinite(v) && v > 1e-6; }});
         if (posSldt.length) minS = Math.min.apply(null, posSldt);
@@ -7323,10 +7094,8 @@ def _build_designer_html() -> str:
         ganttEl.innerHTML = '';
         return;
       }}
-      // default full range (zoomThe minimum reduction limit of)
       const baseMinT = Math.max(0, minS - GANTT_PAD_MIN);
       const baseMaxT0 = maxE + GANTT_PAD_MIN;
-      // The maximum range is baseMinT 24 hours standard(1440minute)Defensively limited to
       const baseMaxT = Math.min(
         (baseMaxT0 <= baseMinT) ? (baseMinT + 60) : baseMaxT0,
         baseMinT + 1440
@@ -7337,7 +7106,6 @@ def _build_designer_html() -> str:
       const minT = baseMinT;
       const maxT = baseMaxT;
 
-      // Allocation/bar chart/The apron layout is updated only when explicitly changed by the user. No automatic reassignment when updating routes such as taxiways
 
       const tickPositions = buildTimeAxisTicks(minT, maxT, baseMinT, baseSpan, zoom);
 
@@ -7370,15 +7138,11 @@ def _build_designer_html() -> str:
         const showSPointsEl = document.getElementById('chkShowSPoints');
         const showSPoints = !showSPointsEl || showSPointsEl.checked;
         const showSBarsEl = document.getElementById('chkShowSBars');
-        // S‑Bar check: default SIBT‑SOBT Bars are opaque, uncheck: Apply transparency to the default bar.
         const dimSBars = !!(showSBarsEl && !showSBarsEl.checked);
         const showEBarEl = document.getElementById('chkShowEBar');
         const showEBar = !showEBarEl || showEBarEl.checked;
         const showEPointsEl = document.getElementById('chkShowEPoints');
         const showEPoints = !showEPointsEl || showEPointsEl.checked;
-        // S‑Point: S Series auxiliary bar + dot + Full vertical control
-        // E‑Bar : EIBT/EOBT thick auxiliary bar
-        // E‑Point: ELDT/ETOT dot + triangle + ELDT/EIBT·EOBT/ETOT auxiliary bar
         const showAuxBars = showSPoints;
         const showEibtBars = showEBar;
         const showEldtBars = showEPoints;
@@ -7390,7 +7154,6 @@ def _build_designer_html() -> str:
           const sid = (f.standId || null);
           return (standId == null) ? !sid : sid === standId;
         }});
-        // identification Apron/Stand There are overlapping sections within Flightcast conflictdisplayed as
         const conflictMap = {{}};
         for (let i = 0; i < rowFlights.length; i++) {{
           for (let j = i + 1; j < rowFlights.length; j++) {{
@@ -7457,41 +7220,31 @@ def _build_designer_html() -> str:
           const hasOverlap = (f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed;
           const ovlpBadgeHtml = hasOverlap ? '<span class="alloc-flight-ovlp-badge">OVLP</span>' : '';
           if (showEldtBars && e2Bars) {{
-            // ELDT~EIBT (pre-block, Center aligned thin hot pink bar)
             if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) pushAllocSpan(e2Bars, eldt, eibt, 'alloc-e2-bar', 0.5);
-            // EOBT~ETOT (post-block, Center aligned thin hot pink bar)
             if (isFinite(eobt) && isFinite(etot) && etot >= eobt) pushAllocSpan(e2Bars, eobt, etot, 'alloc-e2-bar', 0.5);
           }}
           if (showAuxBars && sBars) {{
-            // SLDT~SIBT (pre-block) auxiliary bar
             if (isFinite(sldt) && sldt <= t0) pushAllocSpan(sBars, sldt, t0, 'alloc-s-bar', 0.5);
-            // SOBT~STOT (post-block) Auxiliary bar: Attached to the top of the main bar
             if (isFinite(stot) && stot >= t1) pushAllocSpan(sBars, t1, stot, 'alloc-s-bar', 0.5);
           }}
           if (showSDots && sDots) {{
-            // S-Point: auxiliary bar(sBars)same as S(d) series time(SLDT(d)/STOT(d))Show only circles
             pushAllocDot(sDots, sldt, 'alloc-time-dot-s');
             pushAllocDot(sDots, stot, 'alloc-time-dot-s');
           }}
           if (showSdDots && sdDots) {{
-            // S(d) The series is also represented by the same blue dot.
             pushAllocDot(sdDots, sldt, 'alloc-time-dot-sd');
             pushAllocDot(sdDots, stot, 'alloc-time-dot-sd');
           }}
           if (showEDots && eDots) {{
-            // E-Point: ELDT/ETOT dot + triangle (pink)
             pushAllocDot(eDots, eldt, 'alloc-time-dot-e');
             pushAllocDot(eDots, etot, 'alloc-time-dot-e');
             pushAllocTriangle(eTrisDown, eldt, 'alloc-e-tri alloc-e-tri-down');
             pushAllocTriangle(eTrisUp, etot, 'alloc-e-tri alloc-e-tri-up');
           }}
-        // S-Point: SLDT/STOTunder Edo/Add top triangle (E-PointSame design and color as GANTT_COLORS.S_BAR)
           if (showSPoints) {{
             pushAllocTriangle(sTrisDown, sldt, 'alloc-s-tri alloc-s-tri-down');
             pushAllocTriangle(sTrisUp, stot, 'alloc-s-tri alloc-s-tri-up');
           }}
-        // The black vertical dotted line is SOBT(orig)It is placed in,
-        // "OVERLAP"Although it is an aircraft SOBT(orig) ≠ SOBT(d) Show only if
         if (sLines && ((f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed) && isFinite(sobtOrig)) {{
           const sobtD = (f.sobtMin_d != null ? f.sobtMin_d : t1);
           if (!isNaN(sobtD) && Math.abs(sobtOrig - sobtD) > 1e-6) {{
@@ -7509,7 +7262,6 @@ def _build_designer_html() -> str:
             '</div>';
         }}).join('');
         const sidAttr = standId ? String(standId) : '';
-        // time axis and time axis "between"Place background text in the center of
         const bgSlots = (tickPositions.length > 1)
           ? tickPositions.slice(0, -1).map((tp, idx) => {{
               const next = tickPositions[idx + 1];
@@ -7545,7 +7297,6 @@ def _build_designer_html() -> str:
           '</div>';
         return {{ labelHtml, trackHtml }};
       }}
-      // Unassigned Above: All flights SLDT/STOT·ELDT/ETOT Only dots (S/E Same class as point·Coordinate formula, existing row logic unchanged)
       function buildRunwayLegendPair() {{
         const sDotsHtml = [];
         const eDotsHtml = [];
@@ -7582,13 +7333,11 @@ def _build_designer_html() -> str:
         labelRows.push(rw.eLabelHtml);
         trackRows.push(rw.eTrackHtml);
       }})();
-      // Unassigned line
       (function() {{
         const row = buildRowHtml('Unassigned', null);
         labelRows.push(row.labelHtml);
         trackRows.push(row.trackHtml);
       }})();
-      // By terminal Stand grouping
       const terminalCopies = makeUniqueNamedCopy(state.terminals || [], 'name');
       const termLabelById = {{}};
       terminalCopies.forEach(t => {{ termLabelById[t.id] = (t.name || '').trim() || 'Building'; }});
@@ -7625,39 +7374,32 @@ def _build_designer_html() -> str:
         const headerLabel = term
           ? (termLabelById[term.id] || term.name || 'Building')
           : 'No Building';
-        // Terminal header: Add one row each to the left label column and right timeline column.
         labelRows.push(
           '<div class="alloc-terminal-header" data-collapsed="0">' +
             '<span class="alloc-section-toggle-icon">▼</span>' +
             escapeHtml(headerLabel) +
           '</div>'
         );
-        // For right header dummy Track terminal label height(24px)Set the row height to be the same..
         trackRows.push('<div class="alloc-row" data-stand-id="">' +
           '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:24px;"></div>' +
         '</div>');
-        // Each apron row: Contact / RemoteDisplay separately (The terminal name is in the header)
         const contactStands = [];
         const remoteStandsInTerm = [];
         group.stands.forEach(s => {{
           if (remoteIdSet.has(s.id)) remoteStandsInTerm.push(s);
           else contactStands.push(s);
         }});
-        // Contact stands first
         contactStands.forEach(s => {{
           const label = (s.name || '') + ' (' + (s.category || '') + ')';
           const row = buildRowHtml(label, s.id);
           labelRows.push(row.labelHtml);
           trackRows.push(row.trackHtml);
         }});
-        // Remote standsgathers them into a global array, Terminal Show only once after
         if (remoteStandsInTerm.length) {{
           remoteStandsInTerm.forEach(s => allRemoteStands.push(s));
         }}
       }});
-      // every Terminal behind, at the bottom Remote stand Add a dedicated section
       if (allRemoteStands.length) {{
-        // left·Right same: Remote stomach 8px interval(nine margin-top)Separated by spacer rows to maintain row index 1:1
         labelRows.push('<div class="alloc-gantt-section-spacer" aria-hidden="true"></div>');
         trackRows.push(
           '<div class="alloc-row" data-stand-id="">' +
@@ -7682,7 +7424,6 @@ def _build_designer_html() -> str:
           trackRows.push(row.trackHtml);
         }});
       }}
-      // Time axis overlay at bottom (Display only time labels at the same location as the vertical grid lines)
       const axisTicks = tickPositions.map(tp =>
         '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
           '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
@@ -7693,14 +7434,12 @@ def _build_designer_html() -> str:
           '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
         '</div>';
 
-      // The left label row also has the same height to match the bottom time axis. spaceradd
       labelRows.push('<div class="alloc-label-axis-spacer"></div>');
 
       const labelColHtml =
         '<div class="alloc-gantt-label-col">' +
           labelRows.join('') +
         '</div>';
-      // zoom As much as the magnification inner Increase the width to the scrolled section .alloc-row-track hit areaAllow to expand (drop zone = full timeline)
       const innerMinWidthPct = Math.max(100, Math.round(zoom * 100));
       const gridOverlayHtml =
         '<div class="alloc-gantt-grid-overlay">' +
@@ -7725,17 +7464,14 @@ def _build_designer_html() -> str:
       ganttEl.innerHTML = rootHtml;
       const newScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
       const newLabelCol = ganttEl.querySelector('.alloc-gantt-label-col');
-      // DOM Horizontal after reconstruction/Restore vertical scroll position
       if (newScrollCol) {{
         if (prevScrollLeft > 0) newScrollCol.scrollLeft = prevScrollLeft;
         if (prevScrollTop > 0) newScrollCol.scrollTop = prevScrollTop;
       }}
-      // Left label column ↔ Synchronize vertical scrolling of right timeline column (Make the horizontal scrollbar always visible at the bottom of the viewport)
       if (newScrollCol && newLabelCol) {{
         newScrollCol.addEventListener('scroll', function() {{ newLabelCol.scrollTop = newScrollCol.scrollTop; }});
         newLabelCol.addEventListener('scroll', function() {{ newScrollCol.scrollTop = newLabelCol.scrollTop; }});
       }}
-      // Terminal / Remote Collapse section/Expand
       if (newScrollCol && newLabelCol) {{
         const labelChildren = Array.from(newLabelCol.children);
         const innerEl = newScrollCol.querySelector('.alloc-gantt-inner');
@@ -7778,7 +7514,6 @@ def _build_designer_html() -> str:
           }}
         }});
       }}
-      // Ctrl + Supports horizontal scrolling with wheel (Apron chart only)
       if (newScrollCol && !newScrollCol._allocWheelBound) {{
         newScrollCol._allocWheelBound = true;
         newScrollCol.addEventListener('wheel', function(ev) {{
@@ -7810,7 +7545,6 @@ def _build_designer_html() -> str:
 
     function _ganttWireInteractions(ganttEl, st) {{
       const newScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
-      // Ctrl+wheel horizontal scroll
       if (newScrollCol && !newScrollCol._allocWheelBound) {{
         newScrollCol._allocWheelBound = true;
         newScrollCol.addEventListener('wheel', function(ev) {{
@@ -7819,7 +7553,6 @@ def _build_designer_html() -> str:
           newScrollCol.scrollLeft += (ev.deltaY || ev.deltaX || 0);
         }}, {{ passive: false }});
       }}
-      // Dragover / drop at container level
       if (!ganttEl._allocDropBound) {{
         ganttEl._allocDropBound = true;
         ganttEl.addEventListener('dragover', function(ev) {{
@@ -7868,7 +7601,6 @@ def _build_designer_html() -> str:
           assignStandToFlight(f, track.getAttribute('data-stand-id') || null);
         }}, true);
       }}
-      // Shift+wheel zoom
       if (!ganttEl._allocZoomBound) {{
         ganttEl._allocZoomBound = true;
         ganttEl.addEventListener('wheel', function(e) {{
@@ -7881,7 +7613,6 @@ def _build_designer_html() -> str:
           if (typeof renderFlightGantt === 'function') renderFlightGantt({{ skipPathPrep: true }});
         }}, {{ passive: false }});
       }}
-      // Per-flight bar: dragstart + click
       ganttEl.querySelectorAll('.alloc-flight').forEach(function(el) {{
         el.addEventListener('dragstart', function(ev) {{
           ev.dataTransfer.setData('text/plain', this.getAttribute('data-flight-id') || '');
@@ -7927,7 +7658,6 @@ def _build_designer_html() -> str:
           if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
         }});
       }});
-      // Per-track: dragover + drop
       ganttEl.querySelectorAll('.alloc-row-track').forEach(function(track) {{
         track.addEventListener('dragover', function(ev) {{
           if (this.getAttribute('data-runway-legend') === '1') return;
@@ -7953,7 +7683,6 @@ def _build_designer_html() -> str:
       if (!state.taxiways || !state.taxiways.length) msgs.push('TaxiwayThere is no.');
       const stands = (state.pbbStands || []).concat(state.remoteStands || []);
       const linked = state.apronLinks || [];
-      // at least one Stand(PBB/Remote)actually exists Taxiwayand Apron Taxiway Must be connected by link.
       const hasApronLink = stands.some(pbb =>
         linked.some(lk =>
           lk.pbbId === pbb.id &&
@@ -7962,7 +7691,6 @@ def _build_designer_html() -> str:
         )
       );
       if (!stands.length || !hasApronLink) msgs.push('Apron(PBB)class TaxiwayAt least one link is required to connect.');
-      // Remote standAvailable terminal constraints and Flight Scheduleof Terminal Check for conflicting settings
       const termsForLabel = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {{ return {{
         id: t.id,
         name: (t.name || '').trim() || 'Building'
@@ -7976,11 +7704,9 @@ def _build_designer_html() -> str:
         if (!f || !f.standId) return;
         const stand = allStands.find(function(s) {{ return s.id === f.standId; }});
         if (!stand) return;
-        // Remote standOnly terminal access restrictions apply
         const isRemote = (state.remoteStands || []).some(function(r) {{ return r.id === stand.id; }});
         if (!isRemote) return;
         const termId = (f.token && f.token.terminalId) || null;
-        // Flight Scheduleat TerminalOnly when this specific value (Random This side termId There is no)
         if (!termId) return;
         const allowed = Array.isArray(stand.allowedTerminals) ? stand.allowedTerminals : [];
         if (allowed.length && !allowed.includes(termId)) {{
@@ -8000,7 +7726,6 @@ def _build_designer_html() -> str:
       el.textContent = Array.isArray(msgs) ? msgs.join(' / ') : (msgs || '');
     }}
 
-    // ---- Layout Design minimum path: Node/Edge Graph, reverse cost 1,000,000 ----
     const REVERSE_COST = (function() {{
       const v = Number((PATH_SEARCH_CFG || {{}}).reverseCost);
       return (isFinite(v) && v > 0) ? v : 1000000;
@@ -8017,7 +7742,6 @@ def _build_designer_html() -> str:
       return mu + sigma * z;
     }}
 
-    // same grid(Same cell, half grid unit)Always with the same node: key based on cell coordinates
     function pathPointKey(p) {{
       const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
       const cellCol = Math.round(p[0] / cs * 2) / 2;
@@ -8087,7 +7811,7 @@ def _build_designer_html() -> str:
       const hh = ((Math.floor(total / 60) % 24) + 24) % 24;
       return String(hh).padStart(2, '0') + ':00';
     }}
-    /** 15분 앵커 라벨 HH:MM (롤링 윈도우 시작 시각). */
+    
     function kpiFormatClockBucket15(minute) {{
       const n = kpiToNumber(minute);
       if (n == null) return '—';
@@ -8612,8 +8336,6 @@ def _build_designer_html() -> str:
       kpiMountInteractiveCharts(snapshot.buckets || []);
     }}
 
-    // S(d) Series: First S(d)=S(Original), Takes precedence when the same parking lot overlaps SOBT(d)-trailing SIBT(d) trailing as much as S(d) push. SLDT(d)=SLDT, SOBT(d)to Min Dwell reflect.
-    // Original S The series is not referenced anywhere after being copied in this function. All calculations are S(d)use only.
     function computeScheduledDisplayTimes(flights) {{
       if (!flights || !flights.length) return;
       flights.forEach(f => {{
@@ -8627,15 +8349,12 @@ def _build_designer_html() -> str:
         if (minDwell > dwell) minDwell = dwell;
         f.dwellMin = dwell;
         f.minDwellMin = minDwell;
-        // VTT(Arr)Is Flight ScheduleReuse the same calculated value as the definition used in
         let vttArrMin = getBaseVttArrMinutes(f);
         const rotArrMin = getArrRotMinutes(f);
         const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
         const sldtOrig = Math.max(0, tArrMin - vttArrMin - rotArrMin);
         const sobtOrig = tArrMin + dwell;
         const stotOrig = sobtOrig + depBlockOutMin;
-        // SLDT/SIBT/SOBT/STOT(orig)is always updated with the internal calculated value.,
-        // SLDT(d)Is SLDT(orig)Copy and use as is (JSON Ignore the initial value)
         f.sldtMin_orig = sldtOrig;
         f.sibtMin_orig = tArrMin;
         f.sobtMin_orig = sobtOrig;
@@ -8661,10 +8380,7 @@ def _build_designer_html() -> str:
           const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
           const overlap = Math.max(0, prevSOBT - sibt0);
           f.vttADelayMin = overlap;
-          // OVLP after reflection SIBT(d)
           f.sibtMin_d = sibt0 + overlap;
-          // existing SOBT(d) candidate (yes: separation Value pushed out of logic)If you have it, keep it,
-          // Min dwell Minimum required as standard SOBT(d)Use a larger value compared to
           const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
           const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
           const minSobtByDwell = f.sibtMin_d + minDwell;
@@ -8674,8 +8390,6 @@ def _build_designer_html() -> str:
           prevSOBT = f.sobtMin_d;
         }});
       }});
-      // OVLP For all stand assigned flights, regardless of whether
-      // Min dwell By enforcing the constraint once more, regular flights are corrected to follow the same rules.
       flights.forEach(f => {{
         if (!f || f.noWayArr || f.noWayDep || !f.standId) return;
         const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
@@ -8698,7 +8412,6 @@ def _build_designer_html() -> str:
       }});
     }}
 
-    // Incremental S(d): per-flight base times for dirty ∪ flights on touched stands, then OVLP chain only on those stands. SEP/E unchanged until full Update.
     function computeScheduledDisplayTimesIncremental(allFlights, dirtyFlightIds, touchedStandIds) {{
       if (!allFlights || !allFlights.length) return;
       const dirty = (dirtyFlightIds instanceof Set) ? dirtyFlightIds : new Set(dirtyFlightIds || []);
@@ -8896,7 +8609,6 @@ def _build_designer_html() -> str:
       }}
     }}
 
-    // Tab switch / timeline preview: S(d)-based events only — no rsepApplySeparationToEvents, no flight E-time rewrite. Uses existing eldtMin/etotMin on flights when set (e.g. after Update).
     function buildRunwaySeparationTimelineByRunwaySnapshot(flights) {{
       const snapGen = state.rwySepSnapshotStaleGen | 0;
       if (state.__rwySepSnapCacheGen === snapGen && state.__rwySepSnapCache) return state.__rwySepSnapCache;
@@ -8966,18 +8678,12 @@ def _build_designer_html() -> str:
       return byRunway;
     }}
 
-    // Runway separation: SLDT(Arr)·STOT(Dep) Single timeline sorted chronologically, same time at the top(List order)See it as a good deed
-    // preceding Eline + Trailing by separation criteria ESeries calculation (dominoes). Arr→ELDT, Dep→ETOT. All standards are S(d) Use series.
-    // Returns: Runway IDnot really events/minT/maxTA map containing (For visualization)
     function computeSeparationAdjustedTimes() {{
       const flights = state.flights || [];
-      // E line(ELDT/ETOT) When recalculating, the already calculated S(d) Use the series as is.
-      // SOBT(d)·STOT(d) Coordination logic is the first S(d) calculation function(computeScheduledDisplayTimes)Perform only in.
       flights.forEach(f => {{ delete f.eldtMin; delete f.etotMin; }});
       const runwaysRaw = (state.taxiways || []).filter(t => t.pathType === 'runway');
       if (!runwaysRaw.length) return {{}};
 
-      // on the same aircraft Arr the runway Dep Sort the runway order so that it is processed before the runway
       const runways = (function() {{
         const idToIndex = {{}};
         runwaysRaw.forEach((r, i) => {{ if (r && r.id != null) idToIndex[r.id] = i; }});
@@ -9006,14 +8712,12 @@ def _build_designer_html() -> str:
             if (indeg[j] === 0) q.push(j);
           }});
         }}
-        // If all nodes cannot be visited due to rotation, etc., the original order is used.
         if (orderIdx.length !== n) return runwaysRaw;
         return orderIdx.map(i => runwaysRaw[i]);
       }})();
 
       const byRunway = {{}};
       runSeparationPass(runways, flights, byRunway, 'initial');
-      // Eline Apron Overlap: 1st RW result EBy parking lot EIBT After aligning the criteria, if they overlap, push them back, and then RWto final E confirmed
       flights.forEach(f => {{
         if (f.noWayArr || f.noWayDep) return;
         const vttArrMin = getBaseVttArrMinutes(f);
@@ -9046,7 +8750,6 @@ def _build_designer_html() -> str:
           const runwayEtotCand = f.etotMin != null ? f.etotMin : ((f.eobtMin != null ? f.eobtMin : f.eibtMin) + depBlockOutMin);
           applyForwardEobtEtotAndDepTaxiDelay(f, f.eibtMin, runwayEtotCand);
           f.eldtMin = f.eibtMin - rotArrMin - vttArrMin - vttADelay;
-          // ELDTis physically SLDT(d)Hard clamp to prevent it from getting ahead of you
           const sldtBase = (f.sldtMin_d != null ? f.sldtMin_d
                            : (f.sldtMin_orig != null ? f.sldtMin_orig : 0));
           if (f.eldtMin < sldtBase) {{
@@ -9057,9 +8760,7 @@ def _build_designer_html() -> str:
           prevEOBT = f.eobtMin;
         }});
       }});
-      // 2car RW: back EUse the series as the event time and perform the same as the original logic one more time.
       runSeparationPass(runways, flights, byRunway, 'refine');
-      // SLDT(d)is the smallest(early) Flights are always ELDT = SLDT(d). Applies to only one arrival per runway.
       runways.forEach(rwy => {{
         const data = byRunway[rwy.id];
         if (!data || !data.events) return;
@@ -9144,7 +8845,7 @@ def _build_designer_html() -> str:
       v = ac && typeof ac.touchdown_speed_avg_ms === 'number' ? ac.touchdown_speed_avg_ms : 70;
       return Math.max(1, v);
     }}
-    /** 활주로 연장상 (ux,uy): 착륙 방향. anchor는 distAlong 지점, base(s)=anchor-s*(ux,uy) 는 중심선상 해당점에서 바깥 s. */
+    
     function getRunwayInboundUxyAtDistance(runwayId, rwDir, distAlong) {{
       const r = getRunwayPath(runwayId);
       const anchor = getRunwayPointAtDistance(runwayId, distAlong);
@@ -9164,13 +8865,7 @@ def _build_designer_html() -> str:
       if (rwDir === 'counter_clockwise') {{ ux = -ux; uy = -uy; }}
       return {{ td: anchor, ux, uy }};
     }}
-    function getRunwayTouchdownInboundUxy(runwayId, rwDir, touchdownDistAlong) {{
-      return getRunwayInboundUxyAtDistance(runwayId, rwDir, touchdownDistAlong);
-    }}
-    /**
-     * 접근 경로: 바깥(총 approachOffsetM)에서 안쪽까지 지그재그(긴 변=legM 측방, 진행=stepM) 후 straightFinalM 직선으로 anchorDistAlong 지점.
-     * 궤적 순서: 최외곡 → … → 직선 시작(s=straightFinal) → anchor. (타임라인은 anchor=터치다운, 2D 프리뷰는 anchor=활주로 시작 임계)
-     */
+    
     function buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDistAlong, totalM, straightFinalM, legM, stepM) {{
       const ax = getRunwayInboundUxyAtDistance(runwayId, rwDir, anchorDistAlong);
       if (!ax) return null;
@@ -9218,7 +8913,7 @@ def _build_designer_html() -> str:
       for (let i = 0; i < out.length - 1; i++) pathLen += pathDist(out[i], out[i + 1]);
       return {{ pts: out, pathLen }};
     }}
-    /** 지그재그 접근 끝점: Runway Start(임계) 연장 거리(m). tdDistAlong은 어느 쪽 임계인지 판별용. */
+    
     function arrivalApproachAnchorDistM(runwayId, tdDistAlong) {{
       let anchorDist = runwayApproachThresholdDistAlongM(runwayId, tdDistAlong);
       if (!(typeof anchorDist === 'number' && isFinite(anchorDist) && anchorDist >= 0)) anchorDist = tdDistAlong;
@@ -9247,7 +8942,7 @@ def _build_designer_html() -> str:
       if (rsPt && tdPt) straightLen += pathDist(rsPt, tdPt);
       return straightLen / vTd;
     }}
-    /** Schedule-only airside window (sec): lazy timeline build uses this for Current active filter. Matches buildFullAirsideTimelineForFlight time bounds. */
+    
     function getFlightAirsideWindowSec(f) {{
       if (!f) return null;
       if (f.noWayArr && f.noWayDep) return null;
@@ -9273,7 +8968,7 @@ def _build_designer_html() -> str:
       if (!isFinite(t0) || !isFinite(etotS)) return null;
       return {{ t0: t0, t1: etotS }};
     }}
-    /** 슬라이더 스냅으로 t < 접근시각이 될 수 있어, 그 구간에서도 타임라인 생성·첫 자세 표시에 사용 */
+    
     function simAirsideLazyPadSec() {{
       return Math.max(90, SIM_TIME_SLIDER_SNAP_SEC + 45);
     }}
@@ -9652,7 +9347,7 @@ def _build_designer_html() -> str:
         vRetResolved, carryAfterRunway: {{ lastTaxiwayMs: carryRw.lastTaxiwayMs }},
       }};
     }}
-    /** Arr_ROT(arrRotSec): 착륙(ELDT)~고속탈출유도로 끝 — 이 구간만 [tStart,tEnd]에 스케일(이전에는 ELDT+ROT까지 터치다운에서 정지 후 한꺼번에 이동). */
+    
     function buildRunwayAndRetTimelineInWindow(f, runwayId, taxiInPts, tStart, tEnd) {{
       const parts = splitTaxiInPartsForTimeline(f, runwayId, taxiInPts);
       const vTaxiBase = parts.vTaxiBase;
@@ -9797,7 +9492,7 @@ def _build_designer_html() -> str:
       tl[tl.length - 1].t = tEnd;
       return tl;
     }}
-    /** 전체 출발 폴리라인을 스탠드→라인업 접두와 활주로 꼬리로 분리 (graphPathDeparture tail 접합과 동일 tol). */
+    
     function splitDeparturePathLineupAndRunwayTail(f) {{
       const depFull = getPathForFlightDeparture(f);
       const depToLineup = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, {{ onlyToLineup: true }}) : null;
@@ -9880,10 +9575,7 @@ def _build_designer_html() -> str:
       state.__lineupQueueRankFp = fp;
       assignLineupQueueRanksAll(flights);
     }}
-    /**
-     * EOBT→(DEP_TAXI_TIME)→라인업 대기(DEP_TAXI_DELAY)→활주로 이륙→ETOT.
-     * 반환: {{ timeline, meta }} 또는 null.
-     */
+    
     function buildDepartureSurfaceTimelineSegments(f, eobtS, etotS) {{
       const eps = 1e-3;
       const split = splitDeparturePathLineupAndRunwayTail(f);
@@ -10113,7 +9805,7 @@ def _build_designer_html() -> str:
       clearAllFlightTimelines();
     }}
 
-    /** Runway departure lineup: JSON/When panel is not set 0(starting point). */
+    
     function getEffectiveRunwayLineupDistM(tw) {{
       if (!tw || tw.pathType !== 'runway') return 0;
       const v = tw.lineupDistM;
@@ -10152,7 +9844,7 @@ def _build_designer_html() -> str:
       return s;
     }}
 
-    /** 접근 쪽 활주로 시작(이륙 방향 기준 시작단 또는 착륙 방향 반대 끝단) 임계까지의 연장 거리(m). 프리뷰·타임라인 지그재그 앵커 공통. */
+    
     function runwayApproachThresholdDistAlongM(runwayId, tdDistAlong) {{
       const path = getRunwayPath(runwayId);
       if (!path || !path.pts || path.pts.length < 2) return 0;
@@ -10401,7 +10093,7 @@ def _build_designer_html() -> str:
       ctx.restore();
     }}
 
-    /** On the runway centerline distPx Row of pixel coordinates from point to end (starting point dist branch included). */
+    
     function polylineTailFromDistancePx(pts, distPx) {{
       if (!pts || pts.length < 2) return [];
       const total = runwayPolylineLengthPx(pts);
@@ -10489,7 +10181,6 @@ def _build_designer_html() -> str:
       t = Math.max(0, Math.min(1, t));
       return {{ t, p: [ax+t*dx, ay+t*dy] }};
     }}
-    // segment (a,b)and (c,d)intersection. Returns only when actual intersection occurs (0<=t,s<=1).
     function segmentSegmentIntersection(a, b, c, d) {{
       const ax = a[0], ay = a[1], bx = b[0], by = b[1];
       const cx = c[0], cy = c[1], dx = d[0], dy = d[1];
@@ -10501,7 +10192,6 @@ def _build_designer_html() -> str:
       if (t < 0 || t > 1 || s < 0 || s > 1) return null;
       return {{ p: [ax + t * rx, ay + t * ry] }};
     }}
-    // When two segments are collinear and overlap (Runway taxiway drawn along runway centerline without a vertex on the crossing), segmentSegmentIntersection returns null. Returns overlap of cd onto ab as t in [0,1] along a→b.
     function collinearSegmentOverlapOnAB(a, b, c, d) {{
       const ax = a[0], ay = a[1], bx = b[0], by = b[1];
       const dx = bx - ax, dy = by - ay;
@@ -10559,7 +10249,7 @@ def _build_designer_html() -> str:
       }}
       return false;
     }}
-    /** Line up 뱃지: 활주로와 접촉한 Runway Taxiway 중심선과 lineup 점이 허용 거리 이내면 true. */
+    
     function isLineupPointTouchingRunwayTaxiwayOnRunway(runwayTw, lineupPt) {{
       if (!runwayTw || runwayTw.pathType !== 'runway' || !lineupPt) return false;
       const rwPts = getOrderedPoints(runwayTw);
@@ -10638,7 +10328,6 @@ def _build_designer_html() -> str:
       return out;
     }}
 
-    // Runwaynot very connected Runway Taxiway(RET)of thresholddistance from(m)calculate
     function computeRunwayExitDistances() {{
       const taxiways = state.taxiways || [];
       const runways = taxiways.filter(t => t.pathType === 'runway' && Array.isArray(t.vertices) && t.vertices.length >= 2);
@@ -10647,14 +10336,12 @@ def _build_designer_html() -> str:
       if (!runways.length || !exits.length) return results;
 
       runways.forEach(rw => {{
-        // Runway center line(grid coordinates) array: start_point Reference direction summary
         let rVerts = rw.vertices.map(v => [v.col, v.row]);
         if (rw.start_point && rw.end_point && rVerts.length >= 2) {{
           const sp = [rw.start_point.col, rw.start_point.row];
           if (dist2(rVerts[rVerts.length - 1], sp) < dist2(rVerts[0], sp)) rVerts.reverse();
         }}
         if (rVerts.length < 2) return;
-        // prefix distance(cell unit)
         const prefixDist = [0];
         for (let i = 1; i < rVerts.length; i++) {{
           prefixDist[i] = prefixDist[i - 1] + pathDist(rVerts[i - 1], rVerts[i]);
@@ -10685,7 +10372,6 @@ def _build_designer_html() -> str:
               const segLen = pathDist(a, b);
               if (!(segLen > 1e-6)) continue;
               const proj = projectOnSegment(a, b, q);
-              // proj.pIs a-b point on segment
               const t = Math.max(0, Math.min(1, segLen > 0 ? pathDist(a, proj.p) / segLen : 0));
               const distCells = prefixDist[i] + segLen * t;
               considerRunwayHit(distCells);
@@ -10731,12 +10417,11 @@ def _build_designer_html() -> str:
         }});
       }});
 
-      // thresholdSort by distance from
       results.sort((a, b) => a.distM - b.distM);
       return results;
     }}
 
-    /** Overlap drawing only: centroid-merge points within radiusM (layout/world meters). Graph nodes unchanged. */
+    
     const PATH_JUNCTION_DRAW_MERGE_RADIUS_M = 2;
     function mergeNearbyPathPointsForDraw(points, radiusM) {{
       if (!points || !points.length) return [];
@@ -10773,7 +10458,7 @@ def _build_designer_html() -> str:
       return out;
     }}
 
-    /** BFS over runway_exit polylines that touch (vertex or near segment) so arrival can use chained RETs, not only sampledArrRet. */
+    
     function computeConnectedRunwayExitIds(seedId, pathList) {{
       const out = new Set();
       if (seedId == null) return out;
@@ -10911,7 +10596,6 @@ def _build_designer_html() -> str:
                     junctions.push({{ tAlong: seg + pr1.t, p: pr1.p }});
                   }}
                 }} else {{
-                // If it is a collinear line, the intersection is null. If endpoints overlap, add them as junctions (Runway-taxiway ends connected)
                 [c, d].forEach(function(q, idx) {{
                   if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {{
                     const {{ t, p: proj }} = projectOnSegment(a, b, q);
@@ -11024,12 +10708,9 @@ def _build_designer_html() -> str:
         if (!(totalDist > 1e-6)) return;
         adj[i].push([j, totalDist]);
         adj[j].push([i, totalDist]);
-        // i=taxiway junction, j=stand: forward polyline must match traversal direction
-        // (was reversed: P→stand used [stand..p] and drew stand→..→p after already at P).
         registerDirectedEdge(i, j, totalDist, totalDist, pts.slice().reverse());
         registerDirectedEdge(j, i, totalDist, totalDist, pts);
       }});
-      // BFS: cost < REVERSE_COSTA set of nodes that can be reached only along an edge.
       function bfsReachable(startIndices) {{
         const out = new Set();
         const q = startIndices.slice();
@@ -11070,12 +10751,10 @@ def _build_designer_html() -> str:
       const standReachable = standNodeIndices.length ? bfsReachable(standNodeIndices) : new Set();
       const connected = new Set();
       runwayReachable.forEach(function(i) {{ if (standReachable.has(i)) connected.add(i); }});
-      // Valid junction: any path junction with degree >= 2, regardless of apron connectivity.
       const validJunctionsForDraw = junctionPts.filter(function(p) {{
         const i = keyToIdx[pathPointKey(p)];
         return i != null && adj[i] && adj[i].length >= 2;
       }});
-      // Connected junction: valid junction that is also reachable from a stand-side graph.
       const connectedJunctionsForDraw = validJunctionsForDraw.filter(function(p) {{
         const i = keyToIdx[pathPointKey(p)];
         return i != null && connected.has(i);
@@ -11265,8 +10944,6 @@ def _build_designer_html() -> str:
       return d;
     }}
 
-    // RET 허용 방향 필터: graphPathArrival에서 확정된 arrRunwayDirUsed가 없을 때도,
-    // RET 미고정 상태와 동일한 CW/CCW 최단경로 규칙으로 "실제 진입 방향"을 정해 Runway Taxiway 체크와 맞춘다.
     function probePreferredArrivalRunwayDir(f) {{
       const token = f.token || {{}};
       let runwayId = token.arrRunwayId || token.runwayId || f.arrRunwayId;
@@ -11380,7 +11057,6 @@ def _build_designer_html() -> str:
             }}
           }}
         }}
-        // 분할 경로(g1→gFull)가 실패해도 통합 그래프(활주로 포함)로 이어서 시도한다. RET 연쇄·지상 단절 시 분할만으로는 실패할 수 있음.
         const g = buildPathGraph(validSelectedArrRetId, rwDir);
         const endNode = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
         if (endNode == null) {{
@@ -11583,7 +11259,7 @@ def _build_designer_html() -> str:
       return out.length >= 2 ? out : null;
     }}
 
-    /** Matches graphPathArrival validSelectedArrRetId: RET id that constrains arrival polyline, or '' if none. */
+    
     function normalizedArrRetCacheKey(f) {{
       const id = f.sampledArrRet != null ? f.sampledArrRet : null;
       if (id == null) return '';
@@ -11706,7 +11382,6 @@ def _build_designer_html() -> str:
       return {{ pts: pts || null, timeline: null }};
     }}
 
-    // Global Update(onDone 제공) 시에만 경로 탐색을 비동기 청크로 돌리며 오버레이에 항공 경로 i/N 표시.
     const FLIGHT_PATH_PROGRESS_PCT_START = 22;
     const FLIGHT_PATH_PROGRESS_PCT_END = 48;
     const PATH_DIRECTION_ARROWS_MAX = 48;
@@ -11916,7 +11591,6 @@ def _build_designer_html() -> str:
       ctx.stroke();
       drawPolylineDirectionArrows(pathPts, _canvas2dStyle.pathArrivalArrowStroke || 'rgba(252, 165, 165, 0.9)', 'rgba(252, 165, 165, 0.8)', 6, 26.4, 6.6);
 
-      // --- Touch Down / RET entrance / RET outlet speed label ---
       ctx.font = 'bold ' + Math.max(9, CELL_SIZE * 0.35) + 'px system-ui';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
@@ -11980,7 +11654,6 @@ def _build_designer_html() -> str:
           retInPt = getRunwayPointAtDistance(f.arrRunwayIdUsed, f.arrRetDistM);
         }}
       }}
-      // RET OUT: selected RET(exit) Taxiwaylast point of
       if (!retOutPt && f.sampledArrRet) {{
         const tw = (state.taxiways || []).find(t => t.id === f.sampledArrRet);
         if (tw && Array.isArray(tw.vertices) && tw.vertices.length) {{
@@ -12088,7 +11761,6 @@ def _build_designer_html() -> str:
       state.flights.forEach(f => {{
         const hasNoWay = f.noWayArr || f.noWayDep;
         if (hasNoWay) {{
-          // No way: The aircraft position is not drawn, but the point where the link breaks.(stand)Only No way scab
           if (!f.standId) return;
           const stand = findStandById(f.standId);
           if (!stand) return;
@@ -12145,7 +11817,7 @@ def _build_designer_html() -> str:
         const tX = isFinite(silTN) ? silTN : -0.3;
         const lY = isFinite(silLY) ? silLY : -0.35;
         const useDetailSil = _ac2d.useDetailedSilhouette === true;
-        /* 상단 투영: 가로=날개폭 AIRCRAFT_WINGSPAN_M, 세로=머리~꼬리 AIRCRAFT_FUSELAGE_LENGTH_M (서로 독립 스케일). */
+        
         const silhouette2D = [
           [0.86, 0],
           [0.74, 0.038], [0.55, 0.046], [0.35, 0.048], [0.16, 0.05],
@@ -12306,7 +11978,6 @@ def _build_designer_html() -> str:
       window.requestAnimationFrame(tick);
     }}
 
-    // ---- Aircraft helpers (from Information.json) ----
     const AIRCRAFT_TYPES = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers && INFORMATION.tiers.aircraft && Array.isArray(INFORMATION.tiers.aircraft.types)) ? INFORMATION.tiers.aircraft.types : [];
     const AIRCRAFT_BY_ID = {{}};
     AIRCRAFT_TYPES.forEach(a => {{ AIRCRAFT_BY_ID[a.id || a.name] = a; }});
@@ -12511,7 +12182,6 @@ def _build_designer_html() -> str:
       return stand;
     }}
 
-    // ---- Flight UI wiring ----
     (function initFlightUI() {{
       (function wireFlightSchedulePagerOnce() {{
         if (wireFlightSchedulePagerOnce._done) return;
@@ -12558,7 +12228,6 @@ def _build_designer_html() -> str:
 
       function randomAirlineCode() {{ return DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)]; }}
       function randomFlightNumber(airlineCode) {{ return (airlineCode || randomAirlineCode()) + String(Math.floor(1000 + Math.random() * 9000)); }}
-      // Currently already created Flightfield SIBT(d) The maximum value of + 10Minutes are basic SIBTused as
       function getDefaultSibtMinutes() {{
         let maxT = 0;
         (state.flights || []).forEach(f => {{
@@ -12606,7 +12275,6 @@ def _build_designer_html() -> str:
           if (el) el.style.display = arr.indexOf(node) >= 0 ? 'block' : 'none';
         }});
       }}
-      // top of screen Global Update Button: Main view based on current state/Redo all calculations
       if (globalUpdateBtn) {{
         globalUpdateBtn.addEventListener('click', function() {{
           function failGlobalUpdate(err) {{
@@ -12635,7 +12303,6 @@ def _build_designer_html() -> str:
                       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
                       if (typeof draw === 'function') draw();
                       if (typeof update3DScene === 'function') update3DScene();
-                      if (typeof scheduleDomCompositionReport === 'function') scheduleDomCompositionReport('global-update');
                     }} catch (e3) {{ failGlobalUpdate(e3); return; }}
                     if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
                   }}, 0);
@@ -12747,7 +12414,6 @@ def _build_designer_html() -> str:
         f.token.terminalId = this.value || null;
         rebuildSelectedFlightTimeline();
       }});
-      // Flight My tab Schedule / Configuration Switch sub tabs
       const flightSubtabButtons = document.querySelectorAll('.flight-subtab');
       const flightPaneSchedule = document.getElementById('flightPaneSchedule');
       const flightPaneConfig = document.getElementById('flightPaneConfig');
@@ -12796,9 +12462,7 @@ def _build_designer_html() -> str:
           dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, dwellMin);
           minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, minDwellMin);
           if (minDwellMin > dwellMin) minDwellMin = dwellMin;
-          // Arr/Depis one Flight(Arr+Dep)It is a concept that expresses, and internally, Arr Manage only based on standards
           const arrDep = 'Arr';
-          // basic Runway Select: currently defined Runway Use the first one in the list (If there is no null)
           const runwayOptions = getRunwayOptions();
           const defaultRunwayId = runwayOptions.length ? (runwayOptions[0].id || null) : null;
           const f = {{
@@ -12835,7 +12499,6 @@ def _build_designer_html() -> str:
           if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
           var addTouched = f.standId ? [f.standId] : [];
           renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: addTouched }});
-          // next Flight base for adding SIBT Input update (Max SIBT + 10minute)
           if (timeInputEl) {{
             const nextDef = getDefaultSibtMinutes();
             timeInputEl.value = formatMinutesToHHMMSS(nextDef);
@@ -12843,11 +12506,9 @@ def _build_designer_html() -> str:
           updateFlightError('');
         }});
       }}
-      // Flight When selecting an object, the value is reflected in the panel input
       function syncFlightPanelFromSelection() {{
         if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
         const f = state.selectedObject.obj;
-        // Arr/Depsilver UIdo not select from, all FlightIs Arr+stand occupancy(Dwell)Structure containing
         if (arrDepEl) arrDepEl.value = 'Arr';
         if (dwellEl) {{
           dwellEl.disabled = false;
@@ -12877,13 +12538,11 @@ def _build_designer_html() -> str:
         if (tokenTerminalSel) tokenTerminalSel.value = f.token.terminalId || '';
       }}
       hookSyncFlightPanelFromSelection = syncFlightPanelFromSelection;
-      // selection So that every change is synchronized. hook
       const origSyncPanel = syncPanelFromState;
       syncPanelFromState = function() {{
         origSyncPanel();
         if (activeTab === 'flight') syncFlightPanelFromSelection();
       }};
-      // Flight Selected when changing setting input Flight reflected in object + Recalculate route
       function rebuildSelectedFlightTimeline() {{
         if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
@@ -13111,8 +12770,6 @@ def _build_designer_html() -> str:
           if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
         }});
       }}
-      // Flight Schedule the displayed value in the table state.flightsBy reflecting back on
-      // Save/Run city JSONin table final values(especially Eline)sync to reflect this
       function syncTableToFlightState() {{
         const schedTable = document.querySelector('.flight-schedule-table');
         if (!schedTable || !Array.isArray(state.flights)) return;
@@ -13137,8 +12794,6 @@ def _build_designer_html() -> str:
             const n = parseFloat(txt);
             return isNaN(n) ? null : n;
           }};
-          // Column order: 7=SLDT(d), 8=SIBT(d), 9=SOBT(d), 10=STOT(d)
-          //            11=ELDT,  12=EIBT,   13=EOBT,   14=ETOT
           const map = {{
             sldtMin_d: 7, sibtMin_d: 8, sobtMin_d: 9,  stotMin_d: 10,
             eldtMin:  11, eibtMin:  12, eobtMin:  13, etotMin:   14
@@ -13149,7 +12804,6 @@ def _build_designer_html() -> str:
           }});
         }});
       }}
-      // Layout Save / Load: data/Layout_storage Save by name to·load (API)
       function setLayoutMessage(msg, isError) {{
         if (!layoutMsgEl) return;
         layoutMsgEl.textContent = msg || '';
@@ -13166,12 +12820,7 @@ def _build_designer_html() -> str:
             if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
             if (typeof syncTableToFlightState === 'function') syncTableToFlightState();
             const data = serializeCurrentLayout();
-            const apiBase = (typeof getLayoutApiBase === 'function') ? getLayoutApiBase() : (LAYOUT_API_URL || '');
-            fetch(apiBase + '/api/save-layout', {{
-              method: 'POST',
-              headers: {{ 'Content-Type': 'application/json' }},
-              body: JSON.stringify({{ layout: data, name: name }})
-            }}).then(function(r) {{
+            fetchSaveLayout(name, data).then(function(r) {{
               if (r.ok) {{
                 if (typeof updateLayoutNameBar === 'function') updateLayoutNameBar(name);
                 setLayoutMessage('Saved to Layout_storage as "' + name + '.json"', false);
@@ -13186,7 +12835,6 @@ def _build_designer_html() -> str:
           }}
         }});
       }}
-      // Save / Load sub-tabs (certainly #tab-saveload Inside only — Flight Prevent malfunctions during global queries by sharing subtabs and classes)
       function switchLayoutTab(tabId) {{
         const root = document.getElementById('tab-saveload');
         if (!root) return;
@@ -13206,12 +12854,7 @@ def _build_designer_html() -> str:
           if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
           if (typeof syncTableToFlightState === 'function') syncTableToFlightState();
           const data = serializeCurrentLayout();
-          const apiBase = (typeof getLayoutApiBase === 'function') ? getLayoutApiBase() : (LAYOUT_API_URL || '');
-          fetch(apiBase + '/api/save-layout', {{
-            method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify({{ layout: data, name: name }})
-          }}).then(function(r) {{
+          fetchSaveLayout(name, data).then(function(r) {{
             if (r.ok) {{
               if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = 'saved: ' + name + '.json'; layoutMessageSaveEl.style.color = '#9ca3af'; }}
             }} else if (layoutMessageSaveEl) {{ layoutMessageSaveEl.textContent = 'save failed (status ' + r.status + ')'; layoutMessageSaveEl.style.color = '#f97316'; }}
@@ -13231,6 +12874,14 @@ def _build_designer_html() -> str:
         if (LAYOUT_API_URL && LAYOUT_API_URL !== 'null') return LAYOUT_API_URL;
         try {{ if (window.location && window.location.origin && window.location.origin !== 'null') return window.location.origin; }} catch(e) {{}}
         return '';
+      }}
+      function fetchSaveLayout(name, data) {{
+        const apiBase = (typeof getLayoutApiBase === 'function') ? getLayoutApiBase() : (LAYOUT_API_URL || '');
+        return fetch(apiBase + '/api/save-layout', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ layout: data, name: name }})
+        }});
       }}
       function fetchAndRefreshLayoutList() {{
         if (!layoutLoadListEl) return;
@@ -13315,7 +12966,6 @@ def _build_designer_html() -> str:
           }});
         }});
       }}
-      // On page load API Check connection (405/404 City information banner display)
       fetch((getLayoutApiBase() || '') + '/api/list-layouts').then(function(r) {{
         if (r.ok) return;
         var banner = document.getElementById('api-warning-banner');
@@ -13328,13 +12978,11 @@ def _build_designer_html() -> str:
     }})();
 
     document.getElementById('btnTerminalDraw').addEventListener('click', function() {{
-      // Drawstart/Deselect existing objects when exiting
       state.selectedObject = null;
       if (state.terminalDrawingId) {{
         const t = state.terminals.find(x => x.id === state.terminalDrawingId);
         if (t && !t.closed && t.vertices.length >= 3) {{
           t.closed = true;
-          // Upon completion Taxiway Overlap check with center line
           if (terminalOverlapsAnyTaxiway(t)) {{
             alert('this Apron/Terminalsilver Taxiway Overlaps the center line. Please place it in a different location.');
             state.terminals = state.terminals.filter(term => term.id !== t.id);
@@ -13370,13 +13018,11 @@ def _build_designer_html() -> str:
     }});
 
     document.getElementById('btnTaxiwayDraw').addEventListener('click', function() {{
-      // Drawstart/Deselect existing objects when exiting
       const hadSelection = !!state.selectedObject;
       state.selectedObject = null;
       if (state.taxiwayDrawingId) {{
         const tw = state.taxiways.find(x => x.id === state.taxiwayDrawingId);
         if (tw && tw.vertices.length >= 2) {{
-          // Check for overlap with terminal upon completion
           if (taxiwayOverlapsAnyTerminal(tw)) {{
             alert('this TaxiwayIs TerminalIt overlaps with . Please draw a different path.');
             pushUndo();
@@ -14229,7 +13875,6 @@ def _build_designer_html() -> str:
         if (term.closed && buildingTheme.hatch === 'diagonal' && buildingTheme.fillEnabled) {{
           drawPolygonHatch(termPts, selected ? c2dObjectSelectedDashStroke() : buildingTheme.stroke, Math.max(10, CELL_SIZE * 0.6));
         }}
-        // Show terminal name centered in terminal (height eliminate)
         if (term.closed && term.vertices.length > 0) {{
           let cx = 0, cy = 0;
           term.vertices.forEach(v => {{
@@ -14337,7 +13982,6 @@ def _build_designer_html() -> str:
         }}
         ctx.stroke();
         if (sel) ctx.restore();
-        // Parking lot label: "Category / Name" form (If there is no name, there is a number)
         const nameRaw = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : String(state.pbbStands.indexOf(pbb) + 1);
         const labelPrefix = getStandCategoryMode(pbb) === 'aircraft' ? 'AC' : (pbb.category || 'C');
         const label = labelPrefix + ' / ' + nameRaw;
@@ -14398,7 +14042,6 @@ def _build_designer_html() -> str:
         ctx.stroke();
         if (sel) ctx.restore();
         ctx.restore();
-        // Apron Taxiway Reference point for link: Remote stand Show small dot in center
         if (mode === 'apronTaxiway') {{
           ctx.save();
           ctx.fillStyle = sel ? '#f97316' : '#e5e7eb';
@@ -14407,7 +14050,6 @@ def _build_designer_html() -> str:
           ctx.fill();
           ctx.restore();
         }}
-        // Remote stand label: "Category / Name" form (Default if no name Rxxx) - Top left placement
         const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
         const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
         const label = labelPrefix + ' / ' + nameRaw;
@@ -14424,7 +14066,6 @@ def _build_designer_html() -> str:
       ctx.restore();
     }}
 
-    // ---- Runway separation panel ----
     function renderRunwaySeparation() {{
       const panel = document.getElementById('rwySepPanel');
       if (!panel) return;
@@ -14455,13 +14096,11 @@ def _build_designer_html() -> str:
       }});
       html += '</div></div>';
 
-      // default tab name 'No Name', and no separate timeline graph is provided..
       const activeSub = 'noname';
       html += '<div class="layout-save-load-tabs" style="margin-top:8px;">';
       html += '<button type="button" class="layout-save-load-tab rwysep-subtab-btn active" data-subtab="noname">No Name</button>';
       html += '</div>';
 
-      // --- Subtab: No Name (Maintain input form) ---
       html += '<div id="rwysep-subtab-input" style="">';
       html += '<div class="rwysep-block">';
       html += '<div class="rwysep-label">Standard &amp; Mode</div>';
@@ -14498,12 +14137,10 @@ def _build_designer_html() -> str:
         html += '</div>';
       }}
 
-      // ROT: Arr→Dep Shown only in combination
       if (seq === 'ARR→DEP') {{
         html += '<div class="rwysep-block">';
         html += '<div class="rwysep-label">ROT (Runway Occupancy Time, sec)</div>';
 
-        // color legend + filled ROT count
         const totalRot = cats.length;
         let filledRot = 0;
         cats.forEach(c => {{
@@ -14532,9 +14169,7 @@ def _build_designer_html() -> str:
         html += '</div></div>';
       }}
 
-      // Separation matrix / 1D
       if (seq === 'ARR→DEP') {{
-        // For ARR→DEP, separation is effectively driven by ROT only
         html += '<div class="rwysep-block">';
         html += '<div class="rwysep-label">ROT‑based separation (sec)</div>';
         html += '<div style="font-size:10px;color:#9ca3af;line-height:1.5;">For ARR→DEP combinations, separation is determined by the ROT values above (runway occupancy time per wake category).</div>';
@@ -14611,11 +14246,9 @@ def _build_designer_html() -> str:
       }}
       html += '</div>'; // end subtab input
 
-      // --- Subtab: Separation Timeline ---
       html += '<div id="rwysep-subtab-timeline" style="' + (activeSub === 'timeline' ? '' : 'display:none;') + '">';
       html += '<div class="rwysep-block" style="margin-top:8px;">';
       html += '<div class="rwysep-label">Separation Timeline (Reg × Time)</div>';
-      // Up to about 12 Reg Only one row appears on the screen, anything beyond that scrolls vertically
       html += '<div id="rwySepTimeWrap" style="width:100%;background:#020617;border-radius:8px;border:1px solid #1f2937;position:relative;overflow-x:auto;overflow-y:auto;margin-top:4px;max-height:calc(40px * 12 + 80px);"></div>';
       html += '<div style="font-size:9px;color:#9ca3af;margin-top:4px;">';
       html += 'Y: Reg Number · X: Time · Bars = S-series (SLDT–STOT) · Lines = E-series (ELDT–ETOT)';
@@ -14624,7 +14257,6 @@ def _build_designer_html() -> str:
 
       panel.innerHTML = html;
 
-      // draw timeline only when timeline subtab is visible (Apron Gantt style, Reg × Time)
       function drawRwySeparationTimeline() {{
         if (state.activeRwySepSubtab && state.activeRwySepSubtab !== 'timeline') return;
         const wrap = panel.querySelector('#rwySepTimeWrap');
@@ -14639,7 +14271,6 @@ def _build_designer_html() -> str:
           return;
         }}
 
-        // Flight not really SLDT/STOT/ELDT/ETOT collect (line = one Reg)
         const byFlight = new Map();
         data.events.forEach(ev => {{
           const f = ev.flight;
@@ -14676,7 +14307,6 @@ def _build_designer_html() -> str:
           return;
         }}
 
-        // time axis: min(SLDT) - pad, max(ETOT) + pad (algorithm.timeAxis.runwaySepTimelinePadMin)
         let minT0 = Infinity;
         let maxT0 = -Infinity;
         lanes.forEach(ln => {{
@@ -14708,7 +14338,6 @@ def _build_designer_html() -> str:
 
         const tickPositions = buildTimeAxisTicks(minT, maxT, baseMinT, baseSpan, zoom);
 
-        // top S/E Data for triangle timeline
         const sMarkers = [];
         const eMarkers = [];
 
@@ -14728,22 +14357,18 @@ def _build_designer_html() -> str:
             const leftPct = ((s1 - baseMinT) / baseSpan) * 100 * zoom;
             const widthPct = Math.max(1, ((s2 - s1) / baseSpan) * 100 * zoom);
             const rightPct = leftPct + widthPct;
-            // top SMarkers for Series Triangles(start/end)
             sMarkers.push({{ t: sStart, leftPct, type: 'start' }});
             sMarkers.push({{ t: sEnd, leftPct: rightPct, type: 'end' }});
-            // S-series: thin blue bar + start/exit triangle (placed at the top)
             blocks +=
               '<div class="rwysep-line-s" style="' +
                 'left:' + leftPct + '%;' +
                 'width:' + widthPct + '%;' +
               '"></div>' +
-              // Starting point: downward triangle (towards the bar)
               '<div class="rwysep-tri" style="' +
                 'top:20%;' +
                 'left:' + leftPct + '%;' +
                 'border-top:6px solid ' + GANTT_COLORS.S_SERIES + ';' +
               '"></div>' +
-              // End point: upward triangle
               '<div class="rwysep-tri" style="' +
                 'top:20%;' +
                 'left:' + rightPct + '%;' +
@@ -14757,22 +14382,18 @@ def _build_designer_html() -> str:
             const leftPct2 = ((e1 - baseMinT) / baseSpan) * 100 * zoom;
             const widthPct2 = Math.max(0.5, ((e2 - e1) / baseSpan) * 100 * zoom);
             const rightPct2 = leftPct2 + widthPct2;
-            // top EMarkers for Series Triangles(start/end)
             eMarkers.push({{ t: eStart, leftPct: leftPct2, type: 'start' }});
             eMarkers.push({{ t: eEnd, leftPct: rightPct2, type: 'end' }});
-            // E-series: thin orange bar + start/exit triangle (placed at the bottom)
             blocks +=
               '<div class="rwysep-line-e" style="' +
                 'left:' + leftPct2 + '%;' +
                 'width:' + widthPct2 + '%;' +
               '"></div>' +
-              // Starting point: downward triangle
               '<div class="rwysep-tri" style="' +
                 'top:54%;' +
                 'left:' + leftPct2 + '%;' +
                 'border-top:6px solid ' + GANTT_COLORS.E_SERIES + ';' +
               '"></div>' +
-              // End point: upward triangle
               '<div class="rwysep-tri" style="' +
                 'top:54%;' +
                 'left:' + rightPct2 + '%;' +
@@ -14783,13 +14404,11 @@ def _build_designer_html() -> str:
           rows.push(
             '<div class="alloc-row">' +
               '<div class="alloc-row-label">' + escapeHtml(reg) + '</div>' +
-              // Runway Separation TimelineIn each row background(track background color/outline)remove
               '<div class="alloc-row-track" style="background:transparent;border:none;">' + blocks + '</div>' +
             '</div>'
           );
         }});
 
-        // top S/E triangle lines HTML (chronological order)
         sMarkers.sort((a, b) => a.t - b.t);
         eMarkers.sort((a, b) => a.t - b.t);
 
@@ -14823,19 +14442,16 @@ def _build_designer_html() -> str:
             '<div class="rwysep-head-track">' + eHeadMarks + '</div>' +
           '</div>';
 
-        // Time axis overlay (Apronsame style as, tickPositions reuse)
         const axisTicks = tickPositions.map(tp =>
           '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
             '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
           '</div>'
         );
-        // Runway Separation TimelineEven in ApronUse the bottom time base overlay the same as
         const axisHtml =
           '<div class="alloc-time-axis-overlay">' +
             '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
           '</div>';
 
-        // many RegIf present, wrap the rows while leaving the header intact to display vertical scrolling.
         const rwyGridOverlay =
           '<div class="alloc-gantt-grid-overlay">' +
             tickPositions.map(function(tp) {{
@@ -14845,7 +14461,6 @@ def _build_designer_html() -> str:
         const rowsHtml = '<div class="rwysep-rows">' + rwyGridOverlay + rows.join('') + '</div>';
         wrap.innerHTML = headHtml + rowsHtml + axisHtml;
 
-        // Shift + Zoom on the time axis with the mouse wheel (Runway Timeline)
         if (!wrap._rwySepZoomBound) {{
           wrap._rwySepZoomBound = true;
           wrap.addEventListener('wheel', function(e) {{
@@ -14861,12 +14476,10 @@ def _build_designer_html() -> str:
           }}, {{ passive: false }});
         }}
 
-        // 수평 스크롤 cityto도 현재 time axis/Re-render so the background is recalculated
         if (!wrap._rwySepScrollBound) {{
           wrap._rwySepScrollBound = true;
           wrap.addEventListener('scroll', function() {{
             if (wrap._rwySepScrollRecalc) return;
-            // Redraw the entire timeline while preserving the current scroll position.
             const currentLeft = wrap.scrollLeft;
             wrap._rwySepScrollRecalc = true;
             drawRwySeparationTimeline();
@@ -14982,7 +14595,6 @@ def _build_designer_html() -> str:
           ctx.strokeStyle = c2dRunwayStroke();
           ctx.fillStyle = c2dRunwayFill();
         }} else {{
-          // common Taxiway: brighter yellow color (Arrow colors remain separate)
           ctx.strokeStyle = drawing ? 'rgba(250, 204, 21, 0.78)' : 'rgba(251, 191, 36, 0.72)';
           ctx.fillStyle = 'rgba(251,191,36,0.18)';
         }}
@@ -15023,7 +14635,6 @@ def _build_designer_html() -> str:
           const totalLen = pts.reduce((acc, p, i) => acc + (i > 0 ? Math.hypot(p[0]-pts[i-1][0], p[1]-pts[i-1][1]) : 0), 0);
           const arrowSpacing = Math.max(22, Math.min(42, totalLen / 10));
           const numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
-          // Arrow: 10% zoom out, color #f5930b
           const arrLen = CELL_SIZE * 0.54;
           ctx.fillStyle = '#f5930b';
           for (let k = 1; k <= numArrows; k++) {{
@@ -15193,7 +14804,6 @@ def _build_designer_html() -> str:
         }}
       }});
       ctx.setLineDash([]);
-      // temporary first endpoint marker
       if (state.apronLinkTemp) {{
         ctx.fillStyle = '#facc15';
         const t = state.apronLinkTemp;
@@ -15315,7 +14925,6 @@ def _build_designer_html() -> str:
         ctx.rect(-size/2, -size/2, size, size);
         ctx.fill();
         ctx.stroke();
-        // Preview category label for contact stand
         ctx.fillStyle = '#bbf7d0';
         ctx.font = '10px system-ui';
         ctx.textAlign = 'center';
@@ -15700,7 +15309,6 @@ def _build_designer_html() -> str:
         if (state.previewHoldingPoint) {{ state.previewHoldingPoint = null; clearedPreview = true; }}
         if (clearedPreview) {{ scheduleDraw(); drewThisMove = true; }}
       }}
-      // 항공기 호버 시 등록번호 우선, 그 외 격자 오브젝트 이름
       if (flightTooltip && !state.isPanning) {{
         let tipDone = false;
         if (state.hasSimulationResult && state.globalUpdateFresh) {{
@@ -15777,7 +15385,6 @@ def _build_designer_html() -> str:
     }}
 
     function hitTestAnyTaxiwayVertex(wx, wy) {{
-      // For Apron Taxiway links: allow connecting to any point along a taxiway polyline
       const click = [wx, wy];
       const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
       let best = null;
@@ -15957,7 +15564,6 @@ def _build_designer_html() -> str:
           state.flightPathRevealFlightId = null;
           state.selectedObject = hit;
           if (hit.type === 'terminal') state.currentTerminalId = hit.id;
-          // When clicking on the canvas, the corresponding type Mode switch to
           const sm = settingModeValueForHit(hit);
           if (sm) settingModeSelect.value = sm;
           if (hit.type === 'flight' && typeof switchToTab === 'function') switchToTab('flight');
@@ -16005,12 +15611,10 @@ def _build_designer_html() -> str:
                 const pt = {{ col, row }};
                 const last = tw.vertices[tw.vertices.length - 1];
                 if (!last || last.col !== col || last.row !== row) {{
-                  // Runway When it comes to type, there are only two points(start/end)only allowed
                   if (tw.pathType === 'runway' && tw.vertices.length >= 2) return;
                   pushUndo();
                   tw.vertices.push(pt);
                   if (typeof syncStartEndFromVertices === 'function') syncStartEndFromVertices(tw);
-                  // The drawing ends automatically the moment two points are struck.
                   if (tw.pathType === 'runway' && tw.vertices.length >= 2) {{
                     state.taxiwayDrawingId = null;
                     state.layoutPathDrawPointer = null;
@@ -16047,8 +15651,6 @@ def _build_designer_html() -> str:
       document.getElementById('canvas-container').style.display = 'block';
       view3dContainer.classList.remove('active');
       if (renderer3d) renderer3d.domElement.style.display = 'none';
-      // display:block Immediately after, the layout is not reflected yet. getBoundingClientRectcan be 0.
-      // one frame later resizeCanvas()Update the canvas size with and draw() call
       requestAnimationFrame(function() {{
         if (typeof resizeCanvas === 'function') resizeCanvas();
       }});
@@ -16145,7 +15747,6 @@ def _build_designer_html() -> str:
       const w = view3dContainer.clientWidth, h = view3dContainer.clientHeight;
       scene3d = new THREE.Scene();
       scene3d.background = new THREE.Color(GRID_VIEW_BG);
-      // 3D grid + Axis-only group (update3DSceneKeep them as separate groups to avoid erasing them from)
       gridGroup3d = new THREE.Group();
       scene3d.add(gridGroup3d);
       camera3d = new THREE.PerspectiveCamera(50, w/h, 1, 100000);
@@ -16153,7 +15754,6 @@ def _build_designer_html() -> str:
       const maxDim = Math.max(halfW, halfH);
       camera3d.position.set(maxDim * 1.2, maxDim * 1.2, maxDim * 1.2);
       camera3d.lookAt(0, 0, 0);
-      // Axis Guide: Grid Plane X(red)–Y(abstract), the vertical axis Z(blue)displayed as
       const axisLen = CELL_SIZE * 8;
       const axisOrigin = new THREE.Vector3(-maxDim, 0, -maxDim);
       function addAxis(toVec, color) {{
@@ -16163,13 +15763,9 @@ def _build_designer_html() -> str:
         const line = new THREE.Line(geo, mat);
         gridGroup3d.add(line);
       }}
-      // x-axis: grid X direction
       addAxis(new THREE.Vector3(axisLen, 0, 0), 0xef4444);
-      // y-axis: grid Y direction (world Z direction)
       addAxis(new THREE.Vector3(0, 0, axisLen), 0x22c55e);
-      // z-axis: perpendicular (world Y direction)
       addAxis(new THREE.Vector3(0, axisLen, 0), 0x7c6af7);
-      // at the end of the axis x,y,z Add label sprite
       function createAxisLabel(text, color, endVec) {{
         const size = 128;
         const canvasLabel = document.createElement('canvas');
@@ -16247,7 +15843,6 @@ def _build_designer_html() -> str:
       }}
       if (faintLines.length) {{
         const faintGeo = new THREE.BufferGeometry().setFromPoints(faintLines);
-        // 2D Similar to auxiliary grid, but slightly more transparent
         const faintMat = new THREE.LineBasicMaterial({{
           color: 0xd4d4d4,
           transparent: true,
@@ -16258,7 +15853,6 @@ def _build_designer_html() -> str:
       }}
       if (majorLines.length) {{
         const majorGeo = new THREE.BufferGeometry().setFromPoints(majorLines);
-        // The main grid is also slightly transparent so that it blends well with the background.
         const majorMat = new THREE.LineBasicMaterial({{
           color: 0xffffff,
           transparent: true,
@@ -16270,7 +15864,6 @@ def _build_designer_html() -> str:
       update3DScene();
     }}
 
-    // ---- 3D: grid + axes only (no layout meshes; lowers GPU/CPU load) ----
     function update3DScene() {{
       if (!scene3d) return;
       while (scene3d.children.length > 1) scene3d.remove(scene3d.children[scene3d.children.length - 1]);
@@ -16306,7 +15899,6 @@ def _build_designer_html() -> str:
         renderer3d.setSize(w, h);
       }}
     }});
-    // Apply initial layout from JSON (if provided from Python) so the designer starts with a default configuration.
     try {{ applyInitialLayoutFromJson(); }} catch(applyErr) {{ console.error('Layout apply failed:', applyErr); }}
     updateLayoutNameBar(INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout');
     resizeCanvas();
@@ -16315,7 +15907,6 @@ def _build_designer_html() -> str:
     if (typeof draw === 'function') draw();
     if (typeof update3DScene === 'function') update3DScene();
     if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Initial load');
-    window.reportLayoutDesignerDomComposition = reportLayoutDesignerDomComposition;
   }})();
   </script>
 </body>
@@ -16325,7 +15916,6 @@ def _build_designer_html() -> str:
 
 html = _build_designer_html()
 
-# Homeof home_globelike in full screen HTML mark (position: fixed, 100vw x 100vh)
 def _designer_background_base() -> str:
     ui_theme = _dict_or_empty(_info_path("tiers", "style", "uiTheme"))
     return _cfg_str(ui_theme, "bgBase", "#0d0d0f")

@@ -1359,8 +1359,6 @@
         "maxTicksShown": 6
       },
       "domOptimization": {
-        "diagnosticDomCompositionReport": true,
-        "diagnosticLogDomCount": false,
         "flightListVirtualScroll": false,
         "flightListVirtualMinRows": 48,
         "flightListVirtualOverscan": 8,
