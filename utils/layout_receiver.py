@@ -15,12 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from typing import Any, Dict, Optional
 
-try:
-    from .airside_sim import run_simulation as _run_simulation
-except ImportError:
-    from utils.airside_sim import run_simulation as _run_simulation
-
-# Run Simulation city current_layout.json must be data/Layout_storage/ Save only to
+# Standalone receiver: Layout JSON must be data/Layout_storage/ Save only to
 _ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_STORAGE_DIR = (_ROOT / "data" / "Layout_storage").resolve()
 LAYOUT_FILE = LAYOUT_STORAGE_DIR / "current_layout.json"
@@ -188,36 +183,6 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
         path = (urlparse(self.path).path or self.path).rstrip("/")
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length).decode("utf-8") if length else "{}"
-        if path == "/api/run-simulation" or path.startswith("/api/run-simulation"):
-            try:
-                raw = json.loads(body)
-                if isinstance(raw, dict) and "layout" in raw:
-                    layout = raw["layout"]
-                    layout_name = (raw.get("layoutName") or "").strip() or "current_layout"
-                else:
-                    layout = raw
-                    layout_name = "current_layout"
-                if not isinstance(layout, dict):
-                    raise ValueError("layout must be a JSON object")
-                # Run Simulation city Layout_storage/current_layout.json save (timeline exception)
-                layout_to_save = dict(layout)
-                flights = layout_to_save.get("flights") or []
-                layout_to_save["flights"] = [{k: v for k, v in f.items() if k != "timeline"} for f in flights]
-                save_layout_to_file(layout_to_save, name=None)
-                result = _run_simulation(layout, time_step_sec=5, use_discrete_engine=True, layout_name=layout_name)
-                out = json.dumps(result, ensure_ascii=False).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self._send_cors()
-                self.end_headers()
-                self.wfile.write(out)
-            except Exception as e:
-                self.send_response(500)
-                self.send_header("Content-Type", "application/json")
-                self._send_cors()
-                self.end_headers()
-                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
-            return
         if path == "/api/delete-layout" or path.startswith("/api/delete-layout"):
             try:
                 obj = json.loads(body)

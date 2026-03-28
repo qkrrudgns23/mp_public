@@ -11,10 +11,8 @@ _logger = logging.getLogger(__name__)
 import streamlit as st
 import streamlit.components.v1 as components
 
-from utils.airside_sim import run_simulation
 from utils.layout_receiver import (
     DEFAULT_LAYOUT_PATH,
-    LAYOUT_FILE,
     LAYOUT_STORAGE_DIR,
     list_layout_names,
     _safe_layout_path,
@@ -94,6 +92,21 @@ def _cfg_str(section: dict, key: str, default: str) -> str:
     return str(value)
 
 
+def _cfg_bool(section: dict, key: str, default: bool) -> bool:
+    if not isinstance(section, dict):
+        return default
+    raw = section.get(key)
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(raw)
+    if isinstance(raw, str):
+        return raw.strip().lower() in ("1", "true", "yes", "on")
+    return default
+
+
 def _cfg_list(section: dict, key: str, default: list):
     if not isinstance(section, dict):
         return default
@@ -130,8 +143,6 @@ _rw_exit_allowed_default_raw = _cfg_list(
 )
 
 _flight_info = _dict_or_empty(_info_path("tiers", "flight_schedule") or _info_path("tiers", "flight"))
-_algo_info = _dict_or_empty(_info_path("tiers", "algorithm"))
-_sim_step = _dict_or_empty(_algo_info.get("simulation")).get("timeStepSec")
 
 if not DEFAULT_LAYOUT_PATH.is_file() and _fallback_default.is_file():
     shutil.copy2(_fallback_default, DEFAULT_LAYOUT_PATH)
@@ -163,15 +174,6 @@ def _ensure_random_regs(layout: dict) -> None:
 
 
 _ensure_random_regs(DEFAULT_LAYOUT)
-
-
-# --- Python Discrete simulation engine (Information.json algorithm.simulation.timeStepSec) ---
-SIM_TIME_STEP_SEC = 5
-try:
-    if _sim_step is not None:
-        SIM_TIME_STEP_SEC = max(1, int(_sim_step))
-except (TypeError, ValueError):
-    pass
 
 # HTML / iframe initial value (Layout tab, Flight tab — tiers.flight_schedule)
 _grid_ui_defaults = _cfg_bundle(_grid_info, [
@@ -210,7 +212,8 @@ _term_ui_defaults = _cfg_bundle(_term_ui, [
     ("arr", "arrivalCapacity", 0, _cfg_int),
 ])
 _taxiway_ui_defaults = _cfg_bundle(_tw_ui, [
-    ("width", "width", 15, _cfg_int),
+    ("width", "width", 1, _cfg_int),
+    ("width_min", "minWidth", 1, _cfg_int),
     ("avg", "avgMoveVelocity", 10.0, _cfg_float),
 ])
 _runway_path_ui_defaults = _cfg_bundle(_rw_path_ui, [
@@ -222,15 +225,20 @@ _runway_path_ui_defaults = _cfg_bundle(_rw_path_ui, [
     ("blast_end", "endBlastPadM", 100, _cfg_int),
 ])
 _runway_exit_ui_defaults = _cfg_bundle(_rw_exit_ui, [
+    ("ex_width", "width", 1, _cfg_int),
     ("ex_max", "maxExitVelocity", 30, _cfg_int),
     ("ex_min", "minExitVelocity", 15, _cfg_int),
+    ("ex_width_min", "minWidth", 1, _cfg_int),
 ])
 _flight_ui_defaults = _cfg_bundle(_flight_info, [
     ("dwell", "defaultDwellMin", 60, _cfg_int),
     ("min_dwell", "defaultMinDwellMin", 0, _cfg_int),
     ("dwell_max", "dwellInputMax", 600, _cfg_int),
     ("dwell_step", "dwellStep", 5, _cfg_int),
-    ("default_sim_speed", "defaultSimSpeed", 20.0, _cfg_float),
+    ("default_sim_speed", "defaultSimSpeed", 5.0, _cfg_float),
+    ("sim_slider_snap_sec", "simTimeSliderSnapSec", 60, _cfg_int),
+    ("allow_rw_ground", "defaultAllowRunwayInGroundSegment", False, _cfg_bool),
+    ("dep_rot_min", "depRotMin", 2, _cfg_int),
 ])
 
 _ui_g_min_cs = _grid_ui_defaults["min_cs"]
@@ -260,6 +268,9 @@ _ui_term_dep = _term_ui_defaults["dep"]
 _ui_term_arr = _term_ui_defaults["arr"]
 
 _ui_tw_w = _taxiway_ui_defaults["width"]
+_ui_tw_w_min = max(1, int(_taxiway_ui_defaults["width_min"]))
+_ui_rtx_w_min = max(1, int(_runway_exit_ui_defaults["ex_width_min"]))
+_ui_shared_path_width_min = min(_ui_tw_w_min, _ui_rtx_w_min)
 _ui_tw_avg = _taxiway_ui_defaults["avg"]
 _ui_rw_min_arr = _runway_path_ui_defaults["min_arr"]
 _ui_rw_lineup = _runway_path_ui_defaults["lineup"]
@@ -276,6 +287,8 @@ _ui_flight_dwell_max = _flight_ui_defaults["dwell_max"]
 _ui_flight_dwell_step = _flight_ui_defaults["dwell_step"]
 _ui_sim_speeds = _cfg_list(_flight_info, "simSpeedOptions", [0.5, 1, 5, 10, 20, 50, 100, 200])
 _ui_default_sim_speed = _flight_ui_defaults["default_sim_speed"]
+_ui_flight_sim_slider_snap_sec = max(1, int(_flight_ui_defaults["sim_slider_snap_sec"]))
+_ui_flight_allow_rw_ground = _flight_ui_defaults["allow_rw_ground"]
 _flight_speed_options_html = "".join(
     f'<option value="{v}"{" selected" if float(v) == float(_ui_default_sim_speed) else ""}>{v}x</option>'
     for v in _ui_sim_speeds
@@ -316,19 +329,6 @@ try:
             layout_display_name = load_name
 except Exception:
     _logger.exception("Failed to load layout from query param")
-
-try:
-    q = _get_query_one("run_simulation")
-    if q and LAYOUT_FILE.is_file():
-        layout_from_designer = json.loads(LAYOUT_FILE.read_text(encoding="utf-8"))
-        layout_for_html = run_simulation(
-            layout_from_designer,
-            time_step_sec=SIM_TIME_STEP_SEC,
-            use_discrete_engine=True,
-        )
-        layout_display_name = "Simulation"
-except Exception:
-    _logger.exception("Failed to run simulation from query param")
 
 # Layout_storage The file list is injected when the page is rendered. (API no call)
 layout_names = list_layout_names()
@@ -493,20 +493,7 @@ def _style_root_css_from_information(info: dict) -> str:
         ("--style-c2d-obj-sel-glow", c2.get("objectSelectedGlow")),
         ("--style-c2d-obj-sel-glow-blur", c2.get("objectSelectedGlowBlur")),
     ]
-    td = st.get("threeD") if isinstance(st.get("threeD"), dict) else {}
-    pairs_3d = [
-        ("--style-3d-remote-apron", td.get("remoteApron")),
-        ("--style-3d-remote-apron-opacity", td.get("remoteApronOpacity")),
-        ("--style-3d-remote-box", td.get("remoteStandBox")),
-        ("--style-3d-taxiway", td.get("taxiway")),
-        ("--style-3d-runway-path", td.get("runwayPath")),
-        ("--style-3d-arrow-cone", td.get("arrowCone")),
-        ("--style-3d-apron-link", td.get("apronLink")),
-        ("--style-3d-apron-link-opacity", td.get("apronLinkOpacity")),
-        ("--style-3d-dir-light", td.get("directionalLightIntensity")),
-        ("--style-3d-amb-light", td.get("ambientLightIntensity")),
-    ]
-    for pairs in (pairs_gantt, pairs_fs, pairs_rwy, pairs_c2, pairs_3d):
+    for pairs in (pairs_gantt, pairs_fs, pairs_rwy, pairs_c2):
         for name, val in pairs:
             row = _emit(name, val)
             if row:
@@ -556,6 +543,8 @@ _ui_g_major_line_w = _grid_ui_defaults["major_line_w"]
 _ui_g_minor_line_w = _grid_ui_defaults["minor_line_w"]
 _ui_g_major_line_rgb = _grid_ui_defaults["major_line_rgb"]
 _ui_g_minor_line_rgb = _grid_ui_defaults["minor_line_rgb"]
+_ui_g_draw_viewport_margin_cells = max(0, _cfg_int(_grid_info, "drawViewportMarginCells", 2))
+_ui_g_minor_grid_min_scale = max(0.0, _cfg_float(_grid_info, "minorGridMinScale", 0.0))
 
 # Layout name to display at the top of the grid
 layout_display_name = "default_layout"
@@ -606,12 +595,13 @@ def _build_layout_mode_tabs_html() -> tuple[str, str]:
             _layout_mode_button_html("runwayPath", "Runway", "layout_mode_runway.svg"),
             _layout_mode_button_html("runwayTaxiway", "Runway Taxiway", "layout_mode_runway_taxiway.svg"),
             _layout_mode_button_html("taxiway", "Taxiway", "layout_mode_taxiway.svg"),
+            _layout_mode_button_html("holdingPoint", "Holding Point", "layout_mode_holding_point.svg"),
             _layout_mode_button_html("edge", "Edge", "layout_mode_edge.svg"),
         ]
     )
     secondary_html = "".join(
         [
-            _layout_mode_button_html("terminal", "Terminal", "layout_mode_terminal.svg"),
+            _layout_mode_button_html("terminal", "Building", "layout_mode_terminal.svg"),
             _layout_mode_button_html("pbb", "Contact Stand", "layout_mode_pbb.svg"),
             _layout_mode_button_html("remote", "Remote Stand", "layout_mode_remote.svg"),
             _layout_mode_button_html("apronTaxiway", "Apron Taxiway", "layout_mode_apron_taxiway.svg"),
@@ -711,23 +701,102 @@ def _build_designer_html() -> str:
     *::-webkit-scrollbar-corner {{ background: transparent; }}
     html, body {{ width: 100%; min-height: 100%; height: 100%; background: var(--ui-bg-base); color: var(--ui-text-primary); font-family: var(--ui-font); font-size: 14px; line-height: 1.5; overflow: hidden; -webkit-font-smoothing: antialiased; }}
     #app {{ position: absolute; inset: 0; width: 100%; height: 100%; }}
-    #canvas-container {{ position: absolute; inset: 0; cursor: crosshair; background: var(--style-grid-view-bg, #252525); }}
+    #canvas-container {{ position: absolute; inset: 0; z-index: 1; cursor: crosshair; background: var(--style-grid-view-bg, #252525); }}
     #grid-canvas {{ width: 100%; height: 100%; display: block; }}
-    #toolbar {{ position: absolute; bottom: 56px; right: var(--layout-toolbar-right, var(--style-right-panel-width-full, 50vw)); left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 30; pointer-events: auto; transition: right 0.2s cubic-bezier(0.16, 1, 0.3, 1); }}
-    #sim-controls-container {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-elevated); transition: var(--ui-transition); }}
-    #sim-controls-container .tool-btn {{ margin: 0; border: none; border-radius: 4px; font-size: 11px; font-weight: 500; padding: 6px 12px; background: var(--ui-bg-overlay); color: var(--ui-text-primary); cursor: pointer; transition: var(--ui-transition); }}
+    .canvas-bottom-dock {{ position: absolute; left: 12px; right: calc(var(--layout-toolbar-right, var(--style-right-panel-width-full, 50vw)) + 12px); bottom: 12px; z-index: 30; display: flex; flex-direction: column; align-items: stretch; gap: 10px; pointer-events: none; transition: right 0.2s cubic-bezier(0.16, 1, 0.3, 1); box-sizing: border-box; }}
+    .canvas-bottom-dock > * {{ pointer-events: auto; }}
+    #toolbar.canvas-dock-toolbar {{ position: static; display: flex; flex-direction: column; align-items: flex-end; gap: 0; margin: 0; padding: 0; z-index: auto; }}
+    #toolbar.canvas-dock-toolbar #view-toggle-stack {{ display: flex; flex-direction: column; align-items: flex-end; gap: 8px; width: 100%; max-width: 100%; box-sizing: border-box; }}
+    #sim-controls-wrap {{ display: none; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }}
+    #sim-controls-container.sim-controls-inner {{ display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: nowrap; min-width: 0; width: 100%; padding: 5px 8px; border-radius: 10px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-elevated); box-shadow: 0 6px 24px rgba(0,0,0,0.28); transition: var(--ui-transition); box-sizing: border-box; }}
+    #sim-controls-container .tool-btn {{ margin: 0; border: none; border-radius: 4px; font-size: 11px; font-weight: 500; padding: 6px 12px; background: var(--ui-bg-overlay); color: var(--ui-text-primary); cursor: pointer; transition: var(--ui-transition); flex-shrink: 0; }}
+    #sim-controls-container .sim-bar-collapse-btn {{ flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; margin: 0; border: 1px solid var(--ui-border-default); border-radius: 8px; background: var(--ui-bg-surface); color: var(--ui-text-secondary); cursor: pointer; transition: var(--ui-transition); }}
+    #sim-controls-container .sim-bar-collapse-btn:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); border-color: var(--ui-border-strong); }}
+    #sim-controls-container .sim-bar-collapse-btn svg {{ display: block; opacity: 0.9; width: 16px; height: 16px; }}
     #sim-controls-container .tool-btn:hover {{ background: var(--ui-bg-surface); }}
-    #sim-controls-container select {{ width: auto; min-width: 70px; margin: 0; padding: 4px 8px; font-size: 11px; background: var(--ui-bg-input); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); border-radius: 4px; transition: var(--ui-transition); }}
+    #sim-controls-container select {{ width: auto; min-width: 70px; margin: 0; padding: 4px 8px; font-size: 11px; background: var(--ui-bg-input); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); border-radius: 4px; transition: var(--ui-transition); flex-shrink: 0; }}
     #sim-controls-container select:focus {{ outline: none; border-color: var(--ui-accent-ring); box-shadow: 0 0 0 2px var(--ui-accent-muted); }}
-    #sim-controls-container label {{ margin: 0 4px 0 0; font-size: 11px; color: var(--ui-text-secondary); }}
-    #sim-controls-container #flightSimSlider {{ width: 120px; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); }}
-    #sim-controls-container #flightSimTimeLabel {{ font-size: 11px; color: var(--ui-text-primary); min-width: 72px; display: inline-block; }}
+    #sim-controls-container label {{ font-size: 11px; color: var(--ui-text-secondary); margin: 0 4px 0 0; flex-shrink: 0; }}
+    #sim-controls-container #flightSimSlider {{ flex: 1; min-width: 80px; width: auto; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); }}
+    #sim-controls-container #flightSimTimeLabel {{ font-size: 11px; color: var(--ui-text-primary); min-width: 72px; flex-shrink: 0; display: inline-block; }}
     #view-toggle-stack {{ display:flex; align-items:center; justify-content:flex-end; gap:8px; }}
     #view-toggle {{ display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--ui-border-default); background: var(--ui-bg-control); transition: var(--ui-transition); }}
     #view-toggle .tool-btn {{ margin: 0; border: none; border-radius: 0; font-size: 11px; font-weight: 500; padding: 6px 12px; transition: var(--ui-transition); }}
     #view-toggle .tool-btn.active {{ background: var(--ui-accent-muted); color: var(--ui-accent); }}
     #view-toggle .tool-btn:not(.active) {{ background: transparent; color: var(--ui-text-secondary); }}
     #view-toggle .tool-btn:hover {{ background: var(--ui-bg-overlay); color: var(--ui-text-primary); }}
+    .global-update-wrap {{ display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; vertical-align: middle; }}
+    .global-update-sync-dot {{
+      align-self: center;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.35);
+      pointer-events: auto;
+    }}
+    .global-update-sync-dot.fresh {{ background: #22c55e; }}
+    .global-update-sync-dot.stale {{ background: #ef4444; }}
+    .global-update-overlay {{
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+    }}
+    .global-update-overlay.is-visible {{ display: flex; }}
+    .global-update-overlay-backdrop {{
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.55);
+      backdrop-filter: blur(2px);
+    }}
+    .global-update-overlay-card {{
+      position: relative;
+      z-index: 1;
+      min-width: 260px;
+      max-width: 90vw;
+      padding: 20px 22px;
+      border-radius: 12px;
+      border: 1px solid var(--ui-border-default);
+      background: var(--ui-bg-elevated);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }}
+    .global-update-overlay-spinner {{
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 3px solid rgba(124, 106, 247, 0.2);
+      border-top-color: var(--ui-accent, #7c6af7);
+      animation: global-update-spin 0.7s linear infinite;
+    }}
+    @keyframes global-update-spin {{ to {{ transform: rotate(360deg); }} }}
+    .global-update-overlay-text {{
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ui-text-primary);
+      text-align: center;
+    }}
+    .global-update-progress-track {{
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--ui-bg-overlay);
+      overflow: hidden;
+    }}
+    .global-update-progress-fill {{
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--ui-accent, #7c6af7), #a78bfa);
+      transition: width 0.2s ease-out;
+    }}
     #info-bar {{ display: none; position: absolute; bottom: 8px; left: 10px; right: 10px; padding: 8px 12px; min-height: 2.2em; border-radius: 8px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); color: var(--ui-text-secondary); font-size: 12px; align-items: center; pointer-events: none; z-index: 5; }}
     #right-panel {{ position: absolute; top: 0; right: 0; bottom: 0; width: var(--style-right-panel-width-full, 50vw); max-width: calc(100vw - var(--style-right-panel-resize-viewport-margin, 8px)); background: color-mix(in srgb, var(--style-right-panel-bg, color-mix(in srgb, var(--ui-bg-surface) 86%, var(--ui-bg-elevated) 14%)) var(--style-right-panel-bg-mix-percent, 95%), transparent); border-left: 1px solid var(--ui-border-default); padding: 12px; font-size: 12px; overflow-y: auto; z-index: 20; transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1); }}
     #right-panel.panel-resize-dragging {{ transition: none !important; }}
@@ -768,7 +837,7 @@ def _build_designer_html() -> str:
     .section-title:first-child {{ margin-top: 0; }}
     .layout-mode-tabs {{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }}
     .layout-mode-tabs-row {{ display:grid; gap:6px; }}
-    .layout-mode-tabs-row.primary {{ grid-template-columns:repeat(5, minmax(0, 1fr)); }}
+    .layout-mode-tabs-row.primary {{ grid-template-columns:repeat(6, minmax(0, 1fr)); }}
     .layout-mode-tabs-row.secondary {{ grid-template-columns:repeat(5, minmax(0, 1fr)); }}
     .layout-mode-tab {{ min-height:51px; padding:6px 6px; border-radius:8px; border:1px solid var(--ui-border-default); background:var(--ui-bg-control); color:var(--ui-text-secondary); font-size:10px; font-weight:500; cursor:pointer; transition:var(--ui-transition); text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }}
     .layout-mode-tab:hover {{ background:var(--ui-bg-overlay); color:var(--ui-text-primary); }}
@@ -964,7 +1033,8 @@ def _build_designer_html() -> str:
     .flight-schedule-table .flight-td-reg {{ font-weight:500; min-width:72px; }}
     .flight-schedule-table .flight-td-time {{ min-width:1em; }}
     .flight-schedule-table .flight-td-select {{ padding:4px 6px 4px 0; min-width:0; }}
-    .flight-schedule-table .flight-td-select select {{ min-width:100px; width:70%; max-width:100%; padding:4px 8px; font-size:11px; }}
+    .flight-schedule-table .flight-td-select select,
+    .flight-schedule-table .flight-td-select .flight-assign-select {{ min-width:100px; width:70%; max-width:100%; padding:4px 8px; font-size:11px; box-sizing:border-box; }}
     .flight-schedule-table .flight-td-del {{ width:36px; text-align:center; padding:2px 0; }}
     .flight-config-input {{ width:72px; font-size:11px; text-align:right; }}
     .flight-config-table th.sticky-col,
@@ -984,6 +1054,9 @@ def _build_designer_html() -> str:
     .alloc-gantt-scroll-col {{ flex:1; overflow:auto; min-height:0; }}
     /* Zoom Horizontal reflecting magnification inner wrapper (Full timeline width = 100% × zoom) */
     .alloc-gantt-inner {{ position:relative; min-width:100%; height:100%; }}
+    .alloc-gantt-inner > .alloc-gantt-grid-overlay {{ position:absolute; left:0; top:0; right:0; bottom:24px; pointer-events:none; z-index:0; }}
+    .rwysep-rows > .alloc-gantt-grid-overlay {{ position:absolute; left:0; top:0; right:0; bottom:0; pointer-events:none; z-index:0; }}
+    .alloc-gantt-inner > .alloc-row {{ position:relative; z-index:1; }}
     /* Right dummy track(24px)and vertical 1:1 alignment — margin doesn't exist */
     .alloc-terminal-header {{ margin:0; height:24px; min-height:24px; line-height:24px; font-size: 11px; font-weight: 600; color: var(--ui-text-primary); text-transform: uppercase; letter-spacing: 0.06em; flex-shrink:0; display:flex; align-items:center; gap:4px; box-sizing:border-box; }}
     .alloc-section-toggle-icon {{ display:inline-block; width:12px; text-align:center; font-size:10px; color:var(--ui-text-secondary); }}
@@ -1098,6 +1171,8 @@ def _build_designer_html() -> str:
     .rwysep-line-s {{ position:absolute; height:7%; top:26%; background:var(--style-rwysep-line-s, #38bdf8); border-radius:9999px; opacity:var(--style-rwysep-line-opacity, 0.55); pointer-events:none; }}
     .rwysep-line-e {{ position:absolute; height:7%; top:60%; background:var(--style-rwysep-line-e, #fb923c); border-radius:9999px; opacity:var(--style-rwysep-line-opacity, 0.55); pointer-events:none; }}
     .rwysep-tri {{ position:absolute; width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; transform:translateX(-50%); pointer-events:none; }}
+    .rwysep-rows {{ position:relative; }}
+    .rwysep-rows > .alloc-row {{ position:relative; z-index:1; }}
     .rwysep-head-row {{ display:flex; align-items:center; font-size:9px; color:var(--ui-text-secondary); margin-bottom:2px; }}
     /* Runway Separation Timeline header label width Apron Gantt label(alloc-row-label)Match the same as
        top S/E header track and angle Reg Ensure that the vertical scales of the row and lower time axes are accurately aligned.. */
@@ -1178,14 +1253,13 @@ def _build_designer_html() -> str:
     .kpi-status-chip::before {{ content:''; width:8px; height:8px; border-radius:9999px; background:var(--ui-accent); box-shadow:0 0 0 4px rgba(124, 106, 247, 0.16); }}
     #kpiDashboard {{ display:flex; flex-direction:column; gap:12px; }}
     .kpi-summary-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; }}
-    .kpi-card {{ position:relative; overflow:hidden; padding:16px; border-radius:12px; border:1px solid var(--ui-accent-ring); background:var(--ui-accent-muted); box-shadow:none; }}
+    .kpi-card {{ position:relative; overflow:hidden; padding:10px 12px; border-radius:12px; border:1px solid var(--ui-accent-ring); background:var(--ui-accent-muted); box-shadow:none; }}
     .kpi-card.accent,
     .kpi-card.success,
     .kpi-card.warning,
     .kpi-card.danger {{ background:var(--ui-accent-muted); border-color:var(--ui-accent-ring); }}
-    .kpi-card-label {{ font-size:10px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--ui-text-secondary); }}
-    .kpi-card-value {{ margin-top:8px; font-size:24px; font-weight:700; line-height:1.1; color:var(--ui-text-primary); }}
-    .kpi-card-meta {{ margin-top:8px; font-size:11px; line-height:1.55; color:var(--ui-text-secondary); }}
+    .kpi-card-label {{ font-size:9px; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:var(--ui-text-secondary); }}
+    .kpi-card-value {{ margin-top:4px; font-size:15px; font-weight:700; line-height:1.2; color:var(--ui-text-primary); }}
     .kpi-panel-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }}
     .kpi-panel {{ padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
     .kpi-panel-header {{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }}
@@ -1198,20 +1272,26 @@ def _build_designer_html() -> str:
     .kpi-metric-values {{ text-align:right; }}
     .kpi-metric-primary {{ font-size:15px; font-weight:700; color:#ffffff; }}
     .kpi-metric-secondary {{ margin-top:4px; font-size:10px; color:var(--ui-text-muted); }}
-    .kpi-chart-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px; }}
+    .kpi-chart-grid {{ display:grid; grid-template-columns:1fr; gap:12px; }}
     .kpi-chart-card {{ padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
+    .kpi-chart-card-primary .kpi-chart-title {{ font-size:17px; font-weight:700; color:var(--ui-text-primary); letter-spacing:-0.02em; }}
+    .kpi-chart-card-primary .kpi-chart-subtitle {{ margin-top:6px; font-size:12px; line-height:1.45; color:var(--ui-text-secondary); }}
     .kpi-chart-head {{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }}
     .kpi-chart-title {{ font-size:13px; font-weight:600; color:var(--ui-text-primary); }}
     .kpi-chart-subtitle {{ margin-top:4px; font-size:11px; line-height:1.45; color:var(--ui-text-secondary); }}
     .kpi-chart-legend {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }}
     .kpi-legend-item {{ display:inline-flex; align-items:center; gap:6px; font-size:10px; color:var(--ui-text-secondary); }}
     .kpi-legend-swatch {{ width:10px; height:10px; border-radius:9999px; }}
-    .kpi-chart-scroll {{ overflow-x:auto; overflow-y:hidden; padding-bottom:4px; }}
-    .kpi-chart-frame {{ min-width:100%; }}
+    .kpi-chart-wrap {{ width:100%; overflow:visible; padding-bottom:4px; }}
+    .kpi-chart-wrap--gate-fill {{ height:min(260px, 35vh); min-height:200px; box-sizing:border-box; }}
+    .kpi-chart-canvas-host {{ position:relative; width:100%; height:min(260px, 35vh); min-height:200px; box-sizing:border-box; }}
+    .kpi-chart-canvas-host canvas {{ display:block; width:100% !important; height:100% !important; }}
+    .kpi-chart-frame {{ width:100%; height:min(260px, 35vh); min-height:200px; display:block; }}
+    .kpi-chart-frame--gate-fill {{ width:100%; height:100%; min-height:0; display:block; }}
     .kpi-chart-frame text {{ font-family:var(--ui-font); }}
-    .kpi-chart-axis {{ fill:var(--ui-text-secondary); font-size:10px; }}
-    .kpi-chart-grid-line {{ stroke:rgba(255,255,255,0.08); stroke-width:1; }}
-    .kpi-chart-dot {{ fill:#f0f0f2; stroke:#0d0d0f; stroke-width:2; }}
+    .kpi-chart-axis {{ fill:var(--ui-text-secondary); font-size:16px; font-weight:600; }}
+    .kpi-chart-grid-line {{ stroke:rgba(255,255,255,0.1); stroke-width:1.2; }}
+    .kpi-chart-dot {{ fill:#f0f0f2; stroke:#0d0d0f; stroke-width:2.5; }}
     .kpi-detail-grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:12px; }}
     .kpi-table-card {{ padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }}
     .kpi-table-wrap {{ margin-top:12px; max-height:340px; overflow:auto; border-radius:12px; border:1px solid var(--ui-border-subtle); }}
@@ -1227,35 +1307,50 @@ def _build_designer_html() -> str:
     #api-warning-banner {{ display: none; background: var(--ui-error-bg); color: var(--ui-error-text); padding: 10px 12px; font-size: 11px; border-radius: 8px; margin-bottom: 12px; line-height: 1.45; border: 1px solid var(--ui-error-border); }}
     #api-warning-banner strong {{ color: var(--ui-text-primary); font-weight: 600; }}
     #flight-tooltip {{ position: absolute; pointer-events: none; padding: 4px 8px; font-size: 11px; border-radius: 6px; background: var(--ui-bg-elevated); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); display: none; z-index: 40; box-shadow: 0 1px 3px rgba(0,0,0,0.4); max-width: 280px; }}
-    #btnRunSimulation {{ margin-left: 8px; }}
-    #remoteTerminalAccess {{ margin-top: 4px; padding: 8px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-input); font-size: 11px; color: var(--ui-text-primary); max-height: 120px; overflow: auto; }}
+    #remoteTerminalAccess, #runwayExitAllowedDirection, #standAircraftAccess, #remoteAircraftAccess {{ margin-top: 4px; padding: 8px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-input); font-size: 11px; color: var(--ui-text-primary); max-height: 140px; overflow: auto; }}
+    .choice-chip-grid {{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }}
+    .choice-chip {{ display:flex; align-items:center; gap:8px; cursor:pointer; padding:8px 10px; border-radius:10px; border:1px solid #374151; background:linear-gradient(180deg,#1f2937 0%,#111827 100%); color:#e5e7eb; transition:var(--ui-transition); user-select:none; }}
+    .choice-chip:hover {{ border-color:#4b5563; filter:brightness(1.05); }}
+    .choice-chip.is-checked {{ border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,0.22) inset; }}
+    .choice-chip input {{ accent-color:#22c55e; inline-size:14px; block-size:14px; cursor:pointer; margin:0; flex:0 0 auto; }}
+    .choice-chip-label {{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; letter-spacing:0.2px; }}
+    .choice-help {{ font-size:10px; color:#9ca3af; line-height:1.45; margin:6px 0 0; }}
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div id="app">
-    <div id="toolbar">
-      <div id="sim-controls-container" style="display:none;">
-        <button type="button" class="tool-btn" id="btnPlayFlights" title="Play">▶ Play</button>
-        <button type="button" class="tool-btn" id="btnPauseFlights" title="Pause">⏸ Pause</button>
-        <select id="flightSpeed">
-          {_flight_speed_options_html}
-        </select>
-        <label for="flightSimSlider">Current</label>
-        <input type="range" id="flightSimSlider" min="0" max="100" value="0" step="1" />
-        <span id="flightSimTimeLabel">00:00:00</span>
+    <div id="canvas-bottom-dock" class="canvas-bottom-dock">
+      <div id="toolbar" class="canvas-dock-toolbar">
+        <div id="view-toggle-stack">
+          <div id="layout-name-bar"></div>
+          <div id="view-toggle">
+            <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
+            <button class="tool-btn" id="btnView3D" title="3D orbit view">3D</button>
+            <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
+            <button class="tool-btn active" id="btnGridToggle" title="Toggle grid visibility">Grid</button>
+            <button class="tool-btn active" id="btnImageToggle" title="Toggle background image visibility">Image</button>
+            <span class="global-update-wrap">
+              <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Click Update to sync calculations and KPIs" role="status" aria-label="Update status"></span>
+              <button class="tool-btn" id="btnGlobalUpdate" title="Refresh all views and calculations">Update</button>
+              <button type="button" class="tool-btn" id="btnShowPlayDock" title="Show bottom playback controls (same as former Show playback)">Show Play</button>
+            </span>
+          </div>
+        </div>
       </div>
-      <div id="view-toggle-stack">
-        <div id="layout-name-bar"></div>
-        <div id="view-toggle">
-          <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
-          <button class="tool-btn" id="btnView3D" title="3D orbit view">3D</button>
-          <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
-          <button class="tool-btn active" id="btnGridToggle" title="Toggle grid visibility">Grid</button>
-          <button class="tool-btn active" id="btnImageToggle" title="Toggle background image visibility">Image</button>
-          <button class="tool-btn" id="btnGlobalUpdate" title="Refresh all views and calculations" style="margin-left:8px;">Update</button>
-          <button type="button" class="tool-btn" id="btnRunSimulation" title="Run simulation (requires API)">Run Sim</button>
+      <div id="sim-controls-wrap" class="sim-controls-wrap" style="display:none;">
+        <div id="sim-controls-container" class="sim-controls-inner">
+          <button type="button" class="tool-btn" id="btnPlayFlights" title="Play">▶ Play</button>
+          <button type="button" class="tool-btn" id="btnPauseFlights" title="Pause">⏸ Pause</button>
+          <select id="flightSpeed" title="Playback speed">
+            {_flight_speed_options_html}
+          </select>
+          <label for="flightSimSlider" title="스케줄 기준 시각(ELDT/ETOT 등으로부터 계산된 절대 시간). 접근 거리(예: 20km)는 이 숫자를 00:00으로 맞추지 않고, 재생 구간 시작만 ELDT보다 앞당깁니다. 스탠드 할당 간트 축과는 별개입니다.">Current</label>
+          <input type="range" id="flightSimSlider" min="0" max="100" value="0" step="any" title="스케줄 절대 시각(HH:MM:SS). 슬라이더 범위 최솟값은 가장 이른 공중 구간 시작(접근 포함)입니다." />
+          <span id="flightSimTimeLabel" title="스케줄 절대 시각">00:00:00</span>
+          <button type="button" class="sim-bar-collapse-btn" id="btnHideSimPlaybackBar" title="Hide playback bar — use Show Play next to Update to show again" aria-label="Hide playback bar" aria-expanded="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
         </div>
       </div>
     </div>
@@ -1263,7 +1358,7 @@ def _build_designer_html() -> str:
       <canvas id="grid-canvas"></canvas>
     </div>
     <div id="info-bar">
-      <span id="hint">Draw terminal: click grid points, then near first point to close. Drag to pan, scroll to zoom.</span>
+      <span id="hint">Draw building/path objects freely. Hold Shift to snap to the grid. Drag to pan, scroll to zoom.</span>
       <span id="coord"></span>
     </div>
     <div id="flight-tooltip"></div>
@@ -1272,7 +1367,7 @@ def _build_designer_html() -> str:
       <div class="panel-content">
         <div id="api-warning-banner">
           <strong>API Not connected</strong><br/>
-          Save/Load/Run SimulationTo use <strong>python run_app.py</strong>After running it with<br/>
+          Save/Load layout API: use <strong>python run_app.py</strong> and connect to<br/>
           <strong>http://127.0.0.1:8501</strong> Please access. (streamlit run Doesn't work when used)
         </div>
         <div class="right-panel-tabs">
@@ -1293,7 +1388,8 @@ def _build_designer_html() -> str:
           <option value="runwayPath">Runway</option>
           <option value="runwayTaxiway">Runway Taxiway</option>
           <option value="taxiway">Taxiway</option>
-          <option value="terminal">Terminal</option>
+          <option value="holdingPoint">Holding Point</option>
+          <option value="terminal">Building</option>
           <option value="pbb">Contact Stand</option>
           <option value="remote">Remote Stand</option>
           <option value="apronTaxiway">Apron Taxiway</option>
@@ -1342,9 +1438,13 @@ def _build_designer_html() -> str:
           <button class="small" id="btnClearGridLayoutImage">Clear image</button>
         </div>
         <div id="settings-terminal" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field">
+            <label>Building Type</label>
+            <select id="buildingType"></select>
+          </div>
           <div class="compact-field wide">
             <label>Building name</label>
-            <input type="text" id="terminalName" placeholder="e.g. T1" />
+            <input type="text" id="terminalName" placeholder="e.g. Terminal1" />
           </div>
           <div class="compact-field">
             <label>Floors</label>
@@ -1370,16 +1470,36 @@ def _build_designer_html() -> str:
             <input type="text" id="standName" placeholder="e.g. Gate 1" />
           </div>
           <div class="compact-field">
-            <label>Category (ICAO)</label>
+            <label>Category Basis</label>
+            <select id="standCategoryMode">
+              <option value="icao" selected>ICAO</option>
+              <option value="aircraft">Aircraft Type</option>
+            </select>
+          </div>
+          <div class="compact-field" id="standIcaoWrap">
+            <label>ICAO Category</label>
             <select id="standCategory">
               <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
               <option value="D">D</option><option value="E">E</option><option value="F">F</option>
             </select>
           </div>
+          <div class="inline-field wide" id="standAircraftWrap" style="display:none;">
+            <label>Aircraft Types</label>
+            <div id="standAircraftAccess"></div>
+          </div>
           <div class="compact-field">
             <label>Contact Stand Length (m)</label>
             <input type="number" id="pbbLength" min="1" max="5000" step="1" value="15" />
           </div>
+          <div class="compact-field">
+            <label>Angle (deg)</label>
+            <input type="number" id="standAngle" min="-180" max="180" step="1" value="0" />
+          </div>
+          <div class="compact-field">
+            <label>PBB Count</label>
+            <input type="number" id="pbbBridgeCount" min="1" max="8" step="1" value="1" />
+          </div>
+          <p class="choice-help">Selected contact stand: drag orange PBB points and the green apron point to fine-tune.</p>
           <button class="small draw-toggle-btn" id="btnPbbDraw">Draw</button>
         </div>
         <div id="settings-remote" class="settings-pane compact-form" style="display:none;">
@@ -1392,19 +1512,38 @@ def _build_designer_html() -> str:
             <input type="number" id="remoteAngle" min="-180" max="180" step="1" value="0" />
           </div>
           <div class="compact-field">
-            <label>Category (ICAO)</label>
+            <label>Category Basis</label>
+            <select id="remoteCategoryMode">
+              <option value="icao" selected>ICAO</option>
+              <option value="aircraft">Aircraft Type</option>
+            </select>
+          </div>
+          <div class="compact-field" id="remoteIcaoWrap">
+            <label>ICAO Category</label>
             <select id="remoteCategory">
               <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
               <option value="D">D</option><option value="E">E</option><option value="F">F</option>
             </select>
           </div>
+          <div class="inline-field wide" id="remoteAircraftWrap" style="display:none;">
+            <label>Aircraft Types</label>
+            <div id="remoteAircraftAccess"></div>
+          </div>
           <div class="inline-field wide">
-            <label>Available terminals</label>
+            <label>Available buildings</label>
             <div id="remoteTerminalAccess">
-              <!-- Terminal checkboxes are rendered dynamically -->
+              <!-- Building checkboxes are rendered dynamically -->
             </div>
           </div>
           <button class="small draw-toggle-btn" id="btnRemoteDraw">Draw</button>
+        </div>
+        <div id="settings-holdingPoint" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="holdingPointName" placeholder="Position1" />
+          </div>
+          <p class="choice-help">Place on Taxiway or Runway Taxiway only (not runway centerline).</p>
+          <button class="small draw-toggle-btn" id="btnHoldingPointDraw">Draw</button>
         </div>
         <div id="settings-edge" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">
@@ -1419,7 +1558,7 @@ def _build_designer_html() -> str:
           </div>
           <div class="compact-field">
             <label>Width (m)</label>
-            <input type="number" id="taxiwayWidth" min="5" max="100" value="{_ui_tw_w}" step="1" />
+            <input type="number" id="taxiwayWidth" min="{_ui_shared_path_width_min}" max="100" value="{_ui_tw_w}" step="1" />
           </div>
           <div id="runwayMinArrVelocityWrap" class="inline-field wide" style="display:none;">
             <label>Min Arr Velocity (m/s)</label>
@@ -1467,16 +1606,7 @@ def _build_designer_html() -> str:
           </div>
           <div id="runwayExitAllowedDirectionWrap" class="compact-field wide" style="display:none;">
             <label>Available RW Direction</label>
-            <div id="runwayExitAllowedDirection" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:2px;">
-              <label style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:10px;border:1px solid #374151;background:linear-gradient(180deg,#1f2937 0%,#111827 100%);color:#e5e7eb;font-weight:600;letter-spacing:0.2px;">
-                <input type="checkbox" id="runwayExitDirCw" style="accent-color:#22c55e;inline-size:14px;block-size:14px;cursor:pointer;" />
-                <span>CW</span>
-              </label>
-              <label style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:10px;border:1px solid #374151;background:linear-gradient(180deg,#1f2937 0%,#111827 100%);color:#e5e7eb;font-weight:600;letter-spacing:0.2px;">
-                <input type="checkbox" id="runwayExitDirCcw" style="accent-color:#22c55e;inline-size:14px;block-size:14px;cursor:pointer;" />
-                <span>CCW</span>
-              </label>
-            </div>
+            <div id="runwayExitAllowedDirection"></div>
           </div>
           <button class="small draw-toggle-btn" id="btnTaxiwayDraw">Draw</button>
         </div>
@@ -1486,7 +1616,7 @@ def _build_designer_html() -> str:
             <input type="text" id="apronLinkName" placeholder="e.g. Apron Taxiway 1" />
           </div>
           <button class="small draw-toggle-btn" id="btnApronLinkDraw">Draw</button>
-          <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Click a stand or taxiway to start, then grid cells for corners, then the opposite end to finish. Turn off Draw and click the line to select. Drag yellow handles to move corners or the taxiway end (snaps to path). Backspace removes the last corner or selected midpoint.</p>
+          <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Click a stand or taxiway to start, then place corners freely. Hold Shift to snap to the grid. Turn off Draw and click the line to select. Drag yellow handles to move corners or the taxiway end (snaps to path). Double-click a segment to add a point. Backspace/Delete removes the selected midpoint.</p>
         </div>
         <div id="settings-groundAccess" class="settings-pane" style="display:none;">
           <p style="font-size:11px;color:#9ca3af;line-height:1.45;margin:0;">Ground Access mode is reserved for access transport related layout elements.</p>
@@ -1544,6 +1674,12 @@ def _build_designer_html() -> str:
             <button class="small" id="btnAddFlight">+ Add Flight</button>
             <div id="flightError" style="color:#f97316;font-size:11px;margin-top:4px;"></div>
             <div class="section-title" style="margin-top:10px;">Flight schedule</div>
+            <div id="flightSchedulePager" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:#9ca3af;margin:4px 0 6px;">
+              <span>총 <strong id="flightSchedulePagerTotal">0</strong>편</span>
+              <span id="flightSchedulePagerRange"></span>
+              <button type="button" class="tool-btn" id="btnFlightSchedPrev" title="이전 페이지">◀</button>
+              <button type="button" class="tool-btn" id="btnFlightSchedNext" title="다음 페이지">▶</button>
+            </div>
             <div id="flightList" class="obj-list"></div>
           </div>
 
@@ -1621,6 +1757,14 @@ def _build_designer_html() -> str:
       </div>
     </div>
     <div id="view3d-container"></div>
+    <div id="globalUpdateOverlay" class="global-update-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="globalUpdateOverlayLabel">
+      <div class="global-update-overlay-backdrop"></div>
+      <div class="global-update-overlay-card">
+        <div class="global-update-overlay-spinner" aria-hidden="true"></div>
+        <div id="globalUpdateOverlayLabel" class="global-update-overlay-text">업데이트 중…</div>
+        <div class="global-update-progress-track"><div id="globalUpdateProgressFill" class="global-update-progress-fill"></div></div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -1639,23 +1783,61 @@ def _build_designer_html() -> str:
     const GRID_MINOR_LINE_WIDTH = {json.dumps(_ui_g_minor_line_w)};
     const GRID_MAJOR_LINE_RGB = {json.dumps(_ui_g_major_line_rgb)};
     const GRID_MINOR_LINE_RGB = {json.dumps(_ui_g_minor_line_rgb)};
+    const GRID_DRAW_VIEWPORT_MARGIN_CELLS = {json.dumps(_ui_g_draw_viewport_margin_cells)};
+    const GRID_MINOR_GRID_MIN_SCALE = {json.dumps(_ui_g_minor_grid_min_scale)};
     let GRID_COLS = {GRID_COLS};
     let GRID_ROWS = {GRID_ROWS};
     let CELL_SIZE = {CELL_SIZE};
 
     const _tiers = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers) ? INFORMATION.tiers : {{}};
     const _layoutTier = _tiers.layout || {{}};
+    const _pbbTier = _layoutTier.pbb || {{}};
+    const _remoteTier = _layoutTier.remote || {{}};
     const _taxiwayTier = _layoutTier.taxiway || {{}};
     const _runwayPathTier = _layoutTier.runwayPath || {{}};
     const _runwayExitTier = _layoutTier.runwayExit || {{}};
     const _flightTier = _tiers.flight_schedule || _tiers.flight || {{}};
+    const SCHED_DEP_ROT_MIN = Math.max(0, Number(_flightTier.depRotMin) || 2);
+    const APRON_TAXIWAY_SPEED_MS = Math.max(0.1, Number(_flightTier.apronTaxiwaySpeedMs) || 1.5);
+    const LINEUP_QUEUE_SPACING_M = Math.max(0, Number(_flightTier.lineupQueueSpacingM) || 50);
+    const SIM_TIME_SLIDER_SNAP_SEC = Math.max(1, Number({json.dumps(_ui_flight_sim_slider_snap_sec)}) || 60);
+    const DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT = {json.dumps(bool(_ui_flight_allow_rw_ground))};
     const _algoTier = _tiers.algorithm || {{}};
+    const _algoSimTier = (_algoTier.simulation && typeof _algoTier.simulation === 'object') ? _algoTier.simulation : {{}};
+    const APPROACH_OFFSET_WORLD_M = Math.max(0, Number(_algoSimTier.approachOffsetM) || 10000);
+    const APPROACH_STRAIGHT_FINAL_M = Math.max(0, Number(_algoSimTier.approachStraightFinalM) || 3000);
+    const APPROACH_ZIGZAG_LEG_M = Math.max(0, Number(_algoSimTier.approachZigzagLegM) || 2000);
+    const APPROACH_ZIGZAG_STEP_M = Math.max(0, Number(_algoSimTier.approachZigzagStepM) || 200);
+    const AIRCRAFT_WINGSPAN_M = Math.max(1, Number(_algoSimTier.aircraftWingspanM) || 40);
+    const AIRCRAFT_FUSELAGE_LENGTH_M = Math.max(1, Number(_algoSimTier.aircraftFuselageLengthM) || 50);
+    const FLIGHT_TRAIL_LENGTH_M = Math.max(0, Number(_algoSimTier.trailLengthM) || 300);
+    const PRE_TOUCHDOWN_HALO_ENABLED = (_algoSimTier.preTouchdownHaloEnabled !== false);
+    const PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC = Math.max(0, Number(_algoSimTier.playbackLeadBeforeFirstTouchdownSec) || 0);
     const _styleTier = _tiers.style || {{}};
     const _ganttStyle = _styleTier.gantt || {{}};
     const _canvas2dStyle = _styleTier.canvas2d || {{}};
-    const TAXIWAY_DEFAULT_WIDTH = Math.max(5, Math.min(100, Number(_taxiwayTier.width) || 5));
+    const TAXIWAY_WIDTH_MIN = Math.max(1, Math.min(100, Number(_taxiwayTier.minWidth) || 1));
+    const RUNWAY_EXIT_WIDTH_MIN = Math.max(1, Math.min(100, Number(_runwayExitTier.minWidth) || 1));
+    const TAXIWAY_DEFAULT_WIDTH = Math.max(TAXIWAY_WIDTH_MIN, Math.min(100, Number(_taxiwayTier.width) || 1));
     const RUNWAY_PATH_DEFAULT_WIDTH = Math.max(5, Math.min(100, Number(_runwayPathTier.width) || 60));
-    const RUNWAY_EXIT_DEFAULT_WIDTH = Math.max(5, Math.min(100, Number(_runwayExitTier.width) || 5));
+    const RUNWAY_EXIT_DEFAULT_WIDTH = Math.max(RUNWAY_EXIT_WIDTH_MIN, Math.min(100, Number(_runwayExitTier.width) || 1));
+    function minWidthMForTaxiwayPathType(pathType) {{
+      if (pathType === 'runway') return 5;
+      if (pathType === 'runway_exit') return RUNWAY_EXIT_WIDTH_MIN;
+      return TAXIWAY_WIDTH_MIN;
+    }}
+    function clampTaxiwayWidthM(pathType, val, baseWidth) {{
+      const lo = minWidthMForTaxiwayPathType(pathType);
+      const raw = Number(val);
+      const use = (isFinite(raw) && raw > 0) ? raw : baseWidth;
+      return Math.max(lo, Math.min(100, use));
+    }}
+    function normalizeTaxiwayWidthInPlace(tw) {{
+      if (!tw || typeof tw !== 'object') return;
+      const pt = tw.pathType || 'taxiway';
+      const fb = pt === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+      if (tw.width != null) tw.width = clampTaxiwayWidthM(pt, tw.width, fb);
+    }}
     const RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.startDisplacedThresholdM) || 100);
     const RUNWAY_START_BLAST_PAD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.startBlastPadM) || 100);
     const RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.endDisplacedThresholdM) || 100);
@@ -1678,6 +1860,60 @@ def _build_designer_html() -> str:
       const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
       return (isFinite(n) && n >= 0) ? n : 22;
     }}
+    function c2dSimPreTouchdownHaloStroke() {{ return _canvas2dStyle.simPreTouchdownHaloStroke || 'rgba(239, 68, 68, 0.92)'; }}
+    function c2dSimPreTouchdownHaloFill() {{ return _canvas2dStyle.simPreTouchdownHaloFill || 'rgba(239, 68, 68, 0.18)'; }}
+    function c2dSimPreTouchdownHaloBlur() {{
+      const n = Number(_canvas2dStyle.simPreTouchdownHaloBlur);
+      return (isFinite(n) && n >= 0) ? n : 14;
+    }}
+    function c2dSimFlightTrailStroke() {{ return _canvas2dStyle.simFlightTrailStroke || 'rgba(255, 47, 146, 0.97)'; }}
+    function c2dSimFlightTrailStrokeEnd() {{ return _canvas2dStyle.simFlightTrailStrokeEnd || 'rgba(255, 47, 146, 0)'; }}
+    function c2dSimFlightTrailLineWidth() {{
+      const n = Number(_canvas2dStyle.simFlightTrailLineWidth);
+      return (isFinite(n) && n > 0) ? n : 3.5;
+    }}
+    function c2dApproachPreviewWidthM() {{
+      const n = Number(_canvas2dStyle.approachPreviewWidthM);
+      return (isFinite(n) && n > 0) ? n : 30;
+    }}
+    function c2dApproachPreviewStroke() {{
+      return _canvas2dStyle.approachPreviewStroke || 'rgba(255, 255, 255, 0.01)';
+    }}
+    function c2dHoldingPointDiameterM() {{
+      const n = Number(_canvas2dStyle.holdingPointDiameterM);
+      return (isFinite(n) && n > 0) ? n : 15;
+    }}
+    function normalizeHoldingPointKind(raw) {{
+      return raw === 'runway_holding' ? 'runway_holding' : 'intermediate';
+    }}
+    function pathTypeToHpKind(pathType) {{
+      return pathType === 'runway_exit' ? 'runway_holding' : 'intermediate';
+    }}
+    function holdingPointKindDisplayLabel(kind) {{
+      return normalizeHoldingPointKind(kind) === 'runway_holding' ? 'Runway Holding Position' : 'Intermediate Holding Position';
+    }}
+    function c2dHoldingPointFillForKind(kind) {{
+      const k = normalizeHoldingPointKind(kind);
+      if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayFill || 'rgba(239, 68, 68, 0.5)';
+      return _canvas2dStyle.holdingPointIntermediateFill || 'rgba(249, 115, 22, 0.5)';
+    }}
+    function c2dHoldingPointStrokeForKind(kind) {{
+      const k = normalizeHoldingPointKind(kind);
+      if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayStroke || 'rgba(220, 38, 38, 0.78)';
+      return _canvas2dStyle.holdingPointIntermediateStroke || 'rgba(234, 88, 12, 0.75)';
+    }}
+    function c2dHoldingPointPreviewFillForPathType(pathType) {{
+      const k = pathTypeToHpKind(pathType || 'taxiway');
+      if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayPreviewFill || 'rgba(239, 68, 68, 0.28)';
+      return _canvas2dStyle.holdingPointIntermediatePreviewFill || 'rgba(249, 115, 22, 0.28)';
+    }}
+    function c2dHoldingPointPreviewStrokeForPathType(pathType) {{
+      const k = pathTypeToHpKind(pathType || 'taxiway');
+      if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayStroke || 'rgba(220, 38, 38, 0.78)';
+      return _canvas2dStyle.holdingPointIntermediateStroke || 'rgba(234, 88, 12, 0.75)';
+    }}
+    function c2dSimStandOccupiedFill() {{ return _canvas2dStyle.simStandOccupiedFill || 'rgba(239, 68, 68, 0.32)'; }}
+    function c2dSimStandOccupiedStroke() {{ return _canvas2dStyle.simStandOccupiedStroke || 'rgba(220, 38, 38, 0.95)'; }}
     function c2dPathDrawStartMarkerRadiusPx() {{
       const n = Number(_canvas2dStyle.pathDrawStartMarkerRadiusPx);
       const base = (isFinite(n) && n > 0) ? n : 3.5;
@@ -1698,7 +1934,6 @@ def _build_designer_html() -> str:
       const base = isFinite(n) ? n : -6;
       return base * LAYOUT_VERTEX_DOT_SCALE;
     }}
-    const _threeDStyle = _styleTier.threeD || {{}};
     const GANTT_COLORS = {{
       S_BAR: _ganttStyle.sBar || '#007aff',
       S_SERIES: _ganttStyle.sSeries || '#38bdf8',
@@ -1719,21 +1954,6 @@ def _build_designer_html() -> str:
     const _ac2d = _apronAc.twoD || {{}};
     const _acSil = (_ac2d.silhouette && typeof _ac2d.silhouette === 'object') ? _ac2d.silhouette : {{}};
     function apron2DGlyphFill() {{ return _ac2d.fillColor || '#ff2f92'; }}
-    const _ac3d = _apronAc.threeD || {{}};
-    function _toNumberOr(v, def) {{
-      const n = Number(v);
-      return (isFinite(n) && n > 0) ? n : def;
-    }}
-    function hexToThreeColor(hex) {{
-      const s = String(hex || '').replace('#', '').trim();
-      if (!s || s.length < 6) return 0xff2f92;
-      const n = parseInt(s.slice(0, 6), 16);
-      return isFinite(n) ? n : 0xff2f92;
-    }}
-    function threeOpacity(v, def) {{
-      const o = Number(v);
-      return (isFinite(o) && o >= 0 && o <= 1) ? o : def;
-    }}
     const _schedAlgo = _algoTier.scheduledTimes || {{}};
     const SCHED_DWELL_FLOOR_MIN = (function() {{
       const v = Number(_schedAlgo.dwellFloorMin);
@@ -1744,6 +1964,157 @@ def _build_designer_html() -> str:
       return (isFinite(v) && v >= 0) ? v : 90;
     }})();
     const TIME_AXIS_CFG = _algoTier.timeAxis || {{}};
+    const DOM_OPT_CFG = (_algoTier.domOptimization && typeof _algoTier.domOptimization === 'object') ? _algoTier.domOptimization : {{}};
+    const DOM_DIAGNOSTIC_LOG = DOM_OPT_CFG.diagnosticLogDomCount === true;
+    const DOM_OPT_FLIGHT_VIRT_ENABLE = DOM_OPT_CFG.flightListVirtualScroll !== false;
+    const DOM_OPT_FLIGHT_VIRT_MIN = (function() {{
+      const v = Math.floor(Number(DOM_OPT_CFG.flightListVirtualMinRows));
+      return (isFinite(v) && v >= 8) ? v : 48;
+    }})();
+    const DOM_OPT_FLIGHT_VIRT_OVERSCAN = (function() {{
+      const v = Math.floor(Number(DOM_OPT_CFG.flightListVirtualOverscan));
+      return (isFinite(v) && v >= 0) ? v : 8;
+    }})();
+    const DOM_OPT_FLIGHT_VIRT_ROW_H = (function() {{
+      const v = Number(DOM_OPT_CFG.flightListVirtualRowHeightPx);
+      return (isFinite(v) && v >= 18) ? v : 28;
+    }})();
+    const DOM_COMPOSITION_REPORT = DOM_OPT_CFG.diagnosticDomCompositionReport === true;
+    const FLIGHT_SCHED_PAGE_SIZE = (function() {{
+      const v = Math.floor(Number(DOM_OPT_CFG.flightSchedulePageSize));
+      if (!isFinite(v) || v < 0) return 20;
+      return v;
+    }})();
+    const GANTT_LEGEND_MAX_INTERVALS = (function() {{
+      const v = Math.floor(Number(DOM_OPT_CFG.ganttLegendMaxIntervals));
+      if (!isFinite(v) || v < 1) return 100;
+      return v;
+    }})();
+    const KPI_ROLLING_TABLE_VISIBLE_ROWS = (function() {{
+      const v = Math.floor(Number(DOM_OPT_CFG.kpiRollingTableVisibleRows));
+      if (!isFinite(v) || v < 1) return 24;
+      return v;
+    }})();
+    const DOM_REGION_META = {{
+      'app': {{ label: '루트 #app', source: '기본 레이아웃' }},
+      'toolbar': {{ label: '상단 툴바', source: '정적 HTML' }},
+      'canvas-container': {{ label: '2D 캔버스 영역', source: 'draw() / Canvas' }},
+      'view3d-container': {{ label: '3D 뷰', source: 'update3DScene / Three.js' }},
+      'right-panel': {{ label: '우측 패널(미세분류 없음)', source: '정적 HTML' }},
+      'tab-settings': {{ label: '탭: Settings', source: '정적 HTML' }},
+      'tab-flight': {{ label: '탭: Flight', source: '정적 HTML' }},
+      'tab-rwysep': {{ label: '탭: Runway sep', source: '정적 HTML' }},
+      'tab-allocation': {{ label: '탭: Allocation', source: '정적 HTML' }},
+      'tab-simulation': {{ label: '탭: Simulation/KPI', source: '정적 HTML' }},
+      'tab-saveload': {{ label: '탭: Save/Load', source: '정적 HTML' }},
+      'settings-grid': {{ label: '그리드 설정 폼', source: '정적 HTML' }},
+      'flightPaneSchedule': {{ label: '항공편 입력 폼', source: '정적 HTML' }},
+      'flightList': {{ label: '항공편 스케줄 표', source: 'renderFlightList' }},
+      'flightConfigList': {{ label: '기종별 착륙 설정 표', source: '_renderFlightConfigTable' }},
+      'allocationGantt': {{ label: 'Stand allocation 간트', source: 'renderFlightGantt' }},
+      'rwySepPanel': {{ label: '활주로 분리 패널', source: 'renderRunwaySeparation' }},
+      'rwysep-subtab-input': {{ label: '활주로 분리 입력 서브탭', source: 'renderRunwaySeparation' }},
+      'rwysep-subtab-timeline': {{ label: '활주로 분리 타임라인 서브탭', source: 'renderRunwaySeparation' }},
+      'rwySepTimeWrap': {{ label: '활주로 분리 Reg×Time', source: 'drawRwySeparationTimeline' }},
+      'kpiDashboard': {{ label: 'KPI 대시보드', source: 'renderKpiDashboard' }},
+      'object-list': {{ label: '그리드 객체 목록', source: 'object list sync' }},
+      'layoutLoadList': {{ label: '레이아웃 로드 목록', source: 'load list API' }},
+      'globalUpdateOverlay': {{ label: 'Update 오버레이', source: 'setGlobalUpdateProgressUi' }},
+      'layout-name-bar': {{ label: '레이아웃 이름 바', source: 'updateLayoutNameBar' }},
+      'info-bar': {{ label: '하단 힌트 바', source: '정적 HTML' }},
+      'flight-tooltip': {{ label: '항공편 툴팁', source: '동적' }},
+      'api-warning-banner': {{ label: 'API 경고 배너', source: '정적 HTML' }}
+    }};
+    function reportLayoutDesignerDomComposition(runId) {{
+      const appEl = document.getElementById('app');
+      const docTotal = document.getElementsByTagName('*').length;
+      const rows = [];
+      const counts = {{}};
+      let appTotal = 0;
+      if (appEl) {{
+        appTotal = 1 + appEl.getElementsByTagName('*').length;
+        const allEls = [appEl].concat(Array.prototype.slice.call(appEl.getElementsByTagName('*')));
+        allEls.forEach(function(el) {{
+          let cur = el;
+          let key = '_other_under_app';
+          while (cur) {{
+            if (cur.id && DOM_REGION_META[cur.id]) {{
+              key = cur.id;
+              break;
+            }}
+            cur = cur.parentElement;
+          }}
+          counts[key] = (counts[key] || 0) + 1;
+        }});
+      }}
+      const keys = Object.keys(counts).sort(function(a, b) {{ return (counts[b] || 0) - (counts[a] || 0); }});
+      keys.forEach(function(k) {{
+        const meta = DOM_REGION_META[k] || {{ label: k, source: '—' }};
+        rows.push({{
+          regionId: k,
+          label: meta.label,
+          sourceFn: meta.source,
+          nodeCount: counts[k]
+        }});
+      }});
+      const summary = {{
+        runId: runId || '',
+        documentElementCount: docTotal,
+        appSubtreeElementCount: appTotal,
+        rows: rows,
+        scheduleTableDetail: null,
+        configTableDetail: null
+      }};
+      const flRoot = document.getElementById('flightList');
+      if (flRoot) {{
+        const dataRows = flRoot.querySelectorAll('tr.flight-data-row').length;
+        const virt = !!(flRoot.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]'));
+        let rwN = 0, termN = 0;
+        try {{
+          rwN = (typeof getRunwayOptions === 'function') ? getRunwayOptions().length : 0;
+        }} catch (eR) {{}}
+        try {{
+          termN = (state.terminals || []).length;
+        }} catch (eT) {{}}
+        const optN = flRoot.querySelectorAll('option').length;
+        const selN = flRoot.querySelectorAll('select').length;
+        const tdN = flRoot.querySelectorAll('td').length;
+        summary.scheduleTableDetail = {{
+          dataRowCount: dataRows,
+          selectElements: selN,
+          optionElements: optN,
+          tdElements: tdN,
+          virtualScrollActive: virt,
+          runwayCountForSelects: rwN,
+          terminalCountForSelects: termN,
+          note: 'Each row: 3 selects (Arr Rw, Building, Dep Rw); option lists duplicated per row ≈ rows × (2×runways + terminals + 1)'
+        }};
+      }}
+      const fcRoot = document.getElementById('flightConfigList');
+      if (fcRoot) {{
+        summary.configTableDetail = {{
+          trCount: fcRoot.querySelectorAll('tr').length,
+          inputCount: fcRoot.querySelectorAll('input').length,
+          tdCount: fcRoot.querySelectorAll('td').length
+        }};
+      }}
+      try {{
+        console.log('[layout-designer] DOM composition (nearest-region bucketing; sums to #app subtree nodes)');
+        console.table(rows.map(function(r) {{ return {{ region: r.regionId, label: r.label, source: r.sourceFn, nodes: r.nodeCount }}; }}));
+        if (summary.scheduleTableDetail) {{
+          console.log('[layout-designer] Flight schedule table detail (options dominate DOM)', summary.scheduleTableDetail);
+        }}
+      }} catch (e2) {{}}
+      return summary;
+    }}
+    function scheduleDomCompositionReport(runId) {{
+      if (!DOM_COMPOSITION_REPORT) return;
+      requestAnimationFrame(function() {{
+        requestAnimationFrame(function() {{
+          try {{ reportLayoutDesignerDomComposition(runId || 'after-update'); }} catch (e) {{ console.error(e); }}
+        }});
+      }});
+    }}
     function _taNum(k, def) {{
       const v = Number(TIME_AXIS_CFG[k]);
       return (isFinite(v) && v >= 0) ? v : def;
@@ -1791,12 +2162,18 @@ def _build_designer_html() -> str:
       return vertexSelected ? 5.5 * LAYOUT_VERTEX_DOT_SCALE : 4 * LAYOUT_VERTEX_DOT_SCALE;
     }}
     const DRAG_THRESH = _interactionConfigNum('dragThresholdPx', 5);
+    const FREE_DRAW_STEP_CELL = Math.max(0.001, _interactionConfigNum('freeDrawStepCell', 0.05));
+    const GRID_SNAP_STEP_CELL = Math.max(0.001, _interactionConfigNum('gridSnapStepCell', 0.5));
+    const INSERT_VERTEX_HIT_CF = _interactionConfigNum('insertVertexHitCellFactor', 0.9);
+    const CANVAS_MIN_ZOOM = Math.max(0.01, _interactionConfigNum('canvasMinZoom', 0.05));
+    const CANVAS_MAX_ZOOM = Math.max(CANVAS_MIN_ZOOM, _interactionConfigNum('canvasMaxZoom', 10));
     const HIT_TERM_VTX_CF = _interactionConfigNum('hitTerminalVertexCellFactor', 0.6) * LAYOUT_VERTEX_DOT_SCALE;
     const HIT_TW_VTX_CF = _interactionConfigNum('hitTaxiwayVertexCellFactor', 0.6) * LAYOUT_VERTEX_DOT_SCALE;
     const HIT_TW_SEG_CF = _interactionConfigNum('hitTaxiwayAlongCellFactor', 0.8);
     const HIT_PBB_END_CF = _interactionConfigNum('hitPbbEndCellFactor', 0.8);
     const TRY_PBB_MAX_EDGE_CF = _interactionConfigNum('tryPlacePbbMaxEdgeCellFactor', 1.0);
     const FLIGHT_TOOLTIP_CF = _interactionConfigNum('flightTooltipCellFactor', 1.2);
+    const FLIGHT_TOOLTIP_SCAN_MIN_MS = _interactionConfigNum('flightTooltipScanMinIntervalMs', 50);
     const TERM_CLOSE_POLY_CF = _interactionConfigNum('terminalClosePolygonCellFactor', 0.6);
     const PBB_PREVIEW_LEN_CF = _interactionConfigNum('pbbPreviewLengthCellFactor', 0.9);
 
@@ -1824,6 +2201,73 @@ def _build_designer_html() -> str:
     }};
     let layoutImageBitmap = null;
     let layoutImageBitmapSrc = '';
+    const BUILDING_TYPE_CFG = (_layoutTier.building && typeof _layoutTier.building === 'object') ? _layoutTier.building : {{}};
+    const BUILDING_TYPES = Array.isArray(BUILDING_TYPE_CFG.types) && BUILDING_TYPE_CFG.types.length ? BUILDING_TYPE_CFG.types.slice() : [
+      {{ id: 'passenger_terminal', label: 'Passenger Terminal' }},
+      {{ id: 'concourse', label: '위성터미널(콘코스)' }},
+      {{ id: 'control_tower', label: 'Control Tower' }},
+      {{ id: 'cargo_terminal', label: 'Cargo Terminal' }},
+      {{ id: 'hanger', label: 'Hanger' }},
+      {{ id: 'utility', label: 'Utility' }},
+      {{ id: 'wall', label: 'Wall' }},
+    ];
+    const BUILDING_TYPE_DEFAULT = String(BUILDING_TYPE_CFG.defaultType || (BUILDING_TYPES[0] && BUILDING_TYPES[0].id) || 'passenger_terminal');
+    const BUILDING_TYPE_BY_ID = {{}};
+    BUILDING_TYPES.forEach(function(bt) {{ BUILDING_TYPE_BY_ID[String(bt.id || '')] = bt; }});
+    function normalizeBuildingType(rawType) {{
+      const key = String(rawType || '').trim();
+      if (key && BUILDING_TYPE_BY_ID[key]) return key;
+      return BUILDING_TYPE_DEFAULT;
+    }}
+    function getBuildingTypeMeta(rawType) {{
+      return BUILDING_TYPE_BY_ID[normalizeBuildingType(rawType)] || BUILDING_TYPE_BY_ID[BUILDING_TYPE_DEFAULT] || {{ id: BUILDING_TYPE_DEFAULT, label: 'Passenger Terminal' }};
+    }}
+    function getBuildingTypeLabel(rawType) {{
+      const meta = getBuildingTypeMeta(rawType);
+      return String(meta.label || meta.id || 'Building');
+    }}
+    function getBuildingTypeNamePrefix(rawType) {{
+      const key = normalizeBuildingType(rawType);
+      if (key === 'passenger_terminal') return 'Terminal';
+      if (key === 'concourse') return 'Concourse';
+      if (key === 'control_tower') return 'Tower';
+      if (key === 'cargo_terminal') return 'Cargo';
+      if (key === 'hanger') return 'Hanger';
+      if (key === 'utility') return 'Utility';
+      if (key === 'wall') return 'Wall';
+      return 'Building';
+    }}
+    function getBuildingTypeOptionsHtml(selectedType) {{
+      const current = normalizeBuildingType(selectedType);
+      return BUILDING_TYPES.map(function(bt) {{
+        const id = String(bt.id || '');
+        const label = String(bt.label || bt.id || id || 'Building');
+        return '<option value="' + escapeHtml(id) + '"' + (id === current ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+      }}).join('');
+    }}
+    function getBuildingTheme(building) {{
+      const key = normalizeBuildingType(building && building.buildingType);
+      const themes = (_canvas2dStyle.buildingTypes && typeof _canvas2dStyle.buildingTypes === 'object') ? _canvas2dStyle.buildingTypes : {{}};
+      const theme = (themes && typeof themes[key] === 'object') ? themes[key] : {{}};
+      return {{
+        key: key,
+        label: getBuildingTypeLabel(key),
+        stroke: theme.stroke || _canvas2dStyle.terminalStrokeDefault || '#38bdf8',
+        fill: theme.fill || _canvas2dStyle.terminalFillDefault || 'rgba(56,189,248,0.12)',
+        labelFill: theme.labelFill || _canvas2dStyle.terminalLabelFill || 'rgba(56,189,248,0.95)',
+        fillEnabled: theme.fillEnabled !== false,
+        hatch: String(theme.hatch || '').trim().toLowerCase(),
+      }};
+    }}
+    function c2dPassengerTerminalStroke() {{
+      return getBuildingTheme({{ buildingType: 'passenger_terminal' }}).stroke;
+    }}
+    function getDefaultBuildingNameForType(buildingType, currentId) {{
+      const prefix = getBuildingTypeNamePrefix(buildingType);
+      const buildings = (state.terminals || []).filter(function(t) {{ return t && t.id !== currentId; }});
+      const used = new Set(buildings.map(function(t) {{ return (t.name && String(t.name).trim()) || ''; }}).filter(Boolean));
+      return uniqueNameAgainstSet(prefix + String(buildings.length + 1), used);
+    }}
 
     function id() {{ return 'id_' + Math.random().toString(36).slice(2, 11); }}
     function escapeHtml(str) {{
@@ -1834,11 +2278,85 @@ def _build_designer_html() -> str:
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     }}
+    function escapeAttr(str) {{
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/\\r\\n|\\r|\\n/g, ' ');
+    }}
+    function buildNoWayTooltip(f) {{
+      if (!f) return '경로를 찾을 수 없습니다.';
+      const parts = [];
+      if (f.noWayArr) {{
+        const d = f._noWayArrDetail != null ? String(f._noWayArrDetail).trim() : '';
+        parts.push('도착: ' + (d || '사유를 판별하지 못했습니다.'));
+      }}
+      if (f.noWayDep) {{
+        const d = f._noWayDepDetail != null ? String(f._noWayDepDetail).trim() : '';
+        parts.push('출발: ' + (d || '사유를 판별하지 못했습니다.'));
+      }}
+      if (!parts.length) return '경로를 찾을 수 없습니다.';
+      return parts.join(' ');
+    }}
+    function renderChoiceChipList(container, items, selectedIds, inputClass, inputName) {{
+      if (!container) return;
+      const selected = new Set(Array.isArray(selectedIds) ? selectedIds.map(String) : []);
+      const list = Array.isArray(items) ? items : [];
+      if (!list.length) {{
+        container.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No options.</div>';
+        return;
+      }}
+      container.innerHTML = '<div class="choice-chip-grid">' + list.map(function(item) {{
+        const itemId = String(item.id || '');
+        const checked = selected.has(itemId);
+        return '' +
+          '<label class="choice-chip' + (checked ? ' is-checked' : '') + '">' +
+            '<input type="checkbox" class="' + escapeHtml(inputClass || '') + '" name="' + escapeHtml(inputName || '') + '" data-item-id="' + escapeHtml(itemId) + '"' + (checked ? ' checked' : '') + ' />' +
+            '<span class="choice-chip-label">' + escapeHtml(String(item.label || itemId || '')) + '</span>' +
+          '</label>';
+      }}).join('') + '</div>';
+    }}
+    function syncChoiceChipStates(container) {{
+      if (!container) return;
+      container.querySelectorAll('.choice-chip').forEach(function(labelEl) {{
+        const input = labelEl.querySelector('input[type="checkbox"]');
+        labelEl.classList.toggle('is-checked', !!(input && input.checked));
+      }});
+    }}
+    function getNamedBuildings() {{
+      return makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {{
+        return {{ id: t.id, label: (t.name || '').trim() || 'Building' }};
+      }});
+    }}
+    function renderRemoteTerminalAccessChoices(selectedIds) {{
+      const container = document.getElementById('remoteTerminalAccess');
+      renderChoiceChipList(container, getNamedBuildings(), selectedIds, 'remote-term-check', 'remote-building');
+    }}
+    function renderRunwayDirectionChoices(selectedIds) {{
+      const container = document.getElementById('runwayExitAllowedDirection');
+      renderChoiceChipList(container, [
+        {{ id: 'clockwise', label: 'CW' }},
+        {{ id: 'counter_clockwise', label: 'CCW' }},
+      ], selectedIds, 'runway-exit-dir-check', 'runway-exit-dir');
+    }}
+    function renderAircraftConstraintChoices(containerId, selectedIds) {{
+      const container = document.getElementById(containerId);
+      renderChoiceChipList(container, getAircraftConstraintOptions(), selectedIds, 'aircraft-type-check', containerId);
+    }}
+    function syncStandConstraintVisibility(prefix, mode) {{
+      const normMode = normalizeStandCategoryMode(mode, 'icao');
+      const icaoWrap = document.getElementById(prefix + 'IcaoWrap');
+      const aircraftWrap = document.getElementById(prefix + 'AircraftWrap');
+      if (icaoWrap) icaoWrap.style.display = normMode === 'icao' ? 'grid' : 'none';
+      if (aircraftWrap) aircraftWrap.style.display = normMode === 'aircraft' ? 'grid' : 'none';
+    }}
 
     const state = {{
       terminals: [],
       pbbStands: [],
       remoteStands: [],
+      holdingPoints: [],
       taxiways: [],
       apronLinks: [],
       layoutEdgeNames: {{}},
@@ -1853,6 +2371,7 @@ def _build_designer_html() -> str:
       simPlaying: false,
       simSpeed: {json.dumps(float(_ui_default_sim_speed))},
       hasSimulationResult: false,
+      simPlaybackDockVisible: false,
       showGrid: GRID_VISIBLE_DEFAULT,
       showImage: IMAGE_VISIBLE_DEFAULT,
       currentTerminalId: null,
@@ -1861,6 +2380,9 @@ def _build_designer_html() -> str:
       taxiwayDrawingId: null,
       dragVertex: null,
       dragTaxiwayVertex: null,
+      dragPbbBridgeVertex: null,
+      dragStandConnection: null,
+      dragStandRotation: null,
       dragApronLinkVertex: null,
       selectedVertex: null,
       scale: 1,
@@ -1873,15 +2395,100 @@ def _build_designer_html() -> str:
       previewPbb: null,
       pbbDrawing: false,
       remoteDrawing: false,
+      holdingPointDrawing: false,
+      previewHoldingPoint: null,
       apronLinkDrawing: false,
       apronLinkTemp: null,
       apronLinkMidpoints: [],
       apronLinkPointerWorld: null,
+      layoutPathDrawPointer: null,
       hoverCell: null,
       vttArrCacheRev: 0,
       derivedGraphEdges: [],
+      globalUpdateFresh: false,
+      activeRwySepId: null,
+      activeRwySepSubtab: 'noname',
+      rwySepPanelDirty: true,
+      rwySepSnapshotStaleGen: 0,
+      pathPolylineCacheRev: 0,
+      flightSchedulePage: 0,
+      kpiRollingDetailExpanded: false,
+      flightPathRevealFlightId: null,
     }};
     let hookSyncFlightPanelFromSelection = null;
+    function bumpRwySepSnapshotStaleGen() {{
+      state.rwySepSnapshotStaleGen = (state.rwySepSnapshotStaleGen | 0) + 1;
+    }}
+    function bumpPathPolylineCacheRev() {{
+      state.pathPolylineCacheRev = (state.pathPolylineCacheRev | 0) + 1;
+    }}
+    function cloneFlightsWithoutPathPolylineCache(flights) {{
+      return (flights || []).map(function(f) {{
+        const raw = JSON.parse(JSON.stringify(f));
+        delete raw.cachedArrPathPts;
+        delete raw.cachedDepPathPts;
+        delete raw._pathPolylineCacheRev;
+        delete raw._pathPolylineArrRetKey;
+        return raw;
+      }});
+    }}
+    function markGlobalUpdateStale() {{
+      state.globalUpdateFresh = false;
+      state.simPlaying = false;
+      state.simPlaybackDockVisible = false;
+      if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+      bumpPathPolylineCacheRev();
+      state.rwySepPanelDirty = true;
+      bumpRwySepSnapshotStaleGen();
+      if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines();
+      const dot = document.getElementById('globalUpdateSyncDot');
+      if (dot) {{
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Results may be outdated — click Update to refresh');
+      }}
+      if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    }}
+    function markGlobalUpdateFresh() {{
+      state.globalUpdateFresh = true;
+      const dot = document.getElementById('globalUpdateSyncDot');
+      if (dot) {{
+        dot.classList.remove('stale');
+        dot.classList.add('fresh');
+        dot.setAttribute('title', 'All views match the last Update');
+      }}
+      if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    }}
+    // Layout edits: refresh 2D/3D only; paths·schedule·KPI on Update (pushUndo may already mark stale).
+    function redrawLayoutAfterEdit() {{
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      if (typeof draw === 'function') draw();
+      if (typeof scene3d !== 'undefined' && scene3d && typeof update3DScene === 'function') update3DScene();
+    }}
+    function setGlobalUpdateProgressUi(visible, label, pct) {{
+      const ov = document.getElementById('globalUpdateOverlay');
+      const fill = document.getElementById('globalUpdateProgressFill');
+      const lab = document.getElementById('globalUpdateOverlayLabel');
+      const btn = document.getElementById('btnGlobalUpdate');
+      if (!ov) return;
+      if (visible) {{
+        ov.classList.add('is-visible');
+        ov.setAttribute('aria-hidden', 'false');
+        if (lab && label != null) lab.textContent = label;
+        if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        if (btn) btn.disabled = true;
+      }} else {{
+        ov.classList.remove('is-visible');
+        ov.setAttribute('aria-hidden', 'true');
+        if (fill) fill.style.width = '0%';
+        if (btn) btn.disabled = false;
+      }}
+    }}
+    function scheduleAfterPaint(fn) {{
+      requestAnimationFrame(function() {{
+        requestAnimationFrame(function() {{ setTimeout(fn, 0); }});
+      }});
+    }}
     const DEFAULT_AIRLINE_CODES = (function() {{
       const a = _flightTier.defaultAirlineCodes;
       return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
@@ -1906,6 +2513,7 @@ def _build_designer_html() -> str:
       if (hit.type === 'terminal') return 'terminal';
       if (hit.type === 'pbb') return 'pbb';
       if (hit.type === 'remote') return 'remote';
+      if (hit.type === 'holdingPoint') return 'holdingPoint';
       if (hit.type === 'taxiway') return layoutModeFromPathType((hit.obj && hit.obj.pathType) || 'taxiway');
       if (hit.type === 'apronLink') return 'apronTaxiway';
       return null;
@@ -1913,10 +2521,13 @@ def _build_designer_html() -> str:
     function cancelActiveLayoutDrawingState() {{
       state.pbbDrawing = false;
       state.remoteDrawing = false;
+      state.holdingPointDrawing = false;
+      state.previewHoldingPoint = null;
       state.apronLinkDrawing = false;
       state.apronLinkTemp = null;
       state.apronLinkMidpoints = [];
       state.apronLinkPointerWorld = null;
+      state.layoutPathDrawPointer = null;
       state.previewPbb = null;
       state.previewRemote = null;
     }}
@@ -2011,12 +2622,14 @@ def _build_designer_html() -> str:
         if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
         layoutImageBitmap = img;
         layoutImageBitmapSrc = src;
+        invalidateGridUnderlay();
         safeDraw();
       }};
       img.onerror = function() {{
         if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
         layoutImageBitmap = null;
         layoutImageBitmapSrc = '';
+        invalidateGridUnderlay();
         safeDraw();
       }};
       img.src = src;
@@ -2053,6 +2666,11 @@ def _build_designer_html() -> str:
         if (prev && !prev.overlap && tryPlaceRemoteAt(prev.x, prev.y)) {{ syncPanelFromState(); draw(); }}
         return true;
       }}
+      if (mode === 'holdingPoint' && state.holdingPointDrawing) {{
+        const prev = state.previewHoldingPoint;
+        if (prev && tryPlaceHoldingPointAt(prev.x, prev.y, prev.pathType || 'taxiway')) {{ syncPanelFromState(); draw(); }}
+        return true;
+      }}
       return false;
     }}
     function tryCommitStandPlacement3D(mode, wx, wy, col, row) {{
@@ -2068,6 +2686,7 @@ def _build_designer_html() -> str:
       if (typ === 'terminal') return state.terminals.find(t => t.id === idr);
       if (typ === 'pbb') return state.pbbStands.find(p => p.id === idr);
       if (typ === 'remote') return state.remoteStands.find(r => r.id === idr);
+      if (typ === 'holdingPoint') return (state.holdingPoints || []).find(h => h.id === idr);
       if (typ === 'taxiway') return state.taxiways.find(tw => tw.id === idr);
       if (typ === 'apronLink') return state.apronLinks.find(lk => lk.id === idr);
       if (typ === 'layoutEdge') return (state.derivedGraphEdges || []).find(function(e) {{ return e.id === idr; }});
@@ -2081,9 +2700,14 @@ def _build_designer_html() -> str:
       if (type === 'terminal') state.terminals = state.terminals.filter(t => t.id !== id);
       else if (type === 'pbb') state.pbbStands = state.pbbStands.filter(p => p.id !== id);
       else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
+      else if (type === 'holdingPoint') state.holdingPoints = (state.holdingPoints || []).filter(h => h.id !== id);
       else if (type === 'taxiway') state.taxiways = state.taxiways.filter(tw => tw.id !== id);
       else if (type === 'apronLink') state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
-      else if (type === 'flight') state.flights = state.flights.filter(f => f.id !== id);
+      else if (type === 'flight') {{
+        state.flights = state.flights.filter(f => f.id !== id);
+        bumpRwySepSnapshotStaleGen();
+        state.rwySepPanelDirty = true;
+      }}
       else if (type === 'layoutEdge') {{}}
       if (removedTaxiway) {{
         if (removedTaxiway.pathType === 'runway_exit') {{
@@ -2099,6 +2723,7 @@ def _build_designer_html() -> str:
             f.__schedVttArrRev = null;
             f.__schedVttArrMin = null;
             f.noWayArr = false;
+            delete f._noWayArrDetail;
           }});
         }}
         if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
@@ -2125,6 +2750,22 @@ def _build_designer_html() -> str:
       if (maxExitWrap) maxExitWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
       if (minExitWrap) minExitWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
       if (rwDirWrap) rwDirWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
+      refreshTaxiwayDirectionModeSelect(pt);
+    }}
+    function refreshTaxiwayDirectionModeSelect(pathType) {{
+      const sel = document.getElementById('taxiwayDirectionMode');
+      if (!sel) return;
+      const cur = String(sel.value || '').trim();
+      const htmlTwo = '<option value="clockwise">CW</option><option value="counter_clockwise">CCW</option>';
+      const htmlThree = htmlTwo + '<option value="both">Both</option>';
+      sel.innerHTML = (pathType === 'runway') ? htmlTwo : htmlThree;
+      if (pathType === 'runway') {{
+        if (cur === 'clockwise' || cur === 'counter_clockwise') sel.value = cur;
+        else sel.value = 'clockwise';
+      }} else {{
+        if (cur === 'clockwise' || cur === 'counter_clockwise' || cur === 'both') sel.value = cur;
+        else sel.value = 'both';
+      }}
     }}
     function mergeTaxiwaysFromLayoutObject(obj) {{
       if (!obj || typeof obj !== 'object') return [];
@@ -2149,9 +2790,14 @@ def _build_designer_html() -> str:
           if (o.pathType !== 'runway') delete o.rwySepConfig;
           out.push(o);
         }});
+        out.forEach(normalizeTaxiwayWidthInPlace);
         return out;
       }}
-      if (Array.isArray(obj.taxiways)) return obj.taxiways.slice();
+      if (Array.isArray(obj.taxiways)) {{
+        const sliced = obj.taxiways.slice();
+        sliced.forEach(normalizeTaxiwayWidthInPlace);
+        return sliced;
+      }}
       return [];
     }}
     function applyLayoutObject(obj) {{
@@ -2168,13 +2814,33 @@ def _build_designer_html() -> str:
       state.layoutImageOverlay = normalizeLayoutImageOverlay(
         (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
       );
+      invalidateGridUnderlay();
       syncLayoutImageBitmap();
       syncGridToggleButton();
       syncImageToggleButton();
-      if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.slice();
-      if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.slice();
-      if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.slice();
+      if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
+      if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
+      if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
       state.taxiways = mergeTaxiwaysFromLayoutObject(obj);
+      if (Array.isArray(obj.holdingPoints)) {{
+        state.holdingPoints = obj.holdingPoints.map(function(h) {{
+          const hx = Number(h && h.x);
+          const hy = Number(h && h.y);
+          let hpKind = null;
+          if (h && h.hpKind != null) hpKind = normalizeHoldingPointKind(h.hpKind);
+          if (!hpKind) {{
+            const snap = snapHoldingPointOnAllowedTaxiways(hx, hy);
+            hpKind = (snap && snap.pathType) ? pathTypeToHpKind(snap.pathType) : 'intermediate';
+          }}
+          return {{
+            id: (h && h.id) ? h.id : id(),
+            name: h && h.name != null ? String(h.name) : '',
+            x: hx,
+            y: hy,
+            hpKind: hpKind
+          }};
+        }}).filter(function(h) {{ return h && isFinite(h.x) && isFinite(h.y); }});
+      }} else state.holdingPoints = [];
       if (Array.isArray(obj.apronLinks)) state.apronLinks = obj.apronLinks.slice();
       if (Array.isArray(obj.directionModes) && obj.directionModes.length) {{
         state.directionModes = obj.directionModes.slice();
@@ -2207,6 +2873,8 @@ def _build_designer_html() -> str:
           // Route / RET / No-way values are derived from the current graph, so reset them on load.
           f.noWayArr = false;
           f.noWayDep = false;
+          delete f._noWayArrDetail;
+          delete f._noWayDepDetail;
           f.arrRetFailed = false;
           f.sampledArrRet = null;
           f.arrRotSec = null;
@@ -2217,6 +2885,11 @@ def _build_designer_html() -> str:
           f.arrVRetInMs = null;
           f.arrVRetOutMs = null;
           f.timeline = null;
+          delete f.timeline_meta;
+          delete f.cachedArrPathPts;
+          delete f.cachedDepPathPts;
+          delete f._pathPolylineCacheRev;
+          delete f._pathPolylineArrRetKey;
           f.__schedRetRotRev = null;
           f.__schedVttArrRev = null;
           f.__schedVttArrMin = null;
@@ -2226,15 +2899,16 @@ def _build_designer_html() -> str:
       }} else {{
         state.flights = [];
       }}
+      if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
       // The layout of the parking lot is JSON(apronId)Restored only. timeline/No route-based automatic reassignment
       // Do not autoplay simulation
       state.simPlaying = false;
-      // flightsWhen the path changes·Simulation length after timeline calculation·List update (to be playable)
-      if (typeof updateAllFlightPaths === 'function') {{
-        updateAllFlightPaths();
-      }}
+      state.layoutPathDrawPointer = null;
+      state.hasSimulationResult = false;
+      if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+      else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else {{
-        if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
         if (typeof renderFlightList === 'function') renderFlightList();
         draw();
       }}
@@ -2267,9 +2941,7 @@ def _build_designer_html() -> str:
       return uniqueNameAgainstSet(prefix + String(sameType.length + 1), used);
     }}
     function getDefaultTerminalName(currentId) {{
-      const terms = (state.terminals || []).filter(function(t) {{ return t && t.id !== currentId; }});
-      const used = new Set(terms.map(function(t) {{ return (t.name && String(t.name).trim()) || ''; }}).filter(Boolean));
-      return uniqueNameAgainstSet('Terminal' + String(terms.length + 1), used);
+      return getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, currentId);
     }}
     function getDefaultPbbStandName(currentId) {{
       const stands = (state.pbbStands || []).filter(function(st) {{ return st && st.id !== currentId; }});
@@ -2316,6 +2988,93 @@ def _build_designer_html() -> str:
         .filter(Boolean));
       return uniqueNameAgainstSet(baseName, used);
     }}
+    function normalizeLayoutNameKey(name) {{
+      return String(name || '').trim().toLowerCase();
+    }}
+    function findDuplicateLayoutName(objectKind, excludeId, proposedRaw) {{
+      const key = normalizeLayoutNameKey(proposedRaw);
+      if (!key) return null;
+      const ex = excludeId == null || excludeId === '' ? null : String(excludeId);
+      function isOther(oid) {{
+        if (ex === null) return true;
+        return String(oid) !== ex;
+      }}
+      if (objectKind === 'terminal') {{
+        const arr = state.terminals || [];
+        for (let i = 0; i < arr.length; i++) {{
+          const o = arr[i];
+          if (!o || !isOther(o.id)) continue;
+          const disp = (o.name && String(o.name).trim()) || '';
+          if (normalizeLayoutNameKey(disp) === key) return {{ kind: 'terminal', existing: disp || o.id }};
+        }}
+        return null;
+      }}
+      if (objectKind === 'pbb') {{
+        const arr = state.pbbStands || [];
+        for (let i = 0; i < arr.length; i++) {{
+          const o = arr[i];
+          if (!o || !isOther(o.id)) continue;
+          const disp = (o.name && String(o.name).trim()) || '';
+          if (normalizeLayoutNameKey(disp) === key) return {{ kind: 'pbb', existing: disp || o.id }};
+        }}
+        return null;
+      }}
+      if (objectKind === 'remote') {{
+        const arr = state.remoteStands || [];
+        for (let i = 0; i < arr.length; i++) {{
+          const o = arr[i];
+          if (!o || !isOther(o.id)) continue;
+          const disp = (o.name && String(o.name).trim()) || '';
+          if (normalizeLayoutNameKey(disp) === key) return {{ kind: 'remote', existing: disp || o.id }};
+        }}
+        return null;
+      }}
+      if (objectKind === 'holdingPoint') {{
+        const arr = state.holdingPoints || [];
+        for (let i = 0; i < arr.length; i++) {{
+          const o = arr[i];
+          if (!o || !isOther(o.id)) continue;
+          const disp = (o.name && String(o.name).trim()) || '';
+          if (normalizeLayoutNameKey(disp) === key) return {{ kind: 'holdingPoint', existing: disp || o.id }};
+        }}
+        return null;
+      }}
+      if (objectKind === 'taxiway') {{
+        const arr = state.taxiways || [];
+        for (let i = 0; i < arr.length; i++) {{
+          const o = arr[i];
+          if (!o || !isOther(o.id)) continue;
+          const disp = (o.name && String(o.name).trim()) || '';
+          if (normalizeLayoutNameKey(disp) === key) return {{ kind: 'taxiway', existing: disp || o.id }};
+        }}
+        return null;
+      }}
+      if (objectKind === 'apronLink') {{
+        const arr = state.apronLinks || [];
+        for (let i = 0; i < arr.length; i++) {{
+          const o = arr[i];
+          if (!o || !isOther(o.id)) continue;
+          const disp = getApronLinkDisplayName(o);
+          if (normalizeLayoutNameKey(disp) === key) return {{ kind: 'apronLink', existing: disp }};
+        }}
+        return null;
+      }}
+      if (objectKind === 'layoutEdge') {{
+        const map = state.layoutEdgeNames || {{}};
+        const edgeIds = Object.keys(map);
+        for (let ki = 0; ki < edgeIds.length; ki++) {{
+          const kid = edgeIds[ki];
+          if (!isOther(kid)) continue;
+          const disp = map[kid];
+          if (disp != null && normalizeLayoutNameKey(disp) === key) return {{ kind: 'layoutEdge', existing: String(disp) }};
+        }}
+        return null;
+      }}
+      return null;
+    }}
+    function alertDuplicateLayoutName() {{
+      alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
+    }}
     function ensureDefaultDirectionModes() {{
       if (state.directionModes.length === 0) {{
         state.directionModes = [
@@ -2332,15 +3091,17 @@ def _build_designer_html() -> str:
         terminals: JSON.parse(JSON.stringify(state.terminals || [])),
         pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
         remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+        holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
         taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
         apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
         layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
         layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {{}})),
         directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
-        flights: JSON.parse(JSON.stringify(state.flights || []))
+        flights: cloneFlightsWithoutPathPolylineCache(state.flights)
       }};
       undoStack.push(snap);
       if (undoStack.length > maxUndoLevels) undoStack.shift();
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     }}
     function undo() {{
       if (!undoStack.length) return;
@@ -2348,6 +3109,7 @@ def _build_designer_html() -> str:
       state.terminals = snap.terminals;
       state.pbbStands = snap.pbbStands;
       state.remoteStands = snap.remoteStands;
+      state.holdingPoints = snap.holdingPoints || [];
       state.taxiways = snap.taxiways;
       state.apronLinks = snap.apronLinks;
       state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
@@ -2359,11 +3121,12 @@ def _build_designer_html() -> str:
       state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
       state.terminalDrawingId = null;
       state.taxiwayDrawingId = null;
+      state.layoutPathDrawPointer = null;
       syncPanelFromState();
       updateObjectInfo();
       renderObjectList();
-      if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      if (typeof scene3d !== 'undefined' && scene3d) update3DScene();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
     }}
     function getTaxiwayDirection(tw) {{
       if (!tw) return 'both';
@@ -2409,11 +3172,14 @@ def _build_designer_html() -> str:
       return allow.indexOf(d) >= 0;
     }}
     function getRunwayExitAllowedDirectionsFromPanel() {{
-      const c1 = document.getElementById('runwayExitDirCw');
-      const c2 = document.getElementById('runwayExitDirCcw');
       const out = [];
-      if (c1 && c1.checked) out.push('clockwise');
-      if (c2 && c2.checked) out.push('counter_clockwise');
+      const container = document.getElementById('runwayExitAllowedDirection');
+      if (!container) return out;
+      container.querySelectorAll('.runway-exit-dir-check').forEach(function(ch) {{
+        if (!ch.checked) return;
+        const value = String(ch.getAttribute('data-item-id') || '').trim();
+        if (value === 'clockwise' || value === 'counter_clockwise') out.push(value);
+      }});
       return out;
     }}
 
@@ -2595,13 +3361,35 @@ def _build_designer_html() -> str:
       const v = el ? Number(el.value) : 10;
       return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
     }}
+    function roundToStep(value, step) {{
+      const n = Number(value);
+      const s = Number(step);
+      if (!isFinite(n)) return 0;
+      if (!isFinite(s) || s <= 0) return n;
+      return Math.round(n / s) * s;
+    }}
+    function clampToGridBounds(col, row) {{
+      const c = Math.max(0, Math.min(GRID_COLS, Number(col) || 0));
+      const r = Math.max(0, Math.min(GRID_ROWS, Number(row) || 0));
+      return [c, r];
+    }}
     function pixelToCell(x, y) {{
       const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-      let col = Math.round(x / cs * 2) / 2;
-      let row = Math.round(y / cs * 2) / 2;
-      col = Math.max(0, Math.min(GRID_COLS, col));
-      row = Math.max(0, Math.min(GRID_ROWS, row));
-      return [col, row];
+      const snappedCol = roundToStep(x / cs, GRID_SNAP_STEP_CELL);
+      const snappedRow = roundToStep(y / cs, GRID_SNAP_STEP_CELL);
+      return clampToGridBounds(snappedCol, snappedRow);
+    }}
+    function worldPointToCellPoint(wx, wy, snapToGrid) {{
+      const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
+      const step = snapToGrid ? GRID_SNAP_STEP_CELL : FREE_DRAW_STEP_CELL;
+      const col = roundToStep(wx / cs, step);
+      const row = roundToStep(wy / cs, step);
+      const clamped = clampToGridBounds(col, row);
+      return {{ col: clamped[0], row: clamped[1] }};
+    }}
+    function worldPointToPixel(wx, wy, snapToGrid) {{
+      const pt = worldPointToCellPoint(wx, wy, snapToGrid);
+      return cellToPixel(pt.col, pt.row);
     }}
     const ICAO_STAND_SIZE_M = (function() {{
       const m = _layoutTier.standSizesMByIcaoCategory;
@@ -2653,9 +3441,36 @@ def _build_designer_html() -> str:
       // If When two squares touch only by a line or point(When sides overlap or only edges touch)is not considered overlap..
       return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
     }}
-    function getPBBStandAngle(pbb) {{ return Math.atan2(pbb.y2 - pbb.y1, pbb.x2 - pbb.x1); }}
+    function getPbbAnchorPx(pbb) {{
+      const x1 = Number(pbb && pbb.x1);
+      const y1 = Number(pbb && pbb.y1);
+      if (Number.isFinite(x1) && Number.isFinite(y1)) return [x1, y1];
+      const bridges = Array.isArray(pbb && pbb.pbbBridges) ? pbb.pbbBridges : [];
+      const starts = bridges.map(function(bridge) {{
+        const pts = Array.isArray(bridge.points) ? bridge.points : [];
+        return pts.length ? [Number(pts[0].x) || 0, Number(pts[0].y) || 0] : null;
+      }}).filter(Boolean);
+      if (starts.length) {{
+        let sx = 0, sy = 0;
+        starts.forEach(function(pt) {{ sx += pt[0]; sy += pt[1]; }});
+        return [sx / starts.length, sy / starts.length];
+      }}
+      return [0, 0];
+    }}
+    function getPBBStandAngle(pbb) {{
+      if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg) * Math.PI / 180;
+      const x1 = Number(pbb && pbb.x1), y1 = Number(pbb && pbb.y1);
+      const x2 = Number(pbb && pbb.x2), y2 = Number(pbb && pbb.y2);
+      if (Number.isFinite(x1) && Number.isFinite(y1) && Number.isFinite(x2) && Number.isFinite(y2) && (x1 !== x2 || y1 !== y2)) {{
+        return Math.atan2(y2 - y1, x2 - x1);
+      }}
+      const anchor = getPbbAnchorPx(pbb);
+      const center = getStandConnectionPx(pbb);
+      return Math.atan2(center[1] - anchor[1], center[0] - anchor[0]);
+    }}
     function getPBBStandCorners(pbb) {{
-      const cx = pbb.x2, cy = pbb.y2;
+      const center = getStandConnectionPx(pbb);
+      const cx = center[0], cy = center[1];
       const size = getStandSizeMeters(pbb.category || 'C');
       const angle = getPBBStandAngle(pbb);
       const h = size / 2;
@@ -2749,6 +3564,7 @@ def _build_designer_html() -> str:
       const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
       const toClickX = wx - ex, toClickY = wy - ey;
       if (nx * toClickX + ny * toClickY < 0) {{ nx *= -1; ny *= -1; }}
+      const categoryMode = normalizeStandCategoryMode(document.getElementById('standCategoryMode') ? document.getElementById('standCategoryMode').value : (_pbbTier.defaultCategoryMode || 'icao'), 'icao');
       const category = document.getElementById('standCategory').value || 'C';
       const standSize = getStandSizeMeters(category);
       const minLen = standSize / 2 + 3;
@@ -2756,19 +3572,31 @@ def _build_designer_html() -> str:
       const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
       const newPbb = {{ x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx, category }};
       if (pbbStandOverlapsExisting(newPbb)) return false;
+      const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
+      if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {{
+        alertDuplicateLayoutName();
+        return false;
+      }}
       pushUndo();
-      state.pbbStands.push({{
+      state.pbbStands.push(normalizePbbStandObject({{
         id: id(),
-        name: document.getElementById('standName').value.trim() || getDefaultPbbStandName(),
+        name: pbbNameCandidate,
         x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx,
-        category: newPbb.category, edgeCol: bestEdge.col, edgeRow: bestEdge.row
-      }});
+        category: newPbb.category,
+        categoryMode: categoryMode,
+        allowedAircraftTypes: Array.from((document.getElementById('standAircraftAccess') || document).querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean),
+        pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
+        angleDeg: normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI),
+        edgeCol: bestEdge.col,
+        edgeRow: bestEdge.row
+      }}));
       return true;
     }}
     function tryPlaceRemoteAt(wx, wy) {{
       if (!isFinite(wx) || !isFinite(wy)) return false;
       const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
       if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) return false;
+      const categoryMode = normalizeStandCategoryMode(document.getElementById('remoteCategoryMode') ? document.getElementById('remoteCategoryMode').value : (_remoteTier.defaultCategoryMode || 'icao'), 'icao');
       const category = document.getElementById('remoteCategory').value || 'C';
       const angleInput = document.getElementById('remoteAngle');
       const angleDeg = normalizeAngleDeg(angleInput ? angleInput.value : 0);
@@ -2780,16 +3608,23 @@ def _build_designer_html() -> str:
       for (let i = 0; i < state.pbbStands.length; i++) {{
         if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) return false;
       }}
-      pushUndo();
       const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
-      const usedNames = new Set((state.remoteStands || []).map(s => (s.name || '').trim()).filter(Boolean));
-      let finalName = baseName;
-      if (usedNames.has(finalName)) {{
-        let idx = 1;
-        while (usedNames.has(baseName + ' (' + idx + ')')) idx++;
-        finalName = baseName + ' (' + idx + ')';
+      if (findDuplicateLayoutName('remote', null, baseName)) {{
+        alertDuplicateLayoutName();
+        return false;
       }}
-      state.remoteStands.push({{ id: id(), x: Number(wx), y: Number(wy), category, name: finalName, angleDeg }});
+      pushUndo();
+      state.remoteStands.push(normalizeRemoteStandObject({{
+        id: id(),
+        x: Number(wx),
+        y: Number(wy),
+        category,
+        name: baseName,
+        angleDeg,
+        categoryMode: categoryMode,
+        allowedAircraftTypes: Array.from((document.getElementById('remoteAircraftAccess') || document).querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean),
+        allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean)
+      }}));
       return true;
     }}
     function taxiwayOverlapsAnyTerminal(tw) {{
@@ -2927,6 +3762,7 @@ def _build_designer_html() -> str:
         terminals: makeUniqueNamedCopy(state.terminals, 'name'),
         pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
         remoteStands: state.remoteStands.slice(),
+        holdingPoints: (state.holdingPoints || []).slice(),
         ...(function() {{
           const p = partitionTaxiwaysForPersist(state.taxiways);
           return {{ runwayPaths: p.runwayPaths, runwayTaxiways: p.runwayTaxiways, taxiways: p.taxiways }};
@@ -2973,12 +3809,21 @@ def _build_designer_html() -> str:
             'eobtMin',
             'etotMin',
             // Other indicators
+            'depTaxiDelayMin',
             'vttADelayMin',
             'arrRotSec',
             'eOverlapPushed',
             'sampledArrRet',
             'sampledRetName',
-            'arrRetFailed'
+            'arrRetFailed',
+            'arrRunwayIdUsed',
+            'arrTdDistM',
+            'arrRetDistM',
+            'arrVTdMs',
+            'arrVRetInMs',
+            'arrVRetOutMs',
+            'arrRunwayDirUsed',
+            'depRunwayDirUsed'
           ];
           orderedKeys.forEach(function(k) {{
             // sibtMinis explicitly final SIBTto leave a,
@@ -3005,7 +3850,11 @@ def _build_designer_html() -> str:
               k !== 'arrRunwayId' &&
               k !== 'depRunwayId' &&
               k !== 'terminalId' &&
-              k !== 'standId'
+              k !== 'standId' &&
+              k !== 'cachedArrPathPts' &&
+              k !== 'cachedDepPathPts' &&
+              k !== '_pathPolylineCacheRev' &&
+              k !== '_pathPolylineArrRetKey'
             ) {{
               copy[k] = f[k];
             }}
@@ -3020,6 +3869,10 @@ def _build_designer_html() -> str:
               k === 'depRunwayId' ||
               k === 'terminalId' ||
               k === 'standId' ||
+              k === 'cachedArrPathPts' ||
+              k === 'cachedDepPathPts' ||
+              k === '_pathPolylineCacheRev' ||
+              k === '_pathPolylineArrRetKey' ||
               Object.prototype.hasOwnProperty.call(copy, k)
             ) continue;
             copy[k] = f[k];
@@ -3113,6 +3966,28 @@ def _build_designer_html() -> str:
       t = Math.max(0,Math.min(1,t));
       return [x1+t*dx,y1+t*dy];
     }}
+    function getClosestTerminalEdgePoint(wx, wy) {{
+      const click = [wx, wy];
+      let best = null;
+      let bestD2 = Infinity;
+      (state.terminals || []).forEach(function(term) {{
+        if (!term || !term.closed || !Array.isArray(term.vertices) || term.vertices.length < 2) return;
+        for (let i = 0; i < term.vertices.length; i++) {{
+          const v1 = term.vertices[i];
+          const v2 = term.vertices[(i + 1) % term.vertices.length];
+          const p1 = cellToPixel(v1.col, v1.row);
+          const p2 = cellToPixel(v2.col, v2.row);
+          const near = closestPointOnSegment(p1, p2, click);
+          if (!near) continue;
+          const d2 = dist2(near, click);
+          if (d2 < bestD2) {{
+            bestD2 = d2;
+            best = {{ point: near, term: term, edgeIndex: i }};
+          }}
+        }}
+      }});
+      return best;
+    }}
 
     function pointInPolygon(p, verts) {{
       let inside = false;
@@ -3129,9 +4004,7 @@ def _build_designer_html() -> str:
       if (!lk || !lk.pbbId) return null;
       const stand = findStandById(lk.pbbId);
       if (!stand) return null;
-      if (stand.x2 != null && stand.y2 != null) return [Number(stand.x2), Number(stand.y2)];
-      if (stand.x != null && stand.y != null) return [Number(stand.x), Number(stand.y)];
-      return cellToPixel(stand.col || 0, stand.row || 0);
+      return getStandConnectionPx(stand);
     }}
     function getApronLinkPolylineWorldPts(lk) {{
       if (!lk || lk.tx == null || lk.ty == null) return [];
@@ -3160,6 +4033,58 @@ def _build_designer_html() -> str:
       return null;
     }}
 
+    function getDefaultHoldingPointLabel() {{
+      let maxN = 0;
+      (state.holdingPoints || []).forEach(function(h) {{
+        const m = /^Position(\d+)$/i.exec(String(h && h.name || '').trim());
+        if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+      }});
+      return 'Position' + (maxN + 1);
+    }}
+    function snapHoldingPointOnAllowedTaxiways(wx, wy) {{
+      const click = [wx, wy];
+      const maxD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
+      let best = null;
+      let bestD2 = maxD2;
+      (state.taxiways || []).forEach(function(tw) {{
+        const pt = tw.pathType || 'taxiway';
+        if (pt !== 'taxiway' && pt !== 'runway_exit') return;
+        if (!tw.vertices || tw.vertices.length < 2) return;
+        for (let i = 0; i < tw.vertices.length - 1; i++) {{
+          const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
+          const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+          if (!near) continue;
+          const d2 = dist2(near, click);
+          if (d2 < bestD2) {{ bestD2 = d2; best = {{ x: near[0], y: near[1], pathType: pt }}; }}
+        }}
+      }});
+      return best;
+    }}
+    function hitTestHoldingPoint(wx, wy) {{
+      const r = c2dHoldingPointDiameterM() * 0.5;
+      const rHit = r + Math.max(2, CELL_SIZE * 0.15);
+      const r2 = rHit * rHit;
+      const pts = state.holdingPoints || [];
+      for (let i = pts.length - 1; i >= 0; i--) {{
+        const hp = pts[i];
+        if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) continue;
+        const dx = wx - hp.x, dy = wy - hp.y;
+        if (dx * dx + dy * dy <= r2) return {{ type: 'holdingPoint', id: hp.id, obj: hp }};
+      }}
+      return null;
+    }}
+    function tryPlaceHoldingPointAt(x, y, pathType) {{
+      const hpKind = pathTypeToHpKind(pathType || 'taxiway');
+      const nameInput = document.getElementById('holdingPointName');
+      const manual = nameInput && nameInput.value && String(nameInput.value).trim();
+      let baseName = manual ? String(nameInput.value).trim() : getDefaultHoldingPointLabel();
+      if (findDuplicateLayoutName('holdingPoint', null, baseName)) {{ alertDuplicateLayoutName(); return false; }}
+      pushUndo();
+      state.holdingPoints.push({{ id: id(), name: baseName, x: x, y: y, hpKind: hpKind }});
+      return true;
+    }}
+
     function hitTest(wx, wy) {{
       const click = [wx, wy];
       for (let i = state.remoteStands.length - 1; i >= 0; i--) {{
@@ -3178,6 +4103,8 @@ def _build_designer_html() -> str:
         if (t.closed && t.vertices.length >= 3 && pointInPolygon(click, t.vertices))
           return {{ type: 'terminal', id: t.id, obj: t }};
       }}
+      const hpHit = hitTestHoldingPoint(wx, wy);
+      if (hpHit) return hpHit;
       const apronLkHit = hitTestApronLink(wx, wy);
       if (apronLkHit) return apronLkHit;
       if (!state.taxiwayDrawingId) {{
@@ -3226,6 +4153,100 @@ def _build_designer_html() -> str:
         }}
       }});
       return best;
+    }}
+    function hitTestPbbEditablePoint(wx, wy) {{
+      if (!state.selectedObject || state.selectedObject.type !== 'pbb') return null;
+      const pbb = state.selectedObject.obj;
+      if (!pbb || pbb.id !== state.selectedObject.id) return null;
+      const click = [wx, wy];
+      const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
+      let best = null;
+      let bestD2 = maxD2;
+      (Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : []).forEach(function(bridge, bridgeIdx) {{
+        (Array.isArray(bridge.points) ? bridge.points : []).forEach(function(pt, ptIdx) {{
+          const d2 = dist2([Number(pt.x) || 0, Number(pt.y) || 0], click);
+          if (d2 < bestD2) {{
+            bestD2 = d2;
+            best = {{ type: 'bridge', bridgeIndex: bridgeIdx, pointIndex: ptIdx }};
+          }}
+        }});
+      }});
+      const apronPt = getStandConnectionPx(pbb);
+      const apronD2 = dist2(apronPt, click);
+      if (apronD2 < bestD2) best = {{ type: 'apronSite' }};
+      return best;
+    }}
+    function findInsertSegment(vertices, closed, wx, wy) {{
+      if (!Array.isArray(vertices) || vertices.length < 2) return null;
+      const click = [wx, wy];
+      const maxD2 = (CELL_SIZE * INSERT_VERTEX_HIT_CF) ** 2;
+      let best = null;
+      let bestD2 = maxD2;
+      const lastSeg = closed ? vertices.length : (vertices.length - 1);
+      function vertexToPixel(v) {{
+        if (Array.isArray(v) && v.length >= 2) return [Number(v[0]) || 0, Number(v[1]) || 0];
+        if (v && v.x != null && v.y != null) return [Number(v.x) || 0, Number(v.y) || 0];
+        return cellToPixel(v.col, v.row);
+      }}
+      for (let i = 0; i < lastSeg; i++) {{
+        const curr = vertices[i];
+        const next = vertices[(i + 1) % vertices.length];
+        const p1 = vertexToPixel(curr);
+        const p2 = vertexToPixel(next);
+        const near = closestPointOnSegment(p1, p2, click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2) {{
+          bestD2 = d2;
+          best = {{ insertIndex: i + 1, near: near }};
+        }}
+      }}
+      return best;
+    }}
+    function insertSelectedVertexAt(wx, wy, snapToGrid) {{
+      if (!state.selectedObject || !state.selectedObject.obj) return false;
+      const sel = state.selectedObject;
+      if (sel.type === 'terminal') {{
+        const term = sel.obj;
+        const hit = findInsertSegment(term.vertices, !!term.closed, wx, wy);
+        if (!hit) return false;
+        const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
+        pushUndo();
+        term.vertices.splice(hit.insertIndex, 0, pt);
+        state.selectedVertex = {{ type: 'terminal', id: term.id, index: hit.insertIndex }};
+        updateObjectInfo();
+        draw();
+        return true;
+      }}
+      if (sel.type === 'taxiway') {{
+        const tw = sel.obj;
+        const hit = findInsertSegment(tw.vertices, false, wx, wy);
+        if (!hit) return false;
+        const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
+        pushUndo();
+        tw.vertices.splice(hit.insertIndex, 0, pt);
+        if (typeof syncStartEndFromVertices === 'function') syncStartEndFromVertices(tw);
+        state.selectedVertex = {{ type: 'taxiway', id: tw.id, index: hit.insertIndex }};
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+        return true;
+      }}
+      if (sel.type === 'apronLink') {{
+        const lk = sel.obj;
+        const mids = (Array.isArray(lk.midVertices) ? lk.midVertices.slice() : []);
+        const poly = [getApronLinkStandEndPx(lk)].concat(mids.map(function(v) {{ return cellToPixel(v.col, v.row); }})).concat([[Number(lk.tx), Number(lk.ty)]]);
+        const hit = findInsertSegment(poly, false, wx, wy);
+        if (!hit) return false;
+        const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
+        pushUndo();
+        if (!Array.isArray(lk.midVertices)) lk.midVertices = [];
+        lk.midVertices.splice(Math.max(0, hit.insertIndex - 1), 0, pt);
+        state.selectedVertex = {{ type: 'apronLink', id: lk.id, kind: 'mid', midIndex: Math.max(0, hit.insertIndex - 1) }};
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+        return true;
+      }}
+      return false;
     }}
 
     function snapWorldPointToTaxiwayPolyline(wx, wy, taxiwayId) {{
@@ -3297,8 +4318,8 @@ def _build_designer_html() -> str:
         state.selectedVertex = null;
         syncPanelFromState();
         updateObjectInfo();
-        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-        if (scene3d) update3DScene();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
         return true;
       }}
       if (sv.type === 'apronLink') {{
@@ -3310,8 +4331,8 @@ def _build_designer_html() -> str:
         if (!lk.midVertices.length) delete lk.midVertices;
         state.selectedVertex = null;
         updateObjectInfo();
-        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-        if (scene3d) update3DScene();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
         return true;
       }}
       return false;
@@ -3323,6 +4344,7 @@ def _build_designer_html() -> str:
         if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return false;
         pushUndo();
         term.vertices.pop();
+        if (!term.vertices.length) state.layoutPathDrawPointer = null;
         state.selectedVertex = null;
         syncPanelFromState();
         updateObjectInfo();
@@ -3334,6 +4356,7 @@ def _build_designer_html() -> str:
         if (!tw || !Array.isArray(tw.vertices) || !tw.vertices.length) return false;
         pushUndo();
         tw.vertices.pop();
+        if (!tw.vertices.length) state.layoutPathDrawPointer = null;
         if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
         else {{
           tw.start_point = null;
@@ -3342,8 +4365,8 @@ def _build_designer_html() -> str:
         state.selectedVertex = null;
         syncPanelFromState();
         updateObjectInfo();
-        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-        if (scene3d) update3DScene();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
         return true;
       }}
       if (settingModeSelect.value === 'apronTaxiway' && state.apronLinkDrawing && state.apronLinkTemp) {{
@@ -3362,6 +4385,9 @@ def _build_designer_html() -> str:
     }}
 
     function getCurrentTerminal() {{
+      if (state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.obj) {{
+        return state.selectedObject.obj;
+      }}
       if (state.currentTerminalId) {{
         const t = state.terminals.find(x => x.id === state.currentTerminalId);
         if (t) return t;
@@ -3406,7 +4432,12 @@ def _build_designer_html() -> str:
         state.currentTerminalId = state.terminals[0].id;
       const term = getCurrentTerminal();
       if (term) {{
-        document.getElementById('terminalName').value = term.name || '';
+        const buildingTypeSel = document.getElementById('buildingType');
+        if (buildingTypeSel) {{
+          buildingTypeSel.innerHTML = getBuildingTypeOptionsHtml(term.buildingType);
+          buildingTypeSel.value = normalizeBuildingType(term.buildingType);
+        }}
+        document.getElementById('terminalName').value = term.name || getDefaultBuildingNameForType(term.buildingType, term.id);
         const floors = term.floors != null ? Math.max(1, parseInt(term.floors, 10) || 1) : 1;
         const f2fRaw = term.floorToFloor != null ? Number(term.floorToFloor) : (term.floorHeight != null ? Number(term.floorHeight) : 4);
         const f2f = Math.max(0.5, f2fRaw || 4);
@@ -3427,49 +4458,41 @@ def _build_designer_html() -> str:
       if (state.selectedObject && state.selectedObject.type === 'pbb') {{
         const pbb = state.selectedObject.obj;
         const nameInput = document.getElementById('standName');
+        const modeSel = document.getElementById('standCategoryMode');
         const catSel = document.getElementById('standCategory');
         const lenInput = document.getElementById('pbbLength');
+        const angleInput = document.getElementById('standAngle');
+        const pbbCountInput = document.getElementById('pbbBridgeCount');
         if (nameInput) nameInput.value = pbb.name || '';
+        if (modeSel) modeSel.value = getStandCategoryMode(pbb);
         if (catSel) catSel.value = pbb.category || 'C';
         if (lenInput) {{
           const lenM = Math.hypot((pbb.x2 || 0) - (pbb.x1 || 0), (pbb.y2 || 0) - (pbb.y1 || 0));
           lenInput.value = String(Math.max(1, Math.round(lenM)));
         }}
+        if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
+        if (pbbCountInput) pbbCountInput.value = String(Math.max(1, parseInt(pbb.pbbCount, 10) || 1));
+        syncStandConstraintVisibility('stand', getStandCategoryMode(pbb));
+        renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb));
       }}
       if (state.selectedObject && state.selectedObject.type === 'remote') {{
         const st = state.selectedObject.obj;
         const nameInput = document.getElementById('remoteName');
         const angleInput = document.getElementById('remoteAngle');
+        const modeSel = document.getElementById('remoteCategoryMode');
         const catSel = document.getElementById('remoteCategory');
         if (nameInput) nameInput.value = st.name || '';
         if (angleInput) angleInput.value = String(Math.round(normalizeAngleDeg(st.angleDeg != null ? st.angleDeg : 0)));
+        if (modeSel) modeSel.value = getStandCategoryMode(st);
         if (catSel) catSel.value = st.category || 'C';
-        const accWrap = document.getElementById('remoteTerminalAccess');
-        if (accWrap) {{
-          const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {{ return {{
-            id: t.id,
-            name: (t.name || '').trim() || 'Terminal'
-          }}; }});
-          const allowed = Array.isArray(st.allowedTerminals) ? st.allowedTerminals : [];
-          if (!terms.length) {{
-            accWrap.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No terminals.</div>';
-          }} else {{
-            accWrap.innerHTML = terms.map(function(t) {{
-              const checked = allowed.includes(t.id) ? ' checked' : '';
-              return '' +
-                '<label class="remote-term-row" style="display:flex;align-items:center;gap:6px;margin-bottom:4px;cursor:pointer;">' +
-                  '<span class="remote-term-checkbox" style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;border:1px solid #4b5563;background:#020617;">' +
-                    '<input type="checkbox" class="remote-term-check" data-term-id="' + String(t.id || '').replace(/"/g,'&quot;') + '"' + checked + ' ' +
-                           'style="position:absolute;inset:0;opacity:0;cursor:pointer;" />' +
-                    (checked ? '<span style="width:8px;height:8px;border-radius:2px;background:#22c55e;"></span>' : '') +
-                  '</span>' +
-                  '<span class="remote-term-label" style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
-                    escapeHtml(t.name || 'Terminal') +
-                  '</span>' +
-                '</label>';
-            }}).join('');
-          }}
-        }}
+        syncStandConstraintVisibility('remote', getStandCategoryMode(st));
+        renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st));
+        renderRemoteTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
+      }}
+      if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {{
+        const hp = state.selectedObject.obj;
+        const nameInput = document.getElementById('holdingPointName');
+        if (nameInput) nameInput.value = hp.name || '';
       }}
       if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
         const tw = state.selectedObject.obj;
@@ -3512,18 +4535,15 @@ def _build_designer_html() -> str:
             : 15;
           minExitInput.value = minVal;
         }}
-        const rwDirCw = document.getElementById('runwayExitDirCw');
-        const rwDirCcw = document.getElementById('runwayExitDirCcw');
         if (tw.pathType === 'runway_exit') {{
           const allow = getTaxiwayAllowedRunwayDirections(tw);
-          if (rwDirCw) rwDirCw.checked = allow.indexOf('clockwise') >= 0;
-          if (rwDirCcw) rwDirCcw.checked = allow.indexOf('counter_clockwise') >= 0;
+          renderRunwayDirectionChoices(allow);
         }} else {{
-          if (rwDirCw) rwDirCw.checked = false;
-          if (rwDirCcw) rwDirCcw.checked = false;
+          renderRunwayDirectionChoices([]);
         }}
         const modeSel = document.getElementById('taxiwayDirectionMode');
-        const d = getTaxiwayDirection(tw);
+        let d = getTaxiwayDirection(tw);
+        if (tw.pathType === 'runway' && d === 'both') d = 'clockwise';
         if (modeSel) modeSel.value = d;
       }} else if (state.selectedObject && state.selectedObject.type === 'apronLink') {{
         const lk = state.selectedObject.obj;
@@ -3539,11 +4559,8 @@ def _build_designer_html() -> str:
           const ptx = pathTypeFromLayoutMode(rm);
           syncPathFieldVisibilityForPathType(ptx);
           if (ptx === 'runway_exit') {{
-            const rwDirCw = document.getElementById('runwayExitDirCw');
-            const rwDirCcw = document.getElementById('runwayExitDirCcw');
             const allowDef = (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT : ['clockwise', 'counter_clockwise'];
-            if (rwDirCw) rwDirCw.checked = allowDef.indexOf('clockwise') >= 0;
-            if (rwDirCcw) rwDirCcw.checked = allowDef.indexOf('counter_clockwise') >= 0;
+            renderRunwayDirectionChoices(allowDef);
           }}
         }}
         else {{
@@ -3568,15 +4585,37 @@ def _build_designer_html() -> str:
           const rwDirWrap = document.getElementById('runwayExitAllowedDirectionWrap');
           if (rwDirWrap) rwDirWrap.style.display = 'none';
         }}
+        const selIsTerminal = state.selectedObject && state.selectedObject.type === 'terminal';
+        if (!selIsTerminal) {{
+          const buildingTypeSel = document.getElementById('buildingType');
+          if (buildingTypeSel) {{
+            buildingTypeSel.innerHTML = getBuildingTypeOptionsHtml(BUILDING_TYPE_DEFAULT);
+            buildingTypeSel.value = BUILDING_TYPE_DEFAULT;
+          }}
+          const terminalNameInput = document.getElementById('terminalName');
+          if (terminalNameInput && rm === 'terminal') terminalNameInput.value = getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, null);
+        }}
+        const standModeSel = document.getElementById('standCategoryMode');
+        if (standModeSel) standModeSel.value = normalizeStandCategoryMode(_pbbTier.defaultCategoryMode, 'icao');
+        syncStandConstraintVisibility('stand', standModeSel ? standModeSel.value : 'icao');
+        renderAircraftConstraintChoices('standAircraftAccess', []);
+        const remoteModeSel = document.getElementById('remoteCategoryMode');
+        if (remoteModeSel) remoteModeSel.value = normalizeStandCategoryMode(_remoteTier.defaultCategoryMode, 'icao');
+        syncStandConstraintVisibility('remote', remoteModeSel ? remoteModeSel.value : 'icao');
+        renderAircraftConstraintChoices('remoteAircraftAccess', []);
+        renderRemoteTerminalAccessChoices([]);
         const apronLinkNameInput = document.getElementById('apronLinkName');
         if (apronLinkNameInput && rm === 'apronTaxiway') apronLinkNameInput.value = '';
         const edgeNameInput = document.getElementById('edgeName');
         if (edgeNameInput && rm === 'edge') edgeNameInput.value = '';
+        const holdingPointNameInput = document.getElementById('holdingPointName');
+        if (holdingPointNameInput && rm === 'holdingPoint') holdingPointNameInput.value = getDefaultHoldingPointLabel();
       }}
       syncDrawToggleButton('btnTaxiwayDraw', !!state.taxiwayDrawingId);
       syncDrawToggleButton('btnApronLinkDraw', !!state.apronLinkDrawing);
       syncDrawToggleButton('btnPbbDraw', !!state.pbbDrawing);
       syncDrawToggleButton('btnRemoteDraw', !!state.remoteDrawing);
+      syncDrawToggleButton('btnHoldingPointDraw', !!state.holdingPointDrawing);
       renderObjectList();
     }}
 
@@ -3594,7 +4633,16 @@ def _build_designer_html() -> str:
       }}
       var t = getCurrentTerminal();
       if (t) {{
-        if (el('terminalName')) t.name = (el('terminalName').value || '').trim() || t.name;
+        if (el('terminalName')) {{
+          const rawTn = (el('terminalName').value || '').trim();
+          if (rawTn && findDuplicateLayoutName('terminal', t.id, rawTn)) {{
+            alertDuplicateLayoutName();
+            el('terminalName').value = t.name || '';
+          }} else {{
+            t.name = rawTn || t.name;
+          }}
+        }}
+        if (el('buildingType')) t.buildingType = normalizeBuildingType(el('buildingType').value || t.buildingType);
         if (el('terminalFloors')) t.floors = Math.max(1, parseInt(el('terminalFloors').value, 10) || 1);
         if (el('terminalFloorToFloor')) t.floorToFloor = Math.max(0.5, Number(el('terminalFloorToFloor').value) || 4);
         t.floorHeight = (t.floors || 1) * (t.floorToFloor || 4);
@@ -3603,30 +4651,74 @@ def _build_designer_html() -> str:
       }}
       if (state.selectedObject && state.selectedObject.type === 'pbb') {{
         var pbb = state.selectedObject.obj;
-        if (el('standName')) pbb.name = (el('standName').value || '').trim();
+        if (el('standName')) {{
+          const rawSn = (el('standName').value || '').trim();
+          if (rawSn && findDuplicateLayoutName('pbb', pbb.id, rawSn)) {{
+            alertDuplicateLayoutName();
+            el('standName').value = pbb.name || '';
+          }} else {{
+            pbb.name = rawSn;
+          }}
+        }}
+        pbb.categoryMode = normalizeStandCategoryMode(el('standCategoryMode') ? el('standCategoryMode').value : pbb.categoryMode, _pbbTier.defaultCategoryMode || 'icao');
         if (el('standCategory')) pbb.category = el('standCategory').value || 'C';
+        pbb.allowedAircraftTypes = Array.from((document.getElementById('standAircraftAccess') || document).querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean);
       }}
       if (state.selectedObject && state.selectedObject.type === 'remote') {{
         var st = state.selectedObject.obj;
-        if (el('remoteName')) st.name = (el('remoteName').value || '').trim();
+        if (el('remoteName')) {{
+          const rawRn = (el('remoteName').value || '').trim();
+          if (rawRn && findDuplicateLayoutName('remote', st.id, rawRn)) {{
+            alertDuplicateLayoutName();
+            el('remoteName').value = st.name || '';
+          }} else {{
+            st.name = rawRn;
+          }}
+        }}
+        st.categoryMode = normalizeStandCategoryMode(el('remoteCategoryMode') ? el('remoteCategoryMode').value : st.categoryMode, _remoteTier.defaultCategoryMode || 'icao');
         if (el('remoteCategory')) st.category = el('remoteCategory').value || 'C';
+        st.allowedAircraftTypes = Array.from((document.getElementById('remoteAircraftAccess') || document).querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean);
         const accWrap = document.getElementById('remoteTerminalAccess');
         if (accWrap) {{
           const checks = accWrap.querySelectorAll('.remote-term-check');
           const allowed = [];
           checks.forEach(function(ch) {{
             if (ch.checked) {{
-              const id = ch.getAttribute('data-term-id');
+              const id = ch.getAttribute('data-item-id');
               if (id) allowed.push(id);
             }}
           }});
           st.allowedTerminals = allowed;
         }}
       }}
+      if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {{
+        var hpo = state.selectedObject.obj;
+        if (el('holdingPointName')) {{
+          const rawHp = (el('holdingPointName').value || '').trim();
+          if (rawHp && findDuplicateLayoutName('holdingPoint', hpo.id, rawHp)) {{
+            alertDuplicateLayoutName();
+            el('holdingPointName').value = hpo.name || '';
+          }} else {{
+            hpo.name = rawHp;
+          }}
+        }}
+      }}
       if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
         var tw = state.selectedObject.obj;
-        if (el('taxiwayName')) tw.name = (el('taxiwayName').value || '').trim();
-        if (el('taxiwayWidth')) tw.width = Math.max(5, Math.min(100, Number(el('taxiwayWidth').value) || (tw.pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH))));
+        if (el('taxiwayName')) {{
+          const rawTw = (el('taxiwayName').value || '').trim();
+          if (rawTw && findDuplicateLayoutName('taxiway', tw.id, rawTw)) {{
+            alertDuplicateLayoutName();
+            el('taxiwayName').value = tw.name || '';
+          }} else {{
+            tw.name = rawTw;
+          }}
+        }}
+        if (el('taxiwayWidth')) {{
+          const pathType = tw.pathType || 'taxiway';
+          const fb = pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+          tw.width = clampTaxiwayWidthM(pathType, el('taxiwayWidth').value, fb);
+        }}
         if (el('taxiwayMaxExitVel')) {{
           const mv = Number(el('taxiwayMaxExitVel').value);
           if (tw.pathType === 'runway_exit') tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
@@ -3643,7 +4735,9 @@ def _build_designer_html() -> str:
           delete tw.allowedRwDirections;
         }}
         if (el('taxiwayDirectionMode')) {{
-          tw.direction = el('taxiwayDirectionMode').value || 'both';
+          let dirVal = el('taxiwayDirectionMode').value || '';
+          if (tw.pathType === 'runway') tw.direction = (dirVal === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+          else tw.direction = dirVal || 'both';
         }}
         if (el('taxiwayAvgMoveVelocity')) {{
           var v = Number(el('taxiwayAvgMoveVelocity').value);
@@ -3755,8 +4849,20 @@ def _build_designer_html() -> str:
         if (state.selectedObject && state.selectedObject.type === 'flight' && typeof hookSyncFlightPanelFromSelection === 'function')
           hookSyncFlightPanelFromSelection();
       }}
-      if (tabId === 'allocation' && typeof renderFlightGantt === 'function') renderFlightGantt();
-      if (tabId === 'rwysep' && typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
+      if (tabId === 'allocation' && typeof renderFlightGantt === 'function') renderFlightGantt({{ skipPathPrep: true }});
+      if (tabId === 'rwysep') {{
+        const rwyPanel = document.getElementById('rwySepPanel');
+        if (
+          state.rwySepPanelDirty === false &&
+          rwyPanel &&
+          document.getElementById('rwysep-standard') &&
+          typeof drawRwySeparationTimeline === 'function'
+        ) {{
+          drawRwySeparationTimeline(rwyPanel);
+        }} else if (typeof renderRunwaySeparation === 'function') {{
+          renderRunwaySeparation();
+        }}
+      }}
     }}
     document.querySelectorAll('.right-panel-tab').forEach(btn => {{
       btn.addEventListener('click', function() {{ switchToTab(this.getAttribute('data-tab')); }});
@@ -3766,13 +4872,13 @@ def _build_designer_html() -> str:
     ['chkShowSPoints', 'chkShowEBar', 'chkShowEPoints', 'chkShowSBars'].forEach(function(chkId) {{
       const el = document.getElementById(chkId);
       if (el) el.addEventListener('change', function() {{
-        if (typeof renderFlightGantt === 'function') renderFlightGantt();
+        if (typeof renderFlightGantt === 'function') renderFlightGantt({{ skipPathPrep: true }});
       }});
     }});
 
-    document.getElementById('gridCellSize').addEventListener('change', function() {{ CELL_SIZE = Math.max(5, Number(this.value) || 5); draw(); }});
-    document.getElementById('gridCols').addEventListener('change', function() {{ GRID_COLS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); draw(); }});
-    document.getElementById('gridRows').addEventListener('change', function() {{ GRID_ROWS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); draw(); }});
+    document.getElementById('gridCellSize').addEventListener('change', function() {{ CELL_SIZE = Math.max(5, Number(this.value) || 5); invalidateGridUnderlay(); draw(); }});
+    document.getElementById('gridCols').addEventListener('change', function() {{ GRID_COLS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); invalidateGridUnderlay(); draw(); }});
+    document.getElementById('gridRows').addEventListener('change', function() {{ GRID_ROWS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); invalidateGridUnderlay(); draw(); }});
     function commitGridLayoutImageNumericChange(inputId, applyFn) {{
       const input = document.getElementById(inputId);
       if (!input) return;
@@ -3787,6 +4893,7 @@ def _build_designer_html() -> str:
         const after = JSON.stringify(state.layoutImageOverlay);
         if (before === after) {{
           syncPanelFromState();
+          invalidateGridUnderlay();
           draw();
           return;
         }}
@@ -3794,15 +4901,17 @@ def _build_designer_html() -> str:
           terminals: JSON.parse(JSON.stringify(state.terminals || [])),
           pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
           remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+          holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
           taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
           apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
           layoutImageOverlay: snapshot,
           layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {{}})),
           directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
-          flights: JSON.parse(JSON.stringify(state.flights || []))
+          flights: cloneFlightsWithoutPathPolylineCache(state.flights)
         }});
         if (undoStack.length > maxUndoLevels) undoStack.shift();
         syncPanelFromState();
+        invalidateGridUnderlay();
         draw();
       }});
     }}
@@ -3891,13 +5000,44 @@ def _build_designer_html() -> str:
     document.getElementById('terminalName').addEventListener('change', function() {{
       const t = getCurrentTerminal();
       if (t) {{
-        t.name = this.value;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('terminal', t.id, raw)) {{
+          alertDuplicateLayoutName();
+          this.value = t.name || '';
+          return;
+        }}
+        t.name = raw || t.name;
         draw();
         updateObjectInfo();
-        if (typeof renderFlightList === 'function') renderFlightList();
-        if (typeof renderFlightGantt === 'function') renderFlightGantt();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
       }}
     }});
+    const buildingTypeInput = document.getElementById('buildingType');
+    if (buildingTypeInput) {{
+      buildingTypeInput.addEventListener('change', function() {{
+        const nextType = normalizeBuildingType(this.value || BUILDING_TYPE_DEFAULT);
+        const t = getCurrentTerminal();
+        const nameInput = document.getElementById('terminalName');
+        const nextDefaultName = getDefaultBuildingNameForType(nextType, t ? t.id : null);
+        if (t) {{
+          t.buildingType = nextType;
+          if (findDuplicateLayoutName('terminal', t.id, nextDefaultName)) {{
+            alertDuplicateLayoutName();
+            if (nameInput) nameInput.value = t.name || '';
+          }} else {{
+            t.name = nextDefaultName;
+            if (nameInput) nameInput.value = nextDefaultName;
+          }}
+        }} else if (nameInput) {{
+          nameInput.value = nextDefaultName;
+        }}
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        if (typeof update3DScene === 'function') update3DScene();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      }});
+    }}
     function recomputeTerminalFloorHeight() {{
       const t = getCurrentTerminal();
       if (!t) return;
@@ -3932,7 +5072,14 @@ def _build_designer_html() -> str:
 
     document.getElementById('standName').addEventListener('change', function() {{
       if (state.selectedObject && state.selectedObject.type === 'pbb') {{
-        state.selectedObject.obj.name = this.value.trim();
+        const pbb = state.selectedObject.obj;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('pbb', pbb.id, raw)) {{
+          alertDuplicateLayoutName();
+          this.value = pbb.name || '';
+          return;
+        }}
+        pbb.name = raw;
         updateObjectInfo();
         renderObjectList();
         draw();
@@ -3942,12 +5089,25 @@ def _build_designer_html() -> str:
       const val = this.value || 'C';
       if (state.selectedObject && state.selectedObject.type === 'pbb') {{
         state.selectedObject.obj.category = val;
+        rebuildPbbBridgeGeometry(state.selectedObject.obj);
         updateObjectInfo();
         renderObjectList();
         draw();
         if (typeof update3DScene === 'function') update3DScene();
       }}
     }});
+    const standCategoryModeEl = document.getElementById('standCategoryMode');
+    if (standCategoryModeEl) {{
+      standCategoryModeEl.addEventListener('change', function() {{
+        syncStandConstraintVisibility('stand', this.value);
+        if (state.selectedObject && state.selectedObject.type === 'pbb') {{
+          state.selectedObject.obj.categoryMode = normalizeStandCategoryMode(this.value, _pbbTier.defaultCategoryMode || 'icao');
+          updateObjectInfo();
+          renderObjectList();
+          draw();
+        }}
+      }});
+    }}
     const pbbLengthInputEl = document.getElementById('pbbLength');
     if (pbbLengthInputEl) {{
       pbbLengthInputEl.addEventListener('change', function() {{
@@ -3956,16 +5116,7 @@ def _build_designer_html() -> str:
         this.value = String(Math.max(1, Math.round(nextLen)));
         if (state.selectedObject && state.selectedObject.type === 'pbb') {{
           const pbb = state.selectedObject.obj;
-          let vx = (pbb.x2 || 0) - (pbb.x1 || 0);
-          let vy = (pbb.y2 || 0) - (pbb.y1 || 0);
-          let vlen = Math.hypot(vx, vy);
-          if (!(vlen > 1e-6)) {{
-            // Fallback normal direction if stand vector is degenerate.
-            vx = 1; vy = 0; vlen = 1;
-          }}
-          const nx = vx / vlen, ny = vy / vlen;
-          pbb.x2 = (pbb.x1 || 0) + nx * nextLen;
-          pbb.y2 = (pbb.y1 || 0) + ny * nextLen;
+          setPbbGeometryFromAngleLength(pbb, getPbbAngleDeg(pbb), nextLen, true);
           updateObjectInfo();
           renderObjectList();
           draw();
@@ -3973,16 +5124,86 @@ def _build_designer_html() -> str:
         }}
       }});
     }}
+    const standAngleInputEl = document.getElementById('standAngle');
+    if (standAngleInputEl) {{
+      standAngleInputEl.addEventListener('change', function() {{
+        const nextDeg = normalizeAngleDeg(this.value);
+        this.value = String(Math.round(nextDeg));
+        if (state.selectedObject && state.selectedObject.type === 'pbb') {{
+          const pbb = state.selectedObject.obj;
+          setPbbGeometryFromAngleLength(pbb, nextDeg, getPbbLengthMeters(pbb), true);
+          updateObjectInfo();
+          renderObjectList();
+          draw();
+          if (typeof update3DScene === 'function') update3DScene();
+        }}
+      }});
+    }}
+    const pbbBridgeCountInputEl = document.getElementById('pbbBridgeCount');
+    if (pbbBridgeCountInputEl) {{
+      pbbBridgeCountInputEl.addEventListener('change', function() {{
+        const nextCount = Math.max(1, Math.min(8, parseInt(this.value, 10) || 1));
+        this.value = String(nextCount);
+        if (state.selectedObject && state.selectedObject.type === 'pbb') {{
+          const pbb = state.selectedObject.obj;
+          pbb.pbbCount = nextCount;
+          delete pbb.pbbBridges;
+          rebuildPbbBridgeGeometry(pbb);
+          updateObjectInfo();
+          renderObjectList();
+          draw();
+          if (typeof update3DScene === 'function') update3DScene();
+        }}
+      }});
+    }}
+    const standAircraftAccessEl = document.getElementById('standAircraftAccess');
+    if (standAircraftAccessEl) {{
+      standAircraftAccessEl.addEventListener('change', function(ev) {{
+        const target = ev.target;
+        if (!target || !target.classList.contains('aircraft-type-check')) return;
+        syncChoiceChipStates(standAircraftAccessEl);
+        if (!state.selectedObject || state.selectedObject.type !== 'pbb') return;
+        state.selectedObject.obj.allowedAircraftTypes = Array.from(standAircraftAccessEl.querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+      }});
+    }}
 
     const remoteNameInput = document.getElementById('remoteName');
     if (remoteNameInput) {{
       remoteNameInput.addEventListener('change', function() {{
         if (state.selectedObject && state.selectedObject.type === 'remote') {{
-          state.selectedObject.obj.name = this.value.trim();
+          const st = state.selectedObject.obj;
+          const raw = (this.value || '').trim();
+          if (raw && findDuplicateLayoutName('remote', st.id, raw)) {{
+            alertDuplicateLayoutName();
+            this.value = st.name || '';
+            return;
+          }}
+          st.name = raw;
           updateObjectInfo();
           renderObjectList();
           draw();
           if (typeof update3DScene === 'function') update3DScene();
+        }}
+      }});
+    }}
+    const holdingPointNameInput = document.getElementById('holdingPointName');
+    if (holdingPointNameInput) {{
+      holdingPointNameInput.addEventListener('change', function() {{
+        if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {{
+          const hp = state.selectedObject.obj;
+          const raw = (this.value || '').trim();
+          if (raw && findDuplicateLayoutName('holdingPoint', hp.id, raw)) {{
+            alertDuplicateLayoutName();
+            this.value = hp.name || '';
+            return;
+          }}
+          hp.name = raw;
+          updateObjectInfo();
+          renderObjectList();
+          draw();
         }}
       }});
     }}
@@ -3996,6 +5217,18 @@ def _build_designer_html() -> str:
           renderObjectList();
           draw();
           if (typeof update3DScene === 'function') update3DScene();
+        }}
+      }});
+    }}
+    const remoteCategoryModeEl = document.getElementById('remoteCategoryMode');
+    if (remoteCategoryModeEl) {{
+      remoteCategoryModeEl.addEventListener('change', function() {{
+        syncStandConstraintVisibility('remote', this.value);
+        if (state.selectedObject && state.selectedObject.type === 'remote') {{
+          state.selectedObject.obj.categoryMode = normalizeStandCategoryMode(this.value, _remoteTier.defaultCategoryMode || 'icao');
+          updateObjectInfo();
+          renderObjectList();
+          draw();
         }}
       }});
     }}
@@ -4019,13 +5252,14 @@ def _build_designer_html() -> str:
       remoteTerminalAccessEl.addEventListener('change', function(ev) {{
         const target = ev.target;
         if (!target || !target.classList.contains('remote-term-check')) return;
+        syncChoiceChipStates(remoteTerminalAccessEl);
         if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
         const st = state.selectedObject.obj;
         const checks = remoteTerminalAccessEl.querySelectorAll('.remote-term-check');
         const allowed = [];
         checks.forEach(function(ch) {{
           if (ch.checked) {{
-            const id = ch.getAttribute('data-term-id');
+            const id = ch.getAttribute('data-item-id');
             if (id) allowed.push(id);
           }}
         }});
@@ -4036,10 +5270,30 @@ def _build_designer_html() -> str:
         draw();
       }});
     }}
+    const remoteAircraftAccessEl = document.getElementById('remoteAircraftAccess');
+    if (remoteAircraftAccessEl) {{
+      remoteAircraftAccessEl.addEventListener('change', function(ev) {{
+        const target = ev.target;
+        if (!target || !target.classList.contains('aircraft-type-check')) return;
+        syncChoiceChipStates(remoteAircraftAccessEl);
+        if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
+        state.selectedObject.obj.allowedAircraftTypes = Array.from(remoteAircraftAccessEl.querySelectorAll('.aircraft-type-check')).filter(function(ch) {{ return ch.checked; }}).map(function(ch) {{ return String(ch.getAttribute('data-item-id') || '').trim(); }}).filter(Boolean);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+      }});
+    }}
 
     document.getElementById('taxiwayName').addEventListener('change', function() {{
       if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
-        state.selectedObject.obj.name = this.value.trim();
+        const tw = state.selectedObject.obj;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('taxiway', tw.id, raw)) {{
+          alertDuplicateLayoutName();
+          this.value = tw.name || '';
+          return;
+        }}
+        tw.name = raw;
         updateObjectInfo();
         renderObjectList();
         draw();
@@ -4050,8 +5304,15 @@ def _build_designer_html() -> str:
       apronLinkNameInputEl.addEventListener('change', function() {{
         if (state.selectedObject && state.selectedObject.type === 'apronLink') {{
           const lk = state.selectedObject.obj;
-          lk.name = ensureUniqueApronLinkName(this.value, lk.id);
-          this.value = lk.name;
+          const rawTrim = (this.value || '').trim();
+          const candidate = rawTrim || getApronLinkDefaultName(lk.id);
+          if (findDuplicateLayoutName('apronLink', lk.id, candidate)) {{
+            alertDuplicateLayoutName();
+            this.value = getApronLinkDisplayName(lk);
+            return;
+          }}
+          lk.name = rawTrim;
+          this.value = getApronLinkDisplayName(lk);
           updateObjectInfo();
           renderObjectList();
           draw();
@@ -4063,10 +5324,16 @@ def _build_designer_html() -> str:
       edgeNameInputEl.addEventListener('change', function() {{
         if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {{
           const ed = state.selectedObject.obj;
-          const nextName = ensureUniqueLayoutEdgeName(this.value, ed.id, ed);
-          state.layoutEdgeNames[ed.id] = nextName;
-          ed.name = nextName;
-          this.value = nextName;
+          const rawTrim = (this.value || '').trim();
+          const candidate = rawTrim || getLayoutEdgeDefaultName(ed);
+          if (findDuplicateLayoutName('layoutEdge', ed.id, candidate)) {{
+            alertDuplicateLayoutName();
+            this.value = getLayoutEdgeDisplayName(ed);
+            return;
+          }}
+          state.layoutEdgeNames[ed.id] = candidate;
+          ed.name = candidate;
+          this.value = candidate;
           updateObjectInfo();
           renderObjectList();
           draw();
@@ -4080,7 +5347,7 @@ def _build_designer_html() -> str:
           ? RUNWAY_PATH_DEFAULT_WIDTH
           : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
         const val = Number(this.value);
-        tw.width = Math.max(5, Math.min(100, val || baseWidth));
+        tw.width = clampTaxiwayWidthM(tw.pathType || 'taxiway', val, baseWidth);
         this.value = tw.width;
         updateObjectInfo();
         draw();
@@ -4145,28 +5412,30 @@ def _build_designer_html() -> str:
         }}
       }});
     }}
-    function bindRunwayExitDirectionCheckbox(id) {{
-      const cb = document.getElementById(id);
-      if (!cb) return;
-      cb.addEventListener('change', function() {{
+    const runwayExitAllowedDirectionEl = document.getElementById('runwayExitAllowedDirection');
+    if (runwayExitAllowedDirectionEl) {{
+      runwayExitAllowedDirectionEl.addEventListener('change', function(ev) {{
+        const target = ev.target;
+        if (!target || !target.classList.contains('runway-exit-dir-check')) return;
+        syncChoiceChipStates(runwayExitAllowedDirectionEl);
         if (!(state.selectedObject && state.selectedObject.type === 'taxiway')) return;
         const tw = state.selectedObject.obj;
         if (!tw || tw.pathType !== 'runway_exit') return;
         tw.allowedRwDirections = getRunwayExitAllowedDirectionsFromPanel();
-        updateObjectInfo();
-        renderObjectList();
-        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-        else draw();
-        if (scene3d) update3DScene();
-      }});
+          updateObjectInfo();
+          renderObjectList();
+          if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+          else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+          else draw();
+        }});
     }}
-    bindRunwayExitDirectionCheckbox('runwayExitDirCw');
-    bindRunwayExitDirectionCheckbox('runwayExitDirCcw');
     document.getElementById('taxiwayDirectionMode').addEventListener('change', function() {{
       if (state.selectedObject && state.selectedObject.type === 'taxiway') {{
         const tw = state.selectedObject.obj;
-        tw.direction = this.value || 'both';
+        const v = this.value || '';
+        tw.direction = (tw.pathType === 'runway') ? ((v === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise') : (v || 'both');
         updateObjectInfo();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         draw();
         if (typeof update3DScene === 'function') update3DScene();
       }}
@@ -4183,7 +5452,7 @@ def _build_designer_html() -> str:
           this.value = v;
           updateObjectInfo();
           renderObjectList();
-          if (typeof renderFlightList === 'function') renderFlightList();
+          if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
           draw();
         }}
       }});
@@ -4199,7 +5468,8 @@ def _build_designer_html() -> str:
           tw.lineupDistM = v;
           this.value = String(v);
           updateObjectInfo();
-          if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+          if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+          else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
         }}
       }});
     }}
@@ -4221,6 +5491,7 @@ def _build_designer_html() -> str:
           this.value = String(v);
           updateObjectInfo();
           draw();
+          if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         }}
       }});
     }});
@@ -4265,31 +5536,105 @@ def _build_designer_html() -> str:
       return isNaN(num) ? 0 : Math.max(0, num);
     }}
 
-    function recomputeSimDuration() {{
-      let minT = 0, maxT = 0;
-      state.flights.forEach(f => {{
-        if (f.timeline && f.timeline.length) {{
-          const first = f.timeline[0].t;
-          const last = f.timeline[f.timeline.length - 1].t;
-          if (minT === 0 || first < minT) minT = first;
-          if (last > maxT) maxT = last;
-        }}
-      }});
-      state.simStartSec = minT;
-      state.simDurationSec = Math.max(maxT, minT);
-      state.simTimeSec = Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simTimeSec));
-      const slider = document.getElementById('flightSimSlider');
+    function snapSimTimeSecForSlider(tSec) {{
+      const lo = state.simStartSec;
+      const hi = state.simDurationSec;
+      const step = SIM_TIME_SLIDER_SNAP_SEC;
+      const t = Number(tSec);
+      if (!isFinite(t)) return lo;
+      if (!isFinite(lo) || !isFinite(hi) || hi < lo) return t;
+      const clamped = Math.max(lo, Math.min(hi, t));
+      if (!(step > 0)) return clamped;
+      let snapped = lo + Math.round((clamped - lo) / step) * step;
+      if (snapped < lo) snapped = lo;
+      if (snapped > hi) snapped = hi;
+      return snapped;
+    }}
+    function updateFlightSimPlaybackLabelsDom() {{
       const label = document.getElementById('flightSimTimeLabel');
+      const t = state.simTimeSec;
+      if (label) label.textContent = formatSecondsToHHMMSS(t);
+    }}
+    /** 도착편 중 스케줄상 가장 이른 ELDT(초). 없으면 null */
+    function minFirstArrivalTouchdownSecAmongFlights() {{
+      let minS = Infinity;
+      (state.flights || []).forEach(function(f) {{
+        if (!f || f.arrDep === 'Dep') return;
+        if (f.noWayArr && f.noWayDep) return;
+        const w = getFlightAirsideWindowSec(f);
+        if (!w) return;
+        const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], NaN));
+        if (!isFinite(eldtMin)) return;
+        const eldtS = eldtMin * 60;
+        if (eldtS < minS) minS = eldtS;
+      }});
+      return (isFinite(minS) && minS < Infinity) ? minS : null;
+    }}
+    function recomputeSimDuration() {{
+      let minT = Infinity;
+      let maxT = -Infinity;
+      (state.flights || []).forEach(function(f) {{
+        if (!f) return;
+        const w = getFlightAirsideWindowSec(f);
+        if (!w) return;
+        if (w.t0 < minT) minT = w.t0;
+        if (w.t1 > maxT) maxT = w.t1;
+      }});
+      if (!isFinite(minT) || !isFinite(maxT)) {{
+        minT = 0;
+        maxT = 0;
+      }}
+      let simLo = minT;
+      if (PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC > 0) {{
+        const firstTdS = minFirstArrivalTouchdownSecAmongFlights();
+        if (firstTdS != null) {{
+          simLo = Math.max(0, firstTdS - PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC);
+        }}
+      }}
+      state.simDurationSec = Math.max(maxT, minT);
+      if (simLo > state.simDurationSec - 1e-6) {{
+        simLo = Math.max(0, state.simDurationSec - 1);
+      }}
+      state.simStartSec = simLo;
+      if ((state.flights || []).length > 0 && isFinite(minT) && isFinite(maxT) && state.simDurationSec <= state.simStartSec) {{
+        state.simDurationSec = state.simStartSec + 1;
+      }}
+      state.simTimeSec = Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simTimeSec));
+      state.simTimeSec = snapSimTimeSecForSlider(state.simTimeSec);
+      const slider = document.getElementById('flightSimSlider');
       if (slider) {{
         slider.min = state.simStartSec;
         slider.max = state.simDurationSec;
+        slider.step = String(SIM_TIME_SLIDER_SNAP_SEC);
         slider.value = state.simTimeSec;
         if (state.simDurationSec <= state.simStartSec) slider.disabled = true;
         else slider.disabled = false;
       }}
-      if (label) label.textContent = formatSecondsToHHMMSS(state.simTimeSec);
-      const simContainer = document.getElementById('sim-controls-container');
-      if (simContainer) simContainer.style.display = (state.hasSimulationResult && state.flights.length > 0) ? 'flex' : 'none';
+      updateFlightSimPlaybackLabelsDom();
+      if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    }}
+    function applySimPlaybackBarDomVisibility() {{
+      const wrap = document.getElementById('sim-controls-wrap');
+      const inner = document.getElementById('sim-controls-container');
+      const hideBtn = document.getElementById('btnHideSimPlaybackBar');
+      const hasSim = state.hasSimulationResult && state.flights.length > 0 && state.globalUpdateFresh;
+      if (!wrap) return;
+      if (!hasSim || !state.simPlaybackDockVisible) {{
+        wrap.style.display = 'none';
+        return;
+      }}
+      wrap.style.display = 'flex';
+      if (inner) inner.style.display = 'flex';
+      if (hideBtn) hideBtn.setAttribute('aria-expanded', 'true');
+    }}
+    function syncSimulationPlaybackAfterTimelines() {{
+      state.hasSimulationResult = (state.flights || []).length > 0;
+      if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+      if (!state.hasSimulationResult) return;
+      const simSliderAfter = document.getElementById('flightSimSlider');
+      state.simTimeSec = snapSimTimeSecForSlider(Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simStartSec)));
+      if (simSliderAfter) simSliderAfter.value = state.simTimeSec;
+      updateFlightSimPlaybackLabelsDom();
     }}
 
     function formatTotalSecondsToHHMMSS(totalSec) {{
@@ -4298,6 +5643,12 @@ def _build_designer_html() -> str:
     }}
     function formatMinutesToHHMMSS(minsRaw) {{
       return formatTotalSecondsToHHMMSS(_normalizeTimeToSeconds(minsRaw, 'minutes', 'round'));
+    }}
+    function formatSignedMinutesToHHMMSS(minsRaw) {{
+      const n = Number(minsRaw);
+      if (!isFinite(n)) return '—';
+      const sign = n < 0 ? '-' : '';
+      return sign + formatMinutesToHHMMSS(Math.abs(n));
     }}
     function formatSecondsToHHMMSS(secRaw) {{
       return formatTotalSecondsToHHMMSS(_normalizeTimeToSeconds(secRaw, 'seconds', 'floor'));
@@ -4310,8 +5661,9 @@ def _build_designer_html() -> str:
         if (!f || f.id === ignoreFlightId) return;
         if (f.arrDep !== 'Arr') return;
         if (f.standId !== standId) return;
-        if (!f.timeline || !f.timeline.length) return;
-        const end = f.timeline[f.timeline.length - 1].t;
+        const win = getFlightAirsideWindowSec(f);
+        if (!win) return;
+        const end = win.t1;
         const dwellMin = (f.sobtMin_d != null && f.sibtMin_d != null) ? (f.sobtMin_d - f.sibtMin_d) : (f.dwellMin || 0);
         const dwellSec = Math.max(0, dwellMin * 60);
         const start = Math.max(0, end - dwellSec);
@@ -4319,6 +5671,21 @@ def _build_designer_html() -> str:
       }});
       intervals.sort((a, b) => a.start - b.start);
       return intervals;
+    }}
+
+    function isStandOccupiedAtSimSec(standId, tSec) {{
+      if (!standId || !state.hasSimulationResult) return false;
+      const t = Number(tSec);
+      if (!isFinite(t)) return false;
+      const flights = state.flights || [];
+      for (let i = 0; i < flights.length; i++) {{
+        const f = flights[i];
+        if (!f || f.standId !== standId) continue;
+        const m = f.timeline_meta;
+        if (!m || typeof m.eibtSec !== 'number' || typeof m.eobtSec !== 'number') continue;
+        if (t + 1e-3 >= m.eibtSec && t <= m.eobtSec + 1e-3) return true;
+      }}
+      return false;
     }}
 
     function findStandAvailableArrivalTime(standId, desiredArrival, dwellSec) {{
@@ -4334,9 +5701,7 @@ def _build_designer_html() -> str:
 
     function getTerminalForStand(stand) {{
       if (!stand || !state.terminals.length) return null;
-      const [px, py] = (stand.x2 != null && stand.y2 != null)
-        ? [stand.x2, stand.y2]
-        : cellToPixel(stand.edgeCol != null ? stand.edgeCol : stand.col, stand.edgeRow != null ? stand.edgeRow : stand.row);
+      const [px, py] = getStandConnectionPx(stand);
       let nearest = null;
       let nearestD2 = Infinity;
       for (let i = 0; i < state.terminals.length; i++) {{
@@ -4363,12 +5728,19 @@ def _build_designer_html() -> str:
 
     function flightCanUseStand(f, stand) {{
       if (!stand) return true;
-      const order = {{ A:1,B:2,C:3,D:4,E:5,F:6 }};
-      const fCode = (f.code || 'C').toUpperCase();
-      const sCat = (stand.category || 'F').toUpperCase();
-      const fc = order[fCode] || 99;
-      const sc = order[sCat] || 0;
-      if (fc > sc) return false;
+      const mode = getStandCategoryMode(stand);
+      if (mode === 'aircraft') {{
+        const allowedTypes = getStandAllowedAircraftTypes(stand);
+        const flightType = String(f.aircraftType || '').trim();
+        if (!allowedTypes.length || !flightType || allowedTypes.indexOf(flightType) < 0) return false;
+      }} else {{
+        const order = {{ A:1,B:2,C:3,D:4,E:5,F:6 }};
+        const fCode = (f.code || 'C').toUpperCase();
+        const sCat = (stand.category || 'F').toUpperCase();
+        const fc = order[fCode] || 99;
+        const sc = order[sCat] || 0;
+        if (fc > sc) return false;
+      }}
       const ft = (f.terminalId || (f.token && f.token.terminalId)) || null;
       if (!ft) return true;
       const isRemote = (state.remoteStands || []).some(function(r) {{ return r.id === stand.id; }});
@@ -4388,10 +5760,11 @@ def _build_designer_html() -> str:
         const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
         const stand = allStands.find(function(s) {{ return s.id === standId; }});
         if (!flightCanUseStand(f, stand)) {{
-          alert("Code or selected terminal: aircraft doesn't fit apron (stand); cannot be assigned.");
+          alert("Stand constraints or selected building do not match this aircraft, so it cannot be assigned.");
           return false;
         }}
       }}
+      const prevStandForSched = f.standId || null;
       f.standId = standId;
       if (f.token) f.token.apronId = standId;
       delete f.sobtMin_orig;
@@ -4402,21 +5775,24 @@ def _build_designer_html() -> str:
       delete f.eibtMin_orig;
       delete f.eobtMin_orig;
       delete f.etotMin_orig;
-      if (typeof renderFlightGantt === 'function') renderFlightGantt();
-      if (typeof renderFlightList === 'function') renderFlightList();
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      const touchedSt = [];
+      if (prevStandForSched) touchedSt.push(prevStandForSched);
+      if (standId) touchedSt.push(standId);
+      if (typeof renderFlightList === 'function')
+        renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touchedSt }});
       if (typeof draw === 'function') draw();
       return true;
     }}
 
-    function getCandidatePbbStandsForCode(code) {{
+    function getCandidatePbbStandsForCode(code, flight) {{
       const list = [];
       const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
       allStands.forEach(stand => {{
-        // If a code is specified, only use it when the categories are the same
-        if (code && stand.category && stand.category !== code) return;
+        if (flight && !flightCanUseStand(flight, stand)) return;
+        if (!flight && code && getStandCategoryMode(stand) === 'icao' && stand.category && stand.category !== code) return;
         const hasLink = state.apronLinks.some(lk => lk.pbbId === stand.id);
         if (!hasLink) return;
-        // Terminal constraints will not be checked here, and later flight.token.terminalIdand allowedTerminalsFilter by
         list.push(stand);
       }});
       return list;
@@ -4433,7 +5809,7 @@ def _build_designer_html() -> str:
       if (flight.standId) {{
         return allStands.find(s => s.id === flight.standId) || null;
       }}
-      let candidates = getCandidatePbbStandsForCode(flight.code);
+      let candidates = getCandidatePbbStandsForCode(flight.code, flight);
       if (!candidates.length) return null;
       const termId = (flight.token && flight.token.terminalId) || null;
       if (termId) {{
@@ -4516,6 +5892,11 @@ def _build_designer_html() -> str:
     function getFlightPoseAtTime(flight, tSec) {{
       const tl = flight.timeline;
       if (!tl || !tl.length) return null;
+      if (tl.length === 1) {{
+        const a = tl[0];
+        if (tSec + 1e-6 < a.t || tSec - 1e-6 > a.t) return null;
+        return {{ x: a.x, y: a.y, dx: 1, dy: 0 }};
+      }}
       if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
       for (let i = 0; i < tl.length - 1; i++) {{
         const a = tl[i], b = tl[i+1];
@@ -4532,33 +5913,317 @@ def _build_designer_html() -> str:
       return null;
     }}
 
+    /** 2D 시뮬: 타임라인 구간마다 선형 보간해 재생·슬라이더에서 연속적으로 이동합니다. */
+    function getFlightPoseAtTimeForDraw(flight, tSec) {{
+      const tl = flight && flight.timeline;
+      if (!tl || !tl.length) return null;
+      let t = Number(tSec);
+      if (!isFinite(t)) return null;
+      const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
+      if (t + 1e-9 < t0) {{
+        const pad = simAirsideLazyPadSec();
+        if (t >= t0 - pad - 1e-3) t = t0;
+        else return null;
+      }}
+      if (t > t1) t = t1;
+      return getFlightPoseAtTime(flight, t);
+    }}
+
+    function isFlightPreTouchdownForDraw(f, tSec) {{
+      if (!PRE_TOUCHDOWN_HALO_ENABLED) return false;
+      if (!f || f.arrDep === 'Dep') return false;
+      const m = f.timeline_meta;
+      if (!m || typeof m.eldtSec !== 'number' || !isFinite(m.eldtSec)) return false;
+      const t = Number(tSec);
+      if (!isFinite(t)) return false;
+      return t < m.eldtSec - 1e-3;
+    }}
+
+    function isFlightAirsideCycleCompleteAtSimTime(f, tSec) {{
+      const m = f && f.timeline_meta;
+      const t = Number(tSec);
+      if (!isFinite(t) || !m || m.error) return false;
+      if (typeof m.etotSec !== 'number' || !isFinite(m.etotSec)) return false;
+      return t >= m.etotSec - 1e-3;
+    }}
+
+    /** 현재 시각이 타임라인에서 위치 거의 변하지 않는 구간(게이트 체류·ROT 대기 등)이면 true */
+    function isFlightTimelineStationaryAtSimTime(f, tSec) {{
+      const tl = f && f.timeline;
+      if (!tl || tl.length < 2) return false;
+      const t = Number(tSec);
+      if (!isFinite(t)) return false;
+      const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
+      if (t < t0 - 1e-9 || t > t1 + 1e-9) return false;
+      const stillEps = 0.08;
+      for (let i = 0; i < tl.length - 1; i++) {{
+        const a = tl[i], b = tl[i + 1];
+        if (!(t + 1e-9 >= a.t && t - 1e-9 <= b.t)) continue;
+        const dt = b.t - a.t;
+        if (dt < 1e-9) continue;
+        const dist = Math.hypot(b.x - a.x, b.y - a.y);
+        if (dist < stillEps) return true;
+      }}
+      return false;
+    }}
+
+    function isFlightTrailHiddenAtSimTime(f, tSec) {{
+      if (isFlightAirsideCycleCompleteAtSimTime(f, tSec)) return true;
+      if (isFlightTimelineStationaryAtSimTime(f, tSec)) return true;
+      return false;
+    }}
+
+    function getFlightTrailPolylineBackward(f, tEnd, maxDistM) {{
+      const tl = f && f.timeline;
+      if (!tl || tl.length < 2 || !(maxDistM > 0)) return [];
+      const tMin = tl[0].t, tMax = tl[tl.length - 1].t;
+      let t = Math.min(Math.max(tEnd, tMin), tMax);
+      let seg = 0;
+      for (let i = 0; i < tl.length - 1; i++) {{
+        if (t >= tl[i].t && t <= tl[i + 1].t) {{ seg = i; break; }}
+        if (t > tl[i + 1].t) seg = i;
+      }}
+      const pts = [];
+      function xyAt(T) {{
+        if (T <= tMin) return [tl[0].x, tl[0].y];
+        if (T >= tMax) return [tl[tl.length - 1].x, tl[tl.length - 1].y];
+        for (let i = 0; i < tl.length - 1; i++) {{
+          const a = tl[i], b = tl[i + 1];
+          if (T >= a.t && T <= b.t) {{
+            const sp = b.t - a.t || 1;
+            const uu = (T - a.t) / sp;
+            return [a.x + (b.x - a.x) * uu, a.y + (b.y - a.y) * uu];
+          }}
+        }}
+        return [tl[tl.length - 1].x, tl[tl.length - 1].y];
+      }}
+      pts.push(xyAt(t));
+      let rem = maxDistM;
+      let curSeg = seg;
+      let curT = t;
+      let guard = 0;
+      while (rem > 1e-6 && curSeg >= 0 && guard++ < 10000) {{
+        const A = tl[curSeg], B = tl[curSeg + 1];
+        const ta = A.t, tb = B.t;
+        const dt = tb - ta || 1e-12;
+        const distAB = Math.hypot(B.x - A.x, B.y - A.y) || 1e-12;
+        let u = Math.max(0, Math.min(1, (curT - ta) / dt));
+        if (u < 1e-12) {{
+          if (curSeg <= 0) break;
+          curSeg--;
+          curT = tl[curSeg + 1].t;
+          continue;
+        }}
+        const distToA = u * distAB;
+        if (distToA <= rem) {{
+          rem -= distToA;
+          pts.push([A.x, A.y]);
+          curSeg--;
+          curT = ta;
+        }} else {{
+          const frac = rem / distAB;
+          const uu = u - frac;
+          const nx = A.x + uu * (B.x - A.x);
+          const ny = A.y + uu * (B.y - A.y);
+          pts.push([nx, ny]);
+          rem = 0;
+          break;
+        }}
+      }}
+      return pts.slice().reverse();
+    }}
+
     function getRunwayOptions() {{
       const list = [];
       (state.taxiways || []).filter(t => t.pathType === 'runway')
         .forEach(t => list.push({{ id: t.id, name: (t.name || '').trim() || 'Runway' }}));
       return list;
     }}
-    function _buildOptionTag(id, label, selectedId) {{
-      const sel = selectedId && id === selectedId ? ' selected' : '';
-      return '<option value=\"' + String(id || '').replace(/\"/g,'&quot;') + '\"' + sel + '>' + escapeHtml(label) + '</option>';
-    }}
+
     function buildRunwayOptionsHtml(selectedId) {{
+      const opts = [];
       const list = getRunwayOptions();
-      if (!list.length) return '<option value=\"\">Runway</option>';
-      return list.map(function(o) {{ return _buildOptionTag(o.id, o.name || o.id || 'Runway', selectedId); }}).join('');
+      if (!list.length) {{
+        opts.push('<option value=\"\">Runway</option>');
+      }} else {{
+        list.forEach(function(o) {{
+          const sel = selectedId && o.id === selectedId ? ' selected' : '';
+          opts.push('<option value=\"' + String(o.id || '').replace(/\"/g, '&quot;') + '\"' + sel + '>' +
+            escapeHtml(o.name || o.id || 'Runway') + '</option>');
+        }});
+      }}
+      return opts.join('');
     }}
     function buildTerminalOptionsHtml(selectedId) {{
+      const opts = [];
       const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {{
-        return {{ id: t.id, name: (t.name || '').trim() || 'Terminal' }};
+        return {{ id: t.id, name: (t.name || '').trim() || 'Building' }};
       }});
-      if (!terms.length) return '<option value=\"\">Terminal</option>';
-      const prefix = terms.length > 1 ? '<option value=\"\">Random</option>' : '';
-      return prefix + terms.map(function(o) {{ return _buildOptionTag(o.id, o.name || o.id || 'Terminal', selectedId); }}).join('');
+      if (!terms.length) {{
+        opts.push('<option value=\"\">Building</option>');
+      }} else {{
+        if (terms.length > 1) opts.push('<option value=\"\">Random</option>');
+        terms.forEach(function(o) {{
+          const sel = selectedId && o.id === selectedId ? ' selected' : '';
+          opts.push('<option value=\"' + String(o.id || '').replace(/\"/g, '&quot;') + '\"' + sel + '>' +
+            escapeHtml(o.name || o.id || 'Building') + '</option>');
+        }});
+      }}
+      return opts.join('');
+    }}
+    function resolveRunwayIdFromInput(raw) {{
+      const v = (raw || '').trim();
+      if (!v) return null;
+      const list = getRunwayOptions();
+      for (let i = 0; i < list.length; i++) {{
+        if (list[i].id === v) return v;
+      }}
+      const vl = v.toLowerCase();
+      for (let i = 0; i < list.length; i++) {{
+        if (String(list[i].name || '').trim().toLowerCase() === vl) return list[i].id;
+      }}
+      return undefined;
+    }}
+    function resolveTerminalIdFromInput(raw) {{
+      const v = (raw || '').trim();
+      if (!v) return null;
+      const terms = makeUniqueNamedCopy(state.terminals || [], 'name');
+      for (let i = 0; i < terms.length; i++) {{
+        const t = terms[i];
+        if (t.id === v) return v;
+      }}
+      const vl = v.toLowerCase();
+      for (let i = 0; i < terms.length; i++) {{
+        const t = terms[i];
+        if (String(t.name || '').trim().toLowerCase() === vl) return t.id;
+      }}
+      return undefined;
+    }}
+    function syncFlightAssignInputDisplay(el, f) {{
+      const role = el.getAttribute('data-role');
+      if (role === 'arr') el.value = f.arrRunwayId || (f.token && f.token.runwayId) || '';
+      else if (role === 'term') el.value = f.terminalId || (f.token && f.token.terminalId) || '';
+      else if (role === 'dep') el.value = f.depRunwayId || (f.token && f.token.depRunwayId) || '';
+    }}
+    function commitFlightAssignField(el, st, listEl) {{
+      const idVal = el.getAttribute('data-id');
+      const role = el.getAttribute('data-role');
+      const f = st.flights.find(function(x) {{ return x.id === idVal; }});
+      if (!f) return;
+      const raw = el.value;
+      var val = null;
+      if (role === 'arr' || role === 'dep') {{
+        const r = resolveRunwayIdFromInput(raw);
+        if ((raw || '').trim() && r === undefined) {{
+          syncFlightAssignInputDisplay(el, f);
+          return;
+        }}
+        val = r === undefined ? null : r;
+      }} else if (role === 'term') {{
+        const r = resolveTerminalIdFromInput(raw);
+        if ((raw || '').trim() && r === undefined) {{
+          syncFlightAssignInputDisplay(el, f);
+          return;
+        }}
+        val = r === undefined ? null : r;
+      }} else return;
+      var prevArr = f.arrRunwayId || null;
+      var prevDep = f.depRunwayId || (f.token && f.token.depRunwayId) || null;
+      var prevTerm = f.terminalId || (f.token && f.token.terminalId) || null;
+      if (role === 'arr' && val === prevArr) return;
+      if (role === 'dep' && val === prevDep) return;
+      if (role === 'term' && val === prevTerm) return;
+      var prevStand = f.standId || null;
+      if (!f.token) f.token = {{ nodes: ['runway','taxiway','apron','terminal'], runwayId: null, apronId: null, terminalId: null }};
+      if (role === 'arr') {{
+        f.arrRunwayId = val;
+        f.token.runwayId = val;
+      }} else if (role === 'term') {{
+        f.terminalId = val;
+        f.token.terminalId = val;
+        if (f.standId) {{
+          var allStands = (st.pbbStands || []).concat(st.remoteStands || []);
+          var stand = allStands.find(function(s) {{ return s.id === f.standId; }});
+          if (stand) {{
+            var term = getTerminalForStand(stand);
+            var standTermId = term ? term.id : null;
+            if (!val || !standTermId || val !== standTermId) f.standId = null;
+          }}
+        }}
+      }} else if (role === 'dep') {{
+        f.depRunwayId = val;
+        f.token.depRunwayId = val;
+      }}
+      syncFlightAssignInputDisplay(el, f);
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      var touched = [];
+      if (prevStand) touched.push(prevStand);
+      if (f.standId) touched.push(f.standId);
+      if (typeof renderFlightList === 'function')
+        renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [idVal], touchedStandIds: touched }});
+    }}
+
+    function _flightListPaintVirtualSlice(listEl) {{
+      const vs = listEl._flightVirtState;
+      if (!vs) return;
+      const tbody = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"] tbody');
+      if (!tbody) return;
+      const flightsSorted = vs.flightsSorted;
+      const retStatsAll = vs.retStatsAll;
+      const total = flightsSorted.length;
+      const rowH = vs.rowH;
+      const overscan = vs.overscan;
+      const scrollTop = listEl.scrollTop || 0;
+      const vh = listEl.clientHeight || 418;
+      const start = Math.max(0, Math.floor(scrollTop / rowH) - overscan);
+      const rowCount = Math.ceil(vh / rowH) + overscan * 2 + 2;
+      const end = Math.min(total, start + rowCount);
+      const topPad = start * rowH;
+      const botPad = Math.max(0, (total - end) * rowH);
+      const parts = [];
+      parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + topPad + 'px\"><td colspan=\"30\"></td></tr>');
+      for (let i = start; i < end; i++) {{
+        parts.push(_buildFlightListRowHtml(flightsSorted[i], retStatsAll));
+      }}
+      parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"30\"></td></tr>');
+      tbody.innerHTML = parts.join('');
+      _flightListWireEvents(listEl, state);
+    }}
+    function _flightListTeardownVirtual(listEl) {{
+      listEl._flightVirtState = null;
+    }}
+    function _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow) {{
+      const prevScroll = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]') ? (listEl.scrollTop || 0) : 0;
+      listEl._flightVirtState = {{
+        flightsSorted: flightsSorted,
+        retStatsAll: retStatsAll,
+        rowH: DOM_OPT_FLIGHT_VIRT_ROW_H,
+        overscan: DOM_OPT_FLIGHT_VIRT_OVERSCAN,
+        raf: null
+      }};
+      listEl.innerHTML = headerRow + '</tbody></table>';
+      const tbl = listEl.querySelector('.flight-schedule-table');
+      if (tbl) tbl.setAttribute('data-virtual-table', '1');
+      _flightListPaintVirtualSlice(listEl);
+      if (prevScroll > 0) listEl.scrollTop = prevScroll;
+      if (!listEl._flightVirtScrollBound) {{
+        listEl._flightVirtScrollBound = true;
+        listEl.addEventListener('scroll', function() {{
+          const vs = listEl._flightVirtState;
+          if (!vs || !listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]')) return;
+          if (vs.raf) cancelAnimationFrame(vs.raf);
+          vs.raf = requestAnimationFrame(function() {{
+            vs.raf = null;
+            _flightListPaintVirtualSlice(listEl);
+          }});
+        }});
+      }}
     }}
 
     // VTT(Arr) + RET/ROT(arrRotSec) share state.vttArrCacheRev; bump on Update / forced RET resample only.
     function bumpVttArrCacheRev() {{
       state.vttArrCacheRev = (state.vttArrCacheRev | 0) + 1;
+      bumpRwySepSnapshotStaleGen();
     }}
     // Flight Schedule and S(d) same in calculation VTT(Arr) Helpers for using definitions
     // ※ Path/RET change: bump revision (Update or renderFlightList force RET) so VTT is recomputed once per flight.
@@ -4573,7 +6238,6 @@ def _build_designer_html() -> str:
         const rotCfgMap = {{}};
         sampleArrRetRotForFlightIfNeeded(f, retStatsAll, rotCfgMap, false);
       }}
-      const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
       const arrPts = (typeof getPathForFlight === 'function') ? getPathForFlight(f) : null;
       let vttArrMin = 0;
       if (arrPts && arrPts.length >= 2) {{
@@ -4594,9 +6258,15 @@ def _build_designer_html() -> str:
             startIdx = Math.min(bestIdx, arrPts.length - 2);
           }}
         }}
-        let dist = 0;
-        for (let i = startIdx; i < arrPts.length - 1; i++) dist += pathDist(arrPts[i], arrPts[i+1]);
-        vttArrMin = dist / v / 60;
+        const carry = {{ lastTaxiwayMs: null }};
+        let sec = 0;
+        for (let i = startIdx; i < arrPts.length - 1; i++) {{
+          const len = pathDist(arrPts[i], arrPts[i + 1]);
+          if (len < 1e-9) continue;
+          const v = taxiSegmentVelocityMsForPolylineSegment(arrPts[i], arrPts[i + 1], carry);
+          sec += len / Math.max(0.1, v);
+        }}
+        vttArrMin = sec / 60;
       }}
       f.__schedVttArrMin = vttArrMin;
       f.__schedVttArrRev = rev;
@@ -4609,10 +6279,70 @@ def _build_designer_html() -> str:
     function getBaseVttDepMinutes(f) {{
       const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
       if (!depPts || depPts.length < 2) return 0;
-      const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-      let dist = 0;
-      for (let i = 0; i < depPts.length - 1; i++) dist += pathDist(depPts[i], depPts[i+1]);
-      return dist / v / 60;
+      const carry = {{ lastTaxiwayMs: null }};
+      let sec = 0;
+      for (let i = 0; i < depPts.length - 1; i++) {{
+        const len = pathDist(depPts[i], depPts[i + 1]);
+        if (len < 1e-9) continue;
+        const v = taxiSegmentVelocityMsForPolylineSegment(depPts[i], depPts[i + 1], carry);
+        sec += len / Math.max(0.1, v);
+      }}
+      return sec / 60;
+    }}
+    /** DEP_TAXI_TIME 표시용: 스탠드→라인업(활주로 상 lineupDistM 지점) 그래프 경로만. 활주로 이륙 방향 꼬리 구간은 제외. */
+    function getBaseVttDepMinutesToLineup(f) {{
+      const depPts = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, {{ onlyToLineup: true }}) : null;
+      if (!depPts || depPts.length < 2) return 0;
+      const carry = {{ lastTaxiwayMs: null }};
+      let sec = 0;
+      for (let i = 0; i < depPts.length - 1; i++) {{
+        const len = pathDist(depPts[i], depPts[i + 1]);
+        if (len < 1e-9) continue;
+        const v = taxiSegmentVelocityMsForPolylineSegment(depPts[i], depPts[i + 1], carry);
+        sec += len / Math.max(0.1, v);
+      }}
+      return sec / 60;
+    }}
+    /** STOT−SOBT·EOBT역산에 사용: 라인업 택시(분) + 출발 ROT(분, SCHED_DEP_ROT_MIN). */
+    function getDepBlockOutMin(f) {{
+      const taxi = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
+      return taxi + SCHED_DEP_ROT_MIN;
+    }}
+    /** computeScheduledDisplayTimes와 동일 규칙: dwell 상한·minDwell 하한. */
+    function getNormalizedStandDwellBounds(f) {{
+      let dwell = f.dwellMin != null ? f.dwellMin : 0;
+      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+      if (minDwell > dwell) minDwell = dwell;
+      return {{ dwell, minDwell }};
+    }}
+    /**
+     * 전진 모델: SOBT(d) 선호를 [EIBT+minDwell, EIBT+dwell]에 클램프한 EOBT → ETOT 초안 = EOBT + DEP_TAXI(라인업) + DEP_ROT.
+     * 활주로 SEP 후보 etotRunwayCandidateMin(이미 간격 반영된 ETOT)이 있으면 ETOT = max(후보, 초안).
+     * depTaxiDelayMin = ETOT − ETOT초안 ≥ 0 (SEP·물리 하한으로 벌어진 분만).
+     */
+    function applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotRunwayCandidateMin) {{
+      if (!f) return;
+      const eibt = eibtMin != null && isFinite(eibtMin) ? eibtMin : 0;
+      const block = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+      const {{ dwell, minDwell }} = getNormalizedStandDwellBounds(f);
+      const low = eibt + minDwell;
+      const high = eibt + dwell;
+      const sobtPref = (f.sobtMin_d != null)
+        ? f.sobtMin_d
+        : (f.sibtMin_d != null
+          ? f.sibtMin_d + dwell
+          : (f.timeMin != null ? f.timeMin + dwell : low));
+      const eobt = Math.min(Math.max(sobtPref, low), high);
+      const etotDraft = eobt + block;
+      let etot = etotDraft;
+      if (etotRunwayCandidateMin != null && isFinite(etotRunwayCandidateMin)) {{
+        etot = Math.max(etotRunwayCandidateMin, etotDraft);
+      }}
+      f.eobtMin = eobt;
+      f.etotMin = etot;
+      f.depTaxiDelayMin = Math.max(0, etot - etotDraft);
     }}
 
     // By runway SLDT(d)The earliest arrival flight is ELDT = SLDT(d).
@@ -4693,7 +6423,7 @@ def _build_designer_html() -> str:
       if (!f || f.sampledArrRet == null) return false;
       if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
       const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
-      const arrDir = normalizeRwDirectionValue(f.arrRunwayDirUsed);
+      const arrDir = resolveArrivalRunwayDirForRetGate(f);
       return retStatsAll.some(function(r) {{
         if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
         if (arrRunwayId == null) return true;
@@ -4739,7 +6469,7 @@ def _build_designer_html() -> str:
       const aMin = Math.max(0.1, cfg.aMu * 0.85);
       const aMax = Math.min(6,   cfg.aMu * 1.15);
       const aDec = clamp(aSample, aMin, aMax);
-      const arrDir = normalizeRwDirectionValue(f.arrRunwayDirUsed);
+      const arrDir = resolveArrivalRunwayDirForRetGate(f);
       const candidates = retStatsAll.filter(function(r) {{
         if (!(r && r.runway && r.runway.id === arrRunwayId && r.exit)) return false;
         if (arrDir === 'clockwise' || arrDir === 'counter_clockwise') {{
@@ -4805,10 +6535,39 @@ def _build_designer_html() -> str:
     }}
 
     function _renderEmptyFlightListState(listEl, cfgEl) {{
+      state.flightSchedulePage = 0;
+      const pgr = document.getElementById('flightSchedulePager');
+      if (pgr) pgr.style.display = 'none';
+      _flightListTeardownVirtual(listEl);
       listEl.innerHTML = _flightListEmptyHtml('No flights yet.');
       if (cfgEl) cfgEl.innerHTML = _flightListEmptyHtml('No flights yet.');
       const ganttEl = document.getElementById('allocationGantt');
       if (ganttEl) ganttEl.innerHTML = _flightListEmptyHtml('No flights for Gantt.');
+    }}
+    function _updateFlightSchedulePagerUI(totalCount) {{
+      const pager = document.getElementById('flightSchedulePager');
+      if (!pager) return;
+      const size = FLIGHT_SCHED_PAGE_SIZE;
+      if (!size || size <= 0) {{
+        pager.style.display = 'none';
+        return;
+      }}
+      pager.style.display = 'flex';
+      const maxPage = Math.max(0, Math.ceil(totalCount / size) - 1);
+      if (state.flightSchedulePage > maxPage) state.flightSchedulePage = maxPage;
+      if (state.flightSchedulePage < 0) state.flightSchedulePage = 0;
+      const start = state.flightSchedulePage * size;
+      const end = Math.min(totalCount, start + size);
+      const pageNum = maxPage + 1;
+      const cur = state.flightSchedulePage + 1;
+      const tEl = document.getElementById('flightSchedulePagerTotal');
+      const rEl = document.getElementById('flightSchedulePagerRange');
+      if (tEl) tEl.textContent = String(totalCount);
+      if (rEl) rEl.textContent = totalCount ? (String(start + 1) + '–' + String(end) + ' · p ' + String(cur) + '/' + String(pageNum)) : '0–0 · p 0/0';
+      const bPrev = document.getElementById('btnFlightSchedPrev');
+      const bNext = document.getElementById('btnFlightSchedNext');
+      if (bPrev) bPrev.disabled = state.flightSchedulePage <= 0;
+      if (bNext) bNext.disabled = state.flightSchedulePage >= maxPage;
     }}
 
     function _buildFlightListHeaderHtml() {{
@@ -4830,19 +6589,19 @@ def _build_designer_html() -> str:
           '<th class="flight-col-e">EIBT</th>' +
           '<th class="flight-col-e">EOBT</th>' +
           '<th class="flight-col-e">ETOT</th>' +
-          '<th class="flight-col-e flight-col-rot">ROT</th>' +
+          '<th class="flight-col-e flight-col-rot">Arr_ROT</th>' +
           '<th>ARR_TAXI_TIME</th>' +
           '<th>ARR_TAXI_DELAY</th>' +
           '<th>DEP_TAXI_TIME</th>' +
+          '<th>Dep_ROT</th>' +
+          '<th>DEP_TAXI_DELAY</th>' +
           '<th>Aircraft Type</th>' +
           '<th>Code(ICAO)</th>' +
           '<th>ICAO(J/H/M/L)</th>' +
           '<th>RECAT-EU(A-F)</th>' +
-          '<th>Dwell(S)</th>' +
-          '<th>Dwell(E)</th>' +
           '<th>Arr Rw</th>' +
           '<th>Arr RET</th>' +
-          '<th>Terminal</th>' +
+          '<th>Building</th>' +
           '<th>Apron</th>' +
           '<th>Dep Rw</th>' +
           '<th class="flight-td-del"></th>' +
@@ -4864,11 +6623,12 @@ def _build_designer_html() -> str:
       const tDepMin = tArrMin + dwell;
       const vttArrMin = getBaseVttArrMinutes(f);
       const rotArrMin = getArrRotMinutes(f);
-      const vttDepMin = getBaseVttDepMinutes(f);
+      const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+      const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : Math.max(0, depBlockOutMin - SCHED_DEP_ROT_MIN);
       const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin - rotArrMin));
       const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
       const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-      const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + vttDepMin);
+      const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + depBlockOutMin);
       const sldtStr = formatMinutesToHHMMSS(f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc);
       const stotStr = formatMinutesToHHMMSS(stotOrig);
       const sldtStr_d = formatMinutesToHHMMSS(f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
@@ -4876,14 +6636,16 @@ def _build_designer_html() -> str:
       const sobtStr_d = formatMinutesToHHMMSS(f.sobtMin_d != null ? f.sobtMin_d : tDepMin);
       const stotStr_d = formatMinutesToHHMMSS(f.stotMin_d != null ? f.stotMin_d : stotOrig);
       const eldtMin = f.eldtMin != null ? f.eldtMin : (f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
-      const etotMin = f.etotMin != null ? f.etotMin : (f.stotMin_d != null ? f.stotMin_d : stotOrig);
+      const etotCandMin = f.etotMin != null ? f.etotMin : (f.stotMin_d != null ? f.stotMin_d : stotOrig);
       f.eldtMin = eldtMin;
-      f.etotMin = etotMin;
       const tArr = formatMinutesToHHMMSS(tArrMin);
       const tDep = formatMinutesToHHMMSS(tDepMin);
       const vttADelayMin = f.vttADelayMin != null ? f.vttADelayMin : 0;
       const eibtMin = eldtMin + rotArrMin + vttArrMin + vttADelayMin;
-      const eobtMin = etotMin - vttDepMin;
+      f.eibtMin = eibtMin;
+      applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotCandMin);
+      const eobtMin = f.eobtMin != null ? f.eobtMin : (f.etotMin != null ? f.etotMin - depBlockOutMin : 0);
+      const etotMin = f.etotMin != null ? f.etotMin : (eobtMin + depBlockOutMin);
       if (f.sobtMin_orig == null) {{
         f.sldtMin_orig = sldtOrig;
         f.sibtMin_orig = tArrMin;
@@ -4894,21 +6656,21 @@ def _build_designer_html() -> str:
         f.eobtMin_orig = eobtMin;
         f.etotMin_orig = etotMin;
       }}
-      f.eibtMin = eibtMin;
-      f.eobtMin = eobtMin;
       const eldtStr = formatMinutesToHHMMSS(eldtMin);
       const etotStr = formatMinutesToHHMMSS(etotMin);
       const eibtStr = formatMinutesToHHMMSS(eibtMin);
       const eobtStr = formatMinutesToHHMMSS(eobtMin);
-      const dwellS = dwell;
-      const dwellE = Math.max(0, eobtMin - eibtMin);
       const vttArrStr = formatMinutesToHHMMSS(vttArrMin);
       const vttADelayStr = formatMinutesToHHMMSS(vttADelayMin);
-      const vttDepStr = formatMinutesToHHMMSS(vttDepMin);
+      const vttDepStr = formatMinutesToHHMMSS(vttDepMinLineup);
+      const depRotStr = formatMinutesToHHMMSS(SCHED_DEP_ROT_MIN);
+      const depTaxiDelayStr = formatSignedMinutesToHHMMSS(f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
       const arrOpt = buildRunwayOptionsHtml(arrRunwayId);
       const termOpt = buildTerminalOptionsHtml(f.terminalId || (f.token && f.token.terminalId));
       const depOpt = buildRunwayOptionsHtml(f.depRunwayId || (f.token && f.token.depRunwayId));
-      const noWayBadge = (f.noWayArr || f.noWayDep) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ No Way</span>' : '';
+      const noWayBadge = (f.noWayArr || f.noWayDep)
+        ? ' <span class="flight-no-way-badge" style="color:#dc2626;font-weight:600;font-size:10px;cursor:help;" title="' + escapeAttr(buildNoWayTooltip(f)) + '">⚠ No Way</span>'
+        : '';
       const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
       const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
       const icaoJhl = (ac && ac.icaoJHL) ? ac.icaoJHL : '—';
@@ -4935,12 +6697,12 @@ def _build_designer_html() -> str:
           '<td class="flight-td-time">' + vttArrStr + '</td>' +
           '<td class="flight-td-time">' + vttADelayStr + '</td>' +
           '<td class="flight-td-time">' + vttDepStr + '</td>' +
+          '<td class="flight-td-time">' + depRotStr + '</td>' +
+          '<td class="flight-td-time">' + depTaxiDelayStr + '</td>' +
           '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
           '<td>' + escapeHtml(codeIcao) + '</td>' +
           '<td>' + escapeHtml(icaoJhl) + '</td>' +
           '<td>' + escapeHtml(recatEu) + '</td>' +
-          '<td>' + (dwellS != null ? dwellS : 0) + '</td>' +
-          '<td>' + (typeof dwellE === 'number' ? Math.round(dwellE * 10) / 10 : '—') + '</td>' +
           '<td class="flight-td-select"><select class="flight-assign-select" data-role="arr" data-id="' + f.id + '">' + arrOpt + '</select></td>' +
           '<td>' + escapeHtml(sampledRetName) + '</td>' +
           '<td class="flight-td-select"><select class="flight-assign-select" data-role="term" data-id="' + f.id + '">' + termOpt + '</select></td>' +
@@ -4956,34 +6718,140 @@ def _build_designer_html() -> str:
       }});
     }}
 
+    const FLIGHT_LIST_PATH_YIELD_CHUNK = 6;
+    const FLIGHT_LIST_ASYNC_PATH_MIN = 8;
+    function _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, domOpt) {{
+      const skipGanttRefresh = domOpt && domOpt.skipGanttRefresh;
+      const headerRow = _buildFlightListHeaderHtml();
+      if (schedFull) {{
+        if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
+        if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
+        pinEarliestEldtToSldtPerRunway(flightsSorted);
+      }} else {{
+        if (typeof computeScheduledDisplayTimesIncremental === 'function')
+          computeScheduledDisplayTimesIncremental(state.flights, dirtySet, standSet);
+      }}
+      flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+      const usePagination = FLIGHT_SCHED_PAGE_SIZE > 0;
+      let flightsForDom = flightsSorted;
+      if (usePagination) {{
+        const size = FLIGHT_SCHED_PAGE_SIZE;
+        const n = flightsSorted.length;
+        const maxPage = Math.max(0, Math.ceil(n / size) - 1);
+        if (state.flightSchedulePage > maxPage) state.flightSchedulePage = maxPage;
+        if (state.flightSchedulePage < 0) state.flightSchedulePage = 0;
+        const start = state.flightSchedulePage * size;
+        flightsForDom = flightsSorted.slice(start, start + size);
+      }}
+      _updateFlightSchedulePagerUI(flightsSorted.length);
+      const useVirt = !usePagination && DOM_OPT_FLIGHT_VIRT_ENABLE && flightsSorted.length >= DOM_OPT_FLIGHT_VIRT_MIN;
+      if (useVirt) {{
+        _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow);
+      }} else {{
+        _flightListTeardownVirtual(listEl);
+        const dataRows = _buildFlightListRowsHtml(flightsForDom, retStatsAll);
+        listEl.innerHTML = headerRow + dataRows.join('') + '</tbody></table>';
+        const tbl0 = listEl.querySelector('.flight-schedule-table');
+        if (tbl0) {{
+          if (usePagination) tbl0.setAttribute('data-virtual-table', '1');
+          else tbl0.removeAttribute('data-virtual-table');
+        }}
+        _flightListWireEvents(listEl, state);
+      }}
+      _renderFlightConfigTable(cfgEl, flightsSorted);
+      if (!skipGanttRefresh && typeof renderFlightGantt === 'function') renderFlightGantt({{ skipPathPrep: true }});
+      if (DOM_DIAGNOSTIC_LOG) {{
+        requestAnimationFrame(function() {{
+          try {{
+            console.log('[layout-designer] DOM node count:', document.getElementsByTagName('*').length);
+          }} catch (e) {{}}
+        }});
+      }}
+    }}
+    function _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl) {{
+      // Bump rev first so RET/ROT + VTT share the same generation (matches Global Update flow).
+      if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
+      let retStatsAll = [];
+      if (schedFull) {{
+        retStatsAll = (typeof ensureArrRetRotSampled === 'function')
+          ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
+          : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
+      }} else {{
+        const dirtyFlights = flightsSorted.filter(function(f) {{ return dirtySet.has(f.id); }});
+        if (dirtyFlights.length && typeof ensureArrRetRotSampled === 'function')
+          retStatsAll = ensureArrRetRotSampled(dirtyFlights, false);
+        else
+          retStatsAll = (typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : [];
+      }}
+      _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, null);
+    }}
+
     // ---- Flight schedule list ----
-    function renderFlightList(skipAutoAllocate, forceResampleRet) {{
+    // scheduleOpts: {{ scheduleMode:'incremental', dirtyFlightIds, touchedStandIds }}
+    // onDone: optional; Global Update passes this to yield the main thread between ensureFlightPaths chunks (schedFull only, length ≥ FLIGHT_LIST_ASYNC_PATH_MIN).
+    function renderFlightList(skipAutoAllocate, forceResampleRet, scheduleOpts, onDone) {{
       const listEl = document.getElementById('flightList');
       const cfgEl = document.getElementById('flightConfigList');
+      const cb = typeof onDone === 'function' ? onDone : null;
       if (!listEl) return;
       if (!state.flights.length) {{
         _renderEmptyFlightListState(listEl, cfgEl);
+        if (cb) cb();
         return;
       }}
+      if (scheduleOpts && scheduleOpts.pageTurnOnly === true && FLIGHT_SCHED_PAGE_SIZE > 0) {{
+        const flightsSorted = state.flights.slice();
+        flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+        const retStatsAll = (typeof getScheduleRetStatsAll === 'function')
+          ? getScheduleRetStatsAll()
+          : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
+        _renderFlightListDomAndSchedule(flightsSorted, false, new Set(), new Set(), listEl, cfgEl, retStatsAll, {{ skipGanttRefresh: true }});
+        if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
+        if (cb) cb();
+        return;
+      }}
+      let schedFull = true;
+      let dirtySet = new Set();
+      let standSet = new Set();
+      if (!forceResampleRet && scheduleOpts && scheduleOpts.scheduleMode === 'incremental') {{
+        schedFull = false;
+        const d = scheduleOpts.dirtyFlightIds;
+        if (d instanceof Set) d.forEach(function(id) {{ if (id != null && id !== '') dirtySet.add(id); }});
+        else if (Array.isArray(d)) d.forEach(function(id) {{ if (id != null && id !== '') dirtySet.add(id); }});
+        const s = scheduleOpts.touchedStandIds;
+        if (s instanceof Set) s.forEach(function(id) {{ if (id != null && id !== '') standSet.add(id); }});
+        else if (Array.isArray(s)) s.forEach(function(id) {{ if (id != null && id !== '') standSet.add(id); }});
+        if (dirtySet.size === 0 && standSet.size === 0) schedFull = true;
+      }}
+      if (forceResampleRet) schedFull = true;
       // Alignment uses display copies only. state.flights Maintain the order Allocation bar chart/Ensure that the parking lot layout does not change when route is updated.
       const flightsSorted = state.flights.slice();
       flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
-      flightsSorted.forEach(function(f) {{ ensureFlightPaths(f); }});
-      // Bump rev first so RET/ROT + VTT share the same generation (matches Global Update flow).
-      if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
-      // Paths (above) → RET/ROT → S(d)+E (compute* below). Order matches schedule dependency.
-      const retStatsAll = (typeof ensureArrRetRotSampled === 'function')
-        ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
-        : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
-      const headerRow = _buildFlightListHeaderHtml();
-      if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
-      if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
-      pinEarliestEldtToSldtPerRunway(flightsSorted);
-      const dataRows = _buildFlightListRowsHtml(flightsSorted, retStatsAll);
-      listEl.innerHTML = headerRow + dataRows.join('') + '</tbody></table>';
-      _renderFlightConfigTable(cfgEl, flightsSorted);
-      _flightListWireEvents(listEl, state);
-      if (typeof renderFlightGantt === 'function') renderFlightGantt();
+      function runTail() {{
+        _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl);
+        if (cb) cb();
+      }}
+      const useBatchedPathEnsure = schedFull && cb && flightsSorted.length >= FLIGHT_LIST_ASYNC_PATH_MIN;
+      if (useBatchedPathEnsure) {{
+        let idx = 0;
+        function pathChunk() {{
+          const end = Math.min(idx + FLIGHT_LIST_PATH_YIELD_CHUNK, flightsSorted.length);
+          for (; idx < end; idx++) ensureFlightPaths(flightsSorted[idx]);
+          if (idx < flightsSorted.length) setTimeout(pathChunk, 0);
+          else runTail();
+        }}
+        setTimeout(pathChunk, 0);
+        return;
+      }}
+      if (schedFull) {{
+        flightsSorted.forEach(function(f) {{ ensureFlightPaths(f); }});
+      }} else {{
+        dirtySet.forEach(function(fid) {{
+          const ff = flightsSorted.find(function(x) {{ return x.id === fid; }});
+          if (ff) ensureFlightPaths(ff);
+        }});
+      }}
+      runTail();
     }}
 
     function _renderFlightConfigTable(cfgEl, flightsSorted) {{
@@ -5251,60 +7119,70 @@ def _build_designer_html() -> str:
         '</div>';
     }}
 
+    function syncAllocGanttSelectionHighlight() {{
+      const ganttRoot = document.getElementById('allocationGantt');
+      if (!ganttRoot || !ganttRoot.querySelector('.alloc-gantt-root')) return;
+      ganttRoot.querySelectorAll('.alloc-flight').forEach(function(el) {{
+        el.classList.remove('alloc-flight-selected');
+      }});
+      const sel = state.selectedObject;
+      if (!sel || sel.type !== 'flight' || !sel.id) return;
+      const wantId = String(sel.id);
+      ganttRoot.querySelectorAll('.alloc-flight').forEach(function(el) {{
+        if (el.getAttribute('data-flight-id') === wantId) el.classList.add('alloc-flight-selected');
+      }});
+    }}
+
     function _flightListWireEvents(listEl, st) {{
       listEl.querySelectorAll('.obj-item-delete').forEach(function(btn) {{
         btn.addEventListener('click', function(ev) {{
           var idVal = this.getAttribute('data-del');
+          var fDel = st.flights.find(function(x) {{ return x.id === idVal; }});
+          var delStand = (fDel && fDel.standId) ? fDel.standId : null;
           st.flights = st.flights.filter(function(f) {{ return f.id !== idVal; }});
           recomputeSimDuration();
-          renderFlightList();
+          if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+          if (delStand)
+            renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [], touchedStandIds: [delStand] }});
+          else
+            renderFlightList();
         }});
       }});
       listEl.querySelectorAll('.obj-item').forEach(function(row) {{
         row.addEventListener('click', function(ev) {{
+          if (ev.target.closest && ev.target.closest('select.flight-assign-select')) return;
           if ((ev.target.classList && ev.target.classList.contains('obj-item-delete')) || ev.target.getAttribute('data-del')) return;
           var idVal = this.getAttribute('data-id');
           var f = st.flights.find(function(x) {{ return x.id === idVal; }});
           if (!f) return;
+          state.flightPathRevealFlightId = null;
           st.selectedObject = {{ type: 'flight', id: idVal, obj: f }};
           listEl.querySelectorAll('.obj-item').forEach(function(r) {{ r.classList.remove('selected', 'expanded'); }});
           this.classList.add('selected', 'expanded');
           if (typeof updateObjectInfo === 'function') updateObjectInfo();
           if (typeof syncPanelFromState === 'function') syncPanelFromState();
           if (typeof draw === 'function') draw();
-          if (typeof renderFlightGantt === 'function') renderFlightGantt();
+          if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
         }});
-      }});
-      listEl.querySelectorAll('.flight-assign-select').forEach(function(sel) {{
-        sel.addEventListener('change', function() {{
+        row.addEventListener('dblclick', function(ev) {{
+          if (ev.target.closest && ev.target.closest('select.flight-assign-select')) return;
+          if ((ev.target.classList && ev.target.classList.contains('obj-item-delete')) || ev.target.getAttribute('data-del')) return;
+          ev.preventDefault();
           var idVal = this.getAttribute('data-id');
-          var role = this.getAttribute('data-role');
           var f = st.flights.find(function(x) {{ return x.id === idVal; }});
           if (!f) return;
-          var val = this.value || null;
-          if (!f.token) f.token = {{ nodes: ['runway','taxiway','apron','terminal'], runwayId: null, apronId: null, terminalId: null }};
-          if (role === 'arr') {{
-            f.arrRunwayId = val;
-            f.token.runwayId = val;
-          }} else if (role === 'term') {{
-            f.terminalId = val;
-            f.token.terminalId = val;
-            if (f.standId) {{
-              var allStands = (st.pbbStands || []).concat(st.remoteStands || []);
-              var stand = allStands.find(function(s) {{ return s.id === f.standId; }});
-              if (stand) {{
-                var term = getTerminalForStand(stand);
-                var standTermId = term ? term.id : null;
-                if (!val || !standTermId || val !== standTermId) f.standId = null;
-              }}
-            }}
-          }} else if (role === 'dep') {{
-            f.depRunwayId = val;
-            f.token.depRunwayId = val;
-          }}
-          if (typeof renderFlightList === 'function') renderFlightList();
-          if (typeof renderFlightGantt === 'function') renderFlightGantt();
+          st.selectedObject = {{ type: 'flight', id: idVal, obj: f }};
+          state.flightPathRevealFlightId = idVal;
+          listEl.querySelectorAll('.obj-item').forEach(function(r) {{ r.classList.remove('selected', 'expanded'); }});
+          this.classList.add('selected', 'expanded');
+          if (typeof updateObjectInfo === 'function') updateObjectInfo();
+          if (typeof syncPanelFromState === 'function') syncPanelFromState();
+          if (typeof draw === 'function') draw();
+          if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
         }});
+      }});
+      listEl.querySelectorAll('.flight-assign-select').forEach(function(inp) {{
+        inp.addEventListener('change', function() {{ commitFlightAssignField(inp, st, listEl); }});
       }});
     }}
 
@@ -5337,7 +7215,9 @@ def _build_designer_html() -> str:
     }}
 
     // Allocation Gantt (length: Apron/Stand, horizontal: time)
-    function renderFlightGantt() {{
+    // opt.skipPathPrep: when true, skip ensureFlightPaths / RET sample / schedule prep (caller already did it, e.g. end of renderFlightList).
+    function renderFlightGantt(opt) {{
+      const skipPathPrep = opt && opt.skipPathPrep;
       const ganttEl = document.getElementById('allocationGantt');
       if (!ganttEl) return;
       const viewState = _ganttSaveViewState(ganttEl);
@@ -5355,16 +7235,19 @@ def _build_designer_html() -> str:
         ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
         return;
       }}
-      flights.forEach(function(f) {{ ensureFlightPaths(f); }});
-      if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(flights, false);
-      // S(d)/E The series is Flight Schedule The values ​​shown in the table **directly** Read and use.
-      // (Only if the table does not exist or is not rendered state.flights using value fallback)
-      if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
-      if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
+      if (!skipPathPrep) {{
+        flights.forEach(function(f) {{ ensureFlightPaths(f); }});
+        if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(flights, false);
+        // S(d)/E The series is Flight Schedule The values ​​shown in the table **directly** Read and use.
+        // (Only if the table does not exist or is not rendered state.flights using value fallback)
+        if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
+        if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
+      }}
 
       let intervals = [];
       const schedTable = document.querySelector('.flight-schedule-table');
-      if (schedTable) {{
+      const domScheduleOk = schedTable && schedTable.getAttribute('data-virtual-table') !== '1';
+      if (domScheduleOk) {{
         const rows = Array.from(schedTable.querySelectorAll('tbody tr.flight-data-row'));
         rows.forEach(row => {{
           const id = row.getAttribute('data-id');
@@ -5431,6 +7314,11 @@ def _build_designer_html() -> str:
         const etot0 = (it.f && it.f.etotMin != null) ? it.f.etotMin : it.stot;
         if (etot0 > maxE) maxE = etot0;
       }});
+      // 빈 칸/파싱 실패로 sldt==0 만 섞이면 축이 00:00부터 과대하게 잡힘 → 실제 양수 SLDT만 있으면 그 최소로 보정
+      if (minS <= 0 && intervals.length) {{
+        const posSldt = intervals.map(function(it) {{ return it.sldt; }}).filter(function(v) {{ return isFinite(v) && v > 1e-6; }});
+        if (posSldt.length) minS = Math.min.apply(null, posSldt);
+      }}
       if (!isFinite(minS) || !isFinite(maxE)) {{
         ganttEl.innerHTML = '';
         return;
@@ -5461,11 +7349,6 @@ def _build_designer_html() -> str:
       }}
       function allocTrackMarkerHtml(cls, leftPct) {{
         return '<div class="' + cls + '" style="left:' + leftPct + '%;"></div>';
-      }}
-      function allocGridLinesHtml() {{
-        return tickPositions.map(function(tp) {{
-          return allocTrackMarkerHtml('alloc-time-grid-line', tp.leftPct);
-        }}).join('');
       }}
       function pushAllocDot(arr, t, cls) {{
         if (!arr || !isFinite(t) || t < baseMinT || t > baseMaxT) return;
@@ -5540,7 +7423,8 @@ def _build_designer_html() -> str:
           const eobt = it.eobt;
           const eldt = it.eldt;
           const etot = it.etot;
-          const sobtOrig = (it.sobtOrig != null) ? it.sobtOrig : (it.stotOrig - (f.vttDepMin != null ? f.vttDepMin : 0));
+          const depBlk = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+          const sobtOrig = (it.sobtOrig != null) ? it.sobtOrig : (it.stotOrig - depBlk);
           const tStart = Math.max(t0, baseMinT);
           const tEnd = Math.min(t1, baseMaxT);
           if (tEnd <= tStart) return '';
@@ -5558,7 +7442,7 @@ def _build_designer_html() -> str:
           const selectedClass = (state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id) ? ' alloc-flight-selected' : '';
           const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
           const noWayLabel = (f.noWayArr || f.noWayDep)
-            ? ' <span style="color:#fca5a5;font-size:9px;font-weight:700;">No way</span>'
+            ? ' <span class="flight-no-way-badge" style="color:#fca5a5;font-size:9px;font-weight:700;cursor:help;" title="' + escapeAttr(buildNoWayTooltip(f)) + '">No way</span>'
             : '';
           const sibtLabel = formatMinutesToHHMM(t0);
           const sobtLabel = formatMinutesToHHMM(t1);
@@ -5625,7 +7509,6 @@ def _build_designer_html() -> str:
             '</div>';
         }}).join('');
         const sidAttr = standId ? String(standId) : '';
-        const gridLines = allocGridLinesHtml();
         // time axis and time axis "between"Place background text in the center of
         const bgSlots = (tickPositions.length > 1)
           ? tickPositions.slice(0, -1).map((tp, idx) => {{
@@ -5645,7 +7528,6 @@ def _build_designer_html() -> str:
         const trackHtml =
           '<div class="alloc-row" data-stand-id="' + sidAttr + '">' +
             '<div class="alloc-row-track" data-stand-id="' + sidAttr + '">' +
-              gridLines +
               bgSlots +
               blocks +
               (showEibtBars && eBars ? eBars.join('') : '') +
@@ -5665,10 +7547,11 @@ def _build_designer_html() -> str:
       }}
       // Unassigned Above: All flights SLDT/STOT·ELDT/ETOT Only dots (S/E Same class as point·Coordinate formula, existing row logic unchanged)
       function buildRunwayLegendPair() {{
-        const gridLines = allocGridLinesHtml();
         const sDotsHtml = [];
         const eDotsHtml = [];
-        intervals.forEach(function(it) {{
+        const cap = GANTT_LEGEND_MAX_INTERVALS;
+        const lim = (cap > 0 && intervals.length > cap) ? intervals.slice(0, cap) : intervals;
+        lim.forEach(function(it) {{
           pushAllocDot(sDotsHtml, it.sldt, 'alloc-time-dot-s');
           pushAllocDot(sDotsHtml, it.stot, 'alloc-time-dot-s');
           pushAllocDot(eDotsHtml, it.eldt, 'alloc-time-dot-e');
@@ -5678,14 +7561,14 @@ def _build_designer_html() -> str:
         const sTrackHtml =
           '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
             '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
-              gridLines + sDotsHtml.join('') +
+              sDotsHtml.join('') +
             '</div>' +
           '</div>';
         const eLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('E(LDT, TOT)') + '</div>';
         const eTrackHtml =
           '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
             '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
-              gridLines + eDotsHtml.join('') +
+              eDotsHtml.join('') +
             '</div>' +
           '</div>';
         return {{ sLabelHtml: sLabelHtml, sTrackHtml: sTrackHtml, eLabelHtml: eLabelHtml, eTrackHtml: eTrackHtml }};
@@ -5708,7 +7591,7 @@ def _build_designer_html() -> str:
       // By terminal Stand grouping
       const terminalCopies = makeUniqueNamedCopy(state.terminals || [], 'name');
       const termLabelById = {{}};
-      terminalCopies.forEach(t => {{ termLabelById[t.id] = (t.name || '').trim() || 'Terminal'; }});
+      terminalCopies.forEach(t => {{ termLabelById[t.id] = (t.name || '').trim() || 'Building'; }});
       const grouped = {{}};
       const order = [];
       const sortedStands = stands.slice().sort((a, b) => {{
@@ -5740,8 +7623,8 @@ def _build_designer_html() -> str:
         if (!group) return;
         const term = group.term;
         const headerLabel = term
-          ? (termLabelById[term.id] || term.name || 'Terminal')
-          : 'No Terminal';
+          ? (termLabelById[term.id] || term.name || 'Building')
+          : 'No Building';
         // Terminal header: Add one row each to the left label column and right timeline column.
         labelRows.push(
           '<div class="alloc-terminal-header" data-collapsed="0">' +
@@ -5819,9 +7702,16 @@ def _build_designer_html() -> str:
         '</div>';
       // zoom As much as the magnification inner Increase the width to the scrolled section .alloc-row-track hit areaAllow to expand (drop zone = full timeline)
       const innerMinWidthPct = Math.max(100, Math.round(zoom * 100));
+      const gridOverlayHtml =
+        '<div class="alloc-gantt-grid-overlay">' +
+          tickPositions.map(function(tp) {{
+            return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
+          }}).join('') +
+        '</div>';
       const trackColHtml =
         '<div class="alloc-gantt-scroll-col">' +
           '<div class="alloc-gantt-inner" style="min-width:' + innerMinWidthPct + '%;">' +
+            gridOverlayHtml +
             trackRows.join('') +
             axisHtml +
           '</div>' +
@@ -5988,7 +7878,7 @@ def _build_designer_html() -> str:
           let z = st.allocTimeZoom || 1;
           z = Math.max(1, Math.min(8, z * factor));
           st.allocTimeZoom = z;
-          if (typeof renderFlightGantt === 'function') renderFlightGantt();
+          if (typeof renderFlightGantt === 'function') renderFlightGantt({{ skipPathPrep: true }});
         }}, {{ passive: false }});
       }}
       // Per-flight bar: dragstart + click
@@ -6003,6 +7893,7 @@ def _build_designer_html() -> str:
           if (!flightId) return;
           const f = st.flights.find(function(x) {{ return x.id === flightId; }});
           if (!f) return;
+          state.flightPathRevealFlightId = null;
           st.selectedObject = {{ type: 'flight', id: flightId, obj: f }};
           if (typeof updateObjectInfo === 'function') updateObjectInfo();
           if (typeof syncPanelFromState === 'function') syncPanelFromState();
@@ -6013,7 +7904,27 @@ def _build_designer_html() -> str:
             const row = listEl.querySelector('.obj-item[data-id="' + flightId + '"]');
             if (row) row.classList.add('selected', 'expanded');
           }}
-          if (typeof renderFlightGantt === 'function') renderFlightGantt();
+          if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
+        }});
+        el.addEventListener('dblclick', function(ev) {{
+          ev.stopPropagation();
+          ev.preventDefault();
+          const flightId = this.getAttribute('data-flight-id');
+          if (!flightId) return;
+          const f = st.flights.find(function(x) {{ return x.id === flightId; }});
+          if (!f) return;
+          st.selectedObject = {{ type: 'flight', id: flightId, obj: f }};
+          state.flightPathRevealFlightId = flightId;
+          if (typeof updateObjectInfo === 'function') updateObjectInfo();
+          if (typeof syncPanelFromState === 'function') syncPanelFromState();
+          if (typeof draw === 'function') draw();
+          const listEl2 = document.getElementById('flightList');
+          if (listEl2) {{
+            listEl2.querySelectorAll('.obj-item').forEach(function(r) {{ r.classList.remove('selected', 'expanded'); }});
+            const row2 = listEl2.querySelector('.obj-item[data-id="' + flightId + '"]');
+            if (row2) row2.classList.add('selected', 'expanded');
+          }}
+          if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
         }});
       }});
       // Per-track: dragover + drop
@@ -6054,11 +7965,11 @@ def _build_designer_html() -> str:
       // Remote standAvailable terminal constraints and Flight Scheduleof Terminal Check for conflicting settings
       const termsForLabel = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {{ return {{
         id: t.id,
-        name: (t.name || '').trim() || 'Terminal'
+        name: (t.name || '').trim() || 'Building'
       }}; }});
       function termNameById(id) {{
         const tt = termsForLabel.find(function(t) {{ return t.id === id; }});
-        return tt ? tt.name : (id || 'Terminal');
+        return tt ? tt.name : (id || 'Building');
       }}
       const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
       (state.flights || []).forEach(function(f) {{
@@ -6077,7 +7988,7 @@ def _build_designer_html() -> str:
           const standLabel = stand.name || 'Remote';
           const termLabel = termNameById(termId);
           const allowedLabel = allowed.map(termNameById).join(', ');
-          msgs.push('Flight ' + (flightLabel || '') + ' of Terminal setting(' + termLabel + ')this Remote stand ' + standLabel + ' Available terminal settings for(' + allowedLabel + ')does not match.');
+          msgs.push('Flight ' + (flightLabel || '') + ' building setting(' + termLabel + ') does not match Remote stand ' + standLabel + ' available building settings (' + allowedLabel + ').');
         }}
       }});
       return msgs;
@@ -6176,6 +8087,31 @@ def _build_designer_html() -> str:
       const hh = ((Math.floor(total / 60) % 24) + 24) % 24;
       return String(hh).padStart(2, '0') + ':00';
     }}
+    /** 15분 앵커 라벨 HH:MM (롤링 윈도우 시작 시각). */
+    function kpiFormatClockBucket15(minute) {{
+      const n = kpiToNumber(minute);
+      if (n == null) return '—';
+      const total = Math.floor(n);
+      const hh = ((Math.floor(total / 60) % 24) + 24) % 24;
+      const mm = ((total % 60) + 60) % 60;
+      return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+    }}
+    function kpiMinuteOfDay(t) {{
+      const n = kpiToNumber(t);
+      if (n == null || !isFinite(n)) return null;
+      const m = Math.floor(n);
+      return ((m % 1440) + 1440) % 1440;
+    }}
+    function kpiRollWindowOverlapsInterval(w, winMin, startMod, endMod) {{
+      if (startMod == null || endMod == null) return false;
+      const winEnd = w + winMin;
+      function segOverlap(a0, a1, b0, b1) {{
+        return a1 > b0 && a0 < b1;
+      }}
+      if (endMod > startMod) return segOverlap(startMod, endMod, w, winEnd);
+      if (endMod === startMod) return false;
+      return segOverlap(startMod, 1440, w, winEnd) || segOverlap(0, endMod, w, winEnd);
+    }}
 
     function kpiFormatClock(minute) {{
       const n = kpiToNumber(minute);
@@ -6221,12 +8157,11 @@ def _build_designer_html() -> str:
         '</div>';
     }}
 
-    function kpiBuildSummaryCard(label, value, meta, tone, submeta) {{
+    function kpiBuildSummaryCard(label, value, tone) {{
       return '' +
         '<div class="kpi-card ' + escapeHtml(tone || '') + '">' +
           '<div class="kpi-card-label">' + escapeHtml(label) + '</div>' +
           '<div class="kpi-card-value">' + escapeHtml(value) + '</div>' +
-          '<div class="kpi-card-meta">' + escapeHtml(meta) + '</div>' +
         '</div>';
     }}
 
@@ -6241,129 +8176,167 @@ def _build_designer_html() -> str:
         '</div>';
     }}
 
-    function kpiBuildOccupancyChart(buckets) {{
-      if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No gate occupancy data is available for the current snapshot.</div>';
-      const width = Math.max(720, buckets.length * 54);
-      const height = 240;
-      const padL = 44, padR = 20, padT = 18, padB = 34;
-      const innerW = width - padL - padR;
-      const innerH = height - padT - padB;
-      const maxY = Math.max(1, buckets.reduce(function(acc, bucket) {{ return Math.max(acc, bucket.occupancy || 0); }}, 0));
-      const xFor = function(idx) {{
-        return buckets.length === 1 ? (padL + innerW / 2) : (padL + (idx / (buckets.length - 1)) * innerW);
-      }};
-      const yFor = function(value) {{
-        return padT + innerH - ((value || 0) / maxY) * innerH;
-      }};
-      let linePath = '';
-      let areaPath = '';
-      let dots = '';
-      buckets.forEach(function(bucket, idx) {{
-        const x = xFor(idx);
-        const y = yFor(bucket.occupancy || 0);
-        linePath += (idx === 0 ? 'M ' : ' L ') + x + ' ' + y;
-        areaPath += (idx === 0 ? ('M ' + x + ' ' + (padT + innerH) + ' L ' + x + ' ' + y) : (' L ' + x + ' ' + y));
-        dots += '<circle class="kpi-chart-dot" cx="' + x + '" cy="' + y + '" r="4"></circle>';
-      }});
-      areaPath += ' L ' + xFor(buckets.length - 1) + ' ' + (padT + innerH) + ' Z';
-      const yLines = [];
-      for (let i = 0; i < 4; i++) {{
-        const ratio = i / 3;
-        const y = padT + innerH - ratio * innerH;
-        const label = kpiRound(maxY * ratio, 0);
-        yLines.push('<line class="kpi-chart-grid-line" x1="' + padL + '" y1="' + y + '" x2="' + (padL + innerW) + '" y2="' + y + '"></line>');
-        yLines.push('<text class="kpi-chart-axis" x="' + (padL - 8) + '" y="' + (y + 4) + '" text-anchor="end">' + escapeHtml(String(label)) + '</text>');
-      }}
-      const step = Math.max(1, Math.ceil(buckets.length / 8));
-      const xLabels = buckets.map(function(bucket, idx) {{
-        if (idx % step !== 0 && idx !== buckets.length - 1) return '';
-        return '<text class="kpi-chart-axis" x="' + xFor(idx) + '" y="' + (height - 8) + '" text-anchor="middle">' + escapeHtml(bucket.label) + '</text>';
-      }}).join('');
-      return '' +
-        '<div class="kpi-chart-scroll">' +
-          '<svg class="kpi-chart-frame" viewBox="0 0 ' + width + ' ' + height + '" width="' + width + '" height="' + height + '" aria-label="Hourly gate occupancy chart">' +
-            '<defs>' +
-              '<linearGradient id="kpiOccFill" x1="0" y1="0" x2="0" y2="1">' +
-                '<stop offset="0%" stop-color="rgba(124,106,247,0.42)"></stop>' +
-                '<stop offset="100%" stop-color="rgba(124,106,247,0.03)"></stop>' +
-              '</linearGradient>' +
-            '</defs>' +
-            yLines.join('') +
-            '<path d="' + areaPath + '" fill="url(#kpiOccFill)"></path>' +
-            '<path d="' + linePath + '" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>' +
-            dots +
-            xLabels +
-          '</svg>' +
-        '</div>';
+    function kpiBucketOnHour(bucket) {{
+      const bs = kpiToNumber(bucket && bucket.bucketStart);
+      if (bs == null || !isFinite(bs)) return false;
+      const im = Math.floor(bs);
+      return (im % 60 + 60) % 60 === 0;
     }}
-
-    function kpiBuildTrafficChart(buckets) {{
-      if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No arrival or departure events are available for the current snapshot.</div>';
-      const width = Math.max(720, buckets.length * 56);
-      const height = 240;
-      const padL = 44, padR = 20, padT = 18, padB = 34;
-      const innerW = width - padL - padR;
-      const innerH = height - padT - padB;
-      const maxY = Math.max(1, buckets.reduce(function(acc, bucket) {{
-        return Math.max(acc, bucket.arrivals || 0, bucket.departures || 0, bucket.total || 0);
-      }}, 0));
-      const slotW = innerW / buckets.length;
-      const barW = Math.max(8, Math.min(14, slotW * 0.22));
-      const yFor = function(value) {{
-        return padT + innerH - ((value || 0) / maxY) * innerH;
+    function kpiDisposeInteractiveCharts() {{
+      try {{
+        if (window.__kpiChartGate) {{ window.__kpiChartGate.destroy(); window.__kpiChartGate = null; }}
+        if (window.__kpiChartRunway) {{ window.__kpiChartRunway.destroy(); window.__kpiChartRunway = null; }}
+      }} catch (e) {{ console.warn('kpiDisposeInteractiveCharts', e); }}
+    }}
+    function kpiChartCommonOptions(buckets) {{
+      return {{
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {{ mode: 'index', intersect: false }},
+        plugins: {{
+          legend: {{ labels: {{ color: '#94a3b8', font: {{ size: 12, family: 'var(--ui-font, system-ui, sans-serif)' }} }} }},
+          tooltip: {{
+            backgroundColor: 'rgba(15, 23, 42, 0.94)',
+            titleColor: '#f1f5f9',
+            bodyColor: '#e2e8f0',
+            borderColor: 'rgba(148, 163, 184, 0.28)',
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {{
+              title: function(items) {{
+                const i = items && items[0] ? items[0].dataIndex : 0;
+                const b = buckets[i];
+                if (!b) return '';
+                const w = b.bucketStart != null ? kpiFormatClockBucket15(b.bucketStart) : (b.label || '');
+                return 'w = ' + w + ' (60m rolling from w)';
+              }}
+            }}
+          }}
+        }},
+        scales: {{
+          x: {{
+            grid: {{ color: 'rgba(255,255,255,0.07)' }},
+            ticks: {{
+              color: '#94a3b8',
+              maxRotation: buckets.length > 24 ? 40 : 0,
+              autoSkip: buckets.length > 36,
+              maxTicksLimit: buckets.length > 36 ? 20 : undefined,
+              font: {{ size: 12 }},
+              callback: function(tickValue, idx) {{
+                let i = idx;
+                if (typeof tickValue === 'number' && isFinite(tickValue) && tickValue >= 0 && tickValue < buckets.length) {{
+                  i = Math.round(tickValue);
+                }}
+                const b = buckets[i];
+                if (!b || !kpiBucketOnHour(b)) return '';
+                return kpiFormatClockBucket(b.bucketStart);
+              }}
+            }}
+          }},
+          y: {{
+            beginAtZero: true,
+            grid: {{ color: 'rgba(255,255,255,0.07)' }},
+            ticks: {{ color: '#94a3b8', precision: 0, font: {{ size: 12 }} }}
+          }}
+        }}
       }};
-      const yLines = [];
-      for (let i = 0; i < 4; i++) {{
-        const ratio = i / 3;
-        const y = padT + innerH - ratio * innerH;
-        const label = kpiRound(maxY * ratio, 0);
-        yLines.push('<line class="kpi-chart-grid-line" x1="' + padL + '" y1="' + y + '" x2="' + (padL + innerW) + '" y2="' + y + '"></line>');
-        yLines.push('<text class="kpi-chart-axis" x="' + (padL - 8) + '" y="' + (y + 4) + '" text-anchor="end">' + escapeHtml(String(label)) + '</text>');
+    }}
+    function kpiMountInteractiveCharts(buckets) {{
+      if (typeof Chart === 'undefined') {{
+        console.warn('Chart.js failed to load; KPI charts are static until CDN is available.');
+        return;
       }}
-      let bars = '';
-      let linePath = '';
-      let dots = '';
-      buckets.forEach(function(bucket, idx) {{
-        const cx = padL + slotW * idx + slotW / 2;
-        const arrH = innerH - (yFor(bucket.arrivals || 0) - padT);
-        const depH = innerH - (yFor(bucket.departures || 0) - padT);
-        const arrY = yFor(bucket.arrivals || 0);
-        const depY = yFor(bucket.departures || 0);
-        const totalY = yFor(bucket.total || 0);
-        bars += '<rect x="' + (cx - barW - 2) + '" y="' + arrY + '" width="' + barW + '" height="' + Math.max(2, arrH) + '" rx="4" fill="#38bdf8"></rect>';
-        bars += '<rect x="' + (cx + 2) + '" y="' + depY + '" width="' + barW + '" height="' + Math.max(2, depH) + '" rx="4" fill="#fb923c"></rect>';
-        linePath += (idx === 0 ? 'M ' : ' L ') + cx + ' ' + totalY;
-        dots += '<circle class="kpi-chart-dot" cx="' + cx + '" cy="' + totalY + '" r="4" fill="#c4b5fd"></circle>';
-      }});
-      const step = Math.max(1, Math.ceil(buckets.length / 8));
-      const xLabels = buckets.map(function(bucket, idx) {{
-        if (idx % step !== 0 && idx !== buckets.length - 1) return '';
-        const cx = padL + slotW * idx + slotW / 2;
-        return '<text class="kpi-chart-axis" x="' + cx + '" y="' + (height - 8) + '" text-anchor="middle">' + escapeHtml(bucket.label) + '</text>';
-      }}).join('');
-      return '' +
-        '<div class="kpi-chart-scroll">' +
-          '<svg class="kpi-chart-frame" viewBox="0 0 ' + width + ' ' + height + '" width="' + width + '" height="' + height + '" aria-label="Hourly traffic chart">' +
-            yLines.join('') +
-            bars +
-            '<path d="' + linePath + '" fill="none" stroke="#c4b5fd" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>' +
-            dots +
-            xLabels +
-          '</svg>' +
-        '</div>';
+      if (!buckets || !buckets.length) return;
+      const labels = buckets.map(function(b) {{ return b.label || kpiFormatClockBucket15(b.bucketStart); }});
+      const occ = buckets.map(function(b) {{ return b.occupancy || 0; }});
+      const arr = buckets.map(function(b) {{ return b.arrivals || 0; }});
+      const dep = buckets.map(function(b) {{ return b.departures || 0; }});
+      const tot = buckets.map(function(b) {{ return b.total || 0; }});
+      const opt = kpiChartCommonOptions(buckets);
+      const elG = document.getElementById('kpiChartGateOcc');
+      if (elG) {{
+        window.__kpiChartGate = new Chart(elG, {{
+          type: 'line',
+          data: {{
+            labels: labels,
+            datasets: [{{
+              label: 'Gate occupancy',
+              data: occ,
+              borderColor: '#a78bfa',
+              backgroundColor: 'rgba(167, 139, 250, 0.22)',
+              fill: true,
+              tension: 0.28,
+              pointRadius: 3,
+              pointHoverRadius: 7,
+              pointBackgroundColor: '#ddd6fe'
+            }}]
+          }},
+          options: opt
+        }});
+      }}
+      const elR = document.getElementById('kpiChartRunway');
+      if (elR) {{
+        window.__kpiChartRunway = new Chart(elR, {{
+          type: 'bar',
+          data: {{
+            labels: labels,
+            datasets: [
+              {{
+                type: 'bar',
+                label: 'Runway arr (ELDT)',
+                data: arr,
+                backgroundColor: 'rgba(56, 189, 248, 0.72)',
+                order: 3
+              }},
+              {{
+                type: 'bar',
+                label: 'Runway dep (ETOT)',
+                data: dep,
+                backgroundColor: 'rgba(251, 146, 60, 0.72)',
+                order: 3
+              }},
+              {{
+                type: 'line',
+                label: 'Total',
+                data: tot,
+                borderColor: '#c4b5fd',
+                backgroundColor: 'transparent',
+                borderWidth: 3,
+                tension: 0.22,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                order: 1
+              }}
+            ]
+          }},
+          options: opt
+        }});
+      }}
+    }}
+    function kpiGateChartPlaceholder(buckets) {{
+      if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No gate occupancy data is available for the current snapshot.</div>';
+      return '<div class="kpi-chart-canvas-host kpi-chart-wrap--gate-fill"><canvas id="kpiChartGateOcc" aria-label="Gate occupancy chart"></canvas></div>';
+    }}
+    function kpiRunwayChartPlaceholder(buckets) {{
+      if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No arrival or departure events are available for the current snapshot.</div>';
+      return '<div class="kpi-chart-canvas-host"><canvas id="kpiChartRunway" aria-label="Runway traffic chart"></canvas></div>';
     }}
 
     function collectKpiSnapshot() {{
       const flights = Array.isArray(state.flights) ? state.flights.slice() : [];
       const rows = flights.map(function(f) {{
         const arrTaxiMin = kpiToNumber(typeof getBaseVttArrMinutes === 'function' ? getBaseVttArrMinutes(f) : null);
-        const depTaxiMin = kpiToNumber(typeof getBaseVttDepMinutes === 'function' ? getBaseVttDepMinutes(f) : null);
+        const depBlockOutMin = kpiToNumber(typeof getDepBlockOutMin === 'function' ? getDepBlockOutMin(f) : null);
+        const depTaxiMin = kpiToNumber(typeof getBaseVttDepMinutesToLineup === 'function' ? getBaseVttDepMinutesToLineup(f) : null);
         const rotSec = kpiToNumber(f && f.arrRotSec != null ? f.arrRotSec : (typeof getArrRotMinutes === 'function' ? getArrRotMinutes(f) * 60 : null));
+        const depRotSec = (typeof SCHED_DEP_ROT_MIN === 'number' && isFinite(SCHED_DEP_ROT_MIN)) ? SCHED_DEP_ROT_MIN * 60 : null;
+        const arrTaxiDelayMin = kpiToNumber(f && f.vttADelayMin != null ? f.vttADelayMin : 0);
+        const depTaxiDelayMin = kpiToNumber(f && f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
         const sibt = kpiToNumber(f && f.sibtMin_orig != null ? f.sibtMin_orig : (f && f.timeMin != null ? f.timeMin : null));
         const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiMin != null && rotSec != null ? Math.max(0, sibt - arrTaxiMin - rotSec / 60) : null));
         const dwellMin = kpiToNumber(f && f.dwellMin != null ? f.dwellMin : null);
         const sobt = kpiToNumber(f && f.sobtMin_orig != null ? f.sobtMin_orig : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
-        const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depTaxiMin != null ? sobt + depTaxiMin : null));
+        const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depBlockOutMin != null ? sobt + depBlockOutMin : null));
         const eldt = kpiToNumber(f && f.eldtMin != null ? f.eldtMin : (f && f.sldtMin_d != null ? f.sldtMin_d : sldt));
         const eibt = kpiToNumber(f && f.eibtMin != null ? f.eibtMin : (eldt != null && arrTaxiMin != null && rotSec != null ? eldt + arrTaxiMin + rotSec / 60 + (kpiToNumber(f.vttADelayMin) || 0) : sibt));
         const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
@@ -6383,6 +8356,9 @@ def _build_designer_html() -> str:
           arrTaxiMin,
           depTaxiMin,
           rotSec,
+          depRotSec,
+          arrTaxiDelayMin,
+          depTaxiDelayMin,
           sibt,
           sobt,
           sldt,
@@ -6398,40 +8374,37 @@ def _build_designer_html() -> str:
           acDepDelay
         }};
       }});
-      const timeValues = [];
-      rows.forEach(function(row) {{
-        [row.sldt, row.sibt, row.sobt, row.stot, row.eldt, row.eibt, row.eobt, row.etot].forEach(function(value) {{
-          if (kpiToNumber(value) != null) timeValues.push(value);
-        }});
-      }});
-      const minT = timeValues.length ? Math.min.apply(null, timeValues) : null;
-      const maxT = timeValues.length ? Math.max.apply(null, timeValues) : null;
+      const KPI_ROLL_STEP_MIN = 15;
+      const KPI_ROLL_WIN_MIN = 60;
       const buckets = [];
-      if (minT != null && maxT != null) {{
-        const startHour = Math.floor(minT / 60) * 60;
-        let endHour = Math.ceil((maxT + 1) / 60) * 60;
-        if (endHour <= startHour) endHour = startHour + 60;
-        for (let bucketStart = startHour; bucketStart < endHour; bucketStart += 60) {{
-          const bucketEnd = bucketStart + 60;
+      if (rows.length) {{
+        const wLastStart = 1440 - KPI_ROLL_WIN_MIN;
+        for (let w = 0; w <= wLastStart; w += KPI_ROLL_STEP_MIN) {{
+          const wPlus = w + KPI_ROLL_WIN_MIN;
           const activeStands = new Set();
           let arrivals = 0;
           let departures = 0;
           rows.forEach(function(row) {{
-            const occStart = row.eibt != null ? row.eibt : row.sibt;
-            const occEnd = row.eobt != null ? row.eobt : row.sobt;
-            if (row.standId && occStart != null && occEnd != null && occEnd > bucketStart && occStart < bucketEnd) activeStands.add(row.standId);
-            const arrMoment = row.eldt != null ? row.eldt : row.eibt;
-            const depMoment = row.etot != null ? row.etot : row.eobt;
-            if (arrMoment != null && arrMoment >= bucketStart && arrMoment < bucketEnd) arrivals += 1;
-            if (depMoment != null && depMoment >= bucketStart && depMoment < bucketEnd) departures += 1;
+            const occStartRaw = row.eibt != null ? row.eibt : row.sibt;
+            const occEndRaw = row.eobt != null ? row.eobt : row.sobt;
+            const osStart = kpiMinuteOfDay(occStartRaw);
+            const osEnd = kpiMinuteOfDay(occEndRaw);
+            if (row.standId && osStart != null && osEnd != null &&
+                kpiRollWindowOverlapsInterval(w, KPI_ROLL_WIN_MIN, osStart, osEnd)) {{
+              activeStands.add(row.standId);
+            }}
+            const eldtM = kpiMinuteOfDay(row.eldt);
+            const etotM = kpiMinuteOfDay(row.etot);
+            if (eldtM != null && eldtM >= w && eldtM < wPlus) arrivals += 1;
+            if (etotM != null && etotM >= w && etotM < wPlus) departures += 1;
           }});
           buckets.push({{
-            label: kpiFormatClockBucket(bucketStart),
+            label: kpiFormatClockBucket15(w),
             occupancy: activeStands.size,
             arrivals: arrivals,
             departures: departures,
             total: arrivals + departures,
-            bucketStart: bucketStart
+            bucketStart: w
           }});
         }}
       }}
@@ -6444,6 +8417,14 @@ def _build_designer_html() -> str:
       const busiestBucket = buckets.reduce(function(best, bucket) {{
         if (!best) return bucket;
         return (bucket.total || 0) > (best.total || 0) ? bucket : best;
+      }}, null);
+      const peakRunwayArrBucket = buckets.reduce(function(best, bucket) {{
+        if (!best) return bucket;
+        return (bucket.arrivals || 0) > (best.arrivals || 0) ? bucket : best;
+      }}, null);
+      const peakRunwayDepBucket = buckets.reduce(function(best, bucket) {{
+        if (!best) return bucket;
+        return (bucket.departures || 0) > (best.departures || 0) ? bucket : best;
       }}, null);
       const detailRows = rows.slice().sort(function(a, b) {{
         const delayA = (a.paxArrDelay || 0) + (a.paxDepDelay || 0) + (a.acArrDelay || 0) + (a.acDepDelay || 0);
@@ -6458,12 +8439,20 @@ def _build_designer_html() -> str:
         operationalFlights: operationalFlights.length,
         peakBucket: peakBucket,
         busiestBucket: busiestBucket,
-        rotTotalSec: kpiSum(rows, function(row) {{ return row.rotSec; }}),
-        rotAvgSec: kpiAverage(rows, function(row) {{ return row.rotSec; }}),
+        peakRunwayArrBucket: peakRunwayArrBucket,
+        peakRunwayDepBucket: peakRunwayDepBucket,
+        rotArrTotalSec: kpiSum(rows, function(row) {{ return row.rotSec; }}),
+        rotArrAvgSec: kpiAverage(rows, function(row) {{ return row.rotSec; }}),
+        rotDepTotalSec: kpiSum(rows, function(row) {{ return row.depRotSec; }}),
+        rotDepAvgSec: kpiAverage(rows, function(row) {{ return row.depRotSec; }}),
         arrTaxiTotalMin: kpiSum(rows, function(row) {{ return row.arrTaxiMin; }}),
         arrTaxiAvgMin: kpiAverage(rows, function(row) {{ return row.arrTaxiMin; }}),
         depTaxiTotalMin: kpiSum(rows, function(row) {{ return row.depTaxiMin; }}),
         depTaxiAvgMin: kpiAverage(rows, function(row) {{ return row.depTaxiMin; }}),
+        arrTaxiDelayTotalMin: kpiSum(rows, function(row) {{ return row.arrTaxiDelayMin; }}),
+        arrTaxiDelayAvgMin: kpiAverage(rows, function(row) {{ return row.arrTaxiDelayMin; }}),
+        depTaxiDelayTotalMin: kpiSum(rows, function(row) {{ return row.depTaxiDelayMin; }}),
+        depTaxiDelayAvgMin: kpiAverage(rows, function(row) {{ return row.depTaxiDelayMin; }}),
         paxArrDelayTotalMin: kpiSum(rows, function(row) {{ return row.paxArrDelay; }}),
         paxArrDelayAvgMin: kpiAverage(rows, function(row) {{ return row.paxArrDelay; }}),
         paxDepDelayTotalMin: kpiSum(rows, function(row) {{ return row.paxDepDelay; }}),
@@ -6480,43 +8469,64 @@ def _build_designer_html() -> str:
       const host = document.getElementById('kpiDashboard');
       const status = document.getElementById('kpiSnapshotStatus');
       if (!host) return;
+      if (reasonLabel === 'Updated') state.kpiRollingDetailExpanded = false;
+      if (!host._kpiRollingMoreBound) {{
+        host._kpiRollingMoreBound = true;
+        host.addEventListener('click', function(ev) {{
+          const t = ev.target;
+          if (t && t.id === 'btnKpiRollingExpand') {{
+            state.kpiRollingDetailExpanded = true;
+            renderKpiDashboard('Expanded');
+          }}
+        }});
+      }}
+      kpiDisposeInteractiveCharts();
       const snapshot = collectKpiSnapshot();
       if (!snapshot.totalFlights) {{
         host.innerHTML = '<div class="kpi-empty-state">No flights are available yet. Add or load a schedule, then click <strong>Update</strong> to refresh the KPI snapshot.</div>';
         if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
         return;
       }}
-      const failureRate = snapshot.totalFlights > 0 ? ((snapshot.failedFlights / snapshot.totalFlights) * 100) : 0;
-      const peakGateText = snapshot.peakBucket ? (kpiFormatCount(snapshot.peakBucket.occupancy) + ' gates') : '—';
-      const peakGateMeta = snapshot.peakBucket ? (snapshot.peakBucket.label + ' peak occupancy') : 'No occupancy data';
-      const busiestText = snapshot.busiestBucket ? (kpiFormatCount(snapshot.busiestBucket.total) + ' ops') : '—';
-      const busiestMeta = snapshot.busiestBucket ? (snapshot.busiestBucket.label + ' arrivals + departures') : 'No movement data';
+      const prArr = snapshot.peakRunwayArrBucket;
+      const prDep = snapshot.peakRunwayDepBucket;
+      const pkOcc = snapshot.peakBucket;
+      const peakRunwayArrText = prArr ? (kpiFormatCount(prArr.arrivals || 0) + ' · ' + prArr.label) : '—';
+      const peakRunwayDepText = prDep ? (kpiFormatCount(prDep.departures || 0) + ' · ' + prDep.label) : '—';
+      const peakGateText = pkOcc ? (kpiFormatCount(pkOcc.occupancy || 0) + ' · ' + pkOcc.label) : '—';
+      const busiestText = snapshot.busiestBucket ? (kpiFormatCount(snapshot.busiestBucket.total) + ' · ' + snapshot.busiestBucket.label) : '—';
+      const busiestMeta = snapshot.busiestBucket ? ('15m step · 60m rolling · ELDT+ETOT') : 'No runway data';
       const summaryCards = [
-        kpiBuildSummaryCard('Total Flights', kpiFormatCount(snapshot.totalFlights), kpiFormatCount(snapshot.operationalFlights) + ' operational flights in snapshot', 'accent', 'Includes all loaded flights in the current layout'),
-        kpiBuildSummaryCard('Failed Flights', kpiFormatCount(snapshot.failedFlights), kpiRound(failureRate, 1) + '% of total flights flagged as failed', snapshot.failedFlights > 0 ? 'danger' : 'success', 'Failed = no way or RET sampling failure'),
-        kpiBuildSummaryCard('Average ROT', kpiFormatSecondsCompact(snapshot.rotAvgSec), 'Total ROT ' + kpiFormatSecondsCompact(snapshot.rotTotalSec), 'warning', 'Calculated from available ROT samples'),
-        kpiBuildSummaryCard('Average Arr Taxi', kpiFormatMinutesCompact(snapshot.arrTaxiAvgMin), 'Total Arr Taxi ' + kpiFormatMinutesCompact(snapshot.arrTaxiTotalMin), '', 'Based on current arrival taxi path estimates'),
-        kpiBuildSummaryCard('Average Dep Taxi', kpiFormatMinutesCompact(snapshot.depTaxiAvgMin), 'Total Dep Taxi ' + kpiFormatMinutesCompact(snapshot.depTaxiTotalMin), '', 'Based on current departure taxi path estimates'),
-        kpiBuildSummaryCard('Peak Gate Occupancy', peakGateText, peakGateMeta, 'accent', 'Measured from EIBT–EOBT stand occupancy by hour')
+        kpiBuildSummaryCard('Total Flights', kpiFormatCount(snapshot.totalFlights), 'accent'),
+        kpiBuildSummaryCard('Failed Flights', kpiFormatCount(snapshot.failedFlights), snapshot.failedFlights > 0 ? 'danger' : 'success'),
+        kpiBuildSummaryCard('Peak Runway Arr', peakRunwayArrText, 'warning'),
+        kpiBuildSummaryCard('Peak Runway Dep', peakRunwayDepText, 'warning'),
+        kpiBuildSummaryCard('Peak Gate Occupancy', peakGateText, 'accent')
       ].join('');
       const panelHtml = [
-        kpiBuildPanel('Surface Movement', 'ROT + Taxi', [
-          kpiBuildMetricRow('ROT time', 'Avg ' + kpiFormatSecondsValue(snapshot.rotAvgSec), 'Total ' + kpiFormatSecondsValue(snapshot.rotTotalSec)),
-          kpiBuildMetricRow('Arrival taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.arrTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.arrTaxiTotalMin)),
-          kpiBuildMetricRow('Departure taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.depTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.depTaxiTotalMin))
+        kpiBuildPanel('Surface Movement', 'ROT · Taxi · Taxi delay', [
+          kpiBuildMetricRow('Arr ROT time', 'Avg ' + kpiFormatSecondsValue(snapshot.rotArrAvgSec), 'Total ' + kpiFormatSecondsValue(snapshot.rotArrTotalSec)),
+          kpiBuildMetricRow('Dep ROT time', 'Avg ' + kpiFormatSecondsValue(snapshot.rotDepAvgSec), 'Total ' + kpiFormatSecondsValue(snapshot.rotDepTotalSec)),
+          kpiBuildMetricRow('Arr taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.arrTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.arrTaxiTotalMin)),
+          kpiBuildMetricRow('Dep taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.depTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.depTaxiTotalMin)),
+          kpiBuildMetricRow('Arr taxi delay', 'Avg ' + kpiFormatMinutesValue(snapshot.arrTaxiDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.arrTaxiDelayTotalMin)),
+          kpiBuildMetricRow('Dep taxi delay', 'Avg ' + kpiFormatMinutesValue(snapshot.depTaxiDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.depTaxiDelayTotalMin))
         ]),
-        kpiBuildPanel('Passenger Delay', 'Gate View', [
-          kpiBuildMetricRow('EIBT - SIBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxArrDelayTotalMin)),
-          kpiBuildMetricRow('EOBT - SOBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxDepDelayTotalMin)),
-          kpiBuildMetricRow('Busiest movement hour', busiestText, busiestMeta)
+        kpiBuildPanel('Gate Delay', 'EIBT/EOBT vs schedule', [
+          kpiBuildMetricRow('EIBT − SIBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxArrDelayTotalMin)),
+          kpiBuildMetricRow('EOBT − SOBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxDepDelayTotalMin)),
+          kpiBuildMetricRow('Busiest runway window', busiestText, busiestMeta)
         ]),
-        kpiBuildPanel('Aircraft Delay', 'Runway View', [
-          kpiBuildMetricRow('ELDT - SLDT', 'Avg ' + kpiFormatMinutesValue(snapshot.acArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acArrDelayTotalMin)),
-          kpiBuildMetricRow('ETOT - STOT', 'Avg ' + kpiFormatMinutesValue(snapshot.acDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acDepDelayTotalMin)),
+        kpiBuildPanel('Runway Delay', 'ELDT/ETOT vs schedule', [
+          kpiBuildMetricRow('ELDT − SLDT', 'Avg ' + kpiFormatMinutesValue(snapshot.acArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acArrDelayTotalMin)),
+          kpiBuildMetricRow('ETOT − STOT', 'Avg ' + kpiFormatMinutesValue(snapshot.acDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acDepDelayTotalMin)),
           kpiBuildMetricRow('Snapshot basis', kpiFormatCount(snapshot.totalFlights) + ' flights', 'Rendered only on initial load and Update')
         ])
       ].join('');
-      const hourlyTableRows = (snapshot.buckets || []).map(function(bucket) {{
+      const bucketsAll = snapshot.buckets || [];
+      const capRows = KPI_ROLLING_TABLE_VISIBLE_ROWS;
+      const rollExpanded = !!state.kpiRollingDetailExpanded;
+      const bucketsForTable = (!rollExpanded && bucketsAll.length > capRows) ? bucketsAll.slice(0, capRows) : bucketsAll;
+      const hourlyTableRows = bucketsForTable.map(function(bucket) {{
         const highlight = snapshot.peakBucket && bucket.bucketStart === snapshot.peakBucket.bucketStart ? ' class="kpi-row-highlight"' : '';
         return '' +
           '<tr' + highlight + '>' +
@@ -6527,6 +8537,11 @@ def _build_designer_html() -> str:
             '<td>' + escapeHtml(kpiFormatCount(bucket.total)) + '</td>' +
           '</tr>';
       }}).join('');
+      const rollingMoreRow = (!rollExpanded && bucketsAll.length > capRows)
+        ? ('<tr class="kpi-rolling-more"><td colspan="5" style="font-size:11px;color:#9ca3af;padding:8px 6px;">' +
+            '<button type="button" class="tool-btn" id="btnKpiRollingExpand">더 보기 (' + String(bucketsAll.length - capRows) + '행)</button>' +
+          '</td></tr>')
+        : '';
       const topDelayRows = snapshot.detailRows.slice(0, 10).map(function(row) {{
         const statusClass = row.failed ? 'fail' : 'ok';
         const statusLabel = row.failed ? 'Failed' : 'Normal';
@@ -6544,23 +8559,23 @@ def _build_designer_html() -> str:
         '<div class="kpi-summary-grid">' + summaryCards + '</div>' +
         '<div class="kpi-panel-grid">' + panelHtml + '</div>' +
         '<div class="kpi-chart-grid">' +
-          '<div class="kpi-chart-card">' +
+          '<div class="kpi-chart-card kpi-chart-card-primary">' +
             '<div class="kpi-chart-head">' +
               '<div>' +
                 '<div class="kpi-chart-title">Hourly Gate Occupancy</div>' +
-                '<div class="kpi-chart-subtitle">Unique occupied stands by hour based on EIBT–EOBT occupancy windows.</div>' +
+                '<div class="kpi-chart-subtitle">15m anchors · rolling 60m: unique stands overlapping EIBT–EOBT with [w, w+60).</div>' +
               '</div>' +
               '<div class="kpi-chart-legend">' +
                 '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#a78bfa;"></span>Gate occupancy</span>' +
               '</div>' +
             '</div>' +
-            kpiBuildOccupancyChart(snapshot.buckets) +
+            kpiGateChartPlaceholder(snapshot.buckets) +
           '</div>' +
-          '<div class="kpi-chart-card">' +
+          '<div class="kpi-chart-card kpi-chart-card-primary">' +
             '<div class="kpi-chart-head">' +
               '<div>' +
-                '<div class="kpi-chart-title">Hourly Traffic Mix</div>' +
-                '<div class="kpi-chart-subtitle">Arrival and departure counts by hour with total hourly movement overlay.</div>' +
+                '<div class="kpi-chart-title">Hourly Runway Traffic</div>' +
+                '<div class="kpi-chart-subtitle">15m anchors · rolling 60m: ELDT arrivals and ETOT departures in [w, w+60).</div>' +
               '</div>' +
               '<div class="kpi-chart-legend">' +
                 '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#38bdf8;"></span>Arrivals</span>' +
@@ -6568,32 +8583,33 @@ def _build_designer_html() -> str:
                 '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#c4b5fd;"></span>Total</span>' +
               '</div>' +
             '</div>' +
-            kpiBuildTrafficChart(snapshot.buckets) +
+            kpiRunwayChartPlaceholder(snapshot.buckets) +
           '</div>' +
         '</div>' +
         '<div class="kpi-detail-grid">' +
           '<div class="kpi-table-card">' +
-            '<div class="kpi-chart-title">Hourly Detail Table</div>' +
-            '<div class="kpi-chart-subtitle">Quick lookup for gate occupancy and movement volume by hour.</div>' +
+            '<div class="kpi-chart-title">Rolling window detail</div>' +
+            '<div class="kpi-chart-subtitle">Same 15m / 60m windows: gate occupancy; runway arr/dep = ELDT / ETOT counts.</div>' +
             '<div class="kpi-table-wrap">' +
               '<table class="kpi-table">' +
-                '<thead><tr><th>Hour</th><th>Gate Occupancy</th><th>Arrivals</th><th>Departures</th><th>Total</th></tr></thead>' +
-                '<tbody>' + hourlyTableRows + '</tbody>' +
+                '<thead><tr><th>Window w</th><th>Gate occ</th><th>Runway arr</th><th>Runway dep</th><th>Total</th></tr></thead>' +
+                '<tbody>' + hourlyTableRows + rollingMoreRow + '</tbody>' +
               '</table>' +
             '</div>' +
           '</div>' +
           '<div class="kpi-table-card">' +
             '<div class="kpi-chart-title">Top Delay Flights</div>' +
-            '<div class="kpi-chart-subtitle">Flights with the largest combined passenger and aircraft delay footprint.</div>' +
+            '<div class="kpi-chart-subtitle">Largest combined gate delay (EIBT/SIBT, EOBT/SOBT) and runway delay (ELDT/SLDT, ETOT/STOT) footprint.</div>' +
             '<div class="kpi-table-wrap">' +
               '<table class="kpi-table">' +
-                '<thead><tr><th>Flight</th><th>Stand</th><th>Pax Arr Delay</th><th>Pax Dep Delay</th><th>Aircraft Delay</th><th>Status</th></tr></thead>' +
+                '<thead><tr><th>Flight</th><th>Stand</th><th>Gate Arr Delay</th><th>Gate Dep Delay</th><th>Runway Delay</th><th>Status</th></tr></thead>' +
                 '<tbody>' + topDelayRows + '</tbody>' +
               '</table>' +
             '</div>' +
           '</div>' +
         '</div>';
       if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
+      kpiMountInteractiveCharts(snapshot.buckets || []);
     }}
 
     // S(d) Series: First S(d)=S(Original), Takes precedence when the same parking lot overlaps SOBT(d)-trailing SIBT(d) trailing as much as S(d) push. SLDT(d)=SLDT, SOBT(d)to Min Dwell reflect.
@@ -6614,10 +8630,10 @@ def _build_designer_html() -> str:
         // VTT(Arr)Is Flight ScheduleReuse the same calculated value as the definition used in
         let vttArrMin = getBaseVttArrMinutes(f);
         const rotArrMin = getArrRotMinutes(f);
-        const vttDepMin = getBaseVttDepMinutes(f);
+        const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
         const sldtOrig = Math.max(0, tArrMin - vttArrMin - rotArrMin);
         const sobtOrig = tArrMin + dwell;
-        const stotOrig = sobtOrig + vttDepMin;
+        const stotOrig = sobtOrig + depBlockOutMin;
         // SLDT/SIBT/SOBT/STOT(orig)is always updated with the internal calculated value.,
         // SLDT(d)Is SLDT(orig)Copy and use as is (JSON Ignore the initial value)
         f.sldtMin_orig = sldtOrig;
@@ -6641,7 +8657,7 @@ def _build_designer_html() -> str:
         list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
         let prevSOBT = -1e9;
         list.forEach(f => {{
-          const vttDepMin = getBaseVttDepMinutes(f);
+          const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
           const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
           const overlap = Math.max(0, prevSOBT - sibt0);
           f.vttADelayMin = overlap;
@@ -6654,7 +8670,7 @@ def _build_designer_html() -> str:
           const minSobtByDwell = f.sibtMin_d + minDwell;
           const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
           f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-          f.stotMin_d = f.sobtMin_d + vttDepMin;
+          f.stotMin_d = f.sobtMin_d + depBlockOutMin;
           prevSOBT = f.sobtMin_d;
         }});
       }});
@@ -6676,6 +8692,91 @@ def _build_designer_html() -> str:
       }});
       flights.forEach(f => {{
         if (f.noWayArr || f.noWayDep) return;
+        f.sldtMin = f.sldtMin_d;
+        f.stotMin = f.stotMin_d;
+        f.sobtMin = f.sobtMin_d;
+      }});
+    }}
+
+    // Incremental S(d): per-flight base times for dirty ∪ flights on touched stands, then OVLP chain only on those stands. SEP/E unchanged until full Update.
+    function computeScheduledDisplayTimesIncremental(allFlights, dirtyFlightIds, touchedStandIds) {{
+      if (!allFlights || !allFlights.length) return;
+      const dirty = (dirtyFlightIds instanceof Set) ? dirtyFlightIds : new Set(dirtyFlightIds || []);
+      const touchedStands = (touchedStandIds instanceof Set) ? touchedStandIds : new Set(touchedStandIds || []);
+      const standsToRecompute = new Set();
+      touchedStands.forEach(function(sid) {{ if (sid != null && sid !== '') standsToRecompute.add(sid); }});
+      const needStep1 = new Set();
+      dirty.forEach(function(id) {{ if (id != null && id !== '') needStep1.add(id); }});
+      allFlights.forEach(function(f) {{
+        if (!f || f.noWayArr || f.noWayDep) return;
+        if (f.standId && standsToRecompute.has(f.standId)) needStep1.add(f.id);
+      }});
+      allFlights.forEach(function(f) {{
+        if (!f || !needStep1.has(f.id)) return;
+        if (f.noWayArr || f.noWayDep) return;
+        f.vttADelayMin = 0;
+        const tArrMin = f.timeMin != null ? f.timeMin : 0;
+        let dwell = f.dwellMin != null ? f.dwellMin : 0;
+        let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+        dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+        minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+        if (minDwell > dwell) minDwell = dwell;
+        f.dwellMin = dwell;
+        f.minDwellMin = minDwell;
+        const vttArrMin = getBaseVttArrMinutes(f);
+        const rotArrMin = getArrRotMinutes(f);
+        const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+        const sldtOrig = Math.max(0, tArrMin - vttArrMin - rotArrMin);
+        const sobtOrig = tArrMin + dwell;
+        const stotOrig = sobtOrig + depBlockOutMin;
+        f.sldtMin_orig = sldtOrig;
+        f.sibtMin_orig = tArrMin;
+        f.sobtMin_orig = sobtOrig;
+        f.stotMin_orig = stotOrig;
+        f.sldtMin_d = f.sldtMin_orig;
+        f.sibtMin_d = tArrMin;
+        f.sobtMin_d = sobtOrig;
+        f.stotMin_d = stotOrig;
+      }});
+      standsToRecompute.forEach(function(standId) {{
+        const list = allFlights.filter(function(f) {{
+          return f && !f.noWayArr && !f.noWayDep && f.standId === standId;
+        }});
+        list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
+        let prevSOBT = -1e9;
+        list.forEach(function(f) {{
+          const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+          const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
+          const overlap = Math.max(0, prevSOBT - sibt0);
+          f.vttADelayMin = overlap;
+          f.sibtMin_d = sibt0 + overlap;
+          const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
+          const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
+          const minSobtByDwell = f.sibtMin_d + minDwell;
+          const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
+          f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
+          f.stotMin_d = f.sobtMin_d + depBlockOutMin;
+          prevSOBT = f.sobtMin_d;
+        }});
+      }});
+      allFlights.forEach(function(f) {{
+        if (!f || f.noWayArr || f.noWayDep || !f.standId) return;
+        if (!standsToRecompute.has(f.standId)) return;
+        const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
+        const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
+        const sibt = (f.sibtMin_d != null ? f.sibtMin_d : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
+        const minSobtByDwell = sibt + minDwell;
+        const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
+        if (sobtCurrent < minSobtByDwell) {{
+          const delta = minSobtByDwell - sobtCurrent;
+          f.sobtMin_d = minSobtByDwell;
+          if (typeof f.stotMin_d === 'number') f.stotMin_d += delta;
+        }}
+      }});
+      allFlights.forEach(function(f) {{
+        if (!f || f.noWayArr || f.noWayDep) return;
+        const onTouched = f.standId && standsToRecompute.has(f.standId);
+        if (!needStep1.has(f.id) && !onTouched) return;
         f.sldtMin = f.sldtMin_d;
         f.stotMin = f.stotMin_d;
         f.sobtMin = f.sobtMin_d;
@@ -6755,7 +8856,7 @@ def _build_designer_html() -> str:
         const sobtMin_d = f.sobtMin_d != null ? f.sobtMin_d : 0;
         const vttArrMin = getBaseVttArrMinutes(f);
         const rotArrMin = getArrRotMinutes(f);
-        const vttDepMin = getBaseVttDepMinutes(f);
+        const vttDepMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
         if (arrRwy === rwy.id) events.push({{ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ }});
         if (depRwy === rwy.id) {{
           events.push({{ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin_d, index: eventIndex++ }});
@@ -6793,6 +8894,76 @@ def _build_designer_html() -> str:
           byRunway[rwy.id] = {{ events, minT, maxT }};
         }});
       }}
+    }}
+
+    // Tab switch / timeline preview: S(d)-based events only — no rsepApplySeparationToEvents, no flight E-time rewrite. Uses existing eldtMin/etotMin on flights when set (e.g. after Update).
+    function buildRunwaySeparationTimelineByRunwaySnapshot(flights) {{
+      const snapGen = state.rwySepSnapshotStaleGen | 0;
+      if (state.__rwySepSnapCacheGen === snapGen && state.__rwySepSnapCache) return state.__rwySepSnapCache;
+      const list = flights || state.flights || [];
+      const runwaysRaw = (state.taxiways || []).filter(t => t.pathType === 'runway');
+      if (!runwaysRaw.length) {{
+        state.__rwySepSnapCache = {{}};
+        state.__rwySepSnapCacheGen = snapGen;
+        return state.__rwySepSnapCache;
+      }}
+      const runways = (function() {{
+        const idToIndex = {{}};
+        runwaysRaw.forEach((r, i) => {{ if (r && r.id != null) idToIndex[r.id] = i; }});
+        const n = runwaysRaw.length;
+        const indeg = new Array(n).fill(0);
+        const adj = new Array(n).fill(0).map(() => []);
+        list.forEach(f => {{
+          if (!f) return;
+          let arrRwy = f.arrRunwayId || (f.token && f.token.runwayId);
+          let depRwy = f.depRunwayId || (f.token && f.token.depRunwayId);
+          if (!arrRwy || !depRwy || arrRwy === depRwy) return;
+          const ai = idToIndex[arrRwy];
+          const di = idToIndex[depRwy];
+          if (ai == null || di == null) return;
+          adj[ai].push(di);
+          indeg[di] += 1;
+        }});
+        const q = [];
+        for (let i = 0; i < n; i++) if (indeg[i] === 0) q.push(i);
+        const orderIdx = [];
+        while (q.length) {{
+          const i = q.shift();
+          orderIdx.push(i);
+          adj[i].forEach(j => {{
+            indeg[j] -= 1;
+            if (indeg[j] === 0) q.push(j);
+          }});
+        }}
+        if (orderIdx.length !== n) return runwaysRaw;
+        return orderIdx.map(i => runwaysRaw[i]);
+      }})();
+      const byRunway = {{}};
+      runways.forEach(rwy => {{
+        const pack = rsepCollectEventsForRunway(rwy, list, runways);
+        if (!pack || !pack.events.length) {{
+          byRunway[rwy.id] = {{ events: [], minT: 0, maxT: 0 }};
+          return;
+        }}
+        const events = pack.events.slice().sort((a, b) => a.time - b.time || a.index - b.index);
+        let minT = Infinity, maxT = -Infinity;
+        events.forEach(ev => {{
+          const s = ev.time;
+          const f = ev.flight;
+          const e = ev.type === 'arr'
+            ? (f && f.eldtMin != null && isFinite(f.eldtMin) ? f.eldtMin : s)
+            : (f && f.etotMin != null && isFinite(f.etotMin) ? f.etotMin : s);
+          if (s < minT) minT = s;
+          if (e < minT) minT = e;
+          if (s > maxT) maxT = s;
+          if (e > maxT) maxT = e;
+        }});
+        if (!isFinite(minT) || !isFinite(maxT)) {{ minT = 0; maxT = 60; }} else if (maxT <= minT) maxT = minT + 60;
+        byRunway[rwy.id] = {{ events, minT, maxT }};
+      }});
+      state.__rwySepSnapCache = byRunway;
+      state.__rwySepSnapCacheGen = snapGen;
+      return byRunway;
     }}
 
     // Runway separation: SLDT(Arr)·STOT(Dep) Single timeline sorted chronologically, same time at the top(List order)See it as a good deed
@@ -6847,10 +9018,9 @@ def _build_designer_html() -> str:
         if (f.noWayArr || f.noWayDep) return;
         const vttArrMin = getBaseVttArrMinutes(f);
         const rotArrMin = getArrRotMinutes(f);
-        const vttDepMin = getBaseVttDepMinutes(f);
         const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
         f.eibtMin = (f.eldtMin != null ? f.eldtMin : 0) + rotArrMin + vttArrMin + vttADelay;
-        f.eobtMin = (f.etotMin != null ? f.etotMin : 0) - vttDepMin;
+        applyForwardEobtEtotAndDepTaxiDelay(f, f.eibtMin, null);
       }});
       const standToFlightsE = {{}};
       flights.forEach(f => {{ if (f && !f.noWayArr && !f.noWayDep) f.eOverlapPushed = false; }});
@@ -6865,7 +9035,7 @@ def _build_designer_html() -> str:
         list.sort((a, b) => (a.eibtMin != null ? a.eibtMin : 0) - (b.eibtMin != null ? b.eibtMin : 0));
         let prevEOBT = -1e9;
         list.forEach(f => {{
-          const vttDepMin = getBaseVttDepMinutes(f);
+          const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
           const vttArrMin = getBaseVttArrMinutes(f);
           const rotArrMin = getArrRotMinutes(f);
           const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
@@ -6873,12 +9043,8 @@ def _build_designer_html() -> str:
           const overlap = Math.max(0, prevEOBT - eibtMin);
           f.eOverlapPushed = overlap > 0;
           f.eibtMin = eibtMin + overlap;
-          // S(d) Follows the dwell of the series.: dwellSd = SOBT(d) - SIBT(d)
-          const dwellSd = (f.sobtMin_d != null && f.sibtMin_d != null)
-            ? Math.max(0, f.sobtMin_d - f.sibtMin_d)
-            : (f.dwellMin != null ? f.dwellMin : 0);
-          const runwayEtot = f.etotMin != null ? f.etotMin : (f.eobtMin + vttDepMin);
-          f.eobtMin = f.eibtMin + dwellSd;        // ✅ EOBT = EIBT + S(d) dwell
+          const runwayEtotCand = f.etotMin != null ? f.etotMin : ((f.eobtMin != null ? f.eobtMin : f.eibtMin) + depBlockOutMin);
+          applyForwardEobtEtotAndDepTaxiDelay(f, f.eibtMin, runwayEtotCand);
           f.eldtMin = f.eibtMin - rotArrMin - vttArrMin - vttADelay;
           // ELDTis physically SLDT(d)Hard clamp to prevent it from getting ahead of you
           const sldtBase = (f.sldtMin_d != null ? f.sldtMin_d
@@ -6886,10 +9052,8 @@ def _build_designer_html() -> str:
           if (f.eldtMin < sldtBase) {{
             f.eldtMin = sldtBase;
             f.eibtMin = f.eldtMin + rotArrMin + vttArrMin + vttADelay;
-            f.eobtMin = f.eibtMin + dwellSd;
+            applyForwardEobtEtotAndDepTaxiDelay(f, f.eibtMin, f.etotMin);
           }}
-          // IMPORTANT: keep ETOT fixed to the runway-based value, do not let apron overlap/dwell push ETOT further
-          f.etotMin = runwayEtot;
           prevEOBT = f.eobtMin;
         }});
       }});
@@ -6910,6 +9074,14 @@ def _build_designer_html() -> str:
           const sldtBase = earliestArrFlight.sldtMin_d != null ? earliestArrFlight.sldtMin_d : (earliestArrFlight.sldtMin_orig != null ? earliestArrFlight.sldtMin_orig : 0);
           earliestArrFlight.eldtMin = sldtBase;
         }}
+      }});
+      flights.forEach(f => {{
+        if (!f || f.noWayArr || f.noWayDep) return;
+        const vttArrMin = getBaseVttArrMinutes(f);
+        const rotArrMin = getArrRotMinutes(f);
+        const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
+        f.eibtMin = (f.eldtMin != null ? f.eldtMin : 0) + rotArrMin + vttArrMin + vttADelay;
+        applyForwardEobtEtotAndDepTaxiDelay(f, f.eibtMin, f.etotMin);
       }});
       return byRunway;
     }}
@@ -6951,6 +9123,996 @@ def _build_designer_html() -> str:
       return pts[pts.length - 1];
     }}
 
+    function flightEMinutesPrefer(f, keys, fallback) {{
+      for (let ki = 0; ki < keys.length; ki++) {{
+        const v = f[keys[ki]];
+        if (typeof v === 'number' && isFinite(v)) return v;
+      }}
+      return fallback;
+    }}
+    function touchdownDistMForTimeline(f) {{
+      if (typeof f.arrTdDistM === 'number' && isFinite(f.arrTdDistM) && f.arrTdDistM >= 0) return f.arrTdDistM;
+      const ac = (typeof getAircraftInfoByType === 'function') ? getAircraftInfoByType(f.aircraftType) : null;
+      const z = ac && typeof ac.touchdown_zone_avg_m === 'number' ? ac.touchdown_zone_avg_m : null;
+      if (typeof z === 'number' && z > 0) return z;
+      return 400;
+    }}
+    function touchdownSpeedMsForTimeline(f) {{
+      let v = f.arrVTdMs;
+      if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, v);
+      const ac = (typeof getAircraftInfoByType === 'function') ? getAircraftInfoByType(f.aircraftType) : null;
+      v = ac && typeof ac.touchdown_speed_avg_ms === 'number' ? ac.touchdown_speed_avg_ms : 70;
+      return Math.max(1, v);
+    }}
+    /** 활주로 연장상 (ux,uy): 착륙 방향. anchor는 distAlong 지점, base(s)=anchor-s*(ux,uy) 는 중심선상 해당점에서 바깥 s. */
+    function getRunwayInboundUxyAtDistance(runwayId, rwDir, distAlong) {{
+      const r = getRunwayPath(runwayId);
+      const anchor = getRunwayPointAtDistance(runwayId, distAlong);
+      if (!r || !r.pts || r.pts.length < 2 || !anchor) return null;
+      const pts = r.pts;
+      let segIdx = Math.max(0, pts.length - 2);
+      let acc = 0;
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const segLen = pathDist(pts[i], pts[i + 1]);
+        if (segLen < 1e-9) continue;
+        if (acc + segLen >= distAlong - 1e-6) {{ segIdx = i; break; }}
+        acc += segLen;
+      }}
+      const p1 = pts[segIdx], p2 = pts[segIdx + 1];
+      const segLen = pathDist(p1, p2) || 1;
+      let ux = (p2[0] - p1[0]) / segLen, uy = (p2[1] - p1[1]) / segLen;
+      if (rwDir === 'counter_clockwise') {{ ux = -ux; uy = -uy; }}
+      return {{ td: anchor, ux, uy }};
+    }}
+    function getRunwayTouchdownInboundUxy(runwayId, rwDir, touchdownDistAlong) {{
+      return getRunwayInboundUxyAtDistance(runwayId, rwDir, touchdownDistAlong);
+    }}
+    /**
+     * 접근 경로: 바깥(총 approachOffsetM)에서 안쪽까지 지그재그(긴 변=legM 측방, 진행=stepM) 후 straightFinalM 직선으로 anchorDistAlong 지점.
+     * 궤적 순서: 최외곡 → … → 직선 시작(s=straightFinal) → anchor. (타임라인은 anchor=터치다운, 2D 프리뷰는 anchor=활주로 시작 임계)
+     */
+    function buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDistAlong, totalM, straightFinalM, legM, stepM) {{
+      const ax = getRunwayInboundUxyAtDistance(runwayId, rwDir, anchorDistAlong);
+      if (!ax) return null;
+      const td = ax.td, ux = ax.ux, uy = ax.uy;
+      const tm = Math.max(0, Number(totalM) || 0);
+      const sm = Math.max(0, Math.min(Number(straightFinalM) || 0, tm));
+      const leg = Math.max(0, Number(legM) || 0);
+      const step = Math.max(0, Number(stepM) || 0);
+      const perp = [-uy, ux];
+      function ptAt(s, lat) {{
+        return [td[0] - s * ux + lat * perp[0], td[1] - s * uy + lat * perp[1]];
+      }}
+      const tdxy = [td[0], td[1]];
+      if (tm < 1e-6) return {{ pts: [tdxy, tdxy], pathLen: 0 }};
+      if (leg < 1e-6 || step < 1e-6 || sm + 1e-6 >= tm) {{
+        const outer = [td[0] - ux * tm, td[1] - uy * tm];
+        return {{ pts: [outer, tdxy], pathLen: pathDist(outer, tdxy) }};
+      }}
+      const out = [];
+      let s = tm;
+      let lat = 0;
+      let sign = 1;
+      out.push(ptAt(s, lat));
+      while (s > sm + 1e-6) {{
+        lat += sign * leg;
+        out.push([ptAt(s, lat)[0], ptAt(s, lat)[1]]);
+        if (s - step <= sm) {{
+          s = sm;
+          out.push([ptAt(s, lat)[0], ptAt(s, lat)[1]]);
+          break;
+        }}
+        s -= step;
+        out.push([ptAt(s, lat)[0], ptAt(s, lat)[1]]);
+        sign *= -1;
+      }}
+      if (Math.abs(lat) > 1e-2) {{
+        out.push(ptAt(sm, 0));
+        lat = 0;
+      }}
+      const last = out[out.length - 1];
+      if (Math.hypot(last[0] - tdxy[0], last[1] - tdxy[1]) > 1e-3) {{
+        out.push([tdxy[0], tdxy[1]]);
+      }}
+      let pathLen = 0;
+      for (let i = 0; i < out.length - 1; i++) pathLen += pathDist(out[i], out[i + 1]);
+      return {{ pts: out, pathLen }};
+    }}
+    /** 지그재그 접근 끝점: Runway Start(임계) 연장 거리(m). tdDistAlong은 어느 쪽 임계인지 판별용. */
+    function arrivalApproachAnchorDistM(runwayId, tdDistAlong) {{
+      let anchorDist = runwayApproachThresholdDistAlongM(runwayId, tdDistAlong);
+      if (!(typeof anchorDist === 'number' && isFinite(anchorDist) && anchorDist >= 0)) anchorDist = tdDistAlong;
+      else if (anchorDist > tdDistAlong + 1e-3) anchorDist = tdDistAlong;
+      return anchorDist;
+    }}
+    function arrivalApproachDurationSecBeforeEldt(f) {{
+      const vTd = Math.max(1, touchdownSpeedMsForTimeline(f));
+      const token = f.token || {{}};
+      const runwayId = f.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || f.arrRunwayId;
+      if (runwayId == null || runwayId === '') return APPROACH_OFFSET_WORLD_M / vTd;
+      const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
+      const tdDist = touchdownDistMForTimeline(f);
+      const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
+      const pack = buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M, APPROACH_STRAIGHT_FINAL_M, APPROACH_ZIGZAG_LEG_M, APPROACH_ZIGZAG_STEP_M);
+      const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
+      const tdPt = getRunwayPointAtDistance(runwayId, tdDist);
+      if (pack && pack.pathLen > 1e-9) {{
+        let totalLen = pack.pathLen;
+        if (rsPt && tdPt) totalLen += pathDist(rsPt, tdPt);
+        return totalLen / vTd;
+      }}
+      if (!tdPt) return APPROACH_OFFSET_WORLD_M / vTd;
+      const apprPt = approachPointBeforeThresholdJs(runwayId, rwDir, APPROACH_OFFSET_WORLD_M, anchorDist);
+      let straightLen = pathDist(apprPt, rsPt || tdPt);
+      if (rsPt && tdPt) straightLen += pathDist(rsPt, tdPt);
+      return straightLen / vTd;
+    }}
+    /** Schedule-only airside window (sec): lazy timeline build uses this for Current active filter. Matches buildFullAirsideTimelineForFlight time bounds. */
+    function getFlightAirsideWindowSec(f) {{
+      if (!f) return null;
+      if (f.noWayArr && f.noWayDep) return null;
+      if (f.arrDep === 'Dep') {{
+        const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
+        const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
+        const eobtS = eobtMin * 60;
+        const etotS = etotMin * 60;
+        const depRotS = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 0) * 60;
+        let depMoveStart = eobtS + depRotS;
+        if (depMoveStart > etotS) depMoveStart = eobtS;
+        return {{ t0: depMoveStart, t1: etotS }};
+      }}
+      const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
+      const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
+      const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], eibtMin + (typeof f.dwellMin === 'number' && isFinite(f.dwellMin) ? f.dwellMin : 45));
+      const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
+      const eldtS = eldtMin * 60;
+      const etotS = etotMin * 60;
+      const tAppr = arrivalApproachDurationSecBeforeEldt(f);
+      if (!isFinite(tAppr) || tAppr < 0) return null;
+      const t0 = eldtS - tAppr;
+      if (!isFinite(t0) || !isFinite(etotS)) return null;
+      return {{ t0: t0, t1: etotS }};
+    }}
+    /** 슬라이더 스냅으로 t < 접근시각이 될 수 있어, 그 구간에서도 타임라인 생성·첫 자세 표시에 사용 */
+    function simAirsideLazyPadSec() {{
+      return Math.max(90, SIM_TIME_SLIDER_SNAP_SEC + 45);
+    }}
+    function isFlightAirsideActiveAtSimSec(f, tSec) {{
+      const w = getFlightAirsideWindowSec(f);
+      if (!w || !isFinite(Number(tSec))) return false;
+      const t = Number(tSec);
+      return t >= w.t0 - 1e-3 && t <= w.t1 + 1e-3;
+    }}
+    function isFlightAirsideLazyTimelineBuildEligible(f, tSec) {{
+      const w = getFlightAirsideWindowSec(f);
+      if (!w || !isFinite(Number(tSec))) return false;
+      const t = Number(tSec);
+      const pad = simAirsideLazyPadSec();
+      return t >= w.t0 - pad - 1e-3 && t <= w.t1 + 1e-3;
+    }}
+    function nearestIndexOnPolylineForTd(pts, q) {{
+      if (!pts || pts.length < 2) return 0;
+      let bestI = 0, bestD2 = Infinity;
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const pr = projectOnSegment(pts[i], pts[i + 1], q);
+        const d2 = dist2(pr.p, q);
+        if (d2 < bestD2) {{ bestD2 = d2; bestI = i; }}
+      }}
+      return bestI;
+    }}
+    function trimPolylineFromNearPoint(pts, nearPt) {{
+      if (!pts || pts.length < 2) return pts ? pts.slice() : [];
+      const idx = nearestIndexOnPolylineForTd(pts, nearPt);
+      const a = pts[idx], b = pts[idx + 1];
+      const pr = projectOnSegment(a, b, nearPt);
+      const t = Math.max(0, Math.min(1, pr.t));
+      const start = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+      const out = [start];
+      for (let j = idx + 1; j < pts.length; j++) out.push([pts[j][0], pts[j][1]]);
+      return out.length >= 2 ? out : pts.slice();
+    }}
+    function approachPointBeforeThresholdJs(runwayId, rwDir, offsetWorld, touchdownDistAlong) {{
+      const r = getRunwayPath(runwayId);
+      const td = getRunwayPointAtDistance(runwayId, touchdownDistAlong);
+      if (!r || !r.pts || r.pts.length < 2) return td || [0, 0];
+      const pts = r.pts;
+      let segIdx = Math.max(0, pts.length - 2);
+      let acc = 0;
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const segLen = pathDist(pts[i], pts[i + 1]);
+        if (segLen < 1e-9) continue;
+        if (acc + segLen >= touchdownDistAlong - 1e-6) {{ segIdx = i; break; }}
+        acc += segLen;
+      }}
+      const p1 = pts[segIdx], p2 = pts[segIdx + 1];
+      const segLen = pathDist(p1, p2) || 1;
+      let ux = (p2[0] - p1[0]) / segLen, uy = (p2[1] - p1[1]) / segLen;
+      if (rwDir === 'counter_clockwise') {{ ux = -ux; uy = -uy; }}
+      return [td[0] - ux * offsetWorld, td[1] - uy * offsetWorld];
+    }}
+    function mergeTimelineSegments(a, b) {{
+      if (!a || !a.length) return b ? b.slice() : [];
+      if (!b || !b.length) return a.slice();
+      const out = a.slice();
+      const last = out[out.length - 1], first = b[0];
+      if (Math.abs(last.t - first.t) < 1e-3 && Math.abs(last.x - first.x) < 0.1) out.pop();
+      for (let i = 0; i < b.length; i++) out.push(b[i]);
+      return out;
+    }}
+    function polylineTotalLength(pts) {{
+      if (!pts || pts.length < 2) return 0;
+      let s = 0;
+      for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
+      return s;
+    }}
+    function polylinePointAtDistance(pts, distAlong) {{
+      if (!pts || !pts.length) return [0, 0];
+      const d = Math.max(0, Number(distAlong) || 0);
+      if (d <= 1e-12) return [pts[0][0], pts[0][1]];
+      let acc = 0;
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const a = pts[i], b = pts[i + 1];
+        const seg = pathDist(a, b);
+        if (seg < 1e-9) continue;
+        if (acc + seg >= d - 1e-9) {{
+          const t = Math.max(0, Math.min(1, (d - acc) / seg));
+          return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+        }}
+        acc += seg;
+      }}
+      const last = pts[pts.length - 1];
+      return [last[0], last[1]];
+    }}
+    function polylineSplitAtDistance(pts, cutDist) {{
+      if (!pts || pts.length < 2) return {{ first: pts ? pts.slice() : [], second: [] }};
+      const cut = Math.max(0, Number(cutDist) || 0);
+      if (cut <= 1e-9) return {{ first: [[pts[0][0], pts[0][1]]], second: pts.slice() }};
+      let acc = 0;
+      const first = [[pts[0][0], pts[0][1]]];
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const a = pts[i], b = pts[i + 1];
+        const seg = pathDist(a, b);
+        if (seg < 1e-9) continue;
+        if (acc + seg >= cut - 1e-9) {{
+          const t = Math.max(0, Math.min(1, (cut - acc) / seg));
+          const px = a[0] + t * (b[0] - a[0]), py = a[1] + t * (b[1] - a[1]);
+          if (dist2(first[first.length - 1], [px, py]) > 1e-8) first.push([px, py]);
+          const second = [[px, py]];
+          for (let j = i + 1; j < pts.length; j++) second.push([pts[j][0], pts[j][1]]);
+          return {{ first: dedupePathPoints(first), second: dedupePathPoints(second) }};
+        }}
+        acc += seg;
+        if (dist2(first[first.length - 1], b) > 1e-8) first.push([b[0], b[1]]);
+      }}
+      return {{ first: dedupePathPoints(first), second: [[pts[pts.length - 1][0], pts[pts.length - 1][1]]] }};
+    }}
+    function runwayDistanceAtElapsedSec(tau, v0, a, vFloorIn, distM) {{
+      const vf0 = Math.max(1, Math.min(150, vFloorIn));
+      const vf = Math.min(vf0, v0);
+      if (!(tau > 0)) return 0;
+      if (!(a > 0) || distM <= 0) return Math.min(distM, v0 * tau);
+      if (v0 <= vf) return Math.min(distM, v0 * tau);
+      const dStop = (v0 * v0 - vf * vf) / (2 * a);
+      if (distM < dStop) {{
+        const vEnd = Math.sqrt(Math.max(0, v0 * v0 - 2 * a * distM));
+        const tFull = (v0 - vEnd) / a;
+        const t = Math.min(tau, tFull);
+        const s = v0 * t - 0.5 * a * t * t;
+        return Math.min(distM, s);
+      }}
+      const tDecel = (v0 - vf) / a;
+      if (tau <= tDecel) return Math.min(distM, v0 * tau - 0.5 * a * tau * tau);
+      const sDecel = dStop;
+      const s = sDecel + vf * (tau - tDecel);
+      return Math.min(distM, s);
+    }}
+    function runwayPhysicsTimelineScaled(pts, distM, tStart, tEnd, v0, a, vFloorIn) {{
+      if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9 || distM <= 1e-9) {{
+        const p = pts && pts.length ? polylinePointAtDistance(pts, 0) : [0, 0];
+        return [{{ t: tStart, x: p[0], y: p[1] }}, {{ t: tEnd, x: p[0], y: p[1] }}];
+      }}
+      const phy = runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn);
+      const phyT = Math.max(1e-6, phy.tSec);
+      const n = Math.max(6, Math.min(24, Math.ceil(distM / 40)));
+      const tl = [];
+      for (let i = 0; i <= n; i++) {{
+        const u = i / n;
+        const t = tStart + u * (tEnd - tStart);
+        const tauPhy = u * phyT;
+        const s = Math.min(distM, runwayDistanceAtElapsedSec(tauPhy, v0, a, vFloorIn, distM));
+        const pt = polylinePointAtDistance(pts, s);
+        tl.push({{ t: t, x: pt[0], y: pt[1] }});
+      }}
+      tl[0].t = tStart;
+      tl[tl.length - 1].t = tEnd;
+      return tl;
+    }}
+    function aircraftDecelMs2ForTimeline(f) {{
+      const ac = (typeof getAircraftInfoByType === 'function') ? getAircraftInfoByType(f && f.aircraftType) : null;
+      const a = ac && typeof ac.deceleration_avg_ms2 === 'number' ? ac.deceleration_avg_ms2 : null;
+      if (typeof a === 'number' && isFinite(a) && a > 0.05) return Math.min(5, Math.max(0.05, a));
+      return 1.2;
+    }}
+    function nearestTaxiInfraD2ForMidpoint(mid) {{
+      let bestApronD2 = Infinity;
+      let bestTaxiD2 = Infinity;
+      let bestTw = null;
+      const apronList = state.apronLinks || [];
+      for (let ai = 0; ai < apronList.length; ai++) {{
+        const poly = getApronLinkPolylineWorldPts(apronList[ai]);
+        if (!poly || poly.length < 2) continue;
+        for (let j = 0; j < poly.length - 1; j++) {{
+          const pr = projectOnSegment(poly[j], poly[j + 1], mid);
+          const d2 = dist2(pr.p, mid);
+          if (d2 < bestApronD2) bestApronD2 = d2;
+        }}
+      }}
+      const list = state.taxiways || [];
+      for (let ti = 0; ti < list.length; ti++) {{
+        const tw = list[ti];
+        const ot = getOrderedPoints(tw);
+        if (!ot || ot.length < 2) continue;
+        for (let j = 0; j < ot.length - 1; j++) {{
+          const pr = projectOnSegment(ot[j], ot[j + 1], mid);
+          const d2 = dist2(pr.p, mid);
+          if (d2 < bestTaxiD2) {{ bestTaxiD2 = d2; bestTw = tw; }}
+        }}
+      }}
+      return {{ bestApronD2, bestTaxiD2, bestTw }};
+    }}
+    function taxiHitFromMidpoint(mid) {{
+      const {{ bestApronD2, bestTaxiD2, bestTw }} = nearestTaxiInfraD2ForMidpoint(mid);
+      const hasA = bestApronD2 < Infinity;
+      const hasT = bestTaxiD2 < Infinity;
+      if (hasA && (!hasT || bestApronD2 <= bestTaxiD2)) return {{ kind: 'apron' }};
+      if (hasT && bestTw) return {{ kind: 'tw', tw: bestTw }};
+      return {{ kind: 'tw', tw: null }};
+    }}
+    function taxiSegmentVelocityMsFromHit(hit, carry) {{
+      const fallback = getTaxiwayAvgMoveVelocityForPath(null);
+      if (hit.kind === 'apron') return Math.max(0.1, APRON_TAXIWAY_SPEED_MS);
+      const tw = hit.tw;
+      if (!tw) return Math.max(1, fallback);
+      const pt = tw.pathType || 'taxiway';
+      if (pt === 'runway_exit') {{
+        const v = carry.lastTaxiwayMs;
+        return Math.max(1, (typeof v === 'number' && v > 0) ? v : fallback);
+      }}
+      if (pt === 'taxiway') {{
+        const v = getTaxiwayAvgMoveVelocityForPath(tw);
+        carry.lastTaxiwayMs = v;
+        return Math.max(1, v);
+      }}
+      if (pt === 'runway') return Math.max(1, getTaxiwayAvgMoveVelocityForPath(tw));
+      return Math.max(1, getTaxiwayAvgMoveVelocityForPath(tw));
+    }}
+    function taxiSegmentVelocityMsForPolylineSegment(p1, p2, carry) {{
+      const mx = (p1[0] + p2[0]) * 0.5, my = (p1[1] + p2[1]) * 0.5;
+      const hit = taxiHitFromMidpoint([mx, my]);
+      return taxiSegmentVelocityMsFromHit(hit, carry);
+    }}
+    function makeTaxiSegmentVelocityCallback() {{
+      const carry = {{ lastTaxiwayMs: null }};
+      return function(i, a, b) {{ return taxiSegmentVelocityMsForPolylineSegment(a, b, carry); }};
+    }}
+    function polylineRawDurationSegmentVelocities(pts, velForSeg) {{
+      if (!pts || pts.length < 2) return 0;
+      let total = 0;
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const len = pathDist(pts[i], pts[i + 1]);
+        if (len < 1e-9) continue;
+        const v = Math.max(1, velForSeg(i, pts[i], pts[i + 1]));
+        total += len / v;
+      }}
+      return total;
+    }}
+    function polylineTimelineBySegmentSpeeds(pts, tStart, tEnd, velForSeg) {{
+      if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {{
+        const p = pts && pts.length ? pts[0] : [0, 0];
+        return [{{ t: tStart, x: p[0], y: p[1] }}];
+      }}
+      const lengths = [];
+      for (let i = 0; i < pts.length - 1; i++) lengths.push(pathDist(pts[i], pts[i + 1]));
+      const rawDts = [];
+      for (let i = 0; i < lengths.length; i++) {{
+        const v = Math.max(1, velForSeg(i, pts[i], pts[i + 1]));
+        rawDts.push((lengths[i] < 1e-9 ? 0 : lengths[i] / v));
+      }}
+      const rawTotal = rawDts.reduce(function(s, x) {{ return s + x; }}, 0);
+      const window = tEnd - tStart;
+      if (rawTotal < 1e-9) {{
+        return [
+          {{ t: tStart, x: pts[0][0], y: pts[0][1] }},
+          {{ t: tEnd, x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] }},
+        ];
+      }}
+      const scale = window / rawTotal;
+      const tl = [{{ t: tStart, x: pts[0][0], y: pts[0][1] }}];
+      let acc = 0;
+      for (let i = 0; i < lengths.length; i++) {{
+        acc += rawDts[i] * scale;
+        tl.push({{ t: Math.min(tStart + acc, tEnd), x: pts[i + 1][0], y: pts[i + 1][1] }});
+      }}
+      tl[tl.length - 1].t = tEnd;
+      return tl;
+    }}
+    function polylineTimelineLinearRetSpeed(pts, tStart, tEnd, vIn, vOut) {{
+      if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {{
+        const p = pts && pts.length ? pts[0] : [0, 0];
+        return [{{ t: tStart, x: p[0], y: p[1] }}];
+      }}
+      const lengths = [];
+      let totalLen = 0;
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const len = pathDist(pts[i], pts[i + 1]);
+        lengths.push(len);
+        totalLen += len;
+      }}
+      const rawDts = [];
+      let accLen = 0;
+      for (let i = 0; i < lengths.length; i++) {{
+        const midLen = accLen + lengths[i] * 0.5;
+        const u = totalLen > 1e-9 ? midLen / totalLen : 0;
+        const v = Math.max(1, vIn + (vOut - vIn) * u);
+        rawDts.push(lengths[i] < 1e-9 ? 0 : lengths[i] / v);
+        accLen += lengths[i];
+      }}
+      const rawTotal = rawDts.reduce(function(s, x) {{ return s + x; }}, 0);
+      const window = tEnd - tStart;
+      if (rawTotal < 1e-9) {{
+        return [
+          {{ t: tStart, x: pts[0][0], y: pts[0][1] }},
+          {{ t: tEnd, x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] }},
+        ];
+      }}
+      const scale = window / rawTotal;
+      const tl = [{{ t: tStart, x: pts[0][0], y: pts[0][1] }}];
+      let acc = 0;
+      for (let i = 0; i < lengths.length; i++) {{
+        acc += rawDts[i] * scale;
+        tl.push({{ t: Math.min(tStart + acc, tEnd), x: pts[i + 1][0], y: pts[i + 1][1] }});
+      }}
+      tl[tl.length - 1].t = tEnd;
+      return tl;
+    }}
+    function splitTaxiInPartsForTimeline(f, runwayId, taxiInPts) {{
+      const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
+      if (!taxiInPts || taxiInPts.length < 2) {{
+        return {{
+          vTaxiBase,
+          runwayPts: [],
+          retPts: [],
+          taxiPts: [],
+          phyRw: 0,
+          phyRet: 0,
+          phyTaxi: 0,
+          useRwPhy: false,
+          runwayLenM: 0,
+          vTd: 0,
+          aDec: 0,
+          vRetIn: 0,
+          vRetOut: 0,
+          vRetResolved: vTaxiBase,
+          carryAfterRunway: {{ lastTaxiwayMs: null }},
+        }};
+      }}
+      const vTd = touchdownSpeedMsForTimeline(f);
+      let vRetIn = typeof f.arrVRetInMs === 'number' && isFinite(f.arrVRetInMs) && f.arrVRetInMs > 0 ? f.arrVRetInMs : getMinArrVelocityMpsForRunwayId(runwayId);
+      let vRetOut = typeof f.arrVRetOutMs === 'number' && isFinite(f.arrVRetOutMs) && f.arrVRetOutMs > 0 ? f.arrVRetOutMs : vTaxiBase;
+      const aDec = aircraftDecelMs2ForTimeline(f);
+      let runwayLenM = 0;
+      if (typeof f.arrRetDistM === 'number' && isFinite(f.arrRetDistM) && typeof f.arrTdDistM === 'number' && isFinite(f.arrTdDistM)) {{
+        runwayLenM = Math.abs(f.arrRetDistM - f.arrTdDistM);
+      }}
+      const totalInLen = polylineTotalLength(taxiInPts);
+      runwayLenM = Math.min(runwayLenM, Math.max(0, totalInLen));
+      const splitRw = polylineSplitAtDistance(taxiInPts, runwayLenM);
+      const runwayPts = splitRw.first;
+      const afterRw = splitRw.second;
+      let retLenM = 0;
+      if (f.sampledArrRet) {{
+        const retTw = (state.taxiways || []).find(function(t) {{ return t.id === f.sampledArrRet; }});
+        const rPts = retTw ? getOrderedPoints(retTw) : null;
+        if (rPts && rPts.length >= 2) {{
+          retLenM = polylineTotalLength(rPts);
+          const remLen = polylineTotalLength(afterRw);
+          retLenM = Math.min(retLenM, Math.max(0, remLen));
+        }}
+      }}
+      const splitRet = polylineSplitAtDistance(afterRw, retLenM);
+      const retPts = splitRet.first;
+      const taxiPts = splitRet.second;
+      const useRwPhy = runwayLenM > 1 && runwayPts.length >= 2;
+      let phyRw = 0;
+      if (useRwPhy) {{
+        phyRw = runwayArrSpeedAndTimeToRet(vTd, aDec, runwayLenM, vRetIn).tSec;
+      }} else if (runwayPts.length >= 2) {{
+        phyRw = polylineTotalLength(runwayPts) / vTaxiBase;
+      }}
+      const carryRw = {{ lastTaxiwayMs: null }};
+      if (runwayPts.length >= 2) {{
+        for (let ri = 0; ri < runwayPts.length - 1; ri++) {{
+          taxiSegmentVelocityMsForPolylineSegment(runwayPts[ri], runwayPts[ri + 1], carryRw);
+        }}
+      }}
+      const vFallback = getTaxiwayAvgMoveVelocityForPath(null);
+      const vRetResolved = (typeof carryRw.lastTaxiwayMs === 'number' && carryRw.lastTaxiwayMs > 0)
+        ? carryRw.lastTaxiwayMs
+        : vFallback;
+      const retPathLen = polylineTotalLength(retPts);
+      const phyRet = (retPts.length >= 2 && retPathLen > 1e-3) ? retPathLen / Math.max(1, vRetResolved) : 0;
+      const carryTaxi = {{ lastTaxiwayMs: carryRw.lastTaxiwayMs }};
+      const phyTaxi = taxiPts.length >= 2
+        ? polylineRawDurationSegmentVelocities(taxiPts, function(i, a, b) {{
+            return taxiSegmentVelocityMsForPolylineSegment(a, b, carryTaxi);
+          }})
+        : 0;
+      return {{
+        vTaxiBase, runwayPts, retPts, taxiPts, phyRw, phyRet, phyTaxi, useRwPhy, runwayLenM, vTd, aDec, vRetIn, vRetOut,
+        vRetResolved, carryAfterRunway: {{ lastTaxiwayMs: carryRw.lastTaxiwayMs }},
+      }};
+    }}
+    /** Arr_ROT(arrRotSec): 착륙(ELDT)~고속탈출유도로 끝 — 이 구간만 [tStart,tEnd]에 스케일(이전에는 ELDT+ROT까지 터치다운에서 정지 후 한꺼번에 이동). */
+    function buildRunwayAndRetTimelineInWindow(f, runwayId, taxiInPts, tStart, tEnd) {{
+      const parts = splitTaxiInPartsForTimeline(f, runwayId, taxiInPts);
+      const vTaxiBase = parts.vTaxiBase;
+      const runwayPts = parts.runwayPts;
+      const retPts = parts.retPts;
+      const phyRw = parts.phyRw;
+      const phyRet = parts.phyRet;
+      const useRwPhy = parts.useRwPhy;
+      const runwayLenM = parts.runwayLenM;
+      const vTd = parts.vTd;
+      const aDec = parts.aDec;
+      const vRetIn = parts.vRetIn;
+      const vRetOut = parts.vRetOut;
+      const vRetResolved = Math.max(1, parts.vRetResolved != null ? parts.vRetResolved : vTaxiBase);
+      if (!taxiInPts || taxiInPts.length < 2 || tEnd <= tStart + 1e-6) {{
+        const p = taxiInPts && taxiInPts.length ? taxiInPts[0] : [0, 0];
+        return [{{ t: tStart, x: p[0], y: p[1] }}, {{ t: tEnd, x: p[0], y: p[1] }}];
+      }}
+      const window = Math.max(1e-6, tEnd - tStart);
+      const rawSum = phyRw + phyRet;
+      if (rawSum < 1e-9) {{
+        return polylineSpeedScaledToWindow(runwayPts.length >= 2 ? runwayPts : taxiInPts, tStart, tEnd, vTaxiBase);
+      }}
+      const scale = window / rawSum;
+      let tCur = tStart;
+      let merged = null;
+      if (runwayPts.length >= 2 && (useRwPhy ? runwayLenM > 1 : phyRw > 1e-9)) {{
+        const tSegEnd = tCur + phyRw * scale;
+        const seg = useRwPhy
+          ? runwayPhysicsTimelineScaled(runwayPts, runwayLenM, tCur, tSegEnd, vTd, aDec, vRetIn)
+          : polylineSpeedScaledToWindow(runwayPts, tCur, tSegEnd, vTaxiBase);
+        merged = seg;
+        tCur = tSegEnd;
+      }}
+      if (retPts.length >= 2 && phyRet > 1e-9) {{
+        const tSegEnd = tCur + phyRet * scale;
+        const seg = polylineSpeedScaledToWindow(retPts, tCur, tSegEnd, vRetResolved);
+        merged = merged ? mergeTimelineSegments(merged, seg) : seg;
+        tCur = tSegEnd;
+      }}
+      if (!merged) {{
+        return polylineSpeedScaledToWindow(taxiInPts, tStart, tEnd, vTaxiBase);
+      }}
+      if (tCur < tEnd - 1e-3) {{
+        const last = merged[merged.length - 1];
+        merged = mergeTimelineSegments(merged, [{{ t: tCur, x: last.x, y: last.y }}, {{ t: tEnd, x: last.x, y: last.y }}]);
+      }}
+      return merged;
+    }}
+    function buildApronTaxiTimelineAfterRet(f, runwayId, taxiInPts, tStart, tEnd) {{
+      const parts = splitTaxiInPartsForTimeline(f, runwayId, taxiInPts);
+      const taxiPts = parts.taxiPts;
+      const phyTaxi = parts.phyTaxi;
+      const vTaxiBase = parts.vTaxiBase;
+      const cr = parts.carryAfterRunway || {{ lastTaxiwayMs: null }};
+      const carryApron = {{ lastTaxiwayMs: cr.lastTaxiwayMs }};
+      if (!taxiInPts || taxiInPts.length < 2 || tEnd <= tStart + 1e-6) {{
+        const p = taxiInPts && taxiInPts.length ? taxiInPts[taxiInPts.length - 1] : [0, 0];
+        return [{{ t: tStart, x: p[0], y: p[1] }}, {{ t: tEnd, x: p[0], y: p[1] }}];
+      }}
+      if (taxiPts.length >= 2 && phyTaxi > 1e-9) {{
+        return polylineTimelineBySegmentSpeeds(taxiPts, tStart, tEnd, function(i, a, b) {{
+          return taxiSegmentVelocityMsForPolylineSegment(a, b, carryApron);
+        }});
+      }}
+      const last = taxiInPts[taxiInPts.length - 1];
+      return [{{ t: tStart, x: last[0], y: last[1] }}, {{ t: tEnd, x: last[0], y: last[1] }}];
+    }}
+    function buildTaxiInCompositeTimeline(f, runwayId, taxiInPts, tTaxiStart, eibtS) {{
+      if (!taxiInPts || taxiInPts.length < 2) {{
+        const p = taxiInPts && taxiInPts.length ? taxiInPts[0] : [0, 0];
+        return [{{ t: tTaxiStart, x: p[0], y: p[1] }}, {{ t: eibtS, x: p[0], y: p[1] }}];
+      }}
+      const parts = splitTaxiInPartsForTimeline(f, runwayId, taxiInPts);
+      const {{ vTaxiBase, runwayPts, retPts, taxiPts, phyRw, phyRet, phyTaxi, useRwPhy, runwayLenM, vTd, aDec, vRetIn, vRetOut, vRetResolved, carryAfterRunway }} = parts;
+      const vRetRes = Math.max(1, vRetResolved != null ? vRetResolved : vTaxiBase);
+      const crComp = carryAfterRunway || {{ lastTaxiwayMs: null }};
+      const carryCompTaxi = {{ lastTaxiwayMs: crComp.lastTaxiwayMs }};
+      const window = Math.max(1e-6, eibtS - tTaxiStart);
+      let rawSum = phyRw + phyRet + phyTaxi;
+      if (rawSum < 1e-9) {{
+        return polylineSpeedScaledToWindow(taxiInPts, tTaxiStart, eibtS, vTaxiBase);
+      }}
+      const scale = window / rawSum;
+      let tCur = tTaxiStart;
+      let merged = null;
+      if (runwayPts.length >= 2 && (useRwPhy ? runwayLenM > 1 : phyRw > 1e-9)) {{
+        const tEnd = tCur + phyRw * scale;
+        const seg = useRwPhy
+          ? runwayPhysicsTimelineScaled(runwayPts, runwayLenM, tCur, tEnd, vTd, aDec, vRetIn)
+          : polylineSpeedScaledToWindow(runwayPts, tCur, tEnd, vTaxiBase);
+        merged = seg;
+        tCur = tEnd;
+      }}
+      if (retPts.length >= 2 && phyRet > 1e-9) {{
+        const tEnd = tCur + phyRet * scale;
+        const seg = polylineSpeedScaledToWindow(retPts, tCur, tEnd, vRetRes);
+        merged = merged ? mergeTimelineSegments(merged, seg) : seg;
+        tCur = tEnd;
+      }}
+      if (taxiPts.length >= 2 && phyTaxi > 1e-9) {{
+        const seg = polylineTimelineBySegmentSpeeds(taxiPts, tCur, eibtS, function(i, a, b) {{
+          return taxiSegmentVelocityMsForPolylineSegment(a, b, carryCompTaxi);
+        }});
+        merged = merged ? mergeTimelineSegments(merged, seg) : seg;
+        tCur = eibtS;
+      }}
+      if (!merged) {{
+        return polylineSpeedScaledToWindow(taxiInPts, tTaxiStart, eibtS, vTaxiBase);
+      }}
+      if (tCur < eibtS - 1e-3) {{
+        const last = merged[merged.length - 1];
+        merged = mergeTimelineSegments(merged, [{{ t: tCur, x: last.x, y: last.y }}, {{ t: eibtS, x: last.x, y: last.y }}]);
+      }}
+      return merged;
+    }}
+    function polylineSpeedScaledToWindow(pts, tStart, tEnd, velocityMs) {{
+      const v = Math.max(1, velocityMs);
+      if (!pts || pts.length < 2 || tEnd <= tStart + 1e-6) {{
+        const p = pts && pts.length ? pts[0] : [0, 0];
+        return [{{ t: tStart, x: p[0], y: p[1] }}];
+      }}
+      const lengths = [];
+      for (let i = 0; i < pts.length - 1; i++) lengths.push(pathDist(pts[i], pts[i + 1]));
+      const rawDts = lengths.map(function(len) {{ return len / v; }});
+      const rawTotal = rawDts.reduce(function(s, x) {{ return s + x; }}, 0);
+      const window = tEnd - tStart;
+      if (rawTotal < 1e-6) {{
+        return [
+          {{ t: tStart, x: pts[0][0], y: pts[0][1] }},
+          {{ t: tEnd, x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] }},
+        ];
+      }}
+      const scale = window / rawTotal;
+      const tl = [{{ t: tStart, x: pts[0][0], y: pts[0][1] }}];
+      let acc = 0;
+      for (let i = 0; i < lengths.length; i++) {{
+        acc += rawDts[i] * scale;
+        const tt = tStart + acc;
+        tl.push({{ t: Math.min(tt, tEnd), x: pts[i + 1][0], y: pts[i + 1][1] }});
+      }}
+      tl[tl.length - 1].t = tEnd;
+      return tl;
+    }}
+    /** 전체 출발 폴리라인을 스탠드→라인업 접두와 활주로 꼬리로 분리 (graphPathDeparture tail 접합과 동일 tol). */
+    function splitDeparturePathLineupAndRunwayTail(f) {{
+      const depFull = getPathForFlightDeparture(f);
+      const depToLineup = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, {{ onlyToLineup: true }}) : null;
+      if (!depFull || depFull.length < 2 || !depToLineup || depToLineup.length < 2) return null;
+      const lastLu = depToLineup[depToLineup.length - 1];
+      const tol = 0.25;
+      let k = -1;
+      for (let i = 0; i < depFull.length; i++) {{
+        if (dist2(depFull[i], lastLu) <= tol) k = i;
+      }}
+      let runwayTail = (k >= 0) ? depFull.slice(k) : null;
+      if (!runwayTail || runwayTail.length < 2) {{
+        const runwayId = f.depRunwayId || (f.token && f.token.depRunwayId) || (f.token && f.token.runwayId) || f.arrRunwayId;
+        const rp = runwayId ? getRunwayPath(runwayId) : null;
+        const rEnd = rp && rp.endPx ? rp.endPx : (rp && rp.pts && rp.pts.length >= 2 ? rp.pts[rp.pts.length - 1] : null);
+        if (rEnd && Array.isArray(rEnd) && rEnd.length >= 2) {{
+          const lx = lastLu[0], ly = lastLu[1];
+          if (!runwayTail || runwayTail.length < 1) runwayTail = [[lx, ly], [rEnd[0], rEnd[1]]];
+          else if (runwayTail.length === 1 && dist2(runwayTail[0], rEnd) > 1e-6) runwayTail = [runwayTail[0], [rEnd[0], rEnd[1]]];
+        }}
+      }}
+      if (!runwayTail || runwayTail.length < 2) runwayTail = null;
+      return {{ toLineup: depToLineup, runwayTail: runwayTail }};
+    }}
+    function lineupDepQueueFingerprint(flights) {{
+      const parts = [];
+      const list = flights || [];
+      for (let i = 0; i < list.length; i++) {{
+        const f = list[i];
+        if (!f || f.noWayDep) continue;
+        const eob = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
+        const vtt = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
+        const rw = f.depRunwayId || (f.token && (f.token.depRunwayId != null ? f.token.depRunwayId : f.token.runwayId)) || f.arrRunwayId || '';
+        const st = f.standId != null ? f.standId : '';
+        parts.push(String(f.id != null ? f.id : i) + ':' + String(rw) + ':' + String(st) + ':' + eob + ':' + vtt);
+      }}
+      parts.sort();
+      return String(state.pathPolylineCacheRev | 0) + '|' + parts.join(';');
+    }}
+    function assignLineupQueueRanksAll(flights) {{
+      const list = flights || [];
+      for (let i = 0; i < list.length; i++) {{
+        const f = list[i];
+        if (f) delete f._lineupQueueRank;
+      }}
+      const entries = [];
+      for (let i = 0; i < list.length; i++) {{
+        const f = list[i];
+        if (!f || f.noWayDep) continue;
+        const split = splitDeparturePathLineupAndRunwayTail(f);
+        if (!split || !split.toLineup || split.toLineup.length < 2) continue;
+        const last = split.toLineup[split.toLineup.length - 1];
+        const rw = f.depRunwayId || (f.token && (f.token.depRunwayId != null ? f.token.depRunwayId : f.token.runwayId)) || f.arrRunwayId || '';
+        const key = String(rw) + '|' + (Math.round(last[0] * 10) / 10) + '|' + (Math.round(last[1] * 10) / 10);
+        const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
+        const lineupEtaSec = eobtMin * 60 + Math.max(0, (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0) * 60;
+        entries.push({{ f: f, key: key, lineupEtaSec: lineupEtaSec }});
+      }}
+      const byKey = {{}};
+      for (let j = 0; j < entries.length; j++) {{
+        const e = entries[j];
+        if (!byKey[e.key]) byKey[e.key] = [];
+        byKey[e.key].push(e);
+      }}
+      Object.keys(byKey).forEach(function(k) {{
+        const arr = byKey[k];
+        arr.sort(function(a, b) {{
+          if (a.lineupEtaSec !== b.lineupEtaSec) return a.lineupEtaSec - b.lineupEtaSec;
+          const ia = a.f.id != null ? String(a.f.id) : '';
+          const ib = b.f.id != null ? String(b.f.id) : '';
+          return ia.localeCompare(ib);
+        }});
+        for (let r = 0; r < arr.length; r++) arr[r].f._lineupQueueRank = r;
+      }});
+    }}
+    function ensureLineupQueueRanksForSimulation() {{
+      const flights = state.flights || [];
+      const fp = lineupDepQueueFingerprint(flights);
+      if (state.__lineupQueueRankFp === fp) return;
+      state.__lineupQueueRankFp = fp;
+      assignLineupQueueRanksAll(flights);
+    }}
+    /**
+     * EOBT→(DEP_TAXI_TIME)→라인업 대기(DEP_TAXI_DELAY)→활주로 이륙→ETOT.
+     * 반환: {{ timeline, meta }} 또는 null.
+     */
+    function buildDepartureSurfaceTimelineSegments(f, eobtS, etotS) {{
+      const eps = 1e-3;
+      const split = splitDeparturePathLineupAndRunwayTail(f);
+      if (!split || !split.toLineup || split.toLineup.length < 2) return null;
+      const depTaxiLineupMin = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
+      const depTaxiLineupSecReq = Math.max(0, depTaxiLineupMin) * 60;
+      const depTaxiDelaySecReq = (typeof f.depTaxiDelayMin === 'number' && isFinite(f.depTaxiDelayMin))
+        ? Math.max(0, f.depTaxiDelayMin) * 60 : 0;
+      const t0 = eobtS;
+      const t3 = etotS;
+      const rank = (typeof f._lineupQueueRank === 'number' && isFinite(f._lineupQueueRank)) ? Math.max(0, Math.floor(f._lineupQueueRank)) : 0;
+      const backM = rank * LINEUP_QUEUE_SPACING_M;
+      const toLineupOrig = split.toLineup;
+      const totalLen = polylineTotalLength(toLineupOrig);
+      const maxBack = Math.max(0, totalLen - 1e-3);
+      const backClamped = Math.min(backM, maxBack);
+      const alongCut = Math.max(1e-6, totalLen - backClamped);
+      const splitCut = polylineSplitAtDistance(toLineupOrig, alongCut);
+      let taxiLineupPts = (splitCut.first && splitCut.first.length >= 2) ? splitCut.first : toLineupOrig;
+      if (taxiLineupPts.length < 2) taxiLineupPts = toLineupOrig;
+      const lastLu = taxiLineupPts[taxiLineupPts.length - 1];
+      const lx = lastLu[0], ly = lastLu[1];
+      let runwayTailAdj = split.runwayTail;
+      if (runwayTailAdj && runwayTailAdj.length >= 2 && dist2(runwayTailAdj[0], [lx, ly]) > 1e-4) {{
+        runwayTailAdj = [[lx, ly]].concat(runwayTailAdj.slice());
+      }}
+      const makeVelTaxi = makeTaxiSegmentVelocityCallback();
+      const makeVelRoll = makeTaxiSegmentVelocityCallback();
+      if (!(t3 > t0 + eps)) {{
+        const tl = [{{ t: t0, x: lx, y: ly }}, {{ t: t3, x: lx, y: ly }}];
+        return {{
+          timeline: tl,
+          meta: {{
+            eobtSec: t0, etotSec: t3,
+            depTaxiLineupSec: 0, depTaxiDelaySec: 0, depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
+            lineupArrivalSec: t0, depRollStartSec: t0, depRotSec: Math.max(0, t3 - t0),
+            lineupQueueRank: rank, lineupBackM: backClamped,
+          }},
+        }};
+      }}
+      const maxSpan = t3 - t0 - eps;
+      const taxiSecUsed = Math.min(depTaxiLineupSecReq, maxSpan);
+      const t1 = t0 + taxiSecUsed;
+      const afterTaxi = Math.max(0, t3 - t1 - eps);
+      const delaySecUsed = Math.min(depTaxiDelaySecReq, afterTaxi);
+      const t2 = t1 + delaySecUsed;
+      const taxiTl = polylineTimelineBySegmentSpeeds(taxiLineupPts, t0, t1, makeVelTaxi);
+      let holdTl = (t2 > t1 + eps) ? [{{ t: t1, x: lx, y: ly }}, {{ t: t2, x: lx, y: ly }}] : [];
+      let rollTl;
+      if (runwayTailAdj && runwayTailAdj.length >= 2 && t3 > t2 + eps) {{
+        rollTl = polylineTimelineBySegmentSpeeds(runwayTailAdj, t2, t3, makeVelRoll);
+      }} else {{
+        rollTl = [{{ t: t2, x: lx, y: ly }}, {{ t: t3, x: lx, y: ly }}];
+      }}
+      let merged = mergeTimelineSegments(taxiTl, holdTl);
+      merged = mergeTimelineSegments(merged, rollTl);
+      return {{
+        timeline: merged,
+        meta: {{
+          eobtSec: t0, etotSec: t3,
+          depTaxiLineupSec: taxiSecUsed, depTaxiDelaySec: delaySecUsed,
+          depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
+          lineupArrivalSec: t1, depRollStartSec: t2, depRotSec: Math.max(0, t3 - t2),
+          lineupQueueRank: rank, lineupBackM: backClamped,
+        }},
+      }};
+    }}
+    function buildFullAirsideTimelineForFlight(f) {{
+      if (!f) return;
+      if (typeof ensureLineupQueueRanksForSimulation === 'function') ensureLineupQueueRanksForSimulation();
+      const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
+      if (f.arrDep === 'Dep') {{
+        if (f.noWayDep) {{
+          f.timeline = null;
+          f.timeline_meta = {{ error: 'no_path', leg: 'dep' }};
+          return;
+        }}
+        const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
+        const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
+        const eobtS = eobtMin * 60;
+        const etotS = etotMin * 60;
+        const built = buildDepartureSurfaceTimelineSegments(f, eobtS, etotS);
+        if (!built || !built.timeline || built.timeline.length < 2) {{
+          f.timeline = null;
+          f.timeline_meta = {{ error: 'no_path', leg: 'dep' }};
+          return;
+        }}
+        f.timeline = built.timeline;
+        f.timeline_meta = Object.assign({{ leg: 'dep' }}, built.meta || {{}});
+        return;
+      }}
+      const arrPts = getPathForFlight(f);
+      const depPts = getPathForFlightDeparture(f);
+      if (f.noWayArr || f.noWayDep) {{
+        f.timeline = null;
+        f.timeline_meta = {{ error: 'no_path' }};
+        return;
+      }}
+      if (!arrPts || arrPts.length < 2 || !depPts || depPts.length < 2) {{
+        f.timeline = null;
+        f.timeline_meta = {{ error: 'no_path' }};
+        return;
+      }}
+      const token = f.token || {{}};
+      const runwayId = f.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || f.arrRunwayId;
+      if (runwayId == null || runwayId === '') {{
+        f.timeline = null;
+        f.timeline_meta = {{ error: 'no_runway' }};
+        return;
+      }}
+      const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
+      const vTd = Math.max(1, touchdownSpeedMsForTimeline(f));
+      const tdDist = touchdownDistMForTimeline(f);
+      const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
+      const offset = APPROACH_OFFSET_WORLD_M;
+      const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
+      const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
+      const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], eibtMin + (typeof f.dwellMin === 'number' && isFinite(f.dwellMin) ? f.dwellMin : 45));
+      const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
+      const eldtS = eldtMin * 60;
+      const eibtS = eibtMin * 60;
+      const eobtS = eobtMin * 60;
+      const etotS = etotMin * 60;
+      const tdPt = getRunwayPointAtDistance(runwayId, tdDist);
+      if (!tdPt) {{
+        f.timeline = null;
+        f.timeline_meta = {{ error: 'no_td' }};
+        return;
+      }}
+      const pack = buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDist, offset, APPROACH_STRAIGHT_FINAL_M, APPROACH_ZIGZAG_LEG_M, APPROACH_ZIGZAG_STEP_M);
+      let apprPts;
+      if (pack && pack.pts && pack.pts.length >= 2) {{
+        apprPts = pack.pts.slice();
+        const lastAp = apprPts[apprPts.length - 1];
+        if (Math.hypot(lastAp[0] - tdPt[0], lastAp[1] - tdPt[1]) > 1e-3) apprPts.push([tdPt[0], tdPt[1]]);
+      }} else {{
+        const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
+        const outer = approachPointBeforeThresholdJs(runwayId, rwDir, offset, anchorDist);
+        const mid = rsPt ? [rsPt[0], rsPt[1]] : [tdPt[0], tdPt[1]];
+        apprPts = [outer, mid];
+        if (rsPt && Math.hypot(rsPt[0] - tdPt[0], rsPt[1] - tdPt[1]) > 1e-3) apprPts.push([tdPt[0], tdPt[1]]);
+      }}
+      const tAppr = arrivalApproachDurationSecBeforeEldt(f);
+      const t0 = eldtS - tAppr;
+      const airTl = polylineTimelineBySegmentSpeeds(apprPts, t0, eldtS, function() {{ return vTd; }});
+      const rotS = (typeof f.arrRotSec === 'number' && isFinite(f.arrRotSec)) ? Math.max(0, f.arrRotSec) : 0;
+      const vttDelayS = (typeof f.vttADelayMin === 'number' && isFinite(f.vttADelayMin) ? f.vttADelayMin : 0) * 60;
+      const tAfterRot = eldtS + rotS;
+      const runwayEndT = Math.min(tAfterRot, eibtS);
+      let tTaxiStart = Math.min(tAfterRot + vttDelayS, eibtS);
+      if (tTaxiStart < runwayEndT) tTaxiStart = runwayEndT;
+      const taxiInPts = trimPolylineFromNearPoint(arrPts, tdPt);
+      let taxiInTl;
+      if (runwayEndT > eldtS + 1e-3) {{
+        taxiInTl = buildRunwayAndRetTimelineInWindow(f, runwayId, taxiInPts, eldtS, runwayEndT);
+      }} else {{
+        taxiInTl = [{{ t: eldtS, x: tdPt[0], y: tdPt[1] }}];
+      }}
+      if (tTaxiStart > runwayEndT + 1e-3 && taxiInTl && taxiInTl.length) {{
+        const lastRw = taxiInTl[taxiInTl.length - 1];
+        taxiInTl = mergeTimelineSegments(taxiInTl, [
+          {{ t: runwayEndT, x: lastRw.x, y: lastRw.y }},
+          {{ t: tTaxiStart, x: lastRw.x, y: lastRw.y }},
+        ]);
+      }}
+      const apronTl = buildApronTaxiTimelineAfterRet(f, runwayId, taxiInPts, tTaxiStart, eibtS);
+      taxiInTl = mergeTimelineSegments(taxiInTl, apronTl);
+      const standPt = taxiInPts.length ? taxiInPts[taxiInPts.length - 1] : arrPts[arrPts.length - 1];
+      const sx = standPt[0], sy = standPt[1];
+      const dwellTl = [{{ t: eibtS, x: sx, y: sy }}, {{ t: eobtS, x: sx, y: sy }}];
+      const builtDep = buildDepartureSurfaceTimelineSegments(f, eobtS, etotS);
+      if (!builtDep || !builtDep.timeline || builtDep.timeline.length < 2) {{
+        f.timeline = null;
+        f.timeline_meta = {{ error: 'no_path', leg: 'dep_tail' }};
+        return;
+      }}
+      const depTl = builtDep.timeline;
+      let timeline = mergeTimelineSegments(airTl, taxiInTl);
+      timeline = mergeTimelineSegments(timeline, dwellTl);
+      timeline = mergeTimelineSegments(timeline, depTl);
+      f.timeline = timeline;
+      f.timeline_meta = Object.assign({{
+        tApproachStart: t0,
+        eldtSec: eldtS,
+        eibtSec: eibtS,
+        eobtSec: eobtS,
+        etotSec: etotS,
+        approachOffset: offset,
+        approachStraightFinalM: APPROACH_STRAIGHT_FINAL_M,
+        approachZigzagLegM: APPROACH_ZIGZAG_LEG_M,
+        approachZigzagStepM: APPROACH_ZIGZAG_STEP_M,
+        approachPathLenM: (pack && typeof pack.pathLen === 'number') ? pack.pathLen : null,
+        touchdownSpeedMs: vTd,
+      }}, builtDep.meta || {{}});
+    }}
+    function clearAllFlightTimelines() {{
+      delete state.__lineupQueueRankFp;
+      const flights = state.flights || [];
+      for (let i = 0; i < flights.length; i++) {{
+        if (flights[i]) flights[i].timeline = null;
+      }}
+    }}
+    function prepareLazyTimelinesForCurrentSim(tSec) {{
+      if (!state.globalUpdateFresh) return;
+      const flights = state.flights || [];
+      const pad = simAirsideLazyPadSec();
+      for (let i = 0; i < flights.length; i++) {{
+        const f = flights[i];
+        if (!f) continue;
+        if (f.noWayArr && f.noWayDep) continue;
+        if (!f.timeline || !f.timeline.length) continue;
+        const w = getFlightAirsideWindowSec(f);
+        if (!w) {{ f.timeline = null; continue; }}
+        if (tSec > w.t1 + 1e-3 || tSec < w.t0 - pad - 1e-3) f.timeline = null;
+      }}
+      for (let i = 0; i < flights.length; i++) {{
+        const f = flights[i];
+        if (!f) continue;
+        if (f.noWayArr && f.noWayDep) continue;
+        if (f.noWayArr || f.noWayDep) continue;
+        if (!isFlightAirsideLazyTimelineBuildEligible(f, tSec)) continue;
+        if (f.timeline && f.timeline.length) continue;
+        buildFullAirsideTimelineForFlight(f);
+      }}
+    }}
+    function rebuildAllFlightAirsideTimelines() {{
+      clearAllFlightTimelines();
+    }}
+
     /** Runway departure lineup: JSON/When panel is not set 0(starting point). */
     function getEffectiveRunwayLineupDistM(tw) {{
       if (!tw || tw.pathType !== 'runway') return 0;
@@ -6988,6 +10150,21 @@ def _build_designer_html() -> str:
       let s = 0;
       for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
       return s;
+    }}
+
+    /** 접근 쪽 활주로 시작(이륙 방향 기준 시작단 또는 착륙 방향 반대 끝단) 임계까지의 연장 거리(m). 프리뷰·타임라인 지그재그 앵커 공통. */
+    function runwayApproachThresholdDistAlongM(runwayId, tdDistAlong) {{
+      const path = getRunwayPath(runwayId);
+      if (!path || !path.pts || path.pts.length < 2) return 0;
+      const totalLen = runwayPolylineLengthPx(path.pts);
+      const tw = (state.taxiways || []).find(function(t) {{ return t && t.id === runwayId && t.pathType === 'runway'; }});
+      if (!tw) return 0;
+      const dStart = Math.min(Math.max(0, getEffectiveRunwayStartDisplacedThresholdM(tw) + getEffectiveRunwayStartBlastPadM(tw)), totalLen);
+      const endInset = getEffectiveRunwayEndDisplacedThresholdM(tw) + getEffectiveRunwayEndBlastPadM(tw);
+      const dEnd = Math.max(0, Math.min(totalLen, totalLen - endInset));
+      if (!(totalLen > 1e-6)) return dStart;
+      if (tdDistAlong <= totalLen * 0.5) return dStart;
+      return dEnd;
     }}
 
     function getPolylinePointAndFrameAtDistance(pts, distPx) {{
@@ -7079,7 +10256,6 @@ def _build_designer_html() -> str:
 
       ctx.save();
       const thresholdColor = c2dRunwayThresholdColor();
-      const centerlineColor = c2dRunwayCenterlineColor();
       const touchdownColor = c2dRunwayTouchdownColor();
       const aimingPointColor = c2dRunwayAimingPointColor();
       const extensionFill = c2dRunwayExtensionFill();
@@ -7176,13 +10352,28 @@ def _build_designer_html() -> str:
         drawRectAtBothEnds(thresholdInset, offset, thresholdStripeLen, thresholdStripeWidth, thresholdColor);
       }});
 
-      const centerlineInset = Math.min(Math.max(runwayWidth * 1.0, 44), totalLen * 0.18);
-      const centerlineDashLen = Math.min(Math.max(runwayWidth * 0.42, 14), 28);
-      const centerlineDashWidth = Math.max(2, runwayWidth * 0.05);
-      const centerlineGap = centerlineDashLen * 0.8;
-      for (let d = centerlineInset; d <= totalLen - centerlineInset; d += centerlineDashLen + centerlineGap) {{
-        drawRectAtDistance(d, 0, centerlineDashLen, centerlineDashWidth, centerlineColor);
-      }}
+      (function drawRunwayCenterlineDashed() {{
+        const paveStart = startDisp + startBlast;
+        const paveEnd = totalLen - endDisp - endBlast;
+        if (!(paveEnd > paveStart + 1)) return;
+        const clPts = polylineSliceBetweenDistances(pts, paveStart, paveEnd);
+        if (!clPts || clPts.length < 2) return;
+        ctx.save();
+        ctx.strokeStyle = c2dRunwayCenterlineColor();
+        ctx.lineWidth = Math.max(1, runwayWidth * 0.02);
+        const dashPx = Math.max(10, runwayWidth * 0.2);
+        const gapPx = Math.max(8, runwayWidth * 0.16);
+        ctx.setLineDash([dashPx, gapPx]);
+        ctx.lineDashOffset = 0;
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'miter';
+        ctx.beginPath();
+        ctx.moveTo(clPts[0][0], clPts[0][1]);
+        for (let ci = 1; ci < clPts.length; ci++) ctx.lineTo(clPts[ci][0], clPts[ci][1]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }})();
 
       const aimingDist = Math.min(Math.max(300, runwayWidth * 3.5), totalLen * 0.28);
       if (aimingDist < (totalLen * 0.5) - (runwayWidth * 0.6)) {{
@@ -7233,6 +10424,41 @@ def _build_designer_html() -> str:
       return [[pts[pts.length - 1][0], pts[pts.length - 1][1]]];
     }}
 
+    function polylineSliceBetweenDistances(pts, d0, d1) {{
+      if (!pts || pts.length < 2) return [];
+      const total = runwayPolylineLengthPx(pts);
+      let a = Math.max(0, Math.min(typeof d0 === 'number' ? d0 : 0, total));
+      let b = Math.max(a, Math.min(typeof d1 === 'number' ? d1 : total, total));
+      if (b - a < 1e-6) return [];
+      function pointAtDist(d) {{
+        let acc = 0;
+        for (let i = 0; i < pts.length - 1; i++) {{
+          const p1 = pts[i], p2 = pts[i + 1];
+          const segLen = pathDist(p1, p2);
+          if (segLen < 1e-9) continue;
+          if (acc + segLen >= d - 1e-6) {{
+            const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+            return {{ pt: [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])], segIndex: i }};
+          }}
+          acc += segLen;
+        }}
+        const last = pts[pts.length - 1];
+        return {{ pt: [last[0], last[1]], segIndex: Math.max(0, pts.length - 2) }};
+      }}
+      const start = pointAtDist(a);
+      const end = pointAtDist(b);
+      const out = [[start.pt[0], start.pt[1]]];
+      if (start.segIndex === end.segIndex) {{
+        if (dist2(start.pt, end.pt) > 1e-9) out.push([end.pt[0], end.pt[1]]);
+        return out;
+      }}
+      for (let si = start.segIndex + 1; si <= end.segIndex; si++) {{
+        if (si < pts.length) out.push([pts[si][0], pts[si][1]]);
+      }}
+      if (dist2(out[out.length - 1], end.pt) > 1e-9) out.push([end.pt[0], end.pt[1]]);
+      return dedupePathPoints(out);
+    }}
+
     function syncStartEndFromVertices(obj) {{
       if (!obj || !obj.vertices || obj.vertices.length < 2) return;
       const first = obj.vertices[0], last = obj.vertices[obj.vertices.length - 1];
@@ -7275,10 +10501,81 @@ def _build_designer_html() -> str:
       if (t < 0 || t > 1 || s < 0 || s > 1) return null;
       return {{ p: [ax + t * rx, ay + t * ry] }};
     }}
+    // When two segments are collinear and overlap (Runway taxiway drawn along runway centerline without a vertex on the crossing), segmentSegmentIntersection returns null. Returns overlap of cd onto ab as t in [0,1] along a→b.
+    function collinearSegmentOverlapOnAB(a, b, c, d) {{
+      const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+      const dx = bx - ax, dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 1e-12) return null;
+      const len = Math.sqrt(len2);
+      function perpDistAB(p) {{
+        return Math.abs((p[0] - ax) * dy - (p[1] - ay) * dx) / len;
+      }}
+      const lineTol = Math.max(0.55, len * 1e-9);
+      if (perpDistAB(c) > lineTol || perpDistAB(d) > lineTol) return null;
+      function tOnAB(p) {{
+        return ((p[0] - ax) * dx + (p[1] - ay) * dy) / len2;
+      }}
+      const tc = tOnAB(c), td = tOnAB(d);
+      const lo = Math.min(tc, td), hi = Math.max(tc, td);
+      const o0 = Math.max(0, lo), o1 = Math.min(1, hi);
+      if (o1 < o0 - 1e-9) return null;
+      return {{ t0: o0, t1: o1 }};
+    }}
     const SPLIT_TOL_D2 = 0.25;
     function pointOnSegmentStrict(a, b, q) {{
       const {{ p }} = projectOnSegment(a, b, q);
       return dist2(p, q) <= SPLIT_TOL_D2;
+    }}
+    function polylineTouchesPolylineForGraph(pts, otherOrd) {{
+      if (!pts || pts.length < 2 || !otherOrd || otherOrd.length < 2) return false;
+      for (let seg = 0; seg < pts.length - 1; seg++) {{
+        const a = pts[seg], b = pts[seg + 1];
+        for (let oseg = 0; oseg < otherOrd.length - 1; oseg++) {{
+          const c = otherOrd[oseg], d = otherOrd[oseg + 1];
+          if (segmentSegmentIntersection(a, b, c, d)) return true;
+          if (collinearSegmentOverlapOnAB(a, b, c, d)) return true;
+          for (let k = 0; k < 2; k++) {{
+            const q = k === 0 ? c : d;
+            if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {{
+              const pr = projectOnSegment(a, b, q);
+              if (pr.t >= 0 && pr.t <= 1) return true;
+            }}
+          }}
+        }}
+        for (let ri = 0; ri < otherOrd.length; ri++) {{
+          const q = otherOrd[ri];
+          if (pointOnSegmentStrict(a, b, q)) return true;
+        }}
+      }}
+      return false;
+    }}
+    function pointNearPolylineSq(p, pts, tolD2) {{
+      if (!p || !pts || pts.length < 2) return false;
+      const lim = (typeof tolD2 === 'number' && isFinite(tolD2) && tolD2 > 0) ? tolD2 : SPLIT_TOL_D2;
+      for (let i = 0; i < pts.length - 1; i++) {{
+        const pr = projectOnSegment(pts[i], pts[i + 1], p);
+        if (pr.t >= 0 && pr.t <= 1 && dist2(pr.p, p) <= lim) return true;
+      }}
+      return false;
+    }}
+    /** Line up 뱃지: 활주로와 접촉한 Runway Taxiway 중심선과 lineup 점이 허용 거리 이내면 true. */
+    function isLineupPointTouchingRunwayTaxiwayOnRunway(runwayTw, lineupPt) {{
+      if (!runwayTw || runwayTw.pathType !== 'runway' || !lineupPt) return false;
+      const rwPts = getOrderedPoints(runwayTw);
+      if (!rwPts || rwPts.length < 2) return false;
+      const cs = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+      const touchD2 = Math.max(SPLIT_TOL_D2, (cs * 0.2) * (cs * 0.2));
+      const list = state.taxiways || [];
+      for (let ti = 0; ti < list.length; ti++) {{
+        const tx = list[ti];
+        if (tx.pathType !== 'runway_exit') continue;
+        const rtxPts = getOrderedPoints(tx);
+        if (!rtxPts || rtxPts.length < 2) continue;
+        if (!polylineTouchesPolylineForGraph(rtxPts, rwPts) && !polylineTouchesPolylineForGraph(rwPts, rtxPts)) continue;
+        if (pointNearPolylineSq(lineupPt, rtxPts, touchD2)) return true;
+      }}
+      return false;
     }}
     function dedupePathPoints(pts) {{
       const out = [];
@@ -7366,6 +10663,20 @@ def _build_designer_html() -> str:
         exits.forEach(tw => {{
           let best = null;
           const exitName = (tw.name && tw.name.trim()) ? tw.name.trim() : ('Exit ' + String(results.length + 1));
+          function considerRunwayHit(distCells) {{
+            const distM = distCells * CELL_SIZE;
+            const maxExitVelRaw = (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0)
+              ? tw.maxExitVelocity
+              : 30;
+            const minExitVelRaw = (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
+              ? tw.minExitVelocity
+              : 15;
+            const maxExitVel = maxExitVelRaw;
+            const minExitVel = Math.min(minExitVelRaw, maxExitVel);
+            if (!best || distM < best.distM) {{
+              best = {{ runway: rw, exit: tw, name: exitName, distM, maxExitVelocity: maxExitVel, minExitVelocity: minExitVel }};
+            }}
+          }}
           tw.vertices.forEach(v => {{
             const q = [v.col, v.row];
             for (let i = 0; i < rVerts.length - 1; i++) {{
@@ -7377,20 +10688,45 @@ def _build_designer_html() -> str:
               // proj.pIs a-b point on segment
               const t = Math.max(0, Math.min(1, segLen > 0 ? pathDist(a, proj.p) / segLen : 0));
               const distCells = prefixDist[i] + segLen * t;
-              const distM = distCells * CELL_SIZE;
-              const maxExitVelRaw = (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0)
-                ? tw.maxExitVelocity
-                : 30;
-              const minExitVelRaw = (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
-                ? tw.minExitVelocity
-                : 15;
-              const maxExitVel = maxExitVelRaw;
-              const minExitVel = Math.min(minExitVelRaw, maxExitVel);
-              if (!best || distM < best.distM) {{
-                best = {{ runway: rw, exit: tw, name: exitName, distM, maxExitVelocity: maxExitVel, minExitVelocity: minExitVel }};
-              }}
+              considerRunwayHit(distCells);
             }}
           }});
+          let ev = tw.vertices.map(v => [v.col, v.row]);
+          if (tw.start_point && tw.end_point && ev.length >= 2) {{
+            const sp = [tw.start_point.col, tw.start_point.row];
+            if (dist2(ev[ev.length - 1], sp) < dist2(ev[0], sp)) ev.reverse();
+          }}
+          for (let ei = 0; ei < ev.length - 1; ei++) {{
+            const ea = ev[ei], eb = ev[ei + 1];
+            for (let i = 0; i < rVerts.length - 1; i++) {{
+              const ra = rVerts[i], rb = rVerts[i + 1];
+              const segLen = pathDist(ra, rb);
+              if (!(segLen > 1e-6)) continue;
+              function distFromRunwayPoint(q) {{
+                const proj = projectOnSegment(ra, rb, q);
+                if (proj.t < -1e-9 || proj.t > 1 + 1e-9) return;
+                if (dist2(proj.p, q) > SPLIT_TOL_D2 * 4) return;
+                const t = Math.max(0, Math.min(1, segLen > 0 ? pathDist(ra, proj.p) / segLen : 0));
+                considerRunwayHit(prefixDist[i] + segLen * t);
+              }}
+              const isec = segmentSegmentIntersection(ea, eb, ra, rb);
+              if (isec) distFromRunwayPoint(isec.p);
+              const ovRw = collinearSegmentOverlapOnAB(ra, rb, ea, eb);
+              if (ovRw) {{
+                const rax = ra[0], ray = ra[1], rbx = rb[0], rby = rb[1];
+                const rdx = rbx - rax, rdy = rby - ray;
+                distFromRunwayPoint([rax + ovRw.t0 * rdx, ray + ovRw.t0 * rdy]);
+                distFromRunwayPoint([rax + ovRw.t1 * rdx, ray + ovRw.t1 * rdy]);
+              }}
+            }}
+          }}
+          if (best) {{
+            const rwOpDir = normalizeRwDirectionValue(getTaxiwayDirection(rw));
+            if ((rwOpDir === 'clockwise' || rwOpDir === 'counter_clockwise') &&
+                !isRunwayExitDirectionAllowed(tw, rwOpDir)) {{
+              best = null;
+            }}
+          }}
           if (best) results.push(best);
         }});
       }});
@@ -7400,8 +10736,98 @@ def _build_designer_html() -> str:
       return results;
     }}
 
-    function buildPathGraph(selectedArrRetId, runwayDirectionForExit) {{
+    /** Overlap drawing only: centroid-merge points within radiusM (layout/world meters). Graph nodes unchanged. */
+    const PATH_JUNCTION_DRAW_MERGE_RADIUS_M = 2;
+    function mergeNearbyPathPointsForDraw(points, radiusM) {{
+      if (!points || !points.length) return [];
+      const r = (typeof radiusM === 'number' && isFinite(radiusM) && radiusM > 0) ? radiusM : PATH_JUNCTION_DRAW_MERGE_RADIUS_M;
+      const n = points.length;
+      const parent = [];
+      for (let i = 0; i < n; i++) parent[i] = i;
+      function dsFind(i) {{
+        if (parent[i] !== i) parent[i] = dsFind(parent[i]);
+        return parent[i];
+      }}
+      function dsUnion(i, j) {{
+        const ri = dsFind(i), rj = dsFind(j);
+        if (ri !== rj) parent[Math.max(ri, rj)] = Math.min(ri, rj);
+      }}
+      for (let i = 0; i < n; i++) {{
+        for (let j = i + 1; j < n; j++) {{
+          if (pathDist(points[i], points[j]) <= r) dsUnion(i, j);
+        }}
+      }}
+      const buckets = {{}};
+      for (let i = 0; i < n; i++) {{
+        const root = dsFind(i);
+        if (!buckets[root]) buckets[root] = [];
+        buckets[root].push(points[i]);
+      }}
+      const out = [];
+      Object.keys(buckets).forEach(function(k) {{
+        const g = buckets[k];
+        let sx = 0, sy = 0;
+        for (let t = 0; t < g.length; t++) {{ sx += g[t][0]; sy += g[t][1]; }}
+        out.push([sx / g.length, sy / g.length]);
+      }});
+      return out;
+    }}
+
+    /** BFS over runway_exit polylines that touch (vertex or near segment) so arrival can use chained RETs, not only sampledArrRet. */
+    function computeConnectedRunwayExitIds(seedId, pathList) {{
+      const out = new Set();
+      if (seedId == null) return out;
+      const rex = (pathList || []).filter(function(tw) {{
+        return tw && tw.pathType === 'runway_exit' && getOrderedPoints(tw) && getOrderedPoints(tw).length >= 2;
+      }});
+      const idToTw = {{}};
+      rex.forEach(function(tw) {{ idToTw[tw.id] = tw; }});
+      const touchD2 = Math.max(SPLIT_TOL_D2, Math.pow(CELL_SIZE * 0.2, 2));
+      function twPairTouch(twA, twB) {{
+        const p1 = getOrderedPoints(twA);
+        const p2 = getOrderedPoints(twB);
+        if (!p1 || !p2 || p1.length < 2 || p2.length < 2) return false;
+        let i, s, pr;
+        for (i = 0; i < p1.length; i++) {{
+          for (s = 0; s < p2.length - 1; s++) {{
+            pr = projectOnSegment(p2[s], p2[s + 1], p1[i]);
+            if (dist2(pr.p, p1[i]) <= touchD2) return true;
+          }}
+        }}
+        for (i = 0; i < p2.length; i++) {{
+          for (s = 0; s < p1.length - 1; s++) {{
+            pr = projectOnSegment(p1[s], p1[s + 1], p2[i]);
+            if (dist2(pr.p, p2[i]) <= touchD2) return true;
+          }}
+        }}
+        return false;
+      }}
+      if (!idToTw[seedId]) {{
+        out.add(seedId);
+        return out;
+      }}
+      const queue = [seedId];
+      out.add(seedId);
+      while (queue.length) {{
+        const curId = queue.shift();
+        const curTw = idToTw[curId];
+        if (!curTw) continue;
+        rex.forEach(function(tw) {{
+          if (out.has(tw.id)) return;
+          if (twPairTouch(tw, curTw)) {{
+            out.add(tw.id);
+            queue.push(tw.id);
+          }}
+        }});
+      }}
+      return out;
+    }}
+
+    function buildPathGraph(selectedArrRetId, runwayDirectionForExit, pathGraphOpts) {{
+      const opts = pathGraphOpts && typeof pathGraphOpts === 'object' ? pathGraphOpts : {{}};
+      const pureGroundExcludeRunway = !!opts.pureGroundExcludeRunway;
       const nodes = [], keyToIdx = {{}}, edges = [], adj = [], junctionPts = [], junctionKeys = {{}}, edgeMap = {{}};
+      const runwayNodeIndicesById = {{}};
       function addJunction(p) {{
         const k = pathPointKey(p);
         if (junctionKeys[k]) return;
@@ -7450,6 +10876,9 @@ def _build_designer_html() -> str:
       }}
 
       const pathList = state.taxiways || [];
+      const connectedRunwayExitIds = (selectedArrRetId != null)
+        ? computeConnectedRunwayExitIds(selectedArrRetId, pathList)
+        : null;
       const apronNodeStand = [];
       const minD2 = 1e-6;
       pathList.forEach(obj => {{
@@ -7469,6 +10898,19 @@ def _build_designer_html() -> str:
                 const {{ t }} = projectOnSegment(a, b, isec.p);
                 junctions.push({{ tAlong: seg + t, p: isec.p }});
               }} else {{
+                const ov = collinearSegmentOverlapOnAB(a, b, c, d);
+                if (ov) {{
+                  const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+                  const dx = bx - ax, dy = by - ay;
+                  const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
+                  const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
+                  const pr0 = projectOnSegment(a, b, p0);
+                  junctions.push({{ tAlong: seg + pr0.t, p: pr0.p }});
+                  if (dist2(p0, p1ov) > SPLIT_TOL_D2) {{
+                    const pr1 = projectOnSegment(a, b, p1ov);
+                    junctions.push({{ tAlong: seg + pr1.t, p: pr1.p }});
+                  }}
+                }} else {{
                 // If it is a collinear line, the intersection is null. If endpoints overlap, add them as junctions (Runway-taxiway ends connected)
                 [c, d].forEach(function(q, idx) {{
                   if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {{
@@ -7476,6 +10918,7 @@ def _build_designer_html() -> str:
                     if (t >= 0 && t <= 1) junctions.push({{ tAlong: seg + t, p: proj }});
                   }}
                 }});
+                }}
               }}
             }}
             otherOrd.forEach(q => {{
@@ -7494,7 +10937,7 @@ def _build_designer_html() -> str:
                 junctions.push({{ tAlong: seg + t, p }});
                 const pbb = findStandById(lk.pbbId);
                 if (pbb) {{
-                  const standPt = (pbb.x2 != null && pbb.y2 != null) ? [Number(pbb.x2), Number(pbb.y2)] : cellToPixel(pbb.col || 0, pbb.row || 0);
+                  const standPt = getStandConnectionPx(pbb);
                   const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) {{ return cellToPixel(Number(v.col), Number(v.row)); }});
                   const chain = [standPt].concat(mids).concat([p]);
                   apronNodeStand.push({{ nodeP: p, standPt, standId: lk.pbbId, chain }});
@@ -7542,6 +10985,12 @@ def _build_designer_html() -> str:
           chain.push({{ tAlong: wp.tAlong, p: wp.p, isJunction: !!wp.isJunction }});
           if (wp.isJunction) addJunction(wp.p);
         }});
+        if (obj.pathType === 'runway') {{
+          const runwayNodeSet = runwayNodeIndicesById[obj.id] || (runwayNodeIndicesById[obj.id] = new Set());
+          chain.forEach(function(wp) {{
+            runwayNodeSet.add(getOrAdd(wp.p));
+          }});
+        }}
         const dir = getTaxiwayDirection(obj);
         const isRunwayExit = obj.pathType === 'runway_exit';
         const isTaxiway = obj.pathType === 'taxiway';
@@ -7552,10 +11001,11 @@ def _build_designer_html() -> str:
           if (isRunwayExit && !isRunwayExitDirectionAllowed(obj, runwayDirectionForExit)) {{
             cost = REVERSE_COST;
           }}
-          if (selectedArrRetId != null) {{
-            if (isRunwayExit && obj.id !== selectedArrRetId) cost = REVERSE_COST;
+          if (selectedArrRetId != null && connectedRunwayExitIds != null) {{
+            if (isRunwayExit && !connectedRunwayExitIds.has(obj.id)) cost = REVERSE_COST;
             else if (isTaxiway) cost = d + TAXIWAY_HEURISTIC_COST;
           }}
+          if (pureGroundExcludeRunway && obj.pathType === 'runway') cost = REVERSE_COST;
           addEdgeWithDirection(chain[i].p, chain[i + 1].p, dir, cost, d, segPts);
         }}
       }});
@@ -7563,21 +11013,21 @@ def _build_designer_html() -> str:
       const standNodeIndices = [];
       const standIdToNodeIndex = {{}};
       apronNodeStand.forEach(({{ nodeP, standPt, standId, chain }}) => {{
+        const i = getOrAdd(nodeP);
         const j = getOrAdd(standPt);
         standNodeIndices.push(j);
         if (standId != null) standIdToNodeIndex[standId] = j;
-        const pts = (chain && chain.length >= 2) ? chain : [nodeP, standPt];
-        for (let k = 0; k < pts.length - 1; k++) {{
-          const a = pts[k], b = pts[k + 1];
-          const ia = getOrAdd(a), ib = getOrAdd(b);
-          if (ia === ib) continue;
-          const d = pathDist(nodes[ia], nodes[ib]);
-          if (d < 1e-6) continue;
-          adj[ia].push([ib, d]);
-          adj[ib].push([ia, d]);
-          registerDirectedEdge(ia, ib, d, d, [nodes[ia], nodes[ib]]);
-          registerDirectedEdge(ib, ia, d, d, [nodes[ib], nodes[ia]]);
-        }}
+        const pts = (chain && chain.length >= 2) ? dedupePathPoints(chain) : [nodeP, standPt];
+        if (!pts || pts.length < 2 || i === j) return;
+        let totalDist = 0;
+        for (let k = 0; k < pts.length - 1; k++) totalDist += pathDist(pts[k], pts[k + 1]);
+        if (!(totalDist > 1e-6)) return;
+        adj[i].push([j, totalDist]);
+        adj[j].push([i, totalDist]);
+        // i=taxiway junction, j=stand: forward polyline must match traversal direction
+        // (was reversed: P→stand used [stand..p] and drew stand→..→p after already at P).
+        registerDirectedEdge(i, j, totalDist, totalDist, pts.slice().reverse());
+        registerDirectedEdge(j, i, totalDist, totalDist, pts);
       }});
       // BFS: cost < REVERSE_COSTA set of nodes that can be reached only along an edge.
       function bfsReachable(startIndices) {{
@@ -7630,15 +11080,17 @@ def _build_designer_html() -> str:
         const i = keyToIdx[pathPointKey(p)];
         return i != null && connected.has(i);
       }});
+      const connectedJunctionsMerged = mergeNearbyPathPointsForDraw(connectedJunctionsForDraw, PATH_JUNCTION_DRAW_MERGE_RADIUS_M);
       return {{
         nodes,
         edges,
         adj,
         edgeMap,
         getOrAdd,
-        junctions: connectedJunctionsForDraw,
+        runwayNodeIndicesById,
+        junctions: connectedJunctionsMerged,
         validJunctions: validJunctionsForDraw,
-        connectedJunctions: connectedJunctionsForDraw,
+        connectedJunctions: connectedJunctionsMerged,
         standIdToNodeIndex
       }};
     }}
@@ -7761,6 +11213,7 @@ def _build_designer_html() -> str:
       const n = g.nodes.length;
       const dist = Array(n).fill(Infinity);
       const prev = Array(n).fill(null);
+      if (startIdx == null || endIdx == null) return null;
       dist[startIdx] = 0;
       const heap = new MinHeap();
       heap.push([0, startIdx]);
@@ -7791,6 +11244,16 @@ def _build_designer_html() -> str:
       }}
       return best;
     }}
+    function nearestPathNodeFromSet(g, nodeSet, p) {{
+      if (!g || !g.nodes || !g.nodes.length || !nodeSet || !nodeSet.size) return null;
+      let best = null, bestD2 = Infinity;
+      nodeSet.forEach(function(idx) {{
+        if (idx == null || !g.nodes[idx]) return;
+        const d2 = dist2(g.nodes[idx], p);
+        if (d2 < bestD2) {{ bestD2 = d2; best = idx; }}
+      }});
+      return best;
+    }}
 
     function pathTotalDist(g, pathIndices) {{
       let d = 0;
@@ -7802,20 +11265,77 @@ def _build_designer_html() -> str:
       return d;
     }}
 
-    function graphPathArrival(f) {{
+    // RET 허용 방향 필터: graphPathArrival에서 확정된 arrRunwayDirUsed가 없을 때도,
+    // RET 미고정 상태와 동일한 CW/CCW 최단경로 규칙으로 "실제 진입 방향"을 정해 Runway Taxiway 체크와 맞춘다.
+    function probePreferredArrivalRunwayDir(f) {{
       const token = f.token || {{}};
       let runwayId = token.arrRunwayId || token.runwayId || f.arrRunwayId;
       const apronId = f.standId != null ? f.standId : (token.apronId || null);
-      if (!apronId) return null;
+      if (!apronId || runwayId == null || runwayId === '') return 'both';
+      const r = getRunwayPath(runwayId);
+      if (!r || !findStandById(apronId)) return 'both';
+      function solveByRunwayDir(rwDir) {{
+        const runwayPx = rwDir === 'counter_clockwise' ? r.endPx : r.startPx;
+        const excludeRunwayGround = DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT !== true;
+        const gFull = buildPathGraph(null, rwDir, {{ pureGroundExcludeRunway: excludeRunwayGround }});
+        const endNodeFull = gFull.standIdToNodeIndex && gFull.standIdToNodeIndex[apronId];
+        if (endNodeFull == null) return {{ chosen: null }};
+        const g = buildPathGraph(null, rwDir);
+        const endNode = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
+        if (endNode == null) return {{ chosen: null }};
+        const startNode = nearestPathNode(g, runwayPx);
+        const p = pathDijkstra(g, startNode, endNode);
+        if (!p || p.length < 2) return {{ chosen: null }};
+        const d = pathTotalDist(g, p);
+        if (!(d < REVERSE_COST)) return {{ chosen: null }};
+        return {{ chosen: {{ totalD: d, runwayDir: rwDir }} }};
+      }}
+      const candCw = solveByRunwayDir('clockwise').chosen;
+      const candCcw = solveByRunwayDir('counter_clockwise').chosen;
+      let chosen = candCw;
+      if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) chosen = candCcw;
+      if (!chosen || !chosen.runwayDir) return 'both';
+      return chosen.runwayDir;
+    }}
+    function resolveArrivalRunwayDirForRetGate(f) {{
+      const fromFlight = normalizeRwDirectionValue(f.arrRunwayDirUsed);
+      if (fromFlight === 'clockwise' || fromFlight === 'counter_clockwise') return fromFlight;
+      const probed = probePreferredArrivalRunwayDir(f);
+      if (probed === 'clockwise' || probed === 'counter_clockwise') return probed;
+      return 'both';
+    }}
+
+    function graphPathArrival(f) {{
+      f._noWayArrDetail = '';
+      const token = f.token || {{}};
+      let runwayId = token.arrRunwayId || token.runwayId || f.arrRunwayId;
+      const apronId = f.standId != null ? f.standId : (token.apronId || null);
+      if (!apronId) {{
+        f.noWayArr = true;
+        f._noWayArrDetail = '게이트(스탠드)가 없습니다. 스케줄·배정 또는 기종·터미널 조건으로 주기장을 찾지 못했을 수 있습니다.';
+        return null;
+      }}
       if (!runwayId && state.taxiways && state.taxiways.length) {{
         const runways = state.taxiways.filter(t => t.pathType === 'runway' && t.vertices && t.vertices.length >= 2);
         if (runways.length) runwayId = runways[Math.floor(Math.random() * runways.length)].id;
       }}
-      if (!runwayId) return null;
+      if (!runwayId) {{
+        f.noWayArr = true;
+        f._noWayArrDetail = '도착 활주로가 지정되지 않았고 레이아웃에 활주로 정의도 없습니다.';
+        return null;
+      }}
       const r = getRunwayPath(runwayId);
-      if (!r) return null;
+      if (!r) {{
+        f.noWayArr = true;
+        f._noWayArrDetail = '도착 활주로 폴리라인을 불러오지 못했습니다.';
+        return null;
+      }}
       const stand = findStandById(apronId);
-      if (!stand) return null;
+      if (!stand) {{
+        f.noWayArr = true;
+        f._noWayArrDetail = '스탠드 ID가 레이아웃에 없습니다.';
+        return null;
+      }}
       const selectedArrRetId = f.sampledArrRet != null ? f.sampledArrRet : null;
       const validSelectedArrRetId = (selectedArrRetId != null && (state.taxiways || []).some(function(t) {{
         return t && t.id === selectedArrRetId && t.pathType === 'runway_exit';
@@ -7826,51 +11346,132 @@ def _build_designer_html() -> str:
         f.arrRotSec = null;
       }}
       function solveByRunwayDir(rwDir) {{
+        const dirTag = rwDir === 'clockwise' ? '(시계) ' : '(반시계) ';
+        const runwayPx = rwDir === 'counter_clockwise' ? r.endPx : r.startPx;
+        const excludeRunwayGround = DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT !== true;
+        const gFullOpts = {{ pureGroundExcludeRunway: excludeRunwayGround }};
+        const gFull = buildPathGraph(null, rwDir, gFullOpts);
+        const endNodeFull = gFull.standIdToNodeIndex && gFull.standIdToNodeIndex[apronId];
+        if (endNodeFull == null) {{
+          return {{
+            chosen: null,
+            hint: dirTag + '순전 지상 그래프에 스탠드가 연결되어 있지 않습니다. 에이프런 링크·택시웨이를 확인하세요. (활주로 중심선을 순전 지상에 쓰려면 Information.json의 flight_schedule.defaultAllowRunwayInGroundSegment를 true로 두세요.)'
+          }};
+        }}
+        if (validSelectedArrRetId != null) {{
+          const retTw = (state.taxiways || []).find(function(t) {{
+            return t && t.id === validSelectedArrRetId && t.pathType === 'runway_exit';
+          }});
+          const rPts = retTw ? getOrderedPoints(retTw) : null;
+          if (rPts && rPts.length >= 2) {{
+            const retEndPx = rPts[rPts.length - 1];
+            const g1 = buildPathGraph(validSelectedArrRetId, rwDir);
+            const startNode = nearestPathNode(g1, runwayPx);
+            const pivotIdx = nearestPathNode(g1, retEndPx);
+            const pivotIdxFull = nearestPathNode(gFull, g1.nodes[pivotIdx] || retEndPx);
+            const p1 = pathDijkstra(g1, startNode, pivotIdx);
+            const p2 = (p1 && p1.length) ? pathDijkstra(gFull, pivotIdxFull, endNodeFull) : null;
+            if (p1 && p1.length >= 2 && p2 && p2.length >= 2) {{
+              const merged = (pivotIdx === pivotIdxFull) ? p1.concat(p2.slice(1)) : p1.slice(0, -1).concat(p2);
+              const d = pathTotalDist(g1, p1) + pathTotalDist(gFull, p2);
+              if (d < REVERSE_COST) {{
+                return {{ chosen: {{ g: gFull, pathIndices: merged, totalD: d, runwayDir: rwDir }}, hint: '' }};
+              }}
+            }}
+          }}
+        }}
+        // 분할 경로(g1→gFull)가 실패해도 통합 그래프(활주로 포함)로 이어서 시도한다. RET 연쇄·지상 단절 시 분할만으로는 실패할 수 있음.
         const g = buildPathGraph(validSelectedArrRetId, rwDir);
         const endNode = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
-        if (endNode == null) return null;
-        const runwayPx = rwDir === 'counter_clockwise' ? r.endPx : r.startPx;
+        if (endNode == null) {{
+          return {{
+            chosen: null,
+            hint: dirTag + '경로 그래프에 스탠드 노드가 없습니다.'
+          }};
+        }}
         const startNode = nearestPathNode(g, runwayPx);
         const p = pathDijkstra(g, startNode, endNode);
-        if (!p || p.length < 2) return null;
+        if (!p || p.length < 2) {{
+          return {{
+            chosen: null,
+            hint: dirTag + '활주로 쪽에서 스탠드까지 그래프가 끊어져 있습니다.'
+          }};
+        }}
         const d = pathTotalDist(g, p);
-        if (!(d < REVERSE_COST)) return null;
-        return {{ g: g, pathIndices: p, totalD: d, runwayDir: rwDir }};
+        if (!(d < REVERSE_COST)) {{
+          return {{
+            chosen: null,
+            hint: dirTag + '택시 경로 비용이 허용 한도를 초과했습니다(역방향·금지 구간).'
+          }};
+        }}
+        return {{ chosen: {{ g: g, pathIndices: p, totalD: d, runwayDir: rwDir }}, hint: '' }};
       }}
-      const candCw = solveByRunwayDir('clockwise');
-      const candCcw = solveByRunwayDir('counter_clockwise');
+      const tryCw = solveByRunwayDir('clockwise');
+      const tryCcw = solveByRunwayDir('counter_clockwise');
+      const candCw = tryCw.chosen;
+      const candCcw = tryCcw.chosen;
       let chosen = candCw;
       if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) chosen = candCcw;
       if (!chosen) {{
         f.noWayArr = true;
+        const hints = [tryCw.hint, tryCcw.hint].filter(function(h) {{ return h && String(h).trim(); }});
+        f._noWayArrDetail = hints.length ? Array.from(new Set(hints)).join(' ') : '시계·반시계 모두 도착 택시 경로를 찾지 못했습니다.';
         return null;
       }}
       f.noWayArr = false;
+      f._noWayArrDetail = '';
       state.pathGraphJunctions = chosen.g.junctions || [];
       f.arrRunwayDirUsed = chosen.runwayDir;
       return buildPathFromIndices(chosen.g, chosen.pathIndices);
     }}
 
-    function graphPathDeparture(f) {{
+    function graphPathDeparture(f, opts) {{
+      f._noWayDepDetail = '';
+      opts = opts || {{}};
+      const onlyToLineup = !!opts.onlyToLineup;
       const token = f.token || {{}};
       let runwayId = token.depRunwayId || token.runwayId || f.depRunwayId || f.arrRunwayId;
       const apronId = f.standId != null ? f.standId : (token.apronId || null);
-      if (!apronId) return null;
+      if (!apronId) {{
+        f.noWayDep = true;
+        f._noWayDepDetail = '게이트(스탠드)가 없어 출발 경로를 시작할 수 없습니다.';
+        return null;
+      }}
       if (!runwayId && state.taxiways && state.taxiways.length) {{
         const runways = state.taxiways.filter(t => t.pathType === 'runway' && t.vertices && t.vertices.length >= 2);
         if (runways.length) runwayId = runways[Math.floor(Math.random() * runways.length)].id;
       }}
-      if (!runwayId) return null;
+      if (!runwayId) {{
+        f.noWayDep = true;
+        f._noWayDepDetail = '출발 활주로가 없습니다.';
+        return null;
+      }}
       const r = getRunwayPath(runwayId);
-      if (!r) return null;
+      if (!r) {{
+        f.noWayDep = true;
+        f._noWayDepDetail = '출발 활주로 폴리라인을 불러오지 못했습니다.';
+        return null;
+      }}
       const rwTw = (state.taxiways || []).find(t => t.id === runwayId && t.pathType === 'runway');
       const stand = findStandById(apronId);
-      if (!stand) return null;
+      if (!stand) {{
+        f.noWayDep = true;
+        f._noWayDepDetail = '스탠드 ID가 레이아웃에 없습니다.';
+        return null;
+      }}
       const useLineup = rwTw && rwTw.pathType === 'runway';
+      const runwayDirPref = normalizeRwDirectionValue(getTaxiwayDirection(rwTw));
       function solveDepartureByRunwayDir(rwDir) {{
-        const g = buildPathGraph(null, rwDir);
+        const dirTag = rwDir === 'clockwise' ? '(시계) ' : '(반시계) ';
+        const excludeRg = DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT !== true;
+        const g = buildPathGraph(null, rwDir, {{ pureGroundExcludeRunway: excludeRg }});
         const startIdx = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
-        if (startIdx == null) return null;
+        if (startIdx == null) {{
+          return {{
+            chosen: null,
+            hint: dirTag + '순전 지상 그래프에 스탠드가 없습니다. 에이프런 링크를 확인하세요. (필요 시 Information.json flight_schedule.defaultAllowRunwayInGroundSegment.)'
+          }};
+        }}
         const useReverse = rwDir === 'counter_clockwise';
         const rPts = useReverse ? r.pts.slice().reverse() : r.pts.slice();
         const rStart = rPts[0];
@@ -7881,13 +11482,36 @@ def _build_designer_html() -> str:
           const dPx = Math.min(Math.max(0, ldm), lenPx);
           const lineupFrame = getPolylinePointAndFrameAtDistance(rPts, dPx);
           const lineupPx = lineupFrame ? lineupFrame.point : null;
-          if (!lineupPx) return null;
-          const lineupIdx = nearestPathNode(g, lineupPx);
+          if (!lineupPx) {{
+            return {{
+              chosen: null,
+              hint: dirTag + '활주로 라인업 지점을 계산하지 못했습니다.'
+            }};
+          }}
+          const runwayNodeSet = new Set(
+            g.runwayNodeIndicesById && g.runwayNodeIndicesById[runwayId]
+              ? Array.from(g.runwayNodeIndicesById[runwayId])
+              : []
+          );
+          const lineupIdx = nearestPathNodeFromSet(g, runwayNodeSet, lineupPx) ?? nearestPathNode(g, lineupPx);
           const pathIndices = pathDijkstra(g, startIdx, lineupIdx);
           const totalD = pathIndices ? pathTotalDist(g, pathIndices) : Infinity;
-          if (!pathIndices || pathIndices.length < 2 || totalD >= REVERSE_COST) return null;
+          if (!pathIndices || pathIndices.length < 2 || totalD >= REVERSE_COST) {{
+            return {{
+              chosen: null,
+              hint: dirTag + '스탠드에서 라인업 지점까지 경로가 없거나 금지 비용 한도를 초과했습니다.'
+            }};
+          }}
           let pts = buildPathFromIndices(g, pathIndices);
-          if (!pts || pts.length < 2) return null;
+          if (!pts || pts.length < 2) {{
+            return {{
+              chosen: null,
+              hint: dirTag + '라인업 구간 폴리라인을 만들지 못했습니다.'
+            }};
+          }}
+          if (onlyToLineup) {{
+            return {{ chosen: {{ pts: pts, runwayDir: rwDir, totalD: totalD, g: g }}, hint: '' }};
+          }}
           const tail = polylineTailFromDistancePx(rPts, dPx);
           if (tail.length) {{
             const last = pts[pts.length - 1];
@@ -7899,37 +11523,124 @@ def _build_designer_html() -> str:
             const last = pts[pts.length - 1];
             if (pathDist(last, rEnd) > 1e-3) pts.push([rEnd[0], rEnd[1]]);
           }}
-          return {{ pts: pts, runwayDir: rwDir, totalD: totalD, g: g }};
+          return {{ chosen: {{ pts: pts, runwayDir: rwDir, totalD: totalD, g: g }}, hint: '' }};
         }}
         const runwayTargetIdx = nearestPathNode(g, rStart);
         const pathIndices = pathDijkstra(g, startIdx, runwayTargetIdx);
         const totalD = pathIndices ? pathTotalDist(g, pathIndices) : Infinity;
-        if (!pathIndices || pathIndices.length < 2 || totalD >= REVERSE_COST) return null;
+        if (!pathIndices || pathIndices.length < 2 || totalD >= REVERSE_COST) {{
+          return {{
+            chosen: null,
+            hint: dirTag + '스탠드에서 활주로 쪽 접점까지 경로가 없거나 금지 비용을 초과했습니다.'
+          }};
+        }}
         const pts = buildPathFromIndices(g, pathIndices);
-        if (!pts || pts.length < 2) return null;
-        return {{ pts: pts, runwayDir: rwDir, totalD: totalD, g: g }};
+        if (!pts || pts.length < 2) {{
+          return {{
+            chosen: null,
+            hint: dirTag + '출발 택시 폴리라인을 만들지 못했습니다.'
+          }};
+        }}
+        return {{ chosen: {{ pts: pts, runwayDir: rwDir, totalD: totalD, g: g }}, hint: '' }};
       }}
-      const candCw = solveDepartureByRunwayDir('clockwise');
-      const candCcw = solveDepartureByRunwayDir('counter_clockwise');
-      let chosen = candCw;
-      if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) chosen = candCcw;
+      let chosen = null;
+      let depFailHints = [];
+      if (runwayDirPref === 'clockwise' || runwayDirPref === 'counter_clockwise') {{
+        const one = solveDepartureByRunwayDir(runwayDirPref);
+        chosen = one.chosen;
+        if (!chosen && one.hint) depFailHints.push(one.hint);
+      }} else {{
+        const tryCw = solveDepartureByRunwayDir('clockwise');
+        const tryCcw = solveDepartureByRunwayDir('counter_clockwise');
+        const candCw = tryCw.chosen;
+        const candCcw = tryCcw.chosen;
+        chosen = candCw;
+        if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) chosen = candCcw;
+        if (!chosen) {{
+          if (tryCw.hint) depFailHints.push(tryCw.hint);
+          if (tryCcw.hint) depFailHints.push(tryCcw.hint);
+        }}
+      }}
       if (!chosen) {{
         f.noWayDep = true;
+        const uniq = Array.from(new Set(depFailHints.filter(function(h) {{ return h && String(h).trim(); }})));
+        f._noWayDepDetail = uniq.length ? uniq.join(' ') : '출발 택시 경로를 찾지 못했습니다.';
         return null;
       }}
       f.noWayDep = false;
+      f._noWayDepDetail = '';
       f.depRunwayDirUsed = chosen.runwayDir;
       return chosen.pts;
     }}
 
+    function clonePathPtsForCache(pts) {{
+      if (!Array.isArray(pts) || pts.length < 2) return null;
+      const out = [];
+      for (let i = 0; i < pts.length; i++) {{
+        const p = pts[i];
+        if (Array.isArray(p) && p.length >= 2) out.push([Number(p[0]), Number(p[1])]);
+      }}
+      return out.length >= 2 ? out : null;
+    }}
+
+    /** Matches graphPathArrival validSelectedArrRetId: RET id that constrains arrival polyline, or '' if none. */
+    function normalizedArrRetCacheKey(f) {{
+      const id = f.sampledArrRet != null ? f.sampledArrRet : null;
+      if (id == null) return '';
+      const ok = (state.taxiways || []).some(function(t) {{
+        return t && t.id === id && t.pathType === 'runway_exit';
+      }});
+      return ok ? String(id) : '';
+    }}
+
     function getPathForFlight(f) {{
       resolveStand(f);
-      return graphPathArrival(f);
+      const arrRetKey = normalizedArrRetCacheKey(f);
+      if (
+        f._pathPolylineCacheRev === state.pathPolylineCacheRev &&
+        String(f._pathPolylineArrRetKey || '') === arrRetKey &&
+        Array.isArray(f.cachedArrPathPts) &&
+        f.cachedArrPathPts.length >= 2 &&
+        !f.noWayArr
+      ) {{
+        return f.cachedArrPathPts;
+      }}
+      const pts = graphPathArrival(f);
+      if (pts && pts.length >= 2 && !f.noWayArr) {{
+        const cloned = clonePathPtsForCache(pts);
+        if (cloned) {{
+          f.cachedArrPathPts = cloned;
+          f._pathPolylineCacheRev = state.pathPolylineCacheRev;
+          f._pathPolylineArrRetKey = normalizedArrRetCacheKey(f);
+        }}
+      }} else {{
+        delete f.cachedArrPathPts;
+        delete f._pathPolylineArrRetKey;
+      }}
+      return pts;
     }}
 
     function getPathForFlightDeparture(f) {{
       resolveStand(f);
-      return graphPathDeparture(f);
+      if (
+        f._pathPolylineCacheRev === state.pathPolylineCacheRev &&
+        Array.isArray(f.cachedDepPathPts) &&
+        f.cachedDepPathPts.length >= 2 &&
+        !f.noWayDep
+      ) {{
+        return f.cachedDepPathPts;
+      }}
+      const pts = graphPathDeparture(f);
+      if (pts && pts.length >= 2 && !f.noWayDep) {{
+        const cloned = clonePathPtsForCache(pts);
+        if (cloned) {{
+          f.cachedDepPathPts = cloned;
+          f._pathPolylineCacheRev = state.pathPolylineCacheRev;
+        }}
+      }} else {{
+        delete f.cachedDepPathPts;
+      }}
+      return pts;
     }}
 
     function ensureFlightPaths(f) {{
@@ -7948,8 +11659,10 @@ def _build_designer_html() -> str:
       const axisStep = span <= 60 ? TICK_STEP_SPAN_LE60 : (span <= 240 ? TICK_STEP_SPAN_LE240 : TICK_STEP_ELSE);
       let ticks = [];
       let tt = Math.floor(minT / axisStep) * axisStep;
-      while (tt <= maxT) {{
-        ticks.push({{ leftPct: ((tt - baseMinT) / baseSpan) * 100 * zoom, label: formatMinutesToHHMM(tt) }});
+      while (tt + 1e-9 < minT) tt += axisStep;
+      while (tt <= maxT + 1e-9) {{
+        const leftPct = baseSpan > 1e-9 ? ((tt - baseMinT) / baseSpan) * 100 * zoom : 0;
+        ticks.push({{ leftPct: leftPct, label: formatMinutesToHHMM(tt) }});
         tt += axisStep;
       }}
       if (ticks.length > MAX_TICKS_SHOWN) {{
@@ -7967,30 +11680,81 @@ def _build_designer_html() -> str:
       resolveStand(flight);
       if (direction === 'arrival') {{
         const pts = graphPathArrival(flight);
-        const timeline = (!flight.noWayArr && pts && pts.length >= 2)
-          ? buildArrivalTimelineFromPts(flight, pts)
-          : null;
-        return {{ pts: pts || null, timeline }};
+        if (pts && pts.length >= 2 && !flight.noWayArr) {{
+          const cloned = clonePathPtsForCache(pts);
+          if (cloned) {{
+            flight.cachedArrPathPts = cloned;
+            flight._pathPolylineCacheRev = state.pathPolylineCacheRev;
+            flight._pathPolylineArrRetKey = normalizedArrRetCacheKey(flight);
+          }}
+        }} else {{
+          delete flight.cachedArrPathPts;
+          delete flight._pathPolylineArrRetKey;
+        }}
+        return {{ pts: pts || null, timeline: null }};
       }}
       const pts = graphPathDeparture(flight);
-      const timeline = (!flight.noWayDep && pts && pts.length >= 2)
-        ? buildDepartureTimelineFromPts(flight, pts)
-        : null;
-      return {{ pts: pts || null, timeline }};
+      if (pts && pts.length >= 2 && !flight.noWayDep) {{
+        const cloned = clonePathPtsForCache(pts);
+        if (cloned) {{
+          flight.cachedDepPathPts = cloned;
+          flight._pathPolylineCacheRev = state.pathPolylineCacheRev;
+        }}
+      }} else {{
+        delete flight.cachedDepPathPts;
+      }}
+      return {{ pts: pts || null, timeline: null }};
     }}
 
-    function updateAllFlightPaths() {{
-      if (!state.flights || !state.flights.length) {{ draw(); return; }}
-      state.flights.forEach(f => {{
-        const arr = computeFlightPath(f, 'arrival');
+    // Global Update(onDone 제공) 시에만 경로 탐색을 비동기 청크로 돌리며 오버레이에 항공 경로 i/N 표시.
+    const FLIGHT_PATH_PROGRESS_PCT_START = 22;
+    const FLIGHT_PATH_PROGRESS_PCT_END = 48;
+    const PATH_DIRECTION_ARROWS_MAX = 48;
+    function updateAllFlightPaths(onDone) {{
+      if (!state.flights || !state.flights.length) {{
+        draw();
+        if (typeof onDone === 'function') onDone();
+        return;
+      }}
+      const flights = state.flights;
+      const asyncDone = typeof onDone === 'function';
+      function applyPathsForFlight(f) {{
+        computeFlightPath(f, 'arrival');
         computeFlightPath(f, 'departure');
         if (f.noWayArr || f.noWayDep) f.timeline = null;
-        else if (arr.timeline && arr.timeline.length) f.timeline = arr.timeline;
-      }});
-      if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-      // Update path only: Allocation/bar chart/List without touching the apron layout·Update only the canvas
-      if (typeof renderFlightList === 'function') renderFlightList(true);
-      draw();
+      }}
+      function finishPaths() {{
+        if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines();
+        if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+        if (typeof renderFlightList === 'function') renderFlightList(true);
+        draw();
+        if (asyncDone) onDone();
+      }}
+      if (!asyncDone) {{
+        flights.forEach(applyPathsForFlight);
+        finishPaths();
+        return;
+      }}
+      const totalFlights = flights.length;
+      let i = 0;
+      function pathChunk() {{
+        if (i >= totalFlights) {{
+          finishPaths();
+          return;
+        }}
+        applyPathsForFlight(flights[i]);
+        i++;
+        if (typeof setGlobalUpdateProgressUi === 'function') {{
+          const span = FLIGHT_PATH_PROGRESS_PCT_END - FLIGHT_PATH_PROGRESS_PCT_START;
+          const pct = totalFlights > 0
+            ? FLIGHT_PATH_PROGRESS_PCT_START + Math.round(span * (i / totalFlights))
+            : FLIGHT_PATH_PROGRESS_PCT_START;
+          setGlobalUpdateProgressUi(true, '항공 경로 ' + i + '/' + totalFlights, pct);
+        }}
+        if (i < totalFlights) setTimeout(pathChunk, 0);
+        else finishPaths();
+      }}
+      setTimeout(pathChunk, 0);
     }}
 
     function drawPathJunctions() {{
@@ -8070,16 +11834,66 @@ def _build_designer_html() -> str:
       ctx.lineWidth = Math.max(4, CELL_SIZE * 0.12);
       ctx.strokeStyle = c2dObjectSelectedStroke();
       ctx.stroke();
-      layoutEdgePath();
-      ctx.save();
-      ctx.setLineDash([8, 6]);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = c2dObjectSelectedDashStroke();
-      ctx.stroke();
-      ctx.restore();
       ctx.restore();
     }}
 
+    function polylineLengthPx(pathPts) {{
+      let total = 0;
+      for (let i = 1; i < pathPts.length; i++) total += pathDist(pathPts[i - 1], pathPts[i]);
+      return total;
+    }}
+    function pointAlongPolylinePx(pathPts, distPx) {{
+      if (!Array.isArray(pathPts) || pathPts.length < 2) return null;
+      let remain = Math.max(0, Number(distPx) || 0);
+      for (let i = 1; i < pathPts.length; i++) {{
+        const p0 = pathPts[i - 1];
+        const p1 = pathPts[i];
+        const segLen = pathDist(p0, p1);
+        if (!(segLen > 1e-6)) continue;
+        if (remain <= segLen) {{
+          const t = remain / segLen;
+          return [p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t];
+        }}
+        remain -= segLen;
+      }}
+      return pathPts[pathPts.length - 1];
+    }}
+    function drawPolylineDirectionArrows(pathPts, strokeStyle, arrowFill, lineWidth, spacingPx, headSizePx) {{
+      if (!Array.isArray(pathPts) || pathPts.length < 2) return;
+      const totalLen = polylineLengthPx(pathPts);
+      if (!(totalLen > 1e-6)) return;
+      const spacing = Math.max(16, spacingPx || 42);
+      let arrowCount = 0;
+      for (let distPx = spacing * 0.75; distPx < totalLen && arrowCount < PATH_DIRECTION_ARROWS_MAX; distPx += spacing) {{
+        const tail = pointAlongPolylinePx(pathPts, distPx - Math.max(6, headSizePx * 0.9));
+        const tip = pointAlongPolylinePx(pathPts, distPx);
+        if (!tail || !tip) continue;
+        const dx = tip[0] - tail[0];
+        const dy = tip[1] - tail[1];
+        const len = Math.hypot(dx, dy);
+        if (!(len > 1e-6)) continue;
+        const ux = dx / len;
+        const uy = dy / len;
+        const px = -uy;
+        const py = ux;
+        const headSize = Math.max(4, headSizePx || 10);
+        const baseX = tip[0] - ux * headSize;
+        const baseY = tip[1] - uy * headSize;
+        ctx.save();
+        ctx.fillStyle = arrowFill;
+        ctx.strokeStyle = strokeStyle;
+        ctx.lineWidth = Math.max(1.5, lineWidth * 0.22);
+        ctx.beginPath();
+        ctx.moveTo(tip[0], tip[1]);
+        ctx.lineTo(baseX + px * headSize * 0.45, baseY + py * headSize * 0.45);
+        ctx.lineTo(baseX - px * headSize * 0.45, baseY - py * headSize * 0.45);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        arrowCount++;
+      }}
+    }}
     function drawFlightPathHighlight() {{
       const sel = state.selectedObject;
       if (!sel || sel.type !== 'flight' || !sel.obj) return;
@@ -8100,12 +11914,30 @@ def _build_designer_html() -> str:
       ctx.moveTo(pathPts[0][0], pathPts[0][1]);
       for (let i = 1; i < pathPts.length; i++) ctx.lineTo(pathPts[i][0], pathPts[i][1]);
       ctx.stroke();
+      drawPolylineDirectionArrows(pathPts, _canvas2dStyle.pathArrivalArrowStroke || 'rgba(252, 165, 165, 0.9)', 'rgba(252, 165, 165, 0.8)', 6, 26.4, 6.6);
 
       // --- Touch Down / RET entrance / RET outlet speed label ---
       ctx.font = 'bold ' + Math.max(9, CELL_SIZE * 0.35) + 'px system-ui';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = '#fca5a5';
+      function anchorOffPathForLabel(pt, perpPx) {{
+        if (!pt || !pathPts || pathPts.length < 2) return pt;
+        let bestSeg = 0, bestD2 = Infinity;
+        for (let si = 0; si < pathPts.length - 1; si++) {{
+          const near = closestPointOnSegment(pathPts[si], pathPts[si + 1], pt);
+          if (!near) continue;
+          const d2 = dist2(near, pt);
+          if (d2 < bestD2) {{ bestD2 = d2; bestSeg = si; }}
+        }}
+        const p0 = pathPts[bestSeg], p1 = pathPts[bestSeg + 1];
+        const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+        const len = Math.hypot(dx, dy) || 1;
+        let nx = -dy / len, ny = dx / len;
+        if (ny > 0) {{ nx = -nx; ny = -ny; }}
+        const d = Math.max(14, perpPx || 22);
+        return [pt[0] + nx * d, pt[1] + ny * d];
+      }}
       function drawSpeedLabel(pt, label) {{
         if (!pt) return;
         const ox = 4, oy = -4;
@@ -8113,8 +11945,9 @@ def _build_designer_html() -> str:
       }}
       function drawTouchDownLabel(pt, distM, speedMs) {{
         if (!pt) return;
-        const ox = 4, oy = -4;
-        const x = pt[0] + ox, yBot = pt[1] + oy;
+        const a = anchorOffPathForLabel(pt, Math.max(18, CELL_SIZE * 0.55));
+        const ox = 2, oy = -6;
+        const x = a[0] + ox, yBot = a[1] + oy;
         const lh = Math.max(11, Math.round(CELL_SIZE * 0.36));
         let distPart = '---m';
         if (typeof distM === 'number' && isFinite(distM)) {{
@@ -8127,8 +11960,16 @@ def _build_designer_html() -> str:
         }}
         ctx.textAlign = 'left';
         ctx.textBaseline = 'bottom';
-        ctx.fillText('(' + distPart + ',  ' + spdPart + ')', x, yBot);
-        ctx.fillText('Touch Down', x, yBot - lh);
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.lineWidth = 3;
+        ctx.lineJoin = 'round';
+        const line1 = '(' + distPart + ',  ' + spdPart + ')';
+        const line2 = 'Touch Down';
+        ctx.strokeText(line1, x, yBot);
+        ctx.strokeText(line2, x, yBot - lh);
+        ctx.fillStyle = '#fca5a5';
+        ctx.fillText(line1, x, yBot);
+        ctx.fillText(line2, x, yBot - lh);
       }}
       let tdPt = null, retInPt = null, retOutPt = null;
       if (f.arrRunwayIdUsed && typeof getRunwayPointAtDistance === 'function') {{
@@ -8180,13 +12021,58 @@ def _build_designer_html() -> str:
       ctx.translate(state.panX, state.panY);
       ctx.scale(state.scale, state.scale);
       ctx.strokeStyle = _canvas2dStyle.pathDepartureStroke || '#000000';
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 4.8;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.setLineDash([16, 12]);
+      ctx.setLineDash([]);
       ctx.beginPath();
       ctx.moveTo(pathPts[0][0], pathPts[0][1]);
       for (let i = 1; i < pathPts.length; i++) ctx.lineTo(pathPts[i][0], pathPts[i][1]);
+      ctx.stroke();
+      drawPolylineDirectionArrows(pathPts, _canvas2dStyle.pathDepartureArrowStroke || '#111827', _canvas2dStyle.pathDepartureArrowStroke || '#111827', 6, 40, 10);
+      ctx.restore();
+    }}
+
+    function drawApproachPreviewPaths2D() {{
+      if (!state.hasSimulationResult || !state.globalUpdateFresh) return;
+      const flights = state.flights || [];
+      let f = null;
+      for (let i = 0; i < flights.length; i++) {{
+        const ff = flights[i];
+        if (!ff || ff.arrDep === 'Dep' || ff.noWayArr) continue;
+        const token = ff.token || {{}};
+        const rwId = ff.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || ff.arrRunwayId;
+        if (rwId == null || rwId === '') continue;
+        f = ff;
+        break;
+      }}
+      if (!f) return;
+      const token = f.token || {{}};
+      const runwayId = f.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || f.arrRunwayId;
+      const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
+      const tdDist = touchdownDistMForTimeline(f);
+      const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
+      const pack = buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M, APPROACH_STRAIGHT_FINAL_M, APPROACH_ZIGZAG_LEG_M, APPROACH_ZIGZAG_STEP_M);
+      let pts;
+      if (pack && pack.pts && pack.pts.length >= 2) {{
+        pts = pack.pts;
+      }} else {{
+        const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
+        if (!rsPt) return;
+        pts = [approachPointBeforeThresholdJs(runwayId, rwDir, APPROACH_OFFSET_WORLD_M, anchorDist), [rsPt[0], rsPt[1]]];
+      }}
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.translate(state.panX, state.panY);
+      ctx.scale(state.scale, state.scale);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([]);
+      ctx.strokeStyle = c2dApproachPreviewStroke();
+      ctx.lineWidth = c2dApproachPreviewWidthM();
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
       ctx.stroke();
       ctx.restore();
     }}
@@ -8197,7 +12083,8 @@ def _build_designer_html() -> str:
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.translate(state.panX, state.panY);
       ctx.scale(state.scale, state.scale);
-      const tSec = state.simTimeSec;
+      const tSecDraw = state.simTimeSec;
+      if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSecDraw);
       state.flights.forEach(f => {{
         const hasNoWay = f.noWayArr || f.noWayDep;
         if (hasNoWay) {{
@@ -8205,8 +12092,9 @@ def _build_designer_html() -> str:
           if (!f.standId) return;
           const stand = findStandById(f.standId);
           if (!stand) return;
-          const sx = (stand.x2 != null && stand.y2 != null) ? stand.x2 : (stand.x != null ? stand.x : cellToPixel(stand.col || 0, stand.row || 0)[0]);
-          const sy = (stand.x2 != null && stand.y2 != null) ? stand.y2 : (stand.y != null ? stand.y : cellToPixel(stand.col || 0, stand.row || 0)[1]);
+          const standPt = getStandConnectionPx(stand);
+          const sx = standPt[0];
+          const sy = standPt[1];
           const x = Number(sx), y = Number(sy);
           const badgeH = CELL_SIZE * 0.85;
           const badgePad = CELL_SIZE * 0.3;
@@ -8243,14 +12131,12 @@ def _build_designer_html() -> str:
           ctx.restore();
           return;
         }}
-        const pose = getFlightPoseAtTime(f, tSec);
+        if (!state.globalUpdateFresh) return;
+        const pose = getFlightPoseAtTimeForDraw(f, tSecDraw);
         if (!pose) return;
         const x = pose.x, y = pose.y, dx = pose.dx, dy = pose.dy;
         const len = Math.hypot(dx, dy) || 1;
         const nx = dx / len, ny = dy / len;
-        const code = (f.code || '').toUpperCase();
-        const scale = apronAircraftScaleForIcao(code);
-        const size = CELL_SIZE * scale;
         const silN = Number(_acSil.noseX), silWR = Number(_acSil.wingRearX), silUY = Number(_acSil.wingUpperY);
         const silTN = Number(_acSil.tailNeckX), silLY = Number(_acSil.wingLowerY);
         const nX = isFinite(silN) ? silN : 0.6;
@@ -8258,11 +12144,93 @@ def _build_designer_html() -> str:
         const uY = isFinite(silUY) ? silUY : 0.35;
         const tX = isFinite(silTN) ? silTN : -0.3;
         const lY = isFinite(silLY) ? silLY : -0.35;
+        const useDetailSil = _ac2d.useDetailedSilhouette === true;
+        /* 상단 투영: 가로=날개폭 AIRCRAFT_WINGSPAN_M, 세로=머리~꼬리 AIRCRAFT_FUSELAGE_LENGTH_M (서로 독립 스케일). */
+        const silhouette2D = [
+          [0.86, 0],
+          [0.74, 0.038], [0.55, 0.046], [0.35, 0.048], [0.16, 0.05],
+          [-0.16, 0.5],
+          [-0.22, 0.5],
+          [-0.38, 0.09], [-0.52, 0.056], [-0.66, 0.046],
+          [-0.76, 0.15],
+          [-0.82, 0.036], [-0.88, 0],
+          [-0.82, -0.036],
+          [-0.76, -0.15],
+          [-0.66, -0.046], [-0.52, -0.056], [-0.38, -0.09],
+          [-0.22, -0.5],
+          [-0.16, -0.5],
+          [0.16, -0.05], [0.35, -0.048], [0.55, -0.046], [0.74, -0.038],
+        ];
+        let scaleX, scaleY, sizeRef;
+        if (useDetailSil) {{
+          let minXn = Infinity, maxXn = -Infinity, maxYy = 0;
+          for (let si = 0; si < silhouette2D.length; si++) {{
+            const px = silhouette2D[si][0], py = silhouette2D[si][1];
+            minXn = Math.min(minXn, px);
+            maxXn = Math.max(maxXn, px);
+            maxYy = Math.max(maxYy, Math.abs(py));
+          }}
+          const lenNorm = Math.max(1e-9, maxXn - minXn);
+          const wingNorm = Math.max(1e-9, 2 * maxYy);
+          scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
+          scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
+          sizeRef = 0.5 * Math.hypot(AIRCRAFT_FUSELAGE_LENGTH_M, AIRCRAFT_WINGSPAN_M);
+        }} else {{
+          const xs = [nX, wRx, tX];
+          const minXn = Math.min(xs[0], xs[1], xs[2]);
+          const maxXn = Math.max(xs[0], xs[1], xs[2]);
+          const lenNorm = Math.max(1e-9, maxXn - minXn);
+          const wingNorm = Math.max(1e-9, uY + lY);
+          scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
+          scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
+          sizeRef = 0.5 * Math.hypot(AIRCRAFT_FUSELAGE_LENGTH_M, AIRCRAFT_WINGSPAN_M);
+        }}
+        const outW = Number(_ac2d.outlineWidth);
+        const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
+        const outlineColor = _ac2d.outlineColor || '';
         const isFlightSel = state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id;
+        if (FLIGHT_TRAIL_LENGTH_M > 0 && !isFlightTrailHiddenAtSimTime(f, tSecDraw)) {{
+          const trailPts = getFlightTrailPolylineBackward(f, tSecDraw, FLIGHT_TRAIL_LENGTH_M);
+          if (trailPts.length >= 2) {{
+            ctx.save();
+            const x0 = trailPts[0][0], y0 = trailPts[0][1];
+            const x1 = trailPts[trailPts.length - 1][0], y1 = trailPts[trailPts.length - 1][1];
+            const g = ctx.createLinearGradient(x0, y0, x1, y1);
+            const cFar = c2dSimFlightTrailStrokeEnd();
+            const cNearAc = c2dSimFlightTrailStroke();
+            g.addColorStop(0, cFar);
+            g.addColorStop(0.42, cNearAc);
+            g.addColorStop(1, cNearAc);
+            ctx.strokeStyle = g;
+            ctx.lineWidth = c2dSimFlightTrailLineWidth();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(trailPts[0][0], trailPts[0][1]);
+            for (let ti = 1; ti < trailPts.length; ti++) ctx.lineTo(trailPts[ti][0], trailPts[ti][1]);
+            ctx.stroke();
+            ctx.restore();
+          }}
+        }}
+        if (isFlightPreTouchdownForDraw(f, tSecDraw)) {{
+          const rH = Math.max(sizeRef * 0.58, 8);
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(x, y, rH, 0, Math.PI * 2);
+          ctx.fillStyle = c2dSimPreTouchdownHaloFill();
+          ctx.fill();
+          ctx.strokeStyle = c2dSimPreTouchdownHaloStroke();
+          ctx.lineWidth = 2;
+          ctx.shadowColor = c2dSimPreTouchdownHaloStroke();
+          ctx.shadowBlur = c2dSimPreTouchdownHaloBlur();
+          ctx.stroke();
+          ctx.restore();
+        }}
         if (isFlightSel) {{
           ctx.save();
           ctx.beginPath();
-          ctx.arc(x, y, size * 0.62, 0, Math.PI * 2);
+          ctx.arc(x, y, sizeRef * 0.62, 0, Math.PI * 2);
           ctx.strokeStyle = c2dObjectSelectedStroke();
           ctx.lineWidth = 2.5;
           ctx.shadowColor = c2dObjectSelectedGlow();
@@ -8276,12 +12244,27 @@ def _build_designer_html() -> str:
         ctx.rotate(ang);
         ctx.fillStyle = apron2DGlyphFill();
         ctx.beginPath();
-        ctx.moveTo(size * nX, 0);
-        ctx.lineTo(size * wRx, size * uY);
-        ctx.lineTo(size * tX, 0);
-        ctx.lineTo(size * wRx, size * lY);
-        ctx.closePath();
+        if (useDetailSil) {{
+          ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
+          for (let si = 1; si < silhouette2D.length; si++) ctx.lineTo(silhouette2D[si][0] * scaleX, silhouette2D[si][1] * scaleY);
+          ctx.closePath();
+        }} else {{
+          ctx.moveTo(scaleX * nX, 0);
+          ctx.lineTo(scaleX * wRx, scaleY * uY);
+          ctx.lineTo(scaleX * tX, 0);
+          ctx.lineTo(scaleX * wRx, scaleY * lY);
+          ctx.closePath();
+        }}
         ctx.fill();
+        if (outlineWidth > 0 && outlineColor) {{
+          ctx.strokeStyle = outlineColor;
+          ctx.lineWidth = outlineWidth;
+          ctx.stroke();
+        }} else if (useDetailSil) {{
+          ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+          ctx.lineWidth = 1.15;
+          ctx.stroke();
+        }}
         ctx.restore();
       }});
       ctx.restore();
@@ -8292,16 +12275,29 @@ def _build_designer_html() -> str:
       ensureSimLoop._running = true;
       ensureSimLoop._lastTs = null;
       function tick(ts) {{
-        if (ensureSimLoop._lastTs == null) ensureSimLoop._lastTs = ts;
-        const dt = (ts - ensureSimLoop._lastTs) / 1000; // Elapsed time in seconds
+        let dt = 0;
+        if (ensureSimLoop._lastTs != null) {{
+          dt = (ts - ensureSimLoop._lastTs) / 1000;
+          if (dt < 0) dt = 0;
+          if (dt > 0.25) dt = 0.25;
+        }}
+        if (state.simPlaying && ensureSimLoop._playKick) {{
+          ensureSimLoop._playKick = false;
+          dt = Math.max(dt, 1 / 60);
+        }}
         ensureSimLoop._lastTs = ts;
-        if (state.simPlaying && state.simDurationSec > state.simStartSec) {{
-          const speed = state.simSpeed != null ? state.simSpeed : 1;
-          state.simTimeSec = Math.min(state.simTimeSec + Math.max(0, dt) * speed, state.simDurationSec);
+        if (state.simPlaying) {{
+          const lo = state.simStartSec, hi = state.simDurationSec;
+          const speedRaw = state.simSpeed;
+          const speed = (typeof speedRaw === 'number' && isFinite(speedRaw) && speedRaw > 0) ? speedRaw : 1;
+          if (hi > lo + 1e-9) {{
+            state.simTimeSec = Math.min(state.simTimeSec + dt * speed, hi);
+          }} else {{
+            state.simTimeSec = lo;
+          }}
           const slider = document.getElementById('flightSimSlider');
-          const label = document.getElementById('flightSimTimeLabel');
-          if (slider) slider.value = state.simTimeSec;
-          if (label) label.textContent = formatSecondsToHHMMSS(state.simTimeSec);
+          if (slider) slider.value = String(state.simTimeSec);
+          updateFlightSimPlaybackLabelsDom();
           try {{ draw(); }} catch(e) {{}}
           if (typeof update3DScene === 'function') update3DScene();
         }}
@@ -8328,9 +12324,218 @@ def _build_designer_html() -> str:
       if (!opts && sel.options.length) sel.value = 'A320';
       else if (sel.options.length) sel.value = sel.options[0].value;
     }}
+    function getAircraftConstraintOptions() {{
+      return AIRCRAFT_TYPES.map(function(a) {{
+        const id = String(a.id || a.name || '').trim();
+        const label = String(a.name || a.id || id || '').trim();
+        return {{ id: id, label: label || id }};
+      }}).filter(function(item) {{ return !!item.id; }});
+    }}
+    function normalizeStandCategoryMode(rawMode, fallbackMode) {{
+      const mode = String(rawMode || fallbackMode || 'icao').trim().toLowerCase();
+      return mode === 'aircraft' ? 'aircraft' : 'icao';
+    }}
+    function normalizeAllowedAircraftTypes(rawList) {{
+      const valid = new Set(getAircraftConstraintOptions().map(function(item) {{ return item.id; }}));
+      const out = [];
+      (Array.isArray(rawList) ? rawList : []).forEach(function(item) {{
+        const id = String(item || '').trim();
+        if (!id || !valid.has(id) || out.indexOf(id) >= 0) return;
+        out.push(id);
+      }});
+      return out;
+    }}
+    function getStandCategoryMode(stand) {{
+      const isRemote = !!(stand && stand.x != null && stand.y != null && stand.x1 == null && stand.y1 == null);
+      const fallback = isRemote ? (_remoteTier.defaultCategoryMode || 'icao') : (_pbbTier.defaultCategoryMode || 'icao');
+      return normalizeStandCategoryMode(stand && stand.categoryMode, fallback);
+    }}
+    function getStandAllowedAircraftTypes(stand) {{
+      return normalizeAllowedAircraftTypes(stand && stand.allowedAircraftTypes);
+    }}
+    function getPbbLengthMeters(pbb) {{
+      const x1 = Number(pbb && pbb.x1), y1 = Number(pbb && pbb.y1);
+      const x2 = Number(pbb && pbb.x2), y2 = Number(pbb && pbb.y2);
+      if (Number.isFinite(x1) && Number.isFinite(y1) && Number.isFinite(x2) && Number.isFinite(y2)) {{
+        return Math.max(1, Math.hypot(x2 - x1, y2 - y1));
+      }}
+      const anchor = getPbbAnchorPx(pbb);
+      const center = getStandConnectionPx(pbb);
+      return Math.max(1, Math.hypot(center[0] - anchor[0], center[1] - anchor[1]));
+    }}
+    function getPbbAngleDeg(pbb) {{
+      return normalizeAngleDeg(getPBBStandAngle(pbb) * 180 / Math.PI);
+    }}
+    function getStandConnectionPx(stand) {{
+      if (!stand) return [0, 0];
+      if (stand.apronSiteX != null && stand.apronSiteY != null) return [Number(stand.apronSiteX), Number(stand.apronSiteY)];
+      if (stand.x2 != null && stand.y2 != null) return [Number(stand.x2), Number(stand.y2)];
+      if (stand.x != null && stand.y != null) return [Number(stand.x), Number(stand.y)];
+      return cellToPixel(stand.col || 0, stand.row || 0);
+    }}
+    function getStandRotationHandleRadiusPx() {{
+      return Math.max(6, CELL_SIZE * 0.22) * LAYOUT_VERTEX_DOT_SCALE;
+    }}
+    function getPbbRotationOriginPx(pbb) {{
+      return getStandConnectionPx(pbb);
+    }}
+    function getPbbRotationHandlePx(pbb) {{
+      const origin = getPbbRotationOriginPx(pbb);
+      const safeAngle = getPBBStandAngle(pbb);
+      const standSize = getStandSizeMeters((pbb && pbb.category) || 'C');
+      const dist = getPbbLengthMeters(pbb) + Math.max(standSize * 0.55, 10);
+      return [origin[0] + Math.cos(safeAngle) * dist, origin[1] + Math.sin(safeAngle) * dist];
+    }}
+    function getRemoteRotationHandlePx(st) {{
+      const center = getRemoteStandCenterPx(st);
+      const angle = getRemoteStandAngleRad(st);
+      const standSize = getStandSizeMeters((st && st.category) || 'C');
+      const dist = (standSize * 0.5) + Math.max(standSize * 0.35, 10);
+      return [center[0] + Math.cos(angle) * dist, center[1] + Math.sin(angle) * dist];
+    }}
+    function hitTestStandRotationHandle(wx, wy) {{
+      const maxD2 = Math.pow(getStandRotationHandleRadiusPx() * 1.9, 2);
+      if (state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.obj) {{
+        const pbb = state.selectedObject.obj;
+        const handle = getPbbRotationHandlePx(pbb);
+        if (dist2(handle, [wx, wy]) <= maxD2) {{
+          return {{ type: 'pbb', id: pbb.id }};
+        }}
+      }}
+      if (state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.obj) {{
+        const st = state.selectedObject.obj;
+        const handle = getRemoteRotationHandlePx(st);
+        if (dist2(handle, [wx, wy]) <= maxD2) {{
+          return {{ type: 'remote', id: st.id }};
+        }}
+      }}
+      return null;
+    }}
+    function drawStandRotationHandle(originPx, handlePx, active) {{
+      if (!originPx || !handlePx) return;
+      const r = getStandRotationHandleRadiusPx();
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = active ? '#ffffff' : 'rgba(255,255,255,0.65)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(originPx[0], originPx[1]);
+      ctx.lineTo(handlePx[0], handlePx[1]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = active ? '#f43f5e' : '#a78bfa';
+      ctx.beginPath();
+      ctx.arc(handlePx[0], handlePx[1], r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
+    }}
+    function buildDefaultPbbBridgePoints(pbb, bridgeIndex, bridgeCount) {{
+      const count = Math.max(1, parseInt(bridgeCount, 10) || 1);
+      const length = getPbbLengthMeters(pbb);
+      const angle = getPBBStandAngle(pbb);
+      const dirX = Math.cos(angle), dirY = Math.sin(angle);
+      const tanX = -dirY, tanY = dirX;
+      const standSize = getStandSizeMeters((pbb && pbb.category) || 'C');
+      const spread = Math.min(Math.max(standSize * 0.18, 4), standSize * 0.4);
+      const offsetIndex = bridgeIndex - (count - 1) / 2;
+      const lateral = spread * offsetIndex;
+      const startX = Number(pbb.x1 || 0) + tanX * lateral;
+      const startY = Number(pbb.y1 || 0) + tanY * lateral;
+      const endX = Number(pbb.x2 || 0) + tanX * (lateral * 0.55);
+      const endY = Number(pbb.y2 || 0) + tanY * (lateral * 0.55);
+      const midX = startX + dirX * (length * 0.45);
+      const midY = startY + dirY * (length * 0.45);
+      return [
+        {{ x: startX, y: startY }},
+        {{ x: midX, y: midY }},
+        {{ x: endX, y: endY }},
+      ];
+    }}
+    function rebuildPbbBridgeGeometry(pbb) {{
+      const count = Math.max(1, Math.min(8, parseInt(pbb.pbbCount, 10) || 1));
+      pbb.pbbCount = count;
+      const prev = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
+      pbb.pbbBridges = Array.from({{ length: count }}, function(_, idx) {{
+        const current = prev[idx];
+        const points = (current && Array.isArray(current.points) && current.points.length >= 3)
+          ? current.points.map(function(pt) {{ return {{ x: Number(pt.x) || 0, y: Number(pt.y) || 0 }}; }})
+          : buildDefaultPbbBridgePoints(pbb, idx, count);
+        return {{ id: (current && current.id) || id(), points: points }};
+      }});
+      if (pbb.apronSiteX == null || pbb.apronSiteY == null) {{
+        pbb.apronSiteX = Number(pbb.x2 || 0);
+        pbb.apronSiteY = Number(pbb.y2 || 0);
+      }}
+    }}
+    function setPbbGeometryFromAngleLength(pbb, angleDeg, lengthMeters, resetBridgeGeometry) {{
+      const ang = normalizeAngleDeg(angleDeg);
+      const len = Math.max(1, Number(lengthMeters) || 1);
+      const rad = ang * Math.PI / 180;
+      const anchor = getPbbAnchorPx(pbb);
+      pbb.x1 = anchor[0];
+      pbb.y1 = anchor[1];
+      pbb.x2 = anchor[0] + Math.cos(rad) * len;
+      pbb.y2 = anchor[1] + Math.sin(rad) * len;
+      pbb.angleDeg = ang;
+      if (resetBridgeGeometry !== false) {{
+        delete pbb.pbbBridges;
+      }}
+      rebuildPbbBridgeGeometry(pbb);
+    }}
+    function normalizeBuildingObject(termLike) {{
+      const term = Object.assign({{}}, termLike || {{}});
+      term.buildingType = normalizeBuildingType(term.buildingType || term.terminalType);
+      return term;
+    }}
+    function normalizePbbStandObject(rawPbb) {{
+      const pbb = Object.assign({{}}, rawPbb || {{}});
+      pbb.categoryMode = getStandCategoryMode(pbb);
+      pbb.allowedAircraftTypes = getStandAllowedAircraftTypes(pbb);
+      pbb.pbbCount = Math.max(1, Math.min(8, parseInt(pbb.pbbCount != null ? pbb.pbbCount : (_pbbTier.defaultBridgeCount || 1), 10) || 1));
+      if (pbb.x1 != null && pbb.y1 != null && pbb.x2 != null && pbb.y2 != null) {{
+        pbb.angleDeg = pbb.angleDeg != null
+          ? normalizeAngleDeg(pbb.angleDeg)
+          : normalizeAngleDeg(Math.atan2((Number(pbb.y2) || 0) - (Number(pbb.y1) || 0), (Number(pbb.x2) || 0) - (Number(pbb.x1) || 0)) * 180 / Math.PI);
+        rebuildPbbBridgeGeometry(pbb);
+      }}
+      return pbb;
+    }}
+    function normalizeRemoteStandObject(rawStand) {{
+      const stand = Object.assign({{}}, rawStand || {{}});
+      stand.categoryMode = getStandCategoryMode(stand);
+      stand.allowedAircraftTypes = getStandAllowedAircraftTypes(stand);
+      stand.angleDeg = normalizeAngleDeg(stand.angleDeg != null ? stand.angleDeg : 0);
+      return stand;
+    }}
 
     // ---- Flight UI wiring ----
     (function initFlightUI() {{
+      (function wireFlightSchedulePagerOnce() {{
+        if (wireFlightSchedulePagerOnce._done) return;
+        wireFlightSchedulePagerOnce._done = true;
+        const bPrev = document.getElementById('btnFlightSchedPrev');
+        const bNext = document.getElementById('btnFlightSchedNext');
+        if (!bPrev || !bNext) return;
+        bPrev.addEventListener('click', function() {{
+          if (FLIGHT_SCHED_PAGE_SIZE <= 0 || !state.flights.length) return;
+          if (state.flightSchedulePage > 0) {{
+            state.flightSchedulePage--;
+            renderFlightList(false, false, {{ pageTurnOnly: true }});
+          }}
+        }});
+        bNext.addEventListener('click', function() {{
+          if (FLIGHT_SCHED_PAGE_SIZE <= 0 || !state.flights.length) return;
+          const nFl = state.flights.length;
+          const maxP = Math.max(0, Math.ceil(nFl / FLIGHT_SCHED_PAGE_SIZE) - 1);
+          if (state.flightSchedulePage < maxP) {{
+            state.flightSchedulePage++;
+            renderFlightList(false, false, {{ pageTurnOnly: true }});
+          }}
+        }});
+      }})();
       const arrDepEl = document.getElementById('flightArrDep');
       const dwellEl = document.getElementById('flightDwell');
       const minDwellEl = document.getElementById('flightMinDwell');
@@ -8339,7 +12544,6 @@ def _build_designer_html() -> str:
       const pauseBtn = document.getElementById('btnPauseFlights');
       const resetBtn = document.getElementById('btnResetFlights');
       const simSlider = document.getElementById('flightSimSlider');
-      const simTimeLabel = document.getElementById('flightSimTimeLabel');
       const speedSelect = document.getElementById('flightSpeed');
       const timeInputEl = document.getElementById('flightTime');
       const aircraftEl = document.getElementById('flightAircraftType');
@@ -8391,7 +12595,7 @@ def _build_designer_html() -> str:
           runwaySel.innerHTML = '<option value="">Random</option>' + opts.map(o => '<option value="' + (o.id || '').replace(/"/g, '&quot;') + '">' + (o.name || o.id || '').replace(/</g, '&lt;') + '</option>').join('');
         }}
         if (termSel) {{
-          const terms = (state.terminals || []).map(t => ({{ id: t.id, name: (t.name || '').trim() || 'Terminal' }}));
+          const terms = (state.terminals || []).map(t => ({{ id: t.id, name: (t.name || '').trim() || 'Building' }}));
           termSel.innerHTML = '<option value="">Random</option>' + terms.map(o => '<option value="' + (o.id || '').replace(/"/g, '&quot;') + '">' + (o.name || o.id || '').replace(/</g, '&lt;') + '</option>').join('');
         }}
       }}
@@ -8405,24 +12609,91 @@ def _build_designer_html() -> str:
       // top of screen Global Update Button: Main view based on current state/Redo all calculations
       if (globalUpdateBtn) {{
         globalUpdateBtn.addEventListener('click', function() {{
-          try {{
-            if (typeof syncPanelFromState === 'function') syncPanelFromState();
-            if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-            else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-            if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
-            // Do all calculations first
-            if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
-            if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
-            // Update the view using the calculation result
-            if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
-            if (typeof renderFlightGantt === 'function') renderFlightGantt();
-            // at the end Flight schedule Render the table only once (RET/ELDT Full-length resampling)
-            if (typeof renderFlightList === 'function') renderFlightList(false, true);
-            if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
-            if (typeof draw === 'function') draw();
-          }} catch (e) {{
-            console.error('Global update error', e);
+          function failGlobalUpdate(err) {{
+            console.error('Global update error', err);
+            if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
           }}
+          if (typeof setGlobalUpdateProgressUi === 'function')
+            setGlobalUpdateProgressUi(true, '동기화 중…', 5);
+          scheduleAfterPaint(function globalUpdateStep1() {{
+            try {{
+              if (typeof syncPanelFromState === 'function') syncPanelFromState();
+              if (typeof setGlobalUpdateProgressUi === 'function')
+                setGlobalUpdateProgressUi(true, '항공 경로·타임라인…', 22);
+            }} catch (e) {{ failGlobalUpdate(e); return; }}
+            setTimeout(function globalUpdateStep2() {{
+              try {{
+                function runAfterFlightListRefresh() {{
+                  try {{
+                    if (typeof setGlobalUpdateProgressUi === 'function')
+                      setGlobalUpdateProgressUi(true, 'KPI·캔버스…', 92);
+                  }} catch (e2) {{ failGlobalUpdate(e2); return; }}
+                  setTimeout(function globalUpdateStep6() {{
+                    try {{
+                      if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
+                      if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+                      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
+                      if (typeof draw === 'function') draw();
+                      if (typeof update3DScene === 'function') update3DScene();
+                      if (typeof scheduleDomCompositionReport === 'function') scheduleDomCompositionReport('global-update');
+                    }} catch (e3) {{ failGlobalUpdate(e3); return; }}
+                    if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
+                  }}, 0);
+                }}
+                function runFlightListThenKpi() {{
+                  setTimeout(function globalUpdateStep5() {{
+                    try {{
+                      if (typeof renderFlightList === 'function')
+                        renderFlightList(false, true, undefined, runAfterFlightListRefresh);
+                      else
+                        runAfterFlightListRefresh();
+                    }} catch (e2) {{ failGlobalUpdate(e2); return; }}
+                  }}, 0);
+                }}
+                function runSchedAndRwyPanels() {{
+                  setTimeout(function globalUpdateStep3() {{
+                    try {{
+                      if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
+                      if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
+                      if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
+                      if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+                      if (typeof setGlobalUpdateProgressUi === 'function')
+                        setGlobalUpdateProgressUi(true, 'Runway 패널…', 62);
+                    }} catch (e2) {{ failGlobalUpdate(e2); return; }}
+                    setTimeout(function globalUpdateStep4() {{
+                      try {{
+                        if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
+                        if (typeof setGlobalUpdateProgressUi === 'function')
+                          setGlobalUpdateProgressUi(true, '항공편 표·간트…', 78);
+                      }} catch (e3) {{ failGlobalUpdate(e3); return; }}
+                      runFlightListThenKpi();
+                    }}, 0);
+                  }}, 0);
+                }}
+                if (typeof updateAllFlightPaths === 'function') {{
+                  updateAllFlightPaths(function globalUpdatePathsDone() {{
+                    try {{
+                      if (typeof setGlobalUpdateProgressUi === 'function')
+                        setGlobalUpdateProgressUi(true, 'RET·스케줄·활주로 분리…', 48);
+                    }} catch (e2) {{ failGlobalUpdate(e2); return; }}
+                    runSchedAndRwyPanels();
+                  }});
+                }} else {{
+                  if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+                  if (typeof setGlobalUpdateProgressUi === 'function')
+                    setGlobalUpdateProgressUi(true, 'RET·스케줄·활주로 분리…', 48);
+                  runSchedAndRwyPanels();
+                }}
+              }} catch (e) {{ failGlobalUpdate(e); return; }}
+            }}, 0);
+          }});
+        }});
+      }}
+      const btnShowPlayDock = document.getElementById('btnShowPlayDock');
+      if (btnShowPlayDock) {{
+        btnShowPlayDock.addEventListener('click', function() {{
+          state.simPlaybackDockVisible = true;
+          if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
         }});
       }}
       function applyTokenNodesFromCheckboxes() {{
@@ -8442,7 +12713,7 @@ def _build_designer_html() -> str:
         }});
         updateTokenPanesVisibility(arr.length ? arr : TOKEN_NODE_ORDER);
       }}
-      ['Runway','Taxiway','Apron','Terminal'].forEach((name, i) => {{
+      ['Runway','Taxiway','Apron','Building'].forEach((name, i) => {{
         const cb = document.getElementById('token' + name);
         if (!cb) return;
         cb.addEventListener('change', function() {{
@@ -8553,18 +12824,17 @@ def _build_designer_html() -> str:
               terminalId: null
             }}
           }};
-          const arrPath = computeFlightPath(f, 'arrival');
+          computeFlightPath(f, 'arrival');
           computeFlightPath(f, 'departure');
-          const tl = arrPath.timeline;
-          if (!tl || !tl.length) {{
-            // If there is no path timelinesilver nullLeave it at and display the warning message only on the right panel.
+          if (f.noWayArr || f.noWayDep) {{
             updateFlightError('NOTE: Available on your network Taxiway / Apron path not found. (Simulation paths may not be drawn.)');
-          }} else {{
-            f.timeline = tl;
           }}
           state.flights.push(f);
-          recomputeSimDuration();
-          renderFlightList();
+          if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+          else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+          if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+          var addTouched = f.standId ? [f.standId] : [];
+          renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: addTouched }});
           // next Flight base for adding SIBT Input update (Max SIBT + 10minute)
           if (timeInputEl) {{
             const nextDef = getDefaultSibtMinutes();
@@ -8616,9 +12886,10 @@ def _build_designer_html() -> str:
       // Flight Selected when changing setting input Flight reflected in object + Recalculate route
       function rebuildSelectedFlightTimeline() {{
         if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         const f = state.selectedObject.obj;
-        const arr = computeFlightPath(f, 'arrival');
-        const dep = computeFlightPath(f, 'departure');
+        computeFlightPath(f, 'arrival');
+        computeFlightPath(f, 'departure');
         const isArr = f.arrDep !== 'Dep';
         if (isArr && f.noWayArr) {{
           updateFlightError('no path(No Way): Arrival route not found.');
@@ -8632,14 +12903,15 @@ def _build_designer_html() -> str:
           draw();
           return;
         }}
-        const tl = isArr ? arr.timeline : dep.timeline;
-        if (!tl || !tl.length) {{
+        if (typeof buildFullAirsideTimelineForFlight === 'function') buildFullAirsideTimelineForFlight(f);
+        if (!f.timeline || !f.timeline.length) {{
           updateFlightError('No valid route found on that network. (After changing settings)');
           return;
         }}
-        f.timeline = tl;
-        recomputeSimDuration();
-        renderFlightList();
+        if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+        else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+        var sidSched = f.standId || null;
+        renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: sidSched ? [sidSched] : [] }});
       }}
       if (arrDepEl) {{
         arrDepEl.addEventListener('change', function() {{
@@ -8692,7 +12964,9 @@ def _build_designer_html() -> str:
           if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
           const f = state.selectedObject.obj;
           f.reg = this.value || '';
-          renderFlightList();
+          if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+          var rs = f.standId || null;
+          renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rs ? [rs] : [] }});
           updateObjectInfo();
         }});
       }}
@@ -8703,7 +12977,9 @@ def _build_designer_html() -> str:
           if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
           const f = state.selectedObject.obj;
           f.airlineCode = this.value || '';
-          renderFlightList();
+          if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+          var rs2 = f.standId || null;
+          renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rs2 ? [rs2] : [] }});
           updateObjectInfo();
         }});
       }}
@@ -8712,7 +12988,9 @@ def _build_designer_html() -> str:
           if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
           const f = state.selectedObject.obj;
           f.flightNumber = this.value || '';
-          renderFlightList();
+          if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+          var rs3 = f.standId || null;
+          renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rs3 ? [rs3] : [] }});
           updateObjectInfo();
         }});
       }}
@@ -8747,14 +13025,10 @@ def _build_designer_html() -> str:
           f.minDwellMin = minDwell;
           if (dwellEl) dwellEl.value = f.dwellMin;
           this.value = f.minDwellMin;
-          // Flight Schedule graph + Apron Ganttrecalculate immediately/reflect
-          const _prepSched = state.flights.slice();
-          _prepSched.forEach(function(ff) {{ ensureFlightPaths(ff); }});
-          if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(_prepSched, false);
-          if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
-          if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
-          if (typeof renderFlightGantt === 'function') renderFlightGantt();
-          renderFlightList();
+          if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+          var rs4 = f.standId || null;
+          if (typeof renderFlightList === 'function')
+            renderFlightList(false, false, {{ scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rs4 ? [rs4] : [] }});
         }});
       }}
       if (playBtn) {{
@@ -8771,33 +13045,39 @@ def _build_designer_html() -> str:
             alert('registered FlightThere is no.');
             return;
           }}
-          // When playback starts, the earliest Flight start from time
-          let earliest = Infinity;
-          state.flights.forEach(f => {{
-            if (f.timeline && f.timeline.length) {{
-              const t0 = f.timeline[0].t;
-              if (t0 < earliest) earliest = t0;
-            }}
-          }});
-          if (!isFinite(earliest)) earliest = state.simStartSec;
-          state.simTimeSec = Math.max(state.simStartSec, Math.min(state.simDurationSec, earliest));
+          if (!state.globalUpdateFresh) {{
+            alert('Update(새로고침)이 필요합니다. 빨간 동기화 표시일 때는 타임라인이 비어 있어 재생할 수 없습니다.');
+            return;
+          }}
+          if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+          const lo = state.simStartSec, hi = state.simDurationSec;
+          let t = snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, state.simTimeSec)));
+          if (hi > lo && t >= hi - 1e-3) t = snapSimTimeSecForSlider(lo);
+          state.simTimeSec = t;
           if (simSlider) simSlider.value = state.simTimeSec;
-          if (simTimeLabel) simTimeLabel.textContent = formatSecondsToHHMMSS(state.simTimeSec);
+          if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+          if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
           state.simPlaying = true;
+          ensureSimLoop._lastTs = null;
+          ensureSimLoop._playKick = true;
           ensureSimLoop();
+          try {{ draw(); }} catch(e) {{}}
+          if (typeof update3DScene === 'function') update3DScene();
         }});
       }}
       if (pauseBtn) {{
         pauseBtn.addEventListener('click', function() {{
           state.simPlaying = false;
+          if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
         }});
       }}
       if (resetBtn) {{
         resetBtn.addEventListener('click', function() {{
           state.simPlaying = false;
-          state.simTimeSec = state.simStartSec;
+          if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+          state.simTimeSec = snapSimTimeSecForSlider(state.simStartSec);
           if (simSlider) simSlider.value = state.simTimeSec;
-          if (simTimeLabel) simTimeLabel.textContent = formatSecondsToHHMMSS(state.simTimeSec);
+          if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
           try {{ draw(); }} catch(e) {{}}
           if (typeof update3DScene === 'function') update3DScene();
         }});
@@ -8806,8 +13086,11 @@ def _build_designer_html() -> str:
         simSlider.addEventListener('input', function() {{
           const secs = parseFloat(this.value);
           if (!isNaN(secs)) {{
-            state.simTimeSec = Math.max(state.simStartSec, Math.min(state.simDurationSec, secs));
-            if (simTimeLabel) simTimeLabel.textContent = formatSecondsToHHMMSS(state.simTimeSec);
+            const snapped = snapSimTimeSecForSlider(secs);
+            state.simTimeSec = snapped;
+            this.value = snapped;
+            if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+            if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
             try {{ draw(); }} catch(e) {{}}
             if (typeof update3DScene === 'function') update3DScene();
           }}
@@ -8820,6 +13103,13 @@ def _build_designer_html() -> str:
         }});
         const v0 = parseFloat(speedSelect.value);
         state.simSpeed = !isNaN(v0) && v0 > 0 ? v0 : {json.dumps(float(_ui_default_sim_speed))};
+      }}
+      const btnHideSimBar = document.getElementById('btnHideSimPlaybackBar');
+      if (btnHideSimBar) {{
+        btnHideSimBar.addEventListener('click', function() {{
+          state.simPlaybackDockVisible = false;
+          if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+        }});
       }}
       // Flight Schedule the displayed value in the table state.flightsBy reflecting back on
       // Save/Run city JSONin table final values(especially Eline)sync to reflect this
@@ -8893,42 +13183,6 @@ def _build_designer_html() -> str:
           }} catch (e) {{
             console.error(e);
             setLayoutMessage('Unable to save layout.', true);
-          }}
-        }});
-      }}
-      const runSimBtn = document.getElementById('btnRunSimulation');
-      if (runSimBtn) {{
-        runSimBtn.addEventListener('click', function() {{
-          try {{
-            if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
-            const data = serializeCurrentLayout();
-            const layoutName = (state.currentLayoutName && state.currentLayoutName.trim()) || (INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout');
-            const apiBase = (typeof getLayoutApiBase === 'function') ? getLayoutApiBase() : (LAYOUT_API_URL || '');
-            if (layoutMsgEl) {{ layoutMsgEl.textContent = 'Running simulation...'; layoutMsgEl.style.color = '#9ca3af'; }}
-            fetch(apiBase + '/api/run-simulation', {{
-              method: 'POST',
-              headers: {{ 'Content-Type': 'application/json' }},
-              body: JSON.stringify({{ layout: data, layoutName: layoutName }})
-            }}).then(function(r) {{
-              if (!r.ok) throw new Error('Simulation failed');
-              return r.json();
-            }}).then(function(result) {{
-              if (!result) return;
-              state.hasSimulationResult = true;
-              applyLayoutObject(result);
-              resizeCanvas();
-              reset2DView();
-              syncPanelFromState();
-              if (typeof draw === 'function') draw();
-              if (typeof update3DScene === 'function') update3DScene();
-              if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-              if (layoutMsgEl) {{ layoutMsgEl.textContent = 'Simulation complete.'; layoutMsgEl.style.color = '#9ca3af'; }}
-            }}).catch(function(e) {{
-              console.warn('Simulation fetch failed', e);
-              if (layoutMsgEl) {{ layoutMsgEl.textContent = 'Connection failed: ' + ((e && e.message) || 'Simulation failed') + ' — python run_app.pyAfter running with http://127.0.0.1:8501 connection'; layoutMsgEl.style.color = '#f97316'; }}
-            }});
-          }} catch (e) {{
-            if (layoutMsgEl) {{ layoutMsgEl.textContent = 'error: ' + (e && e.message); layoutMsgEl.style.color = '#f97316'; }}
           }}
         }});
       }}
@@ -9087,11 +13341,13 @@ def _build_designer_html() -> str:
           }}
         }}
         state.terminalDrawingId = null;
+        state.layoutPathDrawPointer = null;
         syncPanelFromState();
         draw();
         return;
       }}
-      const nameBase = document.getElementById('terminalName').value.trim() || getDefaultTerminalName();
+      const selectedBuildingType = normalizeBuildingType(document.getElementById('buildingType') ? document.getElementById('buildingType').value : BUILDING_TYPE_DEFAULT);
+      const nameBase = document.getElementById('terminalName').value.trim() || getDefaultBuildingNameForType(selectedBuildingType);
       const floorsEl = document.getElementById('terminalFloors');
       const f2fEl = document.getElementById('terminalFloorToFloor');
       let floors = floorsEl ? parseInt(floorsEl.value, 10) : 1;
@@ -9099,15 +13355,18 @@ def _build_designer_html() -> str:
       floors = Math.max(1, floors || 1);
       f2f = Math.max(0.5, f2f || 4);
       const totalH = floors * f2f;
-      const term = {{ id: id(), name: nameBase, vertices: [], closed: false, floors, floorToFloor: f2f, floorHeight: totalH, departureCapacity: 0, arrivalCapacity: 0 }};
+      if (findDuplicateLayoutName('terminal', null, nameBase)) {{
+        alertDuplicateLayoutName();
+        return;
+      }}
+      const term = {{ id: id(), name: nameBase, buildingType: selectedBuildingType, vertices: [], closed: false, floors, floorToFloor: f2f, floorHeight: totalH, departureCapacity: 0, arrivalCapacity: 0 }};
       pushUndo();
       state.terminals.push(term);
       state.currentTerminalId = term.id;
       state.terminalDrawingId = term.id;
       syncPanelFromState();
       draw();
-      if (typeof renderFlightList === 'function') renderFlightList();
-      if (typeof renderFlightGantt === 'function') renderFlightGantt();
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     }});
 
     document.getElementById('btnTaxiwayDraw').addEventListener('click', function() {{
@@ -9124,9 +13383,10 @@ def _build_designer_html() -> str:
             state.taxiways = state.taxiways.filter(t => t.id !== tw.id);
           }}
           state.taxiwayDrawingId = null;
+          state.layoutPathDrawPointer = null;
           syncPanelFromState();
-          if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-          if (scene3d) update3DScene();
+          if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+          else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
         }}
         return;
       }}
@@ -9141,8 +13401,12 @@ def _build_designer_html() -> str:
       const baseWidth = pathType === 'runway'
         ? RUNWAY_PATH_DEFAULT_WIDTH
         : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-      const widthVal = Math.max(5, Math.min(100, inputWidth || baseWidth));
-      const modeVal = document.getElementById('taxiwayDirectionMode').value || 'both';
+      const widthVal = clampTaxiwayWidthM(pathType, inputWidth, baseWidth);
+      const modeVal = (function() {{
+        const raw = document.getElementById('taxiwayDirectionMode') ? document.getElementById('taxiwayDirectionMode').value : '';
+        if (pathType === 'runway') return (raw === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+        return raw || 'both';
+      }})();
       const maxExitInput = document.getElementById('taxiwayMaxExitVel');
       const minExitInput = document.getElementById('taxiwayMinExitVel');
       const maxExitVelocity = (pathType === 'runway_exit' && maxExitInput)
@@ -9198,11 +13462,16 @@ def _build_designer_html() -> str:
       if (pathType !== 'runway') delete taxiway.endDisplacedThresholdM;
       if (pathType !== 'runway') delete taxiway.endBlastPadM;
       if (pathType !== 'runway_exit') {{ delete taxiway.maxExitVelocity; delete taxiway.minExitVelocity; delete taxiway.allowedRwDirections; }}
+      if (findDuplicateLayoutName('taxiway', null, nameBase)) {{
+        alertDuplicateLayoutName();
+        return;
+      }}
       pushUndo();
       state.taxiways.push(taxiway);
       state.taxiwayDrawingId = taxiway.id;
       syncPanelFromState();
-      if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
     }});
     const btnPbbDrawEl = document.getElementById('btnPbbDraw');
     if (btnPbbDrawEl) btnPbbDrawEl.addEventListener('click', function() {{
@@ -9211,6 +13480,10 @@ def _build_designer_html() -> str:
     const btnRemoteDrawEl = document.getElementById('btnRemoteDraw');
     if (btnRemoteDrawEl) btnRemoteDrawEl.addEventListener('click', function() {{
       toggleLayoutDrawMode('remoteDrawing', 'previewRemote', null);
+    }});
+    const btnHoldingPointDrawEl = document.getElementById('btnHoldingPointDraw');
+    if (btnHoldingPointDrawEl) btnHoldingPointDrawEl.addEventListener('click', function() {{
+      toggleLayoutDrawMode('holdingPointDrawing', 'previewHoldingPoint', null);
     }});
     const btnApronDrawEl = document.getElementById('btnApronLinkDraw');
     if (btnApronDrawEl) btnApronDrawEl.addEventListener('click', function() {{
@@ -9388,13 +13661,16 @@ def _build_designer_html() -> str:
           const floorH = t.floorHeight != null ? Number(t.floorHeight) || (floors * f2f) : (floors * f2f);
           const dep = t.departureCapacity != null ? t.departureCapacity : 0;
           const arr = t.arrivalCapacity != null ? t.arrivalCapacity : 0;
-          const baseName = (t.name && t.name.trim()) ? t.name.trim() : ('Terminal ' + (idx + 1));
+          const baseName = (t.name && t.name.trim()) ? t.name.trim() : ('Building ' + (idx + 1));
+          const buildingTheme = getBuildingTheme(t);
           items.push({{
             type: 'terminal',
             id: t.id,
-            title: uniqueTitle('Terminal | ' + baseName),
+            title: uniqueTitle('Building | ' + baseName),
             tag: 'Height ' + floorH.toFixed(1) + ' m',
             details:
+              'Type: ' + buildingTheme.label +
+              '<br>' +
               'Area: ' + areaM2.toFixed(1) + ' m²' +
               '<br>Height: ' + floorH.toFixed(1) + ' m' +
               '<br>Floors: ' + floors +
@@ -9425,7 +13701,7 @@ def _build_designer_html() -> str:
           if (Array.isArray(st.allowedTerminals) && st.allowedTerminals.length) {{
             const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {{ return {{
               id: t.id,
-              name: (t.name || '').trim() || 'Terminal'
+              name: (t.name || '').trim() || 'Building'
             }}; }});
             const names = st.allowedTerminals.map(function(id) {{
               const tt = terms.find(function(t) {{ return t.id === id; }});
@@ -9445,7 +13721,7 @@ def _build_designer_html() -> str:
               'Category: ' + (st.category || '—') +
               '<br>Position: (' + rcol.toFixed(1) + ',' + rrow.toFixed(1) + ')' +
               '<br>Angle: ' + normalizeAngleDeg(st.angleDeg != null ? st.angleDeg : 0).toFixed(0) + '°' +
-              '<br>available terminals: ' + allowedLabel
+              '<br>available buildings: ' + allowedLabel
           }});
         }});
       }} else if (isPathLayoutMode(mode)) {{
@@ -9502,6 +13778,26 @@ def _build_designer_html() -> str:
               (tw.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
               '<br>Start point: ' + startStr +
               '<br>End point: ' + endStr
+          }});
+        }});
+      }} else if (mode === 'holdingPoint') {{
+        (state.holdingPoints || []).forEach(function(hp, idx) {{
+          if (!hp || seen['hp_' + hp.id]) return;
+          seen['hp_' + hp.id] = true;
+          const kindLabel = holdingPointKindDisplayLabel(hp.hpKind);
+          const baseName = (hp.name && hp.name.trim()) ? hp.name.trim() : (kindLabel + ' ' + (idx + 1));
+          const cx = Number(hp.x), cy = Number(hp.y);
+          const col = cx / CELL_SIZE, row = cy / CELL_SIZE;
+          const tagShort = normalizeHoldingPointKind(hp.hpKind) === 'runway_holding' ? 'RHP' : 'IHP';
+          items.push({{
+            type: 'holdingPoint',
+            id: hp.id,
+            title: uniqueTitle(kindLabel + ' | ' + baseName),
+            tag: tagShort + ' · ' + c2dHoldingPointDiameterM().toFixed(0) + ' m',
+            details:
+              'Type: ' + kindLabel +
+              '<br>Position (cell): (' + col.toFixed(1) + ', ' + row.toFixed(1) + ')' +
+              '<br>World: (' + cx.toFixed(0) + ', ' + cy.toFixed(0) + ')'
           }});
         }});
       }} else if (mode === 'apronTaxiway') {{
@@ -9565,12 +13861,19 @@ def _build_designer_html() -> str:
             state.selectedObject = null;
           if (type === 'terminal' && state.currentTerminalId === id) {{
             state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
-            if (state.terminalDrawingId === id) state.terminalDrawingId = null;
+            if (state.terminalDrawingId === id) {{
+              state.terminalDrawingId = null;
+              state.layoutPathDrawPointer = null;
+            }}
           }}
-          if (type === 'taxiway' && state.taxiwayDrawingId === id) state.taxiwayDrawingId = null;
+          if (type === 'taxiway' && state.taxiwayDrawingId === id) {{
+            state.taxiwayDrawingId = null;
+            state.layoutPathDrawPointer = null;
+          }}
           syncPanelFromState();
           updateObjectInfo();
-          if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+          if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+          else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
         }});
         el.addEventListener('click', function(ev) {{
           if (ev.target.classList.contains('obj-item-delete')) return;
@@ -9583,6 +13886,7 @@ def _build_designer_html() -> str:
           listItems.forEach(li => li.classList.remove('selected', 'expanded'));
           if (!wasExpanded) {{
             this.classList.add('selected', 'expanded');
+            state.flightPathRevealFlightId = null;
             state.selectedObject = {{ type: typ, id: idr, obj }};
             if (typ === 'terminal') state.currentTerminalId = idr;
             syncPanelFromState();
@@ -9611,18 +13915,18 @@ def _build_designer_html() -> str:
           const totalArea = areaM2 * floors;
           const dep = o.departureCapacity != null ? o.departureCapacity : 0;
           const arr = o.arrivalCapacity != null ? o.arrivalCapacity : 0;
-          objectInfoEl.innerHTML = '<strong>Terminal</strong><br>Name: ' + (o.name || o.id) + '<br>Vertices: ' + (o.vertices ? o.vertices.length : 0) +
+          objectInfoEl.innerHTML = '<strong>Building</strong><br>Name: ' + (o.name || o.id) + '<br>Type: ' + getBuildingTypeLabel(o.buildingType) + '<br>Vertices: ' + (o.vertices ? o.vertices.length : 0) +
             '<br>Footprint area: ' + areaM2.toFixed(1) + ' m²<br>Height: ' + floorH.toFixed(1) + ' m (Floors: ' + floors + ' × ' + f2f.toFixed(1) + ' m)' +
             '<br>Total floor area: ' + totalArea.toFixed(1) + ' m²' +
             '<br>Departure capacity: ' + dep + '<br>Arrival capacity: ' + arr;
-        }} else if (state.selectedObject.type === 'pbb')
-          objectInfoEl.innerHTML = '<strong>Contact Stand</strong><br>Name: ' + (o.name || '—') + '<br>Category: ' + o.category + '<br>Edge cell: (' + o.edgeCol + ',' + o.edgeRow + ')';
-        else if (state.selectedObject.type === 'remote') {{
+        }} else if (state.selectedObject.type === 'pbb') {{
+          objectInfoEl.innerHTML = '<strong>Contact Stand</strong><br>Name: ' + (o.name || '—') + '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) + '<br>PBB count: ' + Math.max(1, parseInt(o.pbbCount, 10) || 1) + '<br>Edge cell: (' + o.edgeCol + ',' + o.edgeRow + ')';
+        }} else if (state.selectedObject.type === 'remote') {{
           let allowedLabel = 'All (by proximity)';
           if (Array.isArray(o.allowedTerminals) && o.allowedTerminals.length) {{
             const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {{ return {{
               id: t.id,
-              name: (t.name || '').trim() || 'Terminal'
+              name: (t.name || '').trim() || 'Building'
             }}; }});
             const names = o.allowedTerminals.map(function(id) {{
               const tt = terms.find(function(t) {{ return t.id === id; }});
@@ -9630,12 +13934,23 @@ def _build_designer_html() -> str:
             }});
             if (names.length) allowedLabel = names.join(', ');
           }}
+          const remotePx = getRemoteStandCenterPx(o);
+          const remoteCell = [remotePx[0] / CELL_SIZE, remotePx[1] / CELL_SIZE];
           objectInfoEl.innerHTML =
             '<strong>Remote stand</strong>' +
             '<br>Name: ' + (o.name || '—') +
-            '<br>Category: ' + (o.category || '—') +
-            '<br>Cell: (' + o.col + ',' + o.row + ')' +
-            '<br>available terminals: ' + allowedLabel;
+            '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) +
+            '<br>Cell: (' + remoteCell[0].toFixed(1) + ',' + remoteCell[1].toFixed(1) + ')' +
+            '<br>available buildings: ' + allowedLabel;
+        }} else if (state.selectedObject.type === 'holdingPoint') {{
+          const hx = Number(o.x), hy = Number(o.y);
+          const hCol = hx / CELL_SIZE, hRow = hy / CELL_SIZE;
+          objectInfoEl.innerHTML =
+            '<strong>' + holdingPointKindDisplayLabel(o.hpKind) + '</strong>' +
+            '<br>Name: ' + (o.name || '—') +
+            '<br>Diameter: ' + c2dHoldingPointDiameterM().toFixed(0) + ' m' +
+            '<br>Cell: (' + hCol.toFixed(1) + ', ' + hRow.toFixed(1) + ')' +
+            '<br>World: (' + hx.toFixed(0) + ', ' + hy.toFixed(0) + ')';
         }}
         else if (state.selectedObject.type === 'taxiway') {{
           const dirVal = getTaxiwayDirection(o);
@@ -9741,7 +14056,38 @@ def _build_designer_html() -> str:
       canvas.style.width = w + 'px';
       canvas.style.height = h + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      invalidateGridUnderlay();
       safeDraw();
+    }}
+
+    let _gridUnderlayCanvas = null;
+    let _gridUnderlayDirty = true;
+    function invalidateGridUnderlay() {{ _gridUnderlayDirty = true; }}
+    function rebuildGridUnderlay() {{
+      const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
+      if (!_gridUnderlayCanvas) _gridUnderlayCanvas = document.createElement('canvas');
+      _gridUnderlayCanvas.width = Math.max(1, Math.floor(maxX * dpr));
+      _gridUnderlayCanvas.height = Math.max(1, Math.floor(maxY * dpr));
+      const uctx = _gridUnderlayCanvas.getContext('2d');
+      uctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      uctx.fillStyle = GRID_VIEW_BG;
+      uctx.fillRect(0, 0, maxX, maxY);
+      if (state.layoutImageOverlay && layoutImageBitmap) {{
+        const overlay = state.layoutImageOverlay;
+        const [imgX, imgY] = cellToPixel(overlay.topLeftCol, overlay.topLeftRow);
+        uctx.save();
+        uctx.globalAlpha = state.showImage ? clampLayoutImageOpacity(overlay.opacity) : 0;
+        uctx.imageSmoothingEnabled = true;
+        uctx.drawImage(
+          layoutImageBitmap,
+          imgX,
+          imgY,
+          clampLayoutImageSize(overlay.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM),
+          clampLayoutImageSize(overlay.heightM, GRID_LAYOUT_IMAGE_DEFAULTS.heightM)
+        );
+        uctx.restore();
+      }}
+      _gridUnderlayDirty = false;
     }}
 
     function drawGrid() {{
@@ -9755,44 +14101,45 @@ def _build_designer_html() -> str:
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.translate(state.panX, state.panY);
       ctx.scale(state.scale, state.scale);
-      if (state.layoutImageOverlay && layoutImageBitmap) {{
-        const overlay = state.layoutImageOverlay;
-        const [imgX, imgY] = cellToPixel(overlay.topLeftCol, overlay.topLeftRow);
-        ctx.save();
-        // Keep logic simple: when off, treat image opacity as 0.
-        ctx.globalAlpha = state.showImage ? clampLayoutImageOpacity(overlay.opacity) : 0;
-        ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(
-          layoutImageBitmap,
-          imgX,
-          imgY,
-          clampLayoutImageSize(overlay.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM),
-          clampLayoutImageSize(overlay.heightM, GRID_LAYOUT_IMAGE_DEFAULTS.heightM)
-        );
-        ctx.restore();
-      }}
+      const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
+      if (_gridUnderlayDirty) rebuildGridUnderlay();
+      ctx.drawImage(_gridUnderlayCanvas, 0, 0, maxX, maxY);
       if (!state.showGrid) {{
         ctx.restore();
         return;
       }}
-      const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
-      for (let c = 0; c <= GRID_COLS; c++) {{
+      const drawMinor = !(GRID_MINOR_GRID_MIN_SCALE > 0 && state.scale < GRID_MINOR_GRID_MIN_SCALE);
+      const marginWorld = GRID_DRAW_VIEWPORT_MARGIN_CELLS * CELL_SIZE;
+      const s = state.scale || 1;
+      const minWx = (0 - state.panX) / s - marginWorld;
+      const maxWx = (w - state.panX) / s + marginWorld;
+      const minWy = (0 - state.panY) / s - marginWorld;
+      const maxWy = (h - state.panY) / s + marginWorld;
+      const cMin = Math.max(0, Math.floor(minWx / CELL_SIZE));
+      const cMax = Math.min(GRID_COLS, Math.ceil(maxWx / CELL_SIZE));
+      const rMin = Math.max(0, Math.floor(minWy / CELL_SIZE));
+      const rMax = Math.min(GRID_ROWS, Math.ceil(maxWy / CELL_SIZE));
+      for (let c = cMin; c <= cMax; c++) {{
+        const isMajor = (c % GRID_MAJOR_INTERVAL === 0);
+        if (!isMajor && !drawMinor) continue;
         const x = c * CELL_SIZE;
-        ctx.strokeStyle = (c % GRID_MAJOR_INTERVAL === 0)
+        ctx.strokeStyle = isMajor
           ? ('rgba(' + GRID_MAJOR_LINE_RGB + ',' + GRID_MAJOR_LINE_OPACITY + ')')
           : ('rgba(' + GRID_MINOR_LINE_RGB + ',' + GRID_MINOR_LINE_OPACITY + ')');
-        ctx.lineWidth = (c % GRID_MAJOR_INTERVAL === 0) ? GRID_MAJOR_LINE_WIDTH : GRID_MINOR_LINE_WIDTH;
+        ctx.lineWidth = isMajor ? GRID_MAJOR_LINE_WIDTH : GRID_MINOR_LINE_WIDTH;
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, maxY);
         ctx.stroke();
       }}
-      for (let r = 0; r <= GRID_ROWS; r++) {{
+      for (let r = rMin; r <= rMax; r++) {{
+        const isMajor = (r % GRID_MAJOR_INTERVAL === 0);
+        if (!isMajor && !drawMinor) continue;
         const y = r * CELL_SIZE;
-        ctx.strokeStyle = (r % GRID_MAJOR_INTERVAL === 0)
+        ctx.strokeStyle = isMajor
           ? ('rgba(' + GRID_MAJOR_LINE_RGB + ',' + GRID_MAJOR_LINE_OPACITY + ')')
           : ('rgba(' + GRID_MINOR_LINE_RGB + ',' + GRID_MINOR_LINE_OPACITY + ')');
-        ctx.lineWidth = (r % GRID_MAJOR_INTERVAL === 0) ? GRID_MAJOR_LINE_WIDTH : GRID_MINOR_LINE_WIDTH;
+        ctx.lineWidth = isMajor ? GRID_MAJOR_LINE_WIDTH : GRID_MINOR_LINE_WIDTH;
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(maxX, y);
@@ -9801,14 +14148,12 @@ def _build_designer_html() -> str:
       ctx.fillStyle = '#aaa';
       ctx.font = '10px system-ui';
       ctx.fillText('0,0', 4, 2);
-      // red dot at exact grid center
       const cx = (GRID_COLS * CELL_SIZE) / 2;
       const cy = (GRID_ROWS * CELL_SIZE) / 2;
       ctx.beginPath();
       ctx.fillStyle = '#ef4444';
       ctx.arc(cx, cy, CELL_SIZE * 0.15, 0, Math.PI * 2);
       ctx.fill();
-      // hovered grid intersection: light red dot at crossing point
       if (state.hoverCell != null) {{
         const hc = state.hoverCell;
         const hx = hc.col * CELL_SIZE;
@@ -9821,23 +14166,57 @@ def _build_designer_html() -> str:
       ctx.restore();
     }}
 
+    function drawPolygonHatch(points, strokeStyle, spacingPx) {{
+      if (!Array.isArray(points) || points.length < 3) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      points.forEach(function(p) {{
+        minX = Math.min(minX, p[0]);
+        maxX = Math.max(maxX, p[0]);
+        minY = Math.min(minY, p[1]);
+        maxY = Math.max(maxY, p[1]);
+      }});
+      const span = Math.max(maxX - minX, maxY - minY);
+      const pad = span + Math.max(40, spacingPx * 2);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+      ctx.closePath();
+      ctx.clip();
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([]);
+      for (let offset = minX - pad; offset <= maxX + pad; offset += spacingPx) {{
+        ctx.beginPath();
+        ctx.moveTo(offset, maxY + pad);
+        ctx.lineTo(offset + (maxY - minY) + pad, minY - pad);
+        ctx.stroke();
+      }}
+      ctx.restore();
+    }}
     function drawTerminals() {{
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.translate(state.panX, state.panY);
       ctx.scale(state.scale, state.scale);
       state.terminals.forEach(term => {{
-        if (term.vertices.length === 0) return;
+        const isDrawingTerm = state.terminalDrawingId === term.id;
+        if (term.vertices.length === 0 && !isDrawingTerm) return;
         const selected = state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.id === term.id;
+        const buildingTheme = getBuildingTheme(term);
+        const termPts = term.vertices.map(function(v) {{ return cellToPixel(v.col, v.row); }});
         ctx.lineWidth = selected ? 3 : 2;
-        ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : (_canvas2dStyle.terminalStrokeDefault || '#38bdf8');
-        ctx.fillStyle = selected ? c2dObjectSelectedFill() : (_canvas2dStyle.terminalFillDefault || 'rgba(56,189,248,0.12)');
+        ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : buildingTheme.stroke;
+        ctx.fillStyle = selected ? c2dObjectSelectedFill() : buildingTheme.fill;
         ctx.beginPath();
-        for (let i = 0; i < term.vertices.length; i++) {{
-          const [x,y] = cellToPixel(term.vertices[i].col, term.vertices[i].row);
+        for (let i = 0; i < termPts.length; i++) {{
+          const [x,y] = termPts[i];
           if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
         }}
-        if (term.closed) {{ ctx.closePath(); ctx.fill(); }}
+        if (term.closed) {{
+          ctx.closePath();
+          if (buildingTheme.fillEnabled) ctx.fill();
+        }}
         if (selected) {{
           ctx.save();
           ctx.shadowColor = c2dObjectSelectedGlow();
@@ -9847,20 +14226,8 @@ def _build_designer_html() -> str:
         }}
         ctx.stroke();
         if (selected) ctx.restore();
-        // Selected terminals are highlighted once more with a dotted contour
-        if (selected) {{
-          ctx.save();
-          ctx.setLineDash([8, 6]);
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = c2dObjectSelectedDashStroke();
-          ctx.beginPath();
-          for (let i = 0; i < term.vertices.length; i++) {{
-            const [x,y] = cellToPixel(term.vertices[i].col, term.vertices[i].row);
-            if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-          }}
-          if (term.closed) ctx.closePath();
-          ctx.stroke();
-          ctx.restore();
+        if (term.closed && buildingTheme.hatch === 'diagonal' && buildingTheme.fillEnabled) {{
+          drawPolygonHatch(termPts, selected ? c2dObjectSelectedDashStroke() : buildingTheme.stroke, Math.max(10, CELL_SIZE * 0.6));
         }}
         // Show terminal name centered in terminal (height eliminate)
         if (term.closed && term.vertices.length > 0) {{
@@ -9871,8 +14238,8 @@ def _build_designer_html() -> str:
           }});
           cx /= term.vertices.length;
           cy /= term.vertices.length;
-          const label = term.name || term.id || 'Terminal';
-          ctx.fillStyle = _canvas2dStyle.terminalLabelFill || 'rgba(56,189,248,0.95)';
+          const label = term.name || term.id || 'Building';
+          ctx.fillStyle = buildingTheme.labelFill;
           ctx.font = '12px system-ui';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
@@ -9891,6 +14258,23 @@ def _build_designer_html() -> str:
             ctx.stroke();
           }}
         }});
+        if (isDrawingTerm && state.layoutPathDrawPointer && term.vertices.length >= 1) {{
+          const ptr = state.layoutPathDrawPointer;
+          const lastV = term.vertices[term.vertices.length - 1];
+          const [lx, ly] = cellToPixel(lastV.col, lastV.row);
+          if (ptr && ptr.length >= 2 && dist2([lx, ly], ptr) > 1e-6) {{
+            ctx.save();
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+            ctx.setLineDash([4, 6]);
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(lx, ly);
+            ctx.lineTo(ptr[0], ptr[1]);
+            ctx.stroke();
+            ctx.restore();
+          }}
+        }}
       }});
       ctx.restore();
     }}
@@ -9903,24 +14287,42 @@ def _build_designer_html() -> str:
       state.pbbStands.forEach(pbb => {{
         const x1 = Number(pbb.x1), y1 = Number(pbb.y1), x2 = Number(pbb.x2), y2 = Number(pbb.y2);
         if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) return;
+        rebuildPbbBridgeGeometry(pbb);
         const endSize = getStandSizeMeters(pbb.category || 'C');
         const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#f97316';
-        ctx.lineWidth = sel ? 4 : 3;
-        if (sel) {{
-          ctx.save();
-          ctx.shadowColor = c2dObjectSelectedGlow();
-          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-        }}
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-        if (sel) ctx.restore();
-        const ex = x2, ey = y2;
-        const angle = Math.atan2(y2 - y1, x2 - x1);
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : 'rgba(22,163,74,0.18)';
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#22c55e';
+        const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
+        const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
+        bridges.forEach(function(bridge, bridgeIdx) {{
+          const pts = Array.isArray(bridge.points) ? bridge.points : [];
+          if (pts.length < 2) return;
+          ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#f97316';
+          ctx.lineWidth = sel ? 3.5 : 2.5;
+          if (sel) {{
+            ctx.save();
+            ctx.shadowColor = c2dObjectSelectedGlow();
+            ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+          }}
+          ctx.beginPath();
+          ctx.moveTo(Number(pts[0].x) || 0, Number(pts[0].y) || 0);
+          for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(Number(pts[pi].x) || 0, Number(pts[pi].y) || 0);
+          ctx.stroke();
+          if (sel) ctx.restore();
+          if (sel) {{
+            pts.forEach(function(pt, ptIdx) {{
+              const isBridgeVertexSelected = !!(state.selectedVertex && state.selectedVertex.type === 'pbbBridge' && state.selectedVertex.id === pbb.id && state.selectedVertex.bridgeIndex === bridgeIdx && state.selectedVertex.pointIndex === ptIdx);
+              ctx.beginPath();
+              ctx.fillStyle = isBridgeVertexSelected ? '#f43f5e' : '#fdba74';
+              ctx.arc(Number(pt.x) || 0, Number(pt.y) || 0, isBridgeVertexSelected ? 4 : 3, 0, Math.PI * 2);
+              ctx.fill();
+            }});
+          }}
+        }});
+        const apronPt = getStandConnectionPx(pbb);
+        const ex = apronPt[0], ey = apronPt[1];
+        const angle = getPBBStandAngle(pbb);
+        const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === pbb.id);
+        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : 'rgba(22,163,74,0.18)');
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : '#22c55e');
         ctx.lineWidth = sel ? 2.5 : 1.5;
         ctx.save();
         ctx.translate(ex, ey);
@@ -9935,19 +14337,10 @@ def _build_designer_html() -> str:
         }}
         ctx.stroke();
         if (sel) ctx.restore();
-        if (sel) {{
-          ctx.save();
-          ctx.setLineDash([6, 4]);
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = c2dObjectSelectedDashStroke();
-          ctx.beginPath();
-          ctx.rect(-endSize/2, -endSize/2, endSize, endSize);
-          ctx.stroke();
-          ctx.restore();
-        }}
         // Parking lot label: "Category / Name" form (If there is no name, there is a number)
         const nameRaw = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : String(state.pbbStands.indexOf(pbb) + 1);
-        const label = (pbb.category || 'C') + ' / ' + nameRaw;
+        const labelPrefix = getStandCategoryMode(pbb) === 'aircraft' ? 'AC' : (pbb.category || 'C');
+        const label = labelPrefix + ' / ' + nameRaw;
         const pad = 3;
         const tx = endSize / 2 - pad;
         const ty = -endSize / 2 + pad;
@@ -9957,6 +14350,20 @@ def _build_designer_html() -> str:
         ctx.textBaseline = 'top';
         ctx.fillText(String(label), tx, ty);
         ctx.restore();
+        ctx.save();
+        ctx.beginPath();
+        ctx.fillStyle = sel ? '#22c55e' : 'rgba(34,197,94,0.9)';
+        ctx.arc(apronPt[0], apronPt[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        if (sel) {{
+          ctx.strokeStyle = '#bbf7d0';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }}
+        ctx.restore();
+        if (sel) {{
+          drawStandRotationHandle(getPbbRotationOriginPx(pbb), getPbbRotationHandlePx(pbb), rotationActive);
+        }}
       }});
       ctx.restore();
     }}
@@ -9972,11 +14379,13 @@ def _build_designer_html() -> str:
         const size = getStandSizeMeters(st.category || 'C');
         const angle = getRemoteStandAngleRad(st);
         const sel = state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.id === st.id;
+        const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
+        const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(angle);
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : 'rgba(22,163,74,0.18)';
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#22c55e';
+        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : 'rgba(22,163,74,0.18)');
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : '#22c55e');
         ctx.lineWidth = sel ? 2.5 : 1.5;
         ctx.beginPath();
         ctx.rect(-size/2, -size/2, size, size);
@@ -9988,16 +14397,6 @@ def _build_designer_html() -> str:
         }}
         ctx.stroke();
         if (sel) ctx.restore();
-        if (sel) {{
-          ctx.save();
-          ctx.setLineDash([6, 4]);
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = c2dObjectSelectedDashStroke();
-          ctx.beginPath();
-          ctx.rect(-size/2, -size/2, size, size);
-          ctx.stroke();
-          ctx.restore();
-        }}
         ctx.restore();
         // Apron Taxiway Reference point for link: Remote stand Show small dot in center
         if (mode === 'apronTaxiway') {{
@@ -10010,13 +14409,17 @@ def _build_designer_html() -> str:
         }}
         // Remote stand label: "Category / Name" form (Default if no name Rxxx) - Top left placement
         const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
-        const label = (st.category || 'C') + ' / ' + nameRaw;
+        const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
+        const label = labelPrefix + ' / ' + nameRaw;
         ctx.fillStyle = '#bbf7d0';
         ctx.font = '8px system-ui';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
         const labelOffset = 2;
         ctx.fillText(label, cx + size/2 - labelOffset, cy - size/2 + labelOffset);
+        if (sel) {{
+          drawStandRotationHandle([cx, cy], getRemoteRotationHandlePx(st), rotationActive);
+        }}
       }});
       ctx.restore();
     }}
@@ -10227,13 +14630,9 @@ def _build_designer_html() -> str:
         const wrap = panel.querySelector('#rwySepTimeWrap');
         if (!wrap) return;
 
-        const _prepRwy = state.flights.slice();
-        _prepRwy.forEach(function(ff) {{ ensureFlightPaths(ff); }});
-        if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(_prepRwy, false);
-        if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
-        const allData = typeof computeSeparationAdjustedTimes === 'function' ? computeSeparationAdjustedTimes() : null;
-        // Runway separation(Eline) After recalculation Flight Schedule The table is also up to date ELDT/ETOTImmediately re-render to reflect
-        if (typeof renderFlightList === 'function') renderFlightList();
+        const allData = typeof buildRunwaySeparationTimelineByRunwaySnapshot === 'function'
+          ? buildRunwaySeparationTimelineByRunwaySnapshot(state.flights)
+          : null;
         const data = allData && active && active.id != null ? allData[active.id] : null;
         if (!data || !data.events || !data.events.length) {{
           wrap.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:8px 10px;">No SLDT/STOT events for this runway.</div>';
@@ -10284,6 +14683,10 @@ def _build_designer_html() -> str:
           if (ln.sldt != null && ln.sldt < minT0) minT0 = ln.sldt;
           if (ln.etot != null && ln.etot > maxT0) maxT0 = ln.etot;
         }});
+        if (minT0 <= 0 && lanes.length) {{
+          const pos = lanes.map(function(ln) {{ return ln.sldt; }}).filter(function(v) {{ return v != null && isFinite(v) && v > 1e-6; }});
+          if (pos.length) minT0 = Math.min.apply(null, pos);
+        }}
         if (!isFinite(minT0) || !isFinite(maxT0)) {{
           minT0 = data.minT;
           maxT0 = data.maxT;
@@ -10377,15 +14780,11 @@ def _build_designer_html() -> str:
               '"></div>';
           }}
 
-          const gridLines = tickPositions.map(tp =>
-            '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>'
-          ).join('');
-
           rows.push(
             '<div class="alloc-row">' +
               '<div class="alloc-row-label">' + escapeHtml(reg) + '</div>' +
               // Runway Separation TimelineIn each row background(track background color/outline)remove
-              '<div class="alloc-row-track" style="background:transparent;border:none;">' + gridLines + blocks + '</div>' +
+              '<div class="alloc-row-track" style="background:transparent;border:none;">' + blocks + '</div>' +
             '</div>'
           );
         }});
@@ -10437,7 +14836,13 @@ def _build_designer_html() -> str:
           '</div>';
 
         // many RegIf present, wrap the rows while leaving the header intact to display vertical scrolling.
-        const rowsHtml = '<div class="rwysep-rows">' + rows.join('') + '</div>';
+        const rwyGridOverlay =
+          '<div class="alloc-gantt-grid-overlay">' +
+            tickPositions.map(function(tp) {{
+              return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
+            }}).join('') +
+          '</div>';
+        const rowsHtml = '<div class="rwysep-rows">' + rwyGridOverlay + rows.join('') + '</div>';
         wrap.innerHTML = headHtml + rowsHtml + axisHtml;
 
         // Shift + Zoom on the time axis with the mouse wheel (Runway Timeline)
@@ -10598,27 +15003,15 @@ def _build_designer_html() -> str:
             ctx.restore();
           }} else ctx.stroke();
         }}
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : ((isRunwayPath || isRunwayExit) ? c2dRunwayOutline() : '#facc15');
-        ctx.beginPath();
-        for (let i = 0; i < tw.vertices.length; i++) {{
-          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }}
-        if (tw.vertices.length >= 2) ctx.stroke();
-        if (sel) {{
-          ctx.save();
-          ctx.setLineDash([8, 6]);
-          ctx.lineWidth = 3;
-          ctx.lineCap = pathLineCap;
-          ctx.strokeStyle = c2dObjectSelectedDashStroke();
+        if (!isRunwayPath) {{
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dPassengerTerminalStroke() : '#facc15');
           ctx.beginPath();
           for (let i = 0; i < tw.vertices.length; i++) {{
             const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
           }}
-          ctx.stroke();
-          ctx.restore();
+          if (tw.vertices.length >= 2) ctx.stroke();
         }}
         if (isRunwayPath && tw.vertices.length >= 2) {{
           const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
@@ -10665,19 +15058,35 @@ def _build_designer_html() -> str:
             const d = Math.min(Math.max(0, getEffectiveRunwayLineupDistM(tw)), lenPx);
             const lp = getRunwayPointAtDistance(tw.id, d);
             if (lp) {{
+              const lineupRtxOk = isLineupPointTouchingRunwayTaxiwayOnRunway(tw, lp);
               ctx.save();
-              ctx.fillStyle = '#dc2626';
-              ctx.strokeStyle = '#450a0a';
+              ctx.fillStyle = lineupRtxOk ? '#16a34a' : '#dc2626';
+              ctx.strokeStyle = lineupRtxOk ? '#14532d' : '#450a0a';
               ctx.lineWidth = 1.2;
               ctx.beginPath();
               ctx.arc(lp[0], lp[1], 5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
               ctx.fill();
               ctx.stroke();
-              ctx.fillStyle = '#fecaca';
+              const labelText = 'Line up';
               ctx.font = 'bold 11px system-ui, sans-serif';
-              ctx.textAlign = 'left';
-              ctx.textBaseline = 'bottom';
-              ctx.fillText('Line up', lp[0] + 7, lp[1] - 4);
+              const padX = 6, padY = 4, rad = 5;
+              const mLabel = ctx.measureText(labelText);
+              const bw = mLabel.width + padX * 2;
+              const bh = 11 + padY * 2;
+              const bx = lp[0] + 7;
+              const by = lp[1] - 4 - bh;
+              ctx.beginPath();
+              if (typeof ctx.roundRect === 'function') ctx.roundRect(bx, by, bw, bh, rad);
+              else ctx.rect(bx, by, bw, bh);
+              ctx.fillStyle = lineupRtxOk ? 'rgba(22, 163, 74, 0.92)' : 'rgba(220, 38, 38, 0.92)';
+              ctx.fill();
+              ctx.strokeStyle = lineupRtxOk ? '#14532d' : '#450a0a';
+              ctx.lineWidth = 1.2;
+              ctx.stroke();
+              ctx.fillStyle = '#ffffff';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(labelText, bx + bw / 2, by + bh / 2);
               ctx.restore();
             }}
           }}
@@ -10712,6 +15121,23 @@ def _build_designer_html() -> str:
             }}
           }});
         }}
+        if (drawing && state.layoutPathDrawPointer && tw.vertices.length >= 1) {{
+          const ptr = state.layoutPathDrawPointer;
+          const lastV = tw.vertices[tw.vertices.length - 1];
+          const [lx, ly] = cellToPixel(lastV.col, lastV.row);
+          if (ptr && ptr.length >= 2 && dist2([lx, ly], ptr) > 1e-6) {{
+            ctx.save();
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+            ctx.setLineDash([4, 6]);
+            ctx.lineWidth = Math.max(2, width * 0.25);
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(lx, ly);
+            ctx.lineTo(ptr[0], ptr[1]);
+            ctx.stroke();
+            ctx.restore();
+          }}
+        }}
       }});
       ctx.restore();
     }}
@@ -10722,7 +15148,7 @@ def _build_designer_html() -> str:
       ctx.translate(state.panX, state.panY);
       ctx.scale(state.scale, state.scale);
       ctx.lineWidth = 3;
-      ctx.setLineDash([6, 6]);
+      ctx.setLineDash([3, 3]);
       state.apronLinks.forEach(lk => {{
         const stand = findStandById(lk.pbbId);
         const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
@@ -10734,31 +15160,17 @@ def _build_designer_html() -> str:
         ctx.moveTo(poly[0][0], poly[0][1]);
         for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
         ctx.stroke();
-        if (state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id) {{
-          ctx.save();
-          ctx.setLineDash([4, 3]);
-          ctx.lineWidth = 4;
-          ctx.shadowColor = c2dObjectSelectedGlow();
-          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-          ctx.strokeStyle = c2dObjectSelectedDashStroke();
-          ctx.beginPath();
-          ctx.moveTo(poly[0][0], poly[0][1]);
-          for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
-          ctx.stroke();
-          ctx.restore();
-          ctx.setLineDash([6,6]);
-        }}
-        ctx.setLineDash([]);
         const svApron = state.selectedVertex;
         const selApron = state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id;
-        for (let pi = 0; pi < poly.length; pi++) {{
-          const [px, py] = poly[pi];
-          const isStandEnd = (pi === 0);
-          const isTaxiEnd = (pi === poly.length - 1);
-          const midIdx = isStandEnd || isTaxiEnd ? -1 : (pi - 1);
-          let vtxSel = false;
-          let draggable = false;
-          if (selApron) {{
+        if (selApron) {{
+          ctx.setLineDash([]);
+          for (let pi = 0; pi < poly.length; pi++) {{
+            const [px, py] = poly[pi];
+            const isStandEnd = (pi === 0);
+            const isTaxiEnd = (pi === poly.length - 1);
+            const midIdx = isStandEnd || isTaxiEnd ? -1 : (pi - 1);
+            let vtxSel = false;
+            let draggable = false;
             if (isTaxiEnd) {{
               draggable = true;
               vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'taxiway');
@@ -10766,19 +15178,19 @@ def _build_designer_html() -> str:
               draggable = true;
               vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'mid' && svApron.midIndex === midIdx);
             }}
+            const r = layoutPathVertexRadiusPx(vtxSel, draggable);
+            ctx.fillStyle = vtxSel ? '#f43f5e' : (draggable ? '#fde68a' : '#facc15');
+            ctx.beginPath();
+            ctx.arc(px, py, r, 0, Math.PI*2);
+            ctx.fill();
+            if (vtxSel || draggable) {{
+              ctx.strokeStyle = vtxSel ? '#ffffff' : c2dObjectSelectedStroke();
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+            }}
           }}
-          const r = layoutPathVertexRadiusPx(vtxSel, draggable);
-          ctx.fillStyle = vtxSel ? '#f43f5e' : (draggable ? '#fde68a' : '#facc15');
-          ctx.beginPath();
-          ctx.arc(px, py, r, 0, Math.PI*2);
-          ctx.fill();
-          if (vtxSel || (draggable && selApron)) {{
-            ctx.strokeStyle = vtxSel ? '#ffffff' : c2dObjectSelectedStroke();
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-          }}
+          ctx.setLineDash([3, 3]);
         }}
-        ctx.setLineDash([6,6]);
       }});
       ctx.setLineDash([]);
       // temporary first endpoint marker
@@ -10789,9 +15201,7 @@ def _build_designer_html() -> str:
         if (t.kind === 'pbb' || t.kind === 'remote') {{
           const st = findStandById(t.standId);
           if (st) {{
-            if (st.x2 != null && st.y2 != null) draft.push([st.x2, st.y2]);
-            else if (st.x != null && st.y != null) draft.push([Number(st.x), Number(st.y)]);
-            else draft.push(cellToPixel(st.col || 0, st.row || 0));
+            draft.push(getStandConnectionPx(st));
           }}
         }} else if (t.kind === 'taxiway') {{
           draft.push([t.x, t.y]);
@@ -10816,6 +15226,50 @@ def _build_designer_html() -> str:
             ctx.fill();
           }});
         }}
+      }}
+      ctx.restore();
+    }}
+
+    function drawHoldingPoints2D() {{
+      if (!ctx) return;
+      ctx.save();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.translate(state.panX, state.panY);
+      ctx.scale(state.scale, state.scale);
+      const r = c2dHoldingPointDiameterM() * 0.5;
+      const sel = state.selectedObject && state.selectedObject.type === 'holdingPoint';
+      (state.holdingPoints || []).forEach(function(hp) {{
+        if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return;
+        const selected = sel && state.selectedObject.id === hp.id;
+        const k = normalizeHoldingPointKind(hp.hpKind);
+        const fill = c2dHoldingPointFillForKind(k);
+        const stroke = c2dHoldingPointStrokeForKind(k);
+        ctx.beginPath();
+        ctx.arc(hp.x, hp.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = selected ? c2dObjectSelectedFill() : fill;
+        ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : stroke;
+        ctx.lineWidth = selected ? 2.5 : 1;
+        if (selected) {{
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+        }} else {{
+          ctx.shadowBlur = 0;
+        }}
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }});
+      if (state.holdingPointDrawing && state.previewHoldingPoint) {{
+        const px = state.previewHoldingPoint.x, py = state.previewHoldingPoint.y;
+        const ptp = state.previewHoldingPoint.pathType || 'taxiway';
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fillStyle = c2dHoldingPointPreviewFillForPathType(ptp);
+        ctx.strokeStyle = c2dHoldingPointPreviewStrokeForPathType(ptp);
+        ctx.lineWidth = 1;
+        ctx.shadowBlur = 0;
+        ctx.fill();
+        ctx.stroke();
       }}
       ctx.restore();
     }}
@@ -10873,21 +15327,44 @@ def _build_designer_html() -> str:
     }}
 
     let _safeDrawErrLogged = false;
+    let _drawRafId = 0;
     function safeDraw() {{ try {{ draw(); _safeDrawErrLogged = false; }} catch(e) {{ if (!_safeDrawErrLogged) {{ console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; }} }} }}
+    function flushDrawNow() {{
+      if (_drawRafId) {{
+        cancelAnimationFrame(_drawRafId);
+        _drawRafId = 0;
+      }}
+      safeDraw();
+    }}
+    function scheduleDraw() {{
+      if (_drawRafId) return;
+      _drawRafId = requestAnimationFrame(function() {{
+        _drawRafId = 0;
+        safeDraw();
+      }});
+    }}
     function draw() {{
       if (!ctx || !canvas) return;
       drawGrid();
       drawTerminals();
       drawTaxiways();
+      drawHoldingPoints2D();
       drawPBBs();
       drawRemoteStands();
       drawApronTaxiwayLinks();
       drawStandPreview();
-      drawPathJunctions();
       drawSelectedLayoutEdge();
-      drawFlightPathHighlight();
-      drawDeparturePathHighlight();
+      {{
+        const sel = state.selectedObject;
+        const rid = state.flightPathRevealFlightId;
+        if (sel && sel.type === 'flight' && rid != null && sel.id === rid) {{
+          drawFlightPathHighlight();
+          drawDeparturePathHighlight();
+        }}
+      }}
+      drawApproachPreviewPaths2D();
       drawFlights2D();
+      drawPathJunctions();
     }}
 
     document.addEventListener('keydown', function(ev) {{
@@ -10910,19 +15387,26 @@ def _build_designer_html() -> str:
       if (!state.selectedObject) return;
       const type = state.selectedObject.type;
       const id = state.selectedObject.id;
-      if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight') return;
+      if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'holdingPoint' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight') return;
       pushUndo();
       removeLayoutObjectFromState(type, id);
       state.selectedObject = null;
       state.selectedVertex = null;
       if (type === 'terminal' && state.currentTerminalId === id) {{
         state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
-        if (state.terminalDrawingId === id) state.terminalDrawingId = null;
+        if (state.terminalDrawingId === id) {{
+          state.terminalDrawingId = null;
+          state.layoutPathDrawPointer = null;
+        }}
       }}
-      if (type === 'taxiway' && state.taxiwayDrawingId === id) state.taxiwayDrawingId = null;
+      if (type === 'taxiway' && state.taxiwayDrawingId === id) {{
+        state.taxiwayDrawingId = null;
+        state.layoutPathDrawPointer = null;
+      }}
       syncPanelFromState();
       updateObjectInfo();
-      if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
       ev.preventDefault();
     }});
 
@@ -10940,6 +15424,7 @@ def _build_designer_html() -> str:
           state.selectedVertex = {{ type: 'terminal', id: vhit.terminalId, index: vhit.index }};
           const term = state.terminals.find(t => t.id === vhit.terminalId);
           if (term) {{
+            state.flightPathRevealFlightId = null;
             state.selectedObject = {{ type: 'terminal', id: term.id, obj: term }};
             state.currentTerminalId = term.id;
             syncPanelFromState();
@@ -10959,6 +15444,29 @@ def _build_designer_html() -> str:
           return;
         }}
       }}
+      const standRotateHit = hitTestStandRotationHandle(wx, wy);
+      if (standRotateHit) {{
+        pushUndo();
+        state.dragStandRotation = standRotateHit;
+        state.selectedVertex = {{ type: 'standRotation', id: standRotateHit.id, standType: standRotateHit.type }};
+        draw();
+        return;
+      }}
+      if (state.selectedObject && state.selectedObject.type === 'pbb' && !state.pbbDrawing) {{
+        const ph = hitTestPbbEditablePoint(wx, wy);
+        if (ph) {{
+          pushUndo();
+          if (ph.type === 'bridge') {{
+            state.dragPbbBridgeVertex = {{ pbbId: state.selectedObject.id, bridgeIndex: ph.bridgeIndex, pointIndex: ph.pointIndex }};
+            state.selectedVertex = {{ type: 'pbbBridge', id: state.selectedObject.id, bridgeIndex: ph.bridgeIndex, pointIndex: ph.pointIndex }};
+          }} else {{
+            state.dragStandConnection = {{ pbbId: state.selectedObject.id }};
+            state.selectedVertex = {{ type: 'pbbApronSite', id: state.selectedObject.id }};
+          }}
+          draw();
+          return;
+        }}
+      }}
       if (state.selectedObject && state.selectedObject.type === 'apronLink' && !state.apronLinkDrawing) {{
         const ah = hitTestApronLinkVertex(wx, wy);
         if (ah && ah.linkId === state.selectedObject.id) {{
@@ -10972,7 +15480,7 @@ def _build_designer_html() -> str:
         }}
       }}
       state.selectedVertex = null;
-      if ((mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing)) return;
+      if ((mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing)) return;
       state.dragStart = {{ sx, sy, panX: state.panX, panY: state.panY }};
       state.isPanning = false;
     }});
@@ -10980,6 +15488,8 @@ def _build_designer_html() -> str:
       const rect = canvas.getBoundingClientRect();
       const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
       const [wx, wy] = screenToWorld(sx, sy);
+      const snappedPt = worldPointToCellPoint(wx, wy, !!ev.shiftKey);
+      const snappedPx = cellToPixel(snappedPt.col, snappedPt.row);
       const [col, row] = pixelToCell(wx, wy);
       if (coordEl) coordEl.textContent = 'cell: (' + col + ', ' + row + ')';
       const prev = state.hoverCell;
@@ -10990,19 +15500,32 @@ def _build_designer_html() -> str:
         const pw = state.apronLinkPointerWorld;
         if (!pw || pw[0] !== wx || pw[1] !== wy) {{
           state.apronLinkPointerWorld = [wx, wy];
-          safeDraw(); drewThisMove = true;
+          scheduleDraw(); drewThisMove = true;
         }}
       }} else if (state.apronLinkPointerWorld) {{
         state.apronLinkPointerWorld = null;
-        safeDraw(); drewThisMove = true;
+        scheduleDraw(); drewThisMove = true;
+      }}
+      const pathLayoutDrawing = !!(state.terminalDrawingId || state.taxiwayDrawingId);
+      const blockLayoutPathPtr = !!(state.isPanning || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragApronLinkVertex || state.dragStandRotation);
+      if (pathLayoutDrawing && !blockLayoutPathPtr) {{
+        const nx = snappedPx[0], ny = snappedPx[1];
+        const lp = state.layoutPathDrawPointer;
+        if (!lp || lp[0] !== nx || lp[1] !== ny) {{
+          state.layoutPathDrawPointer = [nx, ny];
+          scheduleDraw(); drewThisMove = true;
+        }}
+      }} else if (state.layoutPathDrawPointer && (!pathLayoutDrawing || blockLayoutPathPtr)) {{
+        state.layoutPathDrawPointer = null;
+        if (!drewThisMove) {{ scheduleDraw(); drewThisMove = true; }}
       }}
       if (state.dragVertex) {{
         const term = state.terminals.find(t => t.id === state.dragVertex.terminalId);
         if (term && term.vertices[state.dragVertex.index]) {{
           const v = term.vertices[state.dragVertex.index];
-          v.col = col;
-          v.row = row;
-          safeDraw(); drewThisMove = true;
+          v.col = snappedPt.col;
+          v.row = snappedPt.row;
+          scheduleDraw(); drewThisMove = true;
         }}
         return;
       }}
@@ -11010,9 +15533,64 @@ def _build_designer_html() -> str:
         const tw = state.taxiways.find(t => t.id === state.dragTaxiwayVertex.taxiwayId);
         if (tw && tw.vertices[state.dragTaxiwayVertex.index]) {{
           const v = tw.vertices[state.dragTaxiwayVertex.index];
-          v.col = col;
-          v.row = row;
-          safeDraw(); drewThisMove = true;
+          v.col = snappedPt.col;
+          v.row = snappedPt.row;
+          scheduleDraw(); drewThisMove = true;
+          if (scene3d) update3DScene();
+        }}
+        return;
+      }}
+      if (state.dragStandRotation) {{
+        if (state.dragStandRotation.type === 'pbb') {{
+          const pbb = state.pbbStands.find(function(item) {{ return item.id === state.dragStandRotation.id; }});
+          if (pbb) {{
+            const origin = getPbbRotationOriginPx(pbb);
+            const nextDeg = normalizeAngleDeg(Math.atan2(wy - origin[1], wx - origin[0]) * 180 / Math.PI);
+            setPbbGeometryFromAngleLength(pbb, nextDeg, getPbbLengthMeters(pbb), true);
+            const angleInput = document.getElementById('standAngle');
+            if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
+            scheduleDraw(); drewThisMove = true;
+            if (scene3d) update3DScene();
+          }}
+        }} else if (state.dragStandRotation.type === 'remote') {{
+          const st = state.remoteStands.find(function(item) {{ return item.id === state.dragStandRotation.id; }});
+          if (st) {{
+            const center = getRemoteStandCenterPx(st);
+            const nextDeg = normalizeAngleDeg(Math.atan2(wy - center[1], wx - center[0]) * 180 / Math.PI);
+            st.angleDeg = nextDeg;
+            const angleInput = document.getElementById('remoteAngle');
+            if (angleInput) angleInput.value = String(Math.round(nextDeg));
+            scheduleDraw(); drewThisMove = true;
+            if (scene3d) update3DScene();
+          }}
+        }}
+        return;
+      }}
+      if (state.dragPbbBridgeVertex) {{
+        const pbb = state.pbbStands.find(function(item) {{ return item.id === state.dragPbbBridgeVertex.pbbId; }});
+        if (pbb && Array.isArray(pbb.pbbBridges) && pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex] && Array.isArray(pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points) && pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points[state.dragPbbBridgeVertex.pointIndex]) {{
+          const pt = pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points[state.dragPbbBridgeVertex.pointIndex];
+          if (state.dragPbbBridgeVertex.pointIndex === 0) {{
+            const projected = getClosestTerminalEdgePoint(wx, wy);
+            if (projected && projected.point) {{
+              pt.x = projected.point[0];
+              pt.y = projected.point[1];
+            }}
+          }} else {{
+            pt.x = snappedPx[0];
+            pt.y = snappedPx[1];
+          }}
+          scheduleDraw(); drewThisMove = true;
+          if (scene3d) update3DScene();
+        }}
+        return;
+      }}
+      if (state.dragStandConnection) {{
+        const pbb = state.pbbStands.find(function(item) {{ return item.id === state.dragStandConnection.pbbId; }});
+        if (pbb) {{
+          pbb.apronSiteX = snappedPx[0];
+          pbb.apronSiteY = snappedPx[1];
+          scheduleDraw(); drewThisMove = true;
           if (scene3d) update3DScene();
         }}
         return;
@@ -11025,9 +15603,9 @@ def _build_designer_html() -> str:
           const mi = state.dragApronLinkVertex.midIndex;
           if (lk.midVertices && mi >= 0 && mi < lk.midVertices.length &&
               col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {{
-            lk.midVertices[mi].col = col;
-            lk.midVertices[mi].row = row;
-            safeDraw(); drewThisMove = true;
+            lk.midVertices[mi].col = snappedPt.col;
+            lk.midVertices[mi].row = snappedPt.row;
+            scheduleDraw(); drewThisMove = true;
             if (scene3d) update3DScene();
           }}
         }} else if (state.dragApronLinkVertex.kind === 'taxiway') {{
@@ -11035,7 +15613,7 @@ def _build_designer_html() -> str:
           if (snap) {{
             lk.tx = snap[0];
             lk.ty = snap[1];
-            safeDraw(); drewThisMove = true;
+            scheduleDraw(); drewThisMove = true;
             if (scene3d) update3DScene();
           }}
         }}
@@ -11048,14 +15626,22 @@ def _build_designer_html() -> str:
         if (state.isPanning) {{
           state.panX = state.dragStart.panX + dx;
           state.panY = state.dragStart.panY + dy;
-          safeDraw(); drewThisMove = true;
+          scheduleDraw(); drewThisMove = true;
         }}
       }}
       const mode = settingModeSelect.value;
-      if (!state.isPanning && !state.dragVertex && mode === 'remote' && state.remoteDrawing) {{
+      if (!state.isPanning && !state.dragVertex && mode === 'holdingPoint' && state.holdingPointDrawing) {{
+        const snap = snapHoldingPointOnAllowedTaxiways(wx, wy);
+        if (snap) {{
+          state.previewHoldingPoint = {{ x: snap.x, y: snap.y, pathType: snap.pathType }};
+        }} else {{
+          state.previewHoldingPoint = null;
+        }}
+        scheduleDraw(); drewThisMove = true;
+      }} else if (!state.isPanning && !state.dragVertex && mode === 'remote' && state.remoteDrawing) {{
         const category = document.getElementById('remoteCategory').value || 'C';
         const angleDeg = normalizeAngleDeg(document.getElementById('remoteAngle') ? document.getElementById('remoteAngle').value : 0);
-        const candidate = {{ x: wx, y: wy, category, angleDeg }};
+        const candidate = {{ x: snappedPx[0], y: snappedPx[1], category, angleDeg }};
         const candCorners = getRemoteStandCorners(candidate);
         let overlap = false;
         for (let i = 0; i < state.remoteStands.length; i++) {{
@@ -11067,9 +15653,9 @@ def _build_designer_html() -> str:
           }}
         }}
         const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
-        if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) overlap = true;
-        state.previewRemote = {{ x: wx, y: wy, overlap }};
-        safeDraw(); drewThisMove = true;
+        if (candidate.x < 0 || candidate.y < 0 || candidate.x > maxX || candidate.y > maxY) overlap = true;
+        state.previewRemote = {{ x: candidate.x, y: candidate.y, overlap }};
+        scheduleDraw(); drewThisMove = true;
       }} else if (!state.isPanning && !state.dragVertex && mode === 'pbb' && state.pbbDrawing) {{
         let bestEdge = null, bestD2 = Infinity;
         state.terminals.forEach(t => {{
@@ -11077,9 +15663,9 @@ def _build_designer_html() -> str:
           for (let i = 0; i < t.vertices.length; i++) {{
             const v1 = t.vertices[i], v2 = t.vertices[(i+1) % t.vertices.length];
             const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-            const near = closestPointOnSegment(p1, p2, [wx, wy]);
+            const near = closestPointOnSegment(p1, p2, snappedPx);
             if (near) {{
-              const d2 = dist2(near, [wx, wy]);
+              const d2 = dist2(near, snappedPx);
               if (d2 < bestD2) {{ bestD2 = d2; bestEdge = {{ near, p1, p2 }}; }}
             }}
           }}
@@ -11092,7 +15678,7 @@ def _build_designer_html() -> str:
           const [x1,y1]=bestEdge.p1, [x2,y2]=bestEdge.p2;
           let nx = -(y2-y1), ny = x2-x1;
           const len = Math.hypot(nx,ny) || 1; nx /= len; ny /= len;
-          const toClickX = wx - ex, toClickY = wy - ey;
+          const toClickX = snappedPx[0] - ex, toClickY = snappedPx[1] - ey;
           if (nx * toClickX + ny * toClickY < 0) {{ nx *= -1; ny *= -1; }}
           const category = document.getElementById('standCategory').value || 'C';
           const standSize = getStandSizeMeters(category);
@@ -11103,65 +15689,84 @@ def _build_designer_html() -> str:
           const preview = {{ x1: ex, y1: ey, x2: px2, y2: py2, category }};
           const overlap = pbbStandOverlapsExisting(preview);
           state.previewPbb = {{ x1: ex, y1: ey, x2: px2, y2: py2, category: preview.category, overlap }};
-          safeDraw(); drewThisMove = true;
+          scheduleDraw(); drewThisMove = true;
         }} else {{
-          if (state.previewPbb) {{ state.previewPbb = null; safeDraw(); drewThisMove = true; }}
+          if (state.previewPbb) {{ state.previewPbb = null; scheduleDraw(); drewThisMove = true; }}
         }}
       }} else {{
         let clearedPreview = false;
         if (state.previewRemote) {{ state.previewRemote = null; clearedPreview = true; }}
         if (state.previewPbb) {{ state.previewPbb = null; clearedPreview = true; }}
-        if (clearedPreview) {{ safeDraw(); drewThisMove = true; }}
+        if (state.previewHoldingPoint) {{ state.previewHoldingPoint = null; clearedPreview = true; }}
+        if (clearedPreview) {{ scheduleDraw(); drewThisMove = true; }}
       }}
-      // Object name tooltip on hover (Grid); flight tooltip when simulation result and near aircraft
+      // 항공기 호버 시 등록번호 우선, 그 외 격자 오브젝트 이름
       if (flightTooltip && !state.isPanning) {{
-        const hit = hitTest(wx, wy);
-        if (hit && hit.obj) {{
-          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Terminal' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type);
-          flightTooltip.style.display = 'block';
-          flightTooltip.textContent = name;
-          flightTooltip.style.left = (ev.clientX + 12) + 'px';
-          flightTooltip.style.top = (ev.clientY + 12) + 'px';
-        }} else if (state.hasSimulationResult) {{
+        let tipDone = false;
+        if (state.hasSimulationResult && state.globalUpdateFresh) {{
           let bestFlight = null;
           let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
           const tSec = state.simTimeSec;
+          if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
           state.flights.forEach(f => {{
-            const pose = getFlightPoseAtTime(f, tSec);
-            if (!pose || !f.reg) return;
+            const pose = getFlightPoseAtTimeForDraw(f, tSec);
+            if (!pose || f.reg == null || !String(f.reg).trim()) return;
             const dx = pose.x - wx;
             const dy = pose.y - wy;
-            const d2 = dx*dx + dy*dy;
+            const d2 = dx * dx + dy * dy;
             if (d2 < bestD2) {{ bestD2 = d2; bestFlight = f; }}
           }});
           if (bestFlight && bestFlight.reg) {{
             flightTooltip.style.display = 'block';
-            flightTooltip.textContent = bestFlight.reg;
+            flightTooltip.textContent = String(bestFlight.reg).trim();
+            flightTooltip.style.left = (ev.clientX + 12) + 'px';
+            flightTooltip.style.top = (ev.clientY + 12) + 'px';
+            tipDone = true;
+          }}
+        }}
+        if (!tipDone) {{
+          const hit = hitTest(wx, wy);
+          if (hit && hit.obj) {{
+            const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type);
+            flightTooltip.style.display = 'block';
+            flightTooltip.textContent = name;
             flightTooltip.style.left = (ev.clientX + 12) + 'px';
             flightTooltip.style.top = (ev.clientY + 12) + 'px';
           }} else {{
             flightTooltip.style.display = 'none';
           }}
-        }} else {{
-          flightTooltip.style.display = 'none';
         }}
       }}
-      if (hoverChanged && !drewThisMove) {{ safeDraw(); drewThisMove = true; }}
+      if (hoverChanged && !drewThisMove) {{ scheduleDraw(); drewThisMove = true; }}
     }});
     container.addEventListener('mouseleave', function() {{
       state.dragStart = null;
       state.isPanning = false;
+      state.dragStandRotation = null;
+      state.dragPbbBridgeVertex = null;
+      state.dragStandConnection = null;
       state.hoverCell = null;
       state.previewPbb = null;
       state.previewRemote = null;
+      state.previewHoldingPoint = null;
       state.apronLinkPointerWorld = null;
-      safeDraw();
+      flushDrawNow();
+    }});
+    container.addEventListener('dblclick', function(ev) {{
+      if (ev.button !== 0) return;
+      const rect = canvas.getBoundingClientRect();
+      const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
+      const [wx, wy] = screenToWorld(sx, sy);
+      if (insertSelectedVertexAt(wx, wy, !!ev.shiftKey)) {{
+        ev.preventDefault();
+      }}
     }});
     function hitTestPbbEnd(wx, wy) {{
       const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
       const cands = [];
       state.pbbStands.forEach(pbb => {{
-        cands.push({{ id: pbb.id, kind: 'pbb', x: pbb.x2, y: pbb.y2 }});
+        const pt = getStandConnectionPx(pbb);
+        cands.push({{ id: pbb.id, kind: 'pbb', x: pt[0], y: pt[1] }});
       }});
       state.remoteStands.forEach(st => {{
         const [cx, cy] = getRemoteStandCenterPx(st);
@@ -11197,6 +15802,7 @@ def _build_designer_html() -> str:
     container.addEventListener('mouseup', function(ev) {{
       if (ev.button !== 0) return;
       const wasPanning = !!state.isPanning;
+      flushDrawNow();
       state.isPanning = false;
       if (state.dragVertex) {{
         state.dragVertex = null;
@@ -11208,26 +15814,61 @@ def _build_designer_html() -> str:
         state.dragTaxiwayVertex = null;
         if (typeof syncPanelFromState === 'function') syncPanelFromState();
         if (typeof updateObjectInfo === 'function') updateObjectInfo();
-        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-        if (scene3d) update3DScene();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else {{
+          if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+          if (scene3d) update3DScene();
+          draw();
+        }}
+        return;
+      }}
+      if (state.dragStandRotation) {{
+        state.dragStandRotation = null;
+        if (typeof syncPanelFromState === 'function') syncPanelFromState();
+        if (typeof updateObjectInfo === 'function') updateObjectInfo();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else {{
+          if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+          if (scene3d) update3DScene();
+          draw();
+        }}
+        return;
+      }}
+      if (state.dragPbbBridgeVertex) {{
+        state.dragPbbBridgeVertex = null;
+        updateObjectInfo();
         draw();
+        return;
+      }}
+      if (state.dragStandConnection) {{
+        state.dragStandConnection = null;
+        updateObjectInfo();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else {{
+          if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+          if (scene3d) update3DScene();
+        }}
         return;
       }}
       if (state.dragApronLinkVertex) {{
         state.dragApronLinkVertex = null;
         if (typeof updateObjectInfo === 'function') updateObjectInfo();
-        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-        if (scene3d) update3DScene();
-        draw();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else {{
+          if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+          if (scene3d) update3DScene();
+          draw();
+        }}
         return;
       }}
       const rect = canvas.getBoundingClientRect();
       const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
       const [wx, wy] = screenToWorld(sx, sy);
+      const placePx = worldPointToPixel(wx, wy, !!ev.shiftKey);
       const mode = settingModeSelect.value;
-      const inStandDrawingMode = (mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing);
+      const inStandDrawingMode = (mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing);
       if (!state.dragStart && !inStandDrawingMode) {{ state.dragStart = null; return; }}
-      if (handlePbbOrRemoteMouseUp2D(mode, wx, wy)) {{
+      if (handlePbbOrRemoteMouseUp2D(mode, placePx[0], placePx[1])) {{
         state.dragStart = null;
         return;
       }}
@@ -11242,9 +15883,11 @@ def _build_designer_html() -> str:
           }} else {{
             state.selectedObject = null;
           }}
+          state.flightPathRevealFlightId = null;
           syncPanelFromState();
           updateObjectInfo();
           draw();
+          if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
           state.dragStart = null;
           return;
         }}
@@ -11276,16 +15919,23 @@ def _build_designer_html() -> str:
                   midVertices = (state.apronLinkMidpoints || []).slice();
                 }}
                 if (standId && taxiwayId) {{
-                  pushUndo();
                   const newId = id();
                   const inputName = document.getElementById('apronLinkName');
-                  const linkName = ensureUniqueApronLinkName(inputName && inputName.value, newId);
-                  const linkRec = {{ id: newId, name: linkName, pbbId: standId, taxiwayId, tx, ty }};
-                  if (midVertices && midVertices.length) linkRec.midVertices = midVertices;
-                  state.apronLinks.push(linkRec);
-                  syncPanelFromState();
-                  if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-                  if (scene3d) update3DScene();
+                  const linkName = (inputName && String(inputName.value).trim()) || getApronLinkDefaultName(newId);
+                  if (findDuplicateLayoutName('apronLink', newId, linkName)) {{
+                    alertDuplicateLayoutName();
+                  }} else {{
+                    pushUndo();
+                    const linkRec = {{ id: newId, name: linkName, pbbId: standId, taxiwayId, tx, ty }};
+                    if (midVertices && midVertices.length) linkRec.midVertices = midVertices;
+                    state.apronLinks.push(linkRec);
+                    syncPanelFromState();
+                    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+                    else {{
+                      if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+                      if (scene3d) update3DScene();
+                    }}
+                  }}
                 }}
               }}
               state.apronLinkTemp = null;
@@ -11304,6 +15954,7 @@ def _build_designer_html() -> str:
             draw();
           }}
         }} else if (hit) {{
+          state.flightPathRevealFlightId = null;
           state.selectedObject = hit;
           if (hit.type === 'terminal') state.currentTerminalId = hit.id;
           // When clicking on the canvas, the corresponding type Mode switch to
@@ -11315,14 +15966,17 @@ def _build_designer_html() -> str:
           renderObjectList();
           updateObjectInfo();
           draw();
+          if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
         }} else {{
-          const [col, row] = pixelToCell(wx, wy);
+          const pt = worldPointToCellPoint(wx, wy, !!ev.shiftKey);
+          const col = pt.col, row = pt.row;
           if (col < 0 || row < 0 || col > GRID_COLS || row > GRID_ROWS) {{ state.dragStart = null; return; }}
           if (mode === 'terminal') {{
             if (state.terminalDrawingId) {{
               let term = state.terminals.find(t => t.id === state.terminalDrawingId);
               if (!term) {{
                 state.terminalDrawingId = null;
+                state.layoutPathDrawPointer = null;
               }} else {{
                 const pt = {{ col, row }};
                 if (term.vertices.length === 0) {{
@@ -11334,6 +15988,7 @@ def _build_designer_html() -> str:
                   if (d2 < (CELL_SIZE * TERM_CLOSE_POLY_CF) ** 2 && term.vertices.length >= 3) {{
                     term.closed = true;
                     state.terminalDrawingId = null;
+                    state.layoutPathDrawPointer = null;
                     syncPanelFromState();
                   }} else {{
                     const last = term.vertices[term.vertices.length-1];
@@ -11358,10 +16013,11 @@ def _build_designer_html() -> str:
                   // The drawing ends automatically the moment two points are struck.
                   if (tw.pathType === 'runway' && tw.vertices.length >= 2) {{
                     state.taxiwayDrawingId = null;
+                    state.layoutPathDrawPointer = null;
                     syncPanelFromState();
-                    if (scene3d) update3DScene();
                   }}
-                  if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+                  if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+                  else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
                 }}
               }}
             }}
@@ -11443,10 +16099,10 @@ def _build_designer_html() -> str:
       imageToggleBtn.addEventListener('click', function() {{
         state.showImage = !state.showImage;
         syncImageToggleButton();
+        invalidateGridUnderlay();
         draw();
       }});
     }}
-
     class Grid3DMapper {{
       constructor(cols, rows, cellSize) {{
         this.cols = cols;
@@ -11614,288 +16270,11 @@ def _build_designer_html() -> str:
       update3DScene();
     }}
 
-    function _3dBuildTaxiways(sc, st, mapper) {{
-      st.taxiways.forEach(function(tw) {{
-        if (tw.vertices.length < 2) return;
-        var w = tw.width != null ? tw.width : (tw.pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH));
-        var isRwy = tw.pathType === 'runway' || tw.pathType === 'runway_exit';
-        var rwGrayHex = _threeDStyle.runwayPath || '#9ca3af';
-        var h = CELL_SIZE * 0.04;
-        var worldPts = tw.vertices.map(function(v) {{
-          var pp = cellToPixel(v.col, v.row);
-          return mapper.worldFromPixel(pp[0], pp[1], h);
-        }});
-        for (var i = 0; i < worldPts.length - 1; i++) {{
-          var start = worldPts[i], end = worldPts[i + 1];
-          var dirVec = new THREE.Vector3().subVectors(end, start);
-          var length = dirVec.length() || 1;
-          dirVec.normalize();
-          var mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-          var segMat = new THREE.MeshPhongMaterial({{ color: hexToThreeColor(isRwy ? rwGrayHex : (_threeDStyle.taxiway || '#eab308')) }});
-          var seg = new THREE.Mesh(new THREE.BoxGeometry(length, h * 0.5, w), segMat);
-          seg.position.copy(mid);
-          seg.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dirVec);
-          sc.add(seg);
-        }}
-        for (var i = 1; i < worldPts.length - 1; i++) {{
-          var pPrev = worldPts[i - 1], p = worldPts[i], pNext = worldPts[i + 1];
-          var v1 = new THREE.Vector3().subVectors(p, pPrev);
-          var v2 = new THREE.Vector3().subVectors(pNext, p);
-          if (v1.lengthSq() < 1e-4 || v2.lengthSq() < 1e-4) continue;
-          v1.normalize(); v2.normalize();
-          if (Math.abs(v1.dot(v2)) > 0.999) continue;
-          var bis = new THREE.Vector3().addVectors(v1, v2);
-          if (bis.lengthSq() < 1e-4) continue;
-          bis.normalize();
-          var jointMat = new THREE.MeshPhongMaterial({{ color: hexToThreeColor(isRwy ? rwGrayHex : (_threeDStyle.taxiway || '#eab308')) }});
-          var joint = new THREE.Mesh(new THREE.BoxGeometry(w * 0.8, h * 0.5, w * 1.02), jointMat);
-          joint.position.copy(p);
-          joint.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), bis);
-          sc.add(joint);
-        }}
-        var dir = getTaxiwayDirection(tw);
-        if (dir !== 'both' && tw.vertices.length >= 2) {{
-          var ptsPix = tw.vertices.map(function(v) {{ return cellToPixel(v.col, v.row); }});
-          var totalLen = ptsPix.reduce(function(acc, p, i) {{ return acc + (i > 0 ? Math.hypot(p[0]-ptsPix[i-1][0], p[1]-ptsPix[i-1][1]) : 0); }}, 0);
-          var arrowSpacing = Math.max(22, Math.min(42, totalLen / 10));
-          var numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
-          var arrowSize = Math.min(8, w * 0.4);
-          for (var k = 1; k <= numArrows; k++) {{
-            var targetDist = totalLen * (k / (numArrows + 1));
-            var acc = 0, ax = ptsPix[0][0], ay = ptsPix[0][1];
-            var angle = Math.atan2(ptsPix[1][1]-ptsPix[0][1], ptsPix[1][0]-ptsPix[0][0]);
-            var segStartPix = ptsPix[0], segEndPix = ptsPix[1];
-            for (var ii = 1; ii < ptsPix.length; ii++) {{
-              var segLen = Math.hypot(ptsPix[ii][0]-ptsPix[ii-1][0], ptsPix[ii][1]-ptsPix[ii-1][1]);
-              angle = Math.atan2(ptsPix[ii][1]-ptsPix[ii-1][1], ptsPix[ii][0]-ptsPix[ii-1][0]);
-              if (acc + segLen >= targetDist) {{
-                var tSeg = segLen > 0 ? (targetDist - acc) / segLen : 0;
-                ax = ptsPix[ii-1][0] + tSeg * (ptsPix[ii][0]-ptsPix[ii-1][0]);
-                ay = ptsPix[ii-1][1] + tSeg * (ptsPix[ii][1]-ptsPix[ii-1][1]);
-                segStartPix = ptsPix[ii-1];
-                segEndPix = ptsPix[ii];
-                break;
-              }}
-              acc += segLen;
-            }}
-            if (dir === 'counter_clockwise') angle += Math.PI;
-            var pos = mapper.worldFromPixel(ax, ay, h + 0.8);
-            var startW = mapper.worldFromPixel(segStartPix[0], segStartPix[1], h + 0.8);
-            var endW = mapper.worldFromPixel(segEndPix[0], segEndPix[1], h + 0.8);
-            var tangent = new THREE.Vector3().subVectors(endW, startW).normalize();
-            if (dir === 'counter_clockwise') tangent.negate();
-            var quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-            var cone = new THREE.Mesh(
-              new THREE.ConeGeometry(arrowSize * 0.6, arrowSize, 4),
-              new THREE.MeshPhongMaterial({{ color: hexToThreeColor(_threeDStyle.arrowCone || '#f59e0b') }})
-            );
-            cone.position.copy(pos);
-            cone.position.y = h + 0.8;
-            cone.quaternion.copy(quat);
-            sc.add(cone);
-          }}
-        }}
-      }});
-    }}
-
-    // ---- 3D scene rendering ----
+    // ---- 3D: grid + axes only (no layout meshes; lowers GPU/CPU load) ----
     function update3DScene() {{
       if (!scene3d) return;
       while (scene3d.children.length > 1) scene3d.remove(scene3d.children[scene3d.children.length - 1]);
       if (!grid3DMapper) grid3DMapper = new Grid3DMapper(GRID_COLS, GRID_ROWS, CELL_SIZE);
-      const ox = grid3DMapper.ox;
-      const oz = grid3DMapper.oz;
-      const maxDim = Math.max(ox, oz);
-      state.terminals.forEach(term => {{
-        if (!term.closed || term.vertices.length < 3) return;
-        const shape = new THREE.Shape();
-        for (let i = 0; i < term.vertices.length; i++) {{
-          const pos = grid3DMapper.shapeFromCell(term.vertices[i].col, term.vertices[i].row);
-          if (i === 0) shape.moveTo(pos.x, pos.y);
-          else shape.lineTo(pos.x, pos.y);
-        }}
-        shape.closePath();
-        const floors = term.floors != null ? Math.max(1, parseInt(term.floors, 10) || 1) : 1;
-        const f2fRaw = term.floorToFloor != null ? Number(term.floorToFloor) : (term.floorHeight != null ? Number(term.floorHeight) : 4);
-        const f2f = Math.max(0.5, f2fRaw || 4);
-        const floorHVal = term.floorHeight != null ? Number(term.floorHeight) || (floors * f2f) : (floors * f2f);
-        const floorH = Math.max(0.5, floorHVal);
-        const extrude = new THREE.ExtrudeGeometry(shape, {{ depth: floorH, bevelEnabled: false }});
-        const mesh = new THREE.Mesh(extrude, new THREE.MeshPhongMaterial({{ color: hexToThreeColor(_canvas2dStyle.terminalStrokeDefault || '#38bdf8'), transparent: true, opacity: 0.55 }}));
-        mesh.rotation.x = -Math.PI / 2;
-        scene3d.add(mesh);
-      }});
-      state.pbbStands.forEach(pbb => {{
-        const h = CELL_SIZE * 0.5;
-        const start = grid3DMapper.worldFromPixel(pbb.x1, pbb.y1, h);
-        const end = grid3DMapper.worldFromPixel(pbb.x2, pbb.y2, h);
-        const dir = new THREE.Vector3().subVectors(end, start);
-        const length = dir.length() || 1;
-        const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-        dir.normalize();
-
-        const corridorWidth = CELL_SIZE * 0.4;
-        const corridorHeight = CELL_SIZE * 0.3;
-        const corridorGeo = new THREE.BoxGeometry(length, corridorHeight, corridorWidth);
-        const corridorMat = new THREE.MeshPhongMaterial({{ color: 0x7dd3fc }});
-        const corridor = new THREE.Mesh(corridorGeo, corridorMat);
-        corridor.position.copy(mid);
-        corridor.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
-
-        const headSize = CELL_SIZE * 0.7;
-        const headGeo = new THREE.BoxGeometry(headSize, corridorHeight * 1.1, headSize * 0.9);
-        const headMat = new THREE.MeshPhongMaterial({{ color: 0x22c55e }});
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.copy(end);
-
-        const baseSize = CELL_SIZE * 0.5;
-        const baseGeo = new THREE.BoxGeometry(baseSize, corridorHeight * 1.1, baseSize);
-        const baseMat = new THREE.MeshPhongMaterial({{ color: 0x1f2937 }});
-        const base = new THREE.Mesh(baseGeo, baseMat);
-        base.position.copy(start);
-
-        // 3D green apron: PBB 3D direction(dir)With the same rotation as,
-        // XZ Construct a square directly on a plane. (2DRotation feeling as similar as possible to)
-        const standSize = getStandSizeMeters(pbb.category || 'C');
-        const half = standSize / 2;
-        const apronY = CELL_SIZE * 0.02;
-        const center = grid3DMapper.worldFromPixel(pbb.x2, pbb.y2, apronY);
-
-        const dirXZ = new THREE.Vector3(end.x - start.x, 0, end.z - start.z);
-        let apronMesh = null;
-        if (dirXZ.lengthSq() > 1e-6) {{
-          dirXZ.normalize();
-          const perp = new THREE.Vector3(-dirXZ.z, 0, dirXZ.x); // XZ Rotate 90 degrees in a plane
-          const v1 = center.clone().addScaledVector(dirXZ, -half).addScaledVector(perp, -half);
-          const v2 = center.clone().addScaledVector(dirXZ,  half).addScaledVector(perp, -half);
-          const v3 = center.clone().addScaledVector(dirXZ,  half).addScaledVector(perp,  half);
-          const v4 = center.clone().addScaledVector(dirXZ, -half).addScaledVector(perp,  half);
-          const apronGeo = new THREE.BufferGeometry();
-          const vertices = new Float32Array([
-            v1.x, v1.y, v1.z,
-            v2.x, v2.y, v2.z,
-            v3.x, v3.y, v3.z,
-            v4.x, v4.y, v4.z
-          ]);
-          apronGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-          apronGeo.setIndex([0, 1, 2, 0, 2, 3]);
-          apronGeo.computeVertexNormals();
-          const apronMat = new THREE.MeshPhongMaterial({{
-            color: 0x22c55e,
-            transparent: true,
-            opacity: 0.55,
-            side: THREE.DoubleSide
-          }});
-          apronMesh = new THREE.Mesh(apronGeo, apronMat);
-          apronMesh.receiveShadow = true;
-        }}
-
-        const group = new THREE.Group();
-        group.add(corridor);
-        group.add(head);
-        group.add(base);
-        if (apronMesh) group.add(apronMesh);
-        scene3d.add(group);
-      }});
-      state.remoteStands.forEach(st => {{
-        // Green remote apron area (same footprint as 2D)
-        const size = getStandSizeMeters(st.category || 'C');
-        const [px, py] = getRemoteStandCenterPx(st);
-        const remoteAngle = getRemoteStandAngleRad(st);
-        const center = grid3DMapper.worldFromPixel(px, py, CELL_SIZE * 0.02);
-        const apronGeo = new THREE.PlaneGeometry(size, size);
-        const apronMat = new THREE.MeshPhongMaterial({{
-          color: hexToThreeColor(_threeDStyle.remoteApron || '#22c55e'),
-          transparent: true,
-          opacity: threeOpacity(_threeDStyle.remoteApronOpacity, 0.55),
-        }});
-        const apron = new THREE.Mesh(apronGeo, apronMat);
-        apron.position.copy(center);
-        apron.rotation.x = -Math.PI / 2;
-        apron.rotation.z = remoteAngle;
-        scene3d.add(apron);
-
-        const box = new THREE.Mesh(
-          new THREE.BoxGeometry(CELL_SIZE * 0.7, CELL_SIZE * 0.3, CELL_SIZE * 0.7),
-          new THREE.MeshPhongMaterial({{ color: hexToThreeColor(_threeDStyle.remoteStandBox || '#22c55e') }})
-        );
-        box.position.copy(grid3DMapper.worldFromPixel(px, py, CELL_SIZE * 0.15));
-        box.rotation.y = -remoteAngle;
-        scene3d.add(box);
-      }});
-      _3dBuildTaxiways(scene3d, state, grid3DMapper);
-      // Apron–Taxiway links in 3D, matching 2D links
-      const linkH = CELL_SIZE * 0.05;
-      const apronLink3dMat = new THREE.MeshPhongMaterial({{
-        color: hexToThreeColor(_threeDStyle.apronLink || '#22d3ee'),
-        transparent: true,
-        opacity: threeOpacity(_threeDStyle.apronLinkOpacity, 0.9),
-      }});
-      const linkWidth = CELL_SIZE * 0.4;
-      state.apronLinks.forEach(lk => {{
-        const stand = findStandById(lk.pbbId);
-        const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
-        if (!stand || !tw || lk.tx == null || lk.ty == null) return;
-        const poly = getApronLinkPolylineWorldPts(lk);
-        if (poly.length < 2) return;
-        for (let si = 0; si < poly.length - 1; si++) {{
-          const start = grid3DMapper.worldFromPixel(poly[si][0], poly[si][1], linkH);
-          const end = grid3DMapper.worldFromPixel(poly[si + 1][0], poly[si + 1][1], linkH);
-          const dirVec = new THREE.Vector3().subVectors(end, start);
-          const length = dirVec.length() || 1;
-          dirVec.normalize();
-          const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-          const linkGeo = new THREE.BoxGeometry(length, linkH * 0.5, linkWidth);
-          const linkMesh = new THREE.Mesh(linkGeo, apronLink3dMat);
-          linkMesh.position.copy(mid);
-          linkMesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dirVec);
-          scene3d.add(linkMesh);
-        }}
-      }});
-      // Flights in 3D: simple airplane-shaped meshes following 2D timeline
-      if (state.flights && state.flights.length) {{
-        const tSec = state.simTimeSec;
-        state.flights.forEach(f => {{
-          const pose = getFlightPoseAtTime(f, tSec);
-          if (!pose) return;
-          const {{ x, y, dx, dy }} = pose;
-          const pos3d = grid3DMapper.worldFromPixel(x, y, CELL_SIZE * _toNumberOr(_ac3d.altitudeCellFactor, 0.5));
-          const len = Math.hypot(dx, dy) || 1;
-          const dirVec = new THREE.Vector3(dx / len, 0, dy / len);
-          const code = (f.code || '').toUpperCase();
-          const scale = apronAircraftScaleForIcao(code);
-          const bl = _toNumberOr(_ac3d.bodyLengthCellFactor, 1.2);
-          const bw = _toNumberOr(_ac3d.bodyWidthCellFactor, 0.4);
-          const bh = _toNumberOr(_ac3d.bodyHeightCellFactor, 0.2);
-          const bodyLen = CELL_SIZE * bl * scale;
-          const bodyWidth = CELL_SIZE * bw * scale;
-          const bodyHeight = CELL_SIZE * bh * scale;
-          const wLen = _toNumberOr(_ac3d.wingLengthRatio, 0.4);
-          const wHt = _toNumberOr(_ac3d.wingHeightRatio, 0.5);
-          const wWd = _toNumberOr(_ac3d.wingWidthRatio, 1.8);
-          const wYo = _toNumberOr(_ac3d.wingYOffsetRatio, 0.2);
-          const color = hexToThreeColor(_ac3d.meshColorHex || '#ff2f92');
-          const group = new THREE.Group();
-          const bodyGeo = new THREE.BoxGeometry(bodyLen, bodyHeight, bodyWidth);
-          const bodyMat = new THREE.MeshPhongMaterial({{ color }});
-          const body = new THREE.Mesh(bodyGeo, bodyMat);
-          group.add(body);
-          const wingGeo = new THREE.BoxGeometry(bodyLen * wLen, bodyHeight * wHt, bodyWidth * wWd);
-          const wingMat = new THREE.MeshPhongMaterial({{ color }});
-          const wings = new THREE.Mesh(wingGeo, wingMat);
-          wings.position.y = -bodyHeight * wYo;
-          group.add(wings);
-          group.position.copy(pos3d);
-          const forward = new THREE.Vector3(1, 0, 0);
-          const quat = new THREE.Quaternion().setFromUnitVectors(forward, dirVec);
-          group.quaternion.copy(quat);
-          scene3d.add(group);
-        }});
-      }}
-      const light = new THREE.DirectionalLight(0xffffff, threeOpacity(_threeDStyle.directionalLightIntensity, 0.8));
-      light.position.set(maxDim, maxDim * 2, maxDim);
-      scene3d.add(light);
-      scene3d.add(new THREE.AmbientLight(0xffffff, threeOpacity(_threeDStyle.ambientLightIntensity, 0.4)));
     }}
 
     function animate3D() {{
@@ -11912,7 +16291,7 @@ def _build_designer_html() -> str:
       const wx = (mx - state.panX) / state.scale, wy = (my - state.panY) / state.scale;
       const factor = 1 - ev.deltaY * 0.002;
       state.scale *= factor;
-      state.scale = Math.max(0.05, Math.min(5, state.scale));
+      state.scale = Math.max(CANVAS_MIN_ZOOM, Math.min(CANVAS_MAX_ZOOM, state.scale));
       state.panX = mx - wx * state.scale;
       state.panY = my - wy * state.scale;
       try {{ draw(); }} catch(e) {{}}
@@ -11936,6 +16315,7 @@ def _build_designer_html() -> str:
     if (typeof draw === 'function') draw();
     if (typeof update3DScene === 'function') update3DScene();
     if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Initial load');
+    window.reportLayoutDesignerDomComposition = reportLayoutDesignerDomComposition;
   }})();
   </script>
 </body>
@@ -11984,4 +16364,3 @@ def _mount_designer_component(component_html: str) -> None:
 
 
 _mount_designer_component(html)
-

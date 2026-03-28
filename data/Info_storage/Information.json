@@ -987,19 +987,27 @@
           "pointStep": 0.5,
           "defaultTopLeftCol": 0,
           "defaultTopLeftRow": 0
-        }
+        },
+        "drawViewportMarginCells": 2,
+        "minorGridMinScale": 0
       },
       "interaction": {
         "layoutVertexDotScale": 0.7,
         "showGridDefault": true,
         "showImageDefault": true,
         "dragThresholdPx": 5,
+        "freeDrawStepCell": 0.05,
+        "gridSnapStepCell": 0.5,
+        "insertVertexHitCellFactor": 0.9,
+        "canvasMinZoom": 0.05,
+        "canvasMaxZoom": 10,
         "hitTerminalVertexCellFactor": 0.6,
         "hitTaxiwayVertexCellFactor": 0.6,
         "hitTaxiwayAlongCellFactor": 1.0,
         "hitPbbEndCellFactor": 0.8,
         "tryPlacePbbMaxEdgeCellFactor": 1.0,
         "flightTooltipCellFactor": 1.2,
+        "flightTooltipScanMinIntervalMs": 50,
         "terminalClosePolygonCellFactor": 0.6,
         "pbbPreviewLengthCellFactor": 0.9,
         "maxUndoLevels": 50,
@@ -1024,17 +1032,54 @@
         "departureCapacity": 0,
         "arrivalCapacity": 0
       },
+      "building": {
+        "defaultType": "passenger_terminal",
+        "types": [
+          {
+            "id": "passenger_terminal",
+            "label": "Passenger Terminal"
+          },
+          {
+            "id": "concourse",
+            "label": "위성터미널(콘코스)"
+          },
+          {
+            "id": "control_tower",
+            "label": "Control Tower"
+          },
+          {
+            "id": "cargo_terminal",
+            "label": "Cargo Terminal"
+          },
+          {
+            "id": "hanger",
+            "label": "Hanger"
+          },
+          {
+            "id": "utility",
+            "label": "Utility"
+          },
+          {
+            "id": "wall",
+            "label": "Wall"
+          }
+        ]
+      },
       "pbb": {
         "defaultCategory": "C",
         "defaultLengthCells": 2,
-        "defaultNamePrefix": "Contact Stand"
+        "defaultNamePrefix": "Contact Stand",
+        "defaultCategoryMode": "icao",
+        "defaultBridgeCount": 1
       },
       "remote": {
         "defaultCategory": "C",
-        "defaultNameTemplate": "R001"
+        "defaultNameTemplate": "R001",
+        "defaultCategoryMode": "icao"
       },
       "taxiway": {
-        "width": 5,
+        "width": 1,
+        "minWidth": 1,
         "avgMoveVelocity": 10,
         "direction": "both"
       },
@@ -1048,7 +1093,8 @@
         "endBlastPadM": 100
       },
       "runwayExit": {
-        "width": 5,
+        "width": 1,
+        "minWidth": 1,
         "maxExitVelocity": 30,
         "minExitVelocity": 15,
         "allowedRwDirectionsDefault": [
@@ -1057,7 +1103,7 @@
         ]
       },
       "apronAircraft": {
-        "description": "Apron flight glyph on 2D canvas and simple 3D mesh (ICAO category scales)",
+        "description": "Apron flight glyph on 2D canvas (ICAO category scales)",
         "scaleByIcaoCategory": {
           "A": 0.8,
           "B": 0.8,
@@ -1069,6 +1115,10 @@
         },
         "twoD": {
           "fillColor": "#ff2f92",
+          "glyphScale": 1.42,
+          "outlineColor": "rgba(15,23,42,0.88)",
+          "outlineWidth": 1.2,
+          "useDetailedSilhouette": true,
           "silhouette": {
             "noseX": 0.6,
             "wingRearX": -0.5,
@@ -1076,17 +1126,6 @@
             "tailNeckX": -0.3,
             "wingLowerY": -0.35
           }
-        },
-        "threeD": {
-          "altitudeCellFactor": 0.5,
-          "bodyLengthCellFactor": 1.2,
-          "bodyWidthCellFactor": 0.4,
-          "bodyHeightCellFactor": 0.2,
-          "wingLengthRatio": 0.4,
-          "wingHeightRatio": 0.5,
-          "wingWidthRatio": 1.8,
-          "wingYOffsetRatio": 0.2,
-          "meshColorHex": "#ff2f92"
         }
       }
     },
@@ -1106,15 +1145,20 @@
         100,
         200
       ],
-      "defaultSimSpeed": 20,
+      "defaultSimSpeed": 5,
+      "simTimeSliderSnapSec": 60,
       "defaultAirlineCodes": [
         "KE",
         "7C",
         "DL"
-      ]
+      ],
+      "defaultAllowRunwayInGroundSegment": false,
+      "depRotMin": 2,
+      "apronTaxiwaySpeedMs": 1.5,
+      "lineupQueueSpacingM": 50
     },
     "style": {
-      "description": "Theme colors and opacities (UI base, Gantt, schedule table, runway timeline, canvas, 3D)",
+      "description": "Theme colors and opacities (UI base, Gantt, schedule table, runway timeline, canvas)",
       "uiTheme": {
         "description": "Base UI design-system tokens: backgrounds, borders, text, accent, feedback, font, transition, scrollbar",
         "bgBase": "#0d0d0f",
@@ -1213,6 +1257,62 @@
         "runwayAimingPointColor": "#f8fafc",
         "runwayExtensionFill": "rgba(55, 65, 81, 0.78)",
         "runwayBlastChevronColor": "#facc15",
+        "pathArrivalArrowStroke": "rgba(252, 165, 165, 0.9)",
+        "approachPreviewWidthM": 30,
+        "approachPreviewStroke": "rgba(255, 255, 255, 0.01)",
+        "holdingPointDiameterM": 15,
+        "holdingPointIntermediateFill": "rgba(249, 115, 22, 0.5)",
+        "holdingPointIntermediateStroke": "rgba(234, 88, 12, 0.75)",
+        "holdingPointIntermediatePreviewFill": "rgba(249, 115, 22, 0.28)",
+        "holdingPointRunwayFill": "rgba(239, 68, 68, 0.5)",
+        "holdingPointRunwayStroke": "rgba(220, 38, 38, 0.78)",
+        "holdingPointRunwayPreviewFill": "rgba(239, 68, 68, 0.28)",
+        "pathDepartureArrowStroke": "rgba(17, 24, 39, 0.95)",
+        "buildingTypes": {
+          "passenger_terminal": {
+            "stroke": "#38bdf8",
+            "fill": "rgba(56,189,248,0.12)",
+            "labelFill": "rgba(56,189,248,0.95)",
+            "fillEnabled": true
+          },
+          "concourse": {
+            "stroke": "#38bdf8",
+            "fill": "rgba(56,189,248,0.12)",
+            "labelFill": "rgba(56,189,248,0.95)",
+            "fillEnabled": true
+          },
+          "control_tower": {
+            "stroke": "#38bdf8",
+            "fill": "rgba(56,189,248,0.12)",
+            "labelFill": "rgba(56,189,248,0.95)",
+            "fillEnabled": true
+          },
+          "cargo_terminal": {
+            "stroke": "#1d4ed8",
+            "fill": "rgba(29,78,216,0.22)",
+            "labelFill": "rgba(147,197,253,0.95)",
+            "fillEnabled": true
+          },
+          "hanger": {
+            "stroke": "#1d4ed8",
+            "fill": "rgba(29,78,216,0.22)",
+            "labelFill": "rgba(147,197,253,0.95)",
+            "fillEnabled": true
+          },
+          "utility": {
+            "stroke": "#1e3a8a",
+            "fill": "rgba(30,58,138,0.22)",
+            "labelFill": "rgba(147,197,253,0.95)",
+            "fillEnabled": true,
+            "hatch": "diagonal"
+          },
+          "wall": {
+            "stroke": "#d1d5db",
+            "fill": "rgba(0,0,0,0)",
+            "labelFill": "#d1d5db",
+            "fillEnabled": false
+          }
+        },
         "vttBadgeBg": "rgba(15, 23, 42, 0.95)",
         "vttBadgeStroke": "#000000",
         "vttBadgeText": "#ffffff",
@@ -1233,19 +1333,15 @@
         "pathDrawStartMarkerRadiusPx": 3.5,
         "pathDrawStartMarkerStrokePx": 1,
         "pathDrawStartLabelFontPx": 8,
-        "pathDrawStartLabelOffsetY": -6
-      },
-      "threeD": {
-        "remoteApron": "#22c55e",
-        "remoteApronOpacity": 0.55,
-        "remoteStandBox": "#22c55e",
-        "taxiway": "#eab308",
-        "runwayPath": "#4b5563",
-        "arrowCone": "#f59e0b",
-        "apronLink": "#22d3ee",
-        "apronLinkOpacity": 0.9,
-        "directionalLightIntensity": 0.8,
-        "ambientLightIntensity": 0.4
+        "pathDrawStartLabelOffsetY": -6,
+        "simPreTouchdownHaloStroke": "rgba(239, 68, 68, 0.92)",
+        "simPreTouchdownHaloFill": "rgba(239, 68, 68, 0.18)",
+        "simPreTouchdownHaloBlur": 14,
+        "simFlightTrailStroke": "rgba(255, 47, 146, 0.97)",
+        "simFlightTrailStrokeEnd": "rgba(255, 47, 146, 0)",
+        "simFlightTrailLineWidth": 3.5,
+        "simStandOccupiedFill": "rgba(239, 68, 68, 0.32)",
+        "simStandOccupiedStroke": "rgba(220, 38, 38, 0.95)"
       }
     },
     "algorithm": {
@@ -1262,12 +1358,33 @@
         "tickStepElseMin": 60,
         "maxTicksShown": 6
       },
+      "domOptimization": {
+        "diagnosticDomCompositionReport": true,
+        "diagnosticLogDomCount": false,
+        "flightListVirtualScroll": false,
+        "flightListVirtualMinRows": 48,
+        "flightListVirtualOverscan": 8,
+        "flightListVirtualRowHeightPx": 28,
+        "flightSchedulePageSize": 20,
+        "ganttLegendMaxIntervals": 100,
+        "kpiRollingTableVisibleRows": 24
+      },
       "pathSearch": {
-        "taxiwayHeuristicCost": 200,
+        "taxiwayHeuristicCost": 0,
         "reverseCost": 1000000
       },
       "simulation": {
-        "timeStepSec": 5
+        "description": "playbackLeadBeforeFirstTouchdownSec=스케줄상 가장 이른 도착 ELDT 기준, 재생 슬라이더 시작을 터치다운 몇 초 전으로 둘지(0이면 전체 접근 구간부터). approachOffsetM/지그재그·timeStepSec·trail·preTouchdownHalo·기체크기.",
+        "playbackLeadBeforeFirstTouchdownSec": 20,
+        "timeStepSec": 1,
+        "approachOffsetM": 10000,
+        "approachStraightFinalM": 3000,
+        "approachZigzagLegM": 2000,
+        "approachZigzagStepM": 200,
+        "aircraftWingspanM": 40,
+        "aircraftFuselageLengthM": 50,
+        "trailLengthM": 300,
+        "preTouchdownHaloEnabled": true
       }
     }
   }
