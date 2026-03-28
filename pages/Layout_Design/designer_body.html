@@ -1,0 +1,450 @@
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div id="canvas-bottom-dock" class="canvas-bottom-dock">
+      <div id="toolbar" class="canvas-dock-toolbar">
+        <div id="view-toggle-stack">
+          <div id="layout-name-bar"></div>
+          <div id="view-toggle">
+            <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
+            <button class="tool-btn" id="btnView3D" title="3D orbit view">3D</button>
+            <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
+            <button class="tool-btn active" id="btnGridToggle" title="Toggle grid visibility">Grid</button>
+            <button class="tool-btn active" id="btnImageToggle" title="Toggle background image visibility">Image</button>
+            <span class="global-update-wrap">
+              <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Click Update to sync calculations and KPIs" role="status" aria-label="Update status"></span>
+              <button class="tool-btn" id="btnGlobalUpdate" title="Refresh all views and calculations">Update</button>
+              <button type="button" class="tool-btn" id="btnShowPlayDock" title="Show bottom playback controls (same as former Show playback)">Show Play</button>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div id="sim-controls-wrap" class="sim-controls-wrap" style="display:none;">
+        <div id="sim-controls-container" class="sim-controls-inner">
+          <button type="button" class="tool-btn" id="btnPlayFlights" title="Play">▶ Play</button>
+          <button type="button" class="tool-btn" id="btnPauseFlights" title="Pause">⏸ Pause</button>
+          <select id="flightSpeed" title="Playback speed">
+            __FLIGHT_SPEED_OPTIONS_HTML__
+          </select>
+          <label for="flightSimSlider" title="스케줄 기준 시각(ELDT/ETOT 등으로부터 계산된 절대 시간). 접근 거리(예: 20km)는 이 숫자를 00:00으로 맞추지 않고, 재생 구간 시작만 ELDT보다 앞당깁니다. 스탠드 할당 간트 축과는 별개입니다.">Current</label>
+          <input type="range" id="flightSimSlider" min="0" max="100" value="0" step="any" title="스케줄 절대 시각(HH:MM:SS). 슬라이더 범위 최솟값은 가장 이른 공중 구간 시작(접근 포함)입니다." />
+          <span id="flightSimTimeLabel" title="스케줄 절대 시각">00:00:00</span>
+          <button type="button" class="sim-bar-collapse-btn" id="btnHideSimPlaybackBar" title="Hide playback bar — use Show Play next to Update to show again" aria-label="Hide playback bar" aria-expanded="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <div id="canvas-container">
+      <canvas id="grid-canvas"></canvas>
+    </div>
+    <div id="info-bar">
+      <span id="hint">Draw building/path objects freely. Hold Shift to snap to the grid. Drag to pan, scroll to zoom.</span>
+      <span id="coord"></span>
+    </div>
+    <div id="flight-tooltip"></div>
+    <div id="right-panel">
+      <button type="button" id="panel-toggle" title="Drag to resize; click toggles open/closed">◀</button>
+      <div class="panel-content">
+        <div id="api-warning-banner">
+          <strong>API Not connected</strong><br/>
+          Save/Load layout API: use <strong>python run_app.py</strong> and connect to<br/>
+          <strong>http://127.0.0.1:8501</strong> Please access. (streamlit run Doesn't work when used)
+        </div>
+        <div class="right-panel-tabs">
+          __TOP_PANEL_TABS_HTML__
+        </div>
+
+        <div id="tab-settings" class="tab-content active">
+        <div class="layout-mode-tabs" id="layoutModeTabs">
+          <div class="layout-mode-tabs-row primary">
+            __LAYOUT_MODE_TABS_PRIMARY_HTML__
+          </div>
+          <div class="layout-mode-tabs-row secondary">
+            __LAYOUT_MODE_TABS_SECONDARY_HTML__
+          </div>
+        </div>
+        <select id="settingMode" style="display:none;">
+          <option value="grid">Grid</option>
+          <option value="runwayPath">Runway</option>
+          <option value="runwayTaxiway">Runway Taxiway</option>
+          <option value="taxiway">Taxiway</option>
+          <option value="holdingPoint">Holding Point</option>
+          <option value="terminal">Building</option>
+          <option value="pbb">Contact Stand</option>
+          <option value="remote">Remote Stand</option>
+          <option value="apronTaxiway">Apron Taxiway</option>
+          <option value="groundAccess">Ground Access</option>
+          <option value="edge">Edge</option>
+        </select>
+
+        <div id="settings-grid" class="settings-pane compact-form">
+          <div class="compact-field">
+            <label>Cell size (m)</label>
+            <input type="number" id="gridCellSize" min="__UI_G_MIN_CS__" max="__UI_G_MAX_CS__" value="__CELL_SIZE__" step="__UI_G_CS_STEP__" />
+          </div>
+          <div class="compact-field">
+            <label>Columns</label>
+            <input type="number" id="gridCols" min="__UI_G_MIN_DIM__" max="__UI_G_MAX_DIM__" value="__GRID_COLS__" />
+          </div>
+          <div class="compact-field">
+            <label>Rows</label>
+            <input type="number" id="gridRows" min="__UI_G_MIN_DIM__" max="__UI_G_MAX_DIM__" value="__GRID_ROWS__" />
+          </div>
+          <div class="compact-field wide">
+            <label>Upload Layout file</label>
+            <input type="file" id="gridLayoutImageFile" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" />
+            <div id="gridLayoutImageMeta" style="margin-top:6px;font-size:11px;color:#9ca3af;">No file selected.</div>
+          </div>
+          <div class="compact-field">
+            <label>Opacity</label>
+            <input type="number" id="gridLayoutImageOpacity" min="__UI_G_IMG_OPACITY_MIN__" max="__UI_G_IMG_OPACITY_MAX__" step="__UI_G_IMG_OPACITY_STEP__" value="__UI_G_IMG_OPACITY__" />
+          </div>
+          <div class="compact-field">
+            <label>Width (m)</label>
+            <input type="number" id="gridLayoutImageWidthM" min="1" step="__UI_G_IMG_SIZE_STEP__" value="__UI_G_IMG_WIDTH_M__" />
+          </div>
+          <div class="compact-field">
+            <label>Height (m)</label>
+            <input type="number" id="gridLayoutImageHeightM" min="1" step="__UI_G_IMG_SIZE_STEP__" value="__UI_G_IMG_HEIGHT_M__" />
+          </div>
+          <div class="compact-field">
+            <label>Top-left X (pt)</label>
+            <input type="number" id="gridLayoutImageCol" step="__UI_G_IMG_POINT_STEP__" value="__UI_G_IMG_TOP_LEFT_COL__" />
+          </div>
+          <div class="compact-field">
+            <label>Top-left Y (pt)</label>
+            <input type="number" id="gridLayoutImageRow" step="__UI_G_IMG_POINT_STEP__" value="__UI_G_IMG_TOP_LEFT_ROW__" />
+          </div>
+          <button class="small" id="btnClearGridLayoutImage">Clear image</button>
+        </div>
+        <div id="settings-terminal" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field">
+            <label>Building Type</label>
+            <select id="buildingType"></select>
+          </div>
+          <div class="compact-field wide">
+            <label>Building name</label>
+            <input type="text" id="terminalName" placeholder="e.g. Terminal1" />
+          </div>
+          <div class="compact-field">
+            <label>Floors</label>
+            <input type="number" id="terminalFloors" min="__UI_TERM_FLOORS_MIN__" max="__UI_TERM_FLOORS_MAX__" value="__UI_TERM_FLOORS__" step="1" />
+          </div>
+          <div class="compact-field">
+            <label>Floor-to-floor height (m)</label>
+            <input type="number" id="terminalFloorToFloor" min="__UI_TERM_F2F_MIN__" max="__UI_TERM_F2F_MAX__" value="__UI_TERM_F2F__" step="__UI_TERM_F2F_STEP__" />
+          </div>
+          <div class="compact-field">
+            <label>Departure capacity</label>
+            <input type="number" id="terminalDepartureCapacity" min="0" value="__UI_TERM_DEP__" step="1" />
+          </div>
+          <div class="compact-field">
+            <label>Arrival capacity</label>
+            <input type="number" id="terminalArrivalCapacity" min="0" value="__UI_TERM_ARR__" step="1" />
+          </div>
+          <button class="small draw-toggle-btn" id="btnTerminalDraw">Draw</button>
+        </div>
+        <div id="settings-pbb" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="standName" placeholder="e.g. Gate 1" />
+          </div>
+          <div class="compact-field">
+            <label>Category Basis</label>
+            <select id="standCategoryMode">
+              <option value="icao" selected>ICAO</option>
+              <option value="aircraft">Aircraft Type</option>
+            </select>
+          </div>
+          <div class="compact-field" id="standIcaoWrap">
+            <label>ICAO Category</label>
+            <select id="standCategory">
+              <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
+              <option value="D">D</option><option value="E">E</option><option value="F">F</option>
+            </select>
+          </div>
+          <div class="inline-field wide" id="standAircraftWrap" style="display:none;">
+            <label>Aircraft Types</label>
+            <div id="standAircraftAccess"></div>
+          </div>
+          <div class="compact-field">
+            <label>Contact Stand Length (m)</label>
+            <input type="number" id="pbbLength" min="1" max="5000" step="1" value="15" />
+          </div>
+          <div class="compact-field">
+            <label>Angle (deg)</label>
+            <input type="number" id="standAngle" min="-180" max="180" step="1" value="0" />
+          </div>
+          <div class="compact-field">
+            <label>PBB Count</label>
+            <input type="number" id="pbbBridgeCount" min="1" max="8" step="1" value="1" />
+          </div>
+          <p class="choice-help">Selected contact stand: drag orange PBB points and the green apron point to fine-tune.</p>
+          <button class="small draw-toggle-btn" id="btnPbbDraw">Draw</button>
+        </div>
+        <div id="settings-remote" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="remoteName" placeholder="e.g. R001" />
+          </div>
+          <div class="compact-field">
+            <label>Angle (deg)</label>
+            <input type="number" id="remoteAngle" min="-180" max="180" step="1" value="0" />
+          </div>
+          <div class="compact-field">
+            <label>Category Basis</label>
+            <select id="remoteCategoryMode">
+              <option value="icao" selected>ICAO</option>
+              <option value="aircraft">Aircraft Type</option>
+            </select>
+          </div>
+          <div class="compact-field" id="remoteIcaoWrap">
+            <label>ICAO Category</label>
+            <select id="remoteCategory">
+              <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
+              <option value="D">D</option><option value="E">E</option><option value="F">F</option>
+            </select>
+          </div>
+          <div class="inline-field wide" id="remoteAircraftWrap" style="display:none;">
+            <label>Aircraft Types</label>
+            <div id="remoteAircraftAccess"></div>
+          </div>
+          <div class="inline-field wide">
+            <label>Available buildings</label>
+            <div id="remoteTerminalAccess">
+              <!-- Building checkboxes are rendered dynamically -->
+            </div>
+          </div>
+          <button class="small draw-toggle-btn" id="btnRemoteDraw">Draw</button>
+        </div>
+        <div id="settings-holdingPoint" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="holdingPointName" placeholder="Position1" />
+          </div>
+          <p class="choice-help">Place on Taxiway or Runway Taxiway only (not runway centerline).</p>
+          <button class="small draw-toggle-btn" id="btnHoldingPointDraw">Draw</button>
+        </div>
+        <div id="settings-edge" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="edgeName" placeholder="e.g. Edge 001" />
+          </div>
+        </div>
+        <div id="settings-taxiway" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="taxiwayName" placeholder="e.g. Taxiway A" />
+          </div>
+          <div class="compact-field">
+            <label>Width (m)</label>
+            <input type="number" id="taxiwayWidth" min="__UI_SHARED_PATH_WIDTH_MIN__" max="100" value="__UI_TW_W__" step="1" />
+          </div>
+          <div id="runwayMinArrVelocityWrap" class="inline-field wide" style="display:none;">
+            <label>Min Arr Velocity (m/s)</label>
+            <input type="number" id="runwayMinArrVelocity" min="1" max="150" value="__UI_RW_MIN_ARR__" step="1" />
+          </div>
+          <div id="runwayLineupDistWrap" class="inline-field wide" style="display:none;">
+            <label>Line up Point</label>
+            <input type="number" id="runwayLineupDistM" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
+          </div>
+          <div id="runwayStartDisplacedThresholdWrap" class="inline-field wide" style="display:none;">
+            <label>Start Displaced Threshold (m)</label>
+            <input type="number" id="runwayStartDisplacedThresholdM" min="0" max="500000" value="__UI_RW_DISP_START__" step="1" />
+          </div>
+          <div id="runwayStartBlastPadWrap" class="inline-field wide" style="display:none;">
+            <label>Start Blast Pad (m)</label>
+            <input type="number" id="runwayStartBlastPadM" min="0" max="500000" value="__UI_RW_BLAST_START__" step="1" />
+          </div>
+          <div id="runwayEndDisplacedThresholdWrap" class="inline-field wide" style="display:none;">
+            <label>End Displaced Threshold (m)</label>
+            <input type="number" id="runwayEndDisplacedThresholdM" min="0" max="500000" value="__UI_RW_DISP_END__" step="1" />
+          </div>
+          <div id="runwayEndBlastPadWrap" class="inline-field wide" style="display:none;">
+            <label>End Blast Pad (m)</label>
+            <input type="number" id="runwayEndBlastPadM" min="0" max="500000" value="__UI_RW_BLAST_END__" step="1" />
+          </div>
+          <div id="taxiwayAvgVelocityWrap" class="inline-field wide" style="display:none;">
+            <label>Avg Move Velocity (m/s)</label>
+            <input type="number" id="taxiwayAvgMoveVelocity" min="1" max="50" value="__UI_TW_AVG__" step="0.5" />
+          </div>
+          <div id="runwayMaxExitVelWrap" class="inline-field wide" style="display:none;">
+            <label>Max Exit Velocity</label>
+            <input type="number" id="taxiwayMaxExitVel" min="1" max="150" value="__UI_EX_MAX__" step="1" />
+          </div>
+          <div id="runwayMinExitVelWrap" class="inline-field wide" style="display:none;">
+            <label>Min Exit Velocity</label>
+            <input type="number" id="taxiwayMinExitVel" min="1" max="150" value="__UI_EX_MIN__" step="1" />
+          </div>
+          <div class="compact-field">
+            <label>Taxiway Direction Mode</label>
+            <select id="taxiwayDirectionMode">
+              <option value="clockwise">CW</option>
+              <option value="counter_clockwise">CCW</option>
+              <option value="both" selected>Both</option>
+            </select>
+          </div>
+          <div id="runwayExitAllowedDirectionWrap" class="compact-field wide" style="display:none;">
+            <label>Available RW Direction</label>
+            <div id="runwayExitAllowedDirection"></div>
+          </div>
+          <button class="small draw-toggle-btn" id="btnTaxiwayDraw">Draw</button>
+        </div>
+        <div id="settings-apronTaxiway" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Name</label>
+            <input type="text" id="apronLinkName" placeholder="e.g. Apron Taxiway 1" />
+          </div>
+          <button class="small draw-toggle-btn" id="btnApronLinkDraw">Draw</button>
+          <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Click a stand or taxiway to start, then place corners freely. Hold Shift to snap to the grid. Turn off Draw and click the line to select. Drag yellow handles to move corners or the taxiway end (snaps to path). Double-click a segment to add a point. Backspace/Delete removes the selected midpoint.</p>
+        </div>
+        <div id="settings-groundAccess" class="settings-pane" style="display:none;">
+          <p style="font-size:11px;color:#9ca3af;line-height:1.45;margin:0;">Ground Access mode is reserved for access transport related layout elements.</p>
+        </div>
+
+        <div class="section-title">Objects</div>
+        <div class="layout-objects-pane">
+          <div id="object-list" class="obj-list"></div>
+          <div id="object-info">Select an object on the grid or from the list.</div>
+        </div>
+        </div>
+
+        <div id="tab-flight" class="tab-content">
+          <div class="layout-save-load-tabs" style="margin-top:4px;">
+            <button type="button" class="layout-save-load-tab flight-subtab active" data-flight-subtab="schedule">Flight Schedule</button>
+            <button type="button" class="layout-save-load-tab flight-subtab" data-flight-subtab="config">Arrival Configuration</button>
+          </div>
+          <!-- Arr / Dep The choice is reserved for internal compatibility., UIhidden in -->
+          <label style="display:none;">Arr / Dep</label>
+          <select id="flightArrDep" style="display:none;">
+            <option value="Arr" selected>Arr (Arrival)</option>
+            <option value="Dep">Dep (Departure)</option>
+          </select>
+          <div id="flightPaneSchedule" class="compact-form">
+            <div class="compact-field wide">
+              <label>SIBT (Scheduled In Block)</label>
+              <input type="text" id="flightTime" placeholder="e.g. 0, 12:30, 09:23:45 (minute / HH:MM:SS)" />
+            </div>
+            <div class="compact-field">
+              <label>Aircraft type</label>
+              <select id="flightAircraftType">
+                <!-- Populated from INFORMATION.tiers.aircraft.types -->
+              </select>
+            </div>
+            <div class="compact-field">
+              <label>Reg. number</label>
+              <input type="text" id="flightReg" placeholder="e.g. HL1234" />
+            </div>
+            <div class="compact-field">
+              <label>Airline Code</label>
+              <input type="text" id="flightAirlineCode" placeholder="e.g. KE" />
+            </div>
+            <div class="compact-field">
+              <label>Flight Number</label>
+              <input type="text" id="flightFlightNumber" placeholder="e.g. KE0081" />
+            </div>
+            <div class="compact-field">
+              <label>Stand dwell (min)</label>
+              <input type="number" id="flightDwell" min="0" max="__UI_FLIGHT_DWELL_MAX__" value="__UI_FLIGHT_DWELL__" step="__UI_FLIGHT_DWELL_STEP__" />
+            </div>
+            <div class="compact-field">
+              <label>Min dwell (min)</label>
+              <input type="number" id="flightMinDwell" min="0" max="__UI_FLIGHT_DWELL_MAX__" value="__UI_FLIGHT_MIN_DWELL__" step="__UI_FLIGHT_DWELL_STEP__" title="In case of delayed arrival EOBT = EIBT + Min Dwell Adjust to (0Not applicable to this side)" />
+            </div>
+            <button class="small" id="btnAddFlight">+ Add Flight</button>
+            <div id="flightError" style="color:#f97316;font-size:11px;margin-top:4px;"></div>
+            <div class="section-title" style="margin-top:10px;">Flight schedule</div>
+            <div id="flightSchedulePager" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:#9ca3af;margin:4px 0 6px;">
+              <span>총 <strong id="flightSchedulePagerTotal">0</strong>편</span>
+              <span id="flightSchedulePagerRange"></span>
+              <button type="button" class="tool-btn" id="btnFlightSchedPrev" title="이전 페이지">◀</button>
+              <button type="button" class="tool-btn" id="btnFlightSchedNext" title="다음 페이지">▶</button>
+            </div>
+            <div id="flightList" class="obj-list"></div>
+          </div>
+
+          <div id="flightPaneConfig" style="display:none;margin-top:8px;">
+            <div class="section-title">Arrival Configuration</div>
+            <div id="flightConfigList" class="obj-list"></div>
+          </div>
+        </div>
+
+        <div id="tab-rwysep" class="tab-content">
+          <div id="rwySepPanel" style="margin-top:6px;"></div>
+        </div>
+
+        <div id="tab-allocation" class="tab-content">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div style="font-size:11px;color:#9ca3af;">Stand allocation (Apron × Time)</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <label style="font-size:11px;color:#9ca3af;display:flex;align-items:center;gap:4px;margin:0;">
+                <input type="checkbox" id="chkShowSPoints" />
+                S‑Point
+              </label>
+              <label style="font-size:11px;color:#9ca3af;display:flex;align-items:center;gap:4px;margin:0;">
+                <input type="checkbox" id="chkShowSBars" checked />
+                S‑Bar
+              </label>
+              <label style="font-size:11px;color:#9ca3af;display:flex;align-items:center;gap:4px;margin:0;">
+                <input type="checkbox" id="chkShowEBar" />
+                E‑Bar
+              </label>
+              <label style="font-size:11px;color:#9ca3af;display:flex;align-items:center;gap:4px;margin:0;">
+                <input type="checkbox" id="chkShowEPoints" />
+                E‑Point
+              </label>
+            </div>
+          </div>
+          <div id="allocationGantt"></div>
+        </div>
+
+        <div id="tab-simulation" class="tab-content">
+          <div class="kpi-pane">
+            <div class="kpi-shell">
+              <div class="kpi-toolbar">
+                <div class="kpi-toolbar-copy">
+                  <div class="kpi-toolbar-eyebrow">Operations Dashboard</div>
+                </div>
+                <div class="kpi-status-chip" id="kpiSnapshotStatus">Initializing snapshot</div>
+              </div>
+              <div id="kpiDashboard"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tab-saveload" class="tab-content">
+          <div class="layout-save-load-tabs">
+            <button type="button" class="layout-save-load-tab active" data-sltab="saveas">Save as</button>
+            <button type="button" class="layout-save-load-tab" data-sltab="save">Save</button>
+            <button type="button" class="layout-save-load-tab" data-sltab="load">Load</button>
+          </div>
+          <div id="layout-saveas-pane" class="layout-save-load-pane active">
+            <label>Layout name</label>
+            <input type="text" id="layoutName" placeholder="yes: base_layout" />
+            <button type="button" class="small" id="btnSaveLayout" style="margin-top:6px;">Save as</button>
+            <div id="layoutMessage" style="font-size:11px;color:#9ca3af;margin-top:4px;"></div>
+          </div>
+          <div id="layout-save-pane" class="layout-save-load-pane">
+            <p style="font-size:11px;color:#9ca3af;">Overwrites the currently loaded layout file.</p>
+            <button type="button" class="small" id="btnSaveCurrentLayout" style="margin-top:6px;">Save current state</button>
+            <div id="layoutMessageSave" style="font-size:11px;color:#9ca3af;margin-top:4px;"></div>
+          </div>
+          <div id="layout-load-pane" class="layout-save-load-pane">
+            <div class="section-title" style="margin-top:0;">Layout storage</div>
+            <div id="layoutLoadList" class="obj-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="view3d-container"></div>
+    <div id="globalUpdateOverlay" class="global-update-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="globalUpdateOverlayLabel">
+      <div class="global-update-overlay-backdrop"></div>
+      <div class="global-update-overlay-card">
+        <div class="global-update-overlay-spinner" aria-hidden="true"></div>
+        <div id="globalUpdateOverlayLabel" class="global-update-overlay-text">업데이트 중…</div>
+        <div class="global-update-progress-track"><div id="globalUpdateProgressFill" class="global-update-progress-fill"></div></div>
+      </div>
+    </div>
+  </div>
