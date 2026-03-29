@@ -746,8 +746,6 @@
   function lineupDepQueueFingerprint(flights) {
     const parts = [];
     const list = flights || [];
-    const tSimB = (typeof state !== 'undefined' && state && isFinite(state.simTimeSec))
-      ? Math.floor(Number(state.simTimeSec)) : -999999;
     for (let i = 0; i < list.length; i++) {
       const f = list[i];
       if (!f || f.noWayDep) continue;
@@ -759,7 +757,7 @@
       parts.push(String(f.id != null ? f.id : i) + ':' + String(rw) + ':' + String(st) + ':' + eob + ':' + etot + ':' + vtt);
     }
     parts.sort();
-    return String(state.pathPolylineCacheRev | 0) + '|tB_' + tSimB + '|' + parts.join(';');
+    return String(state.pathPolylineCacheRev | 0) + '|' + parts.join(';');
   }
   function assignLineupQueueRanksAll(flights) {
     const list = flights || [];
@@ -803,12 +801,26 @@
   function ensureLineupQueueRanksForSimulation() {
     const flights = state.flights || [];
     const fp = lineupDepQueueFingerprint(flights);
-    if (state.__lineupQueueRankFp === fp) return;
+    const tSim = (typeof state !== 'undefined' && state && isFinite(state.simTimeSec))
+      ? Number(state.simTimeSec) : null;
+    if (state.__lineupQueueRankFp === fp && state.__lineupQueueRankSimSec === tSim) return;
+    const oldRanks = {};
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f || f.noWayDep) continue;
+      const k = f.id != null ? f.id : i;
+      if (typeof f._lineupQueueRank === 'number' && isFinite(f._lineupQueueRank)) oldRanks[k] = f._lineupQueueRank;
+    }
     state.__lineupQueueRankFp = fp;
+    state.__lineupQueueRankSimSec = tSim;
     assignLineupQueueRanksAll(flights);
     for (let i = 0; i < flights.length; i++) {
       const f = flights[i];
-      if (f && !f.noWayDep) f.timeline = null;
+      if (!f || f.noWayDep) continue;
+      const k = f.id != null ? f.id : i;
+      const oldN = Object.prototype.hasOwnProperty.call(oldRanks, k) ? oldRanks[k] : null;
+      const newN = (typeof f._lineupQueueRank === 'number' && isFinite(f._lineupQueueRank)) ? f._lineupQueueRank : null;
+      if (oldN !== newN) f.timeline = null;
     }
   }
   
@@ -1107,6 +1119,7 @@
   }
   function clearAllFlightTimelines() {
     delete state.__lineupQueueRankFp;
+    delete state.__lineupQueueRankSimSec;
     const flights = state.flights || [];
     for (let i = 0; i < flights.length; i++) {
       if (flights[i]) flights[i].timeline = null;

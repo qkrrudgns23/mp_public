@@ -1689,7 +1689,6 @@
         let bestFlight = null;
         let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
         const tSec = state.simTimeSec;
-        if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
         state.flights.forEach(f => {
           const pose = getFlightPoseAtTimeForDraw(f, tSec);
           if (!pose || f.reg == null || !String(f.reg).trim()) return;
