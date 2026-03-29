@@ -1,81 +1,16 @@
-    const touchedStands = (touchedStandIds instanceof Set) ? touchedStandIds : new Set(touchedStandIds || []);
-    const standsToRecompute = new Set();
-    touchedStands.forEach(function(sid) { if (sid != null && sid !== '') standsToRecompute.add(sid); });
-    const needStep1 = new Set();
-    dirty.forEach(function(id) { if (id != null && id !== '') needStep1.add(id); });
-    allFlights.forEach(function(f) {
-      if (!f || f.noWayArr || f.noWayDep) return;
-      if (f.standId && standsToRecompute.has(f.standId)) needStep1.add(f.id);
-    });
-    allFlights.forEach(function(f) {
-      if (!f || !needStep1.has(f.id)) return;
-      if (f.noWayArr || f.noWayDep) return;
-      f.vttADelayMin = 0;
-      const tArrMin = f.timeMin != null ? f.timeMin : 0;
-      let dwell = f.dwellMin != null ? f.dwellMin : 0;
-      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
-      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
-      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
-      if (minDwell > dwell) minDwell = dwell;
-      f.dwellMin = dwell;
-      f.minDwellMin = minDwell;
-      const vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
-      const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-      const sldtOrig = Math.max(0, tArrMin - vttArrMin - rotArrMin);
-      const sobtOrig = tArrMin + dwell;
-      const stotOrig = sobtOrig + depBlockOutMin;
-      f.sldtMin_orig = sldtOrig;
-      f.sibtMin_orig = tArrMin;
-      f.sobtMin_orig = sobtOrig;
-      f.stotMin_orig = stotOrig;
-      f.sldtMin_d = f.sldtMin_orig;
-      f.sibtMin_d = tArrMin;
-      f.sobtMin_d = sobtOrig;
-      f.stotMin_d = stotOrig;
-    });
-    standsToRecompute.forEach(function(standId) {
-      const list = allFlights.filter(function(f) {
-        return f && !f.noWayArr && !f.noWayDep && f.standId === standId;
-      });
-      list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
-      let prevSOBT = -1e9;
-      list.forEach(function(f) {
-        const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-        const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
-        const overlap = Math.max(0, prevSOBT - sibt0);
-        f.vttADelayMin = overlap;
-        f.sibtMin_d = sibt0 + overlap;
-        const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
-        const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-        const minSobtByDwell = f.sibtMin_d + minDwell;
-        const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
-        f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-        f.stotMin_d = f.sobtMin_d + depBlockOutMin;
-        prevSOBT = f.sobtMin_d;
-      });
-    });
-    allFlights.forEach(function(f) {
-      if (!f || f.noWayArr || f.noWayDep || !f.standId) return;
-      if (!standsToRecompute.has(f.standId)) return;
-      const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
-      const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-      const sibt = (f.sibtMin_d != null ? f.sibtMin_d : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
-      const minSobtByDwell = sibt + minDwell;
-      const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
-      if (sobtCurrent < minSobtByDwell) {
-        const delta = minSobtByDwell - sobtCurrent;
-        f.sobtMin_d = minSobtByDwell;
-        if (typeof f.stotMin_d === 'number') f.stotMin_d += delta;
-      }
-    });
-    allFlights.forEach(function(f) {
-      if (!f || f.noWayArr || f.noWayDep) return;
-      const onTouched = f.standId && standsToRecompute.has(f.standId);
-      if (!needStep1.has(f.id) && !onTouched) return;
-      f.sldtMin = f.sldtMin_d;
-      f.stotMin = f.stotMin_d;
-      f.sobtMin = f.sobtMin_d;
+  function rsepDepLineupEtaMinForSep(f, sobtMin_d) {
+    if (!f || f.noWayDep) return sobtMin_d;
+    const sobt = sobtMin_d != null && isFinite(sobtMin_d) ? sobtMin_d : 0;
+    const eobtCand = (f.eobtMin != null && isFinite(f.eobtMin)) ? f.eobtMin : sobt;
+    const vttLu = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
+    return eobtCand + Math.max(0, vttLu);
+  }
+  function rsepSortEventsLineupDepOrder(events) {
+    events.sort(function(a, b) {
+      const ka = a.type === 'dep' && typeof a.lineupEtaMin === 'number' && isFinite(a.lineupEtaMin) ? a.lineupEtaMin : a.time;
+      const kb = b.type === 'dep' && typeof b.lineupEtaMin === 'number' && isFinite(b.lineupEtaMin) ? b.lineupEtaMin : b.time;
+      if (ka !== kb) return ka - kb;
+      return a.time - b.time || a.index - b.index;
     });
   }
 
@@ -84,13 +19,15 @@
     return isFinite(n) && n >= 0 ? n : RSEP_MISSING_MATRIX_SEC;
   }
 
-  function rsepApplySeparationToEvents(events, cfg) {
+  function rsepApplySeparationToEvents(events, cfg, sortOpts) {
     const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {};
     const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {};
     const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {};
     const rot = (cfg.rot) ? cfg.rot : {};
     const getSec = rsepGetSec;
-    events.sort((a, b) => a.time - b.time || a.index - b.index);
+    const useLineup = sortOpts && sortOpts.useLineupDepOrder;
+    if (useLineup) rsepSortEventsLineupDepOrder(events);
+    else events.sort((a, b) => a.time - b.time || a.index - b.index);
     let lastArrETime = -1e9, lastArrCat = null;
     let lastDepETime = -1e9, lastDepCat = null;
     events.forEach(ev => {
@@ -155,7 +92,10 @@
       const vttDepMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
       if (arrRwy === rwy.id) events.push({ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ });
       if (depRwy === rwy.id) {
-        events.push({ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin_d, index: eventIndex++ });
+        const lineupEtaMin = rsepDepLineupEtaMinForSep(f, sobtMin_d);
+        events.push({
+          time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin_d, lineupEtaMin: lineupEtaMin, index: eventIndex++,
+        });
       }
     });
     return { cfg, events };
@@ -171,7 +111,7 @@
           byRunway[rwy.id] = { events: [], minT: 0, maxT: 0 };
           return;
         }
-        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg);
+        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg, { useLineupDepOrder: true });
         byRunway[rwy.id] = { events, minT, maxT };
       });
     } else {
@@ -186,7 +126,7 @@
             ? (ev.flight.eldtMin != null ? ev.flight.eldtMin : ev.time)
             : (ev.flight.etotMin != null ? ev.flight.etotMin : ev.time);
         });
-        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg);
+        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg, { useLineupDepOrder: false });
         byRunway[rwy.id] = { events, minT, maxT };
       });
     }
@@ -240,7 +180,8 @@
         byRunway[rwy.id] = { events: [], minT: 0, maxT: 0 };
         return;
       }
-      const events = pack.events.slice().sort((a, b) => a.time - b.time || a.index - b.index);
+      const events = pack.events.slice();
+      rsepSortEventsLineupDepOrder(events);
       let minT = Infinity, maxT = -Infinity;
       events.forEach(ev => {
         const s = ev.time;
@@ -264,6 +205,7 @@
   function computeSeparationAdjustedTimes() {
     const flights = state.flights || [];
     flights.forEach(f => { delete f.eldtMin; delete f.etotMin; });
+    if (typeof assignLineupQueueRanksAll === 'function') assignLineupQueueRanksAll(flights);
     const runwaysRaw = (state.taxiways || []).filter(t => t.pathType === 'runway');
     if (!runwaysRaw.length) return {};
 

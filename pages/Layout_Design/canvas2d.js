@@ -1041,6 +1041,37 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(labelText, bx + bw / 2, by + bh / 2);
+            let hpLinked = false;
+            if (typeof findRunwayHoldingForLineup === 'function' && lp) {
+              const dLine = typeof getEffectiveRunwayLineupDistM === 'function' ? getEffectiveRunwayLineupDistM(tw) : d;
+              const dBack = Math.max(0, dLine - 300);
+              const pBack = typeof getRunwayPointAtDistance === 'function' ? getRunwayPointAtDistance(tw.id, dBack) : null;
+              const stub = (pBack && dist2(pBack, lp) > 1e-6) ? [pBack, lp] : [lp, lp];
+              const hres = findRunwayHoldingForLineup(tw, lp, stub);
+              hpLinked = !!(hres && hres.ok);
+            }
+            if (!hpLinked) {
+              const badge = 'No Holding Point';
+              ctx.font = 'bold 10px system-ui, sans-serif';
+              const p2x = 5, p2y = 3, r2 = 4;
+              const m2 = ctx.measureText(badge);
+              const bw2 = m2.width + p2x * 2;
+              const bh2 = 10 + p2y * 2;
+              const bx2 = bx;
+              const by2 = by + bh + 4;
+              ctx.beginPath();
+              if (typeof ctx.roundRect === 'function') ctx.roundRect(bx2, by2, bw2, bh2, r2);
+              else ctx.rect(bx2, by2, bw2, bh2);
+              ctx.fillStyle = 'rgba(220, 38, 38, 0.95)';
+              ctx.fill();
+              ctx.strokeStyle = '#450a0a';
+              ctx.lineWidth = 1.1;
+              ctx.stroke();
+              ctx.fillStyle = '#ffffff';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(badge, bx2 + bw2 / 2, by2 + bh2 / 2);
+            }
             ctx.restore();
           }
         }

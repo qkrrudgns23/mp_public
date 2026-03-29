@@ -450,6 +450,150 @@
     }
     return false;
   }
+  function polylineLengthWorld(pts) {
+    if (!pts || pts.length < 2) return 0;
+    let s = 0;
+    for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
+    return s;
+  }
+  function nearestPointOnPolylineWithAlong(pts, q) {
+    if (!pts || pts.length < 2 || !q) return null;
+    let bestD2 = Infinity;
+    let bestAlong = 0;
+    let bestPt = [pts[0][0], pts[0][1]];
+    let cumulative = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const pr = projectOnSegment(a, b, q);
+      const d2 = dist2(pr.p, q);
+      const segLen = pathDist(a, b);
+      const along = cumulative + pr.t * segLen;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        bestAlong = along;
+        bestPt = [pr.p[0], pr.p[1]];
+      }
+      cumulative += segLen;
+    }
+    return { pt: bestPt, along: bestAlong, dist2: bestD2 };
+  }
+  function collectRunwayExitPolylinesS0ForLineup(runwayTw, lineupPt) {
+    if (!runwayTw || runwayTw.pathType !== 'runway' || !lineupPt) return [];
+    const rwPts = getOrderedPoints(runwayTw);
+    if (!rwPts || rwPts.length < 2) return [];
+    const cs = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+    const touchD2 = Math.max(SPLIT_TOL_D2, (cs * 0.2) * (cs * 0.2));
+    const list = state.taxiways || [];
+    const out = [];
+    for (let ti = 0; ti < list.length; ti++) {
+      const tx = list[ti];
+      if (tx.pathType !== 'runway_exit') continue;
+      const rtxPts = getOrderedPoints(tx);
+      if (!rtxPts || rtxPts.length < 2) continue;
+      if (!polylineTouchesPolylineForGraph(rtxPts, rwPts) && !polylineTouchesPolylineForGraph(rwPts, rtxPts)) continue;
+      if (!pointNearPolylineSq(lineupPt, rtxPts, touchD2)) continue;
+      out.push({ tw: tx, pts: rtxPts });
+    }
+    return out;
+  }
+  function expandRunwayExitSetOneHop(s0Entries) {
+    if (!s0Entries || !s0Entries.length) return s0Entries.slice();
+    const list = state.taxiways || [];
+    const seen = {};
+    for (let i = 0; i < s0Entries.length; i++) {
+      if (s0Entries[i].tw && s0Entries[i].tw.id != null) seen[s0Entries[i].tw.id] = true;
+    }
+    const out = s0Entries.slice();
+    for (let ti = 0; ti < list.length; ti++) {
+      const tx = list[ti];
+      if (tx.pathType !== 'runway_exit' || seen[tx.id]) continue;
+      const rtxPts = getOrderedPoints(tx);
+      if (!rtxPts || rtxPts.length < 2) continue;
+      let touched = false;
+      for (let j = 0; j < s0Entries.length; j++) {
+        if (polylineTouchesPolylineForGraph(rtxPts, s0Entries[j].pts)) {
+          touched = true;
+          break;
+        }
+      }
+      if (!touched) continue;
+      seen[tx.id] = true;
+      out.push({ tw: tx, pts: rtxPts });
+    }
+    return out;
+  }
+  function buildLineupLinkedRunwayTaxiwayEntries(runwayTw, lineupPt) {
+    const s0 = collectRunwayExitPolylinesS0ForLineup(runwayTw, lineupPt);
+    if (!s0.length) return [];
+    return expandRunwayExitSetOneHop(s0);
+  }
+  function findRunwayHoldingForLineup(runwayTw, lineupPt, toLineupPts) {
+    const S = buildLineupLinkedRunwayTaxiwayEntries(runwayTw, lineupPt);
+    if (!S.length || !toLineupPts || toLineupPts.length < 2) return { ok: false, S: S };
+    const cs = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+    const touchD2 = Math.max(SPLIT_TOL_D2, Math.pow(cs * 0.35, 2));
+    const holdingList = state.holdingPoints || [];
+    let bestHp = null;
+    let bestAlong = -1;
+    const totalLu = polylineLengthWorld(toLineupPts);
+    for (let hi = 0; hi < holdingList.length; hi++) {
+      const hp = holdingList[hi];
+      if (!hp || hp.hpKind !== 'runway_holding') continue;
+      const q = [hp.x, hp.y];
+      let onS = false;
+      for (let si = 0; si < S.length; si++) {
+        if (pointNearPolylineSq(q, S[si].pts, touchD2)) { onS = true; break; }
+      }
+      if (!onS) continue;
+      const nav = nearestPointOnPolylineWithAlong(toLineupPts, q);
+      if (!nav || !(nav.along >= -1e-6)) continue;
+      if (nav.along > bestAlong) {
+        bestAlong = nav.along;
+        bestHp = hp;
+      }
+    }
+    if (!bestHp || bestAlong < 0) return { ok: false, S: S };
+    return {
+      ok: true,
+      hp: bestHp,
+      holdAlong: Math.min(bestAlong, totalLu),
+      lineupAlong: totalLu,
+      S: S,
+    };
+  }
+  function computeDepRotSecondsForFlight(f) {
+    const vHoldLine = (typeof DEP_HOLDING_TO_LINEUP_SPEED_MS === 'number' && isFinite(DEP_HOLDING_TO_LINEUP_SPEED_MS)) ? Math.max(0.1, DEP_HOLDING_TO_LINEUP_SPEED_MS) : 8;
+    const alignS = (typeof DEP_ALIGNMENT_TIME_SEC === 'number' && isFinite(DEP_ALIGNMENT_TIME_SEC)) ? Math.max(0, DEP_ALIGNMENT_TIME_SEC) : 20;
+    const accel = (typeof getDepTakeoffAccelMs2ForFlight === 'function') ? Math.max(0.05, getDepTakeoffAccelMs2ForFlight(f)) : 2;
+    const depFallback = Math.max(1, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
+    const toLineup = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, { onlyToLineup: true }) : null;
+    if (!toLineup || toLineup.length < 2) return depFallback;
+    const runwayId = f.depRunwayId || (f.token && (f.token.depRunwayId != null ? f.token.depRunwayId : f.token.runwayId)) || f.arrRunwayId;
+    const rwTw = runwayId ? (state.taxiways || []).find(function(t) { return t.id === runwayId && t.pathType === 'runway'; }) : null;
+    const lastLu = toLineup[toLineup.length - 1];
+    const holdRes = rwTw ? findRunwayHoldingForLineup(rwTw, lastLu, toLineup) : { ok: false };
+    let distHoldToLu = 0;
+    if (holdRes.ok && typeof holdRes.holdAlong === 'number' && typeof holdRes.lineupAlong === 'number') {
+      distHoldToLu = Math.max(0, holdRes.lineupAlong - holdRes.holdAlong);
+    }
+    const tHoldToLu = distHoldToLu / vHoldLine;
+    const depFull = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
+    let runwayTailLen = 0;
+    if (depFull && depFull.length >= 2 && lastLu) {
+      let k = -1;
+      const tol = 0.25;
+      for (let i = 0; i < depFull.length; i++) {
+        if (dist2(depFull[i], lastLu) <= tol) k = i;
+      }
+      if (k >= 0 && k < depFull.length - 1) {
+        let s = 0;
+        for (let j = k; j < depFull.length - 1; j++) s += pathDist(depFull[j], depFull[j + 1]);
+        runwayTailLen = s;
+      }
+    }
+    const tTakeoff = (runwayTailLen > 1e-6 && accel > 1e-6) ? Math.sqrt(2 * runwayTailLen / accel) : depFallback * 0.25;
+    return tHoldToLu + alignS + tTakeoff;
+  }
   function dedupePathPoints(pts) {
     const out = [];
     (pts || []).forEach(function(p) {
