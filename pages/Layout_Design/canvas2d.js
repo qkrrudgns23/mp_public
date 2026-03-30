@@ -1575,8 +1575,7 @@
     if (typeof polylinePointAtDistance !== 'function' || typeof polylineTotalLength !== 'function') return;
     const tSecDraw = state.simTimeSec;
     if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSecDraw);
-    const HOLDING_QUEUE_GHOST_SPACING_M = 60;
-    const GHOST_ALPHA = 0.62;
+    const HOLDING_QUEUE_GHOST_SPACING_M = 70;
     const dia = typeof c2dHoldingPointDiameterM === 'function' ? c2dHoldingPointDiameterM() : 24;
     const rad = Math.max(10, dia * 0.55);
     const pathTol2 = Math.pow(Math.max(rad * 4, 45), 2);
@@ -1653,7 +1652,6 @@
         ctx.save();
         ctx.translate(pt[0], pt[1]);
         ctx.rotate(Math.atan2(ny, nx));
-        ctx.globalAlpha = GHOST_ALPHA;
         ctx.fillStyle = apron2DGlyphFill();
         ctx.beginPath();
         if (useDetailSil) {
@@ -1673,7 +1671,7 @@
           ctx.lineWidth = outlineWidth;
           ctx.stroke();
         } else if (useDetailSil) {
-          ctx.strokeStyle = 'rgba(15,23,42,0.72)';
+          ctx.strokeStyle = 'rgba(15,23,42,1)';
           ctx.lineWidth = 1.1;
           ctx.stroke();
         }
@@ -1832,6 +1830,7 @@
   }
   function draw() {
     if (!ctx || !canvas) return;
+    if (state.simSliderScrubbing) return;
     drawGrid();
     drawTerminals();
     drawTaxiways();

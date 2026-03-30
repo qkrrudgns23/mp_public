@@ -230,7 +230,7 @@ _flight_ui_defaults = _cfg_bundle(_flight_info, [
     ("dwell_max", "dwellInputMax", 600, _cfg_int),
     ("dwell_step", "dwellStep", 5, _cfg_int),
     ("default_sim_speed", "defaultSimSpeed", 5.0, _cfg_float),
-    ("sim_slider_snap_sec", "simTimeSliderSnapSec", 60, _cfg_int),
+    ("sim_slider_snap_sec", "simTimeSliderSnapSec", 1, _cfg_int),
     ("allow_rw_ground", "defaultAllowRunwayInGroundSegment", False, _cfg_bool),
     ("dep_rot_min", "depRotMin", 2, _cfg_int),
 ])

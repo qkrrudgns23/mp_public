@@ -157,6 +157,7 @@
     simStartSec: 0,
     simDurationSec: 0,
     simPlaying: false,
+    simSliderScrubbing: false,
     simSpeed: _dc.defaultSimSpeed,
     hasSimulationResult: false,
     simPlaybackDockVisible: false,
@@ -224,6 +225,7 @@
   function markGlobalUpdateStale() {
     state.globalUpdateFresh = false;
     state.simPlaying = false;
+    state.simSliderScrubbing = false;
     state.simPlaybackDockVisible = false;
     if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
     bumpPathPolylineCacheRev();

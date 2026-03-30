@@ -483,6 +483,7 @@
         if (hi > lo && t >= hi - 1e-3) t = snapSimTimeSecForSlider(lo);
         state.simTimeSec = t;
         if (simSlider) simSlider.value = state.simTimeSec;
+        state.simSliderScrubbing = false;
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
         if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
         state.simPlaying = true;
@@ -510,7 +511,35 @@
         if (typeof update3DScene === 'function') update3DScene();
       });
     }
+    let simSliderPointerActive = false;
+    function finalizeSimSliderPointerDrag() {
+      if (!simSliderPointerActive) return;
+      simSliderPointerActive = false;
+      state.simSliderScrubbing = false;
+      if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
+      if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+      try { draw(); } catch(e) {}
+      if (typeof update3DScene === 'function') update3DScene();
+    }
     if (simSlider) {
+      simSlider.addEventListener('pointerdown', function(e) {
+        if (e.button != null && e.button !== 0) return;
+        if (e.isPrimary === false) return;
+        simSliderPointerActive = true;
+        state.simSliderScrubbing = true;
+        try { simSlider.setPointerCapture(e.pointerId); } catch (err) {}
+      });
+      simSlider.addEventListener('pointerup', function(e) {
+        if (!simSliderPointerActive) return;
+        try { simSlider.releasePointerCapture(e.pointerId); } catch (err2) {}
+        finalizeSimSliderPointerDrag();
+      });
+      simSlider.addEventListener('pointercancel', function() {
+        finalizeSimSliderPointerDrag();
+      });
+      simSlider.addEventListener('lostpointercapture', function() {
+        finalizeSimSliderPointerDrag();
+      });
       simSlider.addEventListener('input', function() {
         const secs = parseFloat(this.value);
         if (!isNaN(secs)) {
@@ -518,6 +547,7 @@
           state.simTimeSec = snapped;
           this.value = snapped;
           if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+          if (state.simSliderScrubbing) return;
           if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
           try { draw(); } catch(e) {}
           if (typeof update3DScene === 'function') update3DScene();

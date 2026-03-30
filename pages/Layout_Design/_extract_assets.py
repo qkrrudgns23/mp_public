@@ -140,7 +140,7 @@ def main() -> None:
 
     js = js.replace(
         "  const SIM_TIME_SLIDER_SNAP_SEC = Math.max(1, Number({json.dumps(_ui_flight_sim_slider_snap_sec)}) || 60);",
-        "  const SIM_TIME_SLIDER_SNAP_SEC = Math.max(1, Number(_dc.flightSimSliderSnapSec) || 60);",
+        "  const SIM_TIME_SLIDER_SNAP_SEC = Math.max(1, Number(_dc.flightSimSliderSnapSec) || 1);",
     )
     js = js.replace(
         "  const DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT = {json.dumps(bool(_ui_flight_allow_rw_ground))};",

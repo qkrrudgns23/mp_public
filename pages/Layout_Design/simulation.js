@@ -209,6 +209,22 @@
     else if (anchorDist > tdDistAlong + 1e-3) anchorDist = tdDistAlong;
     return anchorDist;
   }
+  function buildArrivalApproachPolylinePts(runwayId, rwDir, anchorDist, offset, tdPt) {
+    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, offset);
+    let apprPts;
+    if (pack && pack.pts && pack.pts.length >= 2) {
+      apprPts = pack.pts.slice();
+      const lastAp = apprPts[apprPts.length - 1];
+      if (Math.hypot(lastAp[0] - tdPt[0], lastAp[1] - tdPt[1]) > 1e-3) apprPts.push([tdPt[0], tdPt[1]]);
+    } else {
+      const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
+      const outer = approachPointBeforeThresholdJs(runwayId, rwDir, offset, anchorDist);
+      const mid = rsPt ? [rsPt[0], rsPt[1]] : [tdPt[0], tdPt[1]];
+      apprPts = [outer, mid];
+      if (rsPt && Math.hypot(rsPt[0] - tdPt[0], rsPt[1] - tdPt[1]) > 1e-3) apprPts.push([tdPt[0], tdPt[1]]);
+    }
+    return { pack: pack, apprPts: apprPts };
+  }
   function arrivalApproachDurationSecBeforeEldt(f) {
     const vTd = Math.max(1, touchdownSpeedMsForTimeline(f));
     const token = f.token || {};
@@ -217,19 +233,12 @@
     const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
     const tdDist = touchdownDistMForTimeline(f);
     const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
-    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M);
-    const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
     const tdPt = getRunwayPointAtDistance(runwayId, tdDist);
-    if (pack && pack.pathLen > 1e-9) {
-      let totalLen = pack.pathLen;
-      if (rsPt && tdPt) totalLen += pathDist(rsPt, tdPt);
-      return totalLen / vTd;
-    }
     if (!tdPt) return APPROACH_OFFSET_WORLD_M / vTd;
-    const apprPt = approachPointBeforeThresholdJs(runwayId, rwDir, APPROACH_OFFSET_WORLD_M, anchorDist);
-    let straightLen = pathDist(apprPt, rsPt || tdPt);
-    if (rsPt && tdPt) straightLen += pathDist(rsPt, tdPt);
-    return straightLen / vTd;
+    const built = buildArrivalApproachPolylinePts(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M, tdPt);
+    const apprPts = built.apprPts;
+    if (!apprPts || apprPts.length < 2) return APPROACH_OFFSET_WORLD_M / vTd;
+    return polylineRawDurationSegmentVelocities(apprPts, function() { return vTd; });
   }
   
   function getFlightAirsideWindowSec(f) {
@@ -1011,21 +1020,16 @@
       f.timeline_meta = { error: 'no_td' };
       return;
     }
-    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, offset);
-    let apprPts;
-    if (pack && pack.pts && pack.pts.length >= 2) {
-      apprPts = pack.pts.slice();
-      const lastAp = apprPts[apprPts.length - 1];
-      if (Math.hypot(lastAp[0] - tdPt[0], lastAp[1] - tdPt[1]) > 1e-3) apprPts.push([tdPt[0], tdPt[1]]);
-    } else {
-      const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
-      const outer = approachPointBeforeThresholdJs(runwayId, rwDir, offset, anchorDist);
-      const mid = rsPt ? [rsPt[0], rsPt[1]] : [tdPt[0], tdPt[1]];
-      apprPts = [outer, mid];
-      if (rsPt && Math.hypot(rsPt[0] - tdPt[0], rsPt[1] - tdPt[1]) > 1e-3) apprPts.push([tdPt[0], tdPt[1]]);
+    const builtAppr = buildArrivalApproachPolylinePts(runwayId, rwDir, anchorDist, offset, tdPt);
+    const pack = builtAppr.pack;
+    const apprPts = builtAppr.apprPts;
+    if (!apprPts || apprPts.length < 2) {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_appr' };
+      return;
     }
-    const tAppr = arrivalApproachDurationSecBeforeEldt(f);
-    const t0 = eldtS - tAppr;
+    const rawApprDur = polylineRawDurationSegmentVelocities(apprPts, function() { return vTd; });
+    const t0 = eldtS - rawApprDur;
     const airTl = polylineTimelineBySegmentSpeeds(apprPts, t0, eldtS, function() { return vTd; });
     const rotS = (typeof f.arrRotSec === 'number' && isFinite(f.arrRotSec)) ? Math.max(0, f.arrRotSec) : 0;
     const vttDelayS = (typeof f.vttADelayMin === 'number' && isFinite(f.vttADelayMin) ? f.vttADelayMin : 0) * 60;

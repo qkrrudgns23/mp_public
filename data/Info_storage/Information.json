@@ -1145,7 +1145,7 @@
         30
       ],
       "defaultSimSpeed": 5,
-      "simTimeSliderSnapSec": 60,
+      "simTimeSliderSnapSec": 1,
       "defaultAirlineCodes": [
         "KE",
         "7C",
