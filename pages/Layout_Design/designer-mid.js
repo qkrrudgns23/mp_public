@@ -1,3 +1,101 @@
+        { t: runwayEndT, x: lastRw.x, y: lastRw.y },
+        { t: tTaxiStart, x: lastRw.x, y: lastRw.y },
+      ]);
+    }
+    const apronTl = buildApronTaxiTimelineAfterRet(f, runwayId, taxiInPts, tTaxiStart, eibtS);
+    taxiInTl = mergeTimelineSegments(taxiInTl, apronTl);
+    const standPt = taxiInPts.length ? taxiInPts[taxiInPts.length - 1] : arrPts[arrPts.length - 1];
+    const sx = standPt[0], sy = standPt[1];
+    const dwellTl = [{ t: eibtS, x: sx, y: sy }, { t: eobtS, x: sx, y: sy }];
+    const builtDep = buildDepartureSurfaceTimelineSegments(f, eobtS, etotS);
+    if (!builtDep || !builtDep.timeline || builtDep.timeline.length < 2) {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_path', leg: 'dep_tail' };
+      return;
+    }
+    const depTl = builtDep.timeline;
+    let timeline = mergeTimelineSegments(airTl, taxiInTl);
+    timeline = mergeTimelineSegments(timeline, dwellTl);
+    timeline = mergeTimelineSegments(timeline, depTl);
+    f.timeline = timeline;
+    f.timeline_meta = Object.assign({
+      tApproachStart: t0,
+      eldtSec: eldtS,
+      eibtSec: eibtS,
+      eobtSec: eobtS,
+      etotSec: etotS,
+      approachOffset: offset,
+      approachStraightFinalM: APPROACH_STRAIGHT_FINAL_M,
+      approachPathLenM: (pack && typeof pack.pathLen === 'number') ? pack.pathLen : null,
+      touchdownSpeedMs: vTd,
+    }, builtDep.meta || {});
+  }
+  function clearAllFlightTimelines() {
+    delete state.__lineupQueueRankFp;
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      if (flights[i]) flights[i].timeline = null;
+    }
+  }
+  function prepareLazyTimelinesForCurrentSim(tSec) {
+    if (!state.globalUpdateFresh) return;
+    const flights = state.flights || [];
+    const pad = simAirsideLazyPadSec();
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f) continue;
+      if (f.noWayArr && f.noWayDep) continue;
+      if (!f.timeline || !f.timeline.length) continue;
+      const w = getFlightAirsideWindowSec(f);
+      if (!w) { f.timeline = null; continue; }
+      if (tSec > w.t1 + 1e-3 || tSec < w.t0 - pad - 1e-3) f.timeline = null;
+    }
+    const pending = [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f) continue;
+      if (f.noWayArr && f.noWayDep) continue;
+      if (f.noWayArr || f.noWayDep) continue;
+      if (!isFlightAirsideLazyTimelineBuildEligible(f, tSec)) continue;
+      if (f.timeline && f.timeline.length) continue;
+      pending.push(f);
+    }
+    if (!pending.length) return;
+    const tN = Number(tSec);
+    const so = state.selectedObject;
+    pending.sort(function(a, b) {
+      const selA = so && so.type === 'flight' && so.id === a.id;
+      const selB = so && so.type === 'flight' && so.id === b.id;
+      if (selA !== selB) return selA ? -1 : 1;
+      const actA = isFlightAirsideActiveAtSimSec(a, tN) ? 0 : 1;
+      const actB = isFlightAirsideActiveAtSimSec(b, tN) ? 0 : 1;
+      if (actA !== actB) return actA - actB;
+      const wa = getFlightAirsideWindowSec(a);
+      const wb = getFlightAirsideWindowSec(b);
+      const da = wa ? Math.abs(tN - (wa.t0 + wa.t1) * 0.5) : Infinity;
+      const db = wb ? Math.abs(tN - (wb.t0 + wb.t1) * 0.5) : Infinity;
+      if (da !== db) return da - db;
+      return (wa && wb) ? (wa.t0 - wb.t0) : 0;
+    });
+    const cap = MAX_LAZY_TIMELINE_BUILDS_PER_FRAME;
+    for (let k = 0; k < pending.length && k < cap; k++) {
+      buildFullAirsideTimelineForFlight(pending[k]);
+    }
+  }
+  function rebuildAllFlightAirsideTimelines() {
+    clearAllFlightTimelines();
+  }
+
+  
+  function getEffectiveRunwayLineupDistM(tw) {
+    if (!tw || tw.pathType !== 'runway') return 0;
+    const v = tw.lineupDistM;
+    if (typeof v === 'number' && isFinite(v) && v >= 0) return v;
+    return 0;
+  }
+
+  function getEffectiveRunwayStartDisplacedThresholdM(tw) {
+    if (!tw || tw.pathType !== 'runway') return RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
     const v = tw.startDisplacedThresholdM;
     return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
   }
@@ -449,150 +547,6 @@
       if (pointNearPolylineSq(lineupPt, rtxPts, touchD2)) return true;
     }
     return false;
-  }
-  function polylineLengthWorld(pts) {
-    if (!pts || pts.length < 2) return 0;
-    let s = 0;
-    for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
-    return s;
-  }
-  function nearestPointOnPolylineWithAlong(pts, q) {
-    if (!pts || pts.length < 2 || !q) return null;
-    let bestD2 = Infinity;
-    let bestAlong = 0;
-    let bestPt = [pts[0][0], pts[0][1]];
-    let cumulative = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const pr = projectOnSegment(a, b, q);
-      const d2 = dist2(pr.p, q);
-      const segLen = pathDist(a, b);
-      const along = cumulative + pr.t * segLen;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        bestAlong = along;
-        bestPt = [pr.p[0], pr.p[1]];
-      }
-      cumulative += segLen;
-    }
-    return { pt: bestPt, along: bestAlong, dist2: bestD2 };
-  }
-  function collectRunwayExitPolylinesS0ForLineup(runwayTw, lineupPt) {
-    if (!runwayTw || runwayTw.pathType !== 'runway' || !lineupPt) return [];
-    const rwPts = getOrderedPoints(runwayTw);
-    if (!rwPts || rwPts.length < 2) return [];
-    const cs = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
-    const touchD2 = Math.max(SPLIT_TOL_D2, (cs * 0.2) * (cs * 0.2));
-    const list = state.taxiways || [];
-    const out = [];
-    for (let ti = 0; ti < list.length; ti++) {
-      const tx = list[ti];
-      if (tx.pathType !== 'runway_exit') continue;
-      const rtxPts = getOrderedPoints(tx);
-      if (!rtxPts || rtxPts.length < 2) continue;
-      if (!polylineTouchesPolylineForGraph(rtxPts, rwPts) && !polylineTouchesPolylineForGraph(rwPts, rtxPts)) continue;
-      if (!pointNearPolylineSq(lineupPt, rtxPts, touchD2)) continue;
-      out.push({ tw: tx, pts: rtxPts });
-    }
-    return out;
-  }
-  function expandRunwayExitSetOneHop(s0Entries) {
-    if (!s0Entries || !s0Entries.length) return s0Entries.slice();
-    const list = state.taxiways || [];
-    const seen = {};
-    for (let i = 0; i < s0Entries.length; i++) {
-      if (s0Entries[i].tw && s0Entries[i].tw.id != null) seen[s0Entries[i].tw.id] = true;
-    }
-    const out = s0Entries.slice();
-    for (let ti = 0; ti < list.length; ti++) {
-      const tx = list[ti];
-      if (tx.pathType !== 'runway_exit' || seen[tx.id]) continue;
-      const rtxPts = getOrderedPoints(tx);
-      if (!rtxPts || rtxPts.length < 2) continue;
-      let touched = false;
-      for (let j = 0; j < s0Entries.length; j++) {
-        if (polylineTouchesPolylineForGraph(rtxPts, s0Entries[j].pts)) {
-          touched = true;
-          break;
-        }
-      }
-      if (!touched) continue;
-      seen[tx.id] = true;
-      out.push({ tw: tx, pts: rtxPts });
-    }
-    return out;
-  }
-  function buildLineupLinkedRunwayTaxiwayEntries(runwayTw, lineupPt) {
-    const s0 = collectRunwayExitPolylinesS0ForLineup(runwayTw, lineupPt);
-    if (!s0.length) return [];
-    return expandRunwayExitSetOneHop(s0);
-  }
-  function findRunwayHoldingForLineup(runwayTw, lineupPt, toLineupPts) {
-    const S = buildLineupLinkedRunwayTaxiwayEntries(runwayTw, lineupPt);
-    if (!S.length || !toLineupPts || toLineupPts.length < 2) return { ok: false, S: S };
-    const cs = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
-    const touchD2 = Math.max(SPLIT_TOL_D2, Math.pow(cs * 0.35, 2));
-    const holdingList = state.holdingPoints || [];
-    let bestHp = null;
-    let bestAlong = -1;
-    const totalLu = polylineLengthWorld(toLineupPts);
-    for (let hi = 0; hi < holdingList.length; hi++) {
-      const hp = holdingList[hi];
-      if (!hp || hp.hpKind !== 'runway_holding') continue;
-      const q = [hp.x, hp.y];
-      let onS = false;
-      for (let si = 0; si < S.length; si++) {
-        if (pointNearPolylineSq(q, S[si].pts, touchD2)) { onS = true; break; }
-      }
-      if (!onS) continue;
-      const nav = nearestPointOnPolylineWithAlong(toLineupPts, q);
-      if (!nav || !(nav.along >= -1e-6)) continue;
-      if (nav.along > bestAlong) {
-        bestAlong = nav.along;
-        bestHp = hp;
-      }
-    }
-    if (!bestHp || bestAlong < 0) return { ok: false, S: S };
-    return {
-      ok: true,
-      hp: bestHp,
-      holdAlong: Math.min(bestAlong, totalLu),
-      lineupAlong: totalLu,
-      S: S,
-    };
-  }
-  function computeDepRotSecondsForFlight(f) {
-    const vHoldLine = (typeof DEP_HOLDING_TO_LINEUP_SPEED_MS === 'number' && isFinite(DEP_HOLDING_TO_LINEUP_SPEED_MS)) ? Math.max(0.1, DEP_HOLDING_TO_LINEUP_SPEED_MS) : 8;
-    const alignS = (typeof DEP_ALIGNMENT_TIME_SEC === 'number' && isFinite(DEP_ALIGNMENT_TIME_SEC)) ? Math.max(0, DEP_ALIGNMENT_TIME_SEC) : 20;
-    const accel = (typeof getDepTakeoffAccelMs2ForFlight === 'function') ? Math.max(0.05, getDepTakeoffAccelMs2ForFlight(f)) : 2;
-    const depFallback = Math.max(1, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
-    const toLineup = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, { onlyToLineup: true }) : null;
-    if (!toLineup || toLineup.length < 2) return depFallback;
-    const runwayId = f.depRunwayId || (f.token && (f.token.depRunwayId != null ? f.token.depRunwayId : f.token.runwayId)) || f.arrRunwayId;
-    const rwTw = runwayId ? (state.taxiways || []).find(function(t) { return t.id === runwayId && t.pathType === 'runway'; }) : null;
-    const lastLu = toLineup[toLineup.length - 1];
-    const holdRes = rwTw ? findRunwayHoldingForLineup(rwTw, lastLu, toLineup) : { ok: false };
-    let distHoldToLu = 0;
-    if (holdRes.ok && typeof holdRes.holdAlong === 'number' && typeof holdRes.lineupAlong === 'number') {
-      distHoldToLu = Math.max(0, holdRes.lineupAlong - holdRes.holdAlong);
-    }
-    const tHoldToLu = distHoldToLu / vHoldLine;
-    const depFull = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
-    let runwayTailLen = 0;
-    if (depFull && depFull.length >= 2 && lastLu) {
-      let k = -1;
-      const tol = 0.25;
-      for (let i = 0; i < depFull.length; i++) {
-        if (dist2(depFull[i], lastLu) <= tol) k = i;
-      }
-      if (k >= 0 && k < depFull.length - 1) {
-        let s = 0;
-        for (let j = k; j < depFull.length - 1; j++) s += pathDist(depFull[j], depFull[j + 1]);
-        runwayTailLen = s;
-      }
-    }
-    const tTakeoff = (runwayTailLen > 1e-6 && accel > 1e-6) ? Math.sqrt(2 * runwayTailLen / accel) : depFallback * 0.25;
-    return tHoldToLu + alignS + tTakeoff;
   }
   function dedupePathPoints(pts) {
     const out = [];
@@ -2052,7 +2006,7 @@
     const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
     const tdDist = touchdownDistMForTimeline(f);
     const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
-    const pack = buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M, APPROACH_STRAIGHT_FINAL_M, APPROACH_ZIGZAG_LEG_M, APPROACH_ZIGZAG_STEP_M);
+    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M);
     let pts;
     if (pack && pack.pts && pack.pts.length >= 2) {
       pts = pack.pts;
@@ -2724,101 +2678,3 @@
         updateTokenPanesVisibility(f.token.nodes);
         rebuildSelectedFlightTimeline();
       });
-    });
-    const tokenRunwaySel = document.getElementById('tokenRunwaySelect');
-    const tokenTerminalSel = document.getElementById('tokenTerminalSelect');
-    if (tokenRunwaySel) tokenRunwaySel.addEventListener('change', function() {
-      if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
-      const f = state.selectedObject.obj;
-      if (!f.token) f.token = { nodes: TOKEN_NODE_ORDER.slice(), runwayId: null, apronId: null, terminalId: null };
-      f.token.runwayId = this.value || null;
-      rebuildSelectedFlightTimeline();
-    });
-    if (tokenTerminalSel) tokenTerminalSel.addEventListener('change', function() {
-      if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
-      const f = state.selectedObject.obj;
-      if (!f.token) f.token = { nodes: TOKEN_NODE_ORDER.slice(), runwayId: null, apronId: null, terminalId: null };
-      f.token.terminalId = this.value || null;
-      rebuildSelectedFlightTimeline();
-    });
-    const flightSubtabButtons = document.querySelectorAll('.flight-subtab');
-    const flightPaneSchedule = document.getElementById('flightPaneSchedule');
-    const flightPaneConfig = document.getElementById('flightPaneConfig');
-    if (flightSubtabButtons && flightPaneSchedule && flightPaneConfig) {
-      flightSubtabButtons.forEach(btn => {
-        btn.addEventListener('click', function() {
-          const target = this.getAttribute('data-flight-subtab') || 'schedule';
-          flightSubtabButtons.forEach(b => b.classList.remove('active'));
-          this.classList.add('active');
-          if (target === 'config') {
-            flightPaneSchedule.style.display = 'none';
-            flightPaneConfig.style.display = 'block';
-          } else {
-            flightPaneSchedule.style.display = 'block';
-            flightPaneConfig.style.display = 'none';
-          }
-        });
-      });
-    }
-    if (addBtn) {
-      addBtn.addEventListener('click', function() {
-        const networkErrors = validateNetworkForFlights();
-        if (networkErrors.length) {
-          updateFlightError(networkErrors);
-          alert('Flightcannot be created:\\n' + networkErrors.join('\\n'));
-          return;
-        }
-        let timeStr = (document.getElementById('flightTime').value || '').trim();
-        if (!timeStr) {
-          const defMin = getDefaultSibtMinutes();
-          timeStr = formatMinutesToHHMMSS(defMin);
-          if (timeInputEl) timeInputEl.value = timeStr;
-        }
-        const timeMin = parseTimeToMinutes(timeStr);
-        const aircraftType = (document.getElementById('flightAircraftType').value || 'A320').trim();
-        const code = getCodeForAircraft(aircraftType);
-        const reg = (document.getElementById('flightReg').value || '').trim();
-        let airlineCode = (document.getElementById('flightAirlineCode') && document.getElementById('flightAirlineCode').value || '').trim();
-        let flightNumber = (document.getElementById('flightFlightNumber') && document.getElementById('flightFlightNumber').value || '').trim();
-        if (!airlineCode) airlineCode = randomAirlineCode();
-        if (!flightNumber) flightNumber = randomFlightNumber(airlineCode);
-        let dwellMin = parseFloat(document.getElementById('flightDwell').value);
-        let minDwellMin = parseFloat(document.getElementById('flightMinDwell').value);
-        dwellMin = (typeof dwellMin === 'number' && !isNaN(dwellMin) && dwellMin >= 0) ? dwellMin : 0;
-        minDwellMin = (typeof minDwellMin === 'number' && !isNaN(minDwellMin) && minDwellMin >= 0) ? minDwellMin : 0;
-        dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, dwellMin);
-        minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, minDwellMin);
-        if (minDwellMin > dwellMin) minDwellMin = dwellMin;
-        const arrDep = 'Arr';
-        const runwayOptions = getRunwayOptions();
-        const defaultRunwayId = runwayOptions.length ? (runwayOptions[0].id || null) : null;
-        const f = {
-          id: id(),
-          arrDep,
-          timeMin,
-          aircraftType,
-          code,
-          reg,
-          airlineCode,
-          flightNumber,
-          dwellMin,
-          minDwellMin,
-          arrRunwayId: defaultRunwayId,
-          depRunwayId: defaultRunwayId,
-          timeline: null,
-          token: {
-            nodes: ['runway','taxiway','apron','terminal'],
-            runwayId: defaultRunwayId,
-            arrRunwayId: defaultRunwayId,
-            depRunwayId: defaultRunwayId,
-            apronId: null,
-            terminalId: null
-          }
-        };
-        computeFlightPath(f, 'arrival');
-        computeFlightPath(f, 'departure');
-        if (f.noWayArr || f.noWayDep) {
-          updateFlightError('NOTE: Available on your network Taxiway / Apron path not found. (Simulation paths may not be drawn.)');
-        }
-        state.flights.push(f);
-        if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();

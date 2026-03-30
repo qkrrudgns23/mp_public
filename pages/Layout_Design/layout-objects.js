@@ -1,3 +1,5 @@
+  function isPathLayoutMode(m) {
+    return PATH_LAYOUT_MODES.indexOf(m) >= 0;
   }
   function settingModeValueForHit(hit) {
     if (!hit || !hit.type) return null;
@@ -668,6 +670,7 @@
 
   const _rwy = _tiers.runway || {};
   const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
+  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
   const RSEP_COLOR_THRESHOLDS = (function() {
     const arr = _sepUi.inputColorThresholdsSec;
     if (Array.isArray(arr) && arr.length) {
@@ -723,7 +726,7 @@
   const RSEP_SEQ_META = _rwy.seqMeta || {
     'ARR→ARR': { driver: 'Wake of leading arrival aircraft', refPoint: 'Touchdown / final approach point of the leading arrival', input: 'Lead (arrival) × Trail (arrival) matrix input' },
     'DEP→DEP': { driver: 'Wake of leading departure aircraft', refPoint: 'Take-off / runway entry point of the leading departure', input: 'Lead (departure) × Trail (departure) matrix input' },
-    'ARR→DEP': { driver: 'Runway occupancy time (ROT) of leading arrival', refPoint: 'Runway vacation / ROT end of the leading arrival', input: 'Lead (arrival category) 1‑D input' },
+    'ARR→DEP': { driver: 'Leading aircraft ROT (runway occupancy time)', refPoint: 'Trailing aircraft: time from lineup to gear-off (lineup–gear-off)', input: 'Lead arrival category — 1D separation inputs' },
     'DEP→ARR': { driver: 'Wake / ROT of leading departure', refPoint: 'Runway vacation / ROT end of the leading departure', input: 'Trail (arrival category) 1‑D input' },
   };
   function rsepGetCatLabel(stdKey, cat) {
@@ -760,10 +763,18 @@
   function rsepMakeSeqData(stdKey) {
     const cats = RSEP_STD_CATS[stdKey] || [];
     const def = RSEP_DEFAULTS[stdKey] || {};
+    const arrDep = rsepMake1D(cats, def['ARR→DEP']);
+    const boost = RSEP_ARRDEP_BOOST_SEC;
+    cats.forEach(function(c) {
+      const s = arrDep[c];
+      if (s === '' || s == null) return;
+      const n = Number(s);
+      if (isFinite(n)) arrDep[c] = String(Math.round(n + boost));
+    });
     return {
       'ARR→ARR': rsepMakeMatrix(cats, def['ARR→ARR']),
       'DEP→DEP': rsepMakeMatrix(cats, def['DEP→DEP']),
-      'ARR→DEP': rsepMake1D(cats, def['ARR→DEP']),
+      'ARR→DEP': arrDep,
       'DEP→ARR': rsepMake1D(cats, def['DEP→ARR']),
     };
   }
@@ -807,24 +818,13 @@
     const cats = RSEP_STD_CATS[stdKey];
     const rot = std.ROT || {};
     const rotCopy = {};
-    cats.forEach(c => { rotCopy[c] = rot[c] != null ? String(rot[c]) : ''; });
+    const boost = RSEP_ARRDEP_BOOST_SEC;
+    cats.forEach(function(c) {
+      if (rot[c] == null || rot[c] === '') rotCopy[c] = '';
+      else {
+        const n = Number(rot[c]);
+        rotCopy[c] = isFinite(n) ? String(Math.round(n + boost)) : String(rot[c]);
+      }
+    });
     return {
       standard: stdKey,
-      mode: 'MIX',
-      activeSeq: 'ARR→ARR',
-      seqData: rsepMakeSeqData(stdKey),
-      rot: rotCopy,
-    };
-  }
-  function rsepGetConfigForRunway(rw) {
-    if (!rw) return null;
-    if (!rw.rwySepConfig) {
-      rw.rwySepConfig = rsepMakeConfig('ICAO');
-    }
-    const cfg = rw.rwySepConfig;
-    if (!RSEP_STD_CATS[cfg.standard]) {
-      rw.rwySepConfig = rsepMakeConfig('ICAO');
-      return rw.rwySepConfig;
-    }
-    return cfg;
-  }

@@ -1,3 +1,21 @@
+    }
+    return state.terminals[0] || null;
+  }
+
+  function polygonAreaM2(vertices) {
+    if (!vertices || vertices.length < 3) return 0;
+    let area = 0;
+    const n = vertices.length;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      area += vertices[i].col * vertices[j].row;
+      area -= vertices[j].col * vertices[i].row;
+    }
+    return Math.abs(area) * 0.5 * CELL_SIZE * CELL_SIZE;
+  }
+
+  function syncPanelFromState() {
+    document.getElementById('gridCellSize').value = CELL_SIZE;
     document.getElementById('gridCols').value = GRID_COLS;
     document.getElementById('gridRows').value = GRID_ROWS;
     const gridImageOpacityEl = document.getElementById('gridLayoutImageOpacity');
@@ -610,21 +628,3 @@
         t.buildingType = nextType;
         if (findDuplicateLayoutName('terminal', t.id, nextDefaultName)) {
           alertDuplicateLayoutName();
-          if (nameInput) nameInput.value = t.name || '';
-        } else {
-          t.name = nextDefaultName;
-          if (nameInput) nameInput.value = nextDefaultName;
-        }
-      } else if (nameInput) {
-        nameInput.value = nextDefaultName;
-      }
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-      if (typeof update3DScene === 'function') update3DScene();
-      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    });
-  }
-  function recomputeTerminalFloorHeight() {
-    const t = getCurrentTerminal();
-    if (!t) return;

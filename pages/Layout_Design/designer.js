@@ -42,15 +42,16 @@
   const _algoSimTier = (_algoTier.simulation && typeof _algoTier.simulation === 'object') ? _algoTier.simulation : {};
   const APPROACH_OFFSET_WORLD_M = Math.max(0, Number(_algoSimTier.approachOffsetM) || 10000);
   const APPROACH_STRAIGHT_FINAL_M = Math.max(0, Number(_algoSimTier.approachStraightFinalM) || 3000);
-  const APPROACH_ZIGZAG_LEG_M = Math.max(0, Number(_algoSimTier.approachZigzagLegM) || 2000);
-  const APPROACH_ZIGZAG_STEP_M = Math.max(0, Number(_algoSimTier.approachZigzagStepM) || 200);
   const AIRCRAFT_WINGSPAN_M = Math.max(1, Number(_algoSimTier.aircraftWingspanM) || 40);
   const AIRCRAFT_FUSELAGE_LENGTH_M = Math.max(1, Number(_algoSimTier.aircraftFuselageLengthM) || 50);
   const FLIGHT_TRAIL_LENGTH_M = Math.max(0, Number(_algoSimTier.trailLengthM) || 300);
   const PRE_TOUCHDOWN_HALO_ENABLED = (_algoSimTier.preTouchdownHaloEnabled !== false);
   const PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC = Math.max(0, Number(_algoSimTier.playbackLeadBeforeFirstTouchdownSec) || 0);
+  const MAX_LAZY_TIMELINE_BUILDS_PER_FRAME = Math.max(1, Math.min(64, Number(_algoSimTier.maxLazyTimelineBuildsPerFrame) || 6));
   const _styleTier = _tiers.style || {};
   const _ganttStyle = _styleTier.gantt || {};
+  const GANTT_VISIBLE_WINDOW_MIN = Math.max(60, Number(_ganttStyle.visibleWindowMin) || 360);
+  const GANTT_PAN_STEP_MIN = Math.max(15, Number(_ganttStyle.panStepMin) || 120);
   const _canvas2dStyle = _styleTier.canvas2d || {};
   const TAXIWAY_WIDTH_MIN = Math.max(1, Math.min(100, Number(_taxiwayTier.minWidth) || 1));
   const RUNWAY_EXIT_WIDTH_MIN = Math.max(1, Math.min(100, Number(_runwayExitTier.minWidth) || 1));
@@ -275,7 +276,7 @@
   function layoutTerminalVertexRadiusPx(vertexSelected) {
     return vertexSelected ? 5.5 * LAYOUT_VERTEX_DOT_SCALE : 4 * LAYOUT_VERTEX_DOT_SCALE;
   }
-  const DRAG_THRESH = _interactionConfigNum('dragThresholdPx', 5);
+  const DRAG_THRESH = _interactionConfigNum('dragThresholdPx', 0);
   const FREE_DRAW_STEP_CELL = Math.max(0.001, _interactionConfigNum('freeDrawStepCell', 0.05));
   const GRID_SNAP_STEP_CELL = Math.max(0.001, _interactionConfigNum('gridSnapStepCell', 0.5));
   const INSERT_VERTEX_HIT_CF = _interactionConfigNum('insertVertexHitCellFactor', 0.9);
@@ -526,6 +527,7 @@
     flightSchedulePage: 0,
     kpiRollingDetailExpanded: false,
     flightPathRevealFlightId: null,
+    allocGanttWindowStartMin: null,
   };
   let hookSyncFlightPanelFromSelection = null;
   function bumpRwySepSnapshotStaleGen() {
@@ -1288,6 +1290,7 @@
 
   const _rwy = _tiers.runway || {};
   const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
+  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
   const RSEP_COLOR_THRESHOLDS = (function() {
     const arr = _sepUi.inputColorThresholdsSec;
     if (Array.isArray(arr) && arr.length) {
@@ -1343,7 +1346,7 @@
   const RSEP_SEQ_META = _rwy.seqMeta || {
     'ARR→ARR': { driver: 'Wake of leading arrival aircraft', refPoint: 'Touchdown / final approach point of the leading arrival', input: 'Lead (arrival) × Trail (arrival) matrix input' },
     'DEP→DEP': { driver: 'Wake of leading departure aircraft', refPoint: 'Take-off / runway entry point of the leading departure', input: 'Lead (departure) × Trail (departure) matrix input' },
-    'ARR→DEP': { driver: 'Runway occupancy time (ROT) of leading arrival', refPoint: 'Runway vacation / ROT end of the leading arrival', input: 'Lead (arrival category) 1‑D input' },
+    'ARR→DEP': { driver: 'Leading aircraft ROT (runway occupancy time)', refPoint: 'Trailing aircraft: time from lineup to gear-off (lineup–gear-off)', input: 'Lead arrival category — 1D separation inputs' },
     'DEP→ARR': { driver: 'Wake / ROT of leading departure', refPoint: 'Runway vacation / ROT end of the leading departure', input: 'Trail (arrival category) 1‑D input' },
   };
   function rsepGetCatLabel(stdKey, cat) {
@@ -1380,10 +1383,18 @@
   function rsepMakeSeqData(stdKey) {
     const cats = RSEP_STD_CATS[stdKey] || [];
     const def = RSEP_DEFAULTS[stdKey] || {};
+    const arrDep = rsepMake1D(cats, def['ARR→DEP']);
+    const boost = RSEP_ARRDEP_BOOST_SEC;
+    cats.forEach(function(c) {
+      const s = arrDep[c];
+      if (s === '' || s == null) return;
+      const n = Number(s);
+      if (isFinite(n)) arrDep[c] = String(Math.round(n + boost));
+    });
     return {
       'ARR→ARR': rsepMakeMatrix(cats, def['ARR→ARR']),
       'DEP→DEP': rsepMakeMatrix(cats, def['DEP→DEP']),
-      'ARR→DEP': rsepMake1D(cats, def['ARR→DEP']),
+      'ARR→DEP': arrDep,
       'DEP→ARR': rsepMake1D(cats, def['DEP→ARR']),
     };
   }
@@ -1427,7 +1438,14 @@
     const cats = RSEP_STD_CATS[stdKey];
     const rot = std.ROT || {};
     const rotCopy = {};
-    cats.forEach(c => { rotCopy[c] = rot[c] != null ? String(rot[c]) : ''; });
+    const boost = RSEP_ARRDEP_BOOST_SEC;
+    cats.forEach(function(c) {
+      if (rot[c] == null || rot[c] === '') rotCopy[c] = '';
+      else {
+        const n = Number(rot[c]);
+        rotCopy[c] = isFinite(n) ? String(Math.round(n + boost)) : String(rot[c]);
+      }
+    });
     return {
       standard: stdKey,
       mode: 'MIX',
@@ -3992,11 +4010,7 @@
     let t = Number(tSec);
     if (!isFinite(t)) return null;
     const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
-    if (t + 1e-9 < t0) {
-      const pad = simAirsideLazyPadSec();
-      if (t >= t0 - pad - 1e-3) t = t0;
-      else return null;
-    }
+    if (t + 1e-9 < t0) return null;
     if (t > t1) t = t1;
     return getFlightPoseAtTime(flight, t);
   }
@@ -4177,24 +4191,71 @@
     else if (role === 'term') el.value = f.terminalId || (f.token && f.token.terminalId) || '';
     else if (role === 'dep') el.value = f.depRunwayId || (f.token && f.token.depRunwayId) || '';
   }
-  function commitFlightAssignField(el, st, listEl) {
-    const idVal = el.getAttribute('data-id');
-    const role = el.getAttribute('data-role');
-    const f = st.flights.find(function(x) { return x.id === idVal; });
+  function getRunwayDisplayLabelById(rwId) {
+    if (rwId == null || rwId === '') return '—';
+    const list = getRunwayOptions();
+    const o = list.find(function(x) { return x.id === rwId; });
+    return o ? (o.name || o.id || 'Runway') : '—';
+  }
+  function getTerminalDisplayLabelById(termId) {
+    if (termId == null || termId === '') return '—';
+    const terms = makeUniqueNamedCopy(state.terminals || [], 'name');
+    const t = terms.find(function(x) { return x.id === termId; });
+    return t ? ((t.name || '').trim() || 'Building') : '—';
+  }
+  function syncFlightAssignStripFromFlight(f) {
+    const arrEl = document.getElementById('flightAssignStripArr');
+    const termEl = document.getElementById('flightAssignStripTerm');
+    const depEl = document.getElementById('flightAssignStripDep');
+    if (arrEl) {
+      const sid = f ? (f.arrRunwayId || (f.token && f.token.runwayId) || '') : '';
+      arrEl.innerHTML = buildRunwayOptionsHtml(sid);
+      arrEl.value = sid;
+    }
+    if (termEl) {
+      const tid = f ? (f.terminalId || (f.token && f.token.terminalId) || '') : '';
+      termEl.innerHTML = buildTerminalOptionsHtml(tid);
+      termEl.value = tid;
+    }
+    if (depEl) {
+      const did = f ? (f.depRunwayId || (f.token && f.token.depRunwayId) || '') : '';
+      depEl.innerHTML = buildRunwayOptionsHtml(did);
+      depEl.value = did;
+    }
+  }
+  function syncFlightAssignStrip() {
+    const arrEl = document.getElementById('flightAssignStripArr');
+    const termEl = document.getElementById('flightAssignStripTerm');
+    const depEl = document.getElementById('flightAssignStripDep');
+    const sel = state.selectedObject;
+    const hasFlight = sel && sel.type === 'flight' && sel.id;
+    const f = hasFlight ? state.flights.find(function(x) { return x.id === sel.id; }) : null;
+    const dis = !f;
+    [arrEl, termEl, depEl].forEach(function(el) {
+      if (el) el.disabled = dis;
+    });
+    if (!f) {
+      syncFlightAssignStripFromFlight(null);
+      return;
+    }
+    syncFlightAssignStripFromFlight(f);
+  }
+  function commitFlightAssign(role, flightId, rawValue, st, listEl) {
+    const f = st.flights.find(function(x) { return x.id === flightId; });
     if (!f) return;
-    const raw = el.value;
+    const raw = rawValue;
     var val = null;
     if (role === 'arr' || role === 'dep') {
       const r = resolveRunwayIdFromInput(raw);
       if ((raw || '').trim() && r === undefined) {
-        syncFlightAssignInputDisplay(el, f);
+        syncFlightAssignStripFromFlight(f);
         return;
       }
       val = r === undefined ? null : r;
     } else if (role === 'term') {
       const r = resolveTerminalIdFromInput(raw);
       if ((raw || '').trim() && r === undefined) {
-        syncFlightAssignInputDisplay(el, f);
+        syncFlightAssignStripFromFlight(f);
         return;
       }
       val = r === undefined ? null : r;
@@ -4226,13 +4287,40 @@
       f.depRunwayId = val;
       f.token.depRunwayId = val;
     }
-    syncFlightAssignInputDisplay(el, f);
+    syncFlightAssignStripFromFlight(f);
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     var touched = [];
     if (prevStand) touched.push(prevStand);
     if (f.standId) touched.push(f.standId);
     if (typeof renderFlightList === 'function')
-      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [idVal], touchedStandIds: touched });
+      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [flightId], touchedStandIds: touched });
+  }
+  function commitFlightAssignField(el, st, listEl) {
+    const idVal = el.getAttribute('data-id');
+    const role = el.getAttribute('data-role');
+    commitFlightAssign(role, idVal, el.value, st, listEl);
+  }
+  function commitFlightAssignFromStrip(el, st, listEl) {
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'flight' || !sel.id) return;
+    const role = el.getAttribute('data-role');
+    if (!role) return;
+    commitFlightAssign(role, sel.id, el.value, st, listEl);
+  }
+
+  const FLIGHT_SCHED_TABLE_COL_COUNT = 29;
+  function ensureFlightAssignStripWired() {
+    if (window.__flightAssignStripWired) return;
+    const wrap = document.getElementById('flightAssignStrip');
+    if (!wrap) return;
+    window.__flightAssignStripWired = true;
+    wrap.querySelectorAll('.flight-assign-strip-select').forEach(function(inp) {
+      inp.addEventListener('change', function(ev) {
+        const listEl = document.getElementById('flightList');
+        const el = ev.target;
+        commitFlightAssignFromStrip(el, state, listEl);
+      });
+    });
   }
 
   function _flightListPaintVirtualSlice(listEl) {
@@ -4253,11 +4341,11 @@
     const topPad = start * rowH;
     const botPad = Math.max(0, (total - end) * rowH);
     const parts = [];
-    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + topPad + 'px\"><td colspan=\"30\"></td></tr>');
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + topPad + 'px\"><td colspan=\"' + FLIGHT_SCHED_TABLE_COL_COUNT + '\"></td></tr>');
     for (let i = start; i < end; i++) {
       parts.push(_buildFlightListRowHtml(flightsSorted[i], retStatsAll));
     }
-    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"30\"></td></tr>');
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"' + FLIGHT_SCHED_TABLE_COL_COUNT + '\"></td></tr>');
     tbody.innerHTML = parts.join('');
     _flightListWireEvents(listEl, state);
   }
@@ -4602,6 +4690,8 @@
     if (cfgEl) cfgEl.innerHTML = _flightListEmptyHtml('No flights yet.');
     const ganttEl = document.getElementById('allocationGantt');
     if (ganttEl) ganttEl.innerHTML = _flightListEmptyHtml('No flights for Gantt.');
+    if (typeof ensureFlightAssignStripWired === 'function') ensureFlightAssignStripWired();
+    if (typeof syncFlightAssignStrip === 'function') syncFlightAssignStrip();
   }
   function _updateFlightSchedulePagerUI(totalCount) {
     const pager = document.getElementById('flightSchedulePager');
@@ -4634,8 +4724,8 @@
       '<table class="flight-schedule-table">' +
       '<thead><tr>' +
         '<th>Reg</th>' +
-        '<th>Airline Code</th>' +
-        '<th>Flight Number</th>' +
+        '<th class="flight-th-mixed">Airline</th>' +
+        '<th class="flight-th-mixed">Flight Num</th>' +
         '<th class="flight-col-s flight-col-s-start">SLDT</th>' +
         '<th class="flight-td-sibt flight-col-s">SIBT</th>' +
         '<th class="flight-col-s">SOBT</th>' +
@@ -4648,16 +4738,14 @@
         '<th class="flight-col-e">EIBT</th>' +
         '<th class="flight-col-e">EOBT</th>' +
         '<th class="flight-col-e">ETOT</th>' +
-        '<th class="flight-col-e flight-col-rot">Arr_ROT</th>' +
-        '<th>ARR_TAXI_TIME</th>' +
-        '<th>ARR_TAXI_DELAY</th>' +
-        '<th>DEP_TAXI_TIME</th>' +
-        '<th>Dep_ROT</th>' +
-        '<th>DEP_TAXI_DELAY</th>' +
+        '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
+        '<th class="flight-th-mixed">STT(arr)</th>' +
+        '<th class="flight-th-mixed">DTT(arr)</th>' +
+        '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(dep)</th>' +
+        '<th class="flight-th-mixed">STT(dep)</th>' +
+        '<th class="flight-th-mixed">DTT(dep)</th>' +
         '<th>Aircraft Type</th>' +
-        '<th>Code(ICAO)</th>' +
-        '<th>ICAO(J/H/M/L)</th>' +
-        '<th>RECAT-EU(A-F)</th>' +
+        '<th class="flight-th-mixed">Code(ICAO)</th>' +
         '<th>Arr Rw</th>' +
         '<th>Arr RET</th>' +
         '<th>Building</th>' +
@@ -4684,6 +4772,7 @@
     const rotArrMin = getArrRotMinutes(f);
     const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
     const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : Math.max(0, depBlockOutMin - SCHED_DEP_ROT_MIN);
+    const vttDepMinSlot = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
     const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin - rotArrMin));
     const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
     const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
@@ -4721,19 +4810,20 @@
     const eobtStr = formatMinutesToHHMMSS(eobtMin);
     const vttArrStr = formatMinutesToHHMMSS(vttArrMin);
     const vttADelayStr = formatMinutesToHHMMSS(vttADelayMin);
-    const vttDepStr = formatMinutesToHHMMSS(vttDepMinLineup);
-    const depRotStr = formatMinutesToHHMMSS(SCHED_DEP_ROT_MIN);
+    const vttDepStr = formatMinutesToHHMMSS(vttDepMinSlot);
+    const depRotSecVal = (typeof computeDepRotSecondsForFlight === 'function') ? computeDepRotSecondsForFlight(f) : Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
+    const depRotStr = formatTotalSecondsToHHMMSS(depRotSecVal);
     const depTaxiDelayStr = formatSignedMinutesToHHMMSS(f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
-    const arrOpt = buildRunwayOptionsHtml(arrRunwayId);
-    const termOpt = buildTerminalOptionsHtml(f.terminalId || (f.token && f.token.terminalId));
-    const depOpt = buildRunwayOptionsHtml(f.depRunwayId || (f.token && f.token.depRunwayId));
+    const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
+    const termId = f.terminalId || (f.token && f.token.terminalId);
+    const arrRwRead = escapeHtml(getRunwayDisplayLabelById(arrRunwayId));
+    const buildingRead = escapeHtml(getTerminalDisplayLabelById(termId));
+    const depRwRead = escapeHtml(getRunwayDisplayLabelById(depRunwayId));
     const noWayBadge = (f.noWayArr || f.noWayDep)
       ? ' <span class="flight-no-way-badge" style="color:#dc2626;font-weight:600;font-size:10px;cursor:help;" title="' + escapeAttr(buildNoWayTooltip(f)) + '">⚠ No Way</span>'
       : '';
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
-    const icaoJhl = (ac && ac.icaoJHL) ? ac.icaoJHL : '—';
-    const recatEu = (ac && ac.recatEu) ? ac.recatEu : '—';
     const arrRetFailedBadge = (f.arrRetFailed || sampledRetName === 'Failed') ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
     return '' +
       '<tr class="flight-data-row obj-item" data-id="' + f.id + '">' +
@@ -4755,18 +4845,16 @@
         '<td class="flight-td-time flight-col-e flight-col-rot">' + (f.arrRotSec != null && isFinite(f.arrRotSec) ? (Math.round(f.arrRotSec) + ' s') : '—') + '</td>' +
         '<td class="flight-td-time">' + vttArrStr + '</td>' +
         '<td class="flight-td-time">' + vttADelayStr + '</td>' +
-        '<td class="flight-td-time">' + vttDepStr + '</td>' +
         '<td class="flight-td-time">' + depRotStr + '</td>' +
+        '<td class="flight-td-time">' + vttDepStr + '</td>' +
         '<td class="flight-td-time">' + depTaxiDelayStr + '</td>' +
         '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
         '<td>' + escapeHtml(codeIcao) + '</td>' +
-        '<td>' + escapeHtml(icaoJhl) + '</td>' +
-        '<td>' + escapeHtml(recatEu) + '</td>' +
-        '<td class="flight-td-select"><select class="flight-assign-select" data-role="arr" data-id="' + f.id + '">' + arrOpt + '</select></td>' +
+        '<td class="flight-td-readonly">' + arrRwRead + '</td>' +
         '<td>' + escapeHtml(sampledRetName) + '</td>' +
-        '<td class="flight-td-select"><select class="flight-assign-select" data-role="term" data-id="' + f.id + '">' + termOpt + '</select></td>' +
+        '<td class="flight-td-readonly">' + buildingRead + '</td>' +
         '<td class="flight-td-reg">' + (function() { var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); })() + '</td>' +
-        '<td class="flight-td-select"><select class="flight-assign-select" data-role="dep" data-id="' + f.id + '">' + depOpt + '</select></td>' +
+        '<td class="flight-td-readonly">' + depRwRead + '</td>' +
         '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
       '</tr>';
   }
@@ -4818,6 +4906,8 @@
       _flightListWireEvents(listEl, state);
     }
     _renderFlightConfigTable(cfgEl, flightsSorted);
+    if (typeof ensureFlightAssignStripWired === 'function') ensureFlightAssignStripWired();
+    if (typeof syncFlightAssignStrip === 'function') syncFlightAssignStrip();
     if (!skipGanttRefresh && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
   }
   function _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl) {
@@ -5197,7 +5287,6 @@
     });
     listEl.querySelectorAll('.obj-item').forEach(function(row) {
       row.addEventListener('click', function(ev) {
-        if (ev.target.closest && ev.target.closest('select.flight-assign-select')) return;
         if ((ev.target.classList && ev.target.classList.contains('obj-item-delete')) || ev.target.getAttribute('data-del')) return;
         var idVal = this.getAttribute('data-id');
         var f = st.flights.find(function(x) { return x.id === idVal; });
@@ -5212,7 +5301,6 @@
         if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
       });
       row.addEventListener('dblclick', function(ev) {
-        if (ev.target.closest && ev.target.closest('select.flight-assign-select')) return;
         if ((ev.target.classList && ev.target.classList.contains('obj-item-delete')) || ev.target.getAttribute('data-del')) return;
         ev.preventDefault();
         var idVal = this.getAttribute('data-id');
@@ -5227,9 +5315,6 @@
         if (typeof draw === 'function') draw();
         if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
       });
-    });
-    listEl.querySelectorAll('.flight-assign-select').forEach(function(inp) {
-      inp.addEventListener('change', function() { commitFlightAssignField(inp, st, listEl); });
     });
   }
 
@@ -5270,13 +5355,19 @@
     const prevCollapsedTerminals = viewState.collapsedTerminals;
     const prevRemoteCollapsed = viewState.remoteCollapsed;
     if (!state.flights.length) {
+      state.allocGanttWindowStartMin = null;
       ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
+      const labEmpty = document.getElementById('allocGanttWindowLabel');
+      if (labEmpty) labEmpty.textContent = '';
       return;
     }
     const flights = state.flights.slice();
     const stands = (state.pbbStands || []).concat(state.remoteStands || []);
     if (!flights.length) {
+      state.allocGanttWindowStartMin = null;
       ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
+      const labEmpty2 = document.getElementById('allocGanttWindowLabel');
+      if (labEmpty2) labEmpty2.textContent = '';
       return;
     }
     if (!skipPathPrep) {
@@ -5364,16 +5455,22 @@
       baseMinT + 1440
     );
     const baseSpan = baseMaxT - baseMinT;
+    const dataSpan = Math.max(1e-9, baseSpan);
+    const visibleSpan = Math.min(GANTT_VISIBLE_WINDOW_MIN, dataSpan);
+    let winStart = state.allocGanttWindowStartMin;
+    if (winStart == null || !isFinite(winStart)) winStart = baseMinT;
+    const maxWinStart = Math.max(baseMinT, baseMaxT - visibleSpan);
+    winStart = Math.min(Math.max(winStart, baseMinT), maxWinStart);
+    state.allocGanttWindowStartMin = winStart;
+    const winEnd = winStart + visibleSpan;
+    state._allocGanttClamp = { baseMinT: baseMinT, baseMaxT: baseMaxT, visibleSpan: visibleSpan };
+    const displaySpan = visibleSpan;
     const zoom = (state.allocTimeZoom && state.allocTimeZoom > 1) ? state.allocTimeZoom : 1;
-    const span = baseSpan;
-    const minT = baseMinT;
-    const maxT = baseMaxT;
 
-
-    const tickPositions = buildTimeAxisTicks(minT, maxT, baseMinT, baseSpan, zoom);
+    const tickPositions = buildTimeAxisTicks(winStart, winEnd, winStart, displaySpan, zoom);
 
     function allocLeftPct(t) {
-      return ((t - baseMinT) / baseSpan) * 100 * zoom;
+      return ((t - winStart) / displaySpan) * 100 * zoom;
     }
     function allocTrackSpanHtml(cls, leftPct, widthPct, minWidthPct) {
       return '<div class="' + cls + '" style="left:' + leftPct + '%;width:' + Math.max(minWidthPct, widthPct) + '%;"></div>';
@@ -5382,18 +5479,18 @@
       return '<div class="' + cls + '" style="left:' + leftPct + '%;"></div>';
     }
     function pushAllocDot(arr, t, cls) {
-      if (!arr || !isFinite(t) || t < baseMinT || t > baseMaxT) return;
+      if (!arr || !isFinite(t) || t < winStart || t > winEnd) return;
       arr.push(allocTrackMarkerHtml('alloc-time-dot ' + cls, allocLeftPct(t)));
     }
     function pushAllocSpan(arr, startT, endT, cls, minWidthPct) {
       if (!arr || !isFinite(startT) || !isFinite(endT) || endT <= startT) return;
-      const clippedStart = Math.max(startT, baseMinT);
-      const clippedEnd = Math.min(endT, baseMaxT);
+      const clippedStart = Math.max(startT, winStart);
+      const clippedEnd = Math.min(endT, winEnd);
       if (clippedEnd <= clippedStart) return;
-      arr.push(allocTrackSpanHtml(cls, allocLeftPct(clippedStart), ((clippedEnd - clippedStart) / baseSpan) * 100 * zoom, minWidthPct));
+      arr.push(allocTrackSpanHtml(cls, allocLeftPct(clippedStart), ((clippedEnd - clippedStart) / displaySpan) * 100 * zoom, minWidthPct));
     }
     function pushAllocTriangle(arr, t, cls) {
-      if (!arr || !isFinite(t) || t < baseMinT || t > baseMaxT) return;
+      if (!arr || !isFinite(t) || t < winStart || t > winEnd) return;
       arr.push(allocTrackMarkerHtml(cls, allocLeftPct(t)));
     }
 
@@ -5451,11 +5548,11 @@
         const etot = it.etot;
         const depBlk = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
         const sobtOrig = (it.sobtOrig != null) ? it.sobtOrig : (it.stotOrig - depBlk);
-        const tStart = Math.max(t0, baseMinT);
-        const tEnd = Math.min(t1, baseMaxT);
+        const tStart = Math.max(t0, winStart);
+        const tEnd = Math.min(t1, winEnd);
         if (tEnd <= tStart) return '';
-        const leftPct = ((tStart - baseMinT) / baseSpan) * 100 * zoom;
-        const widthPct = Math.max(2, ((tEnd - tStart) / baseSpan) * 100 * zoom);
+        const leftPct = ((tStart - winStart) / displaySpan) * 100 * zoom;
+        const widthPct = Math.max(2, ((tEnd - tStart) / displaySpan) * 100 * zoom);
         const regSafe = escapeHtml(f.reg || '');
         const codeSafe = escapeHtml((f.code || '').toUpperCase());
         const dwellVal = (t1 != null && t0 != null) ? Math.max(0, t1 - t0) : (f.dwellMin != null ? f.dwellMin : 0);
@@ -5511,7 +5608,7 @@
       if (sLines && ((f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed) && isFinite(sobtOrig)) {
         const sobtD = (f.sobtMin_d != null ? f.sobtMin_d : t1);
         if (!isNaN(sobtD) && Math.abs(sobtOrig - sobtD) > 1e-6) {
-          const sx = ((sobtOrig - baseMinT) / baseSpan) * 100 * zoom;
+          const sx = ((sobtOrig - winStart) / displaySpan) * 100 * zoom;
           sLines.push('<div class="alloc-s-line-orig" style="left:' + sx + '%;"></div>');
         }
       }
@@ -5725,6 +5822,24 @@
       '</div>';
 
     ganttEl.innerHTML = rootHtml;
+    const labWin = document.getElementById('allocGanttWindowLabel');
+    if (labWin) labWin.textContent = formatMinutesToHHMM(winStart) + ' – ' + formatMinutesToHHMM(winEnd);
+    if (!state._allocGanttPanWired) {
+      state._allocGanttPanWired = true;
+      const bPrev = document.getElementById('btnAllocGanttPrev');
+      const bNext = document.getElementById('btnAllocGanttNext');
+      function allocGanttPanStep(deltaMin) {
+        const c = state._allocGanttClamp;
+        if (!c) return;
+        let w = state.allocGanttWindowStartMin != null ? state.allocGanttWindowStartMin : c.baseMinT;
+        w += deltaMin;
+        const maxW = Math.max(c.baseMinT, c.baseMaxT - c.visibleSpan);
+        state.allocGanttWindowStartMin = Math.min(Math.max(w, c.baseMinT), maxW);
+        renderFlightGantt({ skipPathPrep: true });
+      }
+      if (bPrev) bPrev.addEventListener('click', function() { allocGanttPanStep(-GANTT_PAN_STEP_MIN); });
+      if (bNext) bNext.addEventListener('click', function() { allocGanttPanStep(GANTT_PAN_STEP_MIN); });
+    }
     const newScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
     const newLabelCol = ganttEl.querySelector('.alloc-gantt-label-col');
     if (newScrollCol) {
@@ -7129,52 +7244,15 @@
     return { td: anchor, ux, uy };
   }
   
-  function buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDistAlong, totalM, straightFinalM, legM, stepM) {
+  function buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDistAlong, totalM) {
     const ax = getRunwayInboundUxyAtDistance(runwayId, rwDir, anchorDistAlong);
     if (!ax) return null;
     const td = ax.td, ux = ax.ux, uy = ax.uy;
     const tm = Math.max(0, Number(totalM) || 0);
-    const sm = Math.max(0, Math.min(Number(straightFinalM) || 0, tm));
-    const leg = Math.max(0, Number(legM) || 0);
-    const step = Math.max(0, Number(stepM) || 0);
-    const perp = [-uy, ux];
-    function ptAt(s, lat) {
-      return [td[0] - s * ux + lat * perp[0], td[1] - s * uy + lat * perp[1]];
-    }
     const tdxy = [td[0], td[1]];
     if (tm < 1e-6) return { pts: [tdxy, tdxy], pathLen: 0 };
-    if (leg < 1e-6 || step < 1e-6 || sm + 1e-6 >= tm) {
-      const outer = [td[0] - ux * tm, td[1] - uy * tm];
-      return { pts: [outer, tdxy], pathLen: pathDist(outer, tdxy) };
-    }
-    const out = [];
-    let s = tm;
-    let lat = 0;
-    let sign = 1;
-    out.push(ptAt(s, lat));
-    while (s > sm + 1e-6) {
-      lat += sign * leg;
-      out.push([ptAt(s, lat)[0], ptAt(s, lat)[1]]);
-      if (s - step <= sm) {
-        s = sm;
-        out.push([ptAt(s, lat)[0], ptAt(s, lat)[1]]);
-        break;
-      }
-      s -= step;
-      out.push([ptAt(s, lat)[0], ptAt(s, lat)[1]]);
-      sign *= -1;
-    }
-    if (Math.abs(lat) > 1e-2) {
-      out.push(ptAt(sm, 0));
-      lat = 0;
-    }
-    const last = out[out.length - 1];
-    if (Math.hypot(last[0] - tdxy[0], last[1] - tdxy[1]) > 1e-3) {
-      out.push([tdxy[0], tdxy[1]]);
-    }
-    let pathLen = 0;
-    for (let i = 0; i < out.length - 1; i++) pathLen += pathDist(out[i], out[i + 1]);
-    return { pts: out, pathLen };
+    const outer = [td[0] - ux * tm, td[1] - uy * tm];
+    return { pts: [outer, tdxy], pathLen: pathDist(outer, tdxy) };
   }
   
   function arrivalApproachAnchorDistM(runwayId, tdDistAlong) {
@@ -7191,7 +7269,7 @@
     const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
     const tdDist = touchdownDistMForTimeline(f);
     const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
-    const pack = buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M, APPROACH_STRAIGHT_FINAL_M, APPROACH_ZIGZAG_LEG_M, APPROACH_ZIGZAG_STEP_M);
+    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M);
     const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
     const tdPt = getRunwayPointAtDistance(runwayId, tdDist);
     if (pack && pack.pathLen > 1e-9) {
@@ -7968,7 +8046,7 @@
       f.timeline_meta = { error: 'no_td' };
       return;
     }
-    const pack = buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDist, offset, APPROACH_STRAIGHT_FINAL_M, APPROACH_ZIGZAG_LEG_M, APPROACH_ZIGZAG_STEP_M);
+    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, offset);
     let apprPts;
     if (pack && pack.pts && pack.pts.length >= 2) {
       apprPts = pack.pts.slice();
@@ -8028,8 +8106,6 @@
       etotSec: etotS,
       approachOffset: offset,
       approachStraightFinalM: APPROACH_STRAIGHT_FINAL_M,
-      approachZigzagLegM: APPROACH_ZIGZAG_LEG_M,
-      approachZigzagStepM: APPROACH_ZIGZAG_STEP_M,
       approachPathLenM: (pack && typeof pack.pathLen === 'number') ? pack.pathLen : null,
       touchdownSpeedMs: vTd,
     }, builtDep.meta || {});
@@ -8054,6 +8130,7 @@
       if (!w) { f.timeline = null; continue; }
       if (tSec > w.t1 + 1e-3 || tSec < w.t0 - pad - 1e-3) f.timeline = null;
     }
+    const pending = [];
     for (let i = 0; i < flights.length; i++) {
       const f = flights[i];
       if (!f) continue;
@@ -8061,7 +8138,28 @@
       if (f.noWayArr || f.noWayDep) continue;
       if (!isFlightAirsideLazyTimelineBuildEligible(f, tSec)) continue;
       if (f.timeline && f.timeline.length) continue;
-      buildFullAirsideTimelineForFlight(f);
+      pending.push(f);
+    }
+    if (!pending.length) return;
+    const tN = Number(tSec);
+    const so = state.selectedObject;
+    pending.sort(function(a, b) {
+      const selA = so && so.type === 'flight' && so.id === a.id;
+      const selB = so && so.type === 'flight' && so.id === b.id;
+      if (selA !== selB) return selA ? -1 : 1;
+      const actA = isFlightAirsideActiveAtSimSec(a, tN) ? 0 : 1;
+      const actB = isFlightAirsideActiveAtSimSec(b, tN) ? 0 : 1;
+      if (actA !== actB) return actA - actB;
+      const wa = getFlightAirsideWindowSec(a);
+      const wb = getFlightAirsideWindowSec(b);
+      const da = wa ? Math.abs(tN - (wa.t0 + wa.t1) * 0.5) : Infinity;
+      const db = wb ? Math.abs(tN - (wb.t0 + wb.t1) * 0.5) : Infinity;
+      if (da !== db) return da - db;
+      return (wa && wb) ? (wa.t0 - wb.t0) : 0;
+    });
+    const cap = MAX_LAZY_TIMELINE_BUILDS_PER_FRAME;
+    for (let k = 0; k < pending.length && k < cap; k++) {
+      buildFullAirsideTimelineForFlight(pending[k]);
     }
   }
   function rebuildAllFlightAirsideTimelines() {
@@ -9988,7 +10086,7 @@
     const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
     const tdDist = touchdownDistMForTimeline(f);
     const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
-    const pack = buildLawnmowerApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M, APPROACH_STRAIGHT_FINAL_M, APPROACH_ZIGZAG_LEG_M, APPROACH_ZIGZAG_STEP_M);
+    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M);
     let pts;
     if (pack && pack.pts && pack.pts.length >= 2) {
       pts = pack.pts;
@@ -10799,6 +10897,7 @@
       setTokenCheckboxesFromNodes(f.token.nodes);
       if (tokenRunwaySel) tokenRunwaySel.value = f.token.runwayId || '';
       if (tokenTerminalSel) tokenTerminalSel.value = f.token.terminalId || '';
+      if (typeof syncFlightAssignStrip === 'function') syncFlightAssignStrip();
     }
     hookSyncFlightPanelFromSelection = syncFlightPanelFromSelection;
     const origSyncPanel = syncPanelFromState;
@@ -12402,7 +12501,7 @@
 
     if (seq === 'ARR→DEP') {
       html += '<div class="rwysep-block">';
-      html += '<div class="rwysep-label">ROT (Runway Occupancy Time, sec)</div>';
+      html += '<div style="font-size:10px;color:#9ca3af;line-height:1.5;margin-bottom:6px;">Separation combines leading aircraft ROT with trailing aircraft lineup–gear-off time, using the ROT inputs above per wake category.</div>';
 
       const totalRot = cats.length;
       let filledRot = 0;
@@ -12432,12 +12531,7 @@
       html += '</div></div>';
     }
 
-    if (seq === 'ARR→DEP') {
-      html += '<div class="rwysep-block">';
-      html += '<div class="rwysep-label">ROT‑based separation (sec)</div>';
-      html += '<div style="font-size:10px;color:#9ca3af;line-height:1.5;">For ARR→DEP combinations, separation is determined by the ROT values above (runway occupancy time per wake category).</div>';
-      html += '</div>';
-    } else {
+    if (seq !== 'ARR→DEP') {
       html += '<div class="rwysep-block">';
       html += '<div class="rwysep-label">Separation (sec) — ' + escapeHtml(seq) + '</div>';
       if (seqType === 'matrix') {

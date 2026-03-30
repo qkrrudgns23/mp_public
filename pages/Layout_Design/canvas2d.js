@@ -1,3 +1,102 @@
+        const f2f = Math.max(0.5, f2fRaw || 4);
+        const floorH = o.floorHeight != null ? Number(o.floorHeight) || (floors * f2f) : (floors * f2f);
+        const totalArea = areaM2 * floors;
+        const dep = o.departureCapacity != null ? o.departureCapacity : 0;
+        const arr = o.arrivalCapacity != null ? o.arrivalCapacity : 0;
+        objectInfoEl.innerHTML = '<strong>Building</strong><br>Name: ' + (o.name || o.id) + '<br>Type: ' + getBuildingTypeLabel(o.buildingType) + '<br>Vertices: ' + (o.vertices ? o.vertices.length : 0) +
+          '<br>Footprint area: ' + areaM2.toFixed(1) + ' m²<br>Height: ' + floorH.toFixed(1) + ' m (Floors: ' + floors + ' × ' + f2f.toFixed(1) + ' m)' +
+          '<br>Total floor area: ' + totalArea.toFixed(1) + ' m²' +
+          '<br>Departure capacity: ' + dep + '<br>Arrival capacity: ' + arr;
+      } else if (state.selectedObject.type === 'pbb') {
+        objectInfoEl.innerHTML = '<strong>Contact Stand</strong><br>Name: ' + (o.name || '—') + '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) + '<br>PBB count: ' + Math.max(1, parseInt(o.pbbCount, 10) || 1) + '<br>Edge cell: (' + o.edgeCol + ',' + o.edgeRow + ')';
+      } else if (state.selectedObject.type === 'remote') {
+        let allowedLabel = 'All (by proximity)';
+        if (Array.isArray(o.allowedTerminals) && o.allowedTerminals.length) {
+          const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) { return {
+            id: t.id,
+            name: (t.name || '').trim() || 'Building'
+          }; });
+          const names = o.allowedTerminals.map(function(id) {
+            const tt = terms.find(function(t) { return t.id === id; });
+            return tt ? tt.name : id;
+          });
+          if (names.length) allowedLabel = names.join(', ');
+        }
+        const remotePx = getRemoteStandCenterPx(o);
+        const remoteCell = [remotePx[0] / CELL_SIZE, remotePx[1] / CELL_SIZE];
+        objectInfoEl.innerHTML =
+          '<strong>Remote stand</strong>' +
+          '<br>Name: ' + (o.name || '—') +
+          '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) +
+          '<br>Cell: (' + remoteCell[0].toFixed(1) + ',' + remoteCell[1].toFixed(1) + ')' +
+          '<br>available buildings: ' + allowedLabel;
+      } else if (state.selectedObject.type === 'holdingPoint') {
+        const hx = Number(o.x), hy = Number(o.y);
+        const hCol = hx / CELL_SIZE, hRow = hy / CELL_SIZE;
+        objectInfoEl.innerHTML =
+          '<strong>' + holdingPointKindDisplayLabel(o.hpKind) + '</strong>' +
+          '<br>Name: ' + (o.name || '—') +
+          '<br>Diameter: ' + c2dHoldingPointDiameterM().toFixed(0) + ' m' +
+          '<br>Cell: (' + hCol.toFixed(1) + ', ' + hRow.toFixed(1) + ')' +
+          '<br>World: (' + hx.toFixed(0) + ', ' + hy.toFixed(0) + ')';
+      }
+      else if (state.selectedObject.type === 'taxiway') {
+        const dirVal = getTaxiwayDirection(o);
+        const dirLabel = dirVal === 'clockwise' ? 'Clockwise' : (dirVal === 'counter_clockwise' ? 'Counter Clockwise' : 'Both');
+        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : 'Taxiway');
+        const ser = serializeTaxiwayWithEndpoints(o);
+        const startStr = ser.start_point != null ? '(' + ser.start_point.col + ', ' + ser.start_point.row + ')' : '—';
+        const endStr = ser.end_point != null ? '(' + ser.end_point.col + ', ' + ser.end_point.row + ')' : '—';
+        const avgVel = (typeof o.avgMoveVelocity === 'number' && isFinite(o.avgMoveVelocity) && o.avgMoveVelocity > 0) ? o.avgMoveVelocity : 10;
+        const minArr = (o.pathType === 'runway')
+          ? ((typeof o.minArrVelocity === 'number' && isFinite(o.minArrVelocity) && o.minArrVelocity > 0) ? Math.max(1, Math.min(150, o.minArrVelocity)) : 15)
+          : null;
+        const lineupStr = (o.pathType === 'runway') ? (String(getEffectiveRunwayLineupDistM(o)) + ' m (from start toward end)') : '';
+        const maxEx = (o.pathType === 'runway_exit' && typeof o.maxExitVelocity === 'number' && isFinite(o.maxExitVelocity) && o.maxExitVelocity > 0) ? o.maxExitVelocity : null;
+        const minEx = (o.pathType === 'runway_exit' && typeof o.minExitVelocity === 'number' && isFinite(o.minExitVelocity) && o.minExitVelocity > 0) ? o.minExitVelocity : null;
+        objectInfoEl.innerHTML = '<strong>' + heading + '</strong><br>Name: ' + (o.name || '—') +
+          '<br>Direction: ' + dirLabel +
+          '<br>Width: ' + (o.width != null ? o.width : 23) + ' m' +
+          (o.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
+          (minArr != null ? '<br>Min arr velocity: ' + minArr + ' m/s' : '') +
+          (o.pathType === 'runway' ? '<br>Line up: ' + lineupStr : '') +
+          (maxEx != null ? '<br>Max exit velocity: ' + maxEx + ' m/s' : '') +
+          (minEx != null ? '<br>Min exit velocity: ' + minEx + ' m/s' : '') +
+          '<br>Points: ' + (o.vertices ? o.vertices.length : 0) +
+          '<br>Start point: ' + startStr + '<br>End point: ' + endStr;
+      } else if (state.selectedObject.type === 'apronLink') {
+        const lk = o;
+        const stand = findStandById(lk.pbbId);
+        const tw = state.taxiways.find(function(t) { return t.id === lk.taxiwayId; });
+        objectInfoEl.innerHTML =
+          '<strong>Apron Taxiway</strong><br>' +
+          'Name: ' + getApronLinkDisplayName(lk) +
+          '<br>Stand: ' + (stand && stand.name ? stand.name : lk.pbbId) +
+          '<br>Taxiway: ' + (tw && tw.name ? tw.name : lk.taxiwayId) +
+          '<br>Link point: (' + Number(lk.tx).toFixed(0) + ', ' + Number(lk.ty).toFixed(0) + ')';
+      } else if (state.selectedObject.type === 'layoutEdge') {
+        const ed = state.selectedObject.obj;
+        objectInfoEl.innerHTML =
+          '<strong>Edge (derived)</strong><br>' +
+          'Name: ' + getLayoutEdgeDisplayName(ed) +
+          '<br>Graph length: ' + (ed && ed.dist != null ? Math.round(ed.dist) : '—') +
+          '<br>Nodes: ' + (ed ? ed.fromIdx + ' → ' + ed.toIdx : '—') +
+          '<br>Span (px): (' + (ed ? ed.x1.toFixed(0) : '—') + ', ' + (ed ? ed.y1.toFixed(0) : '—') + ') → (' + (ed ? ed.x2.toFixed(0) : '—') + ', ' + (ed ? ed.y2.toFixed(0) : '—') + ')' +
+          '<br>Polyline points: ' + (ed && ed.pts ? ed.pts.length : 2);
+      } else if (state.selectedObject.type === 'flight') {
+        const dir = o.arrDep === 'Dep' ? 'Departure' : 'Arrival';
+        const sibt = formatMinutesToHHMMSS(o.sibtMin_d != null ? o.sibtMin_d : (o.timeMin != null ? o.timeMin : 0));
+        const sobt = formatMinutesToHHMMSS(o.sobtMin_d != null ? o.sobtMin_d : ((o.timeMin != null ? o.timeMin : 0) + (o.dwellMin != null ? o.dwellMin : 0)));
+        const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(o.aircraftType) : null;
+        const acName = ac ? (ac.name || ac.id || '') : (o.aircraftType || '—');
+        const codeIcao = (ac && ac.icao) ? ac.icao : (o.code || '—');
+        const icaoJhl = (ac && ac.icaoJHL) ? ac.icaoJHL : '—';
+        const recatEu = (ac && ac.recatEu) ? ac.recatEu : '—';
+        objectInfoEl.innerHTML =
+          '<strong>Flight</strong><br>' +
+          'Type: ' + dir +
+          '<br>SIBT: ' + sibt + ' &nbsp; SOBT: ' + sobt +
+          '<br>Aircraft: ' + (acName || '—') +
           '<br>Code(ICAO): ' + (codeIcao || '—') + ' &nbsp; ICAO(J/H/M/L): ' + (icaoJhl || '—') + ' &nbsp; RECAT-EU: ' + (recatEu || '—') +
           '<br>Reg: ' + (o.reg || '—') +
           '<br>Airline Code: ' + (o.airlineCode || '—') + ' &nbsp; Flight Number: ' + (o.flightNumber || '—') +
@@ -482,7 +581,7 @@
 
     if (seq === 'ARR→DEP') {
       html += '<div class="rwysep-block">';
-      html += '<div class="rwysep-label">ROT (Runway Occupancy Time, sec)</div>';
+      html += '<div style="font-size:10px;color:#9ca3af;line-height:1.5;margin-bottom:6px;">Separation combines leading aircraft ROT with trailing aircraft lineup–gear-off time, using the ROT inputs above per wake category.</div>';
 
       const totalRot = cats.length;
       let filledRot = 0;
@@ -512,12 +611,7 @@
       html += '</div></div>';
     }
 
-    if (seq === 'ARR→DEP') {
-      html += '<div class="rwysep-block">';
-      html += '<div class="rwysep-label">ROT‑based separation (sec)</div>';
-      html += '<div style="font-size:10px;color:#9ca3af;line-height:1.5;">For ARR→DEP combinations, separation is determined by the ROT values above (runway occupancy time per wake category).</div>';
-      html += '</div>';
-    } else {
+    if (seq !== 'ARR→DEP') {
       html += '<div class="rwysep-block">';
       html += '<div class="rwysep-label">Separation (sec) — ' + escapeHtml(seq) + '</div>';
       if (seqType === 'matrix') {
@@ -1041,37 +1135,6 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(labelText, bx + bw / 2, by + bh / 2);
-            let hpLinked = false;
-            if (typeof findRunwayHoldingForLineup === 'function' && lp) {
-              const dLine = typeof getEffectiveRunwayLineupDistM === 'function' ? getEffectiveRunwayLineupDistM(tw) : d;
-              const dBack = Math.max(0, dLine - 300);
-              const pBack = typeof getRunwayPointAtDistance === 'function' ? getRunwayPointAtDistance(tw.id, dBack) : null;
-              const stub = (pBack && dist2(pBack, lp) > 1e-6) ? [pBack, lp] : [lp, lp];
-              const hres = findRunwayHoldingForLineup(tw, lp, stub);
-              hpLinked = !!(hres && hres.ok);
-            }
-            if (!hpLinked) {
-              const badge = 'No Holding Point';
-              ctx.font = 'bold 10px system-ui, sans-serif';
-              const p2x = 5, p2y = 3, r2 = 4;
-              const m2 = ctx.measureText(badge);
-              const bw2 = m2.width + p2x * 2;
-              const bh2 = 10 + p2y * 2;
-              const bx2 = bx;
-              const by2 = by + bh + 4;
-              ctx.beginPath();
-              if (typeof ctx.roundRect === 'function') ctx.roundRect(bx2, by2, bw2, bh2, r2);
-              else ctx.rect(bx2, by2, bw2, bh2);
-              ctx.fillStyle = 'rgba(220, 38, 38, 0.95)';
-              ctx.fill();
-              ctx.strokeStyle = '#450a0a';
-              ctx.lineWidth = 1.1;
-              ctx.stroke();
-              ctx.fillStyle = '#ffffff';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(badge, bx2 + bw2 / 2, by2 + bh2 / 2);
-            }
             ctx.restore();
           }
         }
@@ -1645,96 +1708,3 @@
         if (!t.closed || t.vertices.length < 2) return;
         for (let i = 0; i < t.vertices.length; i++) {
           const v1 = t.vertices[i], v2 = t.vertices[(i+1) % t.vertices.length];
-          const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-          const near = closestPointOnSegment(p1, p2, snappedPx);
-          if (near) {
-            const d2 = dist2(near, snappedPx);
-            if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2 }; }
-          }
-        }
-      });
-      const maxD2 = (CELL_SIZE*1.0)**2;
-      if (bestEdge && bestD2 < maxD2) {
-        const nearPt = bestEdge.near;
-        const ex = (nearPt && nearPt[0] != null) ? nearPt[0] : 0;
-        const ey = (nearPt && nearPt[1] != null) ? nearPt[1] : 0;
-        const [x1,y1]=bestEdge.p1, [x2,y2]=bestEdge.p2;
-        let nx = -(y2-y1), ny = x2-x1;
-        const len = Math.hypot(nx,ny) || 1; nx /= len; ny /= len;
-        const toClickX = snappedPx[0] - ex, toClickY = snappedPx[1] - ey;
-        if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
-        const category = document.getElementById('standCategory').value || 'C';
-        const standSize = getStandSizeMeters(category);
-        const minLen = standSize / 2 + 3;
-        const lenMeters = Number(document.getElementById('pbbLength').value || 15);
-        const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-        const px2 = ex + nx * lenPx, py2 = ey + ny * lenPx;
-        const preview = { x1: ex, y1: ey, x2: px2, y2: py2, category };
-        const overlap = pbbStandOverlapsExisting(preview);
-        state.previewPbb = { x1: ex, y1: ey, x2: px2, y2: py2, category: preview.category, overlap };
-        scheduleDraw(); drewThisMove = true;
-      } else {
-        if (state.previewPbb) { state.previewPbb = null; scheduleDraw(); drewThisMove = true; }
-      }
-    } else {
-      let clearedPreview = false;
-      if (state.previewRemote) { state.previewRemote = null; clearedPreview = true; }
-      if (state.previewPbb) { state.previewPbb = null; clearedPreview = true; }
-      if (state.previewHoldingPoint) { state.previewHoldingPoint = null; clearedPreview = true; }
-      if (clearedPreview) { scheduleDraw(); drewThisMove = true; }
-    }
-    if (flightTooltip && !state.isPanning) {
-      let tipDone = false;
-      if (state.hasSimulationResult && state.globalUpdateFresh) {
-        let bestFlight = null;
-        let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
-        const tSec = state.simTimeSec;
-        state.flights.forEach(f => {
-          const pose = getFlightPoseAtTimeForDraw(f, tSec);
-          if (!pose || f.reg == null || !String(f.reg).trim()) return;
-          const dx = pose.x - wx;
-          const dy = pose.y - wy;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < bestD2) { bestD2 = d2; bestFlight = f; }
-        });
-        if (bestFlight && bestFlight.reg) {
-          flightTooltip.style.display = 'block';
-          flightTooltip.textContent = String(bestFlight.reg).trim();
-          flightTooltip.style.left = (ev.clientX + 12) + 'px';
-          flightTooltip.style.top = (ev.clientY + 12) + 'px';
-          tipDone = true;
-        }
-      }
-      if (!tipDone) {
-        const hit = hitTest(wx, wy);
-        if (hit && hit.obj) {
-          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type);
-          flightTooltip.style.display = 'block';
-          flightTooltip.textContent = name;
-          flightTooltip.style.left = (ev.clientX + 12) + 'px';
-          flightTooltip.style.top = (ev.clientY + 12) + 'px';
-        } else {
-          flightTooltip.style.display = 'none';
-        }
-      }
-    }
-    if (hoverChanged && !drewThisMove) { scheduleDraw(); drewThisMove = true; }
-  });
-  container.addEventListener('mouseleave', function() {
-    state.dragStart = null;
-    state.isPanning = false;
-    state.dragStandRotation = null;
-    state.dragPbbBridgeVertex = null;
-    state.dragStandConnection = null;
-    state.hoverCell = null;
-    state.previewPbb = null;
-    state.previewRemote = null;
-    state.previewHoldingPoint = null;
-    state.apronLinkPointerWorld = null;
-    flushDrawNow();
-  });
-  container.addEventListener('dblclick', function(ev) {
-    if (ev.button !== 0) return;
-    const rect = canvas.getBoundingClientRect();
-    const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
-    const [wx, wy] = screenToWorld(sx, sy);

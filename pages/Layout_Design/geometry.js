@@ -1,3 +1,21 @@
+      mode: 'MIX',
+      activeSeq: 'ARR→ARR',
+      seqData: rsepMakeSeqData(stdKey),
+      rot: rotCopy,
+    };
+  }
+  function rsepGetConfigForRunway(rw) {
+    if (!rw) return null;
+    if (!rw.rwySepConfig) {
+      rw.rwySepConfig = rsepMakeConfig('ICAO');
+    }
+    const cfg = rw.rwySepConfig;
+    if (!RSEP_STD_CATS[cfg.standard]) {
+      rw.rwySepConfig = rsepMakeConfig('ICAO');
+      return rw.rwySepConfig;
+    }
+    return cfg;
+  }
   let dpr = window.devicePixelRatio || 1;
   let ctx = (canvas && typeof canvas.getContext === 'function') ? canvas.getContext('2d') : null;
 
@@ -300,21 +318,3 @@
     if (!term || !term.vertices || term.vertices.length < 3) return false;
     const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
     if (!state.taxiways || !state.taxiways.length) return false;
-    for (let i = 0; i < state.taxiways.length; i++) {
-      const tw = state.taxiways[i];
-      if (!tw.vertices || tw.vertices.length < 2) continue;
-      const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-      for (let k = 0; k < vertsPix.length; k++) {
-        if (pointInPolygonXY(vertsPix[k], termPix)) return true;
-      }
-      for (let a = 0; a < vertsPix.length - 1; a++) {
-        const a1 = vertsPix[a], a2 = vertsPix[a+1];
-        for (let b = 0; b < termPix.length; b++) {
-          const b1 = termPix[b], b2 = termPix[(b+1) % termPix.length];
-          if (segIntersect(a1, a2, b1, b2)) return true;
-        }
-      }
-    }
-    return false;
-  }
-  function makeUniqueNamedCopy(list, prop) {

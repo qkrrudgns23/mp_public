@@ -1,3 +1,101 @@
+    });
+    const tokenRunwaySel = document.getElementById('tokenRunwaySelect');
+    const tokenTerminalSel = document.getElementById('tokenTerminalSelect');
+    if (tokenRunwaySel) tokenRunwaySel.addEventListener('change', function() {
+      if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+      const f = state.selectedObject.obj;
+      if (!f.token) f.token = { nodes: TOKEN_NODE_ORDER.slice(), runwayId: null, apronId: null, terminalId: null };
+      f.token.runwayId = this.value || null;
+      rebuildSelectedFlightTimeline();
+    });
+    if (tokenTerminalSel) tokenTerminalSel.addEventListener('change', function() {
+      if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+      const f = state.selectedObject.obj;
+      if (!f.token) f.token = { nodes: TOKEN_NODE_ORDER.slice(), runwayId: null, apronId: null, terminalId: null };
+      f.token.terminalId = this.value || null;
+      rebuildSelectedFlightTimeline();
+    });
+    const flightSubtabButtons = document.querySelectorAll('.flight-subtab');
+    const flightPaneSchedule = document.getElementById('flightPaneSchedule');
+    const flightPaneConfig = document.getElementById('flightPaneConfig');
+    if (flightSubtabButtons && flightPaneSchedule && flightPaneConfig) {
+      flightSubtabButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+          const target = this.getAttribute('data-flight-subtab') || 'schedule';
+          flightSubtabButtons.forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          if (target === 'config') {
+            flightPaneSchedule.style.display = 'none';
+            flightPaneConfig.style.display = 'block';
+          } else {
+            flightPaneSchedule.style.display = 'block';
+            flightPaneConfig.style.display = 'none';
+          }
+        });
+      });
+    }
+    if (addBtn) {
+      addBtn.addEventListener('click', function() {
+        const networkErrors = validateNetworkForFlights();
+        if (networkErrors.length) {
+          updateFlightError(networkErrors);
+          alert('Flightcannot be created:\\n' + networkErrors.join('\\n'));
+          return;
+        }
+        let timeStr = (document.getElementById('flightTime').value || '').trim();
+        if (!timeStr) {
+          const defMin = getDefaultSibtMinutes();
+          timeStr = formatMinutesToHHMMSS(defMin);
+          if (timeInputEl) timeInputEl.value = timeStr;
+        }
+        const timeMin = parseTimeToMinutes(timeStr);
+        const aircraftType = (document.getElementById('flightAircraftType').value || 'A320').trim();
+        const code = getCodeForAircraft(aircraftType);
+        const reg = (document.getElementById('flightReg').value || '').trim();
+        let airlineCode = (document.getElementById('flightAirlineCode') && document.getElementById('flightAirlineCode').value || '').trim();
+        let flightNumber = (document.getElementById('flightFlightNumber') && document.getElementById('flightFlightNumber').value || '').trim();
+        if (!airlineCode) airlineCode = randomAirlineCode();
+        if (!flightNumber) flightNumber = randomFlightNumber(airlineCode);
+        let dwellMin = parseFloat(document.getElementById('flightDwell').value);
+        let minDwellMin = parseFloat(document.getElementById('flightMinDwell').value);
+        dwellMin = (typeof dwellMin === 'number' && !isNaN(dwellMin) && dwellMin >= 0) ? dwellMin : 0;
+        minDwellMin = (typeof minDwellMin === 'number' && !isNaN(minDwellMin) && minDwellMin >= 0) ? minDwellMin : 0;
+        dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, dwellMin);
+        minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, minDwellMin);
+        if (minDwellMin > dwellMin) minDwellMin = dwellMin;
+        const arrDep = 'Arr';
+        const runwayOptions = getRunwayOptions();
+        const defaultRunwayId = runwayOptions.length ? (runwayOptions[0].id || null) : null;
+        const f = {
+          id: id(),
+          arrDep,
+          timeMin,
+          aircraftType,
+          code,
+          reg,
+          airlineCode,
+          flightNumber,
+          dwellMin,
+          minDwellMin,
+          arrRunwayId: defaultRunwayId,
+          depRunwayId: defaultRunwayId,
+          timeline: null,
+          token: {
+            nodes: ['runway','taxiway','apron','terminal'],
+            runwayId: defaultRunwayId,
+            arrRunwayId: defaultRunwayId,
+            depRunwayId: defaultRunwayId,
+            apronId: null,
+            terminalId: null
+          }
+        };
+        computeFlightPath(f, 'arrival');
+        computeFlightPath(f, 'departure');
+        if (f.noWayArr || f.noWayDep) {
+          updateFlightError('NOTE: Available on your network Taxiway / Apron path not found. (Simulation paths may not be drawn.)');
+        }
+        state.flights.push(f);
+        if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
         else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         var addTouched = f.standId ? [f.standId] : [];
@@ -39,6 +137,7 @@
       setTokenCheckboxesFromNodes(f.token.nodes);
       if (tokenRunwaySel) tokenRunwaySel.value = f.token.runwayId || '';
       if (tokenTerminalSel) tokenTerminalSel.value = f.token.terminalId || '';
+      if (typeof syncFlightAssignStrip === 'function') syncFlightAssignStrip();
     }
     hookSyncFlightPanelFromSelection = syncFlightPanelFromSelection;
     const origSyncPanel = syncPanelFromState;
@@ -218,6 +317,7 @@
         state.simTimeSec = t;
         if (simSlider) simSlider.value = state.simTimeSec;
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+        if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
         state.simPlaying = true;
         ensureSimLoop._lastTs = null;
         ensureSimLoop._playKick = true;
@@ -251,6 +351,7 @@
           state.simTimeSec = snapped;
           this.value = snapped;
           if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+          if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
           try { draw(); } catch(e) {}
           if (typeof update3DScene === 'function') update3DScene();
         }
@@ -1057,102 +1158,3 @@
         const areaM2 = o.vertices && o.vertices.length >= 3 ? polygonAreaM2(o.vertices) : 0;
         const floors = o.floors != null ? Math.max(1, parseInt(o.floors, 10) || 1) : 1;
         const f2fRaw = o.floorToFloor != null ? Number(o.floorToFloor) : (o.floorHeight != null ? Number(o.floorHeight) : 4);
-        const f2f = Math.max(0.5, f2fRaw || 4);
-        const floorH = o.floorHeight != null ? Number(o.floorHeight) || (floors * f2f) : (floors * f2f);
-        const totalArea = areaM2 * floors;
-        const dep = o.departureCapacity != null ? o.departureCapacity : 0;
-        const arr = o.arrivalCapacity != null ? o.arrivalCapacity : 0;
-        objectInfoEl.innerHTML = '<strong>Building</strong><br>Name: ' + (o.name || o.id) + '<br>Type: ' + getBuildingTypeLabel(o.buildingType) + '<br>Vertices: ' + (o.vertices ? o.vertices.length : 0) +
-          '<br>Footprint area: ' + areaM2.toFixed(1) + ' m²<br>Height: ' + floorH.toFixed(1) + ' m (Floors: ' + floors + ' × ' + f2f.toFixed(1) + ' m)' +
-          '<br>Total floor area: ' + totalArea.toFixed(1) + ' m²' +
-          '<br>Departure capacity: ' + dep + '<br>Arrival capacity: ' + arr;
-      } else if (state.selectedObject.type === 'pbb') {
-        objectInfoEl.innerHTML = '<strong>Contact Stand</strong><br>Name: ' + (o.name || '—') + '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) + '<br>PBB count: ' + Math.max(1, parseInt(o.pbbCount, 10) || 1) + '<br>Edge cell: (' + o.edgeCol + ',' + o.edgeRow + ')';
-      } else if (state.selectedObject.type === 'remote') {
-        let allowedLabel = 'All (by proximity)';
-        if (Array.isArray(o.allowedTerminals) && o.allowedTerminals.length) {
-          const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) { return {
-            id: t.id,
-            name: (t.name || '').trim() || 'Building'
-          }; });
-          const names = o.allowedTerminals.map(function(id) {
-            const tt = terms.find(function(t) { return t.id === id; });
-            return tt ? tt.name : id;
-          });
-          if (names.length) allowedLabel = names.join(', ');
-        }
-        const remotePx = getRemoteStandCenterPx(o);
-        const remoteCell = [remotePx[0] / CELL_SIZE, remotePx[1] / CELL_SIZE];
-        objectInfoEl.innerHTML =
-          '<strong>Remote stand</strong>' +
-          '<br>Name: ' + (o.name || '—') +
-          '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) +
-          '<br>Cell: (' + remoteCell[0].toFixed(1) + ',' + remoteCell[1].toFixed(1) + ')' +
-          '<br>available buildings: ' + allowedLabel;
-      } else if (state.selectedObject.type === 'holdingPoint') {
-        const hx = Number(o.x), hy = Number(o.y);
-        const hCol = hx / CELL_SIZE, hRow = hy / CELL_SIZE;
-        objectInfoEl.innerHTML =
-          '<strong>' + holdingPointKindDisplayLabel(o.hpKind) + '</strong>' +
-          '<br>Name: ' + (o.name || '—') +
-          '<br>Diameter: ' + c2dHoldingPointDiameterM().toFixed(0) + ' m' +
-          '<br>Cell: (' + hCol.toFixed(1) + ', ' + hRow.toFixed(1) + ')' +
-          '<br>World: (' + hx.toFixed(0) + ', ' + hy.toFixed(0) + ')';
-      }
-      else if (state.selectedObject.type === 'taxiway') {
-        const dirVal = getTaxiwayDirection(o);
-        const dirLabel = dirVal === 'clockwise' ? 'Clockwise' : (dirVal === 'counter_clockwise' ? 'Counter Clockwise' : 'Both');
-        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : 'Taxiway');
-        const ser = serializeTaxiwayWithEndpoints(o);
-        const startStr = ser.start_point != null ? '(' + ser.start_point.col + ', ' + ser.start_point.row + ')' : '—';
-        const endStr = ser.end_point != null ? '(' + ser.end_point.col + ', ' + ser.end_point.row + ')' : '—';
-        const avgVel = (typeof o.avgMoveVelocity === 'number' && isFinite(o.avgMoveVelocity) && o.avgMoveVelocity > 0) ? o.avgMoveVelocity : 10;
-        const minArr = (o.pathType === 'runway')
-          ? ((typeof o.minArrVelocity === 'number' && isFinite(o.minArrVelocity) && o.minArrVelocity > 0) ? Math.max(1, Math.min(150, o.minArrVelocity)) : 15)
-          : null;
-        const lineupStr = (o.pathType === 'runway') ? (String(getEffectiveRunwayLineupDistM(o)) + ' m (from start toward end)') : '';
-        const maxEx = (o.pathType === 'runway_exit' && typeof o.maxExitVelocity === 'number' && isFinite(o.maxExitVelocity) && o.maxExitVelocity > 0) ? o.maxExitVelocity : null;
-        const minEx = (o.pathType === 'runway_exit' && typeof o.minExitVelocity === 'number' && isFinite(o.minExitVelocity) && o.minExitVelocity > 0) ? o.minExitVelocity : null;
-        objectInfoEl.innerHTML = '<strong>' + heading + '</strong><br>Name: ' + (o.name || '—') +
-          '<br>Direction: ' + dirLabel +
-          '<br>Width: ' + (o.width != null ? o.width : 23) + ' m' +
-          (o.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
-          (minArr != null ? '<br>Min arr velocity: ' + minArr + ' m/s' : '') +
-          (o.pathType === 'runway' ? '<br>Line up: ' + lineupStr : '') +
-          (maxEx != null ? '<br>Max exit velocity: ' + maxEx + ' m/s' : '') +
-          (minEx != null ? '<br>Min exit velocity: ' + minEx + ' m/s' : '') +
-          '<br>Points: ' + (o.vertices ? o.vertices.length : 0) +
-          '<br>Start point: ' + startStr + '<br>End point: ' + endStr;
-      } else if (state.selectedObject.type === 'apronLink') {
-        const lk = o;
-        const stand = findStandById(lk.pbbId);
-        const tw = state.taxiways.find(function(t) { return t.id === lk.taxiwayId; });
-        objectInfoEl.innerHTML =
-          '<strong>Apron Taxiway</strong><br>' +
-          'Name: ' + getApronLinkDisplayName(lk) +
-          '<br>Stand: ' + (stand && stand.name ? stand.name : lk.pbbId) +
-          '<br>Taxiway: ' + (tw && tw.name ? tw.name : lk.taxiwayId) +
-          '<br>Link point: (' + Number(lk.tx).toFixed(0) + ', ' + Number(lk.ty).toFixed(0) + ')';
-      } else if (state.selectedObject.type === 'layoutEdge') {
-        const ed = state.selectedObject.obj;
-        objectInfoEl.innerHTML =
-          '<strong>Edge (derived)</strong><br>' +
-          'Name: ' + getLayoutEdgeDisplayName(ed) +
-          '<br>Graph length: ' + (ed && ed.dist != null ? Math.round(ed.dist) : '—') +
-          '<br>Nodes: ' + (ed ? ed.fromIdx + ' → ' + ed.toIdx : '—') +
-          '<br>Span (px): (' + (ed ? ed.x1.toFixed(0) : '—') + ', ' + (ed ? ed.y1.toFixed(0) : '—') + ') → (' + (ed ? ed.x2.toFixed(0) : '—') + ', ' + (ed ? ed.y2.toFixed(0) : '—') + ')' +
-          '<br>Polyline points: ' + (ed && ed.pts ? ed.pts.length : 2);
-      } else if (state.selectedObject.type === 'flight') {
-        const dir = o.arrDep === 'Dep' ? 'Departure' : 'Arrival';
-        const sibt = formatMinutesToHHMMSS(o.sibtMin_d != null ? o.sibtMin_d : (o.timeMin != null ? o.timeMin : 0));
-        const sobt = formatMinutesToHHMMSS(o.sobtMin_d != null ? o.sobtMin_d : ((o.timeMin != null ? o.timeMin : 0) + (o.dwellMin != null ? o.dwellMin : 0)));
-        const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(o.aircraftType) : null;
-        const acName = ac ? (ac.name || ac.id || '') : (o.aircraftType || '—');
-        const codeIcao = (ac && ac.icao) ? ac.icao : (o.code || '—');
-        const icaoJhl = (ac && ac.icaoJHL) ? ac.icaoJHL : '—';
-        const recatEu = (ac && ac.recatEu) ? ac.recatEu : '—';
-        objectInfoEl.innerHTML =
-          '<strong>Flight</strong><br>' +
-          'Type: ' + dir +
-          '<br>SIBT: ' + sibt + ' &nbsp; SOBT: ' + sobt +
-          '<br>Aircraft: ' + (acName || '—') +

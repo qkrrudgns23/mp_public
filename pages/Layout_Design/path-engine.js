@@ -1,3 +1,21 @@
+    for (let i = 0; i < state.taxiways.length; i++) {
+      const tw = state.taxiways[i];
+      if (!tw.vertices || tw.vertices.length < 2) continue;
+      const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
+      for (let k = 0; k < vertsPix.length; k++) {
+        if (pointInPolygonXY(vertsPix[k], termPix)) return true;
+      }
+      for (let a = 0; a < vertsPix.length - 1; a++) {
+        const a1 = vertsPix[a], a2 = vertsPix[a+1];
+        for (let b = 0; b < termPix.length; b++) {
+          const b1 = termPix[b], b2 = termPix[(b+1) % termPix.length];
+          if (segIntersect(a1, a2, b1, b2)) return true;
+        }
+      }
+    }
+    return false;
+  }
+  function makeUniqueNamedCopy(list, prop) {
     const nameCount = {};
     return (list || []).map(obj => {
       const copy = Object.assign({}, obj);
@@ -700,21 +718,3 @@
     if (state.currentTerminalId) {
       const t = state.terminals.find(x => x.id === state.currentTerminalId);
       if (t) return t;
-    }
-    return state.terminals[0] || null;
-  }
-
-  function polygonAreaM2(vertices) {
-    if (!vertices || vertices.length < 3) return 0;
-    let area = 0;
-    const n = vertices.length;
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      area += vertices[i].col * vertices[j].row;
-      area -= vertices[j].col * vertices[i].row;
-    }
-    return Math.abs(area) * 0.5 * CELL_SIZE * CELL_SIZE;
-  }
-
-  function syncPanelFromState() {
-    document.getElementById('gridCellSize').value = CELL_SIZE;

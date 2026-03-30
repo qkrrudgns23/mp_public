@@ -1,3 +1,21 @@
+          if (nameInput) nameInput.value = t.name || '';
+        } else {
+          t.name = nextDefaultName;
+          if (nameInput) nameInput.value = nextDefaultName;
+        }
+      } else if (nameInput) {
+        nameInput.value = nextDefaultName;
+      }
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+      if (typeof update3DScene === 'function') update3DScene();
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    });
+  }
+  function recomputeTerminalFloorHeight() {
+    const t = getCurrentTerminal();
+    if (!t) return;
     const floorsInput = document.getElementById('terminalFloors');
     const f2fInput = document.getElementById('terminalFloorToFloor');
     const totalInput = document.getElementById('terminalFloorHeight');
@@ -430,21 +448,3 @@
     });
   }
   [
-    ['runwayStartDisplacedThresholdM', 'startDisplacedThresholdM', function(tw) { return getEffectiveRunwayStartDisplacedThresholdM(tw); }],
-    ['runwayStartBlastPadM', 'startBlastPadM', function(tw) { return getEffectiveRunwayStartBlastPadM(tw); }],
-    ['runwayEndDisplacedThresholdM', 'endDisplacedThresholdM', function(tw) { return getEffectiveRunwayEndDisplacedThresholdM(tw); }],
-    ['runwayEndBlastPadM', 'endBlastPadM', function(tw) { return getEffectiveRunwayEndBlastPadM(tw); }]
-  ].forEach(function(item) {
-    const el = document.getElementById(item[0]);
-    if (!el) return;
-    el.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-        const tw = state.selectedObject.obj;
-        if (tw.pathType !== 'runway') return;
-        const val = Number(this.value);
-        const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : item[2](tw);
-        tw[item[1]] = v;
-        this.value = String(v);
-        updateObjectInfo();
-        draw();
-        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();

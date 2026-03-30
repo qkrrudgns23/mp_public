@@ -1,3 +1,118 @@
+    });
+    if (allRemoteStands.length) {
+      labelRows.push('<div class="alloc-gantt-section-spacer" aria-hidden="true"></div>');
+      trackRows.push(
+        '<div class="alloc-row" data-stand-id="">' +
+          '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:8px;min-height:8px;"></div>' +
+        '</div>'
+      );
+      labelRows.push(
+        '<div class="alloc-remote-header" data-collapsed="0">' +
+          '<span class="alloc-section-toggle-icon">▼</span>' +
+          'Remote stands' +
+        '</div>'
+      );
+      trackRows.push(
+        '<div class="alloc-row" data-stand-id="">' +
+          '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:20px;min-height:20px;"></div>' +
+        '</div>'
+      );
+      allRemoteStands.forEach(s => {
+        const label = (s.name || '') + ' (' + (s.category || '') + ')';
+        const row = buildRowHtml(label, s.id);
+        labelRows.push(row.labelHtml);
+        trackRows.push(row.trackHtml);
+      });
+    }
+    const axisTicks = tickPositions.map(tp =>
+      '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
+        '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
+      '</div>'
+    );
+    const axisHtml =
+      '<div class="alloc-time-axis-overlay">' +
+        '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
+      '</div>';
+
+    labelRows.push('<div class="alloc-label-axis-spacer"></div>');
+
+    const labelColHtml =
+      '<div class="alloc-gantt-label-col">' +
+        labelRows.join('') +
+      '</div>';
+    const innerMinWidthPct = Math.max(100, Math.round(zoom * 100));
+    const gridOverlayHtml =
+      '<div class="alloc-gantt-grid-overlay">' +
+        tickPositions.map(function(tp) {
+          return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
+        }).join('') +
+      '</div>';
+    const trackColHtml =
+      '<div class="alloc-gantt-scroll-col">' +
+        '<div class="alloc-gantt-inner" style="min-width:' + innerMinWidthPct + '%;">' +
+          gridOverlayHtml +
+          trackRows.join('') +
+          axisHtml +
+        '</div>' +
+      '</div>';
+    const rootHtml =
+      '<div class="alloc-gantt-root">' +
+        labelColHtml +
+        trackColHtml +
+      '</div>';
+
+    ganttEl.innerHTML = rootHtml;
+    const labWin = document.getElementById('allocGanttWindowLabel');
+    if (labWin) labWin.textContent = formatMinutesToHHMM(winStart) + ' – ' + formatMinutesToHHMM(winEnd);
+    if (!state._allocGanttPanWired) {
+      state._allocGanttPanWired = true;
+      const bPrev = document.getElementById('btnAllocGanttPrev');
+      const bNext = document.getElementById('btnAllocGanttNext');
+      function allocGanttPanStep(deltaMin) {
+        const c = state._allocGanttClamp;
+        if (!c) return;
+        let w = state.allocGanttWindowStartMin != null ? state.allocGanttWindowStartMin : c.baseMinT;
+        w += deltaMin;
+        const maxW = Math.max(c.baseMinT, c.baseMaxT - c.visibleSpan);
+        state.allocGanttWindowStartMin = Math.min(Math.max(w, c.baseMinT), maxW);
+        renderFlightGantt({ skipPathPrep: true });
+      }
+      if (bPrev) bPrev.addEventListener('click', function() { allocGanttPanStep(-GANTT_PAN_STEP_MIN); });
+      if (bNext) bNext.addEventListener('click', function() { allocGanttPanStep(GANTT_PAN_STEP_MIN); });
+    }
+    const newScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
+    const newLabelCol = ganttEl.querySelector('.alloc-gantt-label-col');
+    if (newScrollCol) {
+      if (prevScrollLeft > 0) newScrollCol.scrollLeft = prevScrollLeft;
+      if (prevScrollTop > 0) newScrollCol.scrollTop = prevScrollTop;
+    }
+    if (newScrollCol && newLabelCol) {
+      newScrollCol.addEventListener('scroll', function() { newLabelCol.scrollTop = newScrollCol.scrollTop; });
+      newLabelCol.addEventListener('scroll', function() { newScrollCol.scrollTop = newLabelCol.scrollTop; });
+    }
+    if (newScrollCol && newLabelCol) {
+      const labelChildren = Array.from(newLabelCol.children);
+      const innerEl = newScrollCol.querySelector('.alloc-gantt-inner');
+      const trackChildren = innerEl ? Array.from(innerEl.children).filter(function(el) {
+        return el.classList.contains('alloc-row');
+      }) : [];
+      function _toggleSectionRows(labelArr, trackArr, fromIdx, collapsed) {
+        const STOP = ['alloc-terminal-header','alloc-remote-header','alloc-label-axis-spacer','alloc-gantt-section-spacer'];
+        for (let j = fromIdx; j < labelArr.length; j++) {
+          const lbl = labelArr[j];
+          if (STOP.some(function(c) { return lbl.classList.contains(c); })) break;
+          lbl.style.display = collapsed ? 'none' : '';
+          if (trackArr[j]) trackArr[j].style.display = collapsed ? 'none' : '';
+        }
+      }
+      function _wireSectionHeader(el, idx, shouldStartCollapsed) {
+        el.style.cursor = 'pointer';
+        if (shouldStartCollapsed) {
+          el.setAttribute('data-collapsed', '1');
+          const icon0 = el.querySelector('.alloc-section-toggle-icon');
+          if (icon0) icon0.textContent = '▶';
+          _toggleSectionRows(labelChildren, trackChildren, idx + 1, true);
+        }
         el.addEventListener('click', function() {
           const wasCollapsed = el.getAttribute('data-collapsed') === '1';
           const nowCollapsed = !wasCollapsed;
@@ -433,118 +548,3 @@
             title: function(items) {
               const i = items && items[0] ? items[0].dataIndex : 0;
               const b = buckets[i];
-              if (!b) return '';
-              const w = b.bucketStart != null ? kpiFormatClockBucket15(b.bucketStart) : (b.label || '');
-              return 'w = ' + w + ' (60m rolling from w)';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: 'rgba(255,255,255,0.07)' },
-          ticks: {
-            color: '#94a3b8',
-            maxRotation: buckets.length > 24 ? 40 : 0,
-            autoSkip: buckets.length > 36,
-            maxTicksLimit: buckets.length > 36 ? 20 : undefined,
-            font: { size: 12 },
-            callback: function(tickValue, idx) {
-              let i = idx;
-              if (typeof tickValue === 'number' && isFinite(tickValue) && tickValue >= 0 && tickValue < buckets.length) {
-                i = Math.round(tickValue);
-              }
-              const b = buckets[i];
-              if (!b || !kpiBucketOnHour(b)) return '';
-              return kpiFormatClockBucket(b.bucketStart);
-            }
-          }
-        },
-        y: {
-          beginAtZero: true,
-          grid: { color: 'rgba(255,255,255,0.07)' },
-          ticks: { color: '#94a3b8', precision: 0, font: { size: 12 } }
-        }
-      }
-    };
-  }
-  function kpiMountInteractiveCharts(buckets) {
-    if (typeof Chart === 'undefined') {
-      console.warn('Chart.js failed to load; KPI charts are static until CDN is available.');
-      return;
-    }
-    if (!buckets || !buckets.length) return;
-    const labels = buckets.map(function(b) { return b.label || kpiFormatClockBucket15(b.bucketStart); });
-    const occ = buckets.map(function(b) { return b.occupancy || 0; });
-    const arr = buckets.map(function(b) { return b.arrivals || 0; });
-    const dep = buckets.map(function(b) { return b.departures || 0; });
-    const tot = buckets.map(function(b) { return b.total || 0; });
-    const opt = kpiChartCommonOptions(buckets);
-    const elG = document.getElementById('kpiChartGateOcc');
-    if (elG) {
-      window.__kpiChartGate = new Chart(elG, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Gate occupancy',
-            data: occ,
-            borderColor: '#a78bfa',
-            backgroundColor: 'rgba(167, 139, 250, 0.22)',
-            fill: true,
-            tension: 0.28,
-            pointRadius: 3,
-            pointHoverRadius: 7,
-            pointBackgroundColor: '#ddd6fe'
-          }]
-        },
-        options: opt
-      });
-    }
-    const elR = document.getElementById('kpiChartRunway');
-    if (elR) {
-      window.__kpiChartRunway = new Chart(elR, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              type: 'bar',
-              label: 'Runway arr (ELDT)',
-              data: arr,
-              backgroundColor: 'rgba(56, 189, 248, 0.72)',
-              order: 3
-            },
-            {
-              type: 'bar',
-              label: 'Runway dep (ETOT)',
-              data: dep,
-              backgroundColor: 'rgba(251, 146, 60, 0.72)',
-              order: 3
-            },
-            {
-              type: 'line',
-              label: 'Total',
-              data: tot,
-              borderColor: '#c4b5fd',
-              backgroundColor: 'transparent',
-              borderWidth: 3,
-              tension: 0.22,
-              pointRadius: 3,
-              pointHoverRadius: 6,
-              order: 1
-            }
-          ]
-        },
-        options: opt
-      });
-    }
-  }
-  function kpiGateChartPlaceholder(buckets) {
-    if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No gate occupancy data is available for the current snapshot.</div>';
-    return '<div class="kpi-chart-canvas-host kpi-chart-wrap--gate-fill"><canvas id="kpiChartGateOcc" aria-label="Gate occupancy chart"></canvas></div>';
-  }
-  function kpiRunwayChartPlaceholder(buckets) {
-    if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No arrival or departure events are available for the current snapshot.</div>';
-    return '<div class="kpi-chart-canvas-host"><canvas id="kpiChartRunway" aria-label="Runway traffic chart"></canvas></div>';
-  }

@@ -353,6 +353,22 @@
               <label>Min dwell (min)</label>
               <input type="number" id="flightMinDwell" min="0" max="__UI_FLIGHT_DWELL_MAX__" value="__UI_FLIGHT_MIN_DWELL__" step="__UI_FLIGHT_DWELL_STEP__" title="In case of delayed arrival EOBT = EIBT + Min Dwell Adjust to (0Not applicable to this side)" />
             </div>
+            <div id="flightAssignStrip" class="flight-assign-strip-wrap" style="margin:0 0 10px;" aria-label="Arrival runway, building, departure runway for selected flight">
+              <div class="flight-assign-strip-row">
+                <div class="compact-field">
+                  <label for="flightAssignStripArr">Arr Rw</label>
+                  <select id="flightAssignStripArr" class="flight-assign-select flight-assign-strip-select" data-role="arr" disabled title="Select a flight row first"></select>
+                </div>
+                <div class="compact-field">
+                  <label for="flightAssignStripDep">Dep Rw</label>
+                  <select id="flightAssignStripDep" class="flight-assign-select flight-assign-strip-select" data-role="dep" disabled title="Select a flight row first"></select>
+                </div>
+              </div>
+              <div class="compact-field wide">
+                <label for="flightAssignStripTerm">Building</label>
+                <select id="flightAssignStripTerm" class="flight-assign-select flight-assign-strip-select" data-role="term" disabled title="Select a flight row first"></select>
+              </div>
+            </div>
             <button class="small" id="btnAddFlight">+ Add Flight</button>
             <div id="flightError" style="color:#f97316;font-size:11px;margin-top:4px;"></div>
             <div class="section-title" style="margin-top:10px;">Flight schedule</div>
@@ -396,6 +412,11 @@
                 E‑Point
               </label>
             </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+            <button type="button" class="tool-btn" id="btnAllocGanttPrev" aria-label="Earlier time window" title="Earlier">◀</button>
+            <span id="allocGanttWindowLabel" style="font-size:11px;color:#9ca3af;min-width:140px;"></span>
+            <button type="button" class="tool-btn" id="btnAllocGanttNext" aria-label="Later time window" title="Later">▶</button>
           </div>
           <div id="allocationGantt"></div>
         </div>

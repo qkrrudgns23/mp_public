@@ -1,3 +1,4 @@
+  BUILDING_TYPES.forEach(function(bt) { BUILDING_TYPE_BY_ID[String(bt.id || '')] = bt; });
   function normalizeBuildingType(rawType) {
     const key = String(rawType || '').trim();
     if (key && BUILDING_TYPE_BY_ID[key]) return key;
@@ -196,6 +197,7 @@
     flightSchedulePage: 0,
     kpiRollingDetailExpanded: false,
     flightPathRevealFlightId: null,
+    allocGanttWindowStartMin: null,
   };
   let hookSyncFlightPanelFromSelection = null;
   function bumpRwySepSnapshotStaleGen() {
@@ -286,5 +288,3 @@
     if (pt === 'runway_exit') return 'runwayTaxiway';
     return 'taxiway';
   }
-  function isPathLayoutMode(m) {
-    return PATH_LAYOUT_MODES.indexOf(m) >= 0;

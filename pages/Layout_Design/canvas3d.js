@@ -1,3 +1,97 @@
+          const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
+          const near = closestPointOnSegment(p1, p2, snappedPx);
+          if (near) {
+            const d2 = dist2(near, snappedPx);
+            if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2 }; }
+          }
+        }
+      });
+      const maxD2 = (CELL_SIZE*1.0)**2;
+      if (bestEdge && bestD2 < maxD2) {
+        const nearPt = bestEdge.near;
+        const ex = (nearPt && nearPt[0] != null) ? nearPt[0] : 0;
+        const ey = (nearPt && nearPt[1] != null) ? nearPt[1] : 0;
+        const [x1,y1]=bestEdge.p1, [x2,y2]=bestEdge.p2;
+        let nx = -(y2-y1), ny = x2-x1;
+        const len = Math.hypot(nx,ny) || 1; nx /= len; ny /= len;
+        const toClickX = snappedPx[0] - ex, toClickY = snappedPx[1] - ey;
+        if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
+        const category = document.getElementById('standCategory').value || 'C';
+        const standSize = getStandSizeMeters(category);
+        const minLen = standSize / 2 + 3;
+        const lenMeters = Number(document.getElementById('pbbLength').value || 15);
+        const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
+        const px2 = ex + nx * lenPx, py2 = ey + ny * lenPx;
+        const preview = { x1: ex, y1: ey, x2: px2, y2: py2, category };
+        const overlap = pbbStandOverlapsExisting(preview);
+        state.previewPbb = { x1: ex, y1: ey, x2: px2, y2: py2, category: preview.category, overlap };
+        scheduleDraw(); drewThisMove = true;
+      } else {
+        if (state.previewPbb) { state.previewPbb = null; scheduleDraw(); drewThisMove = true; }
+      }
+    } else {
+      let clearedPreview = false;
+      if (state.previewRemote) { state.previewRemote = null; clearedPreview = true; }
+      if (state.previewPbb) { state.previewPbb = null; clearedPreview = true; }
+      if (state.previewHoldingPoint) { state.previewHoldingPoint = null; clearedPreview = true; }
+      if (clearedPreview) { scheduleDraw(); drewThisMove = true; }
+    }
+    if (flightTooltip && !state.isPanning) {
+      let tipDone = false;
+      if (state.hasSimulationResult && state.globalUpdateFresh) {
+        let bestFlight = null;
+        let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
+        const tSec = state.simTimeSec;
+        if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
+        state.flights.forEach(f => {
+          const pose = getFlightPoseAtTimeForDraw(f, tSec);
+          if (!pose || f.reg == null || !String(f.reg).trim()) return;
+          const dx = pose.x - wx;
+          const dy = pose.y - wy;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) { bestD2 = d2; bestFlight = f; }
+        });
+        if (bestFlight && bestFlight.reg) {
+          flightTooltip.style.display = 'block';
+          flightTooltip.textContent = String(bestFlight.reg).trim();
+          flightTooltip.style.left = (ev.clientX + 12) + 'px';
+          flightTooltip.style.top = (ev.clientY + 12) + 'px';
+          tipDone = true;
+        }
+      }
+      if (!tipDone) {
+        const hit = hitTest(wx, wy);
+        if (hit && hit.obj) {
+          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type);
+          flightTooltip.style.display = 'block';
+          flightTooltip.textContent = name;
+          flightTooltip.style.left = (ev.clientX + 12) + 'px';
+          flightTooltip.style.top = (ev.clientY + 12) + 'px';
+        } else {
+          flightTooltip.style.display = 'none';
+        }
+      }
+    }
+    if (hoverChanged && !drewThisMove) { scheduleDraw(); drewThisMove = true; }
+  });
+  container.addEventListener('mouseleave', function() {
+    state.dragStart = null;
+    state.isPanning = false;
+    state.dragStandRotation = null;
+    state.dragPbbBridgeVertex = null;
+    state.dragStandConnection = null;
+    state.hoverCell = null;
+    state.previewPbb = null;
+    state.previewRemote = null;
+    state.previewHoldingPoint = null;
+    state.apronLinkPointerWorld = null;
+    flushDrawNow();
+  });
+  container.addEventListener('dblclick', function(ev) {
+    if (ev.button !== 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
+    const [wx, wy] = screenToWorld(sx, sy);
     if (insertSelectedVertexAt(wx, wy, !!ev.shiftKey)) {
       ev.preventDefault();
     }

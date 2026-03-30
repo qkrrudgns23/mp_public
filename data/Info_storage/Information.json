@@ -71,10 +71,10 @@
               }
             },
             "ARR→DEP": {
-              "J": 90,
-              "H": 80,
-              "M": 65,
-              "L": 50
+              "J": 140,
+              "H": 130,
+              "M": 115,
+              "L": 100
             },
             "DEP→ARR": {
               "J": 60,
@@ -209,12 +209,12 @@
               }
             },
             "ARR→DEP": {
-              "A": 80,
-              "B": 70,
-              "C": 60,
-              "D": 55,
-              "E": 50,
-              "F": 45
+              "A": 130,
+              "B": 120,
+              "C": 110,
+              "D": 105,
+              "E": 100,
+              "F": 95
             },
             "DEP→ARR": {
               "A": 55,
@@ -247,9 +247,9 @@
           "input": "Lead (departure) × Trail (departure) matrix input"
         },
         "ARR→DEP": {
-          "driver": "Runway occupancy time (ROT) of leading arrival",
-          "refPoint": "Runway vacation / ROT end of the leading arrival",
-          "input": "Lead (arrival category) 1‑D input"
+          "driver": "Leading aircraft ROT (runway occupancy time)",
+          "refPoint": "Trailing aircraft: time from lineup to gear-off (lineup–gear-off)",
+          "input": "Lead arrival category — 1D separation inputs"
         },
         "DEP→ARR": {
           "driver": "Wake / ROT of leading departure",
@@ -264,6 +264,7 @@
           "ARR→DEP": "lead-1d",
           "DEP→ARR": "trail-1d"
         },
+        "arrDepDefaultBoostSec": 50,
         "modeSequences": {
           "ARR": [
             "ARR→ARR"
@@ -995,7 +996,7 @@
         "layoutVertexDotScale": 0.7,
         "showGridDefault": true,
         "showImageDefault": true,
-        "dragThresholdPx": 5,
+        "dragThresholdPx": 0,
         "freeDrawStepCell": 0.05,
         "gridSnapStepCell": 0.5,
         "insertVertexHitCellFactor": 0.9,
@@ -1141,9 +1142,7 @@
         5,
         10,
         20,
-        50,
-        100,
-        200
+        30
       ],
       "defaultSimSpeed": 5,
       "simTimeSliderSnapSec": 60,
@@ -1210,7 +1209,7 @@
         "panelToggleColor": "#ffffff",
         "panelToggleBorder": "rgba(255,255,255,0.28)",
         "panelWidthHalf": "26vw",
-        "panelWidthFull": "50vw",
+        "panelWidthFull": "25vw",
         "panelResizeCollapsedPx": 44,
         "panelResizeCollapseBelowPx": 96,
         "panelResizeMinExpandedPx": 220,
@@ -1238,7 +1237,9 @@
         "sBarOpacity": 0.8,
         "eBarOpacity": 0.45,
         "e2BarOpacity": 0.9,
-        "apronSlotLabelOpacity": 0.35
+        "apronSlotLabelOpacity": 0.35,
+        "visibleWindowMin": 360,
+        "panStepMin": 120
       },
       "flightScheduleTable": {
         "colS": "#22c55e",
@@ -1378,13 +1379,12 @@
         "reverseCost": 1000000
       },
       "simulation": {
-        "description": "playbackLeadBeforeFirstTouchdownSec=스케줄상 가장 이른 도착 ELDT 기준, 재생 슬라이더 시작을 터치다운 몇 초 전으로 둘지(0이면 전체 접근 구간부터). approachOffsetM/지그재그·timeStepSec·trail·preTouchdownHalo·기체크기.",
+        "description": "playbackLeadBeforeFirstTouchdownSec: ELDT-relative playback lead. approachOffsetM: straight inbound segment length (m) before threshold. maxLazyTimelineBuildsPerFrame caps how many full airside timelines are built per frame (reduces load when many flights overlap the approach window). timeStepSec, trail, preTouchdownHalo, aircraft dimensions.",
+        "maxLazyTimelineBuildsPerFrame": 6,
         "playbackLeadBeforeFirstTouchdownSec": 20,
         "timeStepSec": 1,
         "approachOffsetM": 10000,
         "approachStraightFinalM": 3000,
-        "approachZigzagLegM": 2000,
-        "approachZigzagStepM": 200,
         "aircraftWingspanM": 40,
         "aircraftFuselageLengthM": 50,
         "trailLengthM": 300,

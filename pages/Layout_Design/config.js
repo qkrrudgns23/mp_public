@@ -34,47 +34,24 @@
   const _runwayExitTier = _layoutTier.runwayExit || {};
   const _flightTier = _tiers.flight_schedule || _tiers.flight || {};
   const SCHED_DEP_ROT_MIN = Math.max(0, Number(_flightTier.depRotMin) || 2);
-  const DEP_HOLDING_TO_LINEUP_SPEED_MS = Math.max(0.1, Number(_flightTier.depHoldingToLineupSpeedMs) || 8);
-  const DEP_ALIGNMENT_TIME_SEC = Math.max(0, Number(_flightTier.depAlignmentTimeSec) || 20);
-  const DEP_TAKEOFF_ACCEL_SMALL_MS2 = Math.max(0.05, Number(_flightTier.depTakeoffAccelSmallMs2) || 2.5);
-  const DEP_TAKEOFF_ACCEL_LARGE_MS2 = Math.max(0.05, Number(_flightTier.depTakeoffAccelLargeMs2) || 1.5);
-  const DEP_TAKEOFF_MTOW_REF_SMALL_KG = Number(_flightTier.depTakeoffAccelMtowRefSmallKg);
-  const DEP_TAKEOFF_MTOW_REF_LARGE_KG = Number(_flightTier.depTakeoffAccelMtowRefLargeKg);
   const APRON_TAXIWAY_SPEED_MS = Math.max(0.1, Number(_flightTier.apronTaxiwaySpeedMs) || 1.5);
   const LINEUP_QUEUE_SPACING_M = Math.max(0, Number(_flightTier.lineupQueueSpacingM) || 50);
-  const _aircraftTypesList = (INFORMATION.tiers && INFORMATION.tiers.aircraft && Array.isArray(INFORMATION.tiers.aircraft.types)) ? INFORMATION.tiers.aircraft.types : [];
-  const _aircraftByIdForConfig = {};
-  _aircraftTypesList.forEach(function(a) {
-    if (a && a.id) _aircraftByIdForConfig[String(a.id)] = a;
-  });
-  function getDepTakeoffAccelMs2ForFlight(f) {
-    const ac = f && f.aircraftType ? _aircraftByIdForConfig[String(f.aircraftType)] : null;
-    const mtow = ac && typeof ac.mtow_kg === 'number' && isFinite(ac.mtow_kg) ? ac.mtow_kg : null;
-    const lo = (typeof DEP_TAKEOFF_MTOW_REF_SMALL_KG === 'number' && isFinite(DEP_TAKEOFF_MTOW_REF_SMALL_KG)) ? DEP_TAKEOFF_MTOW_REF_SMALL_KG : 50000;
-    const hi = (typeof DEP_TAKEOFF_MTOW_REF_LARGE_KG === 'number' && isFinite(DEP_TAKEOFF_MTOW_REF_LARGE_KG)) ? DEP_TAKEOFF_MTOW_REF_LARGE_KG : 350000;
-    const aSmall = DEP_TAKEOFF_ACCEL_SMALL_MS2;
-    const aLarge = DEP_TAKEOFF_ACCEL_LARGE_MS2;
-    if (mtow == null || !(hi > lo + 1)) {
-      return aSmall;
-    }
-    const t = Math.max(0, Math.min(1, (mtow - lo) / (hi - lo)));
-    return aSmall + (aLarge - aSmall) * t;
-  }
   const SIM_TIME_SLIDER_SNAP_SEC = Math.max(1, Number(_dc.flightSimSliderSnapSec) || 60);
   const DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT = _dc.defaultAllowRunwayInGroundSegment;
   const _algoTier = _tiers.algorithm || {};
   const _algoSimTier = (_algoTier.simulation && typeof _algoTier.simulation === 'object') ? _algoTier.simulation : {};
   const APPROACH_OFFSET_WORLD_M = Math.max(0, Number(_algoSimTier.approachOffsetM) || 10000);
   const APPROACH_STRAIGHT_FINAL_M = Math.max(0, Number(_algoSimTier.approachStraightFinalM) || 3000);
-  const APPROACH_ZIGZAG_LEG_M = Math.max(0, Number(_algoSimTier.approachZigzagLegM) || 2000);
-  const APPROACH_ZIGZAG_STEP_M = Math.max(0, Number(_algoSimTier.approachZigzagStepM) || 200);
   const AIRCRAFT_WINGSPAN_M = Math.max(1, Number(_algoSimTier.aircraftWingspanM) || 40);
   const AIRCRAFT_FUSELAGE_LENGTH_M = Math.max(1, Number(_algoSimTier.aircraftFuselageLengthM) || 50);
   const FLIGHT_TRAIL_LENGTH_M = Math.max(0, Number(_algoSimTier.trailLengthM) || 300);
   const PRE_TOUCHDOWN_HALO_ENABLED = (_algoSimTier.preTouchdownHaloEnabled !== false);
   const PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC = Math.max(0, Number(_algoSimTier.playbackLeadBeforeFirstTouchdownSec) || 0);
+  const MAX_LAZY_TIMELINE_BUILDS_PER_FRAME = Math.max(1, Math.min(64, Number(_algoSimTier.maxLazyTimelineBuildsPerFrame) || 6));
   const _styleTier = _tiers.style || {};
   const _ganttStyle = _styleTier.gantt || {};
+  const GANTT_VISIBLE_WINDOW_MIN = Math.max(60, Number(_ganttStyle.visibleWindowMin) || 360);
+  const GANTT_PAN_STEP_MIN = Math.max(15, Number(_ganttStyle.panStepMin) || 120);
   const _canvas2dStyle = _styleTier.canvas2d || {};
   const TAXIWAY_WIDTH_MIN = Math.max(1, Math.min(100, Number(_taxiwayTier.minWidth) || 1));
   const RUNWAY_EXIT_WIDTH_MIN = Math.max(1, Math.min(100, Number(_runwayExitTier.minWidth) || 1));
@@ -299,7 +276,7 @@
   function layoutTerminalVertexRadiusPx(vertexSelected) {
     return vertexSelected ? 5.5 * LAYOUT_VERTEX_DOT_SCALE : 4 * LAYOUT_VERTEX_DOT_SCALE;
   }
-  const DRAG_THRESH = _interactionConfigNum('dragThresholdPx', 5);
+  const DRAG_THRESH = _interactionConfigNum('dragThresholdPx', 0);
   const FREE_DRAW_STEP_CELL = Math.max(0.001, _interactionConfigNum('freeDrawStepCell', 0.05));
   const GRID_SNAP_STEP_CELL = Math.max(0.001, _interactionConfigNum('gridSnapStepCell', 0.5));
   const INSERT_VERTEX_HIT_CF = _interactionConfigNum('insertVertexHitCellFactor', 0.9);
@@ -351,4 +328,3 @@
   ];
   const BUILDING_TYPE_DEFAULT = String(BUILDING_TYPE_CFG.defaultType || (BUILDING_TYPES[0] && BUILDING_TYPES[0].id) || 'passenger_terminal');
   const BUILDING_TYPE_BY_ID = {};
-  BUILDING_TYPES.forEach(function(bt) { BUILDING_TYPE_BY_ID[String(bt.id || '')] = bt; });
