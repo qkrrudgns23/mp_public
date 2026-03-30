@@ -34,8 +34,12 @@
   const _runwayExitTier = _layoutTier.runwayExit || {};
   const _flightTier = _tiers.flight_schedule || _tiers.flight || {};
   const SCHED_DEP_ROT_MIN = Math.max(0, Number(_flightTier.depRotMin) || 2);
+  const DEP_LINEUP_HOLD_SEC = Math.max(0, Number(_flightTier.depLineupHoldSec) != null && isFinite(Number(_flightTier.depLineupHoldSec)) ? Number(_flightTier.depLineupHoldSec) : 20);
+  const DEP_TAKEOFF_ACCEL_SMALL_MS2 = Math.max(0.1, Number(_flightTier.depTakeoffAccelSmallMs2) || 2.5);
+  const DEP_TAKEOFF_ACCEL_LARGE_MS2 = Math.max(0.1, Number(_flightTier.depTakeoffAccelLargeMs2) || 2.0);
+  const DEP_MTOW_REF_SMALL_KG = Math.max(1, Number(_flightTier.depTakeoffAccelMtowRefSmallKg) || 50000);
+  const DEP_MTOW_REF_LARGE_KG = Math.max(DEP_MTOW_REF_SMALL_KG + 1, Number(_flightTier.depTakeoffAccelMtowRefLargeKg) || 350000);
   const APRON_TAXIWAY_SPEED_MS = Math.max(0.1, Number(_flightTier.apronTaxiwaySpeedMs) || 1.5);
-  const LINEUP_QUEUE_SPACING_M = Math.max(0, Number(_flightTier.lineupQueueSpacingM) || 50);
   const SIM_TIME_SLIDER_SNAP_SEC = Math.max(1, Number(_dc.flightSimSliderSnapSec) || 60);
   const DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT = _dc.defaultAllowRunwayInGroundSegment;
   const _algoTier = _tiers.algorithm || {};
@@ -323,8 +327,3 @@
     { id: 'control_tower', label: 'Control Tower' },
     { id: 'cargo_terminal', label: 'Cargo Terminal' },
     { id: 'hanger', label: 'Hanger' },
-    { id: 'utility', label: 'Utility' },
-    { id: 'wall', label: 'Wall' },
-  ];
-  const BUILDING_TYPE_DEFAULT = String(BUILDING_TYPE_CFG.defaultType || (BUILDING_TYPES[0] && BUILDING_TYPES[0].id) || 'passenger_terminal');
-  const BUILDING_TYPE_BY_ID = {};

@@ -1,3 +1,8 @@
+        rotCopy[c] = isFinite(n) ? String(Math.round(n + boost)) : String(rot[c]);
+      }
+    });
+    return {
+      standard: stdKey,
       mode: 'MIX',
       activeSeq: 'ARR→ARR',
       seqData: rsepMakeSeqData(stdKey),
@@ -313,8 +318,3 @@
       }
     }
     return false;
-  }
-  function terminalOverlapsAnyTaxiway(term) {
-    if (!term || !term.vertices || term.vertices.length < 3) return false;
-    const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
-    if (!state.taxiways || !state.taxiways.length) return false;

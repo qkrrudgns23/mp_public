@@ -1,3 +1,8 @@
+      return state.selectedObject.obj;
+    }
+    if (state.currentTerminalId) {
+      const t = state.terminals.find(x => x.id === state.currentTerminalId);
+      if (t) return t;
     }
     return state.terminals[0] || null;
   }
@@ -623,8 +628,3 @@
       const nextType = normalizeBuildingType(this.value || BUILDING_TYPE_DEFAULT);
       const t = getCurrentTerminal();
       const nameInput = document.getElementById('terminalName');
-      const nextDefaultName = getDefaultBuildingNameForType(nextType, t ? t.id : null);
-      if (t) {
-        t.buildingType = nextType;
-        if (findDuplicateLayoutName('terminal', t.id, nextDefaultName)) {
-          alertDuplicateLayoutName();

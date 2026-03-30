@@ -1,3 +1,8 @@
+    { id: 'utility', label: 'Utility' },
+    { id: 'wall', label: 'Wall' },
+  ];
+  const BUILDING_TYPE_DEFAULT = String(BUILDING_TYPE_CFG.defaultType || (BUILDING_TYPES[0] && BUILDING_TYPES[0].id) || 'passenger_terminal');
+  const BUILDING_TYPE_BY_ID = {};
   BUILDING_TYPES.forEach(function(bt) { BUILDING_TYPE_BY_ID[String(bt.id || '')] = bt; });
   function normalizeBuildingType(rawType) {
     const key = String(rawType || '').trim();
@@ -281,10 +286,5 @@
     if (layoutMode === 'runwayPath') return 'runway';
     if (layoutMode === 'runwayTaxiway') return 'runway_exit';
     if (layoutMode === 'taxiway') return 'taxiway';
-    return 'taxiway';
-  }
-  function layoutModeFromPathType(pt) {
-    if (pt === 'runway') return 'runwayPath';
-    if (pt === 'runway_exit') return 'runwayTaxiway';
     return 'taxiway';
   }

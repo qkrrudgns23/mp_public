@@ -1,3 +1,205 @@
+          state.dragStandConnection = { pbbId: state.selectedObject.id };
+          state.selectedVertex = { type: 'pbbApronSite', id: state.selectedObject.id };
+        }
+        draw();
+        return;
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'apronLink' && !state.apronLinkDrawing) {
+      const ah = hitTestApronLinkVertex(wx, wy);
+      if (ah && ah.linkId === state.selectedObject.id) {
+        pushUndo();
+        state.dragApronLinkVertex = ah;
+        state.selectedVertex = ah.kind === 'mid'
+          ? { type: 'apronLink', id: ah.linkId, kind: 'mid', midIndex: ah.midIndex }
+          : { type: 'apronLink', id: ah.linkId, kind: 'taxiway' };
+        draw();
+        return;
+      }
+    }
+    state.selectedVertex = null;
+    if ((mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing)) return;
+    state.dragStart = { sx, sy, panX: state.panX, panY: state.panY };
+    state.isPanning = false;
+  });
+  container.addEventListener('mousemove', function(ev) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
+    const [wx, wy] = screenToWorld(sx, sy);
+    const snappedPt = worldPointToCellPoint(wx, wy, !!ev.shiftKey);
+    const snappedPx = cellToPixel(snappedPt.col, snappedPt.row);
+    const [col, row] = pixelToCell(wx, wy);
+    if (coordEl) coordEl.textContent = 'cell: (' + col + ', ' + row + ')';
+    const prev = state.hoverCell;
+    state.hoverCell = { col, row };
+    const hoverChanged = !prev || prev.col !== col || prev.row !== row;
+    let drewThisMove = false;
+    if (settingModeSelect.value === 'apronTaxiway' && state.apronLinkDrawing && state.apronLinkTemp) {
+      const pw = state.apronLinkPointerWorld;
+      if (!pw || pw[0] !== wx || pw[1] !== wy) {
+        state.apronLinkPointerWorld = [wx, wy];
+        scheduleDraw(); drewThisMove = true;
+      }
+    } else if (state.apronLinkPointerWorld) {
+      state.apronLinkPointerWorld = null;
+      scheduleDraw(); drewThisMove = true;
+    }
+    const pathLayoutDrawing = !!(state.terminalDrawingId || state.taxiwayDrawingId);
+    const blockLayoutPathPtr = !!(state.isPanning || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragApronLinkVertex || state.dragStandRotation);
+    if (pathLayoutDrawing && !blockLayoutPathPtr) {
+      const nx = snappedPx[0], ny = snappedPx[1];
+      const lp = state.layoutPathDrawPointer;
+      if (!lp || lp[0] !== nx || lp[1] !== ny) {
+        state.layoutPathDrawPointer = [nx, ny];
+        scheduleDraw(); drewThisMove = true;
+      }
+    } else if (state.layoutPathDrawPointer && (!pathLayoutDrawing || blockLayoutPathPtr)) {
+      state.layoutPathDrawPointer = null;
+      if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
+    }
+    if (state.dragVertex) {
+      const term = state.terminals.find(t => t.id === state.dragVertex.terminalId);
+      if (term && term.vertices[state.dragVertex.index]) {
+        const v = term.vertices[state.dragVertex.index];
+        v.col = snappedPt.col;
+        v.row = snappedPt.row;
+        scheduleDraw(); drewThisMove = true;
+      }
+      return;
+    }
+    if (state.dragTaxiwayVertex) {
+      const tw = state.taxiways.find(t => t.id === state.dragTaxiwayVertex.taxiwayId);
+      if (tw && tw.vertices[state.dragTaxiwayVertex.index]) {
+        const v = tw.vertices[state.dragTaxiwayVertex.index];
+        v.col = snappedPt.col;
+        v.row = snappedPt.row;
+        scheduleDraw(); drewThisMove = true;
+        if (scene3d) update3DScene();
+      }
+      return;
+    }
+    if (state.dragStandRotation) {
+      if (state.dragStandRotation.type === 'pbb') {
+        const pbb = state.pbbStands.find(function(item) { return item.id === state.dragStandRotation.id; });
+        if (pbb) {
+          const origin = getPbbRotationOriginPx(pbb);
+          const nextDeg = normalizeAngleDeg(Math.atan2(wy - origin[1], wx - origin[0]) * 180 / Math.PI);
+          setPbbGeometryFromAngleLength(pbb, nextDeg, getPbbLengthMeters(pbb), true);
+          const angleInput = document.getElementById('standAngle');
+          if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
+          scheduleDraw(); drewThisMove = true;
+          if (scene3d) update3DScene();
+        }
+      } else if (state.dragStandRotation.type === 'remote') {
+        const st = state.remoteStands.find(function(item) { return item.id === state.dragStandRotation.id; });
+        if (st) {
+          const center = getRemoteStandCenterPx(st);
+          const nextDeg = normalizeAngleDeg(Math.atan2(wy - center[1], wx - center[0]) * 180 / Math.PI);
+          st.angleDeg = nextDeg;
+          const angleInput = document.getElementById('remoteAngle');
+          if (angleInput) angleInput.value = String(Math.round(nextDeg));
+          scheduleDraw(); drewThisMove = true;
+          if (scene3d) update3DScene();
+        }
+      }
+      return;
+    }
+    if (state.dragPbbBridgeVertex) {
+      const pbb = state.pbbStands.find(function(item) { return item.id === state.dragPbbBridgeVertex.pbbId; });
+      if (pbb && Array.isArray(pbb.pbbBridges) && pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex] && Array.isArray(pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points) && pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points[state.dragPbbBridgeVertex.pointIndex]) {
+        const pt = pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points[state.dragPbbBridgeVertex.pointIndex];
+        if (state.dragPbbBridgeVertex.pointIndex === 0) {
+          const projected = getClosestTerminalEdgePoint(wx, wy);
+          if (projected && projected.point) {
+            pt.x = projected.point[0];
+            pt.y = projected.point[1];
+          }
+        } else {
+          pt.x = snappedPx[0];
+          pt.y = snappedPx[1];
+        }
+        scheduleDraw(); drewThisMove = true;
+        if (scene3d) update3DScene();
+      }
+      return;
+    }
+    if (state.dragStandConnection) {
+      const pbb = state.pbbStands.find(function(item) { return item.id === state.dragStandConnection.pbbId; });
+      if (pbb) {
+        pbb.apronSiteX = snappedPx[0];
+        pbb.apronSiteY = snappedPx[1];
+        scheduleDraw(); drewThisMove = true;
+        if (scene3d) update3DScene();
+      }
+      return;
+    }
+    if (state.dragApronLinkVertex) {
+      const lk = state.apronLinks.find(l => l.id === state.dragApronLinkVertex.linkId);
+      if (!lk) {
+        state.dragApronLinkVertex = null;
+      } else if (state.dragApronLinkVertex.kind === 'mid') {
+        const mi = state.dragApronLinkVertex.midIndex;
+        if (lk.midVertices && mi >= 0 && mi < lk.midVertices.length &&
+            col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {
+          lk.midVertices[mi].col = snappedPt.col;
+          lk.midVertices[mi].row = snappedPt.row;
+          scheduleDraw(); drewThisMove = true;
+          if (scene3d) update3DScene();
+        }
+      } else if (state.dragApronLinkVertex.kind === 'taxiway') {
+        const snap = snapWorldPointToTaxiwayPolyline(wx, wy, lk.taxiwayId);
+        if (snap) {
+          lk.tx = snap[0];
+          lk.ty = snap[1];
+          scheduleDraw(); drewThisMove = true;
+          if (scene3d) update3DScene();
+        }
+      }
+      return;
+    }
+    if (state.dragStart) {
+      const dx = sx - state.dragStart.sx, dy = sy - state.dragStart.sy;
+      if (!state.isPanning && (Math.abs(dx) > DRAG_THRESH || Math.abs(dy) > DRAG_THRESH))
+        state.isPanning = true;
+      if (state.isPanning) {
+        state.panX = state.dragStart.panX + dx;
+        state.panY = state.dragStart.panY + dy;
+        scheduleDraw(); drewThisMove = true;
+      }
+    }
+    const mode = settingModeSelect.value;
+    if (!state.isPanning && !state.dragVertex && mode === 'holdingPoint' && state.holdingPointDrawing) {
+      const snap = snapHoldingPointOnAllowedTaxiways(wx, wy);
+      if (snap) {
+        state.previewHoldingPoint = { x: snap.x, y: snap.y, pathType: snap.pathType };
+      } else {
+        state.previewHoldingPoint = null;
+      }
+      scheduleDraw(); drewThisMove = true;
+    } else if (!state.isPanning && !state.dragVertex && mode === 'remote' && state.remoteDrawing) {
+      const category = document.getElementById('remoteCategory').value || 'C';
+      const angleDeg = normalizeAngleDeg(document.getElementById('remoteAngle') ? document.getElementById('remoteAngle').value : 0);
+      const candidate = { x: snappedPx[0], y: snappedPx[1], category, angleDeg };
+      const candCorners = getRemoteStandCorners(candidate);
+      let overlap = false;
+      for (let i = 0; i < state.remoteStands.length; i++) {
+        if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) { overlap = true; break; }
+      }
+      if (!overlap) {
+        for (let i = 0; i < state.pbbStands.length; i++) {
+          if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) { overlap = true; break; }
+        }
+      }
+      const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
+      if (candidate.x < 0 || candidate.y < 0 || candidate.x > maxX || candidate.y > maxY) overlap = true;
+      state.previewRemote = { x: candidate.x, y: candidate.y, overlap };
+      scheduleDraw(); drewThisMove = true;
+    } else if (!state.isPanning && !state.dragVertex && mode === 'pbb' && state.pbbDrawing) {
+      let bestEdge = null, bestD2 = Infinity;
+      state.terminals.forEach(t => {
+        if (!t.closed || t.vertices.length < 2) return;
+        for (let i = 0; i < t.vertices.length; i++) {
+          const v1 = t.vertices[i], v2 = t.vertices[(i+1) % t.vertices.length];
           const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
           const near = closestPointOnSegment(p1, p2, snappedPx);
           if (near) {

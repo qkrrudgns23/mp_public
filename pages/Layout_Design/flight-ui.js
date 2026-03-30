@@ -1,3 +1,14 @@
+      const start = state.flightSchedulePage * size;
+      flightsForDom = flightsSorted.slice(start, start + size);
+    }
+    _updateFlightSchedulePagerUI(flightsSorted.length);
+    const useVirt = !usePagination && DOM_OPT_FLIGHT_VIRT_ENABLE && flightsSorted.length >= DOM_OPT_FLIGHT_VIRT_MIN;
+    if (useVirt) {
+      _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow);
+    } else {
+      _flightListTeardownVirtual(listEl);
+      const dataRows = _buildFlightListRowsHtml(flightsForDom, retStatsAll);
+      listEl.innerHTML = headerRow + dataRows.join('') + '</tbody></table>';
       const tbl0 = listEl.querySelector('.flight-schedule-table');
       if (tbl0) {
         if (usePagination) tbl0.setAttribute('data-virtual-table', '1');
@@ -847,14 +858,3 @@
       const remoteStandsInTerm = [];
       group.stands.forEach(s => {
         if (remoteIdSet.has(s.id)) remoteStandsInTerm.push(s);
-        else contactStands.push(s);
-      });
-      contactStands.forEach(s => {
-        const label = (s.name || '') + ' (' + (s.category || '') + ')';
-        const row = buildRowHtml(label, s.id);
-        labelRows.push(row.labelHtml);
-        trackRows.push(row.trackHtml);
-      });
-      if (remoteStandsInTerm.length) {
-        remoteStandsInTerm.forEach(s => allRemoteStands.push(s));
-      }

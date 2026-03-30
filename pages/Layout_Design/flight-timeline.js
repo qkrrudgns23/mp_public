@@ -1,3 +1,8 @@
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      }
+    });
+  }
+  [
     ['runwayStartDisplacedThresholdM', 'startDisplacedThresholdM', function(tw) { return getEffectiveRunwayStartDisplacedThresholdM(tw); }],
     ['runwayStartBlastPadM', 'startBlastPadM', function(tw) { return getEffectiveRunwayStartBlastPadM(tw); }],
     ['runwayEndDisplacedThresholdM', 'endDisplacedThresholdM', function(tw) { return getEffectiveRunwayEndDisplacedThresholdM(tw); }],
@@ -893,7 +898,10 @@
   
   function getDepBlockOutMin(f) {
     const taxi = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
-    return taxi + SCHED_DEP_ROT_MIN;
+    const rollBundleSec = (typeof computeDepRollAndLineupOnlySec === 'function')
+      ? computeDepRollAndLineupOnlySec(f)
+      : (DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2));
+    return taxi + rollBundleSec / 60;
   }
   
   function getNormalizedStandDwellBounds(f) {
@@ -1201,7 +1209,10 @@
     const vttArrMin = getBaseVttArrMinutes(f);
     const rotArrMin = getArrRotMinutes(f);
     const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-    const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : Math.max(0, depBlockOutMin - SCHED_DEP_ROT_MIN);
+    const rollBundleSecFallback = DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2);
+    const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function')
+      ? getBaseVttDepMinutesToLineup(f)
+      : Math.max(0, depBlockOutMin - ((typeof computeDepRollAndLineupOnlySec === 'function') ? computeDepRollAndLineupOnlySec(f) : rollBundleSecFallback) / 60);
     const vttDepMinSlot = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
     const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin - rotArrMin));
     const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
@@ -1317,14 +1328,3 @@
       const maxPage = Math.max(0, Math.ceil(n / size) - 1);
       if (state.flightSchedulePage > maxPage) state.flightSchedulePage = maxPage;
       if (state.flightSchedulePage < 0) state.flightSchedulePage = 0;
-      const start = state.flightSchedulePage * size;
-      flightsForDom = flightsSorted.slice(start, start + size);
-    }
-    _updateFlightSchedulePagerUI(flightsSorted.length);
-    const useVirt = !usePagination && DOM_OPT_FLIGHT_VIRT_ENABLE && flightsSorted.length >= DOM_OPT_FLIGHT_VIRT_MIN;
-    if (useVirt) {
-      _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow);
-    } else {
-      _flightListTeardownVirtual(listEl);
-      const dataRows = _buildFlightListRowsHtml(flightsForDom, retStatsAll);
-      listEl.innerHTML = headerRow + dataRows.join('') + '</tbody></table>';

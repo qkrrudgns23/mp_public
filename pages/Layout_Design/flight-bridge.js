@@ -1,3 +1,8 @@
+      const nextDefaultName = getDefaultBuildingNameForType(nextType, t ? t.id : null);
+      if (t) {
+        t.buildingType = nextType;
+        if (findDuplicateLayoutName('terminal', t.id, nextDefaultName)) {
+          alertDuplicateLayoutName();
           if (nameInput) nameInput.value = t.name || '';
         } else {
           t.name = nextDefaultName;
@@ -443,8 +448,3 @@
         this.value = String(v);
         updateObjectInfo();
         if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      }
-    });
-  }
-  [

@@ -1,3 +1,11 @@
+    });
+    state.__rwySepSnapCache = byRunway;
+    state.__rwySepSnapCacheGen = snapGen;
+    return byRunway;
+  }
+
+  function computeSeparationAdjustedTimes() {
+    const flights = state.flights || [];
     flights.forEach(f => { delete f.eldtMin; delete f.etotMin; });
     const runwaysRaw = (state.taxiways || []).filter(t => t.pathType === 'runway');
     if (!runwaysRaw.length) return {};
@@ -232,7 +240,9 @@
       const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
       const eobtS = eobtMin * 60;
       const etotS = etotMin * 60;
-      const depRotS = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 0) * 60;
+      const depRotS = Math.max(0, (typeof computeDepRotSecondsForFlight === 'function')
+        ? computeDepRotSecondsForFlight(f)
+        : (Math.max(0, Number(SCHED_DEP_ROT_MIN) || 0) * 60));
       let depMoveStart = eobtS + depRotS;
       if (depMoveStart > etotS) depMoveStart = eobtS;
       return { t0: depMoveStart, t1: etotS };
@@ -509,6 +519,29 @@
       acc += rawDts[i] * scale;
       tl.push({ t: Math.min(tStart + acc, tEnd), x: pts[i + 1][0], y: pts[i + 1][1] });
     }
+    tl[tl.length - 1].t = tEnd;
+    return tl;
+  }
+  function polylineTimelineConstantAccelFromRest(pts, tStart, tEnd, accelMs2) {
+    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
+      const p = pts && pts.length ? polylinePointAtDistance(pts, 0) : [0, 0];
+      return [{ t: tStart, x: p[0], y: p[1] }, { t: tEnd, x: p[0], y: p[1] }];
+    }
+    const L = polylineTotalLength(pts);
+    const a = Math.max(0.1, accelMs2);
+    const tPhys = L < 1e-9 ? 0 : Math.sqrt(2 * L / a);
+    const win = tEnd - tStart;
+    const n = Math.max(8, Math.min(48, Math.ceil(Math.max(L, 1) / 25)));
+    const tl = [];
+    for (let i = 0; i <= n; i++) {
+      const u = i / n;
+      const tt = tStart + u * win;
+      const tau = u * tPhys;
+      const s = Math.min(L, 0.5 * a * tau * tau);
+      const pt = polylinePointAtDistance(pts, s);
+      tl.push({ t: tt, x: pt[0], y: pt[1] });
+    }
+    tl[0].t = tStart;
     tl[tl.length - 1].t = tEnd;
     return tl;
   }
@@ -798,65 +831,6 @@
     if (!runwayTail || runwayTail.length < 2) runwayTail = null;
     return { toLineup: depToLineup, runwayTail: runwayTail };
   }
-  function lineupDepQueueFingerprint(flights) {
-    const parts = [];
-    const list = flights || [];
-    for (let i = 0; i < list.length; i++) {
-      const f = list[i];
-      if (!f || f.noWayDep) continue;
-      const eob = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
-      const vtt = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
-      const rw = f.depRunwayId || (f.token && (f.token.depRunwayId != null ? f.token.depRunwayId : f.token.runwayId)) || f.arrRunwayId || '';
-      const st = f.standId != null ? f.standId : '';
-      parts.push(String(f.id != null ? f.id : i) + ':' + String(rw) + ':' + String(st) + ':' + eob + ':' + vtt);
-    }
-    parts.sort();
-    return String(state.pathPolylineCacheRev | 0) + '|' + parts.join(';');
-  }
-  function assignLineupQueueRanksAll(flights) {
-    const list = flights || [];
-    for (let i = 0; i < list.length; i++) {
-      const f = list[i];
-      if (f) delete f._lineupQueueRank;
-    }
-    const entries = [];
-    for (let i = 0; i < list.length; i++) {
-      const f = list[i];
-      if (!f || f.noWayDep) continue;
-      const split = splitDeparturePathLineupAndRunwayTail(f);
-      if (!split || !split.toLineup || split.toLineup.length < 2) continue;
-      const last = split.toLineup[split.toLineup.length - 1];
-      const rw = f.depRunwayId || (f.token && (f.token.depRunwayId != null ? f.token.depRunwayId : f.token.runwayId)) || f.arrRunwayId || '';
-      const key = String(rw) + '|' + (Math.round(last[0] * 10) / 10) + '|' + (Math.round(last[1] * 10) / 10);
-      const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
-      const lineupEtaSec = eobtMin * 60 + Math.max(0, (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0) * 60;
-      entries.push({ f: f, key: key, lineupEtaSec: lineupEtaSec });
-    }
-    const byKey = {};
-    for (let j = 0; j < entries.length; j++) {
-      const e = entries[j];
-      if (!byKey[e.key]) byKey[e.key] = [];
-      byKey[e.key].push(e);
-    }
-    Object.keys(byKey).forEach(function(k) {
-      const arr = byKey[k];
-      arr.sort(function(a, b) {
-        if (a.lineupEtaSec !== b.lineupEtaSec) return a.lineupEtaSec - b.lineupEtaSec;
-        const ia = a.f.id != null ? String(a.f.id) : '';
-        const ib = b.f.id != null ? String(b.f.id) : '';
-        return ia.localeCompare(ib);
-      });
-      for (let r = 0; r < arr.length; r++) arr[r].f._lineupQueueRank = r;
-    });
-  }
-  function ensureLineupQueueRanksForSimulation() {
-    const flights = state.flights || [];
-    const fp = lineupDepQueueFingerprint(flights);
-    if (state.__lineupQueueRankFp === fp) return;
-    state.__lineupQueueRankFp = fp;
-    assignLineupQueueRanksAll(flights);
-  }
-  
   function buildDepartureSurfaceTimelineSegments(f, eobtS, etotS) {
     const eps = 1e-3;
     const split = splitDeparturePathLineupAndRunwayTail(f);
@@ -867,66 +841,117 @@
       ? Math.max(0, f.depTaxiDelayMin) * 60 : 0;
     const t0 = eobtS;
     const t3 = etotS;
-    const rank = (typeof f._lineupQueueRank === 'number' && isFinite(f._lineupQueueRank)) ? Math.max(0, Math.floor(f._lineupQueueRank)) : 0;
-    const backM = rank * LINEUP_QUEUE_SPACING_M;
     const toLineupOrig = split.toLineup;
     const totalLen = polylineTotalLength(toLineupOrig);
-    const maxBack = Math.max(0, totalLen - 1e-3);
-    const backClamped = Math.min(backM, maxBack);
-    const alongCut = Math.max(1e-6, totalLen - backClamped);
+    const lineupPt = toLineupOrig[toLineupOrig.length - 1];
+    const runwayId = f.depRunwayId || (f.token && (f.token.depRunwayId != null ? f.token.depRunwayId : f.token.runwayId)) || f.arrRunwayId;
+    const rwTw = (state.taxiways || []).find(function(t) { return t && t.id === runwayId && t.pathType === 'runway'; });
+    const exp = rwTw ? expandRtxCandidateIdsTouchingLineup(rwTw, lineupPt) : { allIds: new Set() };
+    const holdPick = findLastRunwayHoldingOnDeparturePath(toLineupOrig, exp.allIds);
+    const alongCut = Math.max(1e-6, totalLen);
+    const backClamped = 0;
     const splitCut = polylineSplitAtDistance(toLineupOrig, alongCut);
-    let taxiLineupPts = (splitCut.first && splitCut.first.length >= 2) ? splitCut.first : toLineupOrig;
-    if (taxiLineupPts.length < 2) taxiLineupPts = toLineupOrig;
-    const lastLu = taxiLineupPts[taxiLineupPts.length - 1];
-    const lx = lastLu[0], ly = lastLu[1];
-    let runwayTailAdj = split.runwayTail;
-    if (runwayTailAdj && runwayTailAdj.length >= 2 && dist2(runwayTailAdj[0], [lx, ly]) > 1e-4) {
-      runwayTailAdj = [[lx, ly]].concat(runwayTailAdj.slice());
+    let pathToQueue = (splitCut.first && splitCut.first.length >= 2) ? splitCut.first : toLineupOrig;
+    if (pathToQueue.length < 2) pathToQueue = toLineupOrig;
+    const distHold = (holdPick && holdPick.distAlong > 1e-3 && holdPick.distAlong < alongCut - 1e-3) ? holdPick.distAlong : -1;
+    let p1 = null, p2 = null;
+    if (distHold > 0) {
+      const splH = polylineSplitAtDistance(toLineupOrig, distHold);
+      p1 = splH.first && splH.first.length >= 2 ? splH.first : null;
+      const rest = splH.second;
+      if (rest && rest.length >= 2 && alongCut > distHold + 1e-6) {
+        const splQ = polylineSplitAtDistance(rest, alongCut - distHold);
+        p2 = splQ.first && splQ.first.length >= 2 ? splQ.first : null;
+      }
     }
+    const validHold = !!(p1 && p2 && p1.length >= 2 && p2.length >= 2);
+    let tau1 = 0, tau2 = 0;
+    if (validHold) {
+      tau1 = polylineDurationSecTaxi(p1);
+      tau2 = polylineDurationSecTaxi(p2);
+    }
+    const tauSum = tau1 + tau2;
     const makeVelTaxi = makeTaxiSegmentVelocityCallback();
-    const makeVelRoll = makeTaxiSegmentVelocityCallback();
+    const accelRoll = depTakeoffAccelMs2ForFlight(f);
+    const lastQ = pathToQueue[pathToQueue.length - 1];
+    const lx0 = lastQ[0], ly0 = lastQ[1];
+    let runwayTailAdj = split.runwayTail;
     if (!(t3 > t0 + eps)) {
-      const tl = [{ t: t0, x: lx, y: ly }, { t: t3, x: lx, y: ly }];
+      const tl = [{ t: t0, x: lx0, y: ly0 }, { t: t3, x: lx0, y: ly0 }];
+      const depRotFull = (typeof computeDepRotSecondsForFlight === 'function') ? computeDepRotSecondsForFlight(f) : Math.max(0, t3 - t0);
       return {
         timeline: tl,
         meta: {
           eobtSec: t0, etotSec: t3,
           depTaxiLineupSec: 0, depTaxiDelaySec: 0, depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
-          lineupArrivalSec: t0, depRollStartSec: t0, depRotSec: Math.max(0, t3 - t0),
-          lineupQueueRank: rank, lineupBackM: backClamped,
+          lineupArrivalSec: t0, depRollStartSec: t0, depRotSec: depRotFull, depLineupHoldSec: 0, depTaxiDelayAtHolding: false,
+          lineupBackM: backClamped,
         },
       };
     }
     const maxSpan = t3 - t0 - eps;
-    const taxiSecUsed = Math.min(depTaxiLineupSecReq, maxSpan);
-    const t1 = t0 + taxiSecUsed;
-    const afterTaxi = Math.max(0, t3 - t1 - eps);
-    const delaySecUsed = Math.min(depTaxiDelaySecReq, afterTaxi);
-    const t2 = t1 + delaySecUsed;
-    const taxiTl = polylineTimelineBySegmentSpeeds(taxiLineupPts, t0, t1, makeVelTaxi);
-    let holdTl = (t2 > t1 + eps) ? [{ t: t1, x: lx, y: ly }, { t: t2, x: lx, y: ly }] : [];
-    let rollTl;
-    if (runwayTailAdj && runwayTailAdj.length >= 2 && t3 > t2 + eps) {
-      rollTl = polylineTimelineBySegmentSpeeds(runwayTailAdj, t2, t3, makeVelRoll);
+    let taxiSecUsed = Math.min(depTaxiLineupSecReq, maxSpan);
+    let tAfterTaxi = t0 + taxiSecUsed;
+    let afterTaxi = Math.max(0, t3 - tAfterTaxi - eps);
+    let delaySecUsed = Math.min(depTaxiDelaySecReq, afterTaxi);
+    let tAfterDelay = tAfterTaxi + delaySecUsed;
+    let afterDelay = Math.max(0, t3 - tAfterDelay - eps);
+    let lineupHoldSec = Math.min(DEP_LINEUP_HOLD_SEC, afterDelay);
+    let merged;
+    let t_cur = t0;
+    if (validHold) {
+      const r1 = tauSum > 1e-6 ? (tau1 / tauSum) : 1;
+      const t1dur = taxiSecUsed * r1;
+      const t2dur = taxiSecUsed * (1 - r1);
+      const taxiTl1 = polylineTimelineBySegmentSpeeds(p1, t_cur, t_cur + t1dur, makeVelTaxi);
+      t_cur += t1dur;
+      const lastP1 = p1[p1.length - 1];
+      const delayTl = (delaySecUsed > eps) ? [{ t: t_cur, x: lastP1[0], y: lastP1[1] }, { t: t_cur + delaySecUsed, x: lastP1[0], y: lastP1[1] }] : [];
+      t_cur += delaySecUsed;
+      const taxiTl2 = polylineTimelineBySegmentSpeeds(p2, t_cur, t_cur + t2dur, makeVelTaxi);
+      t_cur += t2dur;
+      merged = mergeTimelineSegments(taxiTl1, delayTl);
+      merged = mergeTimelineSegments(merged, taxiTl2);
     } else {
-      rollTl = [{ t: t2, x: lx, y: ly }, { t: t3, x: lx, y: ly }];
+      const taxiTl = polylineTimelineBySegmentSpeeds(pathToQueue, t0, t0 + taxiSecUsed, makeVelTaxi);
+      t_cur = t0 + taxiSecUsed;
+      const delayTl = (delaySecUsed > eps) ? [{ t: t_cur, x: lx0, y: ly0 }, { t: t_cur + delaySecUsed, x: lx0, y: ly0 }] : [];
+      t_cur += delaySecUsed;
+      merged = mergeTimelineSegments(taxiTl, delayTl);
     }
-    let merged = mergeTimelineSegments(taxiTl, holdTl);
+    const lastT = merged[merged.length - 1];
+    const lx = lastT.x, ly = lastT.y;
+    const tAtQueue = lastT.t;
+    if (runwayTailAdj && runwayTailAdj.length >= 2 && dist2(runwayTailAdj[0], [lx, ly]) > 1e-4) {
+      runwayTailAdj = [[lx, ly]].concat(runwayTailAdj.slice());
+    }
+    const tRollStart = tAtQueue + lineupHoldSec;
+    const lineupHoldTl = (lineupHoldSec > eps) ? [{ t: tAtQueue, x: lx, y: ly }, { t: tRollStart, x: lx, y: ly }] : [];
+    let rollTl;
+    if (runwayTailAdj && runwayTailAdj.length >= 2 && t3 > tRollStart + eps) {
+      rollTl = polylineTimelineConstantAccelFromRest(runwayTailAdj, tRollStart, t3, accelRoll);
+    } else {
+      rollTl = [{ t: tRollStart, x: lx, y: ly }, { t: t3, x: lx, y: ly }];
+    }
+    merged = mergeTimelineSegments(merged, lineupHoldTl);
     merged = mergeTimelineSegments(merged, rollTl);
+    const rollWindow = Math.max(0, t3 - tRollStart);
+    const depRotFullSec = (typeof computeDepRotSecondsForFlight === 'function') ? computeDepRotSecondsForFlight(f) : (lineupHoldSec + rollWindow);
     return {
       timeline: merged,
       meta: {
         eobtSec: t0, etotSec: t3,
         depTaxiLineupSec: taxiSecUsed, depTaxiDelaySec: delaySecUsed,
         depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
-        lineupArrivalSec: t1, depRollStartSec: t2, depRotSec: Math.max(0, t3 - t2),
-        lineupQueueRank: rank, lineupBackM: backClamped,
+        lineupArrivalSec: tAfterTaxi, depRollStartSec: tRollStart,
+        depRotSec: depRotFullSec, depLineupHoldSec: lineupHoldSec,
+        depTaxiDelayAtHolding: validHold,
+        lineupBackM: backClamped,
       },
     };
   }
   function buildFullAirsideTimelineForFlight(f) {
     if (!f) return;
-    if (typeof ensureLineupQueueRanksForSimulation === 'function') ensureLineupQueueRanksForSimulation();
     const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
     if (f.arrDep === 'Dep') {
       if (f.noWayDep) {
@@ -1008,13 +1033,3 @@
     const runwayEndT = Math.min(tAfterRot, eibtS);
     let tTaxiStart = Math.min(tAfterRot + vttDelayS, eibtS);
     if (tTaxiStart < runwayEndT) tTaxiStart = runwayEndT;
-    const taxiInPts = trimPolylineFromNearPoint(arrPts, tdPt);
-    let taxiInTl;
-    if (runwayEndT > eldtS + 1e-3) {
-      taxiInTl = buildRunwayAndRetTimelineInWindow(f, runwayId, taxiInPts, eldtS, runwayEndT);
-    } else {
-      taxiInTl = [{ t: eldtS, x: tdPt[0], y: tdPt[1] }];
-    }
-    if (tTaxiStart > runwayEndT + 1e-3 && taxiInTl && taxiInTl.length) {
-      const lastRw = taxiInTl[taxiInTl.length - 1];
-      taxiInTl = mergeTimelineSegments(taxiInTl, [

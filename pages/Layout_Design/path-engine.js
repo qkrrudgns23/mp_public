@@ -1,3 +1,8 @@
+  }
+  function terminalOverlapsAnyTaxiway(term) {
+    if (!term || !term.vertices || term.vertices.length < 3) return false;
+    const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
+    if (!state.taxiways || !state.taxiways.length) return false;
     for (let i = 0; i < state.taxiways.length; i++) {
       const tw = state.taxiways[i];
       if (!tw.vertices || tw.vertices.length < 2) continue;
@@ -713,8 +718,3 @@
 
   function getCurrentTerminal() {
     if (state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.obj) {
-      return state.selectedObject.obj;
-    }
-    if (state.currentTerminalId) {
-      const t = state.terminals.find(x => x.id === state.currentTerminalId);
-      if (t) return t;

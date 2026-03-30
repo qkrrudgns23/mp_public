@@ -1,3 +1,8 @@
+  function layoutModeFromPathType(pt) {
+    if (pt === 'runway') return 'runwayPath';
+    if (pt === 'runway_exit') return 'runwayTaxiway';
+    return 'taxiway';
+  }
   function isPathLayoutMode(m) {
     return PATH_LAYOUT_MODES.indexOf(m) >= 0;
   }
@@ -823,8 +828,3 @@
       if (rot[c] == null || rot[c] === '') rotCopy[c] = '';
       else {
         const n = Number(rot[c]);
-        rotCopy[c] = isFinite(n) ? String(Math.round(n + boost)) : String(rot[c]);
-      }
-    });
-    return {
-      standard: stdKey,

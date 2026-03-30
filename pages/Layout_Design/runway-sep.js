@@ -1,3 +1,16 @@
+              '<div class="kpi-chart-subtitle">15m anchors · rolling 60m: unique stands overlapping EIBT–EOBT with [w, w+60).</div>' +
+            '</div>' +
+            '<div class="kpi-chart-legend">' +
+              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#a78bfa;"></span>Gate occupancy</span>' +
+            '</div>' +
+          '</div>' +
+          kpiGateChartPlaceholder(snapshot.buckets) +
+        '</div>' +
+        '<div class="kpi-chart-card kpi-chart-card-primary">' +
+          '<div class="kpi-chart-head">' +
+            '<div>' +
+              '<div class="kpi-chart-title">Hourly Runway Traffic</div>' +
+              '<div class="kpi-chart-subtitle">15m anchors · rolling 60m: ELDT arrivals and ETOT departures in [w, w+60).</div>' +
             '</div>' +
             '<div class="kpi-chart-legend">' +
               '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#38bdf8;"></span>Arrivals</span>' +
@@ -370,11 +383,3 @@
       });
       if (!isFinite(minT) || !isFinite(maxT)) { minT = 0; maxT = 60; } else if (maxT <= minT) maxT = minT + 60;
       byRunway[rwy.id] = { events, minT, maxT };
-    });
-    state.__rwySepSnapCache = byRunway;
-    state.__rwySepSnapCacheGen = snapGen;
-    return byRunway;
-  }
-
-  function computeSeparationAdjustedTimes() {
-    const flights = state.flights || [];

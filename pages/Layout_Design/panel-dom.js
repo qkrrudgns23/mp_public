@@ -1,3 +1,170 @@
+      (state.flights || []).forEach(f => {
+        if (!f) return;
+        const sibt = f.sibtMin_d != null ? f.sibtMin_d : (typeof f.timeMin === 'number' ? f.timeMin : 0);
+        if (isFinite(sibt) && sibt > maxT) maxT = sibt;
+      });
+      return maxT + 10;
+    }
+    if (dwellEl) {
+      const syncDwell = () => {
+        const isArr = arrDepEl.value === 'Arr';
+        dwellEl.disabled = !isArr;
+        if (!isArr) dwellEl.value = dwellEl.value || 0;
+      };
+      arrDepEl.addEventListener('change', syncDwell);
+      syncDwell();
+    }
+    if (minDwellEl) {
+      const syncMinDwell = () => {
+        const isArr = arrDepEl.value === 'Arr';
+        minDwellEl.disabled = !isArr;
+        if (!isArr) minDwellEl.value = minDwellEl.value || 0;
+      };
+      arrDepEl.addEventListener('change', syncMinDwell);
+      syncMinDwell();
+    }
+    const TOKEN_NODE_ORDER = ['runway','taxiway','apron','terminal'];
+    function fillTokenSelects(flightCode) {
+      const runwaySel = document.getElementById('tokenRunwaySelect');
+      const termSel = document.getElementById('tokenTerminalSelect');
+      if (runwaySel) {
+        const opts = getRunwayOptions();
+        runwaySel.innerHTML = '<option value="">Random</option>' + opts.map(o => '<option value="' + (o.id || '').replace(/"/g, '&quot;') + '">' + (o.name || o.id || '').replace(/</g, '&lt;') + '</option>').join('');
+      }
+      if (termSel) {
+        const terms = (state.terminals || []).map(t => ({ id: t.id, name: (t.name || '').trim() || 'Building' }));
+        termSel.innerHTML = '<option value="">Random</option>' + terms.map(o => '<option value="' + (o.id || '').replace(/"/g, '&quot;') + '">' + (o.name || o.id || '').replace(/</g, '&lt;') + '</option>').join('');
+      }
+    }
+    function updateTokenPanesVisibility(nodes) {
+      const arr = Array.isArray(nodes) ? nodes : TOKEN_NODE_ORDER;
+      ['runway','taxiway','apron','terminal'].forEach((node, i) => {
+        const el = document.getElementById('tokenObject' + node.charAt(0).toUpperCase() + node.slice(1));
+        if (el) el.style.display = arr.indexOf(node) >= 0 ? 'block' : 'none';
+      });
+    }
+    if (globalUpdateBtn) {
+      globalUpdateBtn.addEventListener('click', function() {
+        function failGlobalUpdate(err) {
+          console.error('Global update error', err);
+          if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
+        }
+        if (typeof setGlobalUpdateProgressUi === 'function')
+          setGlobalUpdateProgressUi(true, '동기화 중…', 5);
+        scheduleAfterPaint(function globalUpdateStep1() {
+          try {
+            if (typeof syncPanelFromState === 'function') syncPanelFromState();
+            if (typeof setGlobalUpdateProgressUi === 'function')
+              setGlobalUpdateProgressUi(true, '항공 경로·타임라인…', 22);
+          } catch (e) { failGlobalUpdate(e); return; }
+          setTimeout(function globalUpdateStep2() {
+            try {
+              function runAfterFlightListRefresh() {
+                try {
+                  if (typeof setGlobalUpdateProgressUi === 'function')
+                    setGlobalUpdateProgressUi(true, 'KPI·캔버스…', 92);
+                } catch (e2) { failGlobalUpdate(e2); return; }
+                setTimeout(function globalUpdateStep6() {
+                  try {
+                    if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
+                    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+                    if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
+                    if (typeof draw === 'function') draw();
+                    if (typeof update3DScene === 'function') update3DScene();
+                  } catch (e3) { failGlobalUpdate(e3); return; }
+                  if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
+                }, 0);
+              }
+              function runFlightListThenKpi() {
+                setTimeout(function globalUpdateStep5() {
+                  try {
+                    if (typeof renderFlightList === 'function')
+                      renderFlightList(false, true, undefined, runAfterFlightListRefresh);
+                    else
+                      runAfterFlightListRefresh();
+                  } catch (e2) { failGlobalUpdate(e2); return; }
+                }, 0);
+              }
+              function runSchedAndRwyPanels() {
+                setTimeout(function globalUpdateStep3() {
+                  try {
+                    if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
+                    if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
+                    if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
+                    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+                    if (typeof setGlobalUpdateProgressUi === 'function')
+                      setGlobalUpdateProgressUi(true, 'Runway 패널…', 62);
+                  } catch (e2) { failGlobalUpdate(e2); return; }
+                  setTimeout(function globalUpdateStep4() {
+                    try {
+                      if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
+                      if (typeof setGlobalUpdateProgressUi === 'function')
+                        setGlobalUpdateProgressUi(true, '항공편 표·간트…', 78);
+                    } catch (e3) { failGlobalUpdate(e3); return; }
+                    runFlightListThenKpi();
+                  }, 0);
+                }, 0);
+              }
+              if (typeof updateAllFlightPaths === 'function') {
+                updateAllFlightPaths(function globalUpdatePathsDone() {
+                  try {
+                    if (typeof setGlobalUpdateProgressUi === 'function')
+                      setGlobalUpdateProgressUi(true, 'RET·스케줄·활주로 분리…', 48);
+                  } catch (e2) { failGlobalUpdate(e2); return; }
+                  runSchedAndRwyPanels();
+                });
+              } else {
+                if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+                if (typeof setGlobalUpdateProgressUi === 'function')
+                  setGlobalUpdateProgressUi(true, 'RET·스케줄·활주로 분리…', 48);
+                runSchedAndRwyPanels();
+              }
+            } catch (e) { failGlobalUpdate(e); return; }
+          }, 0);
+        });
+      });
+    }
+    const btnShowPlayDock = document.getElementById('btnShowPlayDock');
+    if (btnShowPlayDock) {
+      btnShowPlayDock.addEventListener('click', function() {
+        state.simPlaybackDockVisible = true;
+        if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+      });
+    }
+    function applyTokenNodesFromCheckboxes() {
+      const nodes = [];
+      TOKEN_NODE_ORDER.forEach((node, i) => {
+        const cb = document.getElementById('token' + node.charAt(0).toUpperCase() + node.slice(1));
+        if (cb && cb.checked) nodes.push(node);
+        else return;
+      });
+      return nodes;
+    }
+    function setTokenCheckboxesFromNodes(nodes) {
+      const arr = Array.isArray(nodes) ? nodes : [];
+      TOKEN_NODE_ORDER.forEach((node, i) => {
+        const cb = document.getElementById('token' + node.charAt(0).toUpperCase() + node.slice(1));
+        if (cb) cb.checked = arr.indexOf(node) >= 0;
+      });
+      updateTokenPanesVisibility(arr.length ? arr : TOKEN_NODE_ORDER);
+    }
+    ['Runway','Taxiway','Apron','Building'].forEach((name, i) => {
+      const cb = document.getElementById('token' + name);
+      if (!cb) return;
+      cb.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        if (!f.token) f.token = { nodes: TOKEN_NODE_ORDER.slice(), runwayId: null, apronId: null, terminalId: null };
+        if (this.checked) {
+          f.token.nodes = TOKEN_NODE_ORDER.slice(0, i + 1);
+          setTokenCheckboxesFromNodes(f.token.nodes);
+        } else {
+          f.token.nodes = TOKEN_NODE_ORDER.slice(0, i);
+          setTokenCheckboxesFromNodes(f.token.nodes);
+        }
+        updateTokenPanesVisibility(f.token.nodes);
+        rebuildSelectedFlightTimeline();
+      });
     });
     const tokenRunwaySel = document.getElementById('tokenRunwaySelect');
     const tokenTerminalSel = document.getElementById('tokenTerminalSelect');
@@ -991,170 +1158,3 @@
             const dy = v1.row - v0.row;
             lengthM += CELL_SIZE * Math.hypot(dx, dy);
           }
-        }
-        const widthDefault = tw.pathType === 'runway'
-          ? RUNWAY_PATH_DEFAULT_WIDTH
-          : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-        const widthVal = tw.width != null ? tw.width : widthDefault;
-        const serTw = serializeTaxiwayWithEndpoints(tw);
-        const startStr = serTw.start_point != null ? '(' + serTw.start_point.col + ',' + serTw.start_point.row + ')' : '—';
-        const endStr = serTw.end_point != null ? '(' + serTw.end_point.col + ',' + serTw.end_point.row + ')' : '—';
-        const heading = tw.pathType === 'runway' ? 'Runway' : (tw.pathType === 'runway_exit' ? 'Runway Taxiway' : 'Taxiway');
-        const avgVel = (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) ? tw.avgMoveVelocity : 10;
-        const maxExit = (tw.pathType === 'runway_exit' && typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0) ? tw.maxExitVelocity : null;
-        const minExit = (tw.pathType === 'runway_exit' && typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
-          ? (maxExit != null && tw.minExitVelocity > maxExit ? maxExit : tw.minExitVelocity)
-          : null;
-        const minArrDisplay = tw.pathType === 'runway'
-          ? ((typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0)
-            ? Math.max(1, Math.min(150, tw.minArrVelocity))
-            : 15)
-          : null;
-        items.push({
-          type: 'taxiway',
-          id: tw.id,
-          title: uniqueTitle(heading + ' | ' + baseName),
-          tag: dirLabel,
-          details:
-            'Length: ' + lengthM.toFixed(0) + ' m' +
-            '<br>Points: ' + tw.vertices.length +
-            '<br>Width: ' + widthVal + ' m' +
-            (maxExit != null ? '<br>Max exit velocity: ' + maxExit + ' m/s' : '') +
-            (minExit != null ? '<br>Min exit velocity: ' + minExit + ' m/s' : '') +
-            (minArrDisplay != null ? '<br>Min arr velocity: ' + minArrDisplay + ' m/s' : '') +
-            (tw.pathType === 'runway' ? '<br>Line up: ' + getEffectiveRunwayLineupDistM(tw) + ' m (start→end)' : '') +
-            (tw.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
-            '<br>Start point: ' + startStr +
-            '<br>End point: ' + endStr
-        });
-      });
-    } else if (mode === 'holdingPoint') {
-      (state.holdingPoints || []).forEach(function(hp, idx) {
-        if (!hp || seen['hp_' + hp.id]) return;
-        seen['hp_' + hp.id] = true;
-        const kindLabel = holdingPointKindDisplayLabel(hp.hpKind);
-        const baseName = (hp.name && hp.name.trim()) ? hp.name.trim() : (kindLabel + ' ' + (idx + 1));
-        const cx = Number(hp.x), cy = Number(hp.y);
-        const col = cx / CELL_SIZE, row = cy / CELL_SIZE;
-        const tagShort = normalizeHoldingPointKind(hp.hpKind) === 'runway_holding' ? 'RHP' : 'IHP';
-        items.push({
-          type: 'holdingPoint',
-          id: hp.id,
-          title: uniqueTitle(kindLabel + ' | ' + baseName),
-          tag: tagShort + ' · ' + c2dHoldingPointDiameterM().toFixed(0) + ' m',
-          details:
-            'Type: ' + kindLabel +
-            '<br>Position (cell): (' + col.toFixed(1) + ', ' + row.toFixed(1) + ')' +
-            '<br>World: (' + cx.toFixed(0) + ', ' + cy.toFixed(0) + ')'
-        });
-      });
-    } else if (mode === 'apronTaxiway') {
-      state.apronLinks.forEach((lk, idx) => {
-        if (seen['apron_' + lk.id]) return;
-        seen['apron_' + lk.id] = true;
-        const stand = findStandById(lk.pbbId);
-        const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
-        const title = getApronLinkDisplayName(lk);
-        const standLabel = stand && stand.name ? stand.name : lk.pbbId;
-        const details = 'Stand: ' + standLabel +
-          ', Taxiway: ' + (tw && tw.name ? tw.name : lk.taxiwayId);
-        items.push({
-          type: 'apronLink',
-          id: lk.id,
-          title: uniqueTitle('Apron–Taxiway | ' + title),
-          tag: 'Apron–Taxiway',
-          details
-        });
-      });
-    } else if (mode === 'edge') {
-      rebuildDerivedGraphEdges();
-      (state.derivedGraphEdges || []).forEach(function(ed) {
-        items.push({
-          type: 'layoutEdge',
-          id: ed.id,
-          title: 'Edge | ' + getLayoutEdgeDisplayName(ed),
-          tag: 'Graph',
-          details:
-            'Length (graph): ' + Math.round(ed.dist) +
-            '<br>Pixel span: (' + ed.x1.toFixed(0) + ', ' + ed.y1.toFixed(0) + ') → (' + ed.x2.toFixed(0) + ', ' + ed.y2.toFixed(0) + ')' +
-            '<br>Polyline points: ' + ((ed.pts && ed.pts.length) ? ed.pts.length : 2) +
-            '<br>Node indices: ' + ed.fromIdx + ' → ' + ed.toIdx,
-          noDelete: true
-        });
-      });
-    }
-    if (!items.length) {
-      objectListEl.innerHTML = '<div class="obj-item">No objects yet.</div>';
-      return;
-    }
-    objectListEl.innerHTML = items.map(it => (
-      '<div class="obj-item" data-type="' + it.type + '" data-id="' + it.id + '">' +
-        '<div class="obj-item-header">' +
-          '<span class="obj-item-title">' + it.title + '</span>' +
-          '<span class="obj-item-tag">' + it.tag + '</span>' +
-          '<button type="button" class="obj-item-delete" title="Delete"' + (it.noDelete ? ' style="display:none" tabindex="-1" aria-hidden="true"' : '') + '>×</button>' +
-        '</div>' +
-        '<div class="obj-item-details">' + it.details + '</div>' +
-      '</div>'
-    )).join('');
-    const listItems = objectListEl.querySelectorAll('.obj-item');
-    listItems.forEach(el => {
-      const type = el.getAttribute('data-type');
-      const id = el.getAttribute('data-id');
-      el.querySelector('.obj-item-delete').addEventListener('click', function(ev) {
-        ev.stopPropagation();
-        pushUndo();
-        removeLayoutObjectFromState(type, id);
-        if (state.selectedObject && state.selectedObject.type === type && state.selectedObject.id === id)
-          state.selectedObject = null;
-        if (type === 'terminal' && state.currentTerminalId === id) {
-          state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
-          if (state.terminalDrawingId === id) {
-            state.terminalDrawingId = null;
-            state.layoutPathDrawPointer = null;
-          }
-        }
-        if (type === 'taxiway' && state.taxiwayDrawingId === id) {
-          state.taxiwayDrawingId = null;
-          state.layoutPathDrawPointer = null;
-        }
-        syncPanelFromState();
-        updateObjectInfo();
-        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      });
-      el.addEventListener('click', function(ev) {
-        if (ev.target.classList.contains('obj-item-delete')) return;
-        const typ = this.getAttribute('data-type');
-        const idr = this.getAttribute('data-id');
-        if (typ === 'layoutEdge') rebuildDerivedGraphEdges();
-        const obj = findLayoutObjectByListType(typ, idr);
-        if (!obj) return;
-        const wasExpanded = this.classList.contains('expanded');
-        listItems.forEach(li => li.classList.remove('selected', 'expanded'));
-        if (!wasExpanded) {
-          this.classList.add('selected', 'expanded');
-          state.flightPathRevealFlightId = null;
-          state.selectedObject = { type: typ, id: idr, obj };
-          if (typ === 'terminal') state.currentTerminalId = idr;
-          syncPanelFromState();
-          updateObjectInfo();
-        } else {
-          objectInfoEl.textContent = 'Select an object on the grid or from the list.';
-        }
-        draw();
-      });
-    });
-    if (state.selectedObject) {
-      const sel = objectListEl.querySelector('.obj-item[data-type="' + state.selectedObject.type + '"][data-id="' + state.selectedObject.id + '"]');
-      if (sel) sel.classList.add('selected', 'expanded');
-    }
-  }
-
-  function updateObjectInfo() {
-    if (state.selectedObject) {
-      const o = state.selectedObject.obj;
-      if (state.selectedObject.type === 'terminal') {
-        const areaM2 = o.vertices && o.vertices.length >= 3 ? polygonAreaM2(o.vertices) : 0;
-        const floors = o.floors != null ? Math.max(1, parseInt(o.floors, 10) || 1) : 1;
-        const f2fRaw = o.floorToFloor != null ? Number(o.floorToFloor) : (o.floorHeight != null ? Number(o.floorHeight) : 4);

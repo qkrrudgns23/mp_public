@@ -1,3 +1,14 @@
+        else contactStands.push(s);
+      });
+      contactStands.forEach(s => {
+        const label = (s.name || '') + ' (' + (s.category || '') + ')';
+        const row = buildRowHtml(label, s.id);
+        labelRows.push(row.labelHtml);
+        trackRows.push(row.trackHtml);
+      });
+      if (remoteStandsInTerm.length) {
+        remoteStandsInTerm.forEach(s => allRemoteStands.push(s));
+      }
     });
     if (allRemoteStands.length) {
       labelRows.push('<div class="alloc-gantt-section-spacer" aria-hidden="true"></div>');
@@ -537,14 +548,3 @@
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { labels: { color: '#94a3b8', font: { size: 12, family: 'var(--ui-font, system-ui, sans-serif)' } } },
-        tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.94)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#e2e8f0',
-          borderColor: 'rgba(148, 163, 184, 0.28)',
-          borderWidth: 1,
-          padding: 10,
-          callbacks: {
-            title: function(items) {
-              const i = items && items[0] ? items[0].dataIndex : 0;
-              const b = buckets[i];
