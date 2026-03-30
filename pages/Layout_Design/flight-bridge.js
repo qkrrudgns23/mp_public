@@ -265,19 +265,19 @@
   }
 
   document.getElementById('taxiwayName').addEventListener('change', function() {
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      const raw = (this.value || '').trim();
-      if (raw && findDuplicateLayoutName('taxiway', tw.id, raw)) {
-        alertDuplicateLayoutName();
-        this.value = tw.name || '';
-        return;
-      }
-      tw.name = raw;
-      updateObjectInfo();
-      renderObjectList();
-      draw();
+    const tw = typeof resolveTaxiwayFromPanelContext === 'function' ? resolveTaxiwayFromPanelContext() : null;
+    if (!tw) return;
+    const raw = (this.value || '').trim();
+    if (raw && findDuplicateLayoutName('taxiway', tw.id, raw)) {
+      alertDuplicateLayoutName();
+      this.value = tw.name || '';
+      return;
     }
+    tw.name = raw || tw.name;
+    updateObjectInfo();
+    renderObjectList();
+    draw();
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
   });
   const apronLinkNameInputEl = document.getElementById('apronLinkName');
   if (apronLinkNameInputEl) {

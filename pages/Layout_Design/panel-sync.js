@@ -7,6 +7,17 @@
     return state.terminals[0] || null;
   }
 
+  function resolveTaxiwayFromPanelContext() {
+    if (state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id) {
+      const found = (state.taxiways || []).find(function(t) { return t.id === state.selectedObject.id; });
+      return found || state.selectedObject.obj || null;
+    }
+    if (state.taxiwayDrawingId) {
+      return (state.taxiways || []).find(function(t) { return t.id === state.taxiwayDrawingId; }) || null;
+    }
+    return null;
+  }
+
   function polygonAreaM2(vertices) {
     if (!vertices || vertices.length < 3) return 0;
     let area = 0;
@@ -315,15 +326,15 @@
         }
       }
     }
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      var tw = state.selectedObject.obj;
+    var tw = resolveTaxiwayFromPanelContext();
+    if (tw) {
       if (el('taxiwayName')) {
         const rawTw = (el('taxiwayName').value || '').trim();
         if (rawTw && findDuplicateLayoutName('taxiway', tw.id, rawTw)) {
           alertDuplicateLayoutName();
           el('taxiwayName').value = tw.name || '';
         } else {
-          tw.name = rawTw;
+          tw.name = rawTw || tw.name;
         }
       }
       if (el('taxiwayWidth')) {
@@ -401,7 +412,7 @@
     if (isPathLayoutMode(mode)) {
       const pt = pathTypeFromLayoutMode(mode);
       syncPathFieldVisibilityForPathType(pt);
-      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
+      if (!resolveTaxiwayFromPanelContext()) {
         const nameInput = document.getElementById('taxiwayName');
         if (nameInput) nameInput.value = getDefaultPathName(pt);
         const widthInput = document.getElementById('taxiwayWidth');

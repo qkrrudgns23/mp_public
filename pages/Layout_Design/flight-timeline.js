@@ -34,7 +34,13 @@
     if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, Math.min(150, v));
     return 15;
   }
-  
+  /** Same runway resolution as graphPathArrival (token.arrRunwayId before generic runwayId). */
+  function resolveArrivalRunwayIdForFlight(f) {
+    if (!f) return null;
+    const t = f.token || {};
+    return t.arrRunwayId || t.runwayId || f.arrRunwayId || null;
+  }
+
   function runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn) {
     const vf0 = Math.max(1, Math.min(150, vFloorIn));
     const vf = Math.min(vf0, v0);
@@ -622,7 +628,7 @@
   }
   function syncFlightAssignInputDisplay(el, f) {
     const role = el.getAttribute('data-role');
-    if (role === 'arr') el.value = f.arrRunwayId || (f.token && f.token.runwayId) || '';
+    if (role === 'arr') el.value = resolveArrivalRunwayIdForFlight(f) || '';
     else if (role === 'term') el.value = f.terminalId || (f.token && f.token.terminalId) || '';
     else if (role === 'dep') el.value = f.depRunwayId || (f.token && f.token.depRunwayId) || '';
   }
@@ -643,7 +649,7 @@
     const termEl = document.getElementById('flightAssignStripTerm');
     const depEl = document.getElementById('flightAssignStripDep');
     if (arrEl) {
-      const sid = f ? (f.arrRunwayId || (f.token && f.token.runwayId) || '') : '';
+      const sid = f ? (resolveArrivalRunwayIdForFlight(f) || '') : '';
       arrEl.innerHTML = buildRunwayOptionsHtml(sid);
       arrEl.value = sid;
     }
@@ -1009,7 +1015,7 @@
   function isValidSampledArrRetForFlight(f, retStatsAll) {
     if (!f || f.sampledArrRet == null) return false;
     if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
-    const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const arrDir = resolveArrivalRunwayDirForRetGate(f);
     return retStatsAll.some(function(r) {
       if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
@@ -1036,7 +1042,7 @@
       f.arrRetFailed = false;
       f.arrRotSec = null;
     }
-    const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const cfg = mutRotCfgEntryForType(configByType, f);
     if (!cfg || !retStatsAll || !retStatsAll.length || arrRunwayId == null) {
       f.__schedRetRotRev = rev;
@@ -1064,6 +1070,9 @@
       return true;
     });
     if (!candidates.length) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d3690a39-df65-41bd-83b6-eb0ef6ed1c98', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'flight-timeline.js:sampleArrRetRot', message: 'no_ret_candidates', hypothesisId: 'H5', data: { flightId: f.id || f.flightNo, arrRunwayId: arrRunwayId, retStatsCount: retStatsAll ? retStatsAll.length : 0, arrDir: arrDir }, timestamp: Date.now() }) }).catch(function() {});
+      // #endregion
       f.__schedRetRotRev = rev;
       return;
     }
@@ -1101,6 +1110,9 @@
       f.sampledArrRet = null;
       f.arrRetFailed = true;
       f.arrRotSec = null;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d3690a39-df65-41bd-83b6-eb0ef6ed1c98', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'flight-timeline.js:sampleArrRetRot', message: 'arr_ret_failed_velocity', hypothesisId: 'H5', data: { flightId: f.id || f.flightNo, arrRunwayId: arrRunwayId, candidatesCount: candidates.length, arrDir: arrDir }, timestamp: Date.now() }) }).catch(function() {});
+      // #endregion
     }
     f.__schedRetRotRev = rev;
   }
@@ -1195,7 +1207,7 @@
   }
 
   function _buildFlightListRowHtml(f, retStatsAll) {
-    const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
     let sampledRetName = '—';
     if (f.arrRetFailed) sampledRetName = 'Failed';

@@ -1799,16 +1799,9 @@
     }
     return false;
   }
-  function makeUniqueNamedCopy(list, prop) {
-    const nameCount = {};
-    return (list || []).map(obj => {
-      const copy = Object.assign({}, obj);
-      const baseRaw = (copy[prop] || '').trim();
-      if (!baseRaw) return copy;
-      nameCount[baseRaw] = (nameCount[baseRaw] || 0) + 1;
-      const n = nameCount[baseRaw];
-      copy[prop] = n > 1 ? (baseRaw + ' (' + n + ')') : baseRaw;
-      return copy;
+  function makeUniqueNamedCopy(list, _prop) {
+    return (list || []).map(function(obj) {
+      return Object.assign({}, obj);
     });
   }
 
@@ -4207,7 +4200,7 @@
   }
   function syncFlightAssignInputDisplay(el, f) {
     const role = el.getAttribute('data-role');
-    if (role === 'arr') el.value = f.arrRunwayId || (f.token && f.token.runwayId) || '';
+    if (role === 'arr') el.value = resolveArrivalRunwayIdForFlight(f) || '';
     else if (role === 'term') el.value = f.terminalId || (f.token && f.token.terminalId) || '';
     else if (role === 'dep') el.value = f.depRunwayId || (f.token && f.token.depRunwayId) || '';
   }
@@ -4228,7 +4221,7 @@
     const termEl = document.getElementById('flightAssignStripTerm');
     const depEl = document.getElementById('flightAssignStripDep');
     if (arrEl) {
-      const sid = f ? (f.arrRunwayId || (f.token && f.token.runwayId) || '') : '';
+      const sid = f ? (resolveArrivalRunwayIdForFlight(f) || '') : '';
       arrEl.innerHTML = buildRunwayOptionsHtml(sid);
       arrEl.value = sid;
     }
@@ -4591,10 +4584,16 @@
     configByType[typeKey] = { tdMu, tdSigma, vMu, vSigma, aMu, aSigma };
     return configByType[typeKey];
   }
+  /** Same runway resolution as graphPathArrival (token.arrRunwayId before generic runwayId). */
+  function resolveArrivalRunwayIdForFlight(f) {
+    if (!f) return null;
+    const t = f.token || {};
+    return t.arrRunwayId || t.runwayId || f.arrRunwayId || null;
+  }
   function isValidSampledArrRetForFlight(f, retStatsAll) {
     if (!f || f.sampledArrRet == null) return false;
     if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
-    const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const arrDir = resolveArrivalRunwayDirForRetGate(f);
     return retStatsAll.some(function(r) {
       if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
@@ -4621,7 +4620,7 @@
       f.arrRetFailed = false;
       f.arrRotSec = null;
     }
-    const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const cfg = mutRotCfgEntryForType(configByType, f);
     if (!cfg || !retStatsAll || !retStatsAll.length || arrRunwayId == null) {
       f.__schedRetRotRev = rev;
@@ -4780,7 +4779,7 @@
   }
 
   function _buildFlightListRowHtml(f, retStatsAll) {
-    const arrRunwayId = f.arrRunwayId || (f.token && f.token.runwayId) || null;
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
     let sampledRetName = '—';
     if (f.arrRetFailed) sampledRetName = 'Failed';
@@ -9153,9 +9152,6 @@
     }
 
     const pathList = state.taxiways || [];
-    const connectedRunwayExitIds = (selectedArrRetId != null)
-      ? computeConnectedRunwayExitIds(selectedArrRetId, pathList)
-      : null;
     const apronNodeStand = [];
     const minD2 = 1e-6;
     pathList.forEach(obj => {
@@ -9277,9 +9273,8 @@
         if (isRunwayExit && !isRunwayExitDirectionAllowed(obj, runwayDirectionForExit)) {
           cost = REVERSE_COST;
         }
-        if (selectedArrRetId != null && connectedRunwayExitIds != null) {
-          if (isRunwayExit && !connectedRunwayExitIds.has(obj.id)) cost = REVERSE_COST;
-          else if (isTaxiway) cost = d + TAXIWAY_HEURISTIC_COST;
+        if (selectedArrRetId != null && isTaxiway) {
+          cost = d + TAXIWAY_HEURISTIC_COST;
         }
         if (pureGroundExcludeRunway && obj.pathType === 'runway') cost = REVERSE_COST;
         addEdgeWithDirection(chain[i].p, chain[i + 1].p, dir, cost, d, segPts);
@@ -9525,6 +9520,14 @@
     });
     return best;
   }
+  /** Avoid snapping to another runway's polyline when multiple runways exist (same idea as departure lineup). */
+  function nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx) {
+    if (!g || !g.nodes || !g.nodes.length || !runwayPx) return null;
+    const rwSet = g.runwayNodeIndicesById && g.runwayNodeIndicesById[runwayId];
+    if (rwSet && rwSet.size)
+      return nearestPathNodeFromSet(g, rwSet, runwayPx) ?? nearestPathNode(g, runwayPx);
+    return nearestPathNode(g, runwayPx);
+  }
 
   function pathTotalDist(g, pathIndices) {
     let d = 0;
@@ -9538,7 +9541,7 @@
 
   function probePreferredArrivalRunwayDir(f) {
     const token = f.token || {};
-    let runwayId = token.arrRunwayId || token.runwayId || f.arrRunwayId;
+    let runwayId = resolveArrivalRunwayIdForFlight(f);
     const apronId = f.standId != null ? f.standId : (token.apronId || null);
     if (!apronId || runwayId == null || runwayId === '') return 'both';
     const r = getRunwayPath(runwayId);
@@ -9552,7 +9555,7 @@
       const g = buildPathGraph(null, rwDir);
       const endNode = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
       if (endNode == null) return { chosen: null };
-      const startNode = nearestPathNode(g, runwayPx);
+      const startNode = nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx);
       const p = pathDijkstra(g, startNode, endNode);
       if (!p || p.length < 2) return { chosen: null };
       const d = pathTotalDist(g, p);
@@ -9577,7 +9580,7 @@
   function graphPathArrival(f) {
     f._noWayArrDetail = '';
     const token = f.token || {};
-    let runwayId = token.arrRunwayId || token.runwayId || f.arrRunwayId;
+    let runwayId = resolveArrivalRunwayIdForFlight(f);
     const apronId = f.standId != null ? f.standId : (token.apronId || null);
     if (!apronId) {
       f.noWayArr = true;
@@ -9635,7 +9638,7 @@
         if (rPts && rPts.length >= 2) {
           const retEndPx = rPts[rPts.length - 1];
           const g1 = buildPathGraph(validSelectedArrRetId, rwDir);
-          const startNode = nearestPathNode(g1, runwayPx);
+          const startNode = nearestPathNodeOnRunwayPolyline(g1, runwayId, runwayPx);
           const pivotIdx = nearestPathNode(g1, retEndPx);
           const pivotIdxFull = nearestPathNode(gFull, g1.nodes[pivotIdx] || retEndPx);
           const p1 = pathDijkstra(g1, startNode, pivotIdx);
@@ -9657,7 +9660,7 @@
           hint: dirTag + '경로 그래프에 스탠드 노드가 없습니다.'
         };
       }
-      const startNode = nearestPathNode(g, runwayPx);
+      const startNode = nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx);
       const p = pathDijkstra(g, startNode, endNode);
       if (!p || p.length < 2) {
         return {
@@ -11915,10 +11918,8 @@
     if (!objectListEl) return;
     const mode = settingModeSelect.value;
     const seen = {};
-    const nameCount = {};
     function uniqueTitle(baseName) {
-      nameCount[baseName] = (nameCount[baseName] || 0) + 1;
-      return nameCount[baseName] > 1 ? baseName + ' (' + nameCount[baseName] + ')' : baseName;
+      return baseName;
     }
     const items = [];
     if (mode === 'terminal') {

@@ -20,16 +20,9 @@
     }
     return false;
   }
-  function makeUniqueNamedCopy(list, prop) {
-    const nameCount = {};
-    return (list || []).map(obj => {
-      const copy = Object.assign({}, obj);
-      const baseRaw = (copy[prop] || '').trim();
-      if (!baseRaw) return copy;
-      nameCount[baseRaw] = (nameCount[baseRaw] || 0) + 1;
-      const n = nameCount[baseRaw];
-      copy[prop] = n > 1 ? (baseRaw + ' (' + n + ')') : baseRaw;
-      return copy;
+  function makeUniqueNamedCopy(list, _prop) {
+    return (list || []).map(function(obj) {
+      return Object.assign({}, obj);
     });
   }
 

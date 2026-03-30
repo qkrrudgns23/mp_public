@@ -1022,9 +1022,6 @@
     }
 
     const pathList = state.taxiways || [];
-    const connectedRunwayExitIds = (selectedArrRetId != null)
-      ? computeConnectedRunwayExitIds(selectedArrRetId, pathList)
-      : null;
     const apronNodeStand = [];
     const minD2 = 1e-6;
     pathList.forEach(obj => {
@@ -1146,9 +1143,8 @@
         if (isRunwayExit && !isRunwayExitDirectionAllowed(obj, runwayDirectionForExit)) {
           cost = REVERSE_COST;
         }
-        if (selectedArrRetId != null && connectedRunwayExitIds != null) {
-          if (isRunwayExit && !connectedRunwayExitIds.has(obj.id)) cost = REVERSE_COST;
-          else if (isTaxiway) cost = d + TAXIWAY_HEURISTIC_COST;
+        if (selectedArrRetId != null && isTaxiway) {
+          cost = d + TAXIWAY_HEURISTIC_COST;
         }
         if (pureGroundExcludeRunway && obj.pathType === 'runway') cost = REVERSE_COST;
         addEdgeWithDirection(chain[i].p, chain[i + 1].p, dir, cost, d, segPts);
@@ -1394,6 +1390,14 @@
     });
     return best;
   }
+  /** Avoid snapping to another runway's polyline when multiple runways exist (same idea as departure lineup). */
+  function nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx) {
+    if (!g || !g.nodes || !g.nodes.length || !runwayPx) return null;
+    const rwSet = g.runwayNodeIndicesById && g.runwayNodeIndicesById[runwayId];
+    if (rwSet && rwSet.size)
+      return nearestPathNodeFromSet(g, rwSet, runwayPx) ?? nearestPathNode(g, runwayPx);
+    return nearestPathNode(g, runwayPx);
+  }
 
   function pathTotalDist(g, pathIndices) {
     let d = 0;
@@ -1407,7 +1411,9 @@
 
   function probePreferredArrivalRunwayDir(f) {
     const token = f.token || {};
-    let runwayId = token.arrRunwayId || token.runwayId || f.arrRunwayId;
+    let runwayId = (typeof resolveArrivalRunwayIdForFlight === 'function')
+      ? resolveArrivalRunwayIdForFlight(f)
+      : (token.arrRunwayId || token.runwayId || f.arrRunwayId);
     const apronId = f.standId != null ? f.standId : (token.apronId || null);
     if (!apronId || runwayId == null || runwayId === '') return 'both';
     const r = getRunwayPath(runwayId);
@@ -1421,7 +1427,7 @@
       const g = buildPathGraph(null, rwDir);
       const endNode = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
       if (endNode == null) return { chosen: null };
-      const startNode = nearestPathNode(g, runwayPx);
+      const startNode = nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx);
       const p = pathDijkstra(g, startNode, endNode);
       if (!p || p.length < 2) return { chosen: null };
       const d = pathTotalDist(g, p);
@@ -1446,7 +1452,9 @@
   function graphPathArrival(f) {
     f._noWayArrDetail = '';
     const token = f.token || {};
-    let runwayId = token.arrRunwayId || token.runwayId || f.arrRunwayId;
+    let runwayId = (typeof resolveArrivalRunwayIdForFlight === 'function')
+      ? resolveArrivalRunwayIdForFlight(f)
+      : (token.arrRunwayId || token.runwayId || f.arrRunwayId);
     const apronId = f.standId != null ? f.standId : (token.apronId || null);
     if (!apronId) {
       f.noWayArr = true;
@@ -1466,6 +1474,9 @@
     if (!r) {
       f.noWayArr = true;
       f._noWayArrDetail = '도착 활주로 폴리라인을 불러오지 못했습니다.';
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d3690a39-df65-41bd-83b6-eb0ef6ed1c98', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'designer-mid.js:graphPathArrival', message: 'early_exit_no_runway_path', hypothesisId: 'H1', data: { flightId: f.id || f.flightNo, tokenArrRunwayId: token.arrRunwayId, tokenRunwayId: token.runwayId, fArrRunwayId: f.arrRunwayId, resolvedRunwayId: runwayId }, timestamp: Date.now() }) }).catch(function() {});
+      // #endregion
       return null;
     }
     const stand = findStandById(apronId);
@@ -1483,6 +1494,7 @@
       f.arrRetFailed = false;
       f.arrRotSec = null;
     }
+    var _arrivalSolveDiag = [];
     function solveByRunwayDir(rwDir) {
       const dirTag = rwDir === 'clockwise' ? '(시계) ' : '(반시계) ';
       const runwayPx = rwDir === 'counter_clockwise' ? r.endPx : r.startPx;
@@ -1504,11 +1516,27 @@
         if (rPts && rPts.length >= 2) {
           const retEndPx = rPts[rPts.length - 1];
           const g1 = buildPathGraph(validSelectedArrRetId, rwDir);
-          const startNode = nearestPathNode(g1, runwayPx);
+          const startNode = nearestPathNodeOnRunwayPolyline(g1, runwayId, runwayPx);
           const pivotIdx = nearestPathNode(g1, retEndPx);
           const pivotIdxFull = nearestPathNode(gFull, g1.nodes[pivotIdx] || retEndPx);
           const p1 = pathDijkstra(g1, startNode, pivotIdx);
           const p2 = (p1 && p1.length) ? pathDijkstra(gFull, pivotIdxFull, endNodeFull) : null;
+          // #region agent log
+          (function() {
+            var _rws = g1.runwayNodeIndicesById && g1.runwayNodeIndicesById[runwayId];
+            var _mergedOk = !!(p1 && p1.length >= 2 && p2 && p2.length >= 2);
+            var _row = { rwDir: rwDir, branch: 'ret_split', retId: validSelectedArrRetId, rwSetSize: _rws ? _rws.size : 0, startNode: startNode, p1Len: p1 ? p1.length : 0, p2Len: p2 ? p2.length : 0, pivotIdx: pivotIdx, pivotIdxFull: pivotIdxFull, mergedOk: _mergedOk };
+            if (_mergedOk) {
+              var _d1 = pathTotalDist(g1, p1);
+              var _d2 = pathTotalDist(gFull, p2);
+              _row.d1 = _d1;
+              _row.d2 = _d2;
+              _row.totalD = _d1 + _d2;
+              _row.distOk = (_d1 + _d2) < REVERSE_COST;
+            }
+            _arrivalSolveDiag.push(_row);
+          })();
+          // #endregion
           if (p1 && p1.length >= 2 && p2 && p2.length >= 2) {
             const merged = (pivotIdx === pivotIdxFull) ? p1.concat(p2.slice(1)) : p1.slice(0, -1).concat(p2);
             const d = pathTotalDist(g1, p1) + pathTotalDist(gFull, p2);
@@ -1526,8 +1554,16 @@
           hint: dirTag + '경로 그래프에 스탠드 노드가 없습니다.'
         };
       }
-      const startNode = nearestPathNode(g, runwayPx);
+      const startNode = nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx);
       const p = pathDijkstra(g, startNode, endNode);
+      // #region agent log
+      (function() {
+        var _rws2 = g.runwayNodeIndicesById && g.runwayNodeIndicesById[runwayId];
+        var _dDirect = (p && p.length >= 2) ? pathTotalDist(g, p) : null;
+        var _row2 = { rwDir: rwDir, branch: 'direct', rwSetSize: _rws2 ? _rws2.size : 0, startNode: startNode, pLen: p ? p.length : 0, costOk: _dDirect != null && _dDirect < REVERSE_COST, totalD: _dDirect };
+        _arrivalSolveDiag.push(_row2);
+      })();
+      // #endregion
       if (!p || p.length < 2) {
         return {
           chosen: null,
@@ -1553,6 +1589,9 @@
       f.noWayArr = true;
       const hints = [tryCw.hint, tryCcw.hint].filter(function(h) { return h && String(h).trim(); });
       f._noWayArrDetail = hints.length ? Array.from(new Set(hints)).join(' ') : '시계·반시계 모두 도착 택시 경로를 찾지 못했습니다.';
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d3690a39-df65-41bd-83b6-eb0ef6ed1c98', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'designer-mid.js:graphPathArrival', message: 'noWayArr', hypothesisId: 'H1-H5', data: { flightId: f.id || f.flightNo, tokenArrRunwayId: token.arrRunwayId, tokenRunwayId: token.runwayId, fArrRunwayId: f.arrRunwayId, resolvedRunwayId: runwayId, apronId: apronId, sampledArrRet: f.sampledArrRet, validSelectedArrRetId: validSelectedArrRetId, arrRetFailed: f.arrRetFailed, hints: hints, solveDiag: _arrivalSolveDiag }, timestamp: Date.now() }) }).catch(function() {});
+      // #endregion
       return null;
     }
     f.noWayArr = false;

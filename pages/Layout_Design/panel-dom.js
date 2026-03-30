@@ -1089,10 +1089,8 @@
     if (!objectListEl) return;
     const mode = settingModeSelect.value;
     const seen = {};
-    const nameCount = {};
     function uniqueTitle(baseName) {
-      nameCount[baseName] = (nameCount[baseName] || 0) + 1;
-      return nameCount[baseName] > 1 ? baseName + ' (' + nameCount[baseName] + ')' : baseName;
+      return baseName;
     }
     const items = [];
     if (mode === 'terminal') {
