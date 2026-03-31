@@ -178,9 +178,11 @@
     return { point: [last[0], last[1]], tangent: [ux, uy], normal: [-uy, ux] };
   }
 
-  function drawRunwayDecorations(tw, pts, widthPx) {
+  function drawRunwayDecorations(tw, pts, widthPx, opts) {
     if (!tw || tw.pathType !== 'runway' || !tw.start_point || !tw.end_point) return;
     if (!pts || pts.length < 2) return;
+    const pavementAlphaRaw = opts && typeof opts.pavementAlpha === 'number' && isFinite(opts.pavementAlpha) ? opts.pavementAlpha : 1;
+    const pavementAlpha = Math.max(0, Math.min(1, pavementAlphaRaw));
     const totalLen = runwayPolylineLengthPx(pts);
     const runwayWidth = Math.max(24, Number(widthPx) || RUNWAY_PATH_DEFAULT_WIDTH);
     if (totalLen < Math.max(220, runwayWidth * 3)) return;
@@ -318,21 +320,24 @@
       ctx.restore();
     }
 
+    ctx.save();
+    ctx.globalAlpha = pavementAlpha;
     drawExtensionSegment(startFrame, -1, 0, startDisp);
     drawExtensionSegment(startFrame, -1, startDisp, startBlast);
     drawExtensionSegment(endFrame, 1, 0, endDisp);
     drawExtensionSegment(endFrame, 1, endDisp, endBlast);
-    drawDisplacedThresholdArrows(startFrame, -1, 1, 0, startDisp);
-    drawDisplacedThresholdArrows(endFrame, 1, -1, 0, endDisp);
-    drawBlastPadChevrons(startFrame, -1, startDisp, startBlast);
-    drawBlastPadChevrons(endFrame, 1, endDisp, endBlast);
-
     const thresholdInset = Math.min(Math.max(runwayWidth * 0.58, 26), totalLen * 0.12);
     const thresholdStripeLen = Math.min(Math.max(runwayWidth * 0.54, 20), 34);
     const thresholdStripeWidth = Math.max(3, runwayWidth * 0.085);
     [-runwayWidth * 0.30, -runwayWidth * 0.18, -runwayWidth * 0.06, runwayWidth * 0.06, runwayWidth * 0.18, runwayWidth * 0.30].forEach(function(offset) {
       drawRectAtBothEnds(thresholdInset, offset, thresholdStripeLen, thresholdStripeWidth, thresholdColor);
     });
+    ctx.restore();
+
+    drawDisplacedThresholdArrows(startFrame, -1, 1, 0, startDisp);
+    drawDisplacedThresholdArrows(endFrame, 1, -1, 0, endDisp);
+    drawBlastPadChevrons(startFrame, -1, startDisp, startBlast);
+    drawBlastPadChevrons(endFrame, 1, endDisp, endBlast);
 
     (function drawRunwayCenterlineDashed() {
       const paveStart = startDisp + startBlast;

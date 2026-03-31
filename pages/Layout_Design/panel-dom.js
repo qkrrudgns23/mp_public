@@ -470,7 +470,7 @@
           return;
         }
         if (!state.globalUpdateFresh) {
-          alert('Update(새로고침)이 필요합니다. 빨간 동기화 표시일 때는 타임라인이 비어 있어 재생할 수 없습니다.');
+          alert('Light Sim(새로고침)이 필요합니다. 빨간 동기화 표시일 때는 타임라인이 비어 있어 재생할 수 없습니다.');
           return;
         }
         if (typeof recomputeSimDuration === 'function') recomputeSimDuration();

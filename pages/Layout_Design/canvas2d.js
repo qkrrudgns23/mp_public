@@ -1182,36 +1182,71 @@
       const width = tw.width != null ? tw.width : widthDefault;
       const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
       const pathLineCap = 'butt';
-      if (sel) {
-        ctx.strokeStyle = c2dObjectSelectedStroke();
-        ctx.fillStyle = c2dObjectSelectedFill();
-      } else if (isRunwayPath || isRunwayExit) {
-        ctx.strokeStyle = c2dRunwayStroke();
-        ctx.fillStyle = c2dRunwayFill();
-      } else {
-        ctx.strokeStyle = drawing ? 'rgba(250, 204, 21, 0.78)' : 'rgba(251, 191, 36, 0.72)';
-        ctx.fillStyle = 'rgba(251,191,36,0.18)';
-      }
-      ctx.lineWidth = width;
-      ctx.lineCap = pathLineCap;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      for (let i = 0; i < tw.vertices.length; i++) {
-        const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      if (tw.vertices.length >= 2) {
+      if (!isRunwayPath) {
+        if (!state.showRoadWidth) return;
         if (sel) {
+          ctx.strokeStyle = c2dObjectSelectedStroke();
+          ctx.fillStyle = c2dObjectSelectedFill();
+        } else {
+          ctx.strokeStyle = c2dRunwayBandStrokeOpaque();
+          ctx.fillStyle = c2dRunwayFill();
+        }
+        ctx.lineWidth = width;
+        ctx.lineCap = pathLineCap;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        if (tw.vertices.length >= 2) {
+          if (sel) {
+            ctx.save();
+            ctx.shadowColor = c2dObjectSelectedGlow();
+            ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+            ctx.stroke();
+            ctx.restore();
+          } else ctx.stroke();
+        }
+        return;
+      }
+      if (isRunwayPath && tw.vertices.length >= 2) {
+        ctx.lineWidth = width;
+        ctx.lineCap = pathLineCap;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        if (sel) {
+          ctx.strokeStyle = c2dObjectSelectedStroke();
+          ctx.fillStyle = c2dObjectSelectedFill();
           ctx.save();
           ctx.shadowColor = c2dObjectSelectedGlow();
           ctx.shadowBlur = c2dObjectSelectedGlowBlur();
           ctx.stroke();
           ctx.restore();
-        } else ctx.stroke();
+        } else {
+          ctx.save();
+          ctx.globalAlpha = state.showRoadWidth ? 1 : RUNWAY_PATH_WIDTH_OFF_ALPHA;
+          ctx.strokeStyle = state.showRoadWidth ? c2dRunwayBandStrokeOpaque() : c2dRunwayBandStrokeDim();
+          ctx.stroke();
+          ctx.restore();
+        }
       }
+    });
+    state.taxiways.forEach(tw => {
+      const drawing = state.taxiwayDrawingId === tw.id;
+      if (tw.vertices.length < 2 && !drawing) return;
+      const isRunwayPath = tw.pathType === 'runway';
+      const isRunwayExit = tw.pathType === 'runway_exit';
+      const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+      const width = tw.width != null ? tw.width : widthDefault;
+      const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
       if (!isRunwayPath) {
         ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dPassengerTerminalStroke() : '#facc15');
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
@@ -1221,7 +1256,9 @@
       }
       if (isRunwayPath && tw.vertices.length >= 2) {
         const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
-        drawRunwayDecorations(tw, runwayPts, width);
+        drawRunwayDecorations(tw, runwayPts, width, {
+          pavementAlpha: state.showRoadWidth ? 1 : RUNWAY_PATH_WIDTH_OFF_ALPHA
+        });
       }
       const dir = getTaxiwayDirection(tw);
       if (dir !== 'both' && tw.vertices.length >= 2) {
@@ -1362,7 +1399,7 @@
         const [lx, ly] = cellToPixel(lastV.col, lastV.row);
         if (ptr && ptr.length >= 2 && dist2([lx, ly], ptr) > 1e-6) {
           ctx.save();
-          ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+          ctx.strokeStyle = 'rgba(34, 34, 34, 0.78)';
           ctx.setLineDash([4, 6]);
           ctx.lineWidth = Math.max(2, width * 0.25);
           ctx.lineCap = 'round';

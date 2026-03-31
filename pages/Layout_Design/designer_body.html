@@ -14,10 +14,11 @@
             <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
             <button class="tool-btn active" id="btnGridToggle" title="Toggle grid visibility">Grid</button>
             <button class="tool-btn active" id="btnImageToggle" title="Toggle background image visibility">Image</button>
+            <button class="tool-btn active" id="btnRoadWidthToggle" title="Toggle road width vs schematic (centerlines on top)">Width</button>
             <span class="global-update-wrap">
-              <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Click Update to sync calculations and KPIs" role="status" aria-label="Update status"></span>
-              <button class="tool-btn" id="btnGlobalUpdate" title="Refresh all views and calculations">Update</button>
-              <button type="button" class="tool-btn" id="btnShowPlayDock" title="Show bottom playback controls (same as former Show playback)">Show Play</button>
+              <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Click Light Sim to sync calculations and KPIs" role="status" aria-label="Light Sim status"></span>
+              <button class="tool-btn" id="btnGlobalUpdate" title="Run light simulation: refresh paths, timelines, and KPIs">Light Sim</button>
+              <button type="button" class="tool-btn" id="btnShowPlayDock" title="Show bottom playback controls (Light Play)">Light Play</button>
             </span>
           </div>
         </div>
@@ -32,7 +33,7 @@
           <label for="flightSimSlider" title="스케줄 기준 시각(ELDT/ETOT 등으로부터 계산된 절대 시간). 접근 거리(예: 20km)는 이 숫자를 00:00으로 맞추지 않고, 재생 구간 시작만 ELDT보다 앞당깁니다. 스탠드 할당 간트 축과는 별개입니다.">Current</label>
           <input type="range" id="flightSimSlider" min="0" max="100" value="0" step="any" title="스케줄 절대 시각(HH:MM:SS). 슬라이더 범위 최솟값은 가장 이른 공중 구간 시작(접근 포함)입니다." />
           <span id="flightSimTimeLabel" title="스케줄 절대 시각">00:00:00</span>
-          <button type="button" class="sim-bar-collapse-btn" id="btnHideSimPlaybackBar" title="Hide playback bar — use Show Play next to Update to show again" aria-label="Hide playback bar" aria-expanded="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+          <button type="button" class="sim-bar-collapse-btn" id="btnHideSimPlaybackBar" title="Hide playback bar — use Light Play next to Light Sim to show again" aria-label="Hide playback bar" aria-expanded="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
         </div>
       </div>
     </div>

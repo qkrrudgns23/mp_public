@@ -163,6 +163,7 @@
     simPlaybackDockVisible: false,
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
+    showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
     currentTerminalId: null,
     selectedObject: null,
     terminalDrawingId: null,
@@ -236,7 +237,7 @@
     if (dot) {
       dot.classList.remove('fresh');
       dot.classList.add('stale');
-      dot.setAttribute('title', 'Results may be outdated — click Update to refresh');
+      dot.setAttribute('title', 'Results may be outdated — click Light Sim to refresh');
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
@@ -246,7 +247,7 @@
     if (dot) {
       dot.classList.remove('stale');
       dot.classList.add('fresh');
-      dot.setAttribute('title', 'All views match the last Update');
+      dot.setAttribute('title', 'All views match the last Light Sim run');
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }

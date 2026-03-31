@@ -568,7 +568,7 @@
     if (dot) {
       dot.classList.remove('fresh');
       dot.classList.add('stale');
-      dot.setAttribute('title', 'Results may be outdated — click Update to refresh');
+      dot.setAttribute('title', 'Results may be outdated — click Light Sim to refresh');
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
@@ -578,7 +578,7 @@
     if (dot) {
       dot.classList.remove('stale');
       dot.classList.add('fresh');
-      dot.setAttribute('title', 'All views match the last Update');
+      dot.setAttribute('title', 'All views match the last Light Sim run');
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
@@ -6697,7 +6697,7 @@
     kpiDisposeInteractiveCharts();
     const snapshot = collectKpiSnapshot();
     if (!snapshot.totalFlights) {
-      host.innerHTML = '<div class="kpi-empty-state">No flights are available yet. Add or load a schedule, then click <strong>Update</strong> to refresh the KPI snapshot.</div>';
+      host.innerHTML = '<div class="kpi-empty-state">No flights are available yet. Add or load a schedule, then click <strong>Light Sim</strong> to refresh the KPI snapshot.</div>';
       if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
       return;
     }
@@ -6733,7 +6733,7 @@
       kpiBuildPanel('Runway Delay', 'ELDT/ETOT vs schedule', [
         kpiBuildMetricRow('ELDT − SLDT', 'Avg ' + kpiFormatMinutesValue(snapshot.acArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acArrDelayTotalMin)),
         kpiBuildMetricRow('ETOT − STOT', 'Avg ' + kpiFormatMinutesValue(snapshot.acDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acDepDelayTotalMin)),
-        kpiBuildMetricRow('Snapshot basis', kpiFormatCount(snapshot.totalFlights) + ' flights', 'Rendered only on initial load and Update')
+        kpiBuildMetricRow('Snapshot basis', kpiFormatCount(snapshot.totalFlights) + ' flights', 'Rendered only on initial load and Light Sim')
       ])
     ].join('');
     const bucketsAll = snapshot.buckets || [];
@@ -11411,7 +11411,7 @@
           return;
         }
         if (!state.globalUpdateFresh) {
-          alert('Update(새로고침)이 필요합니다. 빨간 동기화 표시일 때는 타임라인이 비어 있어 재생할 수 없습니다.');
+          alert('Light Sim(새로고침)이 필요합니다. 빨간 동기화 표시일 때는 타임라인이 비어 있어 재생할 수 없습니다.');
           return;
         }
         if (typeof recomputeSimDuration === 'function') recomputeSimDuration();

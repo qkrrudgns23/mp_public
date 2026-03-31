@@ -95,6 +95,7 @@
         cellSize: CELL_SIZE,
         showGrid: !!state.showGrid,
         showImage: !!state.showImage,
+        showRoadWidth: !!state.showRoadWidth,
         layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
       },
       terminals: makeUniqueNamedCopy(state.terminals, 'name'),
