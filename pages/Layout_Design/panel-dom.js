@@ -131,6 +131,68 @@
         if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
       });
     }
+    const btnRunSim = document.getElementById('btnRunSimulation');
+    if (btnRunSim) {
+      btnRunSim.addEventListener('click', function() {
+        if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
+        if (typeof syncTableToFlightState === 'function') syncTableToFlightState();
+        var data = (typeof serializeCurrentLayout === 'function') ? serializeCurrentLayout() : null;
+        if (!data) { console.warn('serializeCurrentLayout not available'); return; }
+        if (!data.flights || data.flights.length === 0) {
+          alert('No flights to simulate.');
+          return;
+        }
+        var apiBase = (typeof getLayoutApiBase === 'function') ? getLayoutApiBase() : (LAYOUT_API_URL || '');
+        console.log('[Sim] apiBase =', apiBase);
+        btnRunSim.disabled = true;
+        btnRunSim.textContent = 'Starting...';
+        fetch(apiBase + '/api/run-simulation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ layout: data })
+        })
+        .then(function(r) {
+          console.log('[Sim] POST response status:', r.status);
+          if (!r.ok) {
+            return r.text().then(function(txt) {
+              throw new Error('Server returned ' + r.status + ': ' + (txt || 'empty body'));
+            });
+          }
+          return r.text().then(function(txt) {
+            if (!txt) throw new Error('Empty response body');
+            return JSON.parse(txt);
+          });
+        })
+        .then(function(startResult) {
+          if (!startResult.ok) throw new Error(startResult.error || 'start failed');
+          var pollInterval = setInterval(function() {
+            fetch(apiBase + '/api/sim-progress')
+              .then(function(r) { return r.ok ? r.json() : Promise.resolve({ running: false, percent: 0 }); })
+              .then(function(prog) {
+                if (prog.running) {
+                  btnRunSim.textContent = 'Sim ' + prog.percent + '%';
+                } else {
+                  clearInterval(pollInterval);
+                  btnRunSim.disabled = false;
+                  btnRunSim.textContent = 'Simulation';
+                  if (prog.error) {
+                    alert('Simulation error: ' + prog.error);
+                  } else if (prog.percent >= 100 || prog.resultFile) {
+                    alert('Simulation complete.\nOpen View Sim page to see results.');
+                  }
+                }
+              })
+              .catch(function(e) { console.warn('[Sim] poll error:', e); });
+          }, 500);
+        })
+        .catch(function(err) {
+          btnRunSim.disabled = false;
+          btnRunSim.textContent = 'Simulation';
+          console.error('[Sim] request failed:', err);
+          alert('Simulation failed: ' + (err.message || err));
+        });
+      });
+    }
     function applyTokenNodesFromCheckboxes() {
       const nodes = [];
       TOKEN_NODE_ORDER.forEach((node, i) => {

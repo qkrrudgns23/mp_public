@@ -23,6 +23,19 @@ DEFAULT_LAYOUT_PATH = LAYOUT_STORAGE_DIR / "default_layout.json"
 
 _PORT = 8765
 _RESERVED_NAMES = frozenset({"current_layout", "default_layout"})
+
+SIM_INPUT_PATH = LAYOUT_STORAGE_DIR / "sim_input.json"
+SIM_OUTPUT_PATH = LAYOUT_STORAGE_DIR / "sim_output.json"
+
+_sim_progress: Dict[str, Any] = {
+    "running": False,
+    "current": 0,
+    "total": 0,
+    "percent": 0,
+    "error": None,
+    "resultFile": None,
+}
+_sim_lock = threading.Lock()
 # Remove only dangerous characters so they can be used as file names (gap·Korean, etc. allowed)
 def _sanitize_layout_name(name: str) -> str:
     s = (name or "").strip()
@@ -175,6 +188,15 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
             return
+        if self.path.startswith("/api/sim-progress"):
+            with _sim_lock:
+                body = json.dumps(_sim_progress).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._send_cors()
+            self.end_headers()
+            self.wfile.write(body)
+            return
         self.send_response(404)
         self._send_cors()
         self.end_headers()
@@ -200,10 +222,46 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
             return
+        if path == "/api/run-simulation" or path.startswith("/api/run-simulation"):
+            try:
+                obj = json.loads(body)
+                layout = obj.get("layout", obj) if isinstance(obj, dict) else obj
+                LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+                SIM_INPUT_PATH.write_text(
+                    json.dumps(layout, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                with _sim_lock:
+                    if _sim_progress["running"]:
+                        self.send_response(409)
+                        self.send_header("Content-Type", "application/json")
+                        self._send_cors()
+                        self.end_headers()
+                        self.wfile.write(json.dumps({
+                            "ok": False, "error": "simulation already running"
+                        }).encode("utf-8"))
+                        return
+                    _sim_progress.update(running=True, current=0, total=0,
+                                         percent=0, error=None, resultFile=None)
+                t = threading.Thread(target=_run_simulation_thread, args=(layout,), daemon=True)
+                t.start()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True, "message": "simulation started"}).encode("utf-8"))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
         if path != "/api/save-layout" and not path.startswith("/api/save-layout"):
             self.send_response(404)
+            self.send_header("Content-Type", "application/json")
             self._send_cors()
             self.end_headers()
+            self.wfile.write(json.dumps({"ok": False, "error": "not_found", "path": path}).encode("utf-8"))
             return
         try:
             obj = json.loads(body)
@@ -231,6 +289,33 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
+
+
+def _sim_progress_cb(current_time: float, total_time: float) -> None:
+    pct = int(100 * current_time / total_time) if total_time > 0 else 0
+    pct = max(0, min(100, pct))
+    with _sim_lock:
+        _sim_progress.update(current=current_time, total=total_time, percent=pct)
+
+
+def _run_simulation_thread(layout: Dict[str, Any]) -> None:
+    try:
+        from utils.airside_sim import run_simulation
+        result = run_simulation(layout, progress_cb=_sim_progress_cb)
+        output = result if isinstance(result, dict) else {}
+        LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        SIM_OUTPUT_PATH.write_text(
+            json.dumps(output, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        with _sim_lock:
+            _sim_progress.update(running=False, percent=100,
+                                 resultFile="sim_output.json", error=None)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        with _sim_lock:
+            _sim_progress.update(running=False, error=str(e))
 
 
 _server: Optional[HTTPServer] = None
