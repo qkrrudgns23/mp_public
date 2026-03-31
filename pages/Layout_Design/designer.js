@@ -1055,7 +1055,14 @@
     const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : 'TX');
     const sameType = (state.taxiways || []).filter(function(tw) { return tw && tw.id !== currentId && tw.pathType === pathType; });
     const used = new Set(sameType.map(function(tw) { return (tw.name && String(tw.name).trim()) || ''; }).filter(Boolean));
-    return uniqueNameAgainstSet(prefix + String(sameType.length + 1), used);
+    let n = 1;
+    let candidate = prefix + String(n);
+    while (used.has(candidate)) {
+      n++;
+      candidate = prefix + String(n);
+      if (n > 100000) break;
+    }
+    return candidate;
   }
   function getDefaultTerminalName(currentId) {
     return getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, currentId);
