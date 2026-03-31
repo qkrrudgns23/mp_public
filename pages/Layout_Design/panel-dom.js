@@ -256,11 +256,7 @@
             terminalId: null
           }
         };
-        computeFlightPath(f, 'arrival');
-        computeFlightPath(f, 'departure');
-        if (f.noWayArr || f.noWayDep) {
-          updateFlightError('NOTE: Available on your network Taxiway / Apron path not found. (Simulation paths may not be drawn.)');
-        }
+        f.deferPathCompute = true;
         state.flights.push(f);
         if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
         else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();

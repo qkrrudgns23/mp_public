@@ -994,6 +994,7 @@
       },
       "interaction": {
         "layoutVertexDotScale": 0.7,
+        "layoutSelectedVertexRadiusFactor": 0.7,
         "showGridDefault": true,
         "showImageDefault": true,
         "dragThresholdPx": 0,

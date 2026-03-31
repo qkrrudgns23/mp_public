@@ -883,10 +883,10 @@
   }
 
   
-  const PATH_JUNCTION_DRAW_MERGE_RADIUS_M = 2;
+  const PATH_JUNCTION_MERGE_RADIUS_M = 7;
   function mergeNearbyPathPointsForDraw(points, radiusM) {
     if (!points || !points.length) return [];
-    const r = (typeof radiusM === 'number' && isFinite(radiusM) && radiusM > 0) ? radiusM : PATH_JUNCTION_DRAW_MERGE_RADIUS_M;
+    const r = (typeof radiusM === 'number' && isFinite(radiusM) && radiusM > 0) ? radiusM : PATH_JUNCTION_MERGE_RADIUS_M;
     const n = points.length;
     const parent = [];
     for (let i = 0; i < n; i++) parent[i] = i;
@@ -973,6 +973,26 @@
     const opts = pathGraphOpts && typeof pathGraphOpts === 'object' ? pathGraphOpts : {};
     const pureGroundExcludeRunway = !!opts.pureGroundExcludeRunway;
     const nodes = [], keyToIdx = {}, edges = [], adj = [], junctionPts = [], junctionKeys = {}, edgeMap = {};
+    const nodeBucket = {};
+    const mergeRM = PATH_JUNCTION_MERGE_RADIUS_M;
+    function nodeBucketKeyForPoint(p) {
+      return Math.floor(p[0] / mergeRM) + ',' + Math.floor(p[1] / mergeRM);
+    }
+    function findNodeIndexWithinMergeRadius(p) {
+      const bx = Math.floor(p[0] / mergeRM);
+      const by = Math.floor(p[1] / mergeRM);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const list = nodeBucket[(bx + dx) + ',' + (by + dy)];
+          if (!list) continue;
+          for (let t = 0; t < list.length; t++) {
+            const idx = list[t];
+            if (pathDist(nodes[idx], p) <= mergeRM) return idx;
+          }
+        }
+      }
+      return null;
+    }
     const runwayNodeIndicesById = {};
     function addJunction(p) {
       const k = pathPointKey(p);
@@ -981,12 +1001,16 @@
       junctionPts.push(p);
     }
     function getOrAdd(p) {
-      const k = pathPointKey(p);
-      if (keyToIdx[k] != null) return keyToIdx[k];
+      const found = findNodeIndexWithinMergeRadius(p);
+      if (found != null) return found;
       const idx = nodes.length;
-      nodes.push(p);
+      nodes.push([p[0], p[1]]);
+      const k = pathPointKey(p);
       keyToIdx[k] = idx;
       adj[idx] = [];
+      const bkey = nodeBucketKeyForPoint(p);
+      if (!nodeBucket[bkey]) nodeBucket[bkey] = [];
+      nodeBucket[bkey].push(idx);
       return idx;
     }
     function registerDirectedEdge(fromIdx, toIdx, cost, rawDist, pts) {
@@ -1209,14 +1233,18 @@
     const connected = new Set();
     runwayReachable.forEach(function(i) { if (standReachable.has(i)) connected.add(i); });
     const validJunctionsForDraw = junctionPts.filter(function(p) {
-      const i = keyToIdx[pathPointKey(p)];
+      const i = findNodeIndexWithinMergeRadius(p);
       return i != null && adj[i] && adj[i].length >= 2;
     });
     const connectedJunctionsForDraw = validJunctionsForDraw.filter(function(p) {
-      const i = keyToIdx[pathPointKey(p)];
+      const i = findNodeIndexWithinMergeRadius(p);
       return i != null && connected.has(i);
     });
-    const connectedJunctionsMerged = mergeNearbyPathPointsForDraw(connectedJunctionsForDraw, PATH_JUNCTION_DRAW_MERGE_RADIUS_M);
+    const disconnectedValidJunctionsForDraw = validJunctionsForDraw.filter(function(p) {
+      const i = findNodeIndexWithinMergeRadius(p);
+      return i != null && !connected.has(i);
+    });
+    const connectedJunctionsMerged = mergeNearbyPathPointsForDraw(connectedJunctionsForDraw, PATH_JUNCTION_MERGE_RADIUS_M);
     return {
       nodes,
       edges,
@@ -1226,6 +1254,7 @@
       runwayNodeIndicesById,
       junctions: connectedJunctionsMerged,
       validJunctions: validJunctionsForDraw,
+      disconnectedValidJunctions: disconnectedValidJunctionsForDraw,
       connectedJunctions: connectedJunctionsMerged,
       standIdToNodeIndex
     };
@@ -1450,6 +1479,7 @@
   }
 
   function graphPathArrival(f) {
+    if (f && f.deferPathCompute) return null;
     f._noWayArrDetail = '';
     const token = f.token || {};
     let runwayId = (typeof resolveArrivalRunwayIdForFlight === 'function')
@@ -1602,6 +1632,7 @@
   }
 
   function graphPathDeparture(f, opts) {
+    if (f && f.deferPathCompute) return null;
     f._noWayDepDetail = '';
     opts = opts || {};
     const onlyToLineup = !!opts.onlyToLineup;
@@ -1770,6 +1801,7 @@
   }
 
   function getPathForFlight(f) {
+    if (f && f.deferPathCompute) return null;
     resolveStand(f);
     const arrRetKey = normalizedArrRetCacheKey(f);
     if (
@@ -1797,6 +1829,7 @@
   }
 
   function getPathForFlightDeparture(f) {
+    if (f && f.deferPathCompute) return null;
     resolveStand(f);
     if (
       f._pathPolylineCacheRev === state.pathPolylineCacheRev &&
@@ -1820,6 +1853,7 @@
   }
 
   function ensureFlightPaths(f) {
+    if (f && f.deferPathCompute) return;
     getPathForFlight(f);
     getPathForFlightDeparture(f);
     if (f.noWayArr || f.noWayDep) f.timeline = null;
@@ -1853,6 +1887,12 @@
   }
 
   function computeFlightPath(flight, direction) {
+    if (flight && flight.deferPathCompute) {
+      delete flight.deferPathCompute;
+      delete flight.__schedVttArrMin;
+      delete flight.__schedVttArrRev;
+      delete flight.__schedRetRotRev;
+    }
     resolveStand(flight);
     if (direction === 'arrival') {
       const pts = graphPathArrival(flight);
@@ -1940,28 +1980,24 @@
     if (!g) return;
     const validJunctions = g.validJunctions || [];
     const connectedJunctions = g.connectedJunctions || g.junctions || [];
+    const redJunctions = g.disconnectedValidJunctions != null ? g.disconnectedValidJunctions : validJunctions;
     if (!validJunctions.length && !connectedJunctions.length) return;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     const r = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
-    ctx.lineWidth = 1.5;
     ctx.fillStyle = '#ef4444';
-    ctx.strokeStyle = '#7f1d1d';
-    validJunctions.forEach(p => {
+    redJunctions.forEach(p => {
       ctx.beginPath();
       ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
     });
     ctx.fillStyle = '#22c55e';
-    ctx.strokeStyle = '#14532d';
     connectedJunctions.forEach(p => {
       ctx.beginPath();
       ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
     });
     ctx.fillStyle = '#0f172a';
     ctx.font = (Math.max(7, CELL_SIZE * 0.18)) + 'px system-ui';
@@ -2598,9 +2634,6 @@
     ctx.beginPath();
     ctx.arc(handlePx[0], handlePx[1], r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
     ctx.restore();
   }
   function buildDefaultPbbBridgePoints(pbb, bridgeIndex, bridgeCount) {

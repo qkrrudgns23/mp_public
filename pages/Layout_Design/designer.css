@@ -348,6 +348,7 @@
     .flight-schedule-table .flight-td-select .flight-assign-select { min-width:100px; width:70%; max-width:100%; padding:4px 8px; font-size:11px; box-sizing:border-box; }
     .flight-schedule-table .flight-td-readonly { color:var(--ui-text-secondary); font-size:11px; max-width:120px; overflow:hidden; text-overflow:ellipsis; }
     .flight-schedule-table .flight-td-del { width:36px; text-align:center; padding:2px 0; }
+    .flight-schedule-table tbody tr.flight-row-path-pending td { background: rgba(239, 68, 68, 0.12); }
     .flight-config-input { width:72px; font-size:11px; text-align:right; }
     .flight-config-table th.sticky-col,
     .flight-config-table td.sticky-col { position:sticky; left:0; z-index:2; background:rgba(8,10,12,0.98); }

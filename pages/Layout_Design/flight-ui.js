@@ -16,7 +16,9 @@
       }
       _flightListWireEvents(listEl, state);
     }
-    _renderFlightConfigTable(cfgEl, flightsSorted);
+    if (schedFull || !deferOnlyDirty) {
+      _renderFlightConfigTable(cfgEl, flightsSorted);
+    }
     if (typeof ensureFlightAssignStripWired === 'function') ensureFlightAssignStripWired();
     if (typeof syncFlightAssignStrip === 'function') syncFlightAssignStrip();
     if (!skipGanttRefresh && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
@@ -30,8 +32,9 @@
         : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
     } else {
       const dirtyFlights = flightsSorted.filter(function(f) { return dirtySet.has(f.id); });
-      if (dirtyFlights.length && typeof ensureArrRetRotSampled === 'function')
-        retStatsAll = ensureArrRetRotSampled(dirtyFlights, false);
+      const dirtyForRet = dirtyFlights.filter(function(f) { return f && !f.deferPathCompute; });
+      if (dirtyForRet.length && typeof ensureArrRetRotSampled === 'function')
+        retStatsAll = ensureArrRetRotSampled(dirtyForRet, false);
       else
         retStatsAll = (typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : [];
     }

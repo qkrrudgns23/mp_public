@@ -827,6 +827,7 @@
   }
   function getBaseVttArrMinutes(f) {
     if (!f) return 0;
+    if (f.deferPathCompute) return 0;
     const rev = state.vttArrCacheRev | 0;
     if (f.__schedVttArrRev === rev && f.__schedVttArrMin != null && isFinite(f.__schedVttArrMin)) {
       return f.__schedVttArrMin;
@@ -875,6 +876,7 @@
     return (rotSec != null && isFinite(rotSec) && rotSec >= 0) ? rotSec / 60 : 0;
   }
   function getBaseVttDepMinutes(f) {
+    if (!f || f.deferPathCompute) return 0;
     const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
     if (!depPts || depPts.length < 2) return 0;
     const carry = { lastTaxiwayMs: null };
@@ -889,6 +891,7 @@
   }
   
   function getBaseVttDepMinutesToLineup(f) {
+    if (!f || f.deferPathCompute) return 0;
     const depPts = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, { onlyToLineup: true }) : null;
     if (!depPts || depPts.length < 2) return 0;
     const carry = { lastTaxiwayMs: null };
@@ -1030,6 +1033,10 @@
   function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {
     if (!f) return;
     const rev = state.vttArrCacheRev | 0;
+    if (!forceResample && f.deferPathCompute) {
+      f.__schedRetRotRev = rev;
+      return;
+    }
     if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
     if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
         f.sampledArrRet != null && f.arrRetFailed === false && f.arrRotSec != null && isFinite(f.arrRotSec) &&
@@ -1215,6 +1222,59 @@
       const retInfo = retStatsAll.find(r => r.exit && r.exit.id === f.sampledArrRet);
       sampledRetName = retInfo ? (retInfo.name || 'RET') : 'RET';
     }
+    if (f.deferPathCompute) {
+      const tArrMin = f.timeMin != null ? f.timeMin : 0;
+      const dwell = f.dwellMin != null ? f.dwellMin : 0;
+      const tDepMin = tArrMin + dwell;
+      const tArr = formatMinutesToHHMMSS(tArrMin);
+      const tDep = formatMinutesToHHMMSS(tDepMin);
+      const dash = '—';
+      const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
+      const termId = f.terminalId || (f.token && f.token.terminalId);
+      const arrRwRead = escapeHtml(getRunwayDisplayLabelById(arrRunwayId));
+      const buildingRead = escapeHtml(getTerminalDisplayLabelById(termId));
+      const depRwRead = escapeHtml(getRunwayDisplayLabelById(depRunwayId));
+      const noWayBadge = (f.noWayArr || f.noWayDep)
+        ? ' <span class="flight-no-way-badge" style="color:#dc2626;font-weight:600;font-size:10px;cursor:help;" title="' + escapeAttr(buildNoWayTooltip(f)) + '">⚠ No Way</span>'
+        : '';
+      const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
+      const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
+      const arrRetFailedBadge = (f.arrRetFailed || sampledRetName === 'Failed') ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
+      const pathPendingClass = ' flight-row-path-pending';
+      const pathPendingTitle = ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"';
+      return '' +
+        '<tr class="flight-data-row obj-item' + pathPendingClass + '"' + pathPendingTitle + ' data-id="' + f.id + '">' +
+          '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + arrRetFailedBadge + '</td>' +
+          '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
+          '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
+          '<td class="flight-td-time flight-col-s flight-col-s-start">' + dash + '</td>' +
+          '<td class="flight-td-time flight-td-sibt flight-col-s">' + tArr + '</td>' +
+          '<td class="flight-td-time flight-col-s">' + tDep + '</td>' +
+          '<td class="flight-td-time flight-col-s flight-col-s-last">' + dash + '</td>' +
+          '<td class="flight-td-time flight-col-sd flight-col-sd-start">' + dash + '</td>' +
+          '<td class="flight-td-time flight-col-sd">' + dash + '</td>' +
+          '<td class="flight-td-time flight-col-sd">' + dash + '</td>' +
+          '<td class="flight-td-time flight-col-sd flight-col-sd-last">' + dash + '</td>' +
+          '<td class="flight-td-time flight-col-e flight-col-e-start">' + dash + '</td>' +
+          '<td class="flight-td-time flight-col-e">' + dash + '</td>' +
+          '<td class="flight-td-time flight-col-e">' + dash + '</td>' +
+          '<td class="flight-td-time flight-col-e">' + dash + '</td>' +
+          '<td class="flight-td-time flight-col-e flight-col-rot">' + dash + '</td>' +
+          '<td class="flight-td-time">' + dash + '</td>' +
+          '<td class="flight-td-time">' + dash + '</td>' +
+          '<td class="flight-td-time">' + dash + '</td>' +
+          '<td class="flight-td-time">' + dash + '</td>' +
+          '<td class="flight-td-time">' + dash + '</td>' +
+          '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
+          '<td>' + escapeHtml(codeIcao) + '</td>' +
+          '<td class="flight-td-readonly">' + arrRwRead + '</td>' +
+          '<td>' + escapeHtml(sampledRetName) + '</td>' +
+          '<td class="flight-td-readonly">' + buildingRead + '</td>' +
+          '<td class="flight-td-reg">' + (function() { var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); })() + '</td>' +
+          '<td class="flight-td-readonly">' + depRwRead + '</td>' +
+          '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
+        '</tr>';
+    }
     const tArrMin = f.timeMin != null ? f.timeMin : 0;
     const dwell = f.dwellMin != null ? f.dwellMin : 0;
     const tDepMin = tArrMin + dwell;
@@ -1278,8 +1338,10 @@
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
     const arrRetFailedBadge = (f.arrRetFailed || sampledRetName === 'Failed') ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
+    const pathPendingClass = f.deferPathCompute ? ' flight-row-path-pending' : '';
+    const pathPendingTitle = f.deferPathCompute ? ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"' : '';
     return '' +
-      '<tr class="flight-data-row obj-item" data-id="' + f.id + '">' +
+      '<tr class="flight-data-row obj-item' + pathPendingClass + '"' + pathPendingTitle + ' data-id="' + f.id + '">' +
         '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + arrRetFailedBadge + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
@@ -1323,12 +1385,18 @@
   function _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, domOpt) {
     const skipGanttRefresh = domOpt && domOpt.skipGanttRefresh;
     const headerRow = _buildFlightListHeaderHtml();
+    const dirtyIds = [];
+    dirtySet.forEach(function(id) { if (id != null && id !== '') dirtyIds.push(id); });
+    const deferOnlyDirty = dirtyIds.length > 0 && dirtyIds.every(function(fid) {
+      const ff = flightsSorted.find(function(x) { return x.id === fid; });
+      return ff && ff.deferPathCompute;
+    });
     if (schedFull) {
       if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
       if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
       pinEarliestEldtToSldtPerRunway(flightsSorted);
     } else {
-      if (typeof computeScheduledDisplayTimesIncremental === 'function')
+      if (!deferOnlyDirty && typeof computeScheduledDisplayTimesIncremental === 'function')
         computeScheduledDisplayTimesIncremental(state.flights, dirtySet, standSet);
     }
     flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));

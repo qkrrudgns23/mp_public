@@ -506,11 +506,6 @@
         ctx.fillStyle = vertexSelected ? '#f43f5e' : (i === 0 ? '#f97316' : '#e5e7eb');
         ctx.arc(x, y, layoutTerminalVertexRadiusPx(vertexSelected), 0, Math.PI*2);
         ctx.fill();
-        if (vertexSelected) {
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-        }
       });
       if (isDrawingTerm && state.layoutPathDrawPointer && term.vertices.length >= 1) {
         const ptr = state.layoutPathDrawPointer;
@@ -608,11 +603,6 @@
       ctx.fillStyle = sel ? '#22c55e' : 'rgba(34,197,94,0.9)';
       ctx.arc(apronPt[0], apronPt[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
       ctx.fill();
-      if (sel) {
-        ctx.strokeStyle = '#bbf7d0';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
       ctx.restore();
       if (sel) {
         drawStandRotationHandle(getPbbRotationOriginPx(pbb), getPbbRotationHandlePx(pbb), rotationActive);
@@ -1363,11 +1353,6 @@
             ctx.beginPath();
             ctx.arc(x, y, layoutPathVertexRadiusPx(vertexSelected, sel), 0, Math.PI*2);
             ctx.fill();
-            if (sel || vertexSelected) {
-              ctx.strokeStyle = vertexSelected ? '#ffffff' : c2dObjectSelectedStroke();
-              ctx.lineWidth = 1.5;
-              ctx.stroke();
-            }
           }
         });
       }
@@ -1433,11 +1418,6 @@
           ctx.beginPath();
           ctx.arc(px, py, r, 0, Math.PI*2);
           ctx.fill();
-          if (vtxSel || draggable) {
-            ctx.strokeStyle = vtxSel ? '#ffffff' : c2dObjectSelectedStroke();
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-          }
         }
         ctx.setLineDash([3, 3]);
       }
@@ -1706,7 +1686,7 @@
         ctx.shadowBlur = 0;
       }
       ctx.fill();
-      ctx.stroke();
+      if (!selected) ctx.stroke();
       ctx.shadowBlur = 0;
       const waitN = countFlightsWaitingAtHoldingPoint2D(hp, state.simTimeSec);
       if (waitN > 0) {
@@ -1755,7 +1735,6 @@
       ctx.lineWidth = 1;
       ctx.shadowBlur = 0;
       ctx.fill();
-      ctx.stroke();
     }
     ctx.restore();
   }
@@ -1859,6 +1838,21 @@
     const inInput = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
     if (ev.ctrlKey && ev.key === 'z') {
       if (!inInput) { ev.preventDefault(); undo(); }
+      return;
+    }
+    if (ev.key === 'Escape') {
+      if (inInput) return;
+      const anyLayoutDraw = !!(state.pbbDrawing || state.remoteDrawing || state.holdingPointDrawing || state.apronLinkDrawing ||
+        state.terminalDrawingId || state.taxiwayDrawingId);
+      if (!anyLayoutDraw) return;
+      ev.preventDefault();
+      cancelActiveLayoutDrawingState();
+      state.terminalDrawingId = null;
+      state.taxiwayDrawingId = null;
+      syncPanelFromState();
+      updateObjectInfo();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
       return;
     }
     if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
