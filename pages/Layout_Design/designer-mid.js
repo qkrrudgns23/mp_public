@@ -250,6 +250,38 @@
     return { point: [last[0], last[1]], tangent: [ux, uy], normal: [-uy, ux] };
   }
 
+  function drawRunwayCenterlineDashedOnly(tw, pts, widthPx) {
+    if (!tw || tw.pathType !== 'runway' || !tw.start_point || !tw.end_point) return;
+    if (!pts || pts.length < 2) return;
+    const totalLen = runwayPolylineLengthPx(pts);
+    const runwayWidth = Math.max(24, Number(widthPx) || RUNWAY_PATH_DEFAULT_WIDTH);
+    if (totalLen < Math.max(220, runwayWidth * 3)) return;
+    const startDisp = getEffectiveRunwayStartDisplacedThresholdM(tw);
+    const startBlast = getEffectiveRunwayStartBlastPadM(tw);
+    const endDisp = getEffectiveRunwayEndDisplacedThresholdM(tw);
+    const endBlast = getEffectiveRunwayEndBlastPadM(tw);
+    const paveStart = startDisp + startBlast;
+    const paveEnd = totalLen - endDisp - endBlast;
+    if (!(paveEnd > paveStart + 1)) return;
+    const clPts = polylineSliceBetweenDistances(pts, paveStart, paveEnd);
+    if (!clPts || clPts.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = c2dRunwayCenterlineColor();
+    ctx.lineWidth = Math.max(1, runwayWidth * 0.02);
+    const dashPx = Math.max(10, runwayWidth * 0.2);
+    const gapPx = Math.max(8, runwayWidth * 0.16);
+    ctx.setLineDash([dashPx, gapPx]);
+    ctx.lineDashOffset = 0;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    ctx.beginPath();
+    ctx.moveTo(clPts[0][0], clPts[0][1]);
+    for (let ci = 1; ci < clPts.length; ci++) ctx.lineTo(clPts[ci][0], clPts[ci][1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   function drawRunwayDecorations(tw, pts, widthPx) {
     if (!tw || tw.pathType !== 'runway' || !tw.start_point || !tw.end_point) return;
     if (!pts || pts.length < 2) return;
@@ -405,29 +437,6 @@
     [-runwayWidth * 0.30, -runwayWidth * 0.18, -runwayWidth * 0.06, runwayWidth * 0.06, runwayWidth * 0.18, runwayWidth * 0.30].forEach(function(offset) {
       drawRectAtBothEnds(thresholdInset, offset, thresholdStripeLen, thresholdStripeWidth, thresholdColor);
     });
-
-    (function drawRunwayCenterlineDashed() {
-      const paveStart = startDisp + startBlast;
-      const paveEnd = totalLen - endDisp - endBlast;
-      if (!(paveEnd > paveStart + 1)) return;
-      const clPts = polylineSliceBetweenDistances(pts, paveStart, paveEnd);
-      if (!clPts || clPts.length < 2) return;
-      ctx.save();
-      ctx.strokeStyle = c2dRunwayCenterlineColor();
-      ctx.lineWidth = Math.max(1, runwayWidth * 0.02);
-      const dashPx = Math.max(10, runwayWidth * 0.2);
-      const gapPx = Math.max(8, runwayWidth * 0.16);
-      ctx.setLineDash([dashPx, gapPx]);
-      ctx.lineDashOffset = 0;
-      ctx.lineCap = 'butt';
-      ctx.lineJoin = 'miter';
-      ctx.beginPath();
-      ctx.moveTo(clPts[0][0], clPts[0][1]);
-      for (let ci = 1; ci < clPts.length; ci++) ctx.lineTo(clPts[ci][0], clPts[ci][1]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-    })();
 
     const aimingDist = Math.min(Math.max(300, runwayWidth * 3.5), totalLen * 0.28);
     if (aimingDist < (totalLen * 0.5) - (runwayWidth * 0.6)) {

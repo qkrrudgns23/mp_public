@@ -7592,47 +7592,6 @@
     }
     return { first: dedupePathPoints(first), second: [[pts[pts.length - 1][0], pts[pts.length - 1][1]]] };
   }
-  function runwayDistanceAtElapsedSec(tau, v0, a, vFloorIn, distM) {
-    const vf0 = Math.max(1, Math.min(150, vFloorIn));
-    const vf = Math.min(vf0, v0);
-    if (!(tau > 0)) return 0;
-    if (!(a > 0) || distM <= 0) return Math.min(distM, v0 * tau);
-    if (v0 <= vf) return Math.min(distM, v0 * tau);
-    const dStop = (v0 * v0 - vf * vf) / (2 * a);
-    if (distM < dStop) {
-      const vEnd = Math.sqrt(Math.max(0, v0 * v0 - 2 * a * distM));
-      const tFull = (v0 - vEnd) / a;
-      const t = Math.min(tau, tFull);
-      const s = v0 * t - 0.5 * a * t * t;
-      return Math.min(distM, s);
-    }
-    const tDecel = (v0 - vf) / a;
-    if (tau <= tDecel) return Math.min(distM, v0 * tau - 0.5 * a * tau * tau);
-    const sDecel = dStop;
-    const s = sDecel + vf * (tau - tDecel);
-    return Math.min(distM, s);
-  }
-  function runwayPhysicsTimelineScaled(pts, distM, tStart, tEnd, v0, a, vFloorIn) {
-    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9 || distM <= 1e-9) {
-      const p = pts && pts.length ? polylinePointAtDistance(pts, 0) : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }, { t: tEnd, x: p[0], y: p[1] }];
-    }
-    const phy = runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn);
-    const phyT = Math.max(1e-6, phy.tSec);
-    const n = Math.max(6, Math.min(24, Math.ceil(distM / 40)));
-    const tl = [];
-    for (let i = 0; i <= n; i++) {
-      const u = i / n;
-      const t = tStart + u * (tEnd - tStart);
-      const tauPhy = u * phyT;
-      const s = Math.min(distM, runwayDistanceAtElapsedSec(tauPhy, v0, a, vFloorIn, distM));
-      const pt = polylinePointAtDistance(pts, s);
-      tl.push({ t: t, x: pt[0], y: pt[1] });
-    }
-    tl[0].t = tStart;
-    tl[tl.length - 1].t = tEnd;
-    return tl;
-  }
   function aircraftDecelMs2ForTimeline(f) {
     const ac = (typeof getAircraftInfoByType === 'function') ? getAircraftInfoByType(f && f.aircraftType) : null;
     const a = ac && typeof ac.deceleration_avg_ms2 === 'number' ? ac.deceleration_avg_ms2 : null;
@@ -7804,6 +7763,26 @@
     tl[tl.length - 1].t = tEnd;
     return tl;
   }
+  function polylineRawDurationLinearRetSpeed(pts, vIn, vOut) {
+    if (!pts || pts.length < 2) return 0;
+    const lengths = [];
+    let totalLen = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const len = pathDist(pts[i], pts[i + 1]);
+      lengths.push(len);
+      totalLen += len;
+    }
+    let rawTotal = 0;
+    let accLen = 0;
+    for (let i = 0; i < lengths.length; i++) {
+      const midLen = accLen + lengths[i] * 0.5;
+      const u = totalLen > 1e-9 ? midLen / totalLen : 0;
+      const v = Math.max(1, vIn + (vOut - vIn) * u);
+      rawTotal += lengths[i] < 1e-9 ? 0 : lengths[i] / v;
+      accLen += lengths[i];
+    }
+    return rawTotal;
+  }
   function splitTaxiInPartsForTimeline(f, runwayId, taxiInPts) {
     const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
     if (!taxiInPts || taxiInPts.length < 2) {
@@ -7858,7 +7837,7 @@
     const useRwPhy = runwayLenM > 1 && runwayPts.length >= 2;
     let phyRw = 0;
     if (useRwPhy) {
-      phyRw = runwayArrSpeedAndTimeToRet(vTd, aDec, runwayLenM, vRetIn).tSec;
+      phyRw = polylineRawDurationLinearRetSpeed(runwayPts, vTd, vRetIn);
     } else if (runwayPts.length >= 2) {
       phyRw = polylineTotalLength(runwayPts) / vTaxiBase;
     }
@@ -7873,7 +7852,7 @@
       ? carryRw.lastTaxiwayMs
       : vFallback;
     const retPathLen = polylineTotalLength(retPts);
-    const phyRet = (retPts.length >= 2 && retPathLen > 1e-3) ? retPathLen / Math.max(1, vRetResolved) : 0;
+    const phyRet = (retPts.length >= 2 && retPathLen > 1e-3) ? polylineRawDurationLinearRetSpeed(retPts, vRetIn, vRetOut) : 0;
     const carryTaxi = { lastTaxiwayMs: carryRw.lastTaxiwayMs };
     const phyTaxi = taxiPts.length >= 2
       ? polylineRawDurationSegmentVelocities(taxiPts, function(i, a, b) {
@@ -7896,10 +7875,8 @@
     const useRwPhy = parts.useRwPhy;
     const runwayLenM = parts.runwayLenM;
     const vTd = parts.vTd;
-    const aDec = parts.aDec;
     const vRetIn = parts.vRetIn;
     const vRetOut = parts.vRetOut;
-    const vRetResolved = Math.max(1, parts.vRetResolved != null ? parts.vRetResolved : vTaxiBase);
     if (!taxiInPts || taxiInPts.length < 2 || tEnd <= tStart + 1e-6) {
       const p = taxiInPts && taxiInPts.length ? taxiInPts[0] : [0, 0];
       return [{ t: tStart, x: p[0], y: p[1] }, { t: tEnd, x: p[0], y: p[1] }];
@@ -7915,14 +7892,14 @@
     if (runwayPts.length >= 2 && (useRwPhy ? runwayLenM > 1 : phyRw > 1e-9)) {
       const tSegEnd = tCur + phyRw * scale;
       const seg = useRwPhy
-        ? runwayPhysicsTimelineScaled(runwayPts, runwayLenM, tCur, tSegEnd, vTd, aDec, vRetIn)
+        ? polylineTimelineLinearRetSpeed(runwayPts, tCur, tSegEnd, vTd, vRetIn)
         : polylineSpeedScaledToWindow(runwayPts, tCur, tSegEnd, vTaxiBase);
       merged = seg;
       tCur = tSegEnd;
     }
     if (retPts.length >= 2 && phyRet > 1e-9) {
       const tSegEnd = tCur + phyRet * scale;
-      const seg = polylineSpeedScaledToWindow(retPts, tCur, tSegEnd, vRetResolved);
+      const seg = polylineTimelineLinearRetSpeed(retPts, tCur, tSegEnd, vRetIn, vRetOut);
       merged = merged ? mergeTimelineSegments(merged, seg) : seg;
       tCur = tSegEnd;
     }
@@ -7960,8 +7937,7 @@
       return [{ t: tTaxiStart, x: p[0], y: p[1] }, { t: eibtS, x: p[0], y: p[1] }];
     }
     const parts = splitTaxiInPartsForTimeline(f, runwayId, taxiInPts);
-    const { vTaxiBase, runwayPts, retPts, taxiPts, phyRw, phyRet, phyTaxi, useRwPhy, runwayLenM, vTd, aDec, vRetIn, vRetOut, vRetResolved, carryAfterRunway } = parts;
-    const vRetRes = Math.max(1, vRetResolved != null ? vRetResolved : vTaxiBase);
+    const { vTaxiBase, runwayPts, retPts, taxiPts, phyRw, phyRet, phyTaxi, useRwPhy, runwayLenM, vTd, vRetIn, vRetOut, carryAfterRunway } = parts;
     const crComp = carryAfterRunway || { lastTaxiwayMs: null };
     const carryCompTaxi = { lastTaxiwayMs: crComp.lastTaxiwayMs };
     const window = Math.max(1e-6, eibtS - tTaxiStart);
@@ -7975,14 +7951,14 @@
     if (runwayPts.length >= 2 && (useRwPhy ? runwayLenM > 1 : phyRw > 1e-9)) {
       const tEnd = tCur + phyRw * scale;
       const seg = useRwPhy
-        ? runwayPhysicsTimelineScaled(runwayPts, runwayLenM, tCur, tEnd, vTd, aDec, vRetIn)
+        ? polylineTimelineLinearRetSpeed(runwayPts, tCur, tEnd, vTd, vRetIn)
         : polylineSpeedScaledToWindow(runwayPts, tCur, tEnd, vTaxiBase);
       merged = seg;
       tCur = tEnd;
     }
     if (retPts.length >= 2 && phyRet > 1e-9) {
       const tEnd = tCur + phyRet * scale;
-      const seg = polylineSpeedScaledToWindow(retPts, tCur, tEnd, vRetRes);
+      const seg = polylineTimelineLinearRetSpeed(retPts, tCur, tEnd, vRetIn, vRetOut);
       merged = merged ? mergeTimelineSegments(merged, seg) : seg;
       tCur = tEnd;
     }

@@ -1446,7 +1446,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    state.taxiways.forEach(tw => {
+    state.taxiways.forEach(function(tw) {
       const drawing = state.taxiwayDrawingId === tw.id;
       if (tw.vertices.length < 2 && !drawing) return;
       const isRunwayPath = tw.pathType === 'runway';
@@ -1484,16 +1484,17 @@
         } else ctx.stroke();
         ctx.restore();
       }
-      if (!isRunwayPath) {
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
-        ctx.beginPath();
-        for (let i = 0; i < tw.vertices.length; i++) {
-          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        if (tw.vertices.length >= 2) ctx.stroke();
-      }
+    });
+    ctx.globalAlpha = 1;
+    state.taxiways.forEach(function(tw) {
+      const drawing = state.taxiwayDrawingId === tw.id;
+      if (tw.vertices.length < 2 && !drawing) return;
+      const isRunwayPath = tw.pathType === 'runway';
+      const isRunwayExit = tw.pathType === 'runway_exit';
+      const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+      const width = tw.width != null ? tw.width : widthDefault;
+      const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
+      const pathBodyAlpha = taxiwayPathWidthBodyAlpha(tw, sel, drawing);
       if (isRunwayPath && tw.vertices.length >= 2) {
         const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
         ctx.save();
@@ -1650,6 +1651,36 @@
           ctx.stroke();
           ctx.restore();
         }
+      }
+    });
+    ctx.globalAlpha = 1;
+    state.taxiways.forEach(function(tw) {
+      const drawing = state.taxiwayDrawingId === tw.id;
+      if (tw.vertices.length < 2 && !drawing) return;
+      const isRunwayPath = tw.pathType === 'runway';
+      const isRunwayExit = tw.pathType === 'runway_exit';
+      const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+      const width = tw.width != null ? tw.width : widthDefault;
+      const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
+      if (!isRunwayPath && tw.vertices.length >= 2) {
+        ctx.save();
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (isRunwayPath && tw.vertices.length >= 2 && typeof drawRunwayCenterlineDashedOnly === 'function') {
+        const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
+        ctx.save();
+        ctx.globalAlpha = 1;
+        drawRunwayCenterlineDashedOnly(tw, runwayPts, width);
+        ctx.restore();
       }
     });
     ctx.restore();
