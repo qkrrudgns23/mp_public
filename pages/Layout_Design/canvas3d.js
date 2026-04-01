@@ -1,3 +1,503 @@
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(draft[0][0], draft[0][1]);
+        for (let di = 1; di < draft.length; di++) ctx.lineTo(draft[di][0], draft[di][1]);
+        if (draft.length >= 2) ctx.stroke();
+        ctx.restore();
+        draft.forEach(function(pt) {
+          ctx.beginPath();
+          ctx.arc(pt[0], pt[1], CELL_SIZE * 0.2 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI*2);
+          ctx.fill();
+        });
+      }
+    }
+    ctx.restore();
+  }
+
+  function flightTimelineSegmentAtSimTime(flight, tSec) {
+    const tl = flight && flight.timeline;
+    if (!tl || tl.length < 2) return null;
+    let t = Number(tSec);
+    if (!isFinite(t)) return null;
+    if (t + 1e-9 < tl[0].t) return null;
+    if (t > tl[tl.length - 1].t) t = tl[tl.length - 1].t;
+    for (let i = 0; i < tl.length - 1; i++) {
+      const a = tl[i], b = tl[i + 1];
+      if (t >= a.t && t <= b.t) return { a: a, b: b };
+    }
+    return null;
+  }
+  function isTimelineSegmentStationaryWorld(a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    return dx * dx + dy * dy < 0.64;
+  }
+  function countFlightsWaitingAtHoldingPoint2D(hp, tSec) {
+    if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return 0;
+    if (!state.hasSimulationResult || !state.globalUpdateFresh) return 0;
+    if (typeof getFlightPoseAtTimeForDraw !== 'function') return 0;
+    const t = Number(tSec);
+    if (!isFinite(t)) return 0;
+    const hx = hp.x, hy = hp.y;
+    const dia = typeof c2dHoldingPointDiameterM === 'function' ? c2dHoldingPointDiameterM() : 24;
+    const rad = Math.max(10, dia * 0.55);
+    const rad2 = rad * rad;
+    let n = 0;
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f || flightBlockedLikeNoWay(f)) continue;
+      const pose = getFlightPoseAtTimeForDraw(f, t);
+      if (!pose) continue;
+      const dx = pose.x - hx, dy = pose.y - hy;
+      if (dx * dx + dy * dy > rad2) continue;
+      const seg = flightTimelineSegmentAtSimTime(f, t);
+      if (!seg || !isTimelineSegmentStationaryWorld(seg.a, seg.b)) continue;
+      n++;
+    }
+    return n;
+  }
+  function firstFlightWaitingAtHoldingPoint2D(hp, tSec) {
+    if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return null;
+    if (!state.hasSimulationResult || !state.globalUpdateFresh) return null;
+    if (typeof getFlightPoseAtTimeForDraw !== 'function') return null;
+    const t = Number(tSec);
+    if (!isFinite(t)) return null;
+    const hx = hp.x, hy = hp.y;
+    const dia = typeof c2dHoldingPointDiameterM === 'function' ? c2dHoldingPointDiameterM() : 24;
+    const rad = Math.max(10, dia * 0.55);
+    const rad2 = rad * rad;
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f || flightBlockedLikeNoWay(f)) continue;
+      const pose = getFlightPoseAtTimeForDraw(f, t);
+      if (!pose) continue;
+      const dx = pose.x - hx, dy = pose.y - hy;
+      if (dx * dx + dy * dy > rad2) continue;
+      const seg = flightTimelineSegmentAtSimTime(f, t);
+      if (!seg || !isTimelineSegmentStationaryWorld(seg.a, seg.b)) continue;
+      return f;
+    }
+    return null;
+  }
+  function polylineTangentForwardAtDistance(pts, sAlong) {
+    if (!pts || pts.length < 2) return [1, 0];
+    if (typeof polylineTotalLength !== 'function' || typeof polylinePointAtDistance !== 'function') return [1, 0];
+    const total = polylineTotalLength(pts);
+    if (total < 1e-6) return [1, 0];
+    const eps = 2;
+    const s0 = Math.max(0, Math.min(Number(sAlong) || 0, total));
+    let s1 = Math.min(s0 + eps, total);
+    let p0 = polylinePointAtDistance(pts, s0);
+    let p1 = polylinePointAtDistance(pts, s1);
+    let dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+    if (dx * dx + dy * dy < 1e-10) {
+      s1 = Math.max(0, s0 - eps);
+      p1 = polylinePointAtDistance(pts, s0);
+      p0 = polylinePointAtDistance(pts, s1);
+      dx = p1[0] - p0[0];
+      dy = p1[1] - p0[1];
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    return [dx / len, dy / len];
+  }
+  function drawHoldingQueueGhostFlights2D() {
+    if (!ctx) return;
+    if (!state.hasSimulationResult || !state.globalUpdateFresh) return;
+    if (!state.flights || !state.flights.length) return;
+    if (typeof getFlightPoseAtTimeForDraw !== 'function') return;
+    if (typeof graphPathDeparture !== 'function' || typeof cumulativeDistAlongPolylineToPoint !== 'function') return;
+    if (typeof polylinePointAtDistance !== 'function' || typeof polylineTotalLength !== 'function') return;
+    const tSecDraw = state.simTimeSec;
+    if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSecDraw);
+    const HOLDING_QUEUE_GHOST_SPACING_M = 70;
+    const dia = typeof c2dHoldingPointDiameterM === 'function' ? c2dHoldingPointDiameterM() : 24;
+    const rad = Math.max(10, dia * 0.55);
+    const pathTol2 = Math.pow(Math.max(rad * 4, 45), 2);
+    const silN = Number(_acSil.noseX), silWR = Number(_acSil.wingRearX), silUY = Number(_acSil.wingUpperY);
+    const silTN = Number(_acSil.tailNeckX), silLY = Number(_acSil.wingLowerY);
+    const nX = isFinite(silN) ? silN : 0.6;
+    const wRx = isFinite(silWR) ? silWR : -0.5;
+    const uY = isFinite(silUY) ? silUY : 0.35;
+    const tX = isFinite(silTN) ? silTN : -0.3;
+    const lY = isFinite(silLY) ? silLY : -0.35;
+    const useDetailSil = _ac2d.useDetailedSilhouette === true;
+    const silhouette2D = [
+      [0.86, 0],
+      [0.74, 0.038], [0.55, 0.046], [0.35, 0.048], [0.16, 0.05],
+      [-0.16, 0.5],
+      [-0.22, 0.5],
+      [-0.38, 0.09], [-0.52, 0.056], [-0.66, 0.046],
+      [-0.76, 0.15],
+      [-0.82, 0.036], [-0.88, 0],
+      [-0.82, -0.036],
+      [-0.76, -0.15],
+      [-0.66, -0.046], [-0.52, -0.056], [-0.38, -0.09],
+      [-0.22, -0.5],
+      [-0.16, -0.5],
+      [0.16, -0.05], [0.35, -0.048], [0.55, -0.046], [0.74, -0.038],
+    ];
+    let scaleX, scaleY;
+    if (useDetailSil) {
+      let minXn = Infinity, maxXn = -Infinity, maxYy = 0;
+      for (let si = 0; si < silhouette2D.length; si++) {
+        const px = silhouette2D[si][0], py = silhouette2D[si][1];
+        minXn = Math.min(minXn, px);
+        maxXn = Math.max(maxXn, px);
+        maxYy = Math.max(maxYy, Math.abs(py));
+      }
+      const lenNorm = Math.max(1e-9, maxXn - minXn);
+      const wingNorm = Math.max(1e-9, 2 * maxYy);
+      scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
+      scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
+    } else {
+      const xs = [nX, wRx, tX];
+      const minXn = Math.min(xs[0], xs[1], xs[2]);
+      const maxXn = Math.max(xs[0], xs[1], xs[2]);
+      const lenNorm = Math.max(1e-9, maxXn - minXn);
+      const wingNorm = Math.max(1e-9, uY + lY);
+      scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
+      scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
+    }
+    const outW = Number(_ac2d.outlineWidth);
+    const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
+    const outlineColor = _ac2d.outlineColor || '';
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    (state.holdingPoints || []).forEach(function(hp) {
+      if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return;
+      const waitN = countFlightsWaitingAtHoldingPoint2D(hp, tSecDraw);
+      if (waitN < 2) return;
+      const f = firstFlightWaitingAtHoldingPoint2D(hp, tSecDraw);
+      if (!f) return;
+      const pts = graphPathDeparture(f, { onlyToLineup: true });
+      if (!pts || pts.length < 2) return;
+      const cum = cumulativeDistAlongPolylineToPoint(pts, [hp.x, hp.y]);
+      if (!cum || cum.d2 > pathTol2) return;
+      const sHp = cum.distAlong;
+      for (let k = 1; k < waitN; k++) {
+        const s = sHp - k * HOLDING_QUEUE_GHOST_SPACING_M;
+        if (s < -0.5) break;
+        const sDraw = Math.max(0, s);
+        const pt = polylinePointAtDistance(pts, sDraw);
+        const tan = polylineTangentForwardAtDistance(pts, sDraw);
+        const nx = tan[0], ny = tan[1];
+        ctx.save();
+        ctx.translate(pt[0], pt[1]);
+        ctx.rotate(Math.atan2(ny, nx));
+        ctx.fillStyle = apron2DGlyphFill();
+        ctx.beginPath();
+        if (useDetailSil) {
+          ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
+          for (let si = 1; si < silhouette2D.length; si++) ctx.lineTo(silhouette2D[si][0] * scaleX, silhouette2D[si][1] * scaleY);
+          ctx.closePath();
+        } else {
+          ctx.moveTo(scaleX * nX, 0);
+          ctx.lineTo(scaleX * wRx, scaleY * uY);
+          ctx.lineTo(scaleX * tX, 0);
+          ctx.lineTo(scaleX * wRx, scaleY * lY);
+          ctx.closePath();
+        }
+        ctx.fill();
+        if (outlineWidth > 0 && outlineColor) {
+          ctx.strokeStyle = outlineColor;
+          ctx.lineWidth = outlineWidth;
+          ctx.stroke();
+        } else if (useDetailSil) {
+          ctx.strokeStyle = 'rgba(15,23,42,1)';
+          ctx.lineWidth = 1.1;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    });
+    ctx.restore();
+  }
+  function drawHoldingPoints2D() {
+    if (!ctx) return;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    const r = c2dHoldingPointDiameterM() * 0.5;
+    const sel = state.selectedObject && state.selectedObject.type === 'holdingPoint';
+    (state.holdingPoints || []).forEach(function(hp) {
+      if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return;
+      const selected = sel && state.selectedObject.id === hp.id;
+      const k = normalizeHoldingPointKind(hp.hpKind);
+      const fill = c2dHoldingPointFillForKind(k);
+      const stroke = c2dHoldingPointStrokeForKind(k);
+      ctx.beginPath();
+      ctx.arc(hp.x, hp.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = selected ? c2dObjectSelectedFill() : fill;
+      ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : stroke;
+      ctx.lineWidth = selected ? 2.5 : 1;
+      if (selected) {
+        ctx.shadowColor = c2dObjectSelectedGlow();
+        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+      } else {
+        ctx.shadowBlur = 0;
+      }
+      ctx.fill();
+      if (!selected) ctx.stroke();
+      ctx.shadowBlur = 0;
+      const waitN = countFlightsWaitingAtHoldingPoint2D(hp, state.simTimeSec);
+      if (waitN > 0) {
+        const bx = hp.x + r * 1.05 + 6;
+        const by = hp.y - r * 1.05;
+        const label = String(waitN);
+        const fs = Math.max(9, Math.min(15, 11 / Math.max(0.22, state.scale)));
+        ctx.font = 'bold ' + fs + 'px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const tw = ctx.measureText(label).width;
+        const padX = fs * 0.42;
+        const padY = fs * 0.28;
+        const bw = tw + padX * 2;
+        const bh = fs + padY * 2;
+        const left = bx - bw / 2;
+        const top = by - bh / 2;
+        const rr = Math.min(bh * 0.45, fs * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(left + rr, top);
+        ctx.lineTo(left + bw - rr, top);
+        ctx.quadraticCurveTo(left + bw, top, left + bw, top + rr);
+        ctx.lineTo(left + bw, top + bh - rr);
+        ctx.quadraticCurveTo(left + bw, top + bh, left + bw - rr, top + bh);
+        ctx.lineTo(left + rr, top + bh);
+        ctx.quadraticCurveTo(left, top + bh, left, top + bh - rr);
+        ctx.lineTo(left, top + rr);
+        ctx.quadraticCurveTo(left, top, left + rr, top);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.95)';
+        ctx.lineWidth = Math.max(0.75, 1.15 / Math.max(state.scale, 0.08));
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#f1f5f9';
+        ctx.fillText(label, bx, by);
+      }
+    });
+    if (state.holdingPointDrawing && state.previewHoldingPoint) {
+      const px = state.previewHoldingPoint.x, py = state.previewHoldingPoint.y;
+      const ptp = state.previewHoldingPoint.pathType || 'taxiway';
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fillStyle = c2dHoldingPointPreviewFillForPathType(ptp);
+      ctx.strokeStyle = c2dHoldingPointPreviewStrokeForPathType(ptp);
+      ctx.lineWidth = 1;
+      ctx.shadowBlur = 0;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawStandPreview() {
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    const mode = settingModeSelect.value;
+    if (mode === 'remote' && state.previewRemote) {
+      const cx = Number(state.previewRemote.x), cy = Number(state.previewRemote.y);
+      const category = document.getElementById('remoteCategory').value || 'C';
+      const size = getStandSizeMeters(category);
+      const angle = normalizeAngleDeg(document.getElementById('remoteAngle') ? document.getElementById('remoteAngle').value : 0) * Math.PI / 180;
+      const overlap = state.previewRemote.overlap;
+      ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.25)';
+      ctx.strokeStyle = overlap ? '#ef4444' : '#22c55e';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.rect(-size/2, -size/2, size, size);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (mode === 'pbb' && state.previewPbb) {
+      const ex = state.previewPbb.x2, ey = state.previewPbb.y2;
+      const size = getStandSizeMeters(state.previewPbb.category || 'C');
+      const overlap = state.previewPbb.overlap;
+      const angle = getPBBStandAngle(state.previewPbb);
+      ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.25)';
+      ctx.strokeStyle = overlap ? '#ef4444' : '#22c55e';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.rect(-size/2, -size/2, size, size);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#bbf7d0';
+      ctx.font = '10px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(state.previewPbb.category || document.getElementById('standCategory').value || 'C', 0, 0);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  let _safeDrawErrLogged = false;
+  let _drawRafId = 0;
+  function safeDraw() { try { draw(); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
+  function flushDrawNow() {
+    if (_drawRafId) {
+      cancelAnimationFrame(_drawRafId);
+      _drawRafId = 0;
+    }
+    safeDraw();
+  }
+  function scheduleDraw() {
+    if (_drawRafId) return;
+    _drawRafId = requestAnimationFrame(function() {
+      _drawRafId = 0;
+      safeDraw();
+    });
+  }
+  function draw() {
+    if (!ctx || !canvas) return;
+    if (state.simSliderScrubbing) return;
+    drawGrid();
+    drawTerminals();
+    drawTaxiways();
+    drawHoldingPoints2D();
+    drawPBBs();
+    drawRemoteStands();
+    drawApronTaxiwayLinks();
+    drawStandPreview();
+    drawSelectedLayoutEdge();
+    {
+      const sel = state.selectedObject;
+      const rid = state.flightPathRevealFlightId;
+      if (sel && sel.type === 'flight' && rid != null && sel.id === rid) {
+        drawFlightPathHighlight();
+        drawDeparturePathHighlight();
+      }
+    }
+    drawApproachPreviewPaths2D();
+    drawHoldingQueueGhostFlights2D();
+    drawFlights2D();
+    drawPathJunctions();
+  }
+
+  document.addEventListener('keydown', function(ev) {
+    const el = document.activeElement;
+    const inInput = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+    if (ev.ctrlKey && ev.key === 'z') {
+      if (!inInput) { ev.preventDefault(); undo(); }
+      return;
+    }
+    if (ev.key === 'Escape') {
+      if (inInput) return;
+      const anyLayoutDraw = !!(state.pbbDrawing || state.remoteDrawing || state.holdingPointDrawing || state.apronLinkDrawing ||
+        state.terminalDrawingId || state.taxiwayDrawingId);
+      if (!anyLayoutDraw) return;
+      ev.preventDefault();
+      cancelActiveLayoutDrawingState();
+      state.terminalDrawingId = null;
+      state.taxiwayDrawingId = null;
+      syncPanelFromState();
+      updateObjectInfo();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return;
+    }
+    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
+    if (inInput) return;
+    if (removeLastDrawingVertex()) {
+      ev.preventDefault();
+      return;
+    }
+    if (removeSelectedVertex()) {
+      ev.preventDefault();
+      return;
+    }
+    if (!state.selectedObject) return;
+    const type = state.selectedObject.type;
+    const id = state.selectedObject.id;
+    if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'holdingPoint' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight') return;
+    pushUndo();
+    removeLayoutObjectFromState(type, id);
+    state.selectedObject = null;
+    state.selectedVertex = null;
+    if (type === 'terminal' && state.currentTerminalId === id) {
+      state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
+      if (state.terminalDrawingId === id) {
+        state.terminalDrawingId = null;
+        state.layoutPathDrawPointer = null;
+      }
+    }
+    if (type === 'taxiway' && state.taxiwayDrawingId === id) {
+      state.taxiwayDrawingId = null;
+      state.layoutPathDrawPointer = null;
+    }
+    syncPanelFromState();
+    updateObjectInfo();
+    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+    ev.preventDefault();
+  });
+
+  container.addEventListener('mousedown', function(ev) {
+    if (ev.button !== 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
+    const [wx, wy] = screenToWorld(sx, sy);
+    const mode = settingModeSelect.value;
+    if (mode === 'terminal' && !state.terminalDrawingId) {
+      const vhit = hitTestTerminalVertex(wx, wy);
+      if (vhit) {
+        pushUndo();
+        state.dragVertex = vhit;
+        state.selectedVertex = { type: 'terminal', id: vhit.terminalId, index: vhit.index };
+        const term = state.terminals.find(t => t.id === vhit.terminalId);
+        if (term) {
+          state.flightPathRevealFlightId = null;
+          state.selectedObject = { type: 'terminal', id: term.id, obj: term };
+          state.currentTerminalId = term.id;
+          syncPanelFromState();
+          updateObjectInfo();
+          draw();
+        }
+        return;
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const thit = hitTestTaxiwayVertex(wx, wy);
+      if (thit && thit.taxiwayId === state.selectedObject.id) {
+        pushUndo();
+        state.dragTaxiwayVertex = thit;
+        state.selectedVertex = { type: 'taxiway', id: thit.taxiwayId, index: thit.index };
+        draw();
+        return;
+      }
+    }
+    const standRotateHit = hitTestStandRotationHandle(wx, wy);
+    if (standRotateHit) {
+      pushUndo();
+      state.dragStandRotation = standRotateHit;
+      state.selectedVertex = { type: 'standRotation', id: standRotateHit.id, standType: standRotateHit.type };
+      draw();
+      return;
+    }
+    if (state.selectedObject && state.selectedObject.type === 'pbb' && !state.pbbDrawing) {
+      const ph = hitTestPbbEditablePoint(wx, wy);
+      if (ph) {
+        pushUndo();
+        if (ph.type === 'bridge') {
+          state.dragPbbBridgeVertex = { pbbId: state.selectedObject.id, bridgeIndex: ph.bridgeIndex, pointIndex: ph.pointIndex };
+          state.selectedVertex = { type: 'pbbBridge', id: state.selectedObject.id, bridgeIndex: ph.bridgeIndex, pointIndex: ph.pointIndex };
+        } else {
+
+
           state.dragStandConnection = { pbbId: state.selectedObject.id };
           state.selectedVertex = { type: 'pbbApronSite', id: state.selectedObject.id };
         }
@@ -631,14 +1131,6 @@
       state.showImage = !state.showImage;
       syncImageToggleButton();
       invalidateGridUnderlay();
-      draw();
-    });
-  }
-  if (roadWidthToggleBtn) {
-    syncRoadWidthToggleButton();
-    roadWidthToggleBtn.addEventListener('click', function() {
-      state.showRoadWidth = !state.showRoadWidth;
-      syncRoadWidthToggleButton();
       draw();
     });
   }

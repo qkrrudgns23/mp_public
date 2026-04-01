@@ -1,3 +1,21 @@
+  function scheduleAfterPaint(fn) {
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() { setTimeout(fn, 0); });
+    });
+  }
+  const DEFAULT_AIRLINE_CODES = (function() {
+    const a = _flightTier.defaultAirlineCodes;
+    return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
+  })();
+  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
+  function pathTypeFromLayoutMode(layoutMode) {
+    if (layoutMode === 'runwayPath') return 'runway';
+    if (layoutMode === 'runwayTaxiway') return 'runway_exit';
+    if (layoutMode === 'taxiway') return 'taxiway';
+    return 'taxiway';
+  }
+
+
   function layoutModeFromPathType(pt) {
     if (pt === 'runway') return 'runwayPath';
     if (pt === 'runway_exit') return 'runwayTaxiway';
@@ -46,14 +64,6 @@
     const on = !!state.showImage;
     imageToggleBtn.classList.toggle('active', on);
     imageToggleBtn.title = on ? 'Image visible (click to hide)' : 'Image hidden (click to show)';
-  }
-  function syncRoadWidthToggleButton() {
-    if (!roadWidthToggleBtn) return;
-    const on = !!state.showRoadWidth;
-    roadWidthToggleBtn.classList.toggle('active', on);
-    roadWidthToggleBtn.title = on
-      ? 'Road width visible — taxi/runway taxiway bands opaque; runway pavement full opacity (click for schematic: lines + dim runway)'
-      : 'Schematic roads — taxi/runway taxiway centerlines only; runway pavement dimmed (click to show full width)';
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -314,11 +324,9 @@
       if (typeof obj.grid.cellSize === 'number') CELL_SIZE = obj.grid.cellSize;
       if (typeof obj.grid.showGrid === 'boolean') state.showGrid = obj.grid.showGrid;
       if (typeof obj.grid.showImage === 'boolean') state.showImage = obj.grid.showImage;
-      if (typeof obj.grid.showRoadWidth === 'boolean') state.showRoadWidth = obj.grid.showRoadWidth;
     }
     if (typeof obj.showGrid === 'boolean') state.showGrid = obj.showGrid;
     if (typeof obj.showImage === 'boolean') state.showImage = obj.showImage;
-    if (typeof obj.showRoadWidth === 'boolean') state.showRoadWidth = obj.showRoadWidth;
     state.layoutImageOverlay = normalizeLayoutImageOverlay(
       (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
     );
@@ -326,7 +334,6 @@
     syncLayoutImageBitmap();
     syncGridToggleButton();
     syncImageToggleButton();
-    syncRoadWidthToggleButton();
     if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
     if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
     if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
@@ -821,28 +828,3 @@
     if (th.length) {
       const st0 = rsepColorForValue(Math.max(0, th[0] - 1));
       html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st0.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st0.color + ';">' + escapeHtml(rsepLegendFmt(lab.ltFirst || '<{0}s', th[0])) + '</span></span>';
-      for (let i = 1; i < th.length; i++) {
-        const lo = th[i - 1], hi = th[i];
-        const mid = lo + (hi - lo) / 2;
-        const st = rsepColorForValue(mid);
-        const text = rsepLegendFmt(lab.rangeMid || '{0}–{1}s', lo, hi - 1);
-        html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st.color + ';">' + escapeHtml(text) + '</span></span>';
-      }
-      const lastT = th[th.length - 1];
-      const stL = rsepColorForValue(lastT + 1000);
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + stL.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + stL.color + ';">' + escapeHtml(rsepLegendFmt(lab.gteLast || '≥{0}s', lastT)) + '</span></span>';
-    }
-    html += '<span style="margin-left:4px;color:' + countColor + ';">' + filled + '/' + total + '</span>';
-    html += '</div>';
-    return html;
-  }
-  function rsepMakeConfig(stdKey) {
-    const std = RSEP_STANDARDS[stdKey] || RSEP_STANDARDS['ICAO'];
-    const cats = RSEP_STD_CATS[stdKey];
-    const rot = std.ROT || {};
-    const rotCopy = {};
-    const boost = RSEP_ARRDEP_BOOST_SEC;
-    cats.forEach(function(c) {
-      if (rot[c] == null || rot[c] === '') rotCopy[c] = '';
-      else {
-        const n = Number(rot[c]);

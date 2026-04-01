@@ -26,7 +26,7 @@
     #sim-controls-container select:focus { outline: none; border-color: var(--ui-accent-ring); box-shadow: 0 0 0 2px var(--ui-accent-muted); }
     #sim-controls-container label { font-size: 11px; color: var(--ui-text-secondary); margin: 0 4px 0 0; flex-shrink: 0; }
     #sim-controls-container #flightSimSlider { flex: 1; min-width: 80px; width: auto; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); }
-    #sim-controls-container #flightSimTimeLabel { font-size: 11px; color: var(--ui-text-primary); min-width: 72px; flex-shrink: 0; display: inline-block; }
+    #sim-controls-container #flightSimTimeLabel { font-size: 11px; color: var(--ui-text-primary); min-width: 120px; flex-shrink: 0; display: inline-block; }
     #view-toggle-stack { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
     #view-toggle { display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--ui-border-default); background: var(--ui-bg-control); transition: var(--ui-transition); }
     #view-toggle .tool-btn { margin: 0; border: none; border-radius: 0; font-size: 11px; font-weight: 500; padding: 6px 12px; transition: var(--ui-transition); }

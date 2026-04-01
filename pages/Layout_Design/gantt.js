@@ -1,3 +1,122 @@
+            );
+          }).join('')
+        : '';
+      const labelHtml =
+        '<div class="alloc-row-label" data-stand-id="' + sidAttr + '">' +
+          escapeHtml(label) +
+        '</div>';
+      const trackHtml =
+        '<div class="alloc-row" data-stand-id="' + sidAttr + '">' +
+          '<div class="alloc-row-track" data-stand-id="' + sidAttr + '">' +
+            bgSlots +
+            blocks +
+            (showEibtBars && eBars ? eBars.join('') : '') +
+            (showEldtBars && e2Bars ? e2Bars.join('') : '') +
+            (showAuxBars && sBars ? sBars.join('') : '') +
+            (showSDots && sDots ? sDots.join('') : '') +
+            (showSdDots && sdDots ? sdDots.join('') : '') +
+            (showEDots && eDots ? eDots.join('') : '') +
+            (sTrisDown ? sTrisDown.join('') : '') +
+            (sTrisUp ? sTrisUp.join('') : '') +
+            (eTrisDown ? eTrisDown.join('') : '') +
+            (eTrisUp ? eTrisUp.join('') : '') +
+            (sLines ? sLines.join('') : '') +
+          '</div>' +
+        '</div>';
+      return { labelHtml, trackHtml };
+    }
+    function buildRunwayLegendPair() {
+      const sDotsHtml = [];
+      const eDotsHtml = [];
+      const cap = GANTT_LEGEND_MAX_INTERVALS;
+      const lim = (cap > 0 && intervals.length > cap) ? intervals.slice(0, cap) : intervals;
+      lim.forEach(function(it) {
+        pushAllocDot(sDotsHtml, it.sldt, 'alloc-time-dot-s');
+        pushAllocDot(sDotsHtml, it.stot, 'alloc-time-dot-s');
+        pushAllocDot(eDotsHtml, it.eldt, 'alloc-time-dot-e');
+        pushAllocDot(eDotsHtml, it.etot, 'alloc-time-dot-e');
+      });
+      const sLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('S(LDT, TOT)') + '</div>';
+      const sTrackHtml =
+        '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
+          '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
+            sDotsHtml.join('') +
+          '</div>' +
+        '</div>';
+      const eLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('E(LDT, TOT)') + '</div>';
+      const eTrackHtml =
+        '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
+          '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
+            eDotsHtml.join('') +
+          '</div>' +
+        '</div>';
+      return { sLabelHtml: sLabelHtml, sTrackHtml: sTrackHtml, eLabelHtml: eLabelHtml, eTrackHtml: eTrackHtml };
+    }
+    const labelRows = [];
+    const trackRows = [];
+    (function() {
+      const rw = buildRunwayLegendPair();
+      labelRows.push(rw.sLabelHtml);
+      trackRows.push(rw.sTrackHtml);
+      labelRows.push(rw.eLabelHtml);
+      trackRows.push(rw.eTrackHtml);
+    })();
+    (function() {
+      const row = buildRowHtml('Unassigned', null);
+      labelRows.push(row.labelHtml);
+      trackRows.push(row.trackHtml);
+    })();
+    const terminalCopies = makeUniqueNamedCopy(state.terminals || [], 'name');
+    const termLabelById = {};
+    terminalCopies.forEach(t => { termLabelById[t.id] = (t.name || '').trim() || 'Building'; });
+    const grouped = {};
+    const order = [];
+    const sortedStands = stands.slice().sort((a, b) => {
+      const ta = getTerminalForStand(a);
+      const tb = getTerminalForStand(b);
+      const la = ta ? (termLabelById[ta.id] || ta.name || '') : '';
+      const lb = tb ? (termLabelById[tb.id] || tb.name || '') : '';
+      if (la < lb) return -1;
+      if (la > lb) return 1;
+      const na = (a.name || '').toLowerCase();
+      const nb = (b.name || '').toLowerCase();
+      if (na < nb) return -1;
+      if (na > nb) return 1;
+      return 0;
+    });
+    sortedStands.forEach(s => {
+      const term = getTerminalForStand(s);
+      const key = term ? term.id : '__no_terminal__';
+      if (!grouped[key]) {
+        grouped[key] = { term, stands: [] };
+        order.push(key);
+      }
+      grouped[key].stands.push(s);
+    });
+    const remoteIdSet = new Set((state.remoteStands || []).map(r => r.id));
+    const allRemoteStands = [];
+    order.forEach(key => {
+      const group = grouped[key];
+      if (!group) return;
+      const term = group.term;
+      const headerLabel = term
+        ? (termLabelById[term.id] || term.name || 'Building')
+        : 'No Building';
+      labelRows.push(
+        '<div class="alloc-terminal-header" data-collapsed="0">' +
+          '<span class="alloc-section-toggle-icon">▼</span>' +
+          escapeHtml(headerLabel) +
+        '</div>'
+      );
+      trackRows.push('<div class="alloc-row" data-stand-id="">' +
+        '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:24px;"></div>' +
+      '</div>');
+      const contactStands = [];
+      const remoteStandsInTerm = [];
+      group.stands.forEach(s => {
+        if (remoteIdSet.has(s.id)) remoteStandsInTerm.push(s);
+
+
         else contactStands.push(s);
       });
       contactStands.forEach(s => {
@@ -429,122 +548,3 @@
     return _kpiFormatValueWithUnit(value, 1, 'min');
   }
 
-  function kpiFormatSecondsValue(value) {
-    return _kpiFormatValueWithUnit(value, 0, 'sec');
-  }
-
-  function kpiFormatClockBucket(minute) {
-    const n = kpiToNumber(minute);
-    if (n == null) return '—';
-    const total = Math.floor(n);
-    const hh = ((Math.floor(total / 60) % 24) + 24) % 24;
-    return String(hh).padStart(2, '0') + ':00';
-  }
-  
-  function kpiFormatClockBucket15(minute) {
-    const n = kpiToNumber(minute);
-    if (n == null) return '—';
-    const total = Math.floor(n);
-    const hh = ((Math.floor(total / 60) % 24) + 24) % 24;
-    const mm = ((total % 60) + 60) % 60;
-    return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
-  }
-  function kpiMinuteOfDay(t) {
-    const n = kpiToNumber(t);
-    if (n == null || !isFinite(n)) return null;
-    const m = Math.floor(n);
-    return ((m % 1440) + 1440) % 1440;
-  }
-  function kpiRollWindowOverlapsInterval(w, winMin, startMod, endMod) {
-    if (startMod == null || endMod == null) return false;
-    const winEnd = w + winMin;
-    function segOverlap(a0, a1, b0, b1) {
-      return a1 > b0 && a0 < b1;
-    }
-    if (endMod > startMod) return segOverlap(startMod, endMod, w, winEnd);
-    if (endMod === startMod) return false;
-    return segOverlap(startMod, 1440, w, winEnd) || segOverlap(0, endMod, w, winEnd);
-  }
-
-  function kpiFormatClock(minute) {
-    const n = kpiToNumber(minute);
-    if (n == null) return '—';
-    return formatMinutesToHHMMSS(n);
-  }
-
-  function kpiFormatSnapshotTime() {
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    const ss = String(now.getSeconds()).padStart(2, '0');
-    return hh + ':' + mm + ':' + ss;
-  }
-
-  function kpiSum(items, selector) {
-    return (items || []).reduce(function(acc, item) {
-      const value = selector(item);
-      return acc + (kpiToNumber(value) || 0);
-    }, 0);
-  }
-
-  function kpiAverage(items, selector) {
-    const vals = (items || []).map(selector).map(kpiToNumber).filter(v => v != null);
-    if (!vals.length) return null;
-    return kpiSum(vals, function(v) { return v; }) / vals.length;
-  }
-
-  function kpiStandLabelById(standId) {
-    const stands = (state.pbbStands || []).concat(state.remoteStands || []);
-    const stand = stands.find(function(s) { return s && s.id === standId; });
-    return stand ? ((stand.name && stand.name.trim()) || stand.id || 'Stand') : 'Unassigned';
-  }
-
-  function kpiBuildMetricRow(label, primary, secondary) {
-    return '' +
-      '<div class="kpi-metric-row">' +
-        '<div class="kpi-metric-label">' + escapeHtml(label) + '</div>' +
-        '<div class="kpi-metric-values">' +
-          '<div class="kpi-metric-primary">' + escapeHtml(primary) + '</div>' +
-          '<div class="kpi-metric-secondary">' + escapeHtml(secondary) + '</div>' +
-        '</div>' +
-      '</div>';
-  }
-
-  function kpiBuildSummaryCard(label, value, tone) {
-    return '' +
-      '<div class="kpi-card ' + escapeHtml(tone || '') + '">' +
-        '<div class="kpi-card-label">' + escapeHtml(label) + '</div>' +
-        '<div class="kpi-card-value">' + escapeHtml(value) + '</div>' +
-      '</div>';
-  }
-
-  function kpiBuildPanel(title, badge, rows) {
-    return '' +
-      '<div class="kpi-panel">' +
-        '<div class="kpi-panel-header">' +
-          '<div class="kpi-panel-title">' + escapeHtml(title) + '</div>' +
-          '<div class="kpi-panel-badge">' + escapeHtml(badge) + '</div>' +
-        '</div>' +
-        '<div class="kpi-metric-list">' + rows.join('') + '</div>' +
-      '</div>';
-  }
-
-  function kpiBucketOnHour(bucket) {
-    const bs = kpiToNumber(bucket && bucket.bucketStart);
-    if (bs == null || !isFinite(bs)) return false;
-    const im = Math.floor(bs);
-    return (im % 60 + 60) % 60 === 0;
-  }
-  function kpiDisposeInteractiveCharts() {
-    try {
-      if (window.__kpiChartGate) { window.__kpiChartGate.destroy(); window.__kpiChartGate = null; }
-      if (window.__kpiChartRunway) { window.__kpiChartRunway.destroy(); window.__kpiChartRunway = null; }
-    } catch (e) { console.warn('kpiDisposeInteractiveCharts', e); }
-  }
-  function kpiChartCommonOptions(buckets) {
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { labels: { color: '#94a3b8', font: { size: 12, family: 'var(--ui-font, system-ui, sans-serif)' } } },

@@ -1,3 +1,117 @@
+    const eldtMin = f.eldtMin != null ? f.eldtMin : (f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
+    const etotCandMin = f.etotMin != null ? f.etotMin : (f.stotMin_d != null ? f.stotMin_d : stotOrig);
+    f.eldtMin = eldtMin;
+    const tArr = formatMinutesToHHMMSS(tArrMin);
+    const tDep = formatMinutesToHHMMSS(tDepMin);
+    const vttADelayMin = f.vttADelayMin != null ? f.vttADelayMin : 0;
+    const eibtMin = eldtMin + rotArrMin + vttArrMin + vttADelayMin;
+    f.eibtMin = eibtMin;
+    applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotCandMin);
+    const eobtMin = f.eobtMin != null ? f.eobtMin : (f.etotMin != null ? f.etotMin - depBlockOutMin : 0);
+    const etotMin = f.etotMin != null ? f.etotMin : (eobtMin + depBlockOutMin);
+    if (f.sobtMin_orig == null) {
+      f.sldtMin_orig = sldtOrig;
+      f.sibtMin_orig = tArrMin;
+      f.sobtMin_orig = sobtOrig;
+      f.stotMin_orig = stotOrig;
+      f.eldtMin_orig = eldtMin;
+      f.eibtMin_orig = eibtMin;
+      f.eobtMin_orig = eobtMin;
+      f.etotMin_orig = etotMin;
+    }
+    const eldtStr = formatMinutesToHHMMSS(eldtMin);
+    const etotStr = formatMinutesToHHMMSS(etotMin);
+    const eibtStr = formatMinutesToHHMMSS(eibtMin);
+    const eobtStr = formatMinutesToHHMMSS(eobtMin);
+    const vttArrStr = formatMinutesToHHMMSS(vttArrMin);
+    const vttADelayStr = formatMinutesToHHMMSS(vttADelayMin);
+    const vttDepStr = formatMinutesToHHMMSS(vttDepMinSlot);
+    const depRotSecVal = (typeof computeDepRotSecondsForFlight === 'function') ? computeDepRotSecondsForFlight(f) : Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
+    const depRotStr = formatTotalSecondsToHHMMSS(depRotSecVal);
+    const depTaxiDelayStr = formatSignedMinutesToHHMMSS(f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
+    const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
+    const termId = f.terminalId || (f.token && f.token.terminalId);
+    const arrRwRead = escapeHtml(getRunwayDisplayLabelById(arrRunwayId));
+    const buildingRead = escapeHtml(getTerminalDisplayLabelById(termId));
+    const depRwRead = escapeHtml(getRunwayDisplayLabelById(depRunwayId));
+    const noWayBadge = flightBlockedLikeNoWay(f)
+      ? ' <span class="flight-no-way-badge" style="color:#dc2626;font-weight:600;font-size:10px;cursor:help;" title="' + escapeAttr(buildNoWayTooltip(f)) + '">⚠ No Way</span>'
+      : '';
+    const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
+    const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
+    const arrRetFailedBadge = ((f.arrRetFailed || sampledRetName === 'Failed') && !flightBlockedLikeNoWay(f)) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
+    const pathPendingClass = f.deferPathCompute ? ' flight-row-path-pending' : '';
+    const pathPendingTitle = f.deferPathCompute ? ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"' : '';
+    return '' +
+      '<tr class="flight-data-row obj-item' + pathPendingClass + '"' + pathPendingTitle + ' data-id="' + f.id + '">' +
+        '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + arrRetFailedBadge + '</td>' +
+        '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
+        '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
+        '<td class="flight-td-time flight-col-s flight-col-s-start">' + sldtStr + '</td>' +
+        '<td class="flight-td-time flight-td-sibt flight-col-s">' + tArr + '</td>' +
+        '<td class="flight-td-time flight-col-s">' + tDep + '</td>' +
+        '<td class="flight-td-time flight-col-s flight-col-s-last">' + stotStr + '</td>' +
+        '<td class="flight-td-time flight-col-sd flight-col-sd-start">' + sldtStr_d + '</td>' +
+        '<td class="flight-td-time flight-col-sd">' + sibtStr_d + '</td>' +
+        '<td class="flight-td-time flight-col-sd">' + sobtStr_d + '</td>' +
+        '<td class="flight-td-time flight-col-sd flight-col-sd-last">' + stotStr_d + '</td>' +
+        '<td class="flight-td-time flight-col-e flight-col-e-start">' + eldtStr + '</td>' +
+        '<td class="flight-td-time flight-col-e">' + eibtStr + '</td>' +
+        '<td class="flight-td-time flight-col-e">' + eobtStr + '</td>' +
+        '<td class="flight-td-time flight-col-e">' + etotStr + '</td>' +
+        '<td class="flight-td-time flight-col-e flight-col-rot">' + (f.arrRotSec != null && isFinite(f.arrRotSec) ? (Math.round(f.arrRotSec) + ' s') : '—') + '</td>' +
+        '<td class="flight-td-time">' + vttArrStr + '</td>' +
+        '<td class="flight-td-time">' + vttADelayStr + '</td>' +
+        '<td class="flight-td-time">' + depRotStr + '</td>' +
+        '<td class="flight-td-time">' + vttDepStr + '</td>' +
+        '<td class="flight-td-time">' + depTaxiDelayStr + '</td>' +
+        '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
+        '<td>' + escapeHtml(codeIcao) + '</td>' +
+        '<td class="flight-td-readonly">' + arrRwRead + '</td>' +
+        '<td>' + escapeHtml(sampledRetName) + '</td>' +
+        '<td class="flight-td-readonly">' + buildingRead + '</td>' +
+        '<td class="flight-td-reg">' + (function() { var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); })() + '</td>' +
+        '<td class="flight-td-readonly">' + depRwRead + '</td>' +
+        '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
+      '</tr>';
+  }
+
+  function _buildFlightListRowsHtml(flightsSorted, retStatsAll) {
+    return flightsSorted.map(function(f) {
+      return _buildFlightListRowHtml(f, retStatsAll);
+    });
+  }
+
+  const FLIGHT_LIST_PATH_YIELD_CHUNK = 6;
+  const FLIGHT_LIST_ASYNC_PATH_MIN = 8;
+  function _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, domOpt) {
+    const skipGanttRefresh = domOpt && domOpt.skipGanttRefresh;
+    const headerRow = _buildFlightListHeaderHtml();
+    const dirtyIds = [];
+    dirtySet.forEach(function(id) { if (id != null && id !== '') dirtyIds.push(id); });
+    const deferOnlyDirty = dirtyIds.length > 0 && dirtyIds.every(function(fid) {
+      const ff = flightsSorted.find(function(x) { return x.id === fid; });
+      return ff && ff.deferPathCompute;
+    });
+    if (schedFull) {
+      if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
+      if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
+      pinEarliestEldtToSldtPerRunway(flightsSorted);
+    } else {
+      if (!deferOnlyDirty && typeof computeScheduledDisplayTimesIncremental === 'function')
+        computeScheduledDisplayTimesIncremental(state.flights, dirtySet, standSet);
+    }
+    flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+    const usePagination = FLIGHT_SCHED_PAGE_SIZE > 0;
+    let flightsForDom = flightsSorted;
+    if (usePagination) {
+      const size = FLIGHT_SCHED_PAGE_SIZE;
+      const n = flightsSorted.length;
+      const maxPage = Math.max(0, Math.ceil(n / size) - 1);
+      if (state.flightSchedulePage > maxPage) state.flightSchedulePage = maxPage;
+      if (state.flightSchedulePage < 0) state.flightSchedulePage = 0;
+
+
       const start = state.flightSchedulePage * size;
       flightsForDom = flightsSorted.slice(start, start + size);
     }
@@ -675,10 +789,10 @@
         if (codeSafe && dwellLabel) meta = codeSafe + ' · ' + dwellLabel;
         else if (codeSafe) meta = codeSafe;
         else meta = dwellLabel;
-        const conflictClass = (conflictMap[f.id] || f.noWayArr || f.noWayDep) ? ' conflict' : '';
+        const conflictClass = (conflictMap[f.id] || flightBlockedLikeNoWay(f)) ? ' conflict' : '';
         const selectedClass = (state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id) ? ' alloc-flight-selected' : '';
         const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
-        const noWayLabel = (f.noWayArr || f.noWayDep)
+        const noWayLabel = (flightBlockedLikeNoWay(f))
           ? ' <span class="flight-no-way-badge" style="color:#fca5a5;font-size:9px;font-weight:700;cursor:help;" title="' + escapeAttr(buildNoWayTooltip(f)) + '">No way</span>'
           : '';
         const sibtLabel = formatMinutesToHHMM(t0);
@@ -744,120 +858,3 @@
               '<div class="alloc-apron-bg-slot" style="left:' + midLeft + '%;transform:translateX(-50%);">' +
                 escapeHtml(label) +
               '</div>'
-            );
-          }).join('')
-        : '';
-      const labelHtml =
-        '<div class="alloc-row-label" data-stand-id="' + sidAttr + '">' +
-          escapeHtml(label) +
-        '</div>';
-      const trackHtml =
-        '<div class="alloc-row" data-stand-id="' + sidAttr + '">' +
-          '<div class="alloc-row-track" data-stand-id="' + sidAttr + '">' +
-            bgSlots +
-            blocks +
-            (showEibtBars && eBars ? eBars.join('') : '') +
-            (showEldtBars && e2Bars ? e2Bars.join('') : '') +
-            (showAuxBars && sBars ? sBars.join('') : '') +
-            (showSDots && sDots ? sDots.join('') : '') +
-            (showSdDots && sdDots ? sdDots.join('') : '') +
-            (showEDots && eDots ? eDots.join('') : '') +
-            (sTrisDown ? sTrisDown.join('') : '') +
-            (sTrisUp ? sTrisUp.join('') : '') +
-            (eTrisDown ? eTrisDown.join('') : '') +
-            (eTrisUp ? eTrisUp.join('') : '') +
-            (sLines ? sLines.join('') : '') +
-          '</div>' +
-        '</div>';
-      return { labelHtml, trackHtml };
-    }
-    function buildRunwayLegendPair() {
-      const sDotsHtml = [];
-      const eDotsHtml = [];
-      const cap = GANTT_LEGEND_MAX_INTERVALS;
-      const lim = (cap > 0 && intervals.length > cap) ? intervals.slice(0, cap) : intervals;
-      lim.forEach(function(it) {
-        pushAllocDot(sDotsHtml, it.sldt, 'alloc-time-dot-s');
-        pushAllocDot(sDotsHtml, it.stot, 'alloc-time-dot-s');
-        pushAllocDot(eDotsHtml, it.eldt, 'alloc-time-dot-e');
-        pushAllocDot(eDotsHtml, it.etot, 'alloc-time-dot-e');
-      });
-      const sLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('S(LDT, TOT)') + '</div>';
-      const sTrackHtml =
-        '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
-          '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
-            sDotsHtml.join('') +
-          '</div>' +
-        '</div>';
-      const eLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('E(LDT, TOT)') + '</div>';
-      const eTrackHtml =
-        '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
-          '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
-            eDotsHtml.join('') +
-          '</div>' +
-        '</div>';
-      return { sLabelHtml: sLabelHtml, sTrackHtml: sTrackHtml, eLabelHtml: eLabelHtml, eTrackHtml: eTrackHtml };
-    }
-    const labelRows = [];
-    const trackRows = [];
-    (function() {
-      const rw = buildRunwayLegendPair();
-      labelRows.push(rw.sLabelHtml);
-      trackRows.push(rw.sTrackHtml);
-      labelRows.push(rw.eLabelHtml);
-      trackRows.push(rw.eTrackHtml);
-    })();
-    (function() {
-      const row = buildRowHtml('Unassigned', null);
-      labelRows.push(row.labelHtml);
-      trackRows.push(row.trackHtml);
-    })();
-    const terminalCopies = makeUniqueNamedCopy(state.terminals || [], 'name');
-    const termLabelById = {};
-    terminalCopies.forEach(t => { termLabelById[t.id] = (t.name || '').trim() || 'Building'; });
-    const grouped = {};
-    const order = [];
-    const sortedStands = stands.slice().sort((a, b) => {
-      const ta = getTerminalForStand(a);
-      const tb = getTerminalForStand(b);
-      const la = ta ? (termLabelById[ta.id] || ta.name || '') : '';
-      const lb = tb ? (termLabelById[tb.id] || tb.name || '') : '';
-      if (la < lb) return -1;
-      if (la > lb) return 1;
-      const na = (a.name || '').toLowerCase();
-      const nb = (b.name || '').toLowerCase();
-      if (na < nb) return -1;
-      if (na > nb) return 1;
-      return 0;
-    });
-    sortedStands.forEach(s => {
-      const term = getTerminalForStand(s);
-      const key = term ? term.id : '__no_terminal__';
-      if (!grouped[key]) {
-        grouped[key] = { term, stands: [] };
-        order.push(key);
-      }
-      grouped[key].stands.push(s);
-    });
-    const remoteIdSet = new Set((state.remoteStands || []).map(r => r.id));
-    const allRemoteStands = [];
-    order.forEach(key => {
-      const group = grouped[key];
-      if (!group) return;
-      const term = group.term;
-      const headerLabel = term
-        ? (termLabelById[term.id] || term.name || 'Building')
-        : 'No Building';
-      labelRows.push(
-        '<div class="alloc-terminal-header" data-collapsed="0">' +
-          '<span class="alloc-section-toggle-icon">▼</span>' +
-          escapeHtml(headerLabel) +
-        '</div>'
-      );
-      trackRows.push('<div class="alloc-row" data-stand-id="">' +
-        '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:24px;"></div>' +
-      '</div>');
-      const contactStands = [];
-      const remoteStandsInTerm = [];
-      group.stands.forEach(s => {
-        if (remoteIdSet.has(s.id)) remoteStandsInTerm.push(s);

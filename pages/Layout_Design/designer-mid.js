@@ -1,3 +1,76 @@
+        return;
+      }
+      const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
+      const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
+      const eobtS = eobtMin * 60;
+      const etotS = etotMin * 60;
+      const built = buildDepartureSurfaceTimelineSegments(f, eobtS, etotS);
+      if (!built || !built.timeline || built.timeline.length < 2) {
+        f.timeline = null;
+        f.timeline_meta = { error: 'no_path', leg: 'dep' };
+        return;
+      }
+      f.timeline = built.timeline;
+      f.timeline_meta = Object.assign({ leg: 'dep' }, built.meta || {});
+      return;
+    }
+    const arrPts = getPathForFlight(f);
+    const depPts = getPathForFlightDeparture(f);
+    if (flightBlockedLikeNoWay(f)) {
+      f.timeline = null;
+      f.timeline_meta = { error: (f.arrDep !== 'Dep' && f.arrRetFailed && !f.noWayArr && !f.noWayDep) ? 'arr_ret_failed' : 'no_path' };
+      return;
+    }
+    if (!arrPts || arrPts.length < 2 || !depPts || depPts.length < 2) {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_path' };
+      return;
+    }
+    const token = f.token || {};
+    const runwayId = f.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || f.arrRunwayId;
+    if (runwayId == null || runwayId === '') {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_runway' };
+      return;
+    }
+    const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
+    const vTd = Math.max(1, touchdownSpeedMsForTimeline(f));
+    const tdDist = touchdownDistMForTimeline(f);
+    const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
+    const offset = APPROACH_OFFSET_WORLD_M;
+    const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
+    const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
+    const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], eibtMin + (typeof f.dwellMin === 'number' && isFinite(f.dwellMin) ? f.dwellMin : 45));
+    const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
+    const eldtS = eldtMin * 60;
+    const eibtS = eibtMin * 60;
+    const eobtS = eobtMin * 60;
+    const etotS = etotMin * 60;
+    const tdPt = getRunwayPointAtDistance(runwayId, tdDist);
+    if (!tdPt) {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_td' };
+      return;
+    }
+    const builtAppr = buildArrivalApproachPolylinePts(runwayId, rwDir, anchorDist, offset, tdPt);
+    const pack = builtAppr.pack;
+    const apprPts = builtAppr.apprPts;
+    if (!apprPts || apprPts.length < 2) {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_appr' };
+      return;
+    }
+    const rawApprDur = polylineRawDurationSegmentVelocities(apprPts, function() { return vTd; });
+    const t0 = eldtS - rawApprDur;
+    const airTl = polylineTimelineBySegmentSpeeds(apprPts, t0, eldtS, function() { return vTd; });
+    const rotS = (typeof f.arrRotSec === 'number' && isFinite(f.arrRotSec)) ? Math.max(0, f.arrRotSec) : 0;
+    const vttDelayS = (typeof f.vttADelayMin === 'number' && isFinite(f.vttADelayMin) ? f.vttADelayMin : 0) * 60;
+    const tAfterRot = eldtS + rotS;
+    const runwayEndT = Math.min(tAfterRot, eibtS);
+    let tTaxiStart = Math.min(tAfterRot + vttDelayS, eibtS);
+    if (tTaxiStart < runwayEndT) tTaxiStart = runwayEndT;
+
+
     const taxiInPts = trimPolylineFromNearPoint(arrPts, tdPt);
     let taxiInTl;
     if (runwayEndT > eldtS + 1e-3) {
@@ -53,7 +126,7 @@
     for (let i = 0; i < flights.length; i++) {
       const f = flights[i];
       if (!f) continue;
-      if (f.noWayArr && f.noWayDep) continue;
+      if (flightBlockedLikeNoWay(f)) continue;
       if (!f.timeline || !f.timeline.length) continue;
       const w = getFlightAirsideWindowSec(f);
       if (!w) { f.timeline = null; continue; }
@@ -63,8 +136,7 @@
     for (let i = 0; i < flights.length; i++) {
       const f = flights[i];
       if (!f) continue;
-      if (f.noWayArr && f.noWayDep) continue;
-      if (f.noWayArr || f.noWayDep) continue;
+      if (flightBlockedLikeNoWay(f)) continue;
       if (!isFlightAirsideLazyTimelineBuildEligible(f, tSec)) continue;
       if (f.timeline && f.timeline.length) continue;
       pending.push(f);
@@ -178,11 +250,9 @@
     return { point: [last[0], last[1]], tangent: [ux, uy], normal: [-uy, ux] };
   }
 
-  function drawRunwayDecorations(tw, pts, widthPx, opts) {
+  function drawRunwayDecorations(tw, pts, widthPx) {
     if (!tw || tw.pathType !== 'runway' || !tw.start_point || !tw.end_point) return;
     if (!pts || pts.length < 2) return;
-    const pavementAlphaRaw = opts && typeof opts.pavementAlpha === 'number' && isFinite(opts.pavementAlpha) ? opts.pavementAlpha : 1;
-    const pavementAlpha = Math.max(0, Math.min(1, pavementAlphaRaw));
     const totalLen = runwayPolylineLengthPx(pts);
     const runwayWidth = Math.max(24, Number(widthPx) || RUNWAY_PATH_DEFAULT_WIDTH);
     if (totalLen < Math.max(220, runwayWidth * 3)) return;
@@ -320,24 +390,21 @@
       ctx.restore();
     }
 
-    ctx.save();
-    ctx.globalAlpha = pavementAlpha;
     drawExtensionSegment(startFrame, -1, 0, startDisp);
     drawExtensionSegment(startFrame, -1, startDisp, startBlast);
     drawExtensionSegment(endFrame, 1, 0, endDisp);
     drawExtensionSegment(endFrame, 1, endDisp, endBlast);
+    drawDisplacedThresholdArrows(startFrame, -1, 1, 0, startDisp);
+    drawDisplacedThresholdArrows(endFrame, 1, -1, 0, endDisp);
+    drawBlastPadChevrons(startFrame, -1, startDisp, startBlast);
+    drawBlastPadChevrons(endFrame, 1, endDisp, endBlast);
+
     const thresholdInset = Math.min(Math.max(runwayWidth * 0.58, 26), totalLen * 0.12);
     const thresholdStripeLen = Math.min(Math.max(runwayWidth * 0.54, 20), 34);
     const thresholdStripeWidth = Math.max(3, runwayWidth * 0.085);
     [-runwayWidth * 0.30, -runwayWidth * 0.18, -runwayWidth * 0.06, runwayWidth * 0.06, runwayWidth * 0.18, runwayWidth * 0.30].forEach(function(offset) {
       drawRectAtBothEnds(thresholdInset, offset, thresholdStripeLen, thresholdStripeWidth, thresholdColor);
     });
-    ctx.restore();
-
-    drawDisplacedThresholdArrows(startFrame, -1, 1, 0, startDisp);
-    drawDisplacedThresholdArrows(endFrame, 1, -1, 0, endDisp);
-    drawBlastPadChevrons(startFrame, -1, startDisp, startBlast);
-    drawBlastPadChevrons(endFrame, 1, endDisp, endBlast);
 
     (function drawRunwayCenterlineDashed() {
       const paveStart = startDisp + startBlast;
@@ -777,6 +844,26 @@
     out.push([endPt[0], endPt[1]]);
     return dedupePathPoints(out);
   }
+  /** p1 indices are on g1; p2 on gFull. buildPathFromIndices must use one graph — remap g1 nodes into gFull index space. */
+  function retSplitPathIndicesOnGFull(g1, gFull, p1, p2, pivotIdx, pivotIdxFull) {
+    if (!g1 || !gFull || !p1 || !p2 || p1.length < 2 || p2.length < 2) return null;
+    const p1Seg = (pivotIdx === pivotIdxFull) ? p1 : p1.slice(0, -1);
+    const part1 = [];
+    for (let i = 0; i < p1Seg.length; i++) {
+      const wp = g1.nodes[p1Seg[i]];
+      if (!wp) return null;
+      const ni = nearestPathNode(gFull, wp);
+      if (!part1.length || part1[part1.length - 1] !== ni) part1.push(ni);
+    }
+    const p2Tail = (pivotIdx === pivotIdxFull) ? p2.slice(1) : p2;
+    const merged = part1.concat(p2Tail);
+    const out = [];
+    for (let i = 0; i < merged.length; i++) {
+      if (!out.length || out[out.length - 1] !== merged[i]) out.push(merged[i]);
+    }
+    return out.length >= 2 ? out : null;
+  }
+
   function buildPathFromIndices(g, pathIndices) {
     if (!g || !Array.isArray(pathIndices) || pathIndices.length < 2) return null;
     const out = [];
@@ -977,6 +1064,8 @@
   function buildPathGraph(selectedArrRetId, runwayDirectionForExit, pathGraphOpts) {
     const opts = pathGraphOpts && typeof pathGraphOpts === 'object' ? pathGraphOpts : {};
     const pureGroundExcludeRunway = !!opts.pureGroundExcludeRunway;
+    /** When true with selectedArrRetId: drop other runway_exit polylines (runway→chosen RET leg only). Full taxi/crossing needs all RETs. */
+    const omitOtherRunwayExits = !!opts.omitOtherRunwayExits;
     const nodes = [], keyToIdx = {}, edges = [], adj = [], junctionPts = [], junctionKeys = {}, edgeMap = {};
     const nodeBucket = {};
     const mergeRM = PATH_JUNCTION_MERGE_RADIUS_M;
@@ -1054,6 +1143,7 @@
     const apronNodeStand = [];
     const minD2 = 1e-6;
     pathList.forEach(obj => {
+      if (omitOtherRunwayExits && selectedArrRetId != null && obj && obj.pathType === 'runway_exit' && obj.id !== selectedArrRetId) return;
       const pts = getOrderedPoints(obj);
       if (!pts || pts.length < 2) return;
       const junctions = [];
@@ -1406,6 +1496,66 @@
     return path.reverse();
   }
 
+  /** RET 출구 근처 여러 그래프 노드에서 gFull 상 스탠드까지 다익스트라를 시도해, 단일 nearest 스냅이 다른 성분에 묶이는 경우를 완화한다. */
+  function gatherRetExitPivotIndicesOnGFull(gFull, retEndPx, pivotG1Px, rPts) {
+    const mergeRM = PATH_JUNCTION_MERGE_RADIUS_M;
+    const pxPts = [];
+    if (pivotG1Px && pivotG1Px.length >= 2) pxPts.push(pivotG1Px);
+    if (retEndPx && retEndPx.length >= 2) pxPts.push(retEndPx);
+    if (rPts && rPts.length >= 2) {
+      pxPts.push(rPts[rPts.length - 1]);
+      if (rPts.length >= 3) pxPts.push(rPts[rPts.length - 2]);
+    }
+    const indices = [];
+    const seen = new Set();
+    for (let i = 0; i < pxPts.length; i++) {
+      const idx = nearestPathNode(gFull, pxPts[i]);
+      if (idx != null && !seen.has(idx)) {
+        seen.add(idx);
+        indices.push(idx);
+      }
+    }
+    const rNear = mergeRM * 6;
+    const r2 = rNear * rNear;
+    if (retEndPx && retEndPx.length >= 2 && gFull.nodes && gFull.nodes.length) {
+      const scored = [];
+      for (let ni = 0; ni < gFull.nodes.length; ni++) {
+        const d2 = dist2(gFull.nodes[ni], retEndPx);
+        if (d2 <= r2) scored.push({ ni: ni, d2: d2 });
+      }
+      scored.sort(function(a, b) { return a.d2 - b.d2; });
+      const cap = 36;
+      for (let k = 0; k < scored.length && k < cap; k++) {
+        const ni = scored[k].ni;
+        if (!seen.has(ni)) {
+          seen.add(ni);
+          indices.push(ni);
+        }
+      }
+    }
+    return indices;
+  }
+  function pathDijkstraFromRetExitToStand(gFull, endNodeFull, candidateStartIndices) {
+    if (!gFull || endNodeFull == null || !candidateStartIndices || !candidateStartIndices.length) return { path: null, startIdx: null };
+    let bestPath = null;
+    let bestD = Infinity;
+    const seenStart = new Set();
+    for (let ci = 0; ci < candidateStartIndices.length; ci++) {
+      const s = candidateStartIndices[ci];
+      if (s == null || seenStart.has(s)) continue;
+      seenStart.add(s);
+      const path = pathDijkstra(gFull, s, endNodeFull);
+      if (!path || path.length < 2) continue;
+      const d = pathTotalDist(gFull, path);
+      if (!(d < REVERSE_COST)) continue;
+      if (d < bestD) {
+        bestD = d;
+        bestPath = path;
+      }
+    }
+    return { path: bestPath, startIdx: bestPath ? bestPath[0] : null };
+  }
+
   function nearestPathNode(g, p) {
     let best = 0, bestD2 = dist2(g.nodes[0], p);
     for (let i = 1; i < g.nodes.length; i++) {
@@ -1445,9 +1595,7 @@
 
   function probePreferredArrivalRunwayDir(f) {
     const token = f.token || {};
-    let runwayId = (typeof resolveArrivalRunwayIdForFlight === 'function')
-      ? resolveArrivalRunwayIdForFlight(f)
-      : (token.arrRunwayId || token.runwayId || f.arrRunwayId);
+    let runwayId = resolveArrivalRunwayIdForFlight(f);
     const apronId = f.standId != null ? f.standId : (token.apronId || null);
     if (!apronId || runwayId == null || runwayId === '') return 'both';
     const r = getRunwayPath(runwayId);
@@ -1487,9 +1635,7 @@
     if (f && f.deferPathCompute) return null;
     f._noWayArrDetail = '';
     const token = f.token || {};
-    let runwayId = (typeof resolveArrivalRunwayIdForFlight === 'function')
-      ? resolveArrivalRunwayIdForFlight(f)
-      : (token.arrRunwayId || token.runwayId || f.arrRunwayId);
+    let runwayId = resolveArrivalRunwayIdForFlight(f);
     const apronId = f.standId != null ? f.standId : (token.apronId || null);
     if (!apronId) {
       f.noWayArr = true;
@@ -1509,9 +1655,6 @@
     if (!r) {
       f.noWayArr = true;
       f._noWayArrDetail = '도착 활주로 폴리라인을 불러오지 못했습니다.';
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/d3690a39-df65-41bd-83b6-eb0ef6ed1c98', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'designer-mid.js:graphPathArrival', message: 'early_exit_no_runway_path', hypothesisId: 'H1', data: { flightId: f.id || f.flightNo, tokenArrRunwayId: token.arrRunwayId, tokenRunwayId: token.runwayId, fArrRunwayId: f.arrRunwayId, resolvedRunwayId: runwayId }, timestamp: Date.now() }) }).catch(function() {});
-      // #endregion
       return null;
     }
     const stand = findStandById(apronId);
@@ -1520,7 +1663,10 @@
       f._noWayArrDetail = '스탠드 ID가 레이아웃에 없습니다.';
       return null;
     }
-    const selectedArrRetId = f.sampledArrRet != null ? f.sampledArrRet : null;
+    const scheduleArrRetTrim = (f.scheduleArrRetId != null && String(f.scheduleArrRetId).trim()) ? String(f.scheduleArrRetId).trim() : '';
+    let selectedArrRetId = f.sampledArrRet != null ? f.sampledArrRet : null;
+    if (scheduleArrRetTrim && (state.taxiways || []).some(function(t) { return t && t.id === scheduleArrRetTrim && t.pathType === 'runway_exit'; }))
+      selectedArrRetId = scheduleArrRetTrim;
     const validSelectedArrRetId = (selectedArrRetId != null && (state.taxiways || []).some(function(t) {
       return t && t.id === selectedArrRetId && t.pathType === 'runway_exit';
     })) ? selectedArrRetId : null;
@@ -1529,10 +1675,10 @@
       f.arrRetFailed = false;
       f.arrRotSec = null;
     }
-    var _arrivalSolveDiag = [];
     function solveByRunwayDir(rwDir) {
       const dirTag = rwDir === 'clockwise' ? '(시계) ' : '(반시계) ';
       const runwayPx = rwDir === 'counter_clockwise' ? r.endPx : r.startPx;
+      const splitDiag = validSelectedArrRetId != null ? { rwDir: rwDir, retId: validSelectedArrRetId } : null;
       const excludeRunwayGround = DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT !== true;
       const gFullOpts = { pureGroundExcludeRunway: excludeRunwayGround };
       const gFull = buildPathGraph(null, rwDir, gFullOpts);
@@ -1540,7 +1686,8 @@
       if (endNodeFull == null) {
         return {
           chosen: null,
-          hint: dirTag + '순전 지상 그래프에 스탠드가 연결되어 있지 않습니다. 에이프런 링크·택시웨이를 확인하세요. (활주로 중심선을 순전 지상에 쓰려면 Information.json의 flight_schedule.defaultAllowRunwayInGroundSegment를 true로 두세요.)'
+          hint: dirTag + '순전 지상 그래프에 스탠드가 연결되어 있지 않습니다. 에이프런 링크·택시웨이를 확인하세요. (활주로 중심선을 순전 지상에 쓰려면 Information.json의 flight_schedule.defaultAllowRunwayInGroundSegment를 true로 두세요.)',
+          splitDiag: splitDiag
         };
       }
       if (validSelectedArrRetId != null) {
@@ -1548,36 +1695,48 @@
           return t && t.id === validSelectedArrRetId && t.pathType === 'runway_exit';
         });
         const rPts = retTw ? getOrderedPoints(retTw) : null;
-        if (rPts && rPts.length >= 2) {
+        if (!(rPts && rPts.length >= 2)) {
+          if (splitDiag) splitDiag.retSplitFail = 'ret_polyline_short_or_missing';
+        } else {
           const retEndPx = rPts[rPts.length - 1];
-          const g1 = buildPathGraph(validSelectedArrRetId, rwDir);
+          const g1 = buildPathGraph(validSelectedArrRetId, rwDir, { omitOtherRunwayExits: true });
           const startNode = nearestPathNodeOnRunwayPolyline(g1, runwayId, runwayPx);
           const pivotIdx = nearestPathNode(g1, retEndPx);
-          const pivotIdxFull = nearestPathNode(gFull, g1.nodes[pivotIdx] || retEndPx);
+          const pivotPxG1 = g1.nodes[pivotIdx] || retEndPx;
           const p1 = pathDijkstra(g1, startNode, pivotIdx);
-          const p2 = (p1 && p1.length) ? pathDijkstra(gFull, pivotIdxFull, endNodeFull) : null;
-          // #region agent log
-          (function() {
-            var _rws = g1.runwayNodeIndicesById && g1.runwayNodeIndicesById[runwayId];
-            var _mergedOk = !!(p1 && p1.length >= 2 && p2 && p2.length >= 2);
-            var _row = { rwDir: rwDir, branch: 'ret_split', retId: validSelectedArrRetId, rwSetSize: _rws ? _rws.size : 0, startNode: startNode, p1Len: p1 ? p1.length : 0, p2Len: p2 ? p2.length : 0, pivotIdx: pivotIdx, pivotIdxFull: pivotIdxFull, mergedOk: _mergedOk };
-            if (_mergedOk) {
-              var _d1 = pathTotalDist(g1, p1);
-              var _d2 = pathTotalDist(gFull, p2);
-              _row.d1 = _d1;
-              _row.d2 = _d2;
-              _row.totalD = _d1 + _d2;
-              _row.distOk = (_d1 + _d2) < REVERSE_COST;
-            }
-            _arrivalSolveDiag.push(_row);
-          })();
-          // #endregion
+          let p2 = null;
+          let pivotIdxFull = null;
+          if (p1 && p1.length) {
+            const candIdx = gatherRetExitPivotIndicesOnGFull(gFull, retEndPx, pivotPxG1, rPts);
+            const leg2 = pathDijkstraFromRetExitToStand(gFull, endNodeFull, candIdx);
+            p2 = leg2.path;
+            pivotIdxFull = leg2.startIdx;
+            if (splitDiag) splitDiag.p2CandidateCount = candIdx.length;
+          }
+          if (splitDiag) {
+            splitDiag.startNode = startNode;
+            splitDiag.pivotIdx = pivotIdx;
+            splitDiag.pivotIdxFull = pivotIdxFull;
+            splitDiag.p1Len = p1 ? p1.length : 0;
+            splitDiag.p2Len = p2 ? p2.length : 0;
+          }
           if (p1 && p1.length >= 2 && p2 && p2.length >= 2) {
-            const merged = (pivotIdx === pivotIdxFull) ? p1.concat(p2.slice(1)) : p1.slice(0, -1).concat(p2);
+            const merged = retSplitPathIndicesOnGFull(g1, gFull, p1, p2, pivotIdx, pivotIdxFull);
             const d = pathTotalDist(g1, p1) + pathTotalDist(gFull, p2);
-            if (d < REVERSE_COST) {
-              return { chosen: { g: gFull, pathIndices: merged, totalD: d, runwayDir: rwDir }, hint: '' };
+            if (splitDiag) {
+              splitDiag.mergedLen = merged ? merged.length : 0;
+              splitDiag.splitTotalD = d;
             }
+            if (merged && merged.length >= 2 && d < REVERSE_COST) {
+              if (splitDiag) splitDiag.retSplitOk = true;
+              return { chosen: { g: gFull, pathIndices: merged, totalD: d, runwayDir: rwDir, usedRetSplit: true }, hint: '', splitDiag: splitDiag };
+            }
+            if (splitDiag) {
+              if (!merged || merged.length < 2) splitDiag.retSplitFail = 'merge_short_or_null';
+              else if (!(d < REVERSE_COST)) splitDiag.retSplitFail = 'split_cost_reverse_or_limit';
+            }
+          } else if (splitDiag) {
+            splitDiag.retSplitFail = (!p1 || p1.length < 2) ? 'p1_too_short' : 'p2_too_short_or_null';
           }
         }
       }
@@ -1586,47 +1745,48 @@
       if (endNode == null) {
         return {
           chosen: null,
-          hint: dirTag + '경로 그래프에 스탠드 노드가 없습니다.'
+          hint: dirTag + '경로 그래프에 스탠드 노드가 없습니다.',
+          splitDiag: splitDiag
         };
       }
       const startNode = nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx);
       const p = pathDijkstra(g, startNode, endNode);
-      // #region agent log
-      (function() {
-        var _rws2 = g.runwayNodeIndicesById && g.runwayNodeIndicesById[runwayId];
-        var _dDirect = (p && p.length >= 2) ? pathTotalDist(g, p) : null;
-        var _row2 = { rwDir: rwDir, branch: 'direct', rwSetSize: _rws2 ? _rws2.size : 0, startNode: startNode, pLen: p ? p.length : 0, costOk: _dDirect != null && _dDirect < REVERSE_COST, totalD: _dDirect };
-        _arrivalSolveDiag.push(_row2);
-      })();
-      // #endregion
       if (!p || p.length < 2) {
         return {
           chosen: null,
-          hint: dirTag + '활주로 쪽에서 스탠드까지 그래프가 끊어져 있습니다.'
+          hint: dirTag + '활주로 쪽에서 스탠드까지 그래프가 끊어져 있습니다.',
+          splitDiag: splitDiag
         };
       }
       const d = pathTotalDist(g, p);
       if (!(d < REVERSE_COST)) {
         return {
           chosen: null,
-          hint: dirTag + '택시 경로 비용이 허용 한도를 초과했습니다(역방향·금지 구간).'
+          hint: dirTag + '택시 경로 비용이 허용 한도를 초과했습니다(역방향·금지 구간).',
+          splitDiag: splitDiag
         };
       }
-      return { chosen: { g: g, pathIndices: p, totalD: d, runwayDir: rwDir }, hint: '' };
+      if (splitDiag) splitDiag.fellThroughToDirect = true;
+      return { chosen: { g: g, pathIndices: p, totalD: d, runwayDir: rwDir, usedRetSplit: false }, hint: '', splitDiag: splitDiag };
     }
     const tryCw = solveByRunwayDir('clockwise');
     const tryCcw = solveByRunwayDir('counter_clockwise');
     const candCw = tryCw.chosen;
     const candCcw = tryCcw.chosen;
     let chosen = candCw;
-    if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) chosen = candCcw;
+    if (validSelectedArrRetId != null) {
+      const splitCw = !!(candCw && candCw.usedRetSplit);
+      const splitCcw = !!(candCcw && candCcw.usedRetSplit);
+      if (splitCw && !splitCcw) chosen = candCw;
+      else if (splitCcw && !splitCw) chosen = candCcw;
+      else if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) chosen = candCcw;
+    } else if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) {
+      chosen = candCcw;
+    }
     if (!chosen) {
       f.noWayArr = true;
       const hints = [tryCw.hint, tryCcw.hint].filter(function(h) { return h && String(h).trim(); });
       f._noWayArrDetail = hints.length ? Array.from(new Set(hints)).join(' ') : '시계·반시계 모두 도착 택시 경로를 찾지 못했습니다.';
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/d3690a39-df65-41bd-83b6-eb0ef6ed1c98', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'designer-mid.js:graphPathArrival', message: 'noWayArr', hypothesisId: 'H1-H5', data: { flightId: f.id || f.flightNo, tokenArrRunwayId: token.arrRunwayId, tokenRunwayId: token.runwayId, fArrRunwayId: f.arrRunwayId, resolvedRunwayId: runwayId, apronId: apronId, sampledArrRet: f.sampledArrRet, validSelectedArrRetId: validSelectedArrRetId, arrRetFailed: f.arrRetFailed, hints: hints, solveDiag: _arrivalSolveDiag }, timestamp: Date.now() }) }).catch(function() {});
-      // #endregion
       return null;
     }
     f.noWayArr = false;
@@ -1814,12 +1974,12 @@
       String(f._pathPolylineArrRetKey || '') === arrRetKey &&
       Array.isArray(f.cachedArrPathPts) &&
       f.cachedArrPathPts.length >= 2 &&
-      !f.noWayArr
+      !arrivalAirsideBlocked(f)
     ) {
       return f.cachedArrPathPts;
     }
     const pts = graphPathArrival(f);
-    if (pts && pts.length >= 2 && !f.noWayArr) {
+    if (pts && pts.length >= 2 && !arrivalAirsideBlocked(f)) {
       const cloned = clonePathPtsForCache(pts);
       if (cloned) {
         f.cachedArrPathPts = cloned;
@@ -1861,7 +2021,7 @@
     if (f && f.deferPathCompute) return;
     getPathForFlight(f);
     getPathForFlightDeparture(f);
-    if (f.noWayArr || f.noWayDep) f.timeline = null;
+    if (flightBlockedLikeNoWay(f)) f.timeline = null;
   }
 
   function findStandById(id) {
@@ -1901,7 +2061,7 @@
     resolveStand(flight);
     if (direction === 'arrival') {
       const pts = graphPathArrival(flight);
-      if (pts && pts.length >= 2 && !flight.noWayArr) {
+      if (pts && pts.length >= 2 && !arrivalAirsideBlocked(flight)) {
         const cloned = clonePathPtsForCache(pts);
         if (cloned) {
           flight.cachedArrPathPts = cloned;
@@ -1941,7 +2101,7 @@
     function applyPathsForFlight(f) {
       computeFlightPath(f, 'arrival');
       computeFlightPath(f, 'departure');
-      if (f.noWayArr || f.noWayDep) f.timeline = null;
+      if (flightBlockedLikeNoWay(f)) f.timeline = null;
     }
     function finishPaths() {
       if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines();
@@ -2114,7 +2274,7 @@
     const sel = state.selectedObject;
     if (!sel || sel.type !== 'flight' || !sel.obj) return;
     const f = sel.obj;
-    if (f.noWayArr) return;
+    if (arrivalAirsideBlocked(f)) return;
     const pathPts = getPathForFlight(f);
     if (!pathPts || pathPts.length < 2) return;
     ctx.save();
@@ -2214,10 +2374,10 @@
     if (tdPt && ((typeof f.arrVTdMs === 'number' && isFinite(f.arrVTdMs)) || (typeof f.arrTdDistM === 'number' && isFinite(f.arrTdDistM)))) {
       drawTouchDownLabel(tdPt, f.arrTdDistM, f.arrVTdMs);
     }
-    if (typeof f.arrVRetInMs === 'number' && isFinite(f.arrVRetInMs)) {
+    if (!f.arrRetFailed && typeof f.arrVRetInMs === 'number' && isFinite(f.arrVRetInMs)) {
       drawSpeedLabel(retInPt, 'RET IN ' + f.arrVRetInMs.toFixed(1) + ' m/s');
     }
-    if (typeof f.arrVRetOutMs === 'number' && isFinite(f.arrVRetOutMs)) {
+    if (!f.arrRetFailed && typeof f.arrVRetOutMs === 'number' && isFinite(f.arrVRetOutMs)) {
       drawSpeedLabel(retOutPt, 'RET OUT ' + f.arrVRetOutMs.toFixed(1) + ' m/s');
     }
     ctx.restore();
@@ -2253,7 +2413,7 @@
     let f = null;
     for (let i = 0; i < flights.length; i++) {
       const ff = flights[i];
-      if (!ff || ff.arrDep === 'Dep' || ff.noWayArr) continue;
+      if (!ff || ff.arrDep === 'Dep' || arrivalAirsideBlocked(ff)) continue;
       const token = ff.token || {};
       const rwId = ff.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || ff.arrRunwayId;
       if (rwId == null || rwId === '') continue;
@@ -2300,7 +2460,7 @@
     const tSecDraw = state.simTimeSec;
     if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSecDraw);
     state.flights.forEach(f => {
-      const hasNoWay = f.noWayArr || f.noWayDep;
+      const hasNoWay = flightBlockedLikeNoWay(f);
       if (hasNoWay) {
         if (!f.standId) return;
         const stand = findStandById(f.standId);
@@ -2312,7 +2472,8 @@
         const badgeH = CELL_SIZE * 0.85;
         const badgePad = CELL_SIZE * 0.3;
         let label = 'No way';
-        if (f.noWayArr && !f.noWayDep) label = 'No way (Arr)';
+        if (f.arrDep !== 'Dep' && f.arrRetFailed && !f.noWayArr && !f.noWayDep) label = 'Failed (Arr)';
+        else if (f.noWayArr && !f.noWayDep) label = 'No way (Arr)';
         else if (!f.noWayArr && f.noWayDep) label = 'No way (Dep)';
         ctx.save();
         ctx.font = 'bold ' + Math.round(badgeH * 0.62) + 'px system-ui';
@@ -2531,240 +2692,3 @@
   }
   function populateAircraftSelect(sel) {
     if (!sel) return;
-    const opts = AIRCRAFT_TYPES.map(a => '<option value="' + escapeHtml(String(a.id || a.name || '')) + '">' + escapeHtml(a.name || a.id || '') + '</option>').join('');
-    sel.innerHTML = opts || '<option value="A320">Airbus A320</option>';
-    if (!opts && sel.options.length) sel.value = 'A320';
-    else if (sel.options.length) sel.value = sel.options[0].value;
-  }
-  function getAircraftConstraintOptions() {
-    return AIRCRAFT_TYPES.map(function(a) {
-      const id = String(a.id || a.name || '').trim();
-      const label = String(a.name || a.id || id || '').trim();
-      return { id: id, label: label || id };
-    }).filter(function(item) { return !!item.id; });
-  }
-  function normalizeStandCategoryMode(rawMode, fallbackMode) {
-    const mode = String(rawMode || fallbackMode || 'icao').trim().toLowerCase();
-    return mode === 'aircraft' ? 'aircraft' : 'icao';
-  }
-  function normalizeAllowedAircraftTypes(rawList) {
-    const valid = new Set(getAircraftConstraintOptions().map(function(item) { return item.id; }));
-    const out = [];
-    (Array.isArray(rawList) ? rawList : []).forEach(function(item) {
-      const id = String(item || '').trim();
-      if (!id || !valid.has(id) || out.indexOf(id) >= 0) return;
-      out.push(id);
-    });
-    return out;
-  }
-  function getStandCategoryMode(stand) {
-    const isRemote = !!(stand && stand.x != null && stand.y != null && stand.x1 == null && stand.y1 == null);
-    const fallback = isRemote ? (_remoteTier.defaultCategoryMode || 'icao') : (_pbbTier.defaultCategoryMode || 'icao');
-    return normalizeStandCategoryMode(stand && stand.categoryMode, fallback);
-  }
-  function getStandAllowedAircraftTypes(stand) {
-    return normalizeAllowedAircraftTypes(stand && stand.allowedAircraftTypes);
-  }
-  function getPbbLengthMeters(pbb) {
-    const x1 = Number(pbb && pbb.x1), y1 = Number(pbb && pbb.y1);
-    const x2 = Number(pbb && pbb.x2), y2 = Number(pbb && pbb.y2);
-    if (Number.isFinite(x1) && Number.isFinite(y1) && Number.isFinite(x2) && Number.isFinite(y2)) {
-      return Math.max(1, Math.hypot(x2 - x1, y2 - y1));
-    }
-    const anchor = getPbbAnchorPx(pbb);
-    const center = getStandConnectionPx(pbb);
-    return Math.max(1, Math.hypot(center[0] - anchor[0], center[1] - anchor[1]));
-  }
-  function getPbbAngleDeg(pbb) {
-    return normalizeAngleDeg(getPBBStandAngle(pbb) * 180 / Math.PI);
-  }
-  function getStandConnectionPx(stand) {
-    if (!stand) return [0, 0];
-    if (stand.apronSiteX != null && stand.apronSiteY != null) return [Number(stand.apronSiteX), Number(stand.apronSiteY)];
-    if (stand.x2 != null && stand.y2 != null) return [Number(stand.x2), Number(stand.y2)];
-    if (stand.x != null && stand.y != null) return [Number(stand.x), Number(stand.y)];
-    return cellToPixel(stand.col || 0, stand.row || 0);
-  }
-  function getStandRotationHandleRadiusPx() {
-    return Math.max(6, CELL_SIZE * 0.22) * LAYOUT_VERTEX_DOT_SCALE;
-  }
-  function getPbbRotationOriginPx(pbb) {
-    return getStandConnectionPx(pbb);
-  }
-  function getPbbRotationHandlePx(pbb) {
-    const origin = getPbbRotationOriginPx(pbb);
-    const safeAngle = getPBBStandAngle(pbb);
-    const standSize = getStandSizeMeters((pbb && pbb.category) || 'C');
-    const dist = getPbbLengthMeters(pbb) + Math.max(standSize * 0.55, 10);
-    return [origin[0] + Math.cos(safeAngle) * dist, origin[1] + Math.sin(safeAngle) * dist];
-  }
-  function getRemoteRotationHandlePx(st) {
-    const center = getRemoteStandCenterPx(st);
-    const angle = getRemoteStandAngleRad(st);
-    const standSize = getStandSizeMeters((st && st.category) || 'C');
-    const dist = (standSize * 0.5) + Math.max(standSize * 0.35, 10);
-    return [center[0] + Math.cos(angle) * dist, center[1] + Math.sin(angle) * dist];
-  }
-  function hitTestStandRotationHandle(wx, wy) {
-    const maxD2 = Math.pow(getStandRotationHandleRadiusPx() * 1.9, 2);
-    if (state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.obj) {
-      const pbb = state.selectedObject.obj;
-      const handle = getPbbRotationHandlePx(pbb);
-      if (dist2(handle, [wx, wy]) <= maxD2) {
-        return { type: 'pbb', id: pbb.id };
-      }
-    }
-    if (state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.obj) {
-      const st = state.selectedObject.obj;
-      const handle = getRemoteRotationHandlePx(st);
-      if (dist2(handle, [wx, wy]) <= maxD2) {
-        return { type: 'remote', id: st.id };
-      }
-    }
-    return null;
-  }
-  function drawStandRotationHandle(originPx, handlePx, active) {
-    if (!originPx || !handlePx) return;
-    const r = getStandRotationHandleRadiusPx();
-    ctx.save();
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = active ? '#ffffff' : 'rgba(255,255,255,0.65)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(originPx[0], originPx[1]);
-    ctx.lineTo(handlePx[0], handlePx[1]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = active ? '#f43f5e' : '#a78bfa';
-    ctx.beginPath();
-    ctx.arc(handlePx[0], handlePx[1], r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-  function buildDefaultPbbBridgePoints(pbb, bridgeIndex, bridgeCount) {
-    const count = Math.max(1, parseInt(bridgeCount, 10) || 1);
-    const length = getPbbLengthMeters(pbb);
-    const angle = getPBBStandAngle(pbb);
-    const dirX = Math.cos(angle), dirY = Math.sin(angle);
-    const tanX = -dirY, tanY = dirX;
-    const standSize = getStandSizeMeters((pbb && pbb.category) || 'C');
-    const spread = Math.min(Math.max(standSize * 0.18, 4), standSize * 0.4);
-    const offsetIndex = bridgeIndex - (count - 1) / 2;
-    const lateral = spread * offsetIndex;
-    const startX = Number(pbb.x1 || 0) + tanX * lateral;
-    const startY = Number(pbb.y1 || 0) + tanY * lateral;
-    const endX = Number(pbb.x2 || 0) + tanX * (lateral * 0.55);
-    const endY = Number(pbb.y2 || 0) + tanY * (lateral * 0.55);
-    const midX = startX + dirX * (length * 0.45);
-    const midY = startY + dirY * (length * 0.45);
-    return [
-      { x: startX, y: startY },
-      { x: midX, y: midY },
-      { x: endX, y: endY },
-    ];
-  }
-  function rebuildPbbBridgeGeometry(pbb) {
-    const count = Math.max(1, Math.min(8, parseInt(pbb.pbbCount, 10) || 1));
-    pbb.pbbCount = count;
-    const prev = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
-    pbb.pbbBridges = Array.from({ length: count }, function(_, idx) {
-      const current = prev[idx];
-      const points = (current && Array.isArray(current.points) && current.points.length >= 3)
-        ? current.points.map(function(pt) { return { x: Number(pt.x) || 0, y: Number(pt.y) || 0 }; })
-        : buildDefaultPbbBridgePoints(pbb, idx, count);
-      return { id: (current && current.id) || id(), points: points };
-    });
-    if (pbb.apronSiteX == null || pbb.apronSiteY == null) {
-      pbb.apronSiteX = Number(pbb.x2 || 0);
-      pbb.apronSiteY = Number(pbb.y2 || 0);
-    }
-  }
-  function setPbbGeometryFromAngleLength(pbb, angleDeg, lengthMeters, resetBridgeGeometry) {
-    const ang = normalizeAngleDeg(angleDeg);
-    const len = Math.max(1, Number(lengthMeters) || 1);
-    const rad = ang * Math.PI / 180;
-    const anchor = getPbbAnchorPx(pbb);
-    pbb.x1 = anchor[0];
-    pbb.y1 = anchor[1];
-    pbb.x2 = anchor[0] + Math.cos(rad) * len;
-    pbb.y2 = anchor[1] + Math.sin(rad) * len;
-    pbb.angleDeg = ang;
-    if (resetBridgeGeometry !== false) {
-      delete pbb.pbbBridges;
-    }
-    rebuildPbbBridgeGeometry(pbb);
-  }
-  function normalizeBuildingObject(termLike) {
-    const term = Object.assign({}, termLike || {});
-    term.buildingType = normalizeBuildingType(term.buildingType || term.terminalType);
-    return term;
-  }
-  function normalizePbbStandObject(rawPbb) {
-    const pbb = Object.assign({}, rawPbb || {});
-    pbb.categoryMode = getStandCategoryMode(pbb);
-    pbb.allowedAircraftTypes = getStandAllowedAircraftTypes(pbb);
-    pbb.pbbCount = Math.max(1, Math.min(8, parseInt(pbb.pbbCount != null ? pbb.pbbCount : (_pbbTier.defaultBridgeCount || 1), 10) || 1));
-    if (pbb.x1 != null && pbb.y1 != null && pbb.x2 != null && pbb.y2 != null) {
-      pbb.angleDeg = pbb.angleDeg != null
-        ? normalizeAngleDeg(pbb.angleDeg)
-        : normalizeAngleDeg(Math.atan2((Number(pbb.y2) || 0) - (Number(pbb.y1) || 0), (Number(pbb.x2) || 0) - (Number(pbb.x1) || 0)) * 180 / Math.PI);
-      rebuildPbbBridgeGeometry(pbb);
-    }
-    return pbb;
-  }
-  function normalizeRemoteStandObject(rawStand) {
-    const stand = Object.assign({}, rawStand || {});
-    stand.categoryMode = getStandCategoryMode(stand);
-    stand.allowedAircraftTypes = getStandAllowedAircraftTypes(stand);
-    stand.angleDeg = normalizeAngleDeg(stand.angleDeg != null ? stand.angleDeg : 0);
-    return stand;
-  }
-
-  (function initFlightUI() {
-    (function wireFlightSchedulePagerOnce() {
-      if (wireFlightSchedulePagerOnce._done) return;
-      wireFlightSchedulePagerOnce._done = true;
-      const bPrev = document.getElementById('btnFlightSchedPrev');
-      const bNext = document.getElementById('btnFlightSchedNext');
-      if (!bPrev || !bNext) return;
-      bPrev.addEventListener('click', function() {
-        if (FLIGHT_SCHED_PAGE_SIZE <= 0 || !state.flights.length) return;
-        if (state.flightSchedulePage > 0) {
-          state.flightSchedulePage--;
-          renderFlightList(false, false, { pageTurnOnly: true });
-        }
-      });
-      bNext.addEventListener('click', function() {
-        if (FLIGHT_SCHED_PAGE_SIZE <= 0 || !state.flights.length) return;
-        const nFl = state.flights.length;
-        const maxP = Math.max(0, Math.ceil(nFl / FLIGHT_SCHED_PAGE_SIZE) - 1);
-        if (state.flightSchedulePage < maxP) {
-          state.flightSchedulePage++;
-          renderFlightList(false, false, { pageTurnOnly: true });
-        }
-      });
-    })();
-    const arrDepEl = document.getElementById('flightArrDep');
-    const dwellEl = document.getElementById('flightDwell');
-    const minDwellEl = document.getElementById('flightMinDwell');
-    const addBtn = document.getElementById('btnAddFlight');
-    const playBtn = document.getElementById('btnPlayFlights');
-    const pauseBtn = document.getElementById('btnPauseFlights');
-    const resetBtn = document.getElementById('btnResetFlights');
-    const simSlider = document.getElementById('flightSimSlider');
-    const speedSelect = document.getElementById('flightSpeed');
-    const timeInputEl = document.getElementById('flightTime');
-    const aircraftEl = document.getElementById('flightAircraftType');
-    const regEl = document.getElementById('flightReg');
-    const layoutNameInput = document.getElementById('layoutName');
-    const saveLayoutBtn = document.getElementById('btnSaveLayout');
-    const layoutMsgEl = document.getElementById('layoutMessage');
-    const layoutLoadListEl = document.getElementById('layoutLoadList');
-    const globalUpdateBtn = document.getElementById('btnGlobalUpdate');
-    if (!arrDepEl) return;
-    populateAircraftSelect(aircraftEl);
-
-    function randomAirlineCode() { return DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)]; }
-    function randomFlightNumber(airlineCode) { return (airlineCode || randomAirlineCode()) + String(Math.floor(1000 + Math.random() * 9000)); }
-    function getDefaultSibtMinutes() {
-      let maxT = 0;

@@ -1,3 +1,14 @@
+  let layoutImageBitmap = null;
+  let layoutImageBitmapSrc = '';
+  const BUILDING_TYPE_CFG = (_layoutTier.building && typeof _layoutTier.building === 'object') ? _layoutTier.building : {};
+  const BUILDING_TYPES = Array.isArray(BUILDING_TYPE_CFG.types) && BUILDING_TYPE_CFG.types.length ? BUILDING_TYPE_CFG.types.slice() : [
+    { id: 'passenger_terminal', label: 'Passenger Terminal' },
+    { id: 'concourse', label: '위성터미널(콘코스)' },
+    { id: 'control_tower', label: 'Control Tower' },
+    { id: 'cargo_terminal', label: 'Cargo Terminal' },
+    { id: 'hanger', label: 'Hanger' },
+
+
     { id: 'utility', label: 'Utility' },
     { id: 'wall', label: 'Wall' },
   ];
@@ -52,6 +63,14 @@
   function c2dPassengerTerminalStroke() {
     return getBuildingTheme({ buildingType: 'passenger_terminal' }).stroke;
   }
+  function c2dRunwayTaxiwayCenterlineStroke() {
+    const s = _canvas2dStyle.runwayTaxiwayCenterlineStroke;
+    return (typeof s === 'string' && s.trim()) ? s.trim() : c2dPassengerTerminalStroke();
+  }
+  function c2dTaxiwayCenterlineStroke() {
+    const s = _canvas2dStyle.taxiwayCenterlineStroke;
+    return (typeof s === 'string' && s.trim()) ? s.trim() : c2dRunwayTaxiwayCenterlineStroke();
+  }
   function getDefaultBuildingNameForType(buildingType, currentId) {
     const prefix = getBuildingTypeNamePrefix(buildingType);
     const buildings = (state.terminals || []).filter(function(t) { return t && t.id !== currentId; });
@@ -85,6 +104,9 @@
     if (f.noWayDep) {
       const d = f._noWayDepDetail != null ? String(f._noWayDepDetail).trim() : '';
       parts.push('출발: ' + (d || '사유를 판별하지 못했습니다.'));
+    }
+    if (f.arrDep !== 'Dep' && f.arrRetFailed && !f.noWayArr) {
+      parts.push('도착: RET 실패(제약 또는 샘플링).');
     }
     if (!parts.length) return '경로를 찾을 수 없습니다.';
     return parts.join(' ');
@@ -163,7 +185,6 @@
     simPlaybackDockVisible: false,
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
-    showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
     currentTerminalId: null,
     selectedObject: null,
     terminalDrawingId: null,
@@ -274,20 +295,4 @@
       if (fill) fill.style.width = '0%';
       if (btn) btn.disabled = false;
     }
-  }
-  function scheduleAfterPaint(fn) {
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() { setTimeout(fn, 0); });
-    });
-  }
-  const DEFAULT_AIRLINE_CODES = (function() {
-    const a = _flightTier.defaultAirlineCodes;
-    return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
-  })();
-  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
-  function pathTypeFromLayoutMode(layoutMode) {
-    if (layoutMode === 'runwayPath') return 'runway';
-    if (layoutMode === 'runwayTaxiway') return 'runway_exit';
-    if (layoutMode === 'taxiway') return 'taxiway';
-    return 'taxiway';
   }

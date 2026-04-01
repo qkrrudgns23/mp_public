@@ -1,3 +1,30 @@
+      for (let i = 1; i < th.length; i++) {
+        const lo = th[i - 1], hi = th[i];
+        const mid = lo + (hi - lo) / 2;
+        const st = rsepColorForValue(mid);
+        const text = rsepLegendFmt(lab.rangeMid || '{0}–{1}s', lo, hi - 1);
+        html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st.color + ';">' + escapeHtml(text) + '</span></span>';
+      }
+      const lastT = th[th.length - 1];
+      const stL = rsepColorForValue(lastT + 1000);
+      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + stL.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + stL.color + ';">' + escapeHtml(rsepLegendFmt(lab.gteLast || '≥{0}s', lastT)) + '</span></span>';
+    }
+    html += '<span style="margin-left:4px;color:' + countColor + ';">' + filled + '/' + total + '</span>';
+    html += '</div>';
+    return html;
+  }
+  function rsepMakeConfig(stdKey) {
+    const std = RSEP_STANDARDS[stdKey] || RSEP_STANDARDS['ICAO'];
+    const cats = RSEP_STD_CATS[stdKey];
+    const rot = std.ROT || {};
+    const rotCopy = {};
+    const boost = RSEP_ARRDEP_BOOST_SEC;
+    cats.forEach(function(c) {
+      if (rot[c] == null || rot[c] === '') rotCopy[c] = '';
+      else {
+        const n = Number(rot[c]);
+
+
         rotCopy[c] = isFinite(n) ? String(Math.round(n + boost)) : String(rot[c]);
       }
     });
@@ -291,30 +318,3 @@
       x: Number(wx),
       y: Number(wy),
       category,
-      name: baseName,
-      angleDeg,
-      categoryMode: categoryMode,
-      allowedAircraftTypes: readCheckedDataItemIds('remoteAircraftAccess', '.aircraft-type-check'),
-      allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
-    }));
-    return true;
-  }
-  function taxiwayOverlapsAnyTerminal(tw) {
-    if (!tw || !tw.vertices || tw.vertices.length < 2) return false;
-    const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-    for (let t = 0; t < state.terminals.length; t++) {
-      const term = state.terminals[t];
-      if (!term.closed || term.vertices.length < 3) continue;
-      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
-      for (let i = 0; i < vertsPix.length; i++) {
-        if (pointInPolygonXY(vertsPix[i], termPix)) return true;
-      }
-      for (let i = 0; i < vertsPix.length - 1; i++) {
-        const a1 = vertsPix[i], a2 = vertsPix[i+1];
-        for (let j = 0; j < termPix.length; j++) {
-          const b1 = termPix[j], b2 = termPix[(j+1) % termPix.length];
-          if (segIntersect(a1, a2, b1, b2)) return true;
-        }
-      }
-    }
-    return false;

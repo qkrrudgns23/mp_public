@@ -11,6 +11,7 @@ _logger = logging.getLogger(__name__)
 import streamlit as st
 import streamlit.components.v1 as components
 
+from utils.layout_flight_meta import ensure_flight_service_dates
 from utils.layout_receiver import (
     DEFAULT_LAYOUT_PATH,
     LAYOUT_STORAGE_DIR,
@@ -139,6 +140,11 @@ _rw_exit_allowed_default_raw = _cfg_list(
 )
 
 _flight_info = _dict_or_empty(_info_path("tiers", "flight_schedule") or _info_path("tiers", "flight"))
+_algo_tier = _dict_or_empty(_info_path("tiers", "algorithm"))
+_algo_sim = _dict_or_empty(_algo_tier.get("simulation"))
+_default_flight_service_date = _cfg_str(
+    _flight_info, "defaultServiceDate", _cfg_str(_algo_sim, "baseDate", "2026-03-31")
+)
 
 if not DEFAULT_LAYOUT_PATH.is_file() and _fallback_default.is_file():
     shutil.copy2(_fallback_default, DEFAULT_LAYOUT_PATH)
@@ -169,6 +175,7 @@ def _ensure_random_regs(layout: dict) -> None:
 
 
 _ensure_random_regs(DEFAULT_LAYOUT)
+ensure_flight_service_dates(DEFAULT_LAYOUT, _default_flight_service_date)
 
 _grid_ui_defaults = _cfg_bundle(_grid_info, [
     ("min_cs", "minCellSize", 5, _cfg_int),
@@ -318,6 +325,7 @@ try:
         if _load_path and _load_path.is_file():
             layout_for_html = json.loads(_load_path.read_text(encoding="utf-8"))
             _ensure_random_regs(layout_for_html)
+            ensure_flight_service_dates(layout_for_html, _default_flight_service_date)
             layout_display_name = load_name
 except Exception:
     _logger.exception("Failed to load layout from query param")
@@ -721,6 +729,7 @@ def _designer_js_config_dict() -> dict[str, object]:
             "topLeftRow": _ui_g_img_top_left_row,
         },
         "defaultSimSpeed": float(_ui_default_sim_speed),
+        "defaultFlightServiceDate": _default_flight_service_date,
     }
 
 

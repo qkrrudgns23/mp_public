@@ -1134,6 +1134,8 @@
     },
     "flight_schedule": {
       "description": "Flight schedule tab defaults",
+      "defaultServiceDate": "2026-03-31",
+      "arrRetScheduleHelp": "Flight Schedule 표에서 Arr RET 열 드롭다운으로 퇴출로를 지정하면 다익스트라는 해당 RET만 경유합니다. 자동은 거리·속도 기반 후보만 사용합니다.",
       "defaultDwellMin": 60,
       "defaultMinDwellMin": 0,
       "dwellInputMax": 600,
@@ -1271,7 +1273,7 @@
         "runwayBandStrokeOpaque": "#222222",
         "runwayBandStrokeDim": "#141414",
         "runwayTaxiwayCenterlineStroke": "#38bdf8",
-        "taxiwayCenterlineStroke": "#facc15",
+        "taxiwayCenterlineStroke": "#38bdf8",
         "pathArrivalArrowStroke": "rgba(252, 165, 165, 0.9)",
         "approachPreviewWidthM": 30,
         "approachPreviewStroke": "rgba(255, 255, 255, 0.01)",
@@ -1387,7 +1389,7 @@
         "reverseCost": 1000000
       },
       "simulation": {
-        "description": "playbackLeadBeforeFirstTouchdownSec: ELDT-relative playback lead. approachOffsetM: straight inbound segment length (m) before threshold. maxLazyTimelineBuildsPerFrame caps how many full airside timelines are built per frame (reduces load when many flights overlap the approach window). timeStepSec, trail, preTouchdownHalo, aircraft dimensions.",
+        "description": "playbackLeadBeforeFirstTouchdownSec: ELDT-relative playback lead. approachOffsetM: straight inbound segment length (m) before threshold. Inbound animation uses per-flight touchdown speed (arrVTdMs / catalog). maxLazyTimelineBuildsPerFrame caps how many full airside timelines are built per frame (reduces load when many flights overlap the approach window). timeStepSec, trail, preTouchdownHalo, aircraft dimensions.",
         "maxLazyTimelineBuildsPerFrame": 6,
         "playbackLeadBeforeFirstTouchdownSec": 20,
         "timeStepSec": 1,
@@ -1396,7 +1398,8 @@
         "aircraftWingspanM": 40,
         "aircraftFuselageLengthM": 50,
         "trailLengthM": 300,
-        "preTouchdownHaloEnabled": true
+        "preTouchdownHaloEnabled": true,
+        "baseDate": "2026-03-31"
       }
     }
   }

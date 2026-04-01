@@ -1,3 +1,32 @@
+      name: baseName,
+      angleDeg,
+      categoryMode: categoryMode,
+      allowedAircraftTypes: readCheckedDataItemIds('remoteAircraftAccess', '.aircraft-type-check'),
+      allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
+    }));
+    return true;
+  }
+  function taxiwayOverlapsAnyTerminal(tw) {
+    if (!tw || !tw.vertices || tw.vertices.length < 2) return false;
+    const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
+    for (let t = 0; t < state.terminals.length; t++) {
+      const term = state.terminals[t];
+      if (!term.closed || term.vertices.length < 3) continue;
+      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
+      for (let i = 0; i < vertsPix.length; i++) {
+        if (pointInPolygonXY(vertsPix[i], termPix)) return true;
+      }
+      for (let i = 0; i < vertsPix.length - 1; i++) {
+        const a1 = vertsPix[i], a2 = vertsPix[i+1];
+        for (let j = 0; j < termPix.length; j++) {
+          const b1 = termPix[j], b2 = termPix[(j+1) % termPix.length];
+          if (segIntersect(a1, a2, b1, b2)) return true;
+        }
+      }
+    }
+    return false;
+
+
   }
   function terminalOverlapsAnyTaxiway(term) {
     if (!term || !term.vertices || term.vertices.length < 3) return false;
@@ -95,7 +124,6 @@
         cellSize: CELL_SIZE,
         showGrid: !!state.showGrid,
         showImage: !!state.showImage,
-        showRoadWidth: !!state.showRoadWidth,
         layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
       },
       terminals: makeUniqueNamedCopy(state.terminals, 'name'),
@@ -690,25 +718,3 @@
       }
       state.selectedVertex = null;
       syncPanelFromState();
-      updateObjectInfo();
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      return true;
-    }
-    if (settingModeSelect.value === 'apronTaxiway' && state.apronLinkDrawing && state.apronLinkTemp) {
-      if (state.apronLinkMidpoints && state.apronLinkMidpoints.length) {
-        state.apronLinkMidpoints.pop();
-        draw();
-        return true;
-      }
-      state.apronLinkTemp = null;
-      state.apronLinkMidpoints = [];
-      state.apronLinkPointerWorld = null;
-      draw();
-      return true;
-    }
-    return false;
-  }
-
-  function getCurrentTerminal() {
-    if (state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.obj) {

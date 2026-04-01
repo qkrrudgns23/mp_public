@@ -1,3 +1,242 @@
+    const opts = AIRCRAFT_TYPES.map(a => '<option value="' + escapeHtml(String(a.id || a.name || '')) + '">' + escapeHtml(a.name || a.id || '') + '</option>').join('');
+    sel.innerHTML = opts || '<option value="A320">Airbus A320</option>';
+    if (!opts && sel.options.length) sel.value = 'A320';
+    else if (sel.options.length) sel.value = sel.options[0].value;
+  }
+  function getAircraftConstraintOptions() {
+    return AIRCRAFT_TYPES.map(function(a) {
+      const id = String(a.id || a.name || '').trim();
+      const label = String(a.name || a.id || id || '').trim();
+      return { id: id, label: label || id };
+    }).filter(function(item) { return !!item.id; });
+  }
+  function normalizeStandCategoryMode(rawMode, fallbackMode) {
+    const mode = String(rawMode || fallbackMode || 'icao').trim().toLowerCase();
+    return mode === 'aircraft' ? 'aircraft' : 'icao';
+  }
+  function normalizeAllowedAircraftTypes(rawList) {
+    const valid = new Set(getAircraftConstraintOptions().map(function(item) { return item.id; }));
+    const out = [];
+    (Array.isArray(rawList) ? rawList : []).forEach(function(item) {
+      const id = String(item || '').trim();
+      if (!id || !valid.has(id) || out.indexOf(id) >= 0) return;
+      out.push(id);
+    });
+    return out;
+  }
+  function getStandCategoryMode(stand) {
+    const isRemote = !!(stand && stand.x != null && stand.y != null && stand.x1 == null && stand.y1 == null);
+    const fallback = isRemote ? (_remoteTier.defaultCategoryMode || 'icao') : (_pbbTier.defaultCategoryMode || 'icao');
+    return normalizeStandCategoryMode(stand && stand.categoryMode, fallback);
+  }
+  function getStandAllowedAircraftTypes(stand) {
+    return normalizeAllowedAircraftTypes(stand && stand.allowedAircraftTypes);
+  }
+  function getPbbLengthMeters(pbb) {
+    const x1 = Number(pbb && pbb.x1), y1 = Number(pbb && pbb.y1);
+    const x2 = Number(pbb && pbb.x2), y2 = Number(pbb && pbb.y2);
+    if (Number.isFinite(x1) && Number.isFinite(y1) && Number.isFinite(x2) && Number.isFinite(y2)) {
+      return Math.max(1, Math.hypot(x2 - x1, y2 - y1));
+    }
+    const anchor = getPbbAnchorPx(pbb);
+    const center = getStandConnectionPx(pbb);
+    return Math.max(1, Math.hypot(center[0] - anchor[0], center[1] - anchor[1]));
+  }
+  function getPbbAngleDeg(pbb) {
+    return normalizeAngleDeg(getPBBStandAngle(pbb) * 180 / Math.PI);
+  }
+  function getStandConnectionPx(stand) {
+    if (!stand) return [0, 0];
+    if (stand.apronSiteX != null && stand.apronSiteY != null) return [Number(stand.apronSiteX), Number(stand.apronSiteY)];
+    if (stand.x2 != null && stand.y2 != null) return [Number(stand.x2), Number(stand.y2)];
+    if (stand.x != null && stand.y != null) return [Number(stand.x), Number(stand.y)];
+    return cellToPixel(stand.col || 0, stand.row || 0);
+  }
+  function getStandRotationHandleRadiusPx() {
+    return Math.max(6, CELL_SIZE * 0.22) * LAYOUT_VERTEX_DOT_SCALE;
+  }
+  function getPbbRotationOriginPx(pbb) {
+    return getStandConnectionPx(pbb);
+  }
+  function getPbbRotationHandlePx(pbb) {
+    const origin = getPbbRotationOriginPx(pbb);
+    const safeAngle = getPBBStandAngle(pbb);
+    const standSize = getStandSizeMeters((pbb && pbb.category) || 'C');
+    const dist = getPbbLengthMeters(pbb) + Math.max(standSize * 0.55, 10);
+    return [origin[0] + Math.cos(safeAngle) * dist, origin[1] + Math.sin(safeAngle) * dist];
+  }
+  function getRemoteRotationHandlePx(st) {
+    const center = getRemoteStandCenterPx(st);
+    const angle = getRemoteStandAngleRad(st);
+    const standSize = getStandSizeMeters((st && st.category) || 'C');
+    const dist = (standSize * 0.5) + Math.max(standSize * 0.35, 10);
+    return [center[0] + Math.cos(angle) * dist, center[1] + Math.sin(angle) * dist];
+  }
+  function hitTestStandRotationHandle(wx, wy) {
+    const maxD2 = Math.pow(getStandRotationHandleRadiusPx() * 1.9, 2);
+    if (state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.obj) {
+      const pbb = state.selectedObject.obj;
+      const handle = getPbbRotationHandlePx(pbb);
+      if (dist2(handle, [wx, wy]) <= maxD2) {
+        return { type: 'pbb', id: pbb.id };
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.obj) {
+      const st = state.selectedObject.obj;
+      const handle = getRemoteRotationHandlePx(st);
+      if (dist2(handle, [wx, wy]) <= maxD2) {
+        return { type: 'remote', id: st.id };
+      }
+    }
+    return null;
+  }
+  function drawStandRotationHandle(originPx, handlePx, active) {
+    if (!originPx || !handlePx) return;
+    const r = getStandRotationHandleRadiusPx();
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = active ? '#ffffff' : 'rgba(255,255,255,0.65)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(originPx[0], originPx[1]);
+    ctx.lineTo(handlePx[0], handlePx[1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = active ? '#f43f5e' : '#a78bfa';
+    ctx.beginPath();
+    ctx.arc(handlePx[0], handlePx[1], r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  function buildDefaultPbbBridgePoints(pbb, bridgeIndex, bridgeCount) {
+    const count = Math.max(1, parseInt(bridgeCount, 10) || 1);
+    const length = getPbbLengthMeters(pbb);
+    const angle = getPBBStandAngle(pbb);
+    const dirX = Math.cos(angle), dirY = Math.sin(angle);
+    const tanX = -dirY, tanY = dirX;
+    const standSize = getStandSizeMeters((pbb && pbb.category) || 'C');
+    const spread = Math.min(Math.max(standSize * 0.18, 4), standSize * 0.4);
+    const offsetIndex = bridgeIndex - (count - 1) / 2;
+    const lateral = spread * offsetIndex;
+    const startX = Number(pbb.x1 || 0) + tanX * lateral;
+    const startY = Number(pbb.y1 || 0) + tanY * lateral;
+    const endX = Number(pbb.x2 || 0) + tanX * (lateral * 0.55);
+    const endY = Number(pbb.y2 || 0) + tanY * (lateral * 0.55);
+    const midX = startX + dirX * (length * 0.45);
+    const midY = startY + dirY * (length * 0.45);
+    return [
+      { x: startX, y: startY },
+      { x: midX, y: midY },
+      { x: endX, y: endY },
+    ];
+  }
+  function rebuildPbbBridgeGeometry(pbb) {
+    const count = Math.max(1, Math.min(8, parseInt(pbb.pbbCount, 10) || 1));
+    pbb.pbbCount = count;
+    const prev = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
+    pbb.pbbBridges = Array.from({ length: count }, function(_, idx) {
+      const current = prev[idx];
+      const points = (current && Array.isArray(current.points) && current.points.length >= 3)
+        ? current.points.map(function(pt) { return { x: Number(pt.x) || 0, y: Number(pt.y) || 0 }; })
+        : buildDefaultPbbBridgePoints(pbb, idx, count);
+      return { id: (current && current.id) || id(), points: points };
+    });
+    if (pbb.apronSiteX == null || pbb.apronSiteY == null) {
+      pbb.apronSiteX = Number(pbb.x2 || 0);
+      pbb.apronSiteY = Number(pbb.y2 || 0);
+    }
+  }
+  function setPbbGeometryFromAngleLength(pbb, angleDeg, lengthMeters, resetBridgeGeometry) {
+    const ang = normalizeAngleDeg(angleDeg);
+    const len = Math.max(1, Number(lengthMeters) || 1);
+    const rad = ang * Math.PI / 180;
+    const anchor = getPbbAnchorPx(pbb);
+    pbb.x1 = anchor[0];
+    pbb.y1 = anchor[1];
+    pbb.x2 = anchor[0] + Math.cos(rad) * len;
+    pbb.y2 = anchor[1] + Math.sin(rad) * len;
+    pbb.angleDeg = ang;
+    if (resetBridgeGeometry !== false) {
+      delete pbb.pbbBridges;
+    }
+    rebuildPbbBridgeGeometry(pbb);
+  }
+  function normalizeBuildingObject(termLike) {
+    const term = Object.assign({}, termLike || {});
+    term.buildingType = normalizeBuildingType(term.buildingType || term.terminalType);
+    return term;
+  }
+  function normalizePbbStandObject(rawPbb) {
+    const pbb = Object.assign({}, rawPbb || {});
+    pbb.categoryMode = getStandCategoryMode(pbb);
+    pbb.allowedAircraftTypes = getStandAllowedAircraftTypes(pbb);
+    pbb.pbbCount = Math.max(1, Math.min(8, parseInt(pbb.pbbCount != null ? pbb.pbbCount : (_pbbTier.defaultBridgeCount || 1), 10) || 1));
+    if (pbb.x1 != null && pbb.y1 != null && pbb.x2 != null && pbb.y2 != null) {
+      pbb.angleDeg = pbb.angleDeg != null
+        ? normalizeAngleDeg(pbb.angleDeg)
+        : normalizeAngleDeg(Math.atan2((Number(pbb.y2) || 0) - (Number(pbb.y1) || 0), (Number(pbb.x2) || 0) - (Number(pbb.x1) || 0)) * 180 / Math.PI);
+      rebuildPbbBridgeGeometry(pbb);
+    }
+    return pbb;
+  }
+  function normalizeRemoteStandObject(rawStand) {
+    const stand = Object.assign({}, rawStand || {});
+    stand.categoryMode = getStandCategoryMode(stand);
+    stand.allowedAircraftTypes = getStandAllowedAircraftTypes(stand);
+    stand.angleDeg = normalizeAngleDeg(stand.angleDeg != null ? stand.angleDeg : 0);
+    return stand;
+  }
+
+  (function initFlightUI() {
+    (function wireFlightSchedulePagerOnce() {
+      if (wireFlightSchedulePagerOnce._done) return;
+      wireFlightSchedulePagerOnce._done = true;
+      const bPrev = document.getElementById('btnFlightSchedPrev');
+      const bNext = document.getElementById('btnFlightSchedNext');
+      if (!bPrev || !bNext) return;
+      bPrev.addEventListener('click', function() {
+        if (FLIGHT_SCHED_PAGE_SIZE <= 0 || !state.flights.length) return;
+        if (state.flightSchedulePage > 0) {
+          state.flightSchedulePage--;
+          renderFlightList(false, false, { pageTurnOnly: true });
+        }
+      });
+      bNext.addEventListener('click', function() {
+        if (FLIGHT_SCHED_PAGE_SIZE <= 0 || !state.flights.length) return;
+        const nFl = state.flights.length;
+        const maxP = Math.max(0, Math.ceil(nFl / FLIGHT_SCHED_PAGE_SIZE) - 1);
+        if (state.flightSchedulePage < maxP) {
+          state.flightSchedulePage++;
+          renderFlightList(false, false, { pageTurnOnly: true });
+        }
+      });
+    })();
+    const arrDepEl = document.getElementById('flightArrDep');
+    const dwellEl = document.getElementById('flightDwell');
+    const minDwellEl = document.getElementById('flightMinDwell');
+    const addBtn = document.getElementById('btnAddFlight');
+    const playBtn = document.getElementById('btnPlayFlights');
+    const pauseBtn = document.getElementById('btnPauseFlights');
+    const resetBtn = document.getElementById('btnResetFlights');
+    const simSlider = document.getElementById('flightSimSlider');
+    const speedSelect = document.getElementById('flightSpeed');
+    const timeInputEl = document.getElementById('flightTime');
+    const aircraftEl = document.getElementById('flightAircraftType');
+    const regEl = document.getElementById('flightReg');
+    const layoutNameInput = document.getElementById('layoutName');
+    const saveLayoutBtn = document.getElementById('btnSaveLayout');
+    const layoutMsgEl = document.getElementById('layoutMessage');
+    const layoutLoadListEl = document.getElementById('layoutLoadList');
+    const globalUpdateBtn = document.getElementById('btnGlobalUpdate');
+    if (!arrDepEl) return;
+    populateAircraftSelect(aircraftEl);
+
+    function randomAirlineCode() { return DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)]; }
+    function randomFlightNumber(airlineCode) { return (airlineCode || randomAirlineCode()) + String(Math.floor(1000 + Math.random() * 9000)); }
+    function getDefaultSibtMinutes() {
+      let maxT = 0;
+
+
       (state.flights || []).forEach(f => {
         if (!f) return;
         const sibt = f.sibtMin_d != null ? f.sibtMin_d : (typeof f.timeMin === 'number' ? f.timeMin : 0);
@@ -129,68 +368,6 @@
       btnShowPlayDock.addEventListener('click', function() {
         state.simPlaybackDockVisible = true;
         if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
-      });
-    }
-    const btnRunSim = document.getElementById('btnRunSimulation');
-    if (btnRunSim) {
-      btnRunSim.addEventListener('click', function() {
-        if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
-        if (typeof syncTableToFlightState === 'function') syncTableToFlightState();
-        var data = (typeof serializeCurrentLayout === 'function') ? serializeCurrentLayout() : null;
-        if (!data) { console.warn('serializeCurrentLayout not available'); return; }
-        if (!data.flights || data.flights.length === 0) {
-          alert('No flights to simulate.');
-          return;
-        }
-        var apiBase = (typeof getLayoutApiBase === 'function') ? getLayoutApiBase() : (LAYOUT_API_URL || '');
-        console.log('[Sim] apiBase =', apiBase);
-        btnRunSim.disabled = true;
-        btnRunSim.textContent = 'Starting...';
-        fetch(apiBase + '/api/run-simulation', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ layout: data })
-        })
-        .then(function(r) {
-          console.log('[Sim] POST response status:', r.status);
-          if (!r.ok) {
-            return r.text().then(function(txt) {
-              throw new Error('Server returned ' + r.status + ': ' + (txt || 'empty body'));
-            });
-          }
-          return r.text().then(function(txt) {
-            if (!txt) throw new Error('Empty response body');
-            return JSON.parse(txt);
-          });
-        })
-        .then(function(startResult) {
-          if (!startResult.ok) throw new Error(startResult.error || 'start failed');
-          var pollInterval = setInterval(function() {
-            fetch(apiBase + '/api/sim-progress')
-              .then(function(r) { return r.ok ? r.json() : Promise.resolve({ running: false, percent: 0 }); })
-              .then(function(prog) {
-                if (prog.running) {
-                  btnRunSim.textContent = 'Sim ' + prog.percent + '%';
-                } else {
-                  clearInterval(pollInterval);
-                  btnRunSim.disabled = false;
-                  btnRunSim.textContent = 'Simulation';
-                  if (prog.error) {
-                    alert('Simulation error: ' + prog.error);
-                  } else if (prog.percent >= 100 || prog.resultFile) {
-                    alert('Simulation complete.\nOpen View Sim page to see results.');
-                  }
-                }
-              })
-              .catch(function(e) { console.warn('[Sim] poll error:', e); });
-          }, 500);
-        })
-        .catch(function(err) {
-          btnRunSim.disabled = false;
-          btnRunSim.textContent = 'Simulation';
-          console.error('[Sim] request failed:', err);
-          alert('Simulation failed: ' + (err.message || err));
-        });
       });
     }
     function applyTokenNodesFromCheckboxes() {
@@ -377,8 +554,8 @@
       computeFlightPath(f, 'arrival');
       computeFlightPath(f, 'departure');
       const isArr = f.arrDep !== 'Dep';
-      if (isArr && f.noWayArr) {
-        updateFlightError('no path(No Way): Arrival route not found.');
+      if (isArr && arrivalAirsideBlocked(f)) {
+        updateFlightError(f.arrRetFailed && !f.noWayArr ? 'no path(No Way): Arrival RET failed.' : 'no path(No Way): Arrival route not found.');
         f.timeline = null;
         draw();
         return;
@@ -981,266 +1158,3 @@
     toggleLayoutDrawMode('pbbDrawing', 'previewPbb', null);
   });
   const btnRemoteDrawEl = document.getElementById('btnRemoteDraw');
-  if (btnRemoteDrawEl) btnRemoteDrawEl.addEventListener('click', function() {
-    toggleLayoutDrawMode('remoteDrawing', 'previewRemote', null);
-  });
-  const btnHoldingPointDrawEl = document.getElementById('btnHoldingPointDraw');
-  if (btnHoldingPointDrawEl) btnHoldingPointDrawEl.addEventListener('click', function() {
-    toggleLayoutDrawMode('holdingPointDrawing', 'previewHoldingPoint', null);
-  });
-  const btnApronDrawEl = document.getElementById('btnApronLinkDraw');
-  if (btnApronDrawEl) btnApronDrawEl.addEventListener('click', function() {
-    toggleLayoutDrawMode('apronLinkDrawing', null, 'apronLinkTemp');
-  });
-
-  (function setupRightPanelDragResize() {
-    if (!panel || !panelToggle) return;
-    const rootStyle = () => getComputedStyle(document.documentElement);
-    function readPxVar(name, fallback) {
-      const v = parseFloat(rootStyle().getPropertyValue(name));
-      return Number.isFinite(v) ? v : fallback;
-    }
-    function readLenVar(name, fallback) {
-      const t = (rootStyle().getPropertyValue(name) || '').trim();
-      return t || fallback;
-    }
-    function parseCssLenToPx(s, vwBase) {
-      const str = String(s || '').trim().toLowerCase();
-      const n = parseFloat(str);
-      if (!Number.isFinite(n)) return vwBase * 0.5;
-      if (str.endsWith('vw')) return (n / 100) * vwBase;
-      if (str.endsWith('vh')) return (n / 100) * (typeof window !== 'undefined' ? window.innerHeight : 800);
-      if (str.endsWith('%')) return (n / 100) * vwBase;
-      if (str.endsWith('px')) return n;
-      return n;
-    }
-    function maxPanelPx() {
-      const m = readPxVar('--style-right-panel-resize-viewport-margin', 8);
-      return Math.max(120, window.innerWidth - m);
-    }
-    function collapsedPx() { return readPxVar('--style-right-panel-resize-collapsed', 44); }
-    function collapseBelowPx() { return readPxVar('--style-right-panel-resize-collapse-below', 96); }
-    function minExpandedPx() { return readPxVar('--style-right-panel-resize-min-expanded', 220); }
-    let lastExpandedWidthPx = Math.round(parseCssLenToPx(readLenVar('--style-right-panel-width-full', '50vw'), window.innerWidth));
-    lastExpandedWidthPx = Math.min(maxPanelPx(), Math.max(minExpandedPx(), lastExpandedWidthPx));
-    function syncToolbar(px) {
-      document.documentElement.style.setProperty('--layout-toolbar-right', Math.round(px) + 'px');
-    }
-    function applyCollapsed() {
-      panel.classList.add('collapsed');
-      panel.style.width = '';
-      syncToolbar(collapsedPx());
-      panelToggle.textContent = '▶';
-    }
-    function applyExpandedWidthPx(px) {
-      const cap = maxPanelPx();
-      let w = Math.min(cap, Math.round(px));
-      w = Math.max(minExpandedPx(), w);
-      panel.classList.remove('collapsed');
-      panel.style.width = w + 'px';
-      lastExpandedWidthPx = w;
-      syncToolbar(w);
-      panelToggle.textContent = '◀';
-    }
-    function applyDragWidthPx(rawPx) {
-      const cap = maxPanelPx();
-      const c0 = collapsedPx();
-      const below = collapseBelowPx();
-      let w = Math.min(cap, Math.max(c0, Math.round(rawPx)));
-      if (w < below) {
-        panel.classList.add('collapsed');
-        panel.style.width = '';
-        syncToolbar(c0);
-        panelToggle.textContent = '▶';
-        return;
-      }
-      panel.classList.remove('collapsed');
-      panel.style.width = w + 'px';
-      syncToolbar(w);
-      panelToggle.textContent = '◀';
-    }
-    function finishDragWidthPx(rawPx) {
-      const below = collapseBelowPx();
-      const cap = maxPanelPx();
-      let w = Math.min(cap, Math.max(collapsedPx(), Math.round(rawPx)));
-      if (w < below) {
-        applyCollapsed();
-        return;
-      }
-      w = Math.min(cap, Math.max(minExpandedPx(), w));
-      applyExpandedWidthPx(w);
-    }
-    applyExpandedWidthPx(lastExpandedWidthPx);
-    let dragStartClientX = 0;
-    let dragStartWidth = 0;
-    let lastMoveClientX = 0;
-    let dragMoved = false;
-    let resizePointerActive = false;
-    let suppressToggleClick = false;
-    const CLICK_MAX_MOVE = _interactionConfigNum('clickMaxMovePx', 6);
-    function onResizeWindow() {
-      if (panel.classList.contains('collapsed')) {
-        syncToolbar(collapsedPx());
-        return;
-      }
-      const rw = panel.getBoundingClientRect().width;
-      const cap = maxPanelPx();
-      if (rw > cap) applyExpandedWidthPx(cap);
-      else syncToolbar(rw);
-    }
-    window.addEventListener('resize', onResizeWindow);
-    panelToggle.addEventListener('click', function(ev) {
-      if (suppressToggleClick) {
-        ev.preventDefault();
-        ev.stopImmediatePropagation();
-        suppressToggleClick = false;
-      }
-    }, true);
-    panelToggle.addEventListener('pointerdown', function(ev) {
-      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
-      ev.preventDefault();
-      dragMoved = false;
-      resizePointerActive = true;
-      dragStartClientX = ev.clientX;
-      lastMoveClientX = ev.clientX;
-      const c0 = collapsedPx();
-      dragStartWidth = panel.classList.contains('collapsed') ? c0 : panel.getBoundingClientRect().width;
-      panel.classList.add('panel-resize-dragging');
-      try { panelToggle.setPointerCapture(ev.pointerId); } catch (e) {}
-    });
-    panelToggle.addEventListener('pointermove', function(ev) {
-      if (!resizePointerActive) return;
-      if (Math.abs(ev.clientX - dragStartClientX) > CLICK_MAX_MOVE) dragMoved = true;
-      lastMoveClientX = ev.clientX;
-      const w = dragStartWidth + (dragStartClientX - ev.clientX);
-      applyDragWidthPx(w);
-    });
-    function endPointerDrag(ev) {
-      if (!resizePointerActive) return;
-      resizePointerActive = false;
-      panel.classList.remove('panel-resize-dragging');
-      try { if (ev && ev.pointerId != null) panelToggle.releasePointerCapture(ev.pointerId); } catch (e) {}
-      if (!dragMoved) {
-        if (panel.classList.contains('collapsed')) {
-          applyExpandedWidthPx(lastExpandedWidthPx);
-        } else {
-          lastExpandedWidthPx = Math.max(minExpandedPx(), Math.min(maxPanelPx(), panel.getBoundingClientRect().width));
-          applyCollapsed();
-        }
-        dragMoved = false;
-        return;
-      }
-      suppressToggleClick = true;
-      const endX = ev && Number.isFinite(ev.clientX) ? ev.clientX : lastMoveClientX;
-      const w = dragStartWidth + (dragStartClientX - endX);
-      finishDragWidthPx(w);
-      dragMoved = false;
-    }
-    panelToggle.addEventListener('pointerup', endPointerDrag);
-    panelToggle.addEventListener('pointercancel', endPointerDrag);
-    panelToggle.addEventListener('lostpointercapture', function(ev) {
-      if (resizePointerActive) endPointerDrag(ev);
-    });
-  })();
-
-  function renderObjectList() {
-    if (!objectListEl) return;
-    const mode = settingModeSelect.value;
-    const seen = {};
-    function uniqueTitle(baseName) {
-      return baseName;
-    }
-    const items = [];
-    if (mode === 'terminal') {
-      state.terminals.forEach((t, idx) => {
-        if (seen['terminal_' + t.id]) return;
-        seen['terminal_' + t.id] = true;
-        const areaM2 = t.vertices && t.vertices.length >= 3 ? polygonAreaM2(t.vertices) : 0;
-        const floors = t.floors != null ? Math.max(1, parseInt(t.floors, 10) || 1) : 1;
-        const f2fRaw = t.floorToFloor != null ? Number(t.floorToFloor) : (t.floorHeight != null ? Number(t.floorHeight) : 4);
-        const f2f = Math.max(0.5, f2fRaw || 4);
-        const floorH = t.floorHeight != null ? Number(t.floorHeight) || (floors * f2f) : (floors * f2f);
-        const dep = t.departureCapacity != null ? t.departureCapacity : 0;
-        const arr = t.arrivalCapacity != null ? t.arrivalCapacity : 0;
-        const baseName = (t.name && t.name.trim()) ? t.name.trim() : ('Building ' + (idx + 1));
-        const buildingTheme = getBuildingTheme(t);
-        items.push({
-          type: 'terminal',
-          id: t.id,
-          title: uniqueTitle('Building | ' + baseName),
-          tag: 'Height ' + floorH.toFixed(1) + ' m',
-          details:
-            'Type: ' + buildingTheme.label +
-            '<br>' +
-            'Area: ' + areaM2.toFixed(1) + ' m²' +
-            '<br>Height: ' + floorH.toFixed(1) + ' m' +
-            '<br>Floors: ' + floors +
-            '<br>Total floor area: ' + (areaM2 * floors).toFixed(1) + ' m²' +
-            '<br>Departure: ' + dep +
-            '<br>Arrival: ' + arr
-        });
-      });
-    } else if (mode === 'pbb') {
-      state.pbbStands.forEach((pbb, idx) => {
-        if (seen['pbb_' + pbb.id]) return;
-        seen['pbb_' + pbb.id] = true;
-        const baseName = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : ('Contact Stand ' + (idx + 1));
-        items.push({
-          type: 'pbb',
-          id: pbb.id,
-          title: uniqueTitle('Contact Stand | ' + baseName),
-          tag: 'Category ' + (pbb.category || 'C'),
-          details: 'Edge cell: (' + pbb.edgeCol + ',' + pbb.edgeRow + ')'
-        });
-      });
-    } else if (mode === 'remote') {
-      state.remoteStands.forEach((st, idx) => {
-        if (seen['remote_' + st.id]) return;
-        seen['remote_' + st.id] = true;
-        const baseName = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(idx + 1).padStart(3, '0'));
-        let allowedLabel = 'All (by proximity)';
-        if (Array.isArray(st.allowedTerminals) && st.allowedTerminals.length) {
-          const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) { return {
-            id: t.id,
-            name: (t.name || '').trim() || 'Building'
-          }; });
-          const names = st.allowedTerminals.map(function(id) {
-            const tt = terms.find(function(t) { return t.id === id; });
-            return tt ? tt.name : id;
-          });
-          if (names.length) allowedLabel = names.join(', ');
-        }
-        const [rcx, rcy] = getRemoteStandCenterPx(st);
-        const rcol = rcx / CELL_SIZE;
-        const rrow = rcy / CELL_SIZE;
-        items.push({
-          type: 'remote',
-          id: st.id,
-          title: uniqueTitle('Remote stand | ' + baseName),
-          tag: 'Category ' + (st.category || 'C'),
-          details:
-            'Category: ' + (st.category || '—') +
-            '<br>Position: (' + rcol.toFixed(1) + ',' + rrow.toFixed(1) + ')' +
-            '<br>Angle: ' + normalizeAngleDeg(st.angleDeg != null ? st.angleDeg : 0).toFixed(0) + '°' +
-            '<br>available buildings: ' + allowedLabel
-        });
-      });
-    } else if (isPathLayoutMode(mode)) {
-      const wantPt = pathTypeFromLayoutMode(mode);
-      state.taxiways.forEach((tw, idx) => {
-        if (seen['taxiway_' + tw.id]) return;
-        const pt = tw.pathType || 'taxiway';
-        if (pt !== wantPt) return;
-        seen['taxiway_' + tw.id] = true;
-        const baseName = (tw.name && tw.name.trim()) ? tw.name.trim() : ('Taxiway ' + (idx + 1));
-        const dirVal = getTaxiwayDirection(tw);
-        const dirLabel = dirVal === 'clockwise' ? 'CW' : (dirVal === 'counter_clockwise' ? 'CCW' : 'Both');
-        let lengthM = 0;
-        if (tw.vertices && tw.vertices.length >= 2) {
-          for (let i = 1; i < tw.vertices.length; i++) {
-            const v0 = tw.vertices[i - 1];
-            const v1 = tw.vertices[i];
-            const dx = v1.col - v0.col;
-            const dy = v1.row - v0.row;
-            lengthM += CELL_SIZE * Math.hypot(dx, dy);
-          }

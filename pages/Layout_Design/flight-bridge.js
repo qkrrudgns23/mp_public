@@ -1,3 +1,29 @@
+    state.layoutImageOverlay.topLeftRow = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftRow);
+  });
+
+  document.getElementById('terminalName').addEventListener('change', function() {
+    const t = getCurrentTerminal();
+    if (t) {
+      const raw = (this.value || '').trim();
+      if (raw && findDuplicateLayoutName('terminal', t.id, raw)) {
+        alertDuplicateLayoutName();
+        this.value = t.name || '';
+        return;
+      }
+      t.name = raw || t.name;
+      draw();
+      updateObjectInfo();
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    }
+  });
+  const buildingTypeInput = document.getElementById('buildingType');
+  if (buildingTypeInput) {
+    buildingTypeInput.addEventListener('change', function() {
+      const nextType = normalizeBuildingType(this.value || BUILDING_TYPE_DEFAULT);
+      const t = getCurrentTerminal();
+      const nameInput = document.getElementById('terminalName');
+
+
       const nextDefaultName = getDefaultBuildingNameForType(nextType, t ? t.id : null);
       if (t) {
         t.buildingType = nextType;
@@ -265,19 +291,19 @@
   }
 
   document.getElementById('taxiwayName').addEventListener('change', function() {
-    const tw = typeof resolveTaxiwayFromPanelContext === 'function' ? resolveTaxiwayFromPanelContext() : null;
-    if (!tw) return;
-    const raw = (this.value || '').trim();
-    if (raw && findDuplicateLayoutName('taxiway', tw.id, raw)) {
-      alertDuplicateLayoutName();
-      this.value = tw.name || '';
-      return;
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const tw = state.selectedObject.obj;
+      const raw = (this.value || '').trim();
+      if (raw && findDuplicateLayoutName('taxiway', tw.id, raw)) {
+        alertDuplicateLayoutName();
+        this.value = tw.name || '';
+        return;
+      }
+      tw.name = raw;
+      updateObjectInfo();
+      renderObjectList();
+      draw();
     }
-    tw.name = raw || tw.name;
-    updateObjectInfo();
-    renderObjectList();
-    draw();
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
   });
   const apronLinkNameInputEl = document.getElementById('apronLinkName');
   if (apronLinkNameInputEl) {
@@ -422,29 +448,3 @@
   const runwayMinArrVelEl = document.getElementById('runwayMinArrVelocity');
   if (runwayMinArrVelEl) {
     runwayMinArrVelEl.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-        const tw = state.selectedObject.obj;
-        if (tw.pathType !== 'runway') return;
-        const val = Number(this.value);
-        const v = (typeof val === 'number' && isFinite(val) && val > 0) ? Math.max(1, Math.min(150, val)) : 15;
-        tw.minArrVelocity = v;
-        this.value = v;
-        updateObjectInfo();
-        renderObjectList();
-        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-        draw();
-      }
-    });
-  }
-  const runwayLineupEl = document.getElementById('runwayLineupDistM');
-  if (runwayLineupEl) {
-    runwayLineupEl.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-        const tw = state.selectedObject.obj;
-        if (tw.pathType !== 'runway') return;
-        const val = Number(this.value);
-        const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : 0;
-        tw.lineupDistM = v;
-        this.value = String(v);
-        updateObjectInfo();
-        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();

@@ -1,3 +1,27 @@
+      updateObjectInfo();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    if (settingModeSelect.value === 'apronTaxiway' && state.apronLinkDrawing && state.apronLinkTemp) {
+      if (state.apronLinkMidpoints && state.apronLinkMidpoints.length) {
+        state.apronLinkMidpoints.pop();
+        draw();
+        return true;
+      }
+      state.apronLinkTemp = null;
+      state.apronLinkMidpoints = [];
+      state.apronLinkPointerWorld = null;
+      draw();
+      return true;
+    }
+    return false;
+  }
+
+  function getCurrentTerminal() {
+    if (state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.obj) {
+
+
       return state.selectedObject.obj;
     }
     if (state.currentTerminalId) {
@@ -5,17 +29,6 @@
       if (t) return t;
     }
     return state.terminals[0] || null;
-  }
-
-  function resolveTaxiwayFromPanelContext() {
-    if (state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id) {
-      const found = (state.taxiways || []).find(function(t) { return t.id === state.selectedObject.id; });
-      return found || state.selectedObject.obj || null;
-    }
-    if (state.taxiwayDrawingId) {
-      return (state.taxiways || []).find(function(t) { return t.id === state.taxiwayDrawingId; }) || null;
-    }
-    return null;
   }
 
   function polygonAreaM2(vertices) {
@@ -326,15 +339,15 @@
         }
       }
     }
-    var tw = resolveTaxiwayFromPanelContext();
-    if (tw) {
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      var tw = state.selectedObject.obj;
       if (el('taxiwayName')) {
         const rawTw = (el('taxiwayName').value || '').trim();
         if (rawTw && findDuplicateLayoutName('taxiway', tw.id, rawTw)) {
           alertDuplicateLayoutName();
           el('taxiwayName').value = tw.name || '';
         } else {
-          tw.name = rawTw || tw.name;
+          tw.name = rawTw;
         }
       }
       if (el('taxiwayWidth')) {
@@ -412,7 +425,7 @@
     if (isPathLayoutMode(mode)) {
       const pt = pathTypeFromLayoutMode(mode);
       syncPathFieldVisibilityForPathType(pt);
-      if (!resolveTaxiwayFromPanelContext()) {
+      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
         const nameInput = document.getElementById('taxiwayName');
         if (nameInput) nameInput.value = getDefaultPathName(pt);
         const widthInput = document.getElementById('taxiwayWidth');
@@ -615,27 +628,3 @@
     state.layoutImageOverlay.topLeftCol = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftCol);
   });
   commitGridLayoutImageNumericChange('gridLayoutImageRow', function(input) {
-    state.layoutImageOverlay.topLeftRow = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftRow);
-  });
-
-  document.getElementById('terminalName').addEventListener('change', function() {
-    const t = getCurrentTerminal();
-    if (t) {
-      const raw = (this.value || '').trim();
-      if (raw && findDuplicateLayoutName('terminal', t.id, raw)) {
-        alertDuplicateLayoutName();
-        this.value = t.name || '';
-        return;
-      }
-      t.name = raw || t.name;
-      draw();
-      updateObjectInfo();
-      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    }
-  });
-  const buildingTypeInput = document.getElementById('buildingType');
-  if (buildingTypeInput) {
-    buildingTypeInput.addEventListener('change', function() {
-      const nextType = normalizeBuildingType(this.value || BUILDING_TYPE_DEFAULT);
-      const t = getCurrentTerminal();
-      const nameInput = document.getElementById('terminalName');

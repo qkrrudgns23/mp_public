@@ -24,6 +24,15 @@
     const scope = root || document;
     return Array.from(scope.querySelectorAll(selectorClass)).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean);
   }
+  function flightBlockedLikeNoWay(f) {
+    if (!f) return false;
+    if (f.noWayArr || f.noWayDep) return true;
+    return f.arrDep !== 'Dep' && !!f.arrRetFailed;
+  }
+  function arrivalAirsideBlocked(f) {
+    return !!(f && f.arrDep !== 'Dep' && (f.noWayArr || f.arrRetFailed));
+  }
+  window.flightBlockedLikeNoWay = flightBlockedLikeNoWay;
 
   const _tiers = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers) ? INFORMATION.tiers : {};
   const _layoutTier = _tiers.layout || {};
@@ -87,22 +96,16 @@
   function c2dObjectSelectedFill() { return _canvas2dStyle.objectSelectedFill || 'rgba(196, 181, 253, 0.28)'; }
   function c2dObjectSelectedDashStroke() { return _canvas2dStyle.objectSelectedDashStroke || 'rgba(255, 252, 255, 0.55)'; }
   function c2dObjectSelectedGlow() { return _canvas2dStyle.objectSelectedGlow || 'rgba(167, 139, 250, 0.45)'; }
-  function c2dRunwayStroke() { return _canvas2dStyle.runwayStroke || 'rgba(34, 34, 34, 0.97)'; }
-  function c2dRunwayFill() { return _canvas2dStyle.runwayFill || 'rgba(34, 34, 34, 0.97)'; }
+  function c2dRunwayStroke() { return _canvas2dStyle.runwayStroke || 'rgba(156, 163, 175, 0.78)'; }
+  function c2dRunwayFill() { return _canvas2dStyle.runwayFill || 'rgba(75, 85, 99, 0.78)'; }
   function c2dRunwayOutline() { return _canvas2dStyle.runwayOutline || '#cbd5e1'; }
   function c2dRunwayMarkingColor() { return _canvas2dStyle.runwayMarkingColor || '#f8fafc'; }
   function c2dRunwayThresholdColor() { return _canvas2dStyle.runwayThresholdColor || c2dRunwayMarkingColor(); }
   function c2dRunwayCenterlineColor() { return _canvas2dStyle.runwayCenterlineColor || c2dRunwayMarkingColor(); }
   function c2dRunwayTouchdownColor() { return _canvas2dStyle.runwayTouchdownColor || c2dRunwayMarkingColor(); }
   function c2dRunwayAimingPointColor() { return _canvas2dStyle.runwayAimingPointColor || c2dRunwayMarkingColor(); }
-  function c2dRunwayExtensionFill() { return _canvas2dStyle.runwayExtensionFill || 'rgba(22, 22, 22, 0.96)'; }
+  function c2dRunwayExtensionFill() { return _canvas2dStyle.runwayExtensionFill || 'rgba(55, 65, 81, 0.78)'; }
   function c2dRunwayBlastChevronColor() { return _canvas2dStyle.runwayBlastChevronColor || '#facc15'; }
-  function c2dRunwayBandStrokeOpaque() { return _canvas2dStyle.runwayBandStrokeOpaque || '#222222'; }
-  function c2dRunwayBandStrokeDim() { return _canvas2dStyle.runwayBandStrokeDim || '#141414'; }
-  function c2dRunwayTaxiwayCenterlineStroke() {
-    return _canvas2dStyle.runwayTaxiwayCenterlineStroke || _canvas2dStyle.terminalStrokeDefault || '#38bdf8';
-  }
-  function c2dTaxiwayCenterlineStroke() { return _canvas2dStyle.taxiwayCenterlineStroke || '#facc15'; }
   function c2dObjectSelectedGlowBlur() {
     const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
     return (isFinite(n) && n >= 0) ? n : 22;
@@ -278,11 +281,6 @@
   const LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR = Math.max(0.25, Math.min(1.5, _interactionConfigNum('layoutSelectedVertexRadiusFactor', 0.7)));
   const GRID_VISIBLE_DEFAULT = _ixBool('showGridDefault', true);
   const IMAGE_VISIBLE_DEFAULT = _ixBool('showImageDefault', true);
-  const ROAD_WIDTH_VISIBLE_DEFAULT = _ixBool('showRoadWidthDefault', true);
-  const RUNWAY_PATH_WIDTH_OFF_ALPHA = (function() {
-    const v = Number(_canvas2dStyle.runwayPathWidthOffAlpha);
-    return (isFinite(v) && v > 0 && v <= 1) ? v : 0.5;
-  })();
   const RW_EXIT_ALLOWED_DEFAULT = normalizeAllowedRunwayDirections(_dc.rwExitAllowedDefaultRaw);
   function layoutPathVertexRadiusPx(vertexSelected, pathSelected) {
     if (vertexSelected) return 6 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR;
@@ -321,7 +319,6 @@
   const resetViewBtn = document.getElementById('btnResetView');
   const gridToggleBtn = document.getElementById('btnGridToggle');
   const imageToggleBtn = document.getElementById('btnImageToggle');
-  const roadWidthToggleBtn = document.getElementById('btnRoadWidthToggle');
   const GRID_LAYOUT_IMAGE_DEFAULTS = {
     opacity: _dc.gridLayoutImage.opacity,
     opacityMin: _dc.gridLayoutImage.opacityMin,
@@ -331,12 +328,3 @@
     topLeftCol: _dc.gridLayoutImage.topLeftCol,
     topLeftRow: _dc.gridLayoutImage.topLeftRow
   };
-  let layoutImageBitmap = null;
-  let layoutImageBitmapSrc = '';
-  const BUILDING_TYPE_CFG = (_layoutTier.building && typeof _layoutTier.building === 'object') ? _layoutTier.building : {};
-  const BUILDING_TYPES = Array.isArray(BUILDING_TYPE_CFG.types) && BUILDING_TYPE_CFG.types.length ? BUILDING_TYPE_CFG.types.slice() : [
-    { id: 'passenger_terminal', label: 'Passenger Terminal' },
-    { id: 'concourse', label: '위성터미널(콘코스)' },
-    { id: 'control_tower', label: 'Control Tower' },
-    { id: 'cargo_terminal', label: 'Cargo Terminal' },
-    { id: 'hanger', label: 'Hanger' },
