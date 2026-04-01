@@ -962,7 +962,7 @@
       ]
     },
     "layout": {
-      "description": "Layout tab: grid, per-mode defaults, canvas interaction (cell-size factors)",
+      "description": "Layout tab: grid, per-mode defaults, canvas interaction (cell-size factors). interaction.dragThresholdPx: min screen px before pan; use 0 for default 4px (avoids mis-clicks).",
       "grid": {
         "cellSize": 20,
         "cols": 200,
@@ -998,7 +998,7 @@
         "showGridDefault": true,
         "showImageDefault": true,
         "showRoadWidthDefault": true,
-        "dragThresholdPx": 0,
+        "dragThresholdPx": 4,
         "freeDrawStepCell": 0.05,
         "gridSnapStepCell": 0.5,
         "insertVertexHitCellFactor": 0.9,

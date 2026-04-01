@@ -291,7 +291,8 @@
   function layoutTerminalVertexRadiusPx(vertexSelected) {
     return vertexSelected ? 5.5 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR : 4 * LAYOUT_VERTEX_DOT_SCALE;
   }
-  const DRAG_THRESH = _interactionConfigNum('dragThresholdPx', 0);
+  const _dragThreshPx = _interactionConfigNum('dragThresholdPx', 4);
+  const DRAG_THRESH = _dragThreshPx > 0 ? Math.max(1, _dragThreshPx) : 4;
   const FREE_DRAW_STEP_CELL = Math.max(0.001, _interactionConfigNum('freeDrawStepCell', 0.05));
   const GRID_SNAP_STEP_CELL = Math.max(0.001, _interactionConfigNum('gridSnapStepCell', 0.5));
   const INSERT_VERTEX_HIT_CF = _interactionConfigNum('insertVertexHitCellFactor', 0.9);
@@ -308,6 +309,7 @@
   const PBB_PREVIEW_LEN_CF = _interactionConfigNum('pbbPreviewLengthCellFactor', 0.9);
 
   const canvas = document.getElementById('grid-canvas');
+  if (canvas) canvas.draggable = false;
   const container = document.getElementById('canvas-container');
   const coordEl = document.getElementById('coord');
   const objectInfoEl = document.getElementById('object-info');
@@ -329,4 +331,3 @@
     heightM: _dc.gridLayoutImage.heightM,
     topLeftCol: _dc.gridLayoutImage.topLeftCol,
     topLeftRow: _dc.gridLayoutImage.topLeftRow
-  };

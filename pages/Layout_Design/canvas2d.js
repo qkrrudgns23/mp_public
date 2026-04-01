@@ -1,3 +1,132 @@
+    const nameBase = document.getElementById('terminalName').value.trim() || getDefaultBuildingNameForType(selectedBuildingType);
+    const floorsEl = document.getElementById('terminalFloors');
+    const f2fEl = document.getElementById('terminalFloorToFloor');
+    let floors = floorsEl ? parseInt(floorsEl.value, 10) : 1;
+    let f2f = f2fEl ? Number(f2fEl.value) : 4;
+    floors = Math.max(1, floors || 1);
+    f2f = Math.max(0.5, f2f || 4);
+    const totalH = floors * f2f;
+    if (findDuplicateLayoutName('terminal', null, nameBase)) {
+      alertDuplicateLayoutName();
+      return;
+    }
+    const term = { id: id(), name: nameBase, buildingType: selectedBuildingType, vertices: [], closed: false, floors, floorToFloor: f2f, floorHeight: totalH, departureCapacity: 0, arrivalCapacity: 0 };
+    pushUndo();
+    state.terminals.push(term);
+    state.currentTerminalId = term.id;
+    state.terminalDrawingId = term.id;
+    syncPanelFromState();
+    draw();
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+  });
+
+  document.getElementById('btnTaxiwayDraw').addEventListener('click', function() {
+    const hadSelection = !!state.selectedObject;
+    state.selectedObject = null;
+    if (state.taxiwayDrawingId) {
+      const tw = state.taxiways.find(x => x.id === state.taxiwayDrawingId);
+      if (tw && tw.vertices.length >= 2) {
+        if (taxiwayOverlapsAnyTerminal(tw)) {
+          alert('this TaxiwayIs TerminalIt overlaps with . Please draw a different path.');
+          pushUndo();
+          state.taxiways = state.taxiways.filter(t => t.id !== tw.id);
+        }
+        state.taxiwayDrawingId = null;
+        state.layoutPathDrawPointer = null;
+        syncPanelFromState();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      }
+      return;
+    }
+    const layoutMode = settingModeSelect ? settingModeSelect.value : 'taxiway';
+    const pathType = pathTypeFromLayoutMode(isPathLayoutMode(layoutMode) ? layoutMode : 'taxiway');
+    const nameInputEl = document.getElementById('taxiwayName');
+    const defaultPathName = getDefaultPathName(pathType);
+    if (hadSelection && nameInputEl) nameInputEl.value = defaultPathName;
+    const rawName = nameInputEl ? nameInputEl.value.trim() : '';
+    const nameBase = rawName || defaultPathName;
+    const inputWidth = Number(document.getElementById('taxiwayWidth').value);
+    const baseWidth = pathType === 'runway'
+      ? RUNWAY_PATH_DEFAULT_WIDTH
+      : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+    const widthVal = clampTaxiwayWidthM(pathType, inputWidth, baseWidth);
+    const modeVal = (function() {
+      const raw = document.getElementById('taxiwayDirectionMode') ? document.getElementById('taxiwayDirectionMode').value : '';
+      if (pathType === 'runway') return (raw === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+      return raw || 'both';
+    })();
+    const maxExitInput = document.getElementById('taxiwayMaxExitVel');
+    const minExitInput = document.getElementById('taxiwayMinExitVel');
+    const maxExitVelocity = (pathType === 'runway_exit' && maxExitInput)
+      ? (function() { const mv = Number(maxExitInput.value); return isFinite(mv) && mv > 0 ? mv : null; })()
+      : null;
+    const minExitVelocity = (pathType === 'runway_exit' && minExitInput)
+      ? (function() {
+          const mv = Number(minExitInput.value);
+          if (!isFinite(mv) || mv <= 0) return 15;
+          if (maxExitVelocity != null && mv > maxExitVelocity) return maxExitVelocity;
+          return mv;
+        })()
+      : undefined;
+    const allowedRwDirections = (pathType === 'runway_exit')
+      ? getRunwayExitAllowedDirectionsFromPanel()
+      : undefined;
+    const minArrVelInput = document.getElementById('runwayMinArrVelocity');
+    const minArrVelocity = (pathType === 'runway' && minArrVelInput)
+      ? (function() {
+          const mv = Number(minArrVelInput.value);
+          return (isFinite(mv) && mv > 0) ? Math.max(1, Math.min(150, mv)) : 15;
+        })()
+      : undefined;
+    const lineupEl = document.getElementById('runwayLineupDistM');
+    const lineupDistM = (pathType === 'runway' && lineupEl)
+      ? (function() { const x = Number(lineupEl.value); return (isFinite(x) && x >= 0) ? x : 0; })()
+      : undefined;
+    const runwayStartDispEl = document.getElementById('runwayStartDisplacedThresholdM');
+    const startDisplacedThresholdM = (pathType === 'runway' && runwayStartDispEl)
+      ? (function() { const x = Number(runwayStartDispEl.value); return (isFinite(x) && x >= 0) ? x : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M; })()
+      : undefined;
+    const runwayStartBlastEl = document.getElementById('runwayStartBlastPadM');
+    const startBlastPadM = (pathType === 'runway' && runwayStartBlastEl)
+      ? (function() { const x = Number(runwayStartBlastEl.value); return (isFinite(x) && x >= 0) ? x : RUNWAY_START_BLAST_PAD_DEFAULT_M; })()
+      : undefined;
+    const runwayEndDispEl = document.getElementById('runwayEndDisplacedThresholdM');
+    const endDisplacedThresholdM = (pathType === 'runway' && runwayEndDispEl)
+      ? (function() { const x = Number(runwayEndDispEl.value); return (isFinite(x) && x >= 0) ? x : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M; })()
+      : undefined;
+    const runwayEndBlastEl = document.getElementById('runwayEndBlastPadM');
+    const endBlastPadM = (pathType === 'runway' && runwayEndBlastEl)
+      ? (function() { const x = Number(runwayEndBlastEl.value); return (isFinite(x) && x >= 0) ? x : RUNWAY_END_BLAST_PAD_DEFAULT_M; })()
+      : undefined;
+    const taxiway = { id: id(), name: nameBase, vertices: [], width: widthVal, direction: modeVal, pathType, maxExitVelocity, minExitVelocity, allowedRwDirections, minArrVelocity, lineupDistM, avgMoveVelocity: (function() {
+      const el = document.getElementById('taxiwayAvgMoveVelocity');
+      const v = el ? Number(el.value) : 10;
+      return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
+    })(), startDisplacedThresholdM, startBlastPadM, endDisplacedThresholdM, endBlastPadM };
+    if (pathType !== 'runway') delete taxiway.minArrVelocity;
+    if (pathType !== 'runway') delete taxiway.lineupDistM;
+    if (pathType !== 'runway') delete taxiway.startDisplacedThresholdM;
+    if (pathType !== 'runway') delete taxiway.startBlastPadM;
+    if (pathType !== 'runway') delete taxiway.endDisplacedThresholdM;
+    if (pathType !== 'runway') delete taxiway.endBlastPadM;
+    if (pathType !== 'runway_exit') { delete taxiway.maxExitVelocity; delete taxiway.minExitVelocity; delete taxiway.allowedRwDirections; }
+    if (findDuplicateLayoutName('taxiway', null, nameBase)) {
+      alertDuplicateLayoutName();
+      return;
+    }
+    pushUndo();
+    state.taxiways.push(taxiway);
+    state.taxiwayDrawingId = taxiway.id;
+    syncPanelFromState();
+    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+  });
+  const btnPbbDrawEl = document.getElementById('btnPbbDraw');
+  if (btnPbbDrawEl) btnPbbDrawEl.addEventListener('click', function() {
+    toggleLayoutDrawMode('pbbDrawing', 'previewPbb', null);
+  });
+  const btnRemoteDrawEl = document.getElementById('btnRemoteDraw');
   if (btnRemoteDrawEl) btnRemoteDrawEl.addEventListener('click', function() {
     toggleLayoutDrawMode('remoteDrawing', 'previewRemote', null);
   });
@@ -1433,20 +1562,12 @@
     });
   }
 
-  function taxiwayPathWidthBodyAlpha(tw, sel, drawing) {
-    if (sel || drawing || state.showRoadWidth) return 1;
-    if (tw.pathType === 'runway') {
-      const n = Number(_canvas2dStyle.runwayPathWidthOffAlpha);
-      return (isFinite(n) && n >= 0 && n <= 1) ? n : 0.3;
-    }
-    return 0;
-  }
   function drawTaxiways() {
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    state.taxiways.forEach(function(tw) {
+    state.taxiways.forEach(tw => {
       const drawing = state.taxiwayDrawingId === tw.id;
       if (tw.vertices.length < 2 && !drawing) return;
       const isRunwayPath = tw.pathType === 'runway';
@@ -1455,7 +1576,6 @@
       const width = tw.width != null ? tw.width : widthDefault;
       const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
       const pathLineCap = 'butt';
-      const pathBodyAlpha = taxiwayPathWidthBodyAlpha(tw, sel, drawing);
       if (sel) {
         ctx.strokeStyle = c2dObjectSelectedStroke();
         ctx.fillStyle = c2dObjectSelectedFill();
@@ -1474,33 +1594,28 @@
         const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
-      if (tw.vertices.length >= 2) {
-        ctx.save();
-        ctx.globalAlpha = pathBodyAlpha;
+      if (state.showRoadWidth && tw.vertices.length >= 2) {
         if (sel) {
+          ctx.save();
           ctx.shadowColor = c2dObjectSelectedGlow();
           ctx.shadowBlur = c2dObjectSelectedGlowBlur();
           ctx.stroke();
+          ctx.restore();
         } else ctx.stroke();
-        ctx.restore();
       }
-    });
-    ctx.globalAlpha = 1;
-    state.taxiways.forEach(function(tw) {
-      const drawing = state.taxiwayDrawingId === tw.id;
-      if (tw.vertices.length < 2 && !drawing) return;
-      const isRunwayPath = tw.pathType === 'runway';
-      const isRunwayExit = tw.pathType === 'runway_exit';
-      const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-      const width = tw.width != null ? tw.width : widthDefault;
-      const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
-      const pathBodyAlpha = taxiwayPathWidthBodyAlpha(tw, sel, drawing);
+      if (!isRunwayPath) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        if (tw.vertices.length >= 2) ctx.stroke();
+      }
       if (isRunwayPath && tw.vertices.length >= 2) {
         const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
-        ctx.save();
-        ctx.globalAlpha = pathBodyAlpha;
         drawRunwayDecorations(tw, runwayPts, width);
-        ctx.restore();
       }
       const dir = getTaxiwayDirection(tw);
       if (dir !== 'both' && tw.vertices.length >= 2) {
@@ -1593,162 +1708,3 @@
               const mw = ctx.measureText(badgeText).width + padXB * 2;
               const mh = 10 + padYB * 2;
               const bxx = mx - mw / 2, byy = my - 22;
-              ctx.beginPath();
-              if (typeof ctx.roundRect === 'function') ctx.roundRect(bxx, byy, mw, mh, radB);
-              else ctx.rect(bxx, byy, mw, mh);
-              ctx.fillStyle = 'rgba(220, 38, 38, 0.95)';
-              ctx.fill();
-              ctx.strokeStyle = '#450a0a';
-              ctx.lineWidth = 1.1;
-              ctx.stroke();
-              ctx.fillStyle = '#ffffff';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(badgeText, bxx + mw / 2, byy + mh / 2);
-              ctx.restore();
-            }
-          }
-        }
-      }
-      if ((drawing || sel) && tw.vertices.length >= 1) {
-        tw.vertices.forEach((v, i) => {
-          const [x, y] = cellToPixel(v.col, v.row);
-          const vertexSelected = isSelectedVertex('taxiway', tw.id, i);
-          if (i === 0 && drawing) {
-            ctx.fillStyle = '#f97316';
-            ctx.beginPath();
-            ctx.arc(x, y, c2dPathDrawStartMarkerRadiusPx(), 0, Math.PI*2);
-            ctx.fill();
-            ctx.strokeStyle = '#ea580c';
-            ctx.lineWidth = c2dPathDrawStartMarkerStrokePx();
-            ctx.stroke();
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold ' + c2dPathDrawStartLabelFontPx() + 'px system-ui';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('Start', x, y + c2dPathDrawStartLabelOffsetY());
-          } else {
-            ctx.fillStyle = vertexSelected ? '#f43f5e' : ((i === 0 && sel) ? '#f97316' : '#e5e7eb');
-            ctx.beginPath();
-            ctx.arc(x, y, layoutPathVertexRadiusPx(vertexSelected, sel), 0, Math.PI*2);
-            ctx.fill();
-          }
-        });
-      }
-      if (drawing && state.layoutPathDrawPointer && tw.vertices.length >= 1) {
-        const ptr = state.layoutPathDrawPointer;
-        const lastV = tw.vertices[tw.vertices.length - 1];
-        const [lx, ly] = cellToPixel(lastV.col, lastV.row);
-        if (ptr && ptr.length >= 2 && dist2([lx, ly], ptr) > 1e-6) {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
-          ctx.setLineDash([4, 6]);
-          ctx.lineWidth = Math.max(2, width * 0.25);
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(lx, ly);
-          ctx.lineTo(ptr[0], ptr[1]);
-          ctx.stroke();
-          ctx.restore();
-        }
-      }
-    });
-    ctx.globalAlpha = 1;
-    state.taxiways.forEach(function(tw) {
-      const drawing = state.taxiwayDrawingId === tw.id;
-      if (tw.vertices.length < 2 && !drawing) return;
-      const isRunwayPath = tw.pathType === 'runway';
-      const isRunwayExit = tw.pathType === 'runway_exit';
-      const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-      const width = tw.width != null ? tw.width : widthDefault;
-      const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
-      if (!isRunwayPath && tw.vertices.length >= 2) {
-        ctx.save();
-        ctx.globalAlpha = 1;
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
-        ctx.beginPath();
-        for (let i = 0; i < tw.vertices.length; i++) {
-          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-        ctx.restore();
-      }
-      if (isRunwayPath && tw.vertices.length >= 2 && typeof drawRunwayCenterlineDashedOnly === 'function') {
-        const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
-        ctx.save();
-        ctx.globalAlpha = 1;
-        drawRunwayCenterlineDashedOnly(tw, runwayPts, width);
-        ctx.restore();
-      }
-    });
-    ctx.restore();
-  }
-
-  function drawApronTaxiwayLinks() {
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    ctx.lineWidth = 3;
-    ctx.setLineDash([3, 3]);
-    state.apronLinks.forEach(lk => {
-      const stand = findStandById(lk.pbbId);
-      const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
-      if (!stand || !tw || lk.tx == null || lk.ty == null) return;
-      const poly = getApronLinkPolylineWorldPts(lk);
-      if (poly.length < 2) return;
-      ctx.strokeStyle = '#facc15';
-      ctx.beginPath();
-      ctx.moveTo(poly[0][0], poly[0][1]);
-      for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
-      ctx.stroke();
-      const svApron = state.selectedVertex;
-      const selApron = state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id;
-      if (selApron) {
-        ctx.setLineDash([]);
-        for (let pi = 0; pi < poly.length; pi++) {
-          const [px, py] = poly[pi];
-          const isStandEnd = (pi === 0);
-          const isTaxiEnd = (pi === poly.length - 1);
-          const midIdx = isStandEnd || isTaxiEnd ? -1 : (pi - 1);
-          let vtxSel = false;
-          let draggable = false;
-          if (isTaxiEnd) {
-            draggable = true;
-            vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'taxiway');
-          } else if (!isStandEnd) {
-            draggable = true;
-            vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'mid' && svApron.midIndex === midIdx);
-          }
-          const r = layoutPathVertexRadiusPx(vtxSel, draggable);
-          ctx.fillStyle = vtxSel ? '#f43f5e' : (draggable ? '#fde68a' : '#facc15');
-          ctx.beginPath();
-          ctx.arc(px, py, r, 0, Math.PI*2);
-          ctx.fill();
-        }
-        ctx.setLineDash([3, 3]);
-      }
-    });
-    ctx.setLineDash([]);
-    if (state.apronLinkTemp) {
-      ctx.fillStyle = '#facc15';
-      const t = state.apronLinkTemp;
-      const draft = [];
-      if (t.kind === 'pbb' || t.kind === 'remote') {
-        const st = findStandById(t.standId);
-        if (st) {
-          draft.push(getStandConnectionPx(st));
-        }
-      } else if (t.kind === 'taxiway') {
-        draft.push([t.x, t.y]);
-      }
-      (state.apronLinkMidpoints || []).forEach(function(c) {
-        draft.push(cellToPixel(c.col, c.row));
-      });
-      if (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2) draft.push(state.apronLinkPointerWorld);
-      if (draft.length >= 1) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
-        ctx.setLineDash([4, 6]);

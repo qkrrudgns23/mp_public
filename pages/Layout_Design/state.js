@@ -1,3 +1,4 @@
+  };
   let layoutImageBitmap = null;
   let layoutImageBitmapSrc = '';
   const BUILDING_TYPE_CFG = (_layoutTier.building && typeof _layoutTier.building === 'object') ? _layoutTier.building : {};
@@ -186,6 +187,7 @@
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
     showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
+    _canvasGesturePanning: false,
     currentTerminalId: null,
     selectedObject: null,
     terminalDrawingId: null,
@@ -254,12 +256,12 @@
     bumpPathPolylineCacheRev();
     state.rwySepPanelDirty = true;
     bumpRwySepSnapshotStaleGen();
-    if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines();
+    if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines({ keepDesResultTimelines: true });
     const dot = document.getElementById('globalUpdateSyncDot');
     if (dot) {
       dot.classList.remove('fresh');
       dot.classList.add('stale');
-      dot.setAttribute('title', 'Results may be outdated — click Light Sim to refresh');
+      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim 후 Apply로 재동기화');
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
@@ -269,7 +271,7 @@
     if (dot) {
       dot.classList.remove('stale');
       dot.classList.add('fresh');
-      dot.setAttribute('title', 'All views match the last Light Sim run');
+      dot.setAttribute('title', 'Apply된 시뮬 결과와 동기화됨 — 재생 가능');
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
@@ -288,12 +290,3 @@
       ov.classList.add('is-visible');
       ov.setAttribute('aria-hidden', 'false');
       if (lab && label != null) lab.textContent = label;
-      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
-      if (btn) btn.disabled = true;
-    } else {
-      ov.classList.remove('is-visible');
-      ov.setAttribute('aria-hidden', 'true');
-      if (fill) fill.style.width = '0%';
-      if (btn) btn.disabled = false;
-    }
-  }

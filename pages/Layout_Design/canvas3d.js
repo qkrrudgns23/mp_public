@@ -1,3 +1,132 @@
+              ctx.beginPath();
+              if (typeof ctx.roundRect === 'function') ctx.roundRect(bxx, byy, mw, mh, radB);
+              else ctx.rect(bxx, byy, mw, mh);
+              ctx.fillStyle = 'rgba(220, 38, 38, 0.95)';
+              ctx.fill();
+              ctx.strokeStyle = '#450a0a';
+              ctx.lineWidth = 1.1;
+              ctx.stroke();
+              ctx.fillStyle = '#ffffff';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(badgeText, bxx + mw / 2, byy + mh / 2);
+              ctx.restore();
+            }
+          }
+        }
+      }
+      if ((drawing || sel) && tw.vertices.length >= 1) {
+        tw.vertices.forEach((v, i) => {
+          const [x, y] = cellToPixel(v.col, v.row);
+          const vertexSelected = isSelectedVertex('taxiway', tw.id, i);
+          if (i === 0 && drawing) {
+            ctx.fillStyle = '#f97316';
+            ctx.beginPath();
+            ctx.arc(x, y, c2dPathDrawStartMarkerRadiusPx(), 0, Math.PI*2);
+            ctx.fill();
+            ctx.strokeStyle = '#ea580c';
+            ctx.lineWidth = c2dPathDrawStartMarkerStrokePx();
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold ' + c2dPathDrawStartLabelFontPx() + 'px system-ui';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Start', x, y + c2dPathDrawStartLabelOffsetY());
+          } else {
+            ctx.fillStyle = vertexSelected ? '#f43f5e' : ((i === 0 && sel) ? '#f97316' : '#e5e7eb');
+            ctx.beginPath();
+            ctx.arc(x, y, layoutPathVertexRadiusPx(vertexSelected, sel), 0, Math.PI*2);
+            ctx.fill();
+          }
+        });
+      }
+      if (drawing && state.layoutPathDrawPointer && tw.vertices.length >= 1) {
+        const ptr = state.layoutPathDrawPointer;
+        const lastV = tw.vertices[tw.vertices.length - 1];
+        const [lx, ly] = cellToPixel(lastV.col, lastV.row);
+        if (ptr && ptr.length >= 2 && dist2([lx, ly], ptr) > 1e-6) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
+          ctx.setLineDash([4, 6]);
+          ctx.lineWidth = Math.max(2, width * 0.25);
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(lx, ly);
+          ctx.lineTo(ptr[0], ptr[1]);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    });
+    ctx.restore();
+  }
+
+  function drawApronTaxiwayLinks() {
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    ctx.lineWidth = 3;
+    ctx.setLineDash([3, 3]);
+    state.apronLinks.forEach(lk => {
+      const stand = findStandById(lk.pbbId);
+      const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
+      if (!stand || !tw || lk.tx == null || lk.ty == null) return;
+      const poly = getApronLinkPolylineWorldPts(lk);
+      if (poly.length < 2) return;
+      ctx.strokeStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(poly[0][0], poly[0][1]);
+      for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
+      ctx.stroke();
+      const svApron = state.selectedVertex;
+      const selApron = state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id;
+      if (selApron) {
+        ctx.setLineDash([]);
+        for (let pi = 0; pi < poly.length; pi++) {
+          const [px, py] = poly[pi];
+          const isStandEnd = (pi === 0);
+          const isTaxiEnd = (pi === poly.length - 1);
+          const midIdx = isStandEnd || isTaxiEnd ? -1 : (pi - 1);
+          let vtxSel = false;
+          let draggable = false;
+          if (isTaxiEnd) {
+            draggable = true;
+            vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'taxiway');
+          } else if (!isStandEnd) {
+            draggable = true;
+            vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'mid' && svApron.midIndex === midIdx);
+          }
+          const r = layoutPathVertexRadiusPx(vtxSel, draggable);
+          ctx.fillStyle = vtxSel ? '#f43f5e' : (draggable ? '#fde68a' : '#facc15');
+          ctx.beginPath();
+          ctx.arc(px, py, r, 0, Math.PI*2);
+          ctx.fill();
+        }
+        ctx.setLineDash([3, 3]);
+      }
+    });
+    ctx.setLineDash([]);
+    if (state.apronLinkTemp) {
+      ctx.fillStyle = '#facc15';
+      const t = state.apronLinkTemp;
+      const draft = [];
+      if (t.kind === 'pbb' || t.kind === 'remote') {
+        const st = findStandById(t.standId);
+        if (st) {
+          draft.push(getStandConnectionPx(st));
+        }
+      } else if (t.kind === 'taxiway') {
+        draft.push([t.x, t.y]);
+      }
+      (state.apronLinkMidpoints || []).forEach(function(c) {
+        draft.push(cellToPixel(c.col, c.row));
+      });
+      if (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2) draft.push(state.apronLinkPointerWorld);
+      if (draft.length >= 1) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+        ctx.setLineDash([4, 6]);
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(draft[0][0], draft[0][1]);
@@ -519,9 +648,25 @@
     }
     state.selectedVertex = null;
     if ((mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing)) return;
+    ev.preventDefault();
     state.dragStart = { sx, sy, panX: state.panX, panY: state.panY };
     state.isPanning = false;
+    state._canvasGesturePanning = false;
   });
+  function clearCanvasPanGesture() {
+    if (!state.isPanning) return;
+    state.dragStart = null;
+    state.isPanning = false;
+    flushDrawNow();
+  }
+  window.addEventListener('pointerup', function(ev) {
+    if (ev.button !== 0) return;
+    clearCanvasPanGesture();
+  }, true);
+  window.addEventListener('mouseup', function(ev) {
+    if (ev.button !== 0) return;
+    clearCanvasPanGesture();
+  }, true);
   container.addEventListener('mousemove', function(ev) {
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
@@ -658,13 +803,20 @@
       return;
     }
     if (state.dragStart) {
-      const dx = sx - state.dragStart.sx, dy = sy - state.dragStart.sy;
-      if (!state.isPanning && (Math.abs(dx) > DRAG_THRESH || Math.abs(dy) > DRAG_THRESH))
-        state.isPanning = true;
-      if (state.isPanning) {
-        state.panX = state.dragStart.panX + dx;
-        state.panY = state.dragStart.panY + dy;
-        scheduleDraw(); drewThisMove = true;
+      if ((ev.buttons & 1) === 0) {
+        state.dragStart = null;
+        state.isPanning = false;
+      } else {
+        const dx = sx - state.dragStart.sx, dy = sy - state.dragStart.sy;
+        if (!state.isPanning && (Math.abs(dx) > DRAG_THRESH || Math.abs(dy) > DRAG_THRESH)) {
+          state.isPanning = true;
+          state._canvasGesturePanning = true;
+        }
+        if (state.isPanning) {
+          state.panX = state.dragStart.panX + dx;
+          state.panY = state.dragStart.panY + dy;
+          scheduleDraw(); drewThisMove = true;
+        }
       }
     }
     const mode = settingModeSelect.value;
@@ -779,6 +931,7 @@
   container.addEventListener('mouseleave', function() {
     state.dragStart = null;
     state.isPanning = false;
+    state._canvasGesturePanning = false;
     state.dragStandRotation = null;
     state.dragPbbBridgeVertex = null;
     state.dragStandConnection = null;
@@ -837,7 +990,7 @@
 
   container.addEventListener('mouseup', function(ev) {
     if (ev.button !== 0) return;
-    const wasPanning = !!state.isPanning;
+    const wasPanningGesture = !!state._canvasGesturePanning;
     flushDrawNow();
     state.isPanning = false;
     if (state.dragVertex) {
@@ -897,6 +1050,11 @@
       }
       return;
     }
+    if (wasPanningGesture) {
+      state._canvasGesturePanning = false;
+      state.dragStart = null;
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
     const [wx, wy] = screenToWorld(sx, sy);
@@ -909,7 +1067,7 @@
       return;
     }
     if (!state.dragStart) return;
-    if (!wasPanning) {
+    if (!wasPanningGesture) {
       const mode = settingModeSelect.value;
       if (mode === 'edge') {
         rebuildDerivedGraphEdges();
@@ -1140,6 +1298,7 @@
       state.showRoadWidth = !state.showRoadWidth;
       syncRoadWidthToggleButton();
       draw();
+      if (typeof update3DScene === 'function') update3DScene();
     });
   }
   class Grid3DMapper {

@@ -1,3 +1,12 @@
+      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (btn) btn.disabled = true;
+    } else {
+      ov.classList.remove('is-visible');
+      ov.setAttribute('aria-hidden', 'true');
+      if (fill) fill.style.width = '0%';
+      if (btn) btn.disabled = false;
+    }
+  }
   function scheduleAfterPaint(fn) {
     requestAnimationFrame(function() {
       requestAnimationFrame(function() { setTimeout(fn, 0); });
@@ -70,8 +79,8 @@
     const on = !!state.showRoadWidth;
     roadWidthToggleBtn.classList.toggle('active', on);
     roadWidthToggleBtn.title = on
-      ? 'Width: pavement fill visible (click for schematic / faded runway)'
-      : 'Width off: taxiway & runway taxiway fill hidden; runway 70% transparent (click to show width)';
+      ? 'Road width visible (click for schematic centerlines)'
+      : 'Schematic mode (click to show road width)';
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -291,6 +300,40 @@
       else sel.value = 'both';
     }
   }
+  function _layoutCellSizeForPersistLoad() {
+    return (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
+  }
+  function layoutVerticesPersistToCellsLoad(vertices) {
+    const cs = _layoutCellSizeForPersistLoad();
+    if (!Array.isArray(vertices)) return [];
+    return vertices.map(function(v) {
+      if (!v || typeof v !== 'object') return { col: 0, row: 0 };
+      const x = Number(v.x), y = Number(v.y);
+      if (isFinite(x) && isFinite(y)) return { col: x / cs, row: y / cs };
+      return { col: Number(v.col) || 0, row: Number(v.row) || 0 };
+    });
+  }
+  function layoutPointPersistToCellLoad(pt) {
+    if (!pt || typeof pt !== 'object') return null;
+    const cs = _layoutCellSizeForPersistLoad();
+    const x = Number(pt.x), y = Number(pt.y);
+    if (isFinite(x) && isFinite(y)) return { col: x / cs, row: y / cs };
+    if (pt.col != null || pt.row != null) return { col: Number(pt.col) || 0, row: Number(pt.row) || 0 };
+    return null;
+  }
+  function normalizeTaxiwayVerticesFromPersistLoad(tw) {
+    const o = tw;
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o.vertices)) o.vertices = layoutVerticesPersistToCellsLoad(o.vertices);
+    if (o.start_point) {
+      const sp = layoutPointPersistToCellLoad(o.start_point);
+      if (sp) o.start_point = sp;
+    }
+    if (o.end_point) {
+      const ep = layoutPointPersistToCellLoad(o.end_point);
+      if (ep) o.end_point = ep;
+    }
+  }
   function mergeTaxiwaysFromLayoutObject(obj) {
     if (!obj || typeof obj !== 'object') return [];
     const newSchema = Object.prototype.hasOwnProperty.call(obj, 'runwayPaths') ||
@@ -300,18 +343,21 @@
       (obj.runwayPaths || []).forEach(function(tw) {
         const o = Object.assign({}, tw);
         o.pathType = 'runway';
+        normalizeTaxiwayVerticesFromPersistLoad(o);
         out.push(o);
       });
       (obj.runwayTaxiways || []).forEach(function(tw) {
         const o = Object.assign({}, tw);
         o.pathType = 'runway_exit';
         delete o.rwySepConfig;
+        normalizeTaxiwayVerticesFromPersistLoad(o);
         out.push(o);
       });
       (obj.taxiways || []).forEach(function(tw) {
         const o = Object.assign({}, tw);
         if (o.pathType !== 'runway' && o.pathType !== 'runway_exit') o.pathType = 'taxiway';
         if (o.pathType !== 'runway') delete o.rwySepConfig;
+        normalizeTaxiwayVerticesFromPersistLoad(o);
         out.push(o);
       });
       out.forEach(normalizeTaxiwayWidthInPlace);
@@ -319,7 +365,10 @@
     }
     if (Array.isArray(obj.taxiways)) {
       const sliced = obj.taxiways.slice();
-      sliced.forEach(normalizeTaxiwayWidthInPlace);
+      sliced.forEach(function(tw) {
+        normalizeTaxiwayVerticesFromPersistLoad(tw);
+        normalizeTaxiwayWidthInPlace(tw);
+      });
       return sliced;
     }
     return [];
@@ -335,7 +384,6 @@
     }
     if (typeof obj.showGrid === 'boolean') state.showGrid = obj.showGrid;
     if (typeof obj.showImage === 'boolean') state.showImage = obj.showImage;
-    if (typeof obj.showRoadWidth === 'boolean') state.showRoadWidth = obj.showRoadWidth;
     state.layoutImageOverlay = normalizeLayoutImageOverlay(
       (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
     );
@@ -343,7 +391,6 @@
     syncLayoutImageBitmap();
     syncGridToggleButton();
     syncImageToggleButton();
-    syncRoadWidthToggleButton();
     if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
     if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
     if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
@@ -367,7 +414,21 @@
         };
       }).filter(function(h) { return h && isFinite(h.x) && isFinite(h.y); });
     } else state.holdingPoints = [];
-    if (Array.isArray(obj.apronLinks)) state.apronLinks = obj.apronLinks.slice();
+    if (Array.isArray(obj.apronLinks)) {
+      const csAL = _layoutCellSizeForPersistLoad();
+      state.apronLinks = obj.apronLinks.map(function(lk) {
+        const copy = Object.assign({}, lk);
+        if (Array.isArray(copy.midVertices)) {
+          copy.midVertices = copy.midVertices.map(function(v) {
+            if (!v || typeof v !== 'object') return { col: 0, row: 0 };
+            const x = Number(v.x), y = Number(v.y);
+            if (isFinite(x) && isFinite(y)) return { col: x / csAL, row: y / csAL };
+            return { col: Number(v.col) || 0, row: Number(v.row) || 0 };
+          });
+        }
+        return copy;
+      });
+    }
     if (Array.isArray(obj.directionModes) && obj.directionModes.length) {
       state.directionModes = obj.directionModes.slice();
     }
@@ -404,6 +465,7 @@
         f.arrTdDistM = null;
         f.arrRetDistM = null;
         f.arrVTdMs = null;
+        f.arrDecelMs2 = null;
         f.arrVRetInMs = null;
         f.arrVRetOutMs = null;
         f.timeline = null;
@@ -417,6 +479,15 @@
         f.__schedVttArrMin = null;
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
+        f.deferPathCompute = true;
+        delete f.eldtMin;
+        delete f.eibtMin;
+        delete f.eobtMin;
+        delete f.etotMin;
+        delete f.eldtMin_orig;
+        delete f.eibtMin_orig;
+        delete f.eobtMin_orig;
+        delete f.etotMin_orig;
       });
     } else {
       state.flights = [];
@@ -429,9 +500,90 @@
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
     else {
-      if (typeof renderFlightList === 'function') renderFlightList();
       draw();
     }
+    if (Array.isArray(state.flights) && state.flights.length) {
+      const flightTabBtn = document.querySelector('.right-panel-tab[data-tab="flight"]');
+      if (flightTabBtn) flightTabBtn.click();
+      if (typeof renderFlightList === 'function') {
+        renderFlightList(false, true);
+      }
+    } else if (typeof renderFlightList === 'function') {
+      renderFlightList();
+    }
+  }
+  function applyAirsideSimulationResultPayload(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const positions = payload.positions;
+    if (!positions || typeof positions !== 'object') return;
+    const scheduleList = Array.isArray(payload.schedule) ? payload.schedule : [];
+    const layout = payload.layout;
+    if (layout && typeof layout === 'object') {
+      applyLayoutObject(layout);
+    }
+    const schedById = {};
+    scheduleList.forEach(function(s) {
+      if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
+    });
+    function secFromSimSched(srec, eKey, legacyAKey, sKey) {
+      if (srec[eKey] != null && srec[eKey] !== '') return Number(srec[eKey]);
+      if (legacyAKey && srec[legacyAKey] != null && srec[legacyAKey] !== '') return Number(srec[legacyAKey]);
+      if (sKey && srec[sKey] != null && srec[sKey] !== '') return Number(srec[sKey]);
+      return NaN;
+    }
+    let mergedTimelines = 0;
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const rawPts = positions[f.id];
+      if (rawPts == null) return;
+      const pts = Array.isArray(rawPts) ? rawPts : [];
+      if (pts.length < 2) return;
+      const tl = pts.map(function(p) {
+        return { t: Number(p.t), x: Number(p.col), y: Number(p.row) };
+      }).filter(function(k) {
+        return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+      }).sort(function(a, b) { return a.t - b.t; });
+      if (tl.length < 2) return;
+      mergedTimelines++;
+      f.timeline = tl;
+      const srec = schedById[String(f.id)] || {};
+      const eldtS = secFromSimSched(srec, 'ELDT', 'ALDT', 'SLDT');
+      const eibtS = secFromSimSched(srec, 'EIBT', 'AIBT', 'SIBT');
+      const eobtS = secFromSimSched(srec, 'EOBT', 'AOBT', 'SOBT');
+      const etotS = secFromSimSched(srec, 'ETOT', 'ATOT', 'STOT');
+      f.timeline_meta = {
+        playbackSource: 'des_result',
+        eldtSec: isFinite(eldtS) ? eldtS : undefined,
+        eibtSec: isFinite(eibtS) ? eibtS : undefined,
+        eobtSec: isFinite(eobtS) ? eobtS : undefined,
+        etotSec: isFinite(etotS) ? etotS : undefined,
+      };
+      if (isFinite(eldtS)) f.eldtMin = eldtS / 60;
+      if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
+      if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
+      if (isFinite(etotS)) f.etotMin = etotS / 60;
+    });
+    (state.flights || []).forEach(function(ff) {
+      if (ff) ff.deferPathCompute = true;
+    });
+    state.hasSimulationResult = mergedTimelines > 0;
+    if (state.hasSimulationResult) {
+      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
+    } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+    else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+    if (typeof resizeCanvas === 'function') resizeCanvas();
+    if (typeof reset2DView === 'function') reset2DView();
+    if (typeof syncPanelFromState === 'function') syncPanelFromState();
+    if (typeof renderFlightList === 'function') renderFlightList(false, true);
+    if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
+    if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
+    if (typeof draw === 'function') draw();
+    if (typeof scene3d !== 'undefined' && scene3d && typeof update3DScene === 'function') update3DScene();
+    const applyBtn = document.getElementById('btnApplySimResult');
+    const playDockBtn = document.getElementById('btnShowPlayDock');
+    if (applyBtn) applyBtn.disabled = true;
+    if (playDockBtn) playDockBtn.disabled = !state.hasSimulationResult;
   }
   function applyInitialLayoutFromJson() {
     if (!INITIAL_LAYOUT || typeof INITIAL_LAYOUT !== 'object') return;
@@ -712,129 +864,3 @@
   const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
   const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
   const RSEP_COLOR_THRESHOLDS = (function() {
-    const arr = _sepUi.inputColorThresholdsSec;
-    if (Array.isArray(arr) && arr.length) {
-      return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
-    }
-    return [90, 120, 150];
-  })();
-  const RSEP_LEGEND_LAB = (_sepUi.legendLabels && typeof _sepUi.legendLabels === 'object') ? _sepUi.legendLabels : {};
-  function rsepLegendFmt(tpl, a0, a1) {
-    let s = String(tpl || '');
-    if (a1 != null && s.indexOf('{1}') >= 0) return s.replace('{0}', String(a0)).replace('{1}', String(a1));
-    return s.replace('{0}', String(a0));
-  }
-  const RSEP_COLOR_STYLES = [
-    { bg: '#0d2018', color: '#68d391', border: '#68d39155' },
-    { bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' },
-    { bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' },
-    { bg: '#280d0d', color: '#fc8181', border: '#fc818155' },
-  ];
-  const _stds = _rwy.standards || {};
-  const RSEP_STD_CATS = {
-    'ICAO': (_stds.ICAO && _stds.ICAO.categories) ? _stds.ICAO.categories : ['J','H','M','L'],
-    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categories) ? _stds['RECAT-EU'].categories : ['A','B','C','D','E','F'],
-  };
-  const RSEP_SEQ_TYPES = Object.assign({ 'ARR→ARR': 'matrix', 'DEP→DEP': 'matrix', 'ARR→DEP': 'lead-1d', 'DEP→ARR': 'trail-1d' }, _sepUi.seqTypes || {});
-  const RSEP_MODE_SEQS = (function() {
-    const def = { ARR: ['ARR→ARR'], DEP: ['DEP→DEP'], MIX: ['ARR→ARR','DEP→DEP','ARR→DEP','DEP→ARR'] };
-    const ms = _sepUi.modeSequences || {};
-    const out = {};
-    ['ARR','DEP','MIX'].forEach(k => {
-      const a = ms[k];
-      out[k] = (Array.isArray(a) && a.length) ? a.slice() : def[k].slice();
-    });
-    return out;
-  })();
-  const RSEP_DEFAULTS = {};
-  ['ICAO','RECAT-EU'].forEach(k => {
-    const s = _stds[k];
-    if (!s) return;
-    RSEP_DEFAULTS[k] = { ...(s.separationDefaults || {}), ROT: s.ROT || {} };
-  });
-  if (!RSEP_DEFAULTS['ICAO'] || !Object.keys(RSEP_DEFAULTS['ICAO']).length) {
-    RSEP_DEFAULTS['ICAO'] = { 'ARR→ARR': { J:{J:90,H:120,M:180,L:240}, H:{J:90,H:90,M:120,L:180}, M:{J:90,H:90,M:90,L:180}, L:{J:90,H:90,M:90,L:90} }, 'DEP→DEP': { J:{J:90,H:120,M:180,L:180}, H:{J:90,H:90,M:120,L:120}, M:{J:90,H:90,M:90,L:90}, L:{J:90,H:90,M:90,L:90} }, 'ARR→DEP': {J:90,H:80,M:65,L:50}, 'DEP→ARR': {J:60,H:60,M:70,L:90}, ROT: {J:70,H:65,M:55,L:40} };
-  }
-  if (!RSEP_DEFAULTS['RECAT-EU'] || !Object.keys(RSEP_DEFAULTS['RECAT-EU']).length) {
-    RSEP_DEFAULTS['RECAT-EU'] = { 'ARR→ARR': { A:{A:80,B:100,C:120,D:140,E:160,F:180}, B:{A:80,B:80,C:100,D:120,E:120,F:140}, C:{A:80,B:80,C:80,D:100,E:100,F:120}, D:{A:80,B:80,C:80,D:80,E:80,F:100}, E:{A:80,B:80,C:80,D:80,E:80,F:100}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'DEP→DEP': { A:{A:80,B:100,C:120,D:120,E:120,F:140}, B:{A:80,B:80,C:100,D:100,E:100,F:120}, C:{A:80,B:80,C:80,D:80,E:80,F:100}, D:{A:80,B:80,C:80,D:80,E:80,F:80}, E:{A:80,B:80,C:80,D:80,E:80,F:80}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'ARR→DEP': {A:80,B:70,C:60,D:55,E:50,F:45}, 'DEP→ARR': {A:55,B:55,C:60,D:65,E:70,F:80}, ROT: {A:65,B:60,C:55,D:50,E:45,F:40} };
-  }
-  const RSEP_STANDARDS = { 'ICAO': { ROT: RSEP_DEFAULTS['ICAO'] && RSEP_DEFAULTS['ICAO'].ROT ? RSEP_DEFAULTS['ICAO'].ROT : {} }, 'RECAT-EU': { ROT: RSEP_DEFAULTS['RECAT-EU'] && RSEP_DEFAULTS['RECAT-EU'].ROT ? RSEP_DEFAULTS['RECAT-EU'].ROT : {} } };
-  const RSEP_CAT_LABELS = {
-    'ICAO': (_stds.ICAO && _stds.ICAO.categoryLabels) ? _stds.ICAO.categoryLabels : { J:'Super', H:'Heavy', M:'Medium', L:'Light' },
-    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categoryLabels) ? _stds['RECAT-EU'].categoryLabels : { A:'Super-Heavy', B:'Upper-Heavy', C:'Lower-Heavy', D:'Medium', E:'Light', F:'Very-Light' },
-  };
-  const RSEP_SEQ_META = _rwy.seqMeta || {
-    'ARR→ARR': { driver: 'Wake of leading arrival aircraft', refPoint: 'Touchdown / final approach point of the leading arrival', input: 'Lead (arrival) × Trail (arrival) matrix input' },
-    'DEP→DEP': { driver: 'Wake of leading departure aircraft', refPoint: 'Take-off / runway entry point of the leading departure', input: 'Lead (departure) × Trail (departure) matrix input' },
-    'ARR→DEP': { driver: 'Leading aircraft ROT (runway occupancy time)', refPoint: 'Trailing aircraft: time from lineup to gear-off (lineup–gear-off)', input: 'Lead arrival category — 1D separation inputs' },
-    'DEP→ARR': { driver: 'Wake / ROT of leading departure', refPoint: 'Runway vacation / ROT end of the leading departure', input: 'Trail (arrival category) 1‑D input' },
-  };
-  function rsepGetCatLabel(stdKey, cat) {
-    const t = RSEP_CAT_LABELS[stdKey];
-    if (!t) return '';
-    return t[cat] || '';
-  }
-  function rsepGetSeqMeta(seq) {
-    return RSEP_SEQ_META[seq] || null;
-  }
-  function _rsepStringValue(value) {
-    return value != null ? String(value) : '';
-  }
-  function _rsepMakeCategoryValues(cats, src, asMatrix) {
-    const out = {};
-    cats.forEach(leadCat => {
-      if (!asMatrix) {
-        out[leadCat] = _rsepStringValue(src && src[leadCat]);
-        return;
-      }
-      out[leadCat] = {};
-      cats.forEach(trailCat => {
-        out[leadCat][trailCat] = _rsepStringValue(src && src[leadCat] && src[leadCat][trailCat]);
-      });
-    });
-    return out;
-  }
-  function rsepMakeMatrix(cats, src) {
-    return _rsepMakeCategoryValues(cats, src, true);
-  }
-  function rsepMake1D(cats, src) {
-    return _rsepMakeCategoryValues(cats, src, false);
-  }
-  function rsepMakeSeqData(stdKey) {
-    const cats = RSEP_STD_CATS[stdKey] || [];
-    const def = RSEP_DEFAULTS[stdKey] || {};
-    const arrDep = rsepMake1D(cats, def['ARR→DEP']);
-    const boost = RSEP_ARRDEP_BOOST_SEC;
-    cats.forEach(function(c) {
-      const s = arrDep[c];
-      if (s === '' || s == null) return;
-      const n = Number(s);
-      if (isFinite(n)) arrDep[c] = String(Math.round(n + boost));
-    });
-    return {
-      'ARR→ARR': rsepMakeMatrix(cats, def['ARR→ARR']),
-      'DEP→DEP': rsepMakeMatrix(cats, def['DEP→DEP']),
-      'ARR→DEP': arrDep,
-      'DEP→ARR': rsepMake1D(cats, def['DEP→ARR']),
-    };
-  }
-
-  function rsepColorForValue(val) {
-    const n = Number(val);
-    if (!isFinite(n) || val === '' || val == null) {
-      return { bg: '#1a1a1a', color: '#e5e7eb', border: '#444444' };
-    }
-    const th = RSEP_COLOR_THRESHOLDS;
-    for (let i = 0; i < th.length; i++) {
-      if (n < th[i]) return RSEP_COLOR_STYLES[i] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
-    }
-    return RSEP_COLOR_STYLES[th.length] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
-  }
-  function rsepLegendHtml(filled, total) {
-    const th = RSEP_COLOR_THRESHOLDS;
-    const countColor = filled === total ? '#68d391' : '#9ca3af';
-    let html = '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
-    const lab = RSEP_LEGEND_LAB;
-    if (th.length) {
-      const st0 = rsepColorForValue(Math.max(0, th[0] - 1));
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st0.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st0.color + ';">' + escapeHtml(rsepLegendFmt(lab.ltFirst || '<{0}s', th[0])) + '</span></span>';
