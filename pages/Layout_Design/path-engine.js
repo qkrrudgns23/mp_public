@@ -126,6 +126,7 @@
         showImage: !!state.showImage,
         layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
       },
+      showRoadWidth: !!state.showRoadWidth,
       terminals: makeUniqueNamedCopy(state.terminals, 'name'),
       pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
       remoteStands: state.remoteStands.slice(),

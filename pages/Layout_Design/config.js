@@ -281,6 +281,7 @@
   const LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR = Math.max(0.25, Math.min(1.5, _interactionConfigNum('layoutSelectedVertexRadiusFactor', 0.7)));
   const GRID_VISIBLE_DEFAULT = _ixBool('showGridDefault', true);
   const IMAGE_VISIBLE_DEFAULT = _ixBool('showImageDefault', true);
+  const ROAD_WIDTH_VISIBLE_DEFAULT = _ixBool('showRoadWidthDefault', true);
   const RW_EXIT_ALLOWED_DEFAULT = normalizeAllowedRunwayDirections(_dc.rwExitAllowedDefaultRaw);
   function layoutPathVertexRadiusPx(vertexSelected, pathSelected) {
     if (vertexSelected) return 6 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR;
@@ -319,6 +320,7 @@
   const resetViewBtn = document.getElementById('btnResetView');
   const gridToggleBtn = document.getElementById('btnGridToggle');
   const imageToggleBtn = document.getElementById('btnImageToggle');
+  const roadWidthToggleBtn = document.getElementById('btnRoadWidthToggle');
   const GRID_LAYOUT_IMAGE_DEFAULTS = {
     opacity: _dc.gridLayoutImage.opacity,
     opacityMin: _dc.gridLayoutImage.opacityMin,

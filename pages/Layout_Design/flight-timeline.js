@@ -1208,6 +1208,13 @@
     if (bNext) bNext.disabled = state.flightSchedulePage >= maxPage;
   }
 
+  /** Same predicate as Arrival Configuration "Failed" row (flight-ui _renderFlightConfigTable failedCounts). */
+  function isFlightArrRetFailedInConfigTable(f, retStatsAll) {
+    if (!f) return false;
+    if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
+    return f.sampledArrRet === null || typeof f.sampledArrRet === 'undefined';
+  }
+
   function _buildFlightListHeaderHtml() {
     return '' +
       '<table class="flight-schedule-table">' +
@@ -1249,7 +1256,7 @@
     const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
     let sampledRetName = '—';
-    if (f.arrRetFailed) sampledRetName = 'Failed';
+    if (isFlightArrRetFailedInConfigTable(f, retStatsAll)) sampledRetName = 'Failed';
     else if (f.sampledArrRet != null && retStatsAll && retStatsAll.length) {
       const retInfo = retStatsAll.find(r => r.exit && r.exit.id === f.sampledArrRet);
       sampledRetName = retInfo ? (retInfo.name || 'RET') : 'RET';
@@ -1271,7 +1278,7 @@
         : '';
       const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
       const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
-      const arrRetFailedBadge = ((f.arrRetFailed || sampledRetName === 'Failed') && !flightBlockedLikeNoWay(f)) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
+      const arrRetFailedBadge = (sampledRetName === 'Failed' && !flightBlockedLikeNoWay(f)) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
       const pathPendingClass = ' flight-row-path-pending';
       const pathPendingTitle = ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"';
       return '' +

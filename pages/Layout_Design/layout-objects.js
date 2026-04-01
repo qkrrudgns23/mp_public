@@ -65,6 +65,14 @@
     imageToggleBtn.classList.toggle('active', on);
     imageToggleBtn.title = on ? 'Image visible (click to hide)' : 'Image hidden (click to show)';
   }
+  function syncRoadWidthToggleButton() {
+    if (!roadWidthToggleBtn) return;
+    const on = !!state.showRoadWidth;
+    roadWidthToggleBtn.classList.toggle('active', on);
+    roadWidthToggleBtn.title = on
+      ? 'Width: pavement fill visible (click for schematic / faded runway)'
+      : 'Width off: taxiway & runway taxiway fill hidden; runway 70% transparent (click to show width)';
+  }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
     if (!isFinite(n)) return GRID_LAYOUT_IMAGE_DEFAULTS.opacity;
@@ -327,6 +335,7 @@
     }
     if (typeof obj.showGrid === 'boolean') state.showGrid = obj.showGrid;
     if (typeof obj.showImage === 'boolean') state.showImage = obj.showImage;
+    if (typeof obj.showRoadWidth === 'boolean') state.showRoadWidth = obj.showRoadWidth;
     state.layoutImageOverlay = normalizeLayoutImageOverlay(
       (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
     );
@@ -334,6 +343,7 @@
     syncLayoutImageBitmap();
     syncGridToggleButton();
     syncImageToggleButton();
+    syncRoadWidthToggleButton();
     if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
     if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
     if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);

@@ -39,7 +39,7 @@
       : '';
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
-    const arrRetFailedBadge = ((f.arrRetFailed || sampledRetName === 'Failed') && !flightBlockedLikeNoWay(f)) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
+    const arrRetFailedBadge = (sampledRetName === 'Failed' && !flightBlockedLikeNoWay(f)) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
     const pathPendingClass = f.deferPathCompute ? ' flight-row-path-pending' : '';
     const pathPendingTitle = f.deferPathCompute ? ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"' : '';
     return '' +
@@ -441,7 +441,7 @@
       const failedCounts = unique.map(info => {
         const typeKey = info.key;
         return (state.flights || []).filter(f =>
-          (f.sampledArrRet === null || typeof f.sampledArrRet === 'undefined') &&
+          isFlightArrRetFailedInConfigTable(f, retStats) &&
           (f.aircraftType || '') === typeKey
         ).length;
       });

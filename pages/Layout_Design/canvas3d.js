@@ -1134,6 +1134,14 @@
       draw();
     });
   }
+  if (roadWidthToggleBtn) {
+    syncRoadWidthToggleButton();
+    roadWidthToggleBtn.addEventListener('click', function() {
+      state.showRoadWidth = !state.showRoadWidth;
+      syncRoadWidthToggleButton();
+      draw();
+    });
+  }
   class Grid3DMapper {
     constructor(cols, rows, cellSize) {
       this.cols = cols;

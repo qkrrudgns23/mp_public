@@ -1433,6 +1433,14 @@
     });
   }
 
+  function taxiwayPathWidthBodyAlpha(tw, sel, drawing) {
+    if (sel || drawing || state.showRoadWidth) return 1;
+    if (tw.pathType === 'runway') {
+      const n = Number(_canvas2dStyle.runwayPathWidthOffAlpha);
+      return (isFinite(n) && n >= 0 && n <= 1) ? n : 0.3;
+    }
+    return 0;
+  }
   function drawTaxiways() {
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1447,6 +1455,7 @@
       const width = tw.width != null ? tw.width : widthDefault;
       const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
       const pathLineCap = 'butt';
+      const pathBodyAlpha = taxiwayPathWidthBodyAlpha(tw, sel, drawing);
       if (sel) {
         ctx.strokeStyle = c2dObjectSelectedStroke();
         ctx.fillStyle = c2dObjectSelectedFill();
@@ -1466,13 +1475,14 @@
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
       if (tw.vertices.length >= 2) {
+        ctx.save();
+        ctx.globalAlpha = pathBodyAlpha;
         if (sel) {
-          ctx.save();
           ctx.shadowColor = c2dObjectSelectedGlow();
           ctx.shadowBlur = c2dObjectSelectedGlowBlur();
           ctx.stroke();
-          ctx.restore();
         } else ctx.stroke();
+        ctx.restore();
       }
       if (!isRunwayPath) {
         ctx.lineWidth = 1.5;
@@ -1486,7 +1496,10 @@
       }
       if (isRunwayPath && tw.vertices.length >= 2) {
         const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
+        ctx.save();
+        ctx.globalAlpha = pathBodyAlpha;
         drawRunwayDecorations(tw, runwayPts, width);
+        ctx.restore();
       }
       const dir = getTaxiwayDirection(tw);
       if (dir !== 'both' && tw.vertices.length >= 2) {

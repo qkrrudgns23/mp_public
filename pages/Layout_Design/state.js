@@ -185,6 +185,7 @@
     simPlaybackDockVisible: false,
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
+    showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
     currentTerminalId: null,
     selectedObject: null,
     terminalDrawingId: null,
