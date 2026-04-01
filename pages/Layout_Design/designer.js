@@ -4792,6 +4792,14 @@
     if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
     return f.sampledArrRet === null || typeof f.sampledArrRet === 'undefined';
   }
+  function arrivalConfigColumnKeyForFlight(f) {
+    if (!f) return '';
+    const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+    return f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
+  }
+  function isFlightCountedInArrivalConfigFailedRow(f, retStats) {
+    return isFlightArrRetFailedInConfigTable(f, retStats) && !!arrivalConfigColumnKeyForFlight(f);
+  }
 
   function _buildFlightListHeaderHtml() {
     return '' +
@@ -4834,7 +4842,7 @@
     const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
     let sampledRetName = '—';
-    if (isFlightArrRetFailedInConfigTable(f, retStatsAll)) sampledRetName = 'Failed';
+    if (isFlightCountedInArrivalConfigFailedRow(f, retStatsAll)) sampledRetName = 'Failed';
     else if (f.sampledArrRet != null && retStatsAll && retStatsAll.length) {
       const retInfo = retStatsAll.find(r => r.exit && r.exit.id === f.sampledArrRet);
       sampledRetName = retInfo ? (retInfo.name || 'RET') : 'RET';
@@ -4856,12 +4864,11 @@
         : '';
       const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
       const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
-      const arrRetFailedBadge = (sampledRetName === 'Failed' && !flightBlockedLikeNoWay(f)) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
       const pathPendingClass = ' flight-row-path-pending';
       const pathPendingTitle = ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"';
       return '' +
         '<tr class="flight-data-row obj-item' + pathPendingClass + '"' + pathPendingTitle + ' data-id="' + f.id + '">' +
-          '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + arrRetFailedBadge + '</td>' +
+          '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + '</td>' +
           '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
           '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
           '<td class="flight-td-time flight-col-s flight-col-s-start">' + dash + '</td>' +
@@ -4954,12 +4961,11 @@
       : '';
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
-    const arrRetFailedBadge = (sampledRetName === 'Failed' && !flightBlockedLikeNoWay(f)) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
     const pathPendingClass = f.deferPathCompute ? ' flight-row-path-pending' : '';
     const pathPendingTitle = f.deferPathCompute ? ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"' : '';
     return '' +
       '<tr class="flight-data-row obj-item' + pathPendingClass + '"' + pathPendingTitle + ' data-id="' + f.id + '">' +
-        '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + arrRetFailedBadge + '</td>' +
+        '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-start">' + sldtStr + '</td>' +
@@ -5314,7 +5320,7 @@
           const typeKey = info.key;
           return (state.flights || []).filter(f =>
             f.sampledArrRet === (r.exit && r.exit.id) &&
-            (f.aircraftType || '') === typeKey
+            arrivalConfigColumnKeyForFlight(f) === typeKey
           ).length;
         });
         const sortedIdx = counts
@@ -5357,7 +5363,7 @@
         const typeKey = info.key;
         return (state.flights || []).filter(f =>
           isFlightArrRetFailedInConfigTable(f, retStats) &&
-          (f.aircraftType || '') === typeKey
+          arrivalConfigColumnKeyForFlight(f) === typeKey
         ).length;
       });
       if (failedCounts.some(c => c > 0)) {

@@ -39,12 +39,11 @@
       : '';
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
-    const arrRetFailedBadge = (sampledRetName === 'Failed' && !flightBlockedLikeNoWay(f)) ? ' <span style="color:#dc2626;font-weight:600;font-size:10px;">⚠ Failed</span>' : '';
     const pathPendingClass = f.deferPathCompute ? ' flight-row-path-pending' : '';
     const pathPendingTitle = f.deferPathCompute ? ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"' : '';
     return '' +
       '<tr class="flight-data-row obj-item' + pathPendingClass + '"' + pathPendingTitle + ' data-id="' + f.id + '">' +
-        '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + arrRetFailedBadge + '</td>' +
+        '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + noWayBadge + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-start">' + sldtStr + '</td>' +
@@ -399,7 +398,7 @@
           const typeKey = info.key;
           return (state.flights || []).filter(f =>
             f.sampledArrRet === (r.exit && r.exit.id) &&
-            (f.aircraftType || '') === typeKey
+            arrivalConfigColumnKeyForFlight(f) === typeKey
           ).length;
         });
         const sortedIdx = counts
@@ -442,7 +441,7 @@
         const typeKey = info.key;
         return (state.flights || []).filter(f =>
           isFlightArrRetFailedInConfigTable(f, retStats) &&
-          (f.aircraftType || '') === typeKey
+          arrivalConfigColumnKeyForFlight(f) === typeKey
         ).length;
       });
       if (failedCounts.some(c => c > 0)) {
