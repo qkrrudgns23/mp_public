@@ -1102,8 +1102,16 @@
       const byId = {};
       flightsDetail.forEach(function(row) {
         if (!row || row.flight_id == null) return;
-        const raw = row.edge_list;
-        byId[String(row.flight_id)] = Array.isArray(raw) ? raw : [];
+        const fid = String(row.flight_id);
+        const fin = row.edge_list_finished;
+        const planned = row.edge_list;
+        if (Array.isArray(fin) && fin.length) {
+          byId[fid] = fin.slice();
+        } else if (Array.isArray(planned) && planned.length) {
+          byId[fid] = planned.slice();
+        } else {
+          byId[fid] = [];
+        }
       });
       (state.flights || []).forEach(function(f) {
         if (!f || f.id == null) return;
@@ -1984,6 +1992,49 @@
     return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
   }
 
+  function _polylineLengthPxForLineup(pts) {
+    if (!pts || pts.length < 2) return 0;
+    let s = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      s += Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+    }
+    return s;
+  }
+  function _pointOnPolylineAtDistPxForLineup(pts, distPx) {
+    if (!pts || pts.length < 2) return null;
+    const total = _polylineLengthPxForLineup(pts);
+    const d = Math.max(0, Math.min(typeof distPx === 'number' ? distPx : 0, total));
+    let acc = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      const segLen = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+      if (!(segLen > 1e-6)) continue;
+      if (acc + segLen >= d - 1e-6) {
+        const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+        return [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
+      }
+      acc += segLen;
+    }
+    const last = pts[pts.length - 1];
+    return [last[0], last[1]];
+  }
+  /** Ordered runway polyline in layout px (matches getRunwayPath / departure graphPath). */
+  function _persistRunwayPolylinePtsPx(tw) {
+    if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) return null;
+    const pts = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+    const sp = tw.start_point;
+    if (sp && tw.end_point) {
+      const startPx = cellToPixel(sp.col, sp.row);
+      const dLast = (pts[pts.length - 1][0] - startPx[0]) * (pts[pts.length - 1][0] - startPx[0])
+        + (pts[pts.length - 1][1] - startPx[1]) * (pts[pts.length - 1][1] - startPx[1]);
+      const dFirst = (pts[0][0] - startPx[0]) * (pts[0][0] - startPx[0])
+        + (pts[0][1] - startPx[1]) * (pts[0][1] - startPx[1]);
+      if (dLast < dFirst) pts.reverse();
+    }
+    return pts;
+  }
+
   function serializeTaxiwayWithEndpoints(tw) {
     const copy = Object.assign({}, tw);
     const dir = getTaxiwayDirection(tw);
@@ -2023,7 +2074,17 @@
       else delete copy.endDisplacedThresholdM;
       if (typeof tw.endBlastPadM === 'number' && isFinite(tw.endBlastPadM) && tw.endBlastPadM >= 0) copy.endBlastPadM = tw.endBlastPadM;
       else delete copy.endBlastPadM;
-      delete copy.lineup_point;
+      const rwPts = _persistRunwayPolylinePtsPx(tw);
+      if (rwPts && rwPts.length >= 2) {
+        const ldm = (typeof tw.lineupDistM === 'number' && isFinite(tw.lineupDistM) && tw.lineupDistM >= 0) ? tw.lineupDistM : 0;
+        const lenPx = _polylineLengthPxForLineup(rwPts);
+        const dPx = Math.min(ldm, lenPx);
+        const lp = _pointOnPolylineAtDistPxForLineup(rwPts, dPx);
+        if (lp) copy.lineup_point = { x: lp[0], y: lp[1] };
+        else delete copy.lineup_point;
+      } else {
+        delete copy.lineup_point;
+      }
       delete copy.dep_point;
       delete copy.depPointPos;
     }

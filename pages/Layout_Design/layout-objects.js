@@ -519,8 +519,16 @@
       const byId = {};
       flightsDetail.forEach(function(row) {
         if (!row || row.flight_id == null) return;
-        const raw = row.edge_list;
-        byId[String(row.flight_id)] = Array.isArray(raw) ? raw : [];
+        const fid = String(row.flight_id);
+        const fin = row.edge_list_finished;
+        const planned = row.edge_list;
+        if (Array.isArray(fin) && fin.length) {
+          byId[fid] = fin.slice();
+        } else if (Array.isArray(planned) && planned.length) {
+          byId[fid] = planned.slice();
+        } else {
+          byId[fid] = [];
+        }
       });
       (state.flights || []).forEach(function(f) {
         if (!f || f.id == null) return;

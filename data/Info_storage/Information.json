@@ -1396,6 +1396,7 @@
         "defaultIcaoCategory": "M",
         "playbackLeadBeforeFirstTouchdownSec": 20,
         "timeStepSec": 1,
+        "layoutPixelsPerMeter": 1,
         "approachOffsetM": 10000,
         "approachStraightFinalM": 3000,
         "aircraftWingspanM": 40,

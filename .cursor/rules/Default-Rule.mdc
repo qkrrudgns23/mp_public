@@ -8,6 +8,7 @@ description: Core development rules — behavior, code quality, UI standards
 alwaysApply: true
 ---
 ## Agent Behavior
+- 나의 허락 없이 마음대로 fallback 기능을 넣지 말아줘
 - Before starting any task, summarize your understanding of the request.
 - Ask for confirmation and wait for explicit approval before proceeding.
 - If anything is ambiguous or has multiple interpretations, ask clarifying questions before proceeding. Do not assume.
