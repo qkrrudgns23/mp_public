@@ -315,6 +315,7 @@
   if (canvas) canvas.draggable = false;
   const container = document.getElementById('canvas-container');
   const coordEl = document.getElementById('coord');
+  const cursorPixelReadoutEl = document.getElementById('cursor-pixel-readout');
   const objectInfoEl = document.getElementById('object-info');
   const objectListEl = document.getElementById('object-list');
   const flightTooltip = document.getElementById('flight-tooltip');

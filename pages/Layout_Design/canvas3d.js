@@ -676,6 +676,9 @@
     const snappedPx = cellToPixel(snappedPt.col, snappedPt.row);
     const [col, row] = pixelToCell(wx, wy);
     if (coordEl) coordEl.textContent = 'cell: (' + col + ', ' + row + ')';
+    if (cursorPixelReadoutEl) {
+      cursorPixelReadoutEl.textContent = 'x: ' + wx.toFixed(1) + '  y: ' + wy.toFixed(1);
+    }
     const prev = state.hoverCell;
     state.hoverCell = { col, row };
     const hoverChanged = !prev || prev.col !== col || prev.row !== row;
@@ -930,6 +933,7 @@
     if (hoverChanged && !drewThisMove) { scheduleDraw(); drewThisMove = true; }
   });
   container.addEventListener('mouseleave', function() {
+    if (cursorPixelReadoutEl) cursorPixelReadoutEl.textContent = '—';
     state.dragStart = null;
     state.isPanning = false;
     state._canvasGesturePanning = false;

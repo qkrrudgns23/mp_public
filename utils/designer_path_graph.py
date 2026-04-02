@@ -821,6 +821,22 @@ def _stand_end_node_index(g: PathGraph, layout: dict, apron_id: str, cell_size: 
     return g.nearest_path_node(sp)
 
 
+def _norm_sim_edge_path_dir(raw: Any) -> str:
+    """Missing pathDir → clockwise (``from``→``to`` cheap, reverse uses ``reverse_cost``)."""
+    if raw is None:
+        return "clockwise"
+    s = str(raw).strip().lower()
+    if not s:
+        return "clockwise"
+    if s in ("clockwise", "cw"):
+        return "clockwise"
+    if s in ("counter_clockwise", "ccw", "counter-clockwise"):
+        return "counter_clockwise"
+    if s == "both":
+        return "both"
+    return "clockwise"
+
+
 def path_graph_from_layout_sim_export(
     layout: dict,
     rw_dir: str,
@@ -867,6 +883,34 @@ def path_graph_from_layout_sim_export(
     rc = max(float(reverse_cost), 1.0)
     th = max(0.0, float(taxiway_heuristic_bonus))
 
+    def register_sim_arc(
+        u: int,
+        v: int,
+        c: float,
+        raw_d: float,
+        pts_uv: List[Point],
+        lid: str,
+        ptype: str,
+        pdir: str,
+        *,
+        reverse_penalty: bool,
+    ) -> None:
+        if c < 1e-6:
+            return
+        if not reverse_penalty and (c >= rc * 0.999 or c < 1e-6):
+            return
+        adj[u].append((v, c))
+        edge_map[f"{u}:{v}"] = DirectedEdgeRecord(
+            from_idx=u,
+            to_idx=v,
+            cost=c,
+            raw_dist=raw_d,
+            pts=dedupe_path_points(pts_uv),
+            link_id=lid,
+            path_type=ptype,
+            direction=pdir,
+        )
+
     for e in edges_raw:
         if not isinstance(e, dict):
             continue
@@ -893,18 +937,20 @@ def path_graph_from_layout_sim_export(
             pts = [nodes[a], nodes[b]]
         link_id = str(e.get("linkId") or "")
         path_type = str(e.get("pathType") or "taxiway")
-        path_dir = str(e.get("pathDir") or "both")
-        adj[a].append((b, base_cost))
-        edge_map[f"{a}:{b}"] = DirectedEdgeRecord(
-            from_idx=a,
-            to_idx=b,
-            cost=base_cost,
-            raw_dist=raw_d,
-            pts=dedupe_path_points(pts),
-            link_id=link_id,
-            path_type=path_type,
-            direction=path_dir,
-        )
+        path_dir_raw = e.get("pathDir")
+        pd = _norm_sim_edge_path_dir(path_dir_raw)
+        fwd_pts = dedupe_path_points(pts)
+        rev_pts = dedupe_path_points(list(reversed(pts))) if len(pts) >= 2 else fwd_pts
+
+        if pd == "both":
+            register_sim_arc(a, b, base_cost, raw_d, fwd_pts, link_id, path_type, pd, reverse_penalty=False)
+            register_sim_arc(b, a, base_cost, raw_d, rev_pts, link_id, path_type, pd, reverse_penalty=False)
+        elif pd == "counter_clockwise":
+            register_sim_arc(b, a, base_cost, raw_d, rev_pts, link_id, path_type, pd, reverse_penalty=False)
+            register_sim_arc(a, b, rc, raw_d, fwd_pts, link_id, path_type, pd, reverse_penalty=True)
+        else:
+            register_sim_arc(a, b, base_cost, raw_d, fwd_pts, link_id, path_type, pd, reverse_penalty=False)
+            register_sim_arc(b, a, rc, raw_d, rev_pts, link_id, path_type, pd, reverse_penalty=True)
 
     stand_raw = inner.get("standIdToNodeIndex") or {}
     stand_id_to_node_index: Dict[str, int] = {}
