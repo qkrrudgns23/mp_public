@@ -1250,7 +1250,8 @@
         "colS": "#22c55e",
         "colSd": "#007aff",
         "colE": "#ff69b4",
-        "colRot": "#ffffff"
+        "colRot": "#ffffff",
+        "arrRetFailedText": "#f87171"
       },
       "rwySepTimeline": {
         "lineS": "#38bdf8",
@@ -1333,9 +1334,6 @@
         "vttBadgeBg": "rgba(15, 23, 42, 0.95)",
         "vttBadgeStroke": "#000000",
         "vttBadgeText": "#ffffff",
-        "noWayFill": "rgba(220, 38, 38, 0.92)",
-        "noWayStroke": "rgba(185, 28, 28, 0.9)",
-        "noWayText": "#ffffff",
         "terminalStrokeSelected": "rgba(233, 213, 255, 0.62)",
         "terminalStrokeDefault": "#38bdf8",
         "terminalFillSelected": "rgba(196,181,253,0.38)",
@@ -1386,11 +1384,16 @@
       },
       "pathSearch": {
         "taxiwayHeuristicCost": 0,
-        "reverseCost": 1000000
+        "reverseCost": 1000000,
+        "junctionMergeRadiusPx": 7
       },
       "simulation": {
-        "description": "playbackLeadBeforeFirstTouchdownSec: ELDT-relative playback lead. approachOffsetM: straight inbound segment length (m) before threshold. Inbound animation uses per-flight touchdown speed (arrVTdMs / catalog). maxLazyTimelineBuildsPerFrame caps how many full airside timelines are built per frame (reduces load when many flights overlap the approach window). timeStepSec, trail, preTouchdownHalo, aircraft dimensions.",
+        "description": "SLDT = scheduled touchdown (ELDT on-time target). Runway roll: arrDecelMs2 required; MIN_ARR_RUNWAY_VELOCITY_MS floor in code. ARR_ROT_SEC and EXIT_RUNWAY / EXIT_RUNWAY_dt are sim outputs: perpendicular distance from aircraft center to arr runway centerline ≥ EXIT_RUNWAY_MIN_PERPENDICULAR_DISTANCE_FROM_CENTERLINE_M (150 m in code). defaultArrRunwayDir / defaultDepRunwayDir / defaultDwellMin / defaultIcaoCategory apply when a flight omits those fields. playbackLeadBeforeFirstTouchdownSec, approachOffsetM (layout pixels), timeStepSec, trail, aircraft dimensions.",
         "maxLazyTimelineBuildsPerFrame": 6,
+        "defaultArrRunwayDir": "clockwise",
+        "defaultDepRunwayDir": "clockwise",
+        "defaultDwellMin": 45,
+        "defaultIcaoCategory": "M",
         "playbackLeadBeforeFirstTouchdownSec": 20,
         "timeStepSec": 1,
         "approachOffsetM": 10000,

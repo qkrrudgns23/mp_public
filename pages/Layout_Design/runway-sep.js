@@ -1,3 +1,114 @@
+      const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiMin != null && rotSec != null ? Math.max(0, sibt - arrTaxiMin - rotSec / 60) : null));
+      const dwellMin = kpiToNumber(f && f.dwellMin != null ? f.dwellMin : null);
+      const sobt = kpiToNumber(f && f.sobtMin_orig != null ? f.sobtMin_orig : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
+      const sttDepMinK = kpiToNumber(typeof getBaseVttDepMinutesToHoldingSlot === 'function' ? getBaseVttDepMinutesToHoldingSlot(f) : depTaxiMin);
+      const depRotMinK = depRotSec != null && isFinite(depRotSec) ? depRotSec / 60 : null;
+      const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depRotMinK != null && sttDepMinK != null ? sobt + depRotMinK + sttDepMinK : (sobt != null && depBlockOutMin != null ? sobt + depBlockOutMin : null)));
+      const eldt = kpiToNumber(f && f.eldtMin != null ? f.eldtMin : (f && f.sldtMin_d != null ? f.sldtMin_d : sldt));
+      const eibt = kpiToNumber(f && f.eibtMin != null ? f.eibtMin : (eldt != null && arrTaxiMin != null && rotSec != null ? eldt + arrTaxiMin + rotSec / 60 + (kpiToNumber(f.vttADelayMin) || 0) : sibt));
+      const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
+      const etot = kpiToNumber(f && f.etotMin != null ? f.etotMin : (f && f.stotMin_d != null ? f.stotMin_d : stot));
+      const failed = !!(f && flightBlockedLikeNoWay(f));
+      const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
+      const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
+      const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
+      const acDepDelay = (etot != null && stot != null) ? Math.max(0, etot - stot) : null;
+      return {
+        flight: f,
+        id: f && f.id ? f.id : '',
+        reg: f && f.reg ? f.reg : '',
+        flightNumber: f && f.flightNumber ? f.flightNumber : '',
+        standId: f && f.standId ? f.standId : null,
+        standName: kpiStandLabelById(f && f.standId ? f.standId : null),
+        arrTaxiMin,
+        depTaxiMin,
+        rotSec,
+        depRotSec,
+        arrTaxiDelayMin,
+        depTaxiDelayMin,
+        sibt,
+        sobt,
+        sldt,
+        stot,
+        eldt,
+        eibt,
+        eobt,
+        etot,
+        failed,
+        paxArrDelay,
+        paxDepDelay,
+        acArrDelay,
+        acDepDelay
+      };
+    });
+    const KPI_ROLL_STEP_MIN = 15;
+    const KPI_ROLL_WIN_MIN = 60;
+    const buckets = [];
+    if (rows.length) {
+      const wLastStart = 1440 - KPI_ROLL_WIN_MIN;
+      for (let w = 0; w <= wLastStart; w += KPI_ROLL_STEP_MIN) {
+        const wPlus = w + KPI_ROLL_WIN_MIN;
+        const activeStands = new Set();
+        let arrivals = 0;
+        let departures = 0;
+        rows.forEach(function(row) {
+          const occStartRaw = row.eibt != null ? row.eibt : row.sibt;
+          const occEndRaw = row.eobt != null ? row.eobt : row.sobt;
+          const osStart = kpiMinuteOfDay(occStartRaw);
+          const osEnd = kpiMinuteOfDay(occEndRaw);
+          if (row.standId && osStart != null && osEnd != null &&
+              kpiRollWindowOverlapsInterval(w, KPI_ROLL_WIN_MIN, osStart, osEnd)) {
+            activeStands.add(row.standId);
+          }
+          const eldtM = kpiMinuteOfDay(row.eldt);
+          const etotM = kpiMinuteOfDay(row.etot);
+          if (eldtM != null && eldtM >= w && eldtM < wPlus) arrivals += 1;
+          if (etotM != null && etotM >= w && etotM < wPlus) departures += 1;
+        });
+        buckets.push({
+          label: kpiFormatClockBucket15(w),
+          occupancy: activeStands.size,
+          arrivals: arrivals,
+          departures: departures,
+          total: arrivals + departures,
+          bucketStart: w
+        });
+      }
+    }
+    const failedFlights = rows.filter(function(row) { return row.failed; });
+    const operationalFlights = rows.filter(function(row) { return !row.failed; });
+    const peakBucket = buckets.reduce(function(best, bucket) {
+      if (!best) return bucket;
+      return (bucket.occupancy || 0) > (best.occupancy || 0) ? bucket : best;
+    }, null);
+    const busiestBucket = buckets.reduce(function(best, bucket) {
+      if (!best) return bucket;
+      return (bucket.total || 0) > (best.total || 0) ? bucket : best;
+    }, null);
+    const peakRunwayArrBucket = buckets.reduce(function(best, bucket) {
+      if (!best) return bucket;
+      return (bucket.arrivals || 0) > (best.arrivals || 0) ? bucket : best;
+    }, null);
+    const peakRunwayDepBucket = buckets.reduce(function(best, bucket) {
+      if (!best) return bucket;
+      return (bucket.departures || 0) > (best.departures || 0) ? bucket : best;
+    }, null);
+    const detailRows = rows.slice().sort(function(a, b) {
+      const delayA = (a.paxArrDelay || 0) + (a.paxDepDelay || 0) + (a.acArrDelay || 0) + (a.acDepDelay || 0);
+      const delayB = (b.paxArrDelay || 0) + (b.paxDepDelay || 0) + (b.acArrDelay || 0) + (b.acDepDelay || 0);
+      return delayB - delayA;
+    });
+    return {
+      rows: rows,
+      buckets: buckets,
+      totalFlights: rows.length,
+      failedFlights: failedFlights.length,
+      operationalFlights: operationalFlights.length,
+      peakBucket: peakBucket,
+      busiestBucket: busiestBucket,
+      peakRunwayArrBucket: peakRunwayArrBucket,
+      peakRunwayDepBucket: peakRunwayDepBucket,
+      rotArrTotalSec: kpiSum(rows, function(row) { return row.rotSec; }),
       rotArrAvgSec: kpiAverage(rows, function(row) { return row.rotSec; }),
       rotDepTotalSec: kpiSum(rows, function(row) { return row.depRotSec; }),
       rotDepAvgSec: kpiAverage(rows, function(row) { return row.depRotSec; }),
@@ -39,7 +150,7 @@
     kpiDisposeInteractiveCharts();
     const snapshot = collectKpiSnapshot();
     if (!snapshot.totalFlights) {
-      host.innerHTML = '<div class="kpi-empty-state">No flights are available yet. Add or load a schedule, then click <strong>Light Sim</strong> to refresh the KPI snapshot.</div>';
+      host.innerHTML = '<div class="kpi-empty-state">No flights are available yet. Add or load a schedule, then click <strong>Pro Sim</strong> to refresh the KPI snapshot.</div>';
       if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
       return;
     }
@@ -75,7 +186,7 @@
       kpiBuildPanel('Runway Delay', 'ELDT/ETOT vs schedule', [
         kpiBuildMetricRow('ELDT − SLDT', 'Avg ' + kpiFormatMinutesValue(snapshot.acArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acArrDelayTotalMin)),
         kpiBuildMetricRow('ETOT − STOT', 'Avg ' + kpiFormatMinutesValue(snapshot.acDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acDepDelayTotalMin)),
-        kpiBuildMetricRow('Snapshot basis', kpiFormatCount(snapshot.totalFlights) + ' flights', 'Rendered only on initial load and Light Sim')
+        kpiBuildMetricRow('Snapshot basis', kpiFormatCount(snapshot.totalFlights) + ' flights', 'Rendered only on initial load and Pro Sim')
       ])
     ].join('');
     const bucketsAll = snapshot.buckets || [];
@@ -170,6 +281,27 @@
     kpiMountInteractiveCharts(snapshot.buckets || []);
   }
 
+  function scheduledSldtFromSibtMinutes(f, sibtMin) {
+    const sibt = sibtMin != null && isFinite(sibtMin) ? sibtMin : 0;
+    const vttArrMin = getBaseVttArrMinutes(f);
+    const rotArrMin = getArrRotMinutes(f);
+    return Math.max(0, sibt - vttArrMin - rotArrMin);
+  }
+  function scheduledStotFromSobtMinutes(f, sobtMin) {
+    const sobt = sobtMin != null && isFinite(sobtMin) ? sobtMin : 0;
+    const depRotSec = (typeof computeDepRotSecondsForFlight === 'function')
+      ? computeDepRotSecondsForFlight(f)
+      : Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
+    const rotDepMin = depRotSec / 60;
+    const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+    const rollBundleSecFallback = DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2);
+    const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function')
+      ? getBaseVttDepMinutesToLineup(f)
+      : Math.max(0, depBlockOutMin - ((typeof computeDepRollAndLineupOnlySec === 'function') ? computeDepRollAndLineupOnlySec(f) : rollBundleSecFallback) / 60);
+    const sttDepMin = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
+    return sobt + rotDepMin + sttDepMin;
+  }
+
   function computeScheduledDisplayTimes(flights) {
     if (!flights || !flights.length) return;
     flights.forEach(f => {
@@ -183,12 +315,9 @@
       if (minDwell > dwell) minDwell = dwell;
       f.dwellMin = dwell;
       f.minDwellMin = minDwell;
-      let vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
-      const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-      const sldtOrig = Math.max(0, tArrMin - vttArrMin - rotArrMin);
+      const sldtOrig = scheduledSldtFromSibtMinutes(f, tArrMin);
       const sobtOrig = tArrMin + dwell;
-      const stotOrig = sobtOrig + depBlockOutMin;
+      const stotOrig = scheduledStotFromSobtMinutes(f, sobtOrig);
       f.sldtMin_orig = sldtOrig;
       f.sibtMin_orig = tArrMin;
       f.sobtMin_orig = sobtOrig;
@@ -210,7 +339,6 @@
       list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
       let prevSOBT = -1e9;
       list.forEach(f => {
-        const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
         const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
         const overlap = Math.max(0, prevSOBT - sibt0);
         f.vttADelayMin = overlap;
@@ -220,7 +348,8 @@
         const minSobtByDwell = f.sibtMin_d + minDwell;
         const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
         f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-        f.stotMin_d = f.sobtMin_d + depBlockOutMin;
+        f.sldtMin_d = scheduledSldtFromSibtMinutes(f, f.sibtMin_d);
+        f.stotMin_d = scheduledStotFromSobtMinutes(f, f.sobtMin_d);
         prevSOBT = f.sobtMin_d;
       });
     });
@@ -270,12 +399,9 @@
       if (minDwell > dwell) minDwell = dwell;
       f.dwellMin = dwell;
       f.minDwellMin = minDwell;
-      const vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
-      const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-      const sldtOrig = Math.max(0, tArrMin - vttArrMin - rotArrMin);
+      const sldtOrig = scheduledSldtFromSibtMinutes(f, tArrMin);
       const sobtOrig = tArrMin + dwell;
-      const stotOrig = sobtOrig + depBlockOutMin;
+      const stotOrig = scheduledStotFromSobtMinutes(f, sobtOrig);
       f.sldtMin_orig = sldtOrig;
       f.sibtMin_orig = tArrMin;
       f.sobtMin_orig = sobtOrig;
@@ -292,7 +418,6 @@
       list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
       let prevSOBT = -1e9;
       list.forEach(function(f) {
-        const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
         const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
         const overlap = Math.max(0, prevSOBT - sibt0);
         f.vttADelayMin = overlap;
@@ -302,7 +427,8 @@
         const minSobtByDwell = f.sibtMin_d + minDwell;
         const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
         f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-        f.stotMin_d = f.sobtMin_d + depBlockOutMin;
+        f.sldtMin_d = scheduledSldtFromSibtMinutes(f, f.sibtMin_d);
+        f.stotMin_d = scheduledStotFromSobtMinutes(f, f.sobtMin_d);
         prevSOBT = f.sobtMin_d;
       });
     });
@@ -329,57 +455,3 @@
       f.sobtMin = f.sobtMin_d;
     });
   }
-
-  function rsepGetSec(val) {
-    const n = Number(val);
-    return isFinite(n) && n >= 0 ? n : RSEP_MISSING_MATRIX_SEC;
-  }
-
-  function rsepApplySeparationToEvents(events, cfg) {
-    const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {};
-    const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {};
-    const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {};
-    const rot = (cfg.rot) ? cfg.rot : {};
-    const getSec = rsepGetSec;
-    events.sort((a, b) => a.time - b.time || a.index - b.index);
-    let lastArrETime = -1e9, lastArrCat = null;
-    let lastDepETime = -1e9, lastDepCat = null;
-    events.forEach(ev => {
-      if (ev.type === 'arr') {
-        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
-        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
-        const eTime = Math.max(ev.time, minFromArr, minFromDep);
-        ev.flight.eldtMin = eTime;
-        lastArrETime = eTime;
-        lastArrCat = ev.cat;
-      } else {
-        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
-        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
-        const etotSep = Math.max(ev.time, minFromArr, minFromDep);
-        const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
-        const rotM = (ev.rotArrMin != null && isFinite(ev.rotArrMin)) ? ev.rotArrMin : getArrRotMinutes(ev.flight);
-        const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + rotM + (ev.vttArrMin || 0) + vttADelay;
-        const vttDep = ev.vttDepMin || 0;
-        const etotMin = etotSep;
-        const eobtMin = etotMin - vttDep;
-        ev.flight.etotMin = etotMin;
-        lastDepETime = etotMin;
-        lastDepCat = ev.cat;
-      }
-    });
-    let minT = Infinity, maxT = -Infinity;
-    events.forEach(ev => {
-      const s = ev.time;
-      const e = ev.type === 'arr'
-        ? (ev.flight && ev.flight.eldtMin != null ? ev.flight.eldtMin : s)
-        : (ev.flight && ev.flight.etotMin != null ? ev.flight.etotMin : s);
-      if (s < minT) minT = s;
-      if (e < minT) minT = e;
-      if (s > maxT) maxT = s;
-      if (e > maxT) maxT = e;
-    });
-    if (!isFinite(minT) || !isFinite(maxT)) { minT = 0; maxT = 60; } else if (maxT <= minT) { maxT = minT + 60; }
-    return { minT, maxT };
-  }
-
-  function rsepCollectEventsForRunway(rwy, flights, runways) {

@@ -21,7 +21,15 @@ from urllib.request import Request, urlopen
 
 from urllib.parse import parse_qs, urlparse
 
-from utils.layout_receiver import LAYOUT_STORAGE_DIR, save_layout_to_file, list_layout_names, delete_layout, _safe_layout_path, _layout_path_for_read
+from utils.layout_receiver import (
+    LAYOUT_STORAGE_DIR,
+    save_layout_to_file,
+    list_layout_names,
+    delete_layout,
+    _safe_layout_path,
+    _layout_path_for_read,
+    start_layout_receiver,
+)
 
 ROOT = Path(__file__).resolve().parent
 STREAMLIT_PORT = 8502
@@ -161,8 +169,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
 
 def main():
+    layout_api_url = start_layout_receiver()
     os.environ["LAYOUT_SAME_PORT"] = "1"
-    os.environ["LAYOUT_API_BASE_URL"] = f"http://127.0.0.1:{PROXY_PORT}"
+    os.environ["LAYOUT_API_BASE_URL"] = layout_api_url
     entry = ROOT / "Home.py"
     proc = subprocess.Popen(
         [
@@ -175,6 +184,7 @@ def main():
     )
     server = HTTPServer((PROXY_HOST, PROXY_PORT), ProxyHandler)
     print(f"Layout API + Streamlit proxy: http://{PROXY_HOST}:{PROXY_PORT}")
+    print(f"  Layout API (save / Pro Sim / …): {layout_api_url}")
     print(f"  Layout storage: {LAYOUT_STORAGE_DIR}")
     try:
         server.serve_forever()

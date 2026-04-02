@@ -514,8 +514,28 @@
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
+    const flightsDetail = Array.isArray(payload.flights_detail) ? payload.flights_detail : null;
+    if (flightsDetail) {
+      const byId = {};
+      flightsDetail.forEach(function(row) {
+        if (!row || row.flight_id == null) return;
+        const raw = row.edge_list;
+        byId[String(row.flight_id)] = Array.isArray(raw) ? raw : [];
+      });
+      (state.flights || []).forEach(function(f) {
+        if (!f || f.id == null) return;
+        const raw = byId[String(f.id)];
+        if (Array.isArray(raw) && raw.length) {
+          f.edge_list = raw.slice();
+          f.proSimEdgeList = f.edge_list.slice();
+        } else {
+          delete f.edge_list;
+          delete f.proSimEdgeList;
+        }
+      });
+    }
     const positions = payload.positions;
-    if (!positions || typeof positions !== 'object') return;
+    const hasPositions = positions && typeof positions === 'object' && Object.keys(positions).length > 0;
     const scheduleList = Array.isArray(payload.schedule) ? payload.schedule : [];
     const layout = payload.layout;
     if (layout && typeof layout === 'object') {
@@ -532,40 +552,44 @@
       return NaN;
     }
     let mergedTimelines = 0;
-    (state.flights || []).forEach(function(f) {
-      if (!f || f.id == null) return;
-      const rawPts = positions[f.id];
-      if (rawPts == null) return;
-      const pts = Array.isArray(rawPts) ? rawPts : [];
-      if (pts.length < 2) return;
-      const tl = pts.map(function(p) {
-        return { t: Number(p.t), x: Number(p.col), y: Number(p.row) };
-      }).filter(function(k) {
-        return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
-      }).sort(function(a, b) { return a.t - b.t; });
-      if (tl.length < 2) return;
-      mergedTimelines++;
-      f.timeline = tl;
-      const srec = schedById[String(f.id)] || {};
-      const eldtS = secFromSimSched(srec, 'ELDT', 'ALDT', 'SLDT');
-      const eibtS = secFromSimSched(srec, 'EIBT', 'AIBT', 'SIBT');
-      const eobtS = secFromSimSched(srec, 'EOBT', 'AOBT', 'SOBT');
-      const etotS = secFromSimSched(srec, 'ETOT', 'ATOT', 'STOT');
-      f.timeline_meta = {
-        playbackSource: 'des_result',
-        eldtSec: isFinite(eldtS) ? eldtS : undefined,
-        eibtSec: isFinite(eibtS) ? eibtS : undefined,
-        eobtSec: isFinite(eobtS) ? eobtS : undefined,
-        etotSec: isFinite(etotS) ? etotS : undefined,
-      };
-      if (isFinite(eldtS)) f.eldtMin = eldtS / 60;
-      if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
-      if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
-      if (isFinite(etotS)) f.etotMin = etotS / 60;
-    });
-    (state.flights || []).forEach(function(ff) {
-      if (ff) ff.deferPathCompute = true;
-    });
+    if (hasPositions) {
+      (state.flights || []).forEach(function(f) {
+        if (!f || f.id == null) return;
+        const rawPts = positions[f.id];
+        if (rawPts == null) return;
+        const pts = Array.isArray(rawPts) ? rawPts : [];
+        if (pts.length < 2) return;
+        const tl = pts.map(function(p) {
+          const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+          const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+          return { t: Number(p.t), x: x, y: y };
+        }).filter(function(k) {
+          return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+        }).sort(function(a, b) { return a.t - b.t; });
+        if (tl.length < 2) return;
+        mergedTimelines++;
+        f.timeline = tl;
+        const srec = schedById[String(f.id)] || {};
+        const eldtS = secFromSimSched(srec, 'ELDT', 'ALDT', 'SLDT');
+        const eibtS = secFromSimSched(srec, 'EIBT', 'AIBT', 'SIBT');
+        const eobtS = secFromSimSched(srec, 'EOBT', 'AOBT', 'SOBT');
+        const etotS = secFromSimSched(srec, 'ETOT', 'ATOT', 'STOT');
+        f.timeline_meta = {
+          playbackSource: 'des_result',
+          eldtSec: isFinite(eldtS) ? eldtS : undefined,
+          eibtSec: isFinite(eibtS) ? eibtS : undefined,
+          eobtSec: isFinite(eobtS) ? eobtS : undefined,
+          etotSec: isFinite(etotS) ? etotS : undefined,
+        };
+        if (isFinite(eldtS)) f.eldtMin = eldtS / 60;
+        if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
+        if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
+        if (isFinite(etotS)) f.etotMin = etotS / 60;
+      });
+      (state.flights || []).forEach(function(ff) {
+        if (ff) ff.deferPathCompute = true;
+      });
+    }
     state.hasSimulationResult = mergedTimelines > 0;
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
@@ -575,7 +599,7 @@
     if (typeof resizeCanvas === 'function') resizeCanvas();
     if (typeof reset2DView === 'function') reset2DView();
     if (typeof syncPanelFromState === 'function') syncPanelFromState();
-    if (typeof renderFlightList === 'function') renderFlightList(false, true);
+    if (typeof renderFlightList === 'function') renderFlightList(false, false);
     if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
     if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
     if (typeof draw === 'function') draw();

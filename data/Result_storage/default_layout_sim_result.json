@@ -1,0 +1,26 @@
+{
+  "baseDate": "2026-03-31",
+  "positions": {},
+  "schedule": [],
+  "layout": null,
+  "kpi": null,
+  "flights_detail": [
+    {
+      "flight_id": "id_qfyfxgod4",
+      "edge_list": [
+        "layout-edge-001",
+        "layout-edge-003",
+        "layout-edge-072",
+        "layout-edge-073",
+        "layout-edge-074",
+        "layout-edge-076",
+        "layout-edge-078",
+        "layout-edge-080",
+        "layout-edge-082",
+        "layout-edge-084"
+      ],
+      "ok": true,
+      "error": null
+    }
+  ]
+}

@@ -1,3 +1,56 @@
+  function rsepGetSec(val) {
+    const n = Number(val);
+    return isFinite(n) && n >= 0 ? n : RSEP_MISSING_MATRIX_SEC;
+  }
+
+  function rsepApplySeparationToEvents(events, cfg) {
+    const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {};
+    const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {};
+    const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {};
+    const rot = (cfg.rot) ? cfg.rot : {};
+    const getSec = rsepGetSec;
+    events.sort((a, b) => a.time - b.time || a.index - b.index);
+    let lastArrETime = -1e9, lastArrCat = null;
+    let lastDepETime = -1e9, lastDepCat = null;
+    events.forEach(ev => {
+      if (ev.type === 'arr') {
+        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
+        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
+        const eTime = Math.max(ev.time, minFromArr, minFromDep);
+        ev.flight.eldtMin = eTime;
+        lastArrETime = eTime;
+        lastArrCat = ev.cat;
+      } else {
+        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
+        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
+        const etotSep = Math.max(ev.time, minFromArr, minFromDep);
+        const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
+        const rotM = (ev.rotArrMin != null && isFinite(ev.rotArrMin)) ? ev.rotArrMin : getArrRotMinutes(ev.flight);
+        const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + rotM + (ev.vttArrMin || 0) + vttADelay;
+        const vttDep = ev.vttDepMin || 0;
+        const etotMin = etotSep;
+        const eobtMin = etotMin - vttDep;
+        ev.flight.etotMin = etotMin;
+        lastDepETime = etotMin;
+        lastDepCat = ev.cat;
+      }
+    });
+    let minT = Infinity, maxT = -Infinity;
+    events.forEach(ev => {
+      const s = ev.time;
+      const e = ev.type === 'arr'
+        ? (ev.flight && ev.flight.eldtMin != null ? ev.flight.eldtMin : s)
+        : (ev.flight && ev.flight.etotMin != null ? ev.flight.etotMin : s);
+      if (s < minT) minT = s;
+      if (e < minT) minT = e;
+      if (s > maxT) maxT = s;
+      if (e > maxT) maxT = e;
+    });
+    if (!isFinite(minT) || !isFinite(maxT)) { minT = 0; maxT = 60; } else if (maxT <= minT) { maxT = minT + 60; }
+    return { minT, maxT };
+  }
+
+  function rsepCollectEventsForRunway(rwy, flights, runways) {
     const cfg = rsepGetConfigForRunway(rwy);
     if (!cfg) return null;
     const stdKey = cfg.standard || 'ICAO';
@@ -986,88 +1039,3 @@
     }
     const tauSum = tau1 + tau2;
     const makeVelTaxi = makeTaxiSegmentVelocityCallback();
-    const accelRoll = depTakeoffAccelMs2ForFlight(f);
-    const lastQ = pathToQueue[pathToQueue.length - 1];
-    const lx0 = lastQ[0], ly0 = lastQ[1];
-    let runwayTailAdj = split.runwayTail;
-    if (!(t3 > t0 + eps)) {
-      const tl = [{ t: t0, x: lx0, y: ly0 }, { t: t3, x: lx0, y: ly0 }];
-      const depRotFull = (typeof computeDepRotSecondsForFlight === 'function') ? computeDepRotSecondsForFlight(f) : Math.max(0, t3 - t0);
-      return {
-        timeline: tl,
-        meta: {
-          eobtSec: t0, etotSec: t3,
-          depTaxiLineupSec: 0, depTaxiDelaySec: 0, depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
-          lineupArrivalSec: t0, depRollStartSec: t0, depRotSec: depRotFull, depLineupHoldSec: 0, depTaxiDelayAtHolding: false,
-          lineupBackM: backClamped,
-        },
-      };
-    }
-    const maxSpan = t3 - t0 - eps;
-    let taxiSecUsed = Math.min(depTaxiLineupSecReq, maxSpan);
-    let tAfterTaxi = t0 + taxiSecUsed;
-    let afterTaxi = Math.max(0, t3 - tAfterTaxi - eps);
-    let delaySecUsed = Math.min(depTaxiDelaySecReq, afterTaxi);
-    let tAfterDelay = tAfterTaxi + delaySecUsed;
-    let afterDelay = Math.max(0, t3 - tAfterDelay - eps);
-    let lineupHoldSec = Math.min(DEP_LINEUP_HOLD_SEC, afterDelay);
-    let merged;
-    let t_cur = t0;
-    if (validHold) {
-      const r1 = tauSum > 1e-6 ? (tau1 / tauSum) : 1;
-      const t1dur = taxiSecUsed * r1;
-      const t2dur = taxiSecUsed * (1 - r1);
-      const taxiTl1 = polylineTimelineBySegmentSpeeds(p1, t_cur, t_cur + t1dur, makeVelTaxi);
-      t_cur += t1dur;
-      const lastP1 = p1[p1.length - 1];
-      const delayTl = (delaySecUsed > eps) ? [{ t: t_cur, x: lastP1[0], y: lastP1[1] }, { t: t_cur + delaySecUsed, x: lastP1[0], y: lastP1[1] }] : [];
-      t_cur += delaySecUsed;
-      const taxiTl2 = polylineTimelineBySegmentSpeeds(p2, t_cur, t_cur + t2dur, makeVelTaxi);
-      t_cur += t2dur;
-      merged = mergeTimelineSegments(taxiTl1, delayTl);
-      merged = mergeTimelineSegments(merged, taxiTl2);
-    } else {
-      const taxiTl = polylineTimelineBySegmentSpeeds(pathToQueue, t0, t0 + taxiSecUsed, makeVelTaxi);
-      t_cur = t0 + taxiSecUsed;
-      const delayTl = (delaySecUsed > eps) ? [{ t: t_cur, x: lx0, y: ly0 }, { t: t_cur + delaySecUsed, x: lx0, y: ly0 }] : [];
-      t_cur += delaySecUsed;
-      merged = mergeTimelineSegments(taxiTl, delayTl);
-    }
-    const lastT = merged[merged.length - 1];
-    const lx = lastT.x, ly = lastT.y;
-    const tAtQueue = lastT.t;
-    if (runwayTailAdj && runwayTailAdj.length >= 2 && dist2(runwayTailAdj[0], [lx, ly]) > 1e-4) {
-      runwayTailAdj = [[lx, ly]].concat(runwayTailAdj.slice());
-    }
-    const tRollStart = tAtQueue + lineupHoldSec;
-    const lineupHoldTl = (lineupHoldSec > eps) ? [{ t: tAtQueue, x: lx, y: ly }, { t: tRollStart, x: lx, y: ly }] : [];
-    let rollTl;
-    if (runwayTailAdj && runwayTailAdj.length >= 2 && t3 > tRollStart + eps) {
-      rollTl = polylineTimelineConstantAccelFromRest(runwayTailAdj, tRollStart, t3, accelRoll);
-    } else {
-      rollTl = [{ t: tRollStart, x: lx, y: ly }, { t: t3, x: lx, y: ly }];
-    }
-    merged = mergeTimelineSegments(merged, lineupHoldTl);
-    merged = mergeTimelineSegments(merged, rollTl);
-    const rollWindow = Math.max(0, t3 - tRollStart);
-    const depRotFullSec = (typeof computeDepRotSecondsForFlight === 'function') ? computeDepRotSecondsForFlight(f) : (lineupHoldSec + rollWindow);
-    return {
-      timeline: merged,
-      meta: {
-        eobtSec: t0, etotSec: t3,
-        depTaxiLineupSec: taxiSecUsed, depTaxiDelaySec: delaySecUsed,
-        depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
-        lineupArrivalSec: tAfterTaxi, depRollStartSec: tRollStart,
-        depRotSec: depRotFullSec, depLineupHoldSec: lineupHoldSec,
-        depTaxiDelayAtHolding: validHold,
-        lineupBackM: backClamped,
-      },
-    };
-  }
-  function buildFullAirsideTimelineForFlight(f) {
-    if (!f) return;
-    const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-    if (f.arrDep === 'Dep') {
-      if (f.noWayDep) {
-        f.timeline = null;
-        f.timeline_meta = { error: 'no_path', leg: 'dep' };

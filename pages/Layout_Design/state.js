@@ -95,23 +95,6 @@
       .replace(/</g, '&lt;')
       .replace(/\\r\\n|\\r|\\n/g, ' ');
   }
-  function buildNoWayTooltip(f) {
-    if (!f) return '경로를 찾을 수 없습니다.';
-    const parts = [];
-    if (f.noWayArr) {
-      const d = f._noWayArrDetail != null ? String(f._noWayArrDetail).trim() : '';
-      parts.push('도착: ' + (d || '사유를 판별하지 못했습니다.'));
-    }
-    if (f.noWayDep) {
-      const d = f._noWayDepDetail != null ? String(f._noWayDepDetail).trim() : '';
-      parts.push('출발: ' + (d || '사유를 판별하지 못했습니다.'));
-    }
-    if (f.arrDep !== 'Dep' && f.arrRetFailed && !f.noWayArr) {
-      parts.push('도착: RET 실패(제약 또는 샘플링).');
-    }
-    if (!parts.length) return '경로를 찾을 수 없습니다.';
-    return parts.join(' ');
-  }
   function renderChoiceChipList(container, items, selectedIds, inputClass, inputName) {
     if (!container) return;
     const selected = new Set(Array.isArray(selectedIds) ? selectedIds.map(String) : []);

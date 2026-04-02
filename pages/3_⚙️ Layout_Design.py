@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 import random
 import shutil
@@ -318,6 +319,37 @@ def _get_query_one(key: str):
         return None
 
 
+def _sync_grid_globals_from_layout(layout: dict) -> None:
+    """Match GRID_COLS, GRID_ROWS, CELL_SIZE to layout['grid'] when present (same bounds as designer JS)."""
+    global GRID_COLS, GRID_ROWS, CELL_SIZE
+    if not isinstance(layout, dict):
+        return
+    g = layout.get("grid")
+    if not isinstance(g, dict):
+        return
+    if g.get("cols") is not None:
+        try:
+            c = int(g["cols"])
+            if c > 0:
+                GRID_COLS = max(5, min(1000, c))
+        except (TypeError, ValueError):
+            pass
+    if g.get("rows") is not None:
+        try:
+            r = int(g["rows"])
+            if r > 0:
+                GRID_ROWS = max(5, min(1000, r))
+        except (TypeError, ValueError):
+            pass
+    if g.get("cellSize") is not None:
+        try:
+            cs = float(g["cellSize"])
+            if cs > 0 and math.isfinite(cs):
+                CELL_SIZE = max(5.0, cs)
+        except (TypeError, ValueError):
+            pass
+
+
 try:
     load_name = _get_query_one("load_layout")
     if load_name:
@@ -329,6 +361,8 @@ try:
             layout_display_name = load_name
 except Exception:
     _logger.exception("Failed to load layout from query param")
+
+_sync_grid_globals_from_layout(layout_for_html)
 
 layout_names = list_layout_names()
 
@@ -464,6 +498,7 @@ def _style_root_css_from_information(info: dict) -> str:
         ("--style-fs-col-sd", fs.get("colSd")),
         ("--style-fs-col-e", fs.get("colE")),
         ("--style-fs-col-rot", fs.get("colRot")),
+        ("--style-fs-arr-ret-failed", fs.get("arrRetFailedText")),
     ]
     rwy = st.get("rwySepTimeline") if isinstance(st.get("rwySepTimeline"), dict) else {}
     pairs_rwy = [
@@ -477,9 +512,6 @@ def _style_root_css_from_information(info: dict) -> str:
         ("--style-c2d-vtt-badge-bg", c2.get("vttBadgeBg")),
         ("--style-c2d-vtt-badge-stroke", c2.get("vttBadgeStroke")),
         ("--style-c2d-vtt-badge-text", c2.get("vttBadgeText")),
-        ("--style-c2d-noway-fill", c2.get("noWayFill")),
-        ("--style-c2d-noway-stroke", c2.get("noWayStroke")),
-        ("--style-c2d-noway-text", c2.get("noWayText")),
         ("--style-c2d-term-stroke-sel", c2.get("terminalStrokeSelected")),
         ("--style-c2d-term-stroke-def", c2.get("terminalStrokeDefault")),
         ("--style-c2d-term-fill-sel", c2.get("terminalFillSelected")),

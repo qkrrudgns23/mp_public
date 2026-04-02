@@ -1,3 +1,129 @@
+    const arr = _sepUi.inputColorThresholdsSec;
+    if (Array.isArray(arr) && arr.length) {
+      return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
+    }
+    return [90, 120, 150];
+  })();
+  const RSEP_LEGEND_LAB = (_sepUi.legendLabels && typeof _sepUi.legendLabels === 'object') ? _sepUi.legendLabels : {};
+  function rsepLegendFmt(tpl, a0, a1) {
+    let s = String(tpl || '');
+    if (a1 != null && s.indexOf('{1}') >= 0) return s.replace('{0}', String(a0)).replace('{1}', String(a1));
+    return s.replace('{0}', String(a0));
+  }
+  const RSEP_COLOR_STYLES = [
+    { bg: '#0d2018', color: '#68d391', border: '#68d39155' },
+    { bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' },
+    { bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' },
+    { bg: '#280d0d', color: '#fc8181', border: '#fc818155' },
+  ];
+  const _stds = _rwy.standards || {};
+  const RSEP_STD_CATS = {
+    'ICAO': (_stds.ICAO && _stds.ICAO.categories) ? _stds.ICAO.categories : ['J','H','M','L'],
+    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categories) ? _stds['RECAT-EU'].categories : ['A','B','C','D','E','F'],
+  };
+  const RSEP_SEQ_TYPES = Object.assign({ 'ARR→ARR': 'matrix', 'DEP→DEP': 'matrix', 'ARR→DEP': 'lead-1d', 'DEP→ARR': 'trail-1d' }, _sepUi.seqTypes || {});
+  const RSEP_MODE_SEQS = (function() {
+    const def = { ARR: ['ARR→ARR'], DEP: ['DEP→DEP'], MIX: ['ARR→ARR','DEP→DEP','ARR→DEP','DEP→ARR'] };
+    const ms = _sepUi.modeSequences || {};
+    const out = {};
+    ['ARR','DEP','MIX'].forEach(k => {
+      const a = ms[k];
+      out[k] = (Array.isArray(a) && a.length) ? a.slice() : def[k].slice();
+    });
+    return out;
+  })();
+  const RSEP_DEFAULTS = {};
+  ['ICAO','RECAT-EU'].forEach(k => {
+    const s = _stds[k];
+    if (!s) return;
+    RSEP_DEFAULTS[k] = { ...(s.separationDefaults || {}), ROT: s.ROT || {} };
+  });
+  if (!RSEP_DEFAULTS['ICAO'] || !Object.keys(RSEP_DEFAULTS['ICAO']).length) {
+    RSEP_DEFAULTS['ICAO'] = { 'ARR→ARR': { J:{J:90,H:120,M:180,L:240}, H:{J:90,H:90,M:120,L:180}, M:{J:90,H:90,M:90,L:180}, L:{J:90,H:90,M:90,L:90} }, 'DEP→DEP': { J:{J:90,H:120,M:180,L:180}, H:{J:90,H:90,M:120,L:120}, M:{J:90,H:90,M:90,L:90}, L:{J:90,H:90,M:90,L:90} }, 'ARR→DEP': {J:90,H:80,M:65,L:50}, 'DEP→ARR': {J:60,H:60,M:70,L:90}, ROT: {J:70,H:65,M:55,L:40} };
+  }
+  if (!RSEP_DEFAULTS['RECAT-EU'] || !Object.keys(RSEP_DEFAULTS['RECAT-EU']).length) {
+    RSEP_DEFAULTS['RECAT-EU'] = { 'ARR→ARR': { A:{A:80,B:100,C:120,D:140,E:160,F:180}, B:{A:80,B:80,C:100,D:120,E:120,F:140}, C:{A:80,B:80,C:80,D:100,E:100,F:120}, D:{A:80,B:80,C:80,D:80,E:80,F:100}, E:{A:80,B:80,C:80,D:80,E:80,F:100}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'DEP→DEP': { A:{A:80,B:100,C:120,D:120,E:120,F:140}, B:{A:80,B:80,C:100,D:100,E:100,F:120}, C:{A:80,B:80,C:80,D:80,E:80,F:100}, D:{A:80,B:80,C:80,D:80,E:80,F:80}, E:{A:80,B:80,C:80,D:80,E:80,F:80}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'ARR→DEP': {A:80,B:70,C:60,D:55,E:50,F:45}, 'DEP→ARR': {A:55,B:55,C:60,D:65,E:70,F:80}, ROT: {A:65,B:60,C:55,D:50,E:45,F:40} };
+  }
+  const RSEP_STANDARDS = { 'ICAO': { ROT: RSEP_DEFAULTS['ICAO'] && RSEP_DEFAULTS['ICAO'].ROT ? RSEP_DEFAULTS['ICAO'].ROT : {} }, 'RECAT-EU': { ROT: RSEP_DEFAULTS['RECAT-EU'] && RSEP_DEFAULTS['RECAT-EU'].ROT ? RSEP_DEFAULTS['RECAT-EU'].ROT : {} } };
+  const RSEP_CAT_LABELS = {
+    'ICAO': (_stds.ICAO && _stds.ICAO.categoryLabels) ? _stds.ICAO.categoryLabels : { J:'Super', H:'Heavy', M:'Medium', L:'Light' },
+    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categoryLabels) ? _stds['RECAT-EU'].categoryLabels : { A:'Super-Heavy', B:'Upper-Heavy', C:'Lower-Heavy', D:'Medium', E:'Light', F:'Very-Light' },
+  };
+  const RSEP_SEQ_META = _rwy.seqMeta || {
+    'ARR→ARR': { driver: 'Wake of leading arrival aircraft', refPoint: 'Touchdown / final approach point of the leading arrival', input: 'Lead (arrival) × Trail (arrival) matrix input' },
+    'DEP→DEP': { driver: 'Wake of leading departure aircraft', refPoint: 'Take-off / runway entry point of the leading departure', input: 'Lead (departure) × Trail (departure) matrix input' },
+    'ARR→DEP': { driver: 'Leading aircraft ROT (runway occupancy time)', refPoint: 'Trailing aircraft: time from lineup to gear-off (lineup–gear-off)', input: 'Lead arrival category — 1D separation inputs' },
+    'DEP→ARR': { driver: 'Wake / ROT of leading departure', refPoint: 'Runway vacation / ROT end of the leading departure', input: 'Trail (arrival category) 1‑D input' },
+  };
+  function rsepGetCatLabel(stdKey, cat) {
+    const t = RSEP_CAT_LABELS[stdKey];
+    if (!t) return '';
+    return t[cat] || '';
+  }
+  function rsepGetSeqMeta(seq) {
+    return RSEP_SEQ_META[seq] || null;
+  }
+  function _rsepStringValue(value) {
+    return value != null ? String(value) : '';
+  }
+  function _rsepMakeCategoryValues(cats, src, asMatrix) {
+    const out = {};
+    cats.forEach(leadCat => {
+      if (!asMatrix) {
+        out[leadCat] = _rsepStringValue(src && src[leadCat]);
+        return;
+      }
+      out[leadCat] = {};
+      cats.forEach(trailCat => {
+        out[leadCat][trailCat] = _rsepStringValue(src && src[leadCat] && src[leadCat][trailCat]);
+      });
+    });
+    return out;
+  }
+  function rsepMakeMatrix(cats, src) {
+    return _rsepMakeCategoryValues(cats, src, true);
+  }
+  function rsepMake1D(cats, src) {
+    return _rsepMakeCategoryValues(cats, src, false);
+  }
+  function rsepMakeSeqData(stdKey) {
+    const cats = RSEP_STD_CATS[stdKey] || [];
+    const def = RSEP_DEFAULTS[stdKey] || {};
+    const arrDep = rsepMake1D(cats, def['ARR→DEP']);
+    const boost = RSEP_ARRDEP_BOOST_SEC;
+    cats.forEach(function(c) {
+      const s = arrDep[c];
+      if (s === '' || s == null) return;
+      const n = Number(s);
+      if (isFinite(n)) arrDep[c] = String(Math.round(n + boost));
+    });
+    return {
+      'ARR→ARR': rsepMakeMatrix(cats, def['ARR→ARR']),
+      'DEP→DEP': rsepMakeMatrix(cats, def['DEP→DEP']),
+      'ARR→DEP': arrDep,
+      'DEP→ARR': rsepMake1D(cats, def['DEP→ARR']),
+    };
+  }
+
+  function rsepColorForValue(val) {
+    const n = Number(val);
+    if (!isFinite(n) || val === '' || val == null) {
+      return { bg: '#1a1a1a', color: '#e5e7eb', border: '#444444' };
+    }
+    const th = RSEP_COLOR_THRESHOLDS;
+    for (let i = 0; i < th.length; i++) {
+      if (n < th[i]) return RSEP_COLOR_STYLES[i] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
+    }
+    return RSEP_COLOR_STYLES[th.length] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
+  }
+  function rsepLegendHtml(filled, total) {
+    const th = RSEP_COLOR_THRESHOLDS;
+    const countColor = filled === total ? '#68d391' : '#9ca3af';
+    let html = '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
+    const lab = RSEP_LEGEND_LAB;
+    if (th.length) {
+      const st0 = rsepColorForValue(Math.max(0, th[0] - 1));
+      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st0.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st0.color + ';">' + escapeHtml(rsepLegendFmt(lab.ltFirst || '<{0}s', th[0])) + '</span></span>';
       for (let i = 1; i < th.length; i++) {
         const lo = th[i - 1], hi = th[i];
         const mid = lo + (hi - lo) / 2;
@@ -192,129 +318,3 @@
   }
   function segIntersect(a1, a2, b1, b2) {
     const [ax1,ay1]=a1,[ax2,ay2]=a2,[bx1,by1]=b1,[bx2,by2]=b2;
-    const dax = ax2-ax1, day = ay2-ay1, dbx = bx2-bx1, dby = by2-by1;
-    const den = dax*dby - day*dbx;
-    if (Math.abs(den) < 1e-10) return false;
-    const t = ((bx1-ax1)*dby - (by1-ay1)*dbx) / den;
-    const s = ((bx1-ax1)*day - (by1-ay1)*dax) / den;
-    return t >= 0 && t <= 1 && s >= 0 && s <= 1;
-  }
-  function rotatedRectsOverlap(cornersA, cornersB) {
-    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersA[i], cornersB)) return true;
-    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersB[i], cornersA)) return true;
-    for (let i = 0; i < 4; i++) {
-      const a1 = cornersA[i], a2 = cornersA[(i+1)%4];
-      for (let j = 0; j < 4; j++) {
-        if (segIntersect(a1, a2, cornersB[j], cornersB[(j+1)%4])) return true;
-      }
-    }
-    return false;
-  }
-  function pbbStandOverlapsTerminal(pbb) {
-    const corners = getPBBStandCorners(pbb);
-    for (let t = 0; t < state.terminals.length; t++) {
-      const term = state.terminals[t];
-      if (!term.closed || term.vertices.length < 3) continue;
-      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
-      for (let k = 0; k < 4; k++) {
-        if (pointInPolygonXY(corners[k], termPix)) return true;
-      }
-      for (let k = 0; k < termPix.length; k++) {
-        if (pointInPolygonXY(termPix[k], corners)) return true;
-      }
-    }
-    return false;
-  }
-  function pbbStandOverlapsExisting(pbb, excludeId) {
-    if (pbbStandOverlapsTerminal(pbb)) return true;
-    const corners = getPBBStandCorners(pbb);
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      const other = state.pbbStands[i];
-      if (excludeId && other.id === excludeId) continue;
-      if (rotatedRectsOverlap(corners, getPBBStandCorners(other))) return true;
-    }
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      const st = state.remoteStands[i];
-      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
-    }
-    return false;
-  }
-  function tryPlacePbbAt(wx, wy) {
-    let bestEdge = null, bestD2 = Infinity;
-    state.terminals.forEach(t => {
-      if (!t.closed || t.vertices.length < 2) return;
-      let cx = 0, cy = 0;
-      t.vertices.forEach(v => { const [px, py] = cellToPixel(v.col, v.row); cx += px; cy += py; });
-      cx /= t.vertices.length || 1; cy /= t.vertices.length || 1;
-      for (let i = 0; i < t.vertices.length; i++) {
-        const v1 = t.vertices[i], v2 = t.vertices[(i + 1) % t.vertices.length];
-        const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-        const near = closestPointOnSegment(p1, p2, [wx, wy]);
-        if (near) {
-          const d2 = dist2(near, [wx, wy]);
-          if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2, col: v1.col, row: v1.row, cx, cy }; }
-        }
-      }
-    });
-    const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
-    if (!bestEdge || bestD2 >= maxD2) return false;
-    const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
-    let nx = -(y2 - y1), ny = x2 - x1;
-    const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
-    const toClickX = wx - ex, toClickY = wy - ey;
-    if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
-    const categoryMode = normalizeStandCategoryMode(document.getElementById('standCategoryMode') ? document.getElementById('standCategoryMode').value : (_pbbTier.defaultCategoryMode || 'icao'), 'icao');
-    const category = document.getElementById('standCategory').value || 'C';
-    const standSize = getStandSizeMeters(category);
-    const minLen = standSize / 2 + 3;
-    const lenMeters = Number(document.getElementById('pbbLength').value || 15);
-    const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-    const newPbb = { x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx, category };
-    if (pbbStandOverlapsExisting(newPbb)) return false;
-    const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
-    if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
-      alertDuplicateLayoutName();
-      return false;
-    }
-    pushUndo();
-    state.pbbStands.push(normalizePbbStandObject({
-      id: id(),
-      name: pbbNameCandidate,
-      x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx,
-      category: newPbb.category,
-      categoryMode: categoryMode,
-      allowedAircraftTypes: readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check'),
-      pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
-      angleDeg: normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI),
-      edgeCol: bestEdge.col,
-      edgeRow: bestEdge.row
-    }));
-    return true;
-  }
-  function tryPlaceRemoteAt(wx, wy) {
-    if (!isFinite(wx) || !isFinite(wy)) return false;
-    const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
-    if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) return false;
-    const categoryMode = normalizeStandCategoryMode(document.getElementById('remoteCategoryMode') ? document.getElementById('remoteCategoryMode').value : (_remoteTier.defaultCategoryMode || 'icao'), 'icao');
-    const category = document.getElementById('remoteCategory').value || 'C';
-    const angleInput = document.getElementById('remoteAngle');
-    const angleDeg = normalizeAngleDeg(angleInput ? angleInput.value : 0);
-    const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
-    const candCorners = getRemoteStandCorners(candidate);
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) return false;
-    }
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) return false;
-    }
-    const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
-    if (findDuplicateLayoutName('remote', null, baseName)) {
-      alertDuplicateLayoutName();
-      return false;
-    }
-    pushUndo();
-    state.remoteStands.push(normalizeRemoteStandObject({
-      id: id(),
-      x: Number(wx),
-      y: Number(wy),
-      category,

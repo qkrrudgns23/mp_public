@@ -1,3 +1,129 @@
+    const dax = ax2-ax1, day = ay2-ay1, dbx = bx2-bx1, dby = by2-by1;
+    const den = dax*dby - day*dbx;
+    if (Math.abs(den) < 1e-10) return false;
+    const t = ((bx1-ax1)*dby - (by1-ay1)*dbx) / den;
+    const s = ((bx1-ax1)*day - (by1-ay1)*dax) / den;
+    return t >= 0 && t <= 1 && s >= 0 && s <= 1;
+  }
+  function rotatedRectsOverlap(cornersA, cornersB) {
+    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersA[i], cornersB)) return true;
+    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersB[i], cornersA)) return true;
+    for (let i = 0; i < 4; i++) {
+      const a1 = cornersA[i], a2 = cornersA[(i+1)%4];
+      for (let j = 0; j < 4; j++) {
+        if (segIntersect(a1, a2, cornersB[j], cornersB[(j+1)%4])) return true;
+      }
+    }
+    return false;
+  }
+  function pbbStandOverlapsTerminal(pbb) {
+    const corners = getPBBStandCorners(pbb);
+    for (let t = 0; t < state.terminals.length; t++) {
+      const term = state.terminals[t];
+      if (!term.closed || term.vertices.length < 3) continue;
+      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
+      for (let k = 0; k < 4; k++) {
+        if (pointInPolygonXY(corners[k], termPix)) return true;
+      }
+      for (let k = 0; k < termPix.length; k++) {
+        if (pointInPolygonXY(termPix[k], corners)) return true;
+      }
+    }
+    return false;
+  }
+  function pbbStandOverlapsExisting(pbb, excludeId) {
+    if (pbbStandOverlapsTerminal(pbb)) return true;
+    const corners = getPBBStandCorners(pbb);
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const other = state.pbbStands[i];
+      if (excludeId && other.id === excludeId) continue;
+      if (rotatedRectsOverlap(corners, getPBBStandCorners(other))) return true;
+    }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const st = state.remoteStands[i];
+      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
+    }
+    return false;
+  }
+  function tryPlacePbbAt(wx, wy) {
+    let bestEdge = null, bestD2 = Infinity;
+    state.terminals.forEach(t => {
+      if (!t.closed || t.vertices.length < 2) return;
+      let cx = 0, cy = 0;
+      t.vertices.forEach(v => { const [px, py] = cellToPixel(v.col, v.row); cx += px; cy += py; });
+      cx /= t.vertices.length || 1; cy /= t.vertices.length || 1;
+      for (let i = 0; i < t.vertices.length; i++) {
+        const v1 = t.vertices[i], v2 = t.vertices[(i + 1) % t.vertices.length];
+        const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
+        const near = closestPointOnSegment(p1, p2, [wx, wy]);
+        if (near) {
+          const d2 = dist2(near, [wx, wy]);
+          if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2, col: v1.col, row: v1.row, cx, cy }; }
+        }
+      }
+    });
+    const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
+    if (!bestEdge || bestD2 >= maxD2) return false;
+    const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
+    let nx = -(y2 - y1), ny = x2 - x1;
+    const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
+    const toClickX = wx - ex, toClickY = wy - ey;
+    if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
+    const categoryMode = normalizeStandCategoryMode(document.getElementById('standCategoryMode') ? document.getElementById('standCategoryMode').value : (_pbbTier.defaultCategoryMode || 'icao'), 'icao');
+    const category = document.getElementById('standCategory').value || 'C';
+    const standSize = getStandSizeMeters(category);
+    const minLen = standSize / 2 + 3;
+    const lenMeters = Number(document.getElementById('pbbLength').value || 15);
+    const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
+    const newPbb = { x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx, category };
+    if (pbbStandOverlapsExisting(newPbb)) return false;
+    const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
+    if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
+      alertDuplicateLayoutName();
+      return false;
+    }
+    pushUndo();
+    state.pbbStands.push(normalizePbbStandObject({
+      id: id(),
+      name: pbbNameCandidate,
+      x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx,
+      category: newPbb.category,
+      categoryMode: categoryMode,
+      allowedAircraftTypes: readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check'),
+      pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
+      angleDeg: normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI),
+      edgeCol: bestEdge.col,
+      edgeRow: bestEdge.row
+    }));
+    return true;
+  }
+  function tryPlaceRemoteAt(wx, wy) {
+    if (!isFinite(wx) || !isFinite(wy)) return false;
+    const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
+    if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) return false;
+    const categoryMode = normalizeStandCategoryMode(document.getElementById('remoteCategoryMode') ? document.getElementById('remoteCategoryMode').value : (_remoteTier.defaultCategoryMode || 'icao'), 'icao');
+    const category = document.getElementById('remoteCategory').value || 'C';
+    const angleInput = document.getElementById('remoteAngle');
+    const angleDeg = normalizeAngleDeg(angleInput ? angleInput.value : 0);
+    const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
+    const candCorners = getRemoteStandCorners(candidate);
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) return false;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) return false;
+    }
+    const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
+    if (findDuplicateLayoutName('remote', null, baseName)) {
+      alertDuplicateLayoutName();
+      return false;
+    }
+    pushUndo();
+    state.remoteStands.push(normalizeRemoteStandObject({
+      id: id(),
+      x: Number(wx),
+      y: Number(wy),
+      category,
       name: baseName,
       angleDeg,
       categoryMode: categoryMode,
@@ -55,6 +181,25 @@
     });
   }
 
+  function _persistCellSizePx() {
+    return (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
+  }
+  function persistVerticesCellsToXY(vertices) {
+    const cs = _persistCellSizePx();
+    if (!Array.isArray(vertices)) return [];
+    return vertices.map(function(v) {
+      if (!v || typeof v !== 'object') return { x: 0, y: 0 };
+      const c = Number(v.col), r = Number(v.row);
+      return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
+    });
+  }
+  function persistPointCellToXY(pt) {
+    if (!pt || typeof pt !== 'object') return null;
+    const cs = _persistCellSizePx();
+    const c = Number(pt.col), r = Number(pt.row);
+    return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
+  }
+
   function serializeTaxiwayWithEndpoints(tw) {
     const copy = Object.assign({}, tw);
     const dir = getTaxiwayDirection(tw);
@@ -66,11 +211,11 @@
         const first = tw.vertices[0];
         const last = tw.vertices[tw.vertices.length - 1];
         if (dir === 'clockwise') {
-          copy.start_point = { col: first.col, row: first.row };
-          copy.end_point = { col: last.col, row: last.row };
+          copy.start_point = persistPointCellToXY({ col: first.col, row: first.row });
+          copy.end_point = persistPointCellToXY({ col: last.col, row: last.row });
         } else {
-          copy.start_point = { col: last.col, row: last.row };
-          copy.end_point = { col: first.col, row: first.row };
+          copy.start_point = persistPointCellToXY({ col: last.col, row: last.row });
+          copy.end_point = persistPointCellToXY({ col: first.col, row: first.row });
         }
       } else {
         copy.start_point = null;
@@ -100,6 +245,7 @@
     }
     if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
     else delete copy.rwySepConfig;
+    if (Array.isArray(tw.vertices)) copy.vertices = persistVerticesCellsToXY(tw.vertices);
     return copy;
   }
   function partitionTaxiwaysForPersist(list) {
@@ -117,6 +263,35 @@
     return { runwayPaths: runwayPaths, runwayTaxiways: runwayTaxiways, taxiways: taxiways };
   }
   function serializeCurrentLayout() {
+    function pathJunctionsToNetworkJunctions(pts) {
+      const out = [];
+      (pts || []).forEach(function(p) {
+        if (!p) return;
+        if (Array.isArray(p) && p.length >= 2) {
+          out.push({ x: p[0], y: p[1] });
+        } else if (typeof p.x === 'number' && typeof p.y === 'number') {
+          out.push({ x: p.x, y: p.y });
+        }
+      });
+      return out;
+    }
+    let networkJunctions = pathJunctionsToNetworkJunctions(state.pathGraphJunctions);
+    if (!networkJunctions.length && typeof buildPathGraph === 'function') {
+      try {
+        const g = buildPathGraph(null);
+        const cj = (g && (g.connectedJunctions || g.junctions)) || [];
+        networkJunctions = pathJunctionsToNetworkJunctions(cj);
+      } catch (e) { /* ignore */ }
+    }
+    let edgeExport = [];
+    if (typeof rebuildDerivedGraphEdges === 'function') {
+      try {
+        rebuildDerivedGraphEdges();
+        edgeExport = (state.derivedGraphEdges || []).map(function(ed) {
+          return { id: ed.id, label: ed.label, name: ed.name, fromIdx: ed.fromIdx, toIdx: ed.toIdx };
+        });
+      } catch (e2) { edgeExport = []; }
+    }
     return {
       grid: {
         cols: GRID_COLS,
@@ -126,8 +301,13 @@
         showImage: !!state.showImage,
         layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
       },
-      showRoadWidth: !!state.showRoadWidth,
-      terminals: makeUniqueNamedCopy(state.terminals, 'name'),
+      networkJunctions: networkJunctions,
+      Edge: edgeExport,
+      terminals: makeUniqueNamedCopy(state.terminals, 'name').map(function(t) {
+        const o = Object.assign({}, t);
+        if (Array.isArray(o.vertices)) o.vertices = persistVerticesCellsToXY(o.vertices);
+        return o;
+      }),
       pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
       remoteStands: state.remoteStands.slice(),
       holdingPoints: (state.holdingPoints || []).slice(),
@@ -135,23 +315,29 @@
         const p = partitionTaxiwaysForPersist(state.taxiways);
         return { runwayPaths: p.runwayPaths, runwayTaxiways: p.runwayTaxiways, taxiways: p.taxiways };
       })(),
-      apronLinks: state.apronLinks.slice(),
+      apronLinks: (state.apronLinks || []).map(function(lk) {
+        const o = Object.assign({}, lk);
+        if (Array.isArray(o.midVertices)) o.midVertices = persistVerticesCellsToXY(o.midVertices);
+        return o;
+      }),
       directionModes: state.directionModes.slice(),
       flights: state.flights.map(function(f) {
-        const copy = { };
-        const orderedKeys = [
+        const copy = {};
+        const simFlightKeys = [
           'id',
           'reg',
           'airlineCode',
           'flightNumber',
           'aircraftType',
           'code',
-          'velocity',
           'timeMin',
           'dwellMin',
           'minDwellMin',
           'noWayArr',
           'noWayDep',
+          'eOverlapPushed',
+          'arrRetFailed',
+          'serviceDate',
           'sldtMin_orig',
           'sibtMin_orig',
           'sobtMin_orig',
@@ -160,89 +346,69 @@
           'sibtMin_d',
           'sobtMin_d',
           'stotMin_d',
-          'sldtMin',
-          'sibtMin',
-          'sobtMin',
-          'stotMin',
-          'eldtMin',
-          'eibtMin',
-          'eobtMin',
-          'etotMin',
-          'depTaxiDelayMin',
-          'vttADelayMin',
-          'arrRotSec',
-          'eOverlapPushed',
-          'sampledArrRet',
-          'sampledRetName',
-          'arrRetFailed',
-          'arrRunwayIdUsed',
-          'arrTdDistM',
-          'arrRetDistM',
-          'arrVTdMs',
-          'arrVRetInMs',
-          'arrVRetOutMs',
           'arrRunwayDirUsed',
-          'depRunwayDirUsed'
+          'depRunwayDirUsed',
+          'arrTdDistM',
+          'arrVTdMs',
+          'arrDecelMs2',
+          'arrDep',
         ];
-        orderedKeys.forEach(function(k) {
-          if (k === 'sibtMin') {
-            if (
-              Object.prototype.hasOwnProperty.call(f, 'sibtMin') &&
-              f.sibtMin != null
-            ) {
-              copy.sibtMin = f.sibtMin;
-            } else if (
-              Object.prototype.hasOwnProperty.call(f, 'sibtMin_d') &&
-              f.sibtMin_d != null
-            ) {
-              copy.sibtMin = f.sibtMin_d;
-            }
-            return;
-          }
-          if (
-            Object.prototype.hasOwnProperty.call(f, k) &&
-            k !== 'timeline' &&
-            k !== 'arrDep' &&
-            k !== 'token' &&
-            k !== 'arrRunwayId' &&
-            k !== 'depRunwayId' &&
-            k !== 'terminalId' &&
-            k !== 'standId' &&
-            k !== 'cachedArrPathPts' &&
-            k !== 'cachedDepPathPts' &&
-            k !== '_pathPolylineCacheRev' &&
-            k !== '_pathPolylineArrRetKey'
-          ) {
+        simFlightKeys.forEach(function(k) {
+          if (Object.prototype.hasOwnProperty.call(f, k) && f[k] !== undefined) {
             copy[k] = f[k];
           }
         });
-        for (const k in f) {
-          if (
-            k === 'timeline' ||
-            k === 'arrDep' ||
-            k === 'token' ||
-            k === 'arrRunwayId' ||
-            k === 'depRunwayId' ||
-            k === 'terminalId' ||
-            k === 'standId' ||
-            k === 'cachedArrPathPts' ||
-            k === 'cachedDepPathPts' ||
-            k === '_pathPolylineCacheRev' ||
-            k === '_pathPolylineArrRetKey' ||
-            Object.prototype.hasOwnProperty.call(copy, k)
-          ) continue;
-          copy[k] = f[k];
+        if (Array.isArray(f.edge_list) && f.edge_list.length) {
+          copy.edge_list = f.edge_list.slice();
         }
         const t = f.token || {};
+        const arrRwyId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
+        const apronId = (f.standId != null ? f.standId : (t.apronId != null ? t.apronId : null));
+        const termId = f.terminalId || t.terminalId || null;
+        const depRwyId = f.depRunwayId || t.depRunwayId || null;
+        const exitTwId = (f.sampledArrRet != null && f.sampledArrRet !== '') ? f.sampledArrRet : (t.ExitTaxiwayId != null ? t.ExitTaxiwayId : null);
         copy.token = {
-          arrRunwayId: f.arrRunwayId || t.arrRunwayId || t.runwayId || null,
-          apronId: (f.standId != null ? f.standId : (t.apronId != null ? t.apronId : null)),
-          terminalId: f.terminalId || t.terminalId || null,
-          depRunwayId: f.depRunwayId || t.depRunwayId || null,
+          arrRunwayId: arrRwyId,
+          ExitTaxiwayId: exitTwId || null,
+          apronId: apronId || null,
+          terminalId: termId || null,
+          depRunwayId: depRwyId || null,
         };
-        if (!copy.token.apronId) copy.token.apronId = null;
+        function _twNameById(id) {
+          if (id == null || id === '') return null;
+          const tw = (state.taxiways || []).find(function(x) { return x && x.id === id; });
+          if (!tw) return String(id);
+          const n = (tw.name && String(tw.name).trim()) || '';
+          return n || String(tw.id || id);
+        }
+        function _standNameById(id) {
+          if (id == null || id === '') return null;
+          if (typeof findStandById === 'function') {
+            const st = findStandById(id);
+            if (!st) return String(id);
+            const n = (st.name && String(st.name).trim()) || '';
+            return n || String(st.id || id);
+          }
+          return String(id);
+        }
+        function _labelOrId(id, getLab) {
+          if (id == null || id === '') return null;
+          if (typeof getLab === 'function') {
+            const lab = getLab(id);
+            if (lab && lab !== '—') return lab;
+          }
+          return String(id);
+        }
+        copy.token_name = {
+          arrRunwayId: _labelOrId(arrRwyId, typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById : null),
+          ExitTaxiwayId: exitTwId ? _twNameById(exitTwId) : null,
+          apronId: apronId ? _standNameById(apronId) : null,
+          terminalId: _labelOrId(termId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
+          depRunwayId: _labelOrId(depRwyId, typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById : null),
+        };
         return copy;
-      })
+      }),
+      simPathGraph: (typeof buildSimPathGraphExport === 'function' ? buildSimPathGraphExport() : null)
     };
   }
   function getExistingStandBounds() {
@@ -366,6 +532,7 @@
     const a = getApronLinkStandEndPx(lk);
     if (!a) return [];
     const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) {
+      if (v && isFinite(Number(v.x)) && isFinite(Number(v.y))) return [Number(v.x), Number(v.y)];
       return cellToPixel(Number(v.col), Number(v.row));
     });
     const b = [Number(lk.tx), Number(lk.ty)];
@@ -623,99 +790,3 @@
 
   function hitTestApronLinkVertex(wx, wy) {
     if (!state.selectedObject || state.selectedObject.type !== 'apronLink') return null;
-    const lk = state.selectedObject.obj;
-    if (!lk || lk.id !== state.selectedObject.id) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    const tx = Number(lk.tx), ty = Number(lk.ty);
-    if (isFinite(tx) && isFinite(ty)) {
-      const d2 = dist2([tx, ty], click);
-      if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'taxiway' }; }
-    }
-    (lk.midVertices || []).forEach((v, idx) => {
-      const [vx, vy] = cellToPixel(Number(v.col), Number(v.row));
-      const d2 = dist2([vx, vy], click);
-      if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'mid', midIndex: idx }; }
-    });
-    return best;
-  }
-
-  function isSelectedVertex(type, objectId, index) {
-    const sv = state.selectedVertex;
-    return !!(sv && sv.type === type && sv.id === objectId && sv.index === index);
-  }
-
-  function removeSelectedVertex() {
-    const sv = state.selectedVertex;
-    if (!sv) return false;
-    if (sv.type === 'terminal') {
-      const term = state.terminals.find(t => t.id === sv.id);
-      if (!term || !Array.isArray(term.vertices) || sv.index < 0 || sv.index >= term.vertices.length) return false;
-      if (term.closed && term.vertices.length <= 3) return false;
-      pushUndo();
-      term.vertices.splice(sv.index, 1);
-      if (term.vertices.length < 3) term.closed = false;
-      state.selectedVertex = null;
-      if (state.currentTerminalId === term.id) syncPanelFromState();
-      updateObjectInfo();
-      draw();
-      return true;
-    }
-    if (sv.type === 'taxiway') {
-      const tw = state.taxiways.find(t => t.id === sv.id);
-      if (!tw || !Array.isArray(tw.vertices) || sv.index < 0 || sv.index >= tw.vertices.length) return false;
-      if (tw.vertices.length <= 2) return false;
-      pushUndo();
-      tw.vertices.splice(sv.index, 1);
-      if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
-      state.selectedVertex = null;
-      syncPanelFromState();
-      updateObjectInfo();
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      return true;
-    }
-    if (sv.type === 'apronLink') {
-      if (sv.kind !== 'mid') return false;
-      const lk = state.apronLinks.find(l => l.id === sv.id);
-      if (!lk || !Array.isArray(lk.midVertices) || sv.midIndex < 0 || sv.midIndex >= lk.midVertices.length) return false;
-      pushUndo();
-      lk.midVertices.splice(sv.midIndex, 1);
-      if (!lk.midVertices.length) delete lk.midVertices;
-      state.selectedVertex = null;
-      updateObjectInfo();
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      return true;
-    }
-    return false;
-  }
-
-  function removeLastDrawingVertex() {
-    if (state.terminalDrawingId) {
-      const term = state.terminals.find(t => t.id === state.terminalDrawingId);
-      if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return false;
-      pushUndo();
-      term.vertices.pop();
-      if (!term.vertices.length) state.layoutPathDrawPointer = null;
-      state.selectedVertex = null;
-      syncPanelFromState();
-      updateObjectInfo();
-      draw();
-      return true;
-    }
-    if (state.taxiwayDrawingId) {
-      const tw = state.taxiways.find(t => t.id === state.taxiwayDrawingId);
-      if (!tw || !Array.isArray(tw.vertices) || !tw.vertices.length) return false;
-      pushUndo();
-      tw.vertices.pop();
-      if (!tw.vertices.length) state.layoutPathDrawPointer = null;
-      if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
-      else {
-        tw.start_point = null;
-        tw.end_point = null;
-      }
-      state.selectedVertex = null;
-      syncPanelFromState();

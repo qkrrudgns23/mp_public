@@ -1,3 +1,99 @@
+    const lk = state.selectedObject.obj;
+    if (!lk || lk.id !== state.selectedObject.id) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    const tx = Number(lk.tx), ty = Number(lk.ty);
+    if (isFinite(tx) && isFinite(ty)) {
+      const d2 = dist2([tx, ty], click);
+      if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'taxiway' }; }
+    }
+    (lk.midVertices || []).forEach((v, idx) => {
+      const [vx, vy] = cellToPixel(Number(v.col), Number(v.row));
+      const d2 = dist2([vx, vy], click);
+      if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'mid', midIndex: idx }; }
+    });
+    return best;
+  }
+
+  function isSelectedVertex(type, objectId, index) {
+    const sv = state.selectedVertex;
+    return !!(sv && sv.type === type && sv.id === objectId && sv.index === index);
+  }
+
+  function removeSelectedVertex() {
+    const sv = state.selectedVertex;
+    if (!sv) return false;
+    if (sv.type === 'terminal') {
+      const term = state.terminals.find(t => t.id === sv.id);
+      if (!term || !Array.isArray(term.vertices) || sv.index < 0 || sv.index >= term.vertices.length) return false;
+      if (term.closed && term.vertices.length <= 3) return false;
+      pushUndo();
+      term.vertices.splice(sv.index, 1);
+      if (term.vertices.length < 3) term.closed = false;
+      state.selectedVertex = null;
+      if (state.currentTerminalId === term.id) syncPanelFromState();
+      updateObjectInfo();
+      draw();
+      return true;
+    }
+    if (sv.type === 'taxiway') {
+      const tw = state.taxiways.find(t => t.id === sv.id);
+      if (!tw || !Array.isArray(tw.vertices) || sv.index < 0 || sv.index >= tw.vertices.length) return false;
+      if (tw.vertices.length <= 2) return false;
+      pushUndo();
+      tw.vertices.splice(sv.index, 1);
+      if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
+      state.selectedVertex = null;
+      syncPanelFromState();
+      updateObjectInfo();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    if (sv.type === 'apronLink') {
+      if (sv.kind !== 'mid') return false;
+      const lk = state.apronLinks.find(l => l.id === sv.id);
+      if (!lk || !Array.isArray(lk.midVertices) || sv.midIndex < 0 || sv.midIndex >= lk.midVertices.length) return false;
+      pushUndo();
+      lk.midVertices.splice(sv.midIndex, 1);
+      if (!lk.midVertices.length) delete lk.midVertices;
+      state.selectedVertex = null;
+      updateObjectInfo();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    return false;
+  }
+
+  function removeLastDrawingVertex() {
+    if (state.terminalDrawingId) {
+      const term = state.terminals.find(t => t.id === state.terminalDrawingId);
+      if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return false;
+      pushUndo();
+      term.vertices.pop();
+      if (!term.vertices.length) state.layoutPathDrawPointer = null;
+      state.selectedVertex = null;
+      syncPanelFromState();
+      updateObjectInfo();
+      draw();
+      return true;
+    }
+    if (state.taxiwayDrawingId) {
+      const tw = state.taxiways.find(t => t.id === state.taxiwayDrawingId);
+      if (!tw || !Array.isArray(tw.vertices) || !tw.vertices.length) return false;
+      pushUndo();
+      tw.vertices.pop();
+      if (!tw.vertices.length) state.layoutPathDrawPointer = null;
+      if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
+      else {
+        tw.start_point = null;
+        tw.end_point = null;
+      }
+      state.selectedVertex = null;
+      syncPanelFromState();
       updateObjectInfo();
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
@@ -532,99 +628,3 @@
         return;
       }
       undoStack.push({
-        terminals: JSON.parse(JSON.stringify(state.terminals || [])),
-        pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
-        remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
-        holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
-        taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
-        apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
-        layoutImageOverlay: snapshot,
-        layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
-        directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
-        flights: cloneFlightsWithoutPathPolylineCache(state.flights)
-      });
-      if (undoStack.length > maxUndoLevels) undoStack.shift();
-      syncPanelFromState();
-      invalidateGridUnderlay();
-      draw();
-    });
-  }
-  const gridLayoutImageFileEl = document.getElementById('gridLayoutImageFile');
-  if (gridLayoutImageFileEl) {
-    gridLayoutImageFileEl.addEventListener('change', function() {
-      const file = this.files && this.files[0];
-      if (!file) return;
-      const fileType = String(file.type || '').toLowerCase();
-      const fileName = String(file.name || 'Layout image');
-      const accepted = fileType === 'image/png' || fileType === 'image/jpeg' || fileType === 'image/svg+xml' ||
-        /\.(png|jpe?g|svg)$/i.test(fileName);
-      if (!accepted) {
-        alert('Only PNG, JPG, JPEG, and SVG files are supported.');
-        this.value = '';
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = function(ev) {
-        const dataUrl = ev && ev.target ? String(ev.target.result || '') : '';
-        if (!dataUrl) return;
-        const img = new Image();
-        img.onload = function() {
-          const widthM = state.layoutImageOverlay ? clampLayoutImageSize(state.layoutImageOverlay.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM) : GRID_LAYOUT_IMAGE_DEFAULTS.widthM;
-          const aspect = (img.naturalWidth > 0 && img.naturalHeight > 0)
-            ? (img.naturalHeight / img.naturalWidth)
-            : (GRID_LAYOUT_IMAGE_DEFAULTS.heightM / Math.max(GRID_LAYOUT_IMAGE_DEFAULTS.widthM, 1e-9));
-          const heightM = state.layoutImageOverlay
-            ? clampLayoutImageSize(state.layoutImageOverlay.heightM, Math.max(1, widthM * aspect))
-            : Math.max(1, widthM * aspect);
-          pushUndo();
-          state.layoutImageOverlay = normalizeLayoutImageOverlay({
-            name: fileName,
-            type: fileType || 'image/png',
-            dataUrl: dataUrl,
-            opacity: state.layoutImageOverlay ? state.layoutImageOverlay.opacity : GRID_LAYOUT_IMAGE_DEFAULTS.opacity,
-            widthM: widthM,
-            heightM: heightM,
-            originalWidthPx: img.naturalWidth || widthM,
-            originalHeightPx: img.naturalHeight || heightM,
-            topLeftCol: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftCol : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol,
-            topLeftRow: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftRow : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow
-          });
-          syncLayoutImageBitmap();
-          syncPanelFromState();
-          draw();
-        };
-        img.onerror = function() {
-          alert('Failed to read the selected layout image.');
-          gridLayoutImageFileEl.value = '';
-        };
-        img.src = dataUrl;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-  const clearGridLayoutImageBtn = document.getElementById('btnClearGridLayoutImage');
-  if (clearGridLayoutImageBtn) {
-    clearGridLayoutImageBtn.addEventListener('click', function() {
-      if (!state.layoutImageOverlay) return;
-      pushUndo();
-      state.layoutImageOverlay = null;
-      layoutImageBitmap = null;
-      layoutImageBitmapSrc = '';
-      if (gridLayoutImageFileEl) gridLayoutImageFileEl.value = '';
-      syncPanelFromState();
-      draw();
-    });
-  }
-  commitGridLayoutImageNumericChange('gridLayoutImageOpacity', function(input) {
-    state.layoutImageOverlay.opacity = clampLayoutImageOpacity(input.value);
-  });
-  commitGridLayoutImageNumericChange('gridLayoutImageWidthM', function(input) {
-    applyLayoutImageWidthByAspect(input.value);
-  });
-  commitGridLayoutImageNumericChange('gridLayoutImageHeightM', function(input) {
-    applyLayoutImageHeightByAspect(input.value);
-  });
-  commitGridLayoutImageNumericChange('gridLayoutImageCol', function(input) {
-    state.layoutImageOverlay.topLeftCol = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftCol);
-  });
-  commitGridLayoutImageNumericChange('gridLayoutImageRow', function(input) {

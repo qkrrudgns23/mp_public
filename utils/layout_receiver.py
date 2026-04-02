@@ -18,14 +18,12 @@ from typing import Any, Dict, Optional
 # Standalone receiver: Layout JSON must be data/Layout_storage/ Save only to
 _ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_STORAGE_DIR = (_ROOT / "data" / "Layout_storage").resolve()
+RESULT_STORAGE_DIR = (_ROOT / "data" / "Result_storage").resolve()
 LAYOUT_FILE = LAYOUT_STORAGE_DIR / "current_layout.json"
 DEFAULT_LAYOUT_PATH = LAYOUT_STORAGE_DIR / "default_layout.json"
 
 _PORT = 8765
 _RESERVED_NAMES = frozenset({"current_layout", "default_layout"})
-
-SIM_INPUT_PATH = LAYOUT_STORAGE_DIR / "sim_input.json"
-SIM_OUTPUT_PATH = LAYOUT_STORAGE_DIR / "sim_output.json"
 
 _sim_progress: Dict[str, Any] = {
     "running": False,
@@ -41,6 +39,16 @@ def _sanitize_layout_name(name: str) -> str:
     s = (name or "").strip()
     s = re.sub(r'[<>:"/\\|?*]', "_", s)
     return s[:200] if s else ""
+
+
+def _remove_legacy_layout_storage_sim_files() -> None:
+    """Older builds wrote sim_input/sim_output under Layout_storage; remove if present."""
+    for legacy in (LAYOUT_STORAGE_DIR / "sim_input.json", LAYOUT_STORAGE_DIR / "sim_output.json"):
+        try:
+            if legacy.is_file():
+                legacy.unlink()
+        except OSError:
+            pass
 
 
 def _safe_layout_path(name: str) -> Optional[Path]:
@@ -110,6 +118,27 @@ def list_layout_names():
         return []
 
 
+def _try_resolve_sim_result_path(layout_name_safe: str) -> Optional[Path]:
+    """Named result file under Result_storage (and cwd fallbacks for that name)."""
+    RESULT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    ordered: list[Path] = []
+    if layout_name_safe:
+        ordered.append(RESULT_STORAGE_DIR / f"{layout_name_safe}_sim_result.json")
+        try:
+            ordered.append(Path.cwd() / "data" / "Result_storage" / f"{layout_name_safe}_sim_result.json")
+            ordered.append(Path.cwd().parent / "data" / "Result_storage" / f"{layout_name_safe}_sim_result.json")
+        except Exception:
+            pass
+    for raw in ordered:
+        try:
+            p = raw.resolve()
+            if p.is_file():
+                return p
+        except Exception:
+            continue
+    return None
+
+
 def delete_layout(name: str) -> None:
     """Layout_storageof that name in json Delete file. default_layout/current_layout cannot be deleted."""
     if not name or (name or "").strip().lower() in _RESERVED_NAMES:
@@ -146,6 +175,49 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 self._send_cors()
                 self.end_headers()
                 self.wfile.write(body)
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
+        if self.path.startswith("/api/load-sim-result"):
+            qs = parse_qs(urlparse(self.path).query)
+            names = qs.get("name", [])
+            name = (names[0] or "").strip() if names else ""
+            safe = _sanitize_layout_name(name)
+            path = _try_resolve_sim_result_path(safe)
+            if path is None or not path.is_file():
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(
+                    json.dumps({
+                        "ok": False,
+                        "error": "not_found",
+                        "hint": "Run Pro Sim first, or check data/Result_storage/{name}_sim_result.json",
+                    }).encode("utf-8")
+                )
+                return
+            try:
+                raw_text = path.read_text(encoding="utf-8")
+                try:
+                    parsed = json.loads(raw_text)
+                    if isinstance(parsed, dict) and "flight_edge_paths" in parsed:
+                        parsed = dict(parsed)
+                        parsed.pop("flight_edge_paths", None)
+                        body = json.dumps(parsed, ensure_ascii=False, indent=2, default=str)
+                    else:
+                        body = raw_text
+                except json.JSONDecodeError:
+                    body = raw_text
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(body.encode("utf-8"))
             except Exception as e:
                 self.send_response(500)
                 self.send_header("Content-Type", "application/json")
@@ -226,10 +298,21 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
             try:
                 obj = json.loads(body)
                 layout = obj.get("layout", obj) if isinstance(obj, dict) else obj
-                LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-                SIM_INPUT_PATH.write_text(
+                layout_name_raw = ""
+                if isinstance(obj, dict):
+                    layout_name_raw = (
+                        obj.get("layoutName") or obj.get("name") or ""
+                    ).strip()
+                result_stem = _sanitize_layout_name(layout_name_raw) or "default_layout"
+                RESULT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+                sim_input_path = (RESULT_STORAGE_DIR / f"{result_stem}_sim_input.json").resolve()
+                rs_resolved_in = RESULT_STORAGE_DIR.resolve()
+                if not (sim_input_path.parent == rs_resolved_in or rs_resolved_in in sim_input_path.parents):
+                    raise ValueError("invalid sim input path")
+                sim_input_path.write_text(
                     json.dumps(layout, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
+                _remove_legacy_layout_storage_sim_files()
                 with _sim_lock:
                     if _sim_progress["running"]:
                         self.send_response(409)
@@ -242,7 +325,11 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                         return
                     _sim_progress.update(running=True, current=0, total=0,
                                          percent=0, error=None, resultFile=None)
-                t = threading.Thread(target=_run_simulation_thread, args=(layout,), daemon=True)
+                t = threading.Thread(
+                    target=_run_simulation_thread,
+                    args=(layout, result_stem),
+                    daemon=True,
+                )
                 t.start()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -298,19 +385,28 @@ def _sim_progress_cb(current_time: float, total_time: float) -> None:
         _sim_progress.update(current=current_time, total=total_time, percent=pct)
 
 
-def _run_simulation_thread(layout: Dict[str, Any]) -> None:
+def _run_simulation_thread(layout: Dict[str, Any], result_stem: str) -> None:
     try:
         from utils.airside_sim import run_simulation
         result = run_simulation(layout, progress_cb=_sim_progress_cb)
-        output = result if isinstance(result, dict) else {}
-        LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-        SIM_OUTPUT_PATH.write_text(
-            json.dumps(output, ensure_ascii=False, indent=2, default=str),
-            encoding="utf-8",
-        )
+        output = dict(result) if isinstance(result, dict) else {}
+        output.pop("flight_edge_paths", None)
+        RESULT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        safe_stem = _sanitize_layout_name(result_stem) or "default_layout"
+        named_path = (RESULT_STORAGE_DIR / f"{safe_stem}_sim_result.json").resolve()
+        rs_resolved = RESULT_STORAGE_DIR.resolve()
+        if not (named_path.parent == rs_resolved or rs_resolved in named_path.parents):
+            raise ValueError("invalid result path")
+        payload = json.dumps(output, ensure_ascii=False, indent=2, default=str)
+        named_path.write_text(payload, encoding="utf-8")
+        _remove_legacy_layout_storage_sim_files()
         with _sim_lock:
-            _sim_progress.update(running=False, percent=100,
-                                 resultFile="sim_output.json", error=None)
+            _sim_progress.update(
+                running=False,
+                percent=100,
+                resultFile=f"{safe_stem}_sim_result.json",
+                error=None,
+            )
     except Exception as e:
         import traceback
         traceback.print_exc()

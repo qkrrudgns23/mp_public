@@ -506,11 +506,12 @@
     {
       const sel = state.selectedObject;
       const rid = state.flightPathRevealFlightId;
-      if (sel && sel.type === 'flight' && rid != null && sel.id === rid) {
+      if (sel && sel.type === 'flight' && rid != null && String(sel.id) === String(rid)) {
         drawFlightPathHighlight();
         drawDeparturePathHighlight();
       }
     }
+    drawProSimFlightPathEdges();
     drawApproachPreviewPaths2D();
     drawHoldingQueueGhostFlights2D();
     drawFlights2D();

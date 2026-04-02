@@ -61,6 +61,9 @@
   const PRE_TOUCHDOWN_HALO_ENABLED = (_algoSimTier.preTouchdownHaloEnabled !== false);
   const PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC = Math.max(0, Number(_algoSimTier.playbackLeadBeforeFirstTouchdownSec) || 0);
   const MAX_LAZY_TIMELINE_BUILDS_PER_FRAME = Math.max(1, Math.min(64, Number(_algoSimTier.maxLazyTimelineBuildsPerFrame) || 6));
+  const _pathSearchTier = (_algoTier.pathSearch && typeof _algoTier.pathSearch === 'object') ? _algoTier.pathSearch : {};
+  const _junctionMergeRadiusRaw = Number(_pathSearchTier.junctionMergeRadiusPx);
+  const PATH_JUNCTION_MERGE_RADIUS_PX = (isFinite(_junctionMergeRadiusRaw) && _junctionMergeRadiusRaw >= 0) ? _junctionMergeRadiusRaw : 7;
   const _styleTier = _tiers.style || {};
   const _ganttStyle = _styleTier.gantt || {};
   const GANTT_VISIBLE_WINDOW_MIN = Math.max(60, Number(_ganttStyle.visibleWindowMin) || 360);
