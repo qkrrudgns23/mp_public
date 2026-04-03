@@ -10732,6 +10732,114 @@
     ctx.restore();
   }
 
+  const PRO_SIM_PHASE_Z = { Landing: 0, Arr_taxi: 1, Dep_taxi: 2 };
+  function proSimPhaseStrokeStyle(phaseRaw) {
+    const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : 'Landing';
+    if (p === 'Arr_taxi') {
+      return { wMul: 1.72, stroke: '#3b82f6' };
+    }
+    if (p === 'Dep_taxi') {
+      return { wMul: 0.58, stroke: '#ef4444' };
+    }
+    return { wMul: 1.72, stroke: '#22c55e' };
+  }
+  function drawProSimSegmentArrows(edgePts, arrowFill, spacingPx, headSizePx) {
+    if (!Array.isArray(edgePts) || edgePts.length < 2) return;
+    const spacing = Math.max(14, spacingPx || 36);
+    let count = 0;
+    const headSize = Math.max(4, headSizePx || 10);
+    let refUx = 0;
+    let refUy = 0;
+    let refSet = false;
+    for (let i = 1; i < edgePts.length && !refSet; i++) {
+      const p0 = edgePts[i - 1];
+      const p1 = edgePts[i];
+      const segLen = pathDist(p0, p1);
+      if (segLen < 1e-6) continue;
+      refUx = (p1[0] - p0[0]) / segLen;
+      refUy = (p1[1] - p0[1]) / segLen;
+      refSet = true;
+    }
+    if (!refSet) return;
+    for (let i = 1; i < edgePts.length && count < PATH_DIRECTION_ARROWS_MAX; i++) {
+      const p0 = edgePts[i - 1];
+      const p1 = edgePts[i];
+      const segLen = pathDist(p0, p1);
+      if (segLen < 1e-6) continue;
+      const ux = (p1[0] - p0[0]) / segLen;
+      const uy = (p1[1] - p0[1]) / segLen;
+      if (ux * refUx + uy * refUy < -0.08) continue;
+      const px = -uy;
+      const py = ux;
+      for (let d = spacing * 0.55; d < segLen - headSize * 0.35 && count < PATH_DIRECTION_ARROWS_MAX; d += spacing) {
+        const tTip = d / segLen;
+        const tipx = p0[0] + (p1[0] - p0[0]) * tTip;
+        const tipy = p0[1] + (p1[1] - p0[1]) * tTip;
+        const baseX = tipx - ux * headSize;
+        const baseY = tipy - uy * headSize;
+        ctx.save();
+        ctx.fillStyle = arrowFill;
+        ctx.beginPath();
+        ctx.moveTo(tipx, tipy);
+        ctx.lineTo(baseX + px * headSize * 0.45, baseY + py * headSize * 0.45);
+        ctx.lineTo(baseX - px * headSize * 0.45, baseY - py * headSize * 0.45);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        count++;
+      }
+    }
+  }
+  function orientProSimEdgePts(edgePts, prevEnd, prevUx, prevUy) {
+    let pts = edgePts.slice();
+    if (pts.length < 2) return pts;
+    if (prevEnd) {
+      const d0 = dist2(pts[0], prevEnd);
+      const d1 = dist2(pts[pts.length - 1], prevEnd);
+      if (d1 + 9 < d0) {
+        pts.reverse();
+      } else if (Math.abs(d0 - d1) <= 36 && prevUx != null && prevUy != null) {
+        let vx = 0;
+        let vy = 0;
+        for (let i = 1; i < pts.length; i++) {
+          const dx = pts[i][0] - pts[i - 1][0];
+          const dy = pts[i][1] - pts[i - 1][1];
+          const sl = Math.hypot(dx, dy);
+          if (sl > 1e-6) {
+            vx = dx / sl;
+            vy = dy / sl;
+            break;
+          }
+        }
+        if (vx * prevUx + vy * prevUy < -0.15) pts.reverse();
+      }
+    } else if (prevUx != null && prevUy != null) {
+      let vx = 0;
+      let vy = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const dx = pts[i][0] - pts[i - 1][0];
+        const dy = pts[i][1] - pts[i - 1][1];
+        const sl = Math.hypot(dx, dy);
+        if (sl > 1e-6) {
+          vx = dx / sl;
+          vy = dy / sl;
+          break;
+        }
+      }
+      if (vx * prevUx + vy * prevUy < -0.15) pts.reverse();
+    }
+    return pts;
+  }
+  function proSimOutgoingUnit(edgePts) {
+    if (!edgePts || edgePts.length < 2) return { ux: null, uy: null };
+    for (let i = edgePts.length - 1; i >= 1; i--) {
+      const dx = edgePts[i][0] - edgePts[i - 1][0];
+      const dy = edgePts[i][1] - edgePts[i - 1][1];
+      const sl = Math.hypot(dx, dy);
+      if (sl > 1e-6) return { ux: dx / sl, uy: dy / sl };
+    }
+    return { ux: null, uy: null };
+  }
   function drawProSimFlightPathEdges() {
     const sel = state.selectedObject;
     const rid = state.flightPathRevealFlightId;
@@ -10743,40 +10851,78 @@
     (state.derivedGraphEdges || []).forEach(function(ed) {
       if (ed && ed.id) byId[ed.id] = ed;
     });
+    const baseW = Math.max(4.2, CELL_SIZE * 0.148);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    const glow = '#4ade80';
-    const core = '#f7fee7';
-    ids.forEach(function(eid) {
-      const key = eid != null ? String(eid).trim() : '';
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    let prevEnd = null;
+    let prevUx = null;
+    let prevUy = null;
+    let lastDrawnKey = null;
+    let seqIx = 0;
+    const drawList = [];
+    ids.forEach(function(entry) {
+      let key = '';
+      let phase = 'Landing';
+      if (entry != null) {
+        if (typeof entry === 'string' || typeof entry === 'number') {
+          key = String(entry).trim();
+        } else if (typeof entry === 'object') {
+          const rawId = entry.edge_id != null ? entry.edge_id : entry.id;
+          key = rawId != null ? String(rawId).trim() : '';
+          if (entry.phase != null) phase = String(entry.phase).trim() || 'Landing';
+        }
+      }
+      if (key && key === lastDrawnKey) {
+        return;
+      }
+      const st = proSimPhaseStrokeStyle(phase);
+      const lineW = baseW * st.wMul;
       const e = key ? byId[key] : null;
       if (!e) return;
-      const edgePts = (e.pts && e.pts.length >= 2) ? e.pts : [[e.x1, e.y1], [e.x2, e.y2]];
+      let rawPts = (e.pts && e.pts.length >= 2) ? e.pts.slice() : [[e.x1, e.y1], [e.x2, e.y2]];
+      let edgePts = orientProSimEdgePts(rawPts, prevEnd, prevUx, prevUy);
+      const z = Object.prototype.hasOwnProperty.call(PRO_SIM_PHASE_Z, phase) ? PRO_SIM_PHASE_Z[phase] : 0;
+      drawList.push({
+        edgePts: edgePts,
+        st: st,
+        lineW: lineW,
+        z: z,
+        seq: seqIx++,
+      });
+      prevEnd = edgePts[edgePts.length - 1];
+      const ou = proSimOutgoingUnit(edgePts);
+      if (ou.ux != null) {
+        prevUx = ou.ux;
+        prevUy = ou.uy;
+      }
+      lastDrawnKey = key;
+    });
+    drawList.sort(function(a, b) {
+      if (a.z !== b.z) return a.z - b.z;
+      return a.seq - b.seq;
+    });
+    drawList.forEach(function(item) {
+      const edgePts = item.edgePts;
       ctx.beginPath();
       ctx.moveTo(edgePts[0][0], edgePts[0][1]);
       for (let i = 1; i < edgePts.length; i++) ctx.lineTo(edgePts[i][0], edgePts[i][1]);
-      ctx.save();
-      ctx.strokeStyle = glow;
-      ctx.lineWidth = Math.max(14, CELL_SIZE * 0.36);
-      ctx.shadowColor = '#86efac';
-      ctx.shadowBlur = Math.max(24, CELL_SIZE * 0.55);
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 0;
-      ctx.globalAlpha = 0.65;
+      ctx.strokeStyle = item.st.stroke;
+      ctx.lineWidth = item.lineW;
+      ctx.globalAlpha = 0.92;
       ctx.stroke();
-      ctx.restore();
-      ctx.beginPath();
-      ctx.moveTo(edgePts[0][0], edgePts[0][1]);
-      for (let i = 1; i < edgePts.length; i++) ctx.lineTo(edgePts[i][0], edgePts[i][1]);
-      ctx.strokeStyle = core;
-      ctx.lineWidth = Math.max(7, CELL_SIZE * 0.2);
-      ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
-      ctx.stroke();
+      drawProSimSegmentArrows(
+        edgePts,
+        'rgba(250, 250, 250, 0.82)',
+        Math.max(20, CELL_SIZE * 0.34),
+        Math.max(4.5, CELL_SIZE * 0.135)
+      );
     });
     ctx.restore();
   }
@@ -10802,7 +10948,7 @@
     }
     return pathPts[pathPts.length - 1];
   }
-  function drawPolylineDirectionArrows(pathPts, strokeStyle, arrowFill, lineWidth, spacingPx, headSizePx) {
+  function drawPolylineDirectionArrows(pathPts, strokeStyle, arrowFill, lineWidth, spacingPx, headSizePx, omitStroke) {
     if (!Array.isArray(pathPts) || pathPts.length < 2) return;
     const totalLen = polylineLengthPx(pathPts);
     if (!(totalLen > 1e-6)) return;
@@ -10833,7 +10979,7 @@
       ctx.lineTo(baseX - px * headSize * 0.45, baseY - py * headSize * 0.45);
       ctx.closePath();
       ctx.fill();
-      ctx.stroke();
+      if (!omitStroke) ctx.stroke();
       ctx.restore();
       arrowCount++;
     }
