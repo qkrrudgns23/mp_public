@@ -51,6 +51,7 @@ PHASE_LANDING = "Landing"
 PHASE_ARR_TAXI = "Arr_taxi"
 PHASE_DEP_TAXI = "Dep_taxi"
 _EXTRACT_LEG_PHASES: Tuple[str, str, str] = (PHASE_LANDING, PHASE_ARR_TAXI, PHASE_DEP_TAXI)
+SIM_MAX_TIME_SEC = 200_000.0
 
 
 def _arr_ret_decel_floor_ms(phase: str, path_type: str, accel_ms2: float) -> float:
@@ -359,6 +360,9 @@ class Flight:
     history: List[Tuple[float, float, float, float]] = field(default_factory=list)
     eldt_anchor_sec: Optional[float] = None
     dep_taxi_start_sim_time: Optional[float] = None
+    arr_runway_id: Optional[str] = None
+    arr_runway_dir: Optional[str] = None
+    exit_runway_abs_sec: Optional[float] = None
 
 
 def resolve_route_endpoint_index(
@@ -633,6 +637,88 @@ def _polyline_point_at_dist_px(
         acc += seg_len
     last = pts[-1]
     return (float(last[0]), float(last[1]))
+
+
+def _point_segment_distance_sq(
+    px: float, py: float, x1: float, y1: float, x2: float, y2: float
+) -> float:
+    dx = x2 - x1
+    dy = y2 - y1
+    d2 = dx * dx + dy * dy
+    if d2 < 1e-18:
+        dx0 = px - x1
+        dy0 = py - y1
+        return dx0 * dx0 + dy0 * dy0
+    t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / d2))
+    qx = x1 + t * dx
+    qy = y1 + t * dy
+    dxq = px - qx
+    dyq = py - qy
+    return dxq * dxq + dyq * dyq
+
+
+def _min_distance_point_to_polyline(
+    px: float, py: float, verts: List[Tuple[float, float]]
+) -> float:
+    if len(verts) < 2:
+        return float("inf")
+    best_sq = float("inf")
+    for i in range(len(verts) - 1):
+        dsq = _point_segment_distance_sq(
+            px, py, verts[i][0], verts[i][1], verts[i + 1][0], verts[i + 1][1]
+        )
+        if dsq < best_sq:
+            best_sq = dsq
+    return math.sqrt(best_sq)
+
+
+def _oriented_arr_runway_centerline_px(
+    layout: Dict[str, Any],
+    cell_size: float,
+    runway_id: str,
+    ops_dir: Optional[str],
+) -> Optional[List[Tuple[float, float]]]:
+    coords = _runway_polyline_coords_px(layout, cell_size, runway_id)
+    if not coords or len(coords) < 2:
+        return None
+    if ops_dir == "counter_clockwise":
+        return list(reversed(coords))
+    return coords
+
+
+def _try_record_exit_runway_abs_sec(
+    agent: Flight,
+    layout: Dict[str, Any],
+    cell_size: float,
+    pixels_per_meter: float,
+    threshold_m: float,
+    rel_t_after_step: float,
+) -> None:
+    """
+    First sim time (absolute schedule sec) when, after Arr RET / post-Landing segment,
+    perpendicular distance from aircraft center to oriented arr runway centerline ≥ threshold_m.
+    """
+    if agent.exit_runway_abs_sec is not None:
+        return
+    if agent.eldt_anchor_sec is None:
+        return
+    rid = agent.arr_runway_id
+    if not rid or not str(rid).strip():
+        return
+    if not agent.edge_phases or agent.edge_phases[0] == PHASE_LANDING:
+        return
+    verts = _oriented_arr_runway_centerline_px(
+        layout, cell_size, str(rid), agent.arr_runway_dir
+    )
+    if not verts:
+        return
+    ppm = max(float(pixels_per_meter), 1e-9)
+    d_px = _min_distance_point_to_polyline(float(agent.col), float(agent.row), verts)
+    d_m = d_px / ppm
+    if d_m + 1e-9 >= float(threshold_m):
+        agent.exit_runway_abs_sec = float(agent.eldt_anchor_sec) + float(
+            rel_t_after_step
+        )
 
 
 def _flight_arr_td_dist_px(flight: Dict[str, Any]) -> Optional[float]:
@@ -1573,6 +1659,24 @@ def _layout_pixels_per_meter(information: Dict[str, Any]) -> float:
     return 1.0
 
 
+def _exit_runway_min_perpendicular_distance_m(information: Dict[str, Any]) -> float:
+    v = _deep_get(
+        information,
+        "tiers",
+        "algorithm",
+        "simulation",
+        "exitRunwayMinPerpendicularDistanceFromCenterlineM",
+    )
+    if v is not None:
+        try:
+            x = float(v)
+            if math.isfinite(x) and x > 0:
+                return x
+        except (TypeError, ValueError):
+            pass
+    return 120.0
+
+
 def _path_length_px(segments: List[Tuple[Point, Point]]) -> float:
     s = 0.0
     for p0, p1 in segments:
@@ -1735,12 +1839,44 @@ def _dwell_sec_from_flight(fobj: Dict[str, Any]) -> float:
     return dwell_sec
 
 
+def _compress_agent_history_for_dwell_export(
+    history: List[Tuple[float, float, float, float]],
+    anchor_sec: Optional[float],
+    eibt_sec: Optional[float],
+    eobt_sec: Optional[float],
+) -> List[Tuple[float, float, float, float]]:
+    """
+    Drop interior samples while gate dwell (EIBT..EOBT inclusive), keeping endpoints only.
+    Absolute time per row matches export: ``anchor_sec + t_rel``.
+    """
+    if anchor_sec is None or eibt_sec is None or eobt_sec is None:
+        return history
+    eibt = float(eibt_sec)
+    eobt = float(eobt_sec)
+    if eobt <= eibt + 1e-9:
+        return history
+    anch = float(anchor_sec)
+    n = len(history)
+    if n <= 2:
+        return history
+    in_band: List[int] = []
+    for i in range(n):
+        t_abs = anch + float(history[i][0])
+        if eibt - 1e-9 <= t_abs <= eobt + 1e-9:
+            in_band.append(i)
+    if len(in_band) <= 2:
+        return history
+    drop = set(in_band[1:-1])
+    return [history[i] for i in range(n) if i not in drop]
+
+
 def _build_schedule_row(
     fobj: Dict[str, Any],
     fid: str,
     prep: PreparedFlightPath,
     pixels_per_meter: float,
     base_date: str,
+    exit_runway_abs_sec: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     S series from ``*_Min_orig``; Sd echo from ``*_Min_d``; E series from path timing + dwell.
@@ -1783,6 +1919,12 @@ def _build_schedule_row(
     def _sf(x: Optional[int]) -> Optional[float]:
         return float(x) if x is not None else None
 
+    exit_rw_s = (
+        _sim_sec_optional(exit_runway_abs_sec)
+        if exit_runway_abs_sec is not None
+        else None
+    )
+
     return {
         "flight_id": fid,
         "reg": _flight_opt_str(fobj, "reg"),
@@ -1806,8 +1948,8 @@ def _build_schedule_row(
         "STOT_sd_dt": _sec_to_datetime_str(_sf(stot_d), base_date),
         "ELDT": eldt_sec,
         "ELDT_dt": _sec_to_datetime_str(_sf(eldt_sec), base_date),
-        "EXIT_RUNWAY": None,
-        "EXIT_RUNWAY_dt": None,
+        "EXIT_RUNWAY": exit_rw_s,
+        "EXIT_RUNWAY_dt": _sec_to_datetime_str(exit_runway_abs_sec, base_date),
         "ARR_ROT_SEC": _sim_sec_optional(arr_rot_sec) if arr_rot_sec is not None else None,
         "EIBT": _sim_sec_optional(eibt_sec) if eibt_sec is not None else None,
         "EIBT_dt": _sec_to_datetime_str(eibt_sec, base_date),
@@ -1828,6 +1970,7 @@ def run_simulation(
     cell_size = float(layout.get("grid", {}).get("cellSize", 20.0))
     dt_sec = _sim_time_step_sec(information, dt)
     pixels_per_meter = _layout_pixels_per_meter(information)
+    exit_rw_thr_m = _exit_runway_min_perpendicular_distance_m(information)
 
     flights_raw = layout.get("flights") if isinstance(layout.get("flights"), list) else []
     total = max(1, len(flights_raw))
@@ -1884,6 +2027,7 @@ def run_simulation(
             dep_start_sim = (
                 float(ti_hold) + float(dwell_s) if ti_hold is not None else None
             )
+            _arr_rid = str(arr_rwy_o).strip() if arr_rwy_o else ""
             ag_new = Flight(
                 id=fid,
                 edge_ids=list(eids),
@@ -1899,6 +2043,10 @@ def run_simulation(
                 segment_accel_ms2=list(acc_rem),
                 segment_path_types=path_rem,
                 dep_taxi_start_sim_time=dep_start_sim,
+                arr_runway_id=_arr_rid if _arr_rid else None,
+                arr_runway_dir=_flight_rw_dir_for_leg(fobj if isinstance(fobj, dict) else {}, 0)
+                if _arr_rid
+                else None,
             )
             if v0_rem and acc_rem and eph:
                 _v_apply = eph[0] == PHASE_LANDING and float(acc_rem[0]) < -1e-12
@@ -1924,44 +2072,32 @@ def run_simulation(
         if progress_cb:
             progress_cb(float(i + 1), float(total))
 
-    max_dur = 0.0
-    for pi, prep in enumerate(prep_list):
-        if prep.ok and prep.segment_duration_sec:
-            base = float(sum(prep.segment_duration_sec))
-            fo = (
-                flights_raw[pi]
-                if pi < len(flights_raw) and isinstance(flights_raw[pi], dict)
-                else {}
-            )
-            max_dur = max(max_dur, base + _dwell_sec_from_flight(fo))
-    total_end = max(dt_sec, max_dur + 3.0 * dt_sec)
-
     agents = list(agents_by_id.values())
     for ag in agents:
         ag.history.append((0.0, ag.col, ag.row, float(ag.velocity_ms)))
 
     current_time = 0.0
     while True:
-        has_remaining = any(ag.edge_ids for ag in agents)
-        if not has_remaining:
+        if not any(ag.edge_ids for ag in agents):
             break
-        if current_time > total_end + 1e-6:
+        if current_time + dt_sec > SIM_MAX_TIME_SEC + 1e-6:
             break
         for ag in agents:
             move_agent(ag, dt_sec, pixels_per_meter, current_time)
             ag.history.append((current_time + dt_sec, ag.col, ag.row, ag.velocity_ms))
+            _try_record_exit_runway_abs_sec(
+                ag,
+                layout,
+                cell_size,
+                pixels_per_meter,
+                exit_rw_thr_m,
+                current_time + dt_sec,
+            )
         current_time += dt_sec
         if progress_cb:
-            progress_cb(current_time, max(total_end, current_time))
+            progress_cb(current_time, SIM_MAX_TIME_SEC)
 
-    # Pop every remaining expanded segment into edge_ids_finished so edge_ids ends empty.
-    drain_dt = max(3600.0, max_dur * 4.0, total_end * 2.0, dt_sec)
-    for _ in range(10_000):
-        if not any(ag.edge_ids for ag in agents):
-            break
-        for ag in agents:
-            if ag.edge_ids:
-                move_agent(ag, drain_dt, pixels_per_meter, None)
+    # 불필요한 ag 안의 것들을 정리하는것
     for ag in agents:
         if not ag.edge_ids:
             ag.edge_phases.clear()
@@ -1973,6 +2109,32 @@ def run_simulation(
     base_date = str(
         _deep_get(information, "tiers", "algorithm", "simulation", "baseDate", default="2026-03-31")
     )
+
+    for i, fobj in enumerate(flights_raw):
+        fid = str(fobj.get("id", "")) if isinstance(fobj, dict) else ""
+        if not fid:
+            continue
+        ag = agents_by_id.get(fid)
+        if ag is None:
+            continue
+        prep_i = prep_list[i] if i < len(prep_list) else PreparedFlightPath()
+        sched_row = _build_schedule_row(
+            fobj if isinstance(fobj, dict) else {},
+            fid,
+            prep_i,
+            pixels_per_meter,
+            base_date,
+        )
+        eibt_raw = sched_row.get("EIBT")
+        eobt_raw = sched_row.get("EOBT")
+        if eibt_raw is None or eobt_raw is None:
+            continue
+        ag.history = _compress_agent_history_for_dwell_export(
+            ag.history,
+            ag.eldt_anchor_sec,
+            float(eibt_raw),
+            float(eobt_raw),
+        )
 
     positions: Dict[str, List[Dict[str, Any]]] = {}
     for ag in agents:
@@ -2000,6 +2162,7 @@ def run_simulation(
                 prep,
                 pixels_per_meter,
                 base_date,
+                exit_runway_abs_sec=(ag.exit_runway_abs_sec if ag else None),
             )
         )
         _fin_raw = list(ag.edge_ids_finished) if ag else []

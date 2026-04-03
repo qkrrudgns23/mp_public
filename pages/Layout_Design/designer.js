@@ -4440,6 +4440,27 @@
       return { x: a.x, y: a.y, dx: 1, dy: 0 };
     }
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
+    const chordEps2 = 1e-12;
+    function segmentUnitDir(segIdx) {
+      if (segIdx < 0 || segIdx > tl.length - 2) return null;
+      const p = tl[segIdx], q = tl[segIdx + 1];
+      const ddx = q.x - p.x, ddy = q.y - p.y;
+      const l2 = ddx * ddx + ddy * ddy;
+      if (l2 < chordEps2) return null;
+      const inv = 1 / Math.sqrt(l2);
+      return { dx: ddx * inv, dy: ddy * inv };
+    }
+    function headingForInterval(i) {
+      const a = tl[i], b = tl[i + 1];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const l2 = dx * dx + dy * dy;
+      if (l2 >= chordEps2) return { dx: dx, dy: dy };
+      const prev = segmentUnitDir(i - 1);
+      if (prev) return { dx: prev.dx, dy: prev.dy };
+      const next = segmentUnitDir(i + 1);
+      if (next) return { dx: next.dx, dy: next.dy };
+      return { dx: 1, dy: 0 };
+    }
     for (let i = 0; i < tl.length - 1; i++) {
       const a = tl[i], b = tl[i+1];
       if (tSec >= a.t && tSec <= b.t) {
@@ -4447,9 +4468,8 @@
         const u = (tSec - a.t) / span;
         const x = a.x + (b.x - a.x) * u;
         const y = a.y + (b.y - a.y) * u;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        return { x, y, dx, dy };
+        const h = headingForInterval(i);
+        return { x, y, dx: h.dx, dy: h.dy };
       }
     }
     return null;
@@ -8664,6 +8684,8 @@
       if (!f) continue;
       if (flightBlockedLikeNoWay(f)) continue;
       if (!f.timeline || !f.timeline.length) continue;
+      const meta = f.timeline_meta;
+      if (meta && meta.playbackSource === 'des_result') continue;
       const w = getFlightAirsideWindowSec(f);
       if (!w) { f.timeline = null; continue; }
       if (tSec > w.t1 + 1e-3 || tSec < w.t0 - pad - 1e-3) f.timeline = null;

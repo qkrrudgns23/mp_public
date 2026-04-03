@@ -698,6 +698,8 @@
       if (!f) continue;
       if (flightBlockedLikeNoWay(f)) continue;
       if (!f.timeline || !f.timeline.length) continue;
+      const meta = f.timeline_meta;
+      if (meta && meta.playbackSource === 'des_result') continue;
       const w = getFlightAirsideWindowSec(f);
       if (!w) { f.timeline = null; continue; }
       if (tSec > w.t1 + 1e-3 || tSec < w.t0 - pad - 1e-3) f.timeline = null;

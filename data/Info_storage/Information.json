@@ -1392,12 +1392,13 @@
         "junctionMergeRadiusPx": 7
       },
       "simulation": {
-        "description": "SLDT = scheduled touchdown (ELDT on-time target). Runway roll: arrDecelMs2 required; MIN_ARR_RUNWAY_VELOCITY_MS floor in code. ARR_ROT_SEC and EXIT_RUNWAY / EXIT_RUNWAY_dt are sim outputs: perpendicular distance from aircraft center to arr runway centerline ≥ EXIT_RUNWAY_MIN_PERPENDICULAR_DISTANCE_FROM_CENTERLINE_M (150 m in code). defaultArrRunwayDir / defaultDepRunwayDir / defaultDwellMin / defaultIcaoCategory apply when a flight omits those fields. playbackLeadBeforeFirstTouchdownSec, approachOffsetM (layout pixels), timeStepSec, trail, aircraft dimensions.",
+        "description": "SLDT = scheduled touchdown (ELDT on-time target). Runway roll: arrDecelMs2 required; MIN_ARR_RUNWAY_VELOCITY_MS floor in code. ARR_ROT_SEC is path-timing output. EXIT_RUNWAY / EXIT_RUNWAY_dt: after Arr RET (first active segment not Landing), first time perpendicular distance from aircraft center to oriented arr runway centerline ≥ exitRunwayMinPerpendicularDistanceFromCenterlineM (default 120 m). defaultArrRunwayDir / defaultDepRunwayDir / defaultDwellMin / defaultIcaoCategory apply when a flight omits those fields. playbackLeadBeforeFirstTouchdownSec, approachOffsetM (layout pixels), timeStepSec, trail, aircraft dimensions.",
         "maxLazyTimelineBuildsPerFrame": 6,
         "defaultArrRunwayDir": "clockwise",
         "defaultDepRunwayDir": "clockwise",
         "defaultDwellMin": 45,
         "defaultIcaoCategory": "M",
+        "exitRunwayMinPerpendicularDistanceFromCenterlineM": 120,
         "playbackLeadBeforeFirstTouchdownSec": 20,
         "timeStepSec": 1,
         "layoutPixelsPerMeter": 1,
