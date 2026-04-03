@@ -1,3 +1,8 @@
+    opacityMax: _dc.gridLayoutImage.opacityMax,
+    widthM: _dc.gridLayoutImage.widthM,
+    heightM: _dc.gridLayoutImage.heightM,
+    topLeftCol: _dc.gridLayoutImage.topLeftCol,
+    topLeftRow: _dc.gridLayoutImage.topLeftRow
   };
   let layoutImageBitmap = null;
   let layoutImageBitmapSrc = '';
@@ -169,8 +174,6 @@
     simPlaybackDockVisible: false,
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
-    showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
-    _canvasGesturePanning: false,
     currentTerminalId: null,
     selectedObject: null,
     terminalDrawingId: null,
@@ -254,7 +257,7 @@
     if (dot) {
       dot.classList.remove('stale');
       dot.classList.add('fresh');
-      dot.setAttribute('title', 'Apply된 시뮬 결과와 동기화됨 — 재생 가능');
+      dot.setAttribute('title', 'All views match the last Pro Sim run');
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
@@ -273,3 +276,15 @@
       ov.classList.add('is-visible');
       ov.setAttribute('aria-hidden', 'false');
       if (lab && label != null) lab.textContent = label;
+      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (btn) btn.disabled = true;
+    } else {
+      ov.classList.remove('is-visible');
+      ov.setAttribute('aria-hidden', 'true');
+      if (fill) fill.style.width = '0%';
+      if (btn) btn.disabled = false;
+    }
+  }
+  function scheduleAfterPaint(fn) {
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() { setTimeout(fn, 0); });

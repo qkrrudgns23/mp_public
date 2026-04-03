@@ -1,3 +1,535 @@
+      const arrTaxiDelayMin = kpiToNumber(f && f.vttADelayMin != null ? f.vttADelayMin : 0);
+      const depTaxiDelayMin = kpiToNumber(f && f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
+      const sibt = kpiToNumber(f && f.sibtMin_orig != null ? f.sibtMin_orig : (f && f.timeMin != null ? f.timeMin : null));
+      const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiMin != null && rotSec != null ? Math.max(0, sibt - arrTaxiMin - rotSec / 60) : null));
+      const dwellMin = kpiToNumber(f && f.dwellMin != null ? f.dwellMin : null);
+      const sobt = kpiToNumber(f && f.sobtMin_orig != null ? f.sobtMin_orig : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
+      const sttDepMinK = kpiToNumber(typeof getBaseVttDepMinutesToHoldingSlot === 'function' ? getBaseVttDepMinutesToHoldingSlot(f) : depTaxiMin);
+      const depRotMinK = depRotSec != null && isFinite(depRotSec) ? depRotSec / 60 : null;
+      const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depRotMinK != null && sttDepMinK != null ? sobt + depRotMinK + sttDepMinK : (sobt != null && depBlockOutMin != null ? sobt + depBlockOutMin : null)));
+      const eldt = kpiToNumber(f && f.eldtMin != null ? f.eldtMin : (f && f.sldtMin_d != null ? f.sldtMin_d : sldt));
+      const eibt = kpiToNumber(f && f.eibtMin != null ? f.eibtMin : (eldt != null && arrTaxiMin != null && rotSec != null ? eldt + arrTaxiMin + rotSec / 60 + (kpiToNumber(f.vttADelayMin) || 0) : sibt));
+      const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
+      const etot = kpiToNumber(f && f.etotMin != null ? f.etotMin : (f && f.stotMin_d != null ? f.stotMin_d : stot));
+      const failed = !!(f && flightBlockedLikeNoWay(f));
+      const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
+      const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
+      const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
+      const acDepDelay = (etot != null && stot != null) ? Math.max(0, etot - stot) : null;
+      return {
+        flight: f,
+        id: f && f.id ? f.id : '',
+        reg: f && f.reg ? f.reg : '',
+        flightNumber: f && f.flightNumber ? f.flightNumber : '',
+        standId: f && f.standId ? f.standId : null,
+        standName: kpiStandLabelById(f && f.standId ? f.standId : null),
+        arrTaxiMin,
+        depTaxiMin,
+        rotSec,
+        depRotSec,
+        arrTaxiDelayMin,
+        depTaxiDelayMin,
+        sibt,
+        sobt,
+        sldt,
+        stot,
+        eldt,
+        eibt,
+        eobt,
+        etot,
+        failed,
+        paxArrDelay,
+        paxDepDelay,
+        acArrDelay,
+        acDepDelay
+      };
+    });
+    const KPI_ROLL_STEP_MIN = 15;
+    const KPI_ROLL_WIN_MIN = 60;
+    const buckets = [];
+    if (rows.length) {
+      const wLastStart = 1440 - KPI_ROLL_WIN_MIN;
+      for (let w = 0; w <= wLastStart; w += KPI_ROLL_STEP_MIN) {
+        const wPlus = w + KPI_ROLL_WIN_MIN;
+        const activeStands = new Set();
+        let arrivals = 0;
+        let departures = 0;
+        rows.forEach(function(row) {
+          const occStartRaw = row.eibt != null ? row.eibt : row.sibt;
+          const occEndRaw = row.eobt != null ? row.eobt : row.sobt;
+          const osStart = kpiMinuteOfDay(occStartRaw);
+          const osEnd = kpiMinuteOfDay(occEndRaw);
+          if (row.standId && osStart != null && osEnd != null &&
+              kpiRollWindowOverlapsInterval(w, KPI_ROLL_WIN_MIN, osStart, osEnd)) {
+            activeStands.add(row.standId);
+          }
+          const eldtM = kpiMinuteOfDay(row.eldt);
+          const etotM = kpiMinuteOfDay(row.etot);
+          if (eldtM != null && eldtM >= w && eldtM < wPlus) arrivals += 1;
+          if (etotM != null && etotM >= w && etotM < wPlus) departures += 1;
+        });
+        buckets.push({
+          label: kpiFormatClockBucket15(w),
+          occupancy: activeStands.size,
+          arrivals: arrivals,
+          departures: departures,
+          total: arrivals + departures,
+          bucketStart: w
+        });
+      }
+    }
+    const failedFlights = rows.filter(function(row) { return row.failed; });
+    const operationalFlights = rows.filter(function(row) { return !row.failed; });
+    const peakBucket = buckets.reduce(function(best, bucket) {
+      if (!best) return bucket;
+      return (bucket.occupancy || 0) > (best.occupancy || 0) ? bucket : best;
+    }, null);
+    const busiestBucket = buckets.reduce(function(best, bucket) {
+      if (!best) return bucket;
+      return (bucket.total || 0) > (best.total || 0) ? bucket : best;
+    }, null);
+    const peakRunwayArrBucket = buckets.reduce(function(best, bucket) {
+      if (!best) return bucket;
+      return (bucket.arrivals || 0) > (best.arrivals || 0) ? bucket : best;
+    }, null);
+    const peakRunwayDepBucket = buckets.reduce(function(best, bucket) {
+      if (!best) return bucket;
+      return (bucket.departures || 0) > (best.departures || 0) ? bucket : best;
+    }, null);
+    const detailRows = rows.slice().sort(function(a, b) {
+      const delayA = (a.paxArrDelay || 0) + (a.paxDepDelay || 0) + (a.acArrDelay || 0) + (a.acDepDelay || 0);
+      const delayB = (b.paxArrDelay || 0) + (b.paxDepDelay || 0) + (b.acArrDelay || 0) + (b.acDepDelay || 0);
+      return delayB - delayA;
+    });
+    return {
+      rows: rows,
+      buckets: buckets,
+      totalFlights: rows.length,
+      failedFlights: failedFlights.length,
+      operationalFlights: operationalFlights.length,
+      peakBucket: peakBucket,
+      busiestBucket: busiestBucket,
+      peakRunwayArrBucket: peakRunwayArrBucket,
+      peakRunwayDepBucket: peakRunwayDepBucket,
+      rotArrTotalSec: kpiSum(rows, function(row) { return row.rotSec; }),
+      rotArrAvgSec: kpiAverage(rows, function(row) { return row.rotSec; }),
+      rotDepTotalSec: kpiSum(rows, function(row) { return row.depRotSec; }),
+      rotDepAvgSec: kpiAverage(rows, function(row) { return row.depRotSec; }),
+      arrTaxiTotalMin: kpiSum(rows, function(row) { return row.arrTaxiMin; }),
+      arrTaxiAvgMin: kpiAverage(rows, function(row) { return row.arrTaxiMin; }),
+      depTaxiTotalMin: kpiSum(rows, function(row) { return row.depTaxiMin; }),
+      depTaxiAvgMin: kpiAverage(rows, function(row) { return row.depTaxiMin; }),
+      arrTaxiDelayTotalMin: kpiSum(rows, function(row) { return row.arrTaxiDelayMin; }),
+      arrTaxiDelayAvgMin: kpiAverage(rows, function(row) { return row.arrTaxiDelayMin; }),
+      depTaxiDelayTotalMin: kpiSum(rows, function(row) { return row.depTaxiDelayMin; }),
+      depTaxiDelayAvgMin: kpiAverage(rows, function(row) { return row.depTaxiDelayMin; }),
+      paxArrDelayTotalMin: kpiSum(rows, function(row) { return row.paxArrDelay; }),
+      paxArrDelayAvgMin: kpiAverage(rows, function(row) { return row.paxArrDelay; }),
+      paxDepDelayTotalMin: kpiSum(rows, function(row) { return row.paxDepDelay; }),
+      paxDepDelayAvgMin: kpiAverage(rows, function(row) { return row.paxDepDelay; }),
+      acArrDelayTotalMin: kpiSum(rows, function(row) { return row.acArrDelay; }),
+      acArrDelayAvgMin: kpiAverage(rows, function(row) { return row.acArrDelay; }),
+      acDepDelayTotalMin: kpiSum(rows, function(row) { return row.acDepDelay; }),
+      acDepDelayAvgMin: kpiAverage(rows, function(row) { return row.acDepDelay; }),
+      detailRows: detailRows
+    };
+  }
+
+  function renderKpiDashboard(reasonLabel) {
+    const host = document.getElementById('kpiDashboard');
+    const status = document.getElementById('kpiSnapshotStatus');
+    if (!host) return;
+    if (reasonLabel === 'Updated') state.kpiRollingDetailExpanded = false;
+    if (!host._kpiRollingMoreBound) {
+      host._kpiRollingMoreBound = true;
+      host.addEventListener('click', function(ev) {
+        const t = ev.target;
+        if (t && t.id === 'btnKpiRollingExpand') {
+          state.kpiRollingDetailExpanded = true;
+          renderKpiDashboard('Expanded');
+        }
+      });
+    }
+    kpiDisposeInteractiveCharts();
+    const snapshot = collectKpiSnapshot();
+    if (!snapshot.totalFlights) {
+      host.innerHTML = '<div class="kpi-empty-state">No flights are available yet. Add or load a schedule, then click <strong>Pro Sim</strong> to refresh the KPI snapshot.</div>';
+      if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
+      return;
+    }
+    const prArr = snapshot.peakRunwayArrBucket;
+    const prDep = snapshot.peakRunwayDepBucket;
+    const pkOcc = snapshot.peakBucket;
+    const peakRunwayArrText = prArr ? (kpiFormatCount(prArr.arrivals || 0) + ' · ' + prArr.label) : '—';
+    const peakRunwayDepText = prDep ? (kpiFormatCount(prDep.departures || 0) + ' · ' + prDep.label) : '—';
+    const peakGateText = pkOcc ? (kpiFormatCount(pkOcc.occupancy || 0) + ' · ' + pkOcc.label) : '—';
+    const busiestText = snapshot.busiestBucket ? (kpiFormatCount(snapshot.busiestBucket.total) + ' · ' + snapshot.busiestBucket.label) : '—';
+    const busiestMeta = snapshot.busiestBucket ? ('15m step · 60m rolling · ELDT+ETOT') : 'No runway data';
+    const summaryCards = [
+      kpiBuildSummaryCard('Total Flights', kpiFormatCount(snapshot.totalFlights), 'accent'),
+      kpiBuildSummaryCard('Failed Flights', kpiFormatCount(snapshot.failedFlights), snapshot.failedFlights > 0 ? 'danger' : 'success'),
+      kpiBuildSummaryCard('Peak Runway Arr', peakRunwayArrText, 'warning'),
+      kpiBuildSummaryCard('Peak Runway Dep', peakRunwayDepText, 'warning'),
+      kpiBuildSummaryCard('Peak Gate Occupancy', peakGateText, 'accent')
+    ].join('');
+    const panelHtml = [
+      kpiBuildPanel('Surface Movement', 'ROT · Taxi · Taxi delay', [
+        kpiBuildMetricRow('Arr ROT time', 'Avg ' + kpiFormatSecondsValue(snapshot.rotArrAvgSec), 'Total ' + kpiFormatSecondsValue(snapshot.rotArrTotalSec)),
+        kpiBuildMetricRow('Dep ROT time', 'Avg ' + kpiFormatSecondsValue(snapshot.rotDepAvgSec), 'Total ' + kpiFormatSecondsValue(snapshot.rotDepTotalSec)),
+        kpiBuildMetricRow('Arr taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.arrTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.arrTaxiTotalMin)),
+        kpiBuildMetricRow('Dep taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.depTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.depTaxiTotalMin)),
+        kpiBuildMetricRow('Arr taxi delay', 'Avg ' + kpiFormatMinutesValue(snapshot.arrTaxiDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.arrTaxiDelayTotalMin)),
+        kpiBuildMetricRow('Dep taxi delay', 'Avg ' + kpiFormatMinutesValue(snapshot.depTaxiDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.depTaxiDelayTotalMin))
+      ]),
+      kpiBuildPanel('Gate Delay', 'EIBT/EOBT vs schedule', [
+        kpiBuildMetricRow('EIBT − SIBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxArrDelayTotalMin)),
+        kpiBuildMetricRow('EOBT − SOBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxDepDelayTotalMin)),
+        kpiBuildMetricRow('Busiest runway window', busiestText, busiestMeta)
+      ]),
+      kpiBuildPanel('Runway Delay', 'ELDT/ETOT vs schedule', [
+        kpiBuildMetricRow('ELDT − SLDT', 'Avg ' + kpiFormatMinutesValue(snapshot.acArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acArrDelayTotalMin)),
+        kpiBuildMetricRow('ETOT − STOT', 'Avg ' + kpiFormatMinutesValue(snapshot.acDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acDepDelayTotalMin)),
+        kpiBuildMetricRow('Snapshot basis', kpiFormatCount(snapshot.totalFlights) + ' flights', 'Rendered only on initial load and Pro Sim')
+      ])
+    ].join('');
+    const bucketsAll = snapshot.buckets || [];
+    const capRows = KPI_ROLLING_TABLE_VISIBLE_ROWS;
+    const rollExpanded = !!state.kpiRollingDetailExpanded;
+    const bucketsForTable = (!rollExpanded && bucketsAll.length > capRows) ? bucketsAll.slice(0, capRows) : bucketsAll;
+    const hourlyTableRows = bucketsForTable.map(function(bucket) {
+      const highlight = snapshot.peakBucket && bucket.bucketStart === snapshot.peakBucket.bucketStart ? ' class="kpi-row-highlight"' : '';
+      return '' +
+        '<tr' + highlight + '>' +
+          '<td>' + escapeHtml(bucket.label) + '</td>' +
+          '<td>' + escapeHtml(kpiFormatCount(bucket.occupancy)) + '</td>' +
+          '<td>' + escapeHtml(kpiFormatCount(bucket.arrivals)) + '</td>' +
+          '<td>' + escapeHtml(kpiFormatCount(bucket.departures)) + '</td>' +
+          '<td>' + escapeHtml(kpiFormatCount(bucket.total)) + '</td>' +
+        '</tr>';
+    }).join('');
+    const rollingMoreRow = (!rollExpanded && bucketsAll.length > capRows)
+      ? ('<tr class="kpi-rolling-more"><td colspan="5" style="font-size:11px;color:#9ca3af;padding:8px 6px;">' +
+          '<button type="button" class="tool-btn" id="btnKpiRollingExpand">더 보기 (' + String(bucketsAll.length - capRows) + '행)</button>' +
+        '</td></tr>')
+      : '';
+    const topDelayRows = snapshot.detailRows.slice(0, 10).map(function(row) {
+      const statusClass = row.failed ? 'fail' : 'ok';
+      const statusLabel = row.failed ? 'Failed' : 'Normal';
+      return '' +
+        '<tr>' +
+          '<td>' + escapeHtml((row.reg || row.flightNumber || row.id || '—')) + '</td>' +
+          '<td>' + escapeHtml(row.standName || 'Unassigned') + '</td>' +
+          '<td>' + escapeHtml(kpiFormatMinutesValue(row.paxArrDelay)) + '</td>' +
+          '<td>' + escapeHtml(kpiFormatMinutesValue(row.paxDepDelay)) + '</td>' +
+          '<td>' + escapeHtml(kpiFormatMinutesValue((row.acArrDelay || 0) + (row.acDepDelay || 0))) + '</td>' +
+          '<td><span class="kpi-badge ' + statusClass + '">' + escapeHtml(statusLabel) + '</span></td>' +
+        '</tr>';
+    }).join('');
+    host.innerHTML = '' +
+      '<div class="kpi-summary-grid">' + summaryCards + '</div>' +
+      '<div class="kpi-panel-grid">' + panelHtml + '</div>' +
+      '<div class="kpi-chart-grid">' +
+        '<div class="kpi-chart-card kpi-chart-card-primary">' +
+          '<div class="kpi-chart-head">' +
+            '<div>' +
+              '<div class="kpi-chart-title">Hourly Gate Occupancy</div>' +
+
+
+              '<div class="kpi-chart-subtitle">15m anchors · rolling 60m: unique stands overlapping EIBT–EOBT with [w, w+60).</div>' +
+            '</div>' +
+            '<div class="kpi-chart-legend">' +
+              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#a78bfa;"></span>Gate occupancy</span>' +
+            '</div>' +
+          '</div>' +
+          kpiGateChartPlaceholder(snapshot.buckets) +
+        '</div>' +
+        '<div class="kpi-chart-card kpi-chart-card-primary">' +
+          '<div class="kpi-chart-head">' +
+            '<div>' +
+              '<div class="kpi-chart-title">Hourly Runway Traffic</div>' +
+              '<div class="kpi-chart-subtitle">15m anchors · rolling 60m: ELDT arrivals and ETOT departures in [w, w+60).</div>' +
+            '</div>' +
+            '<div class="kpi-chart-legend">' +
+              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#38bdf8;"></span>Arrivals</span>' +
+              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#fb923c;"></span>Departures</span>' +
+              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#c4b5fd;"></span>Total</span>' +
+            '</div>' +
+          '</div>' +
+          kpiRunwayChartPlaceholder(snapshot.buckets) +
+        '</div>' +
+      '</div>' +
+      '<div class="kpi-detail-grid">' +
+        '<div class="kpi-table-card">' +
+          '<div class="kpi-chart-title">Rolling window detail</div>' +
+          '<div class="kpi-chart-subtitle">Same 15m / 60m windows: gate occupancy; runway arr/dep = ELDT / ETOT counts.</div>' +
+          '<div class="kpi-table-wrap">' +
+            '<table class="kpi-table">' +
+              '<thead><tr><th>Window w</th><th>Gate occ</th><th>Runway arr</th><th>Runway dep</th><th>Total</th></tr></thead>' +
+              '<tbody>' + hourlyTableRows + rollingMoreRow + '</tbody>' +
+            '</table>' +
+          '</div>' +
+        '</div>' +
+        '<div class="kpi-table-card">' +
+          '<div class="kpi-chart-title">Top Delay Flights</div>' +
+          '<div class="kpi-chart-subtitle">Largest combined gate delay (EIBT/SIBT, EOBT/SOBT) and runway delay (ELDT/SLDT, ETOT/STOT) footprint.</div>' +
+          '<div class="kpi-table-wrap">' +
+            '<table class="kpi-table">' +
+              '<thead><tr><th>Flight</th><th>Stand</th><th>Gate Arr Delay</th><th>Gate Dep Delay</th><th>Runway Delay</th><th>Status</th></tr></thead>' +
+              '<tbody>' + topDelayRows + '</tbody>' +
+            '</table>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
+    kpiMountInteractiveCharts(snapshot.buckets || []);
+  }
+
+  function scheduledSldtFromSibtMinutes(f, sibtMin) {
+    const sibt = sibtMin != null && isFinite(sibtMin) ? sibtMin : 0;
+    const vttArrMin = getBaseVttArrMinutes(f);
+    const rotArrMin = getArrRotMinutes(f);
+    return Math.max(0, sibt - vttArrMin - rotArrMin);
+  }
+  function scheduledStotFromSobtMinutes(f, sobtMin) {
+    const sobt = sobtMin != null && isFinite(sobtMin) ? sobtMin : 0;
+    const depRotSec = (typeof computeDepRotSecondsForFlight === 'function')
+      ? computeDepRotSecondsForFlight(f)
+      : Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
+    const rotDepMin = depRotSec / 60;
+    const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+    const rollBundleSecFallback = DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2);
+    const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function')
+      ? getBaseVttDepMinutesToLineup(f)
+      : Math.max(0, depBlockOutMin - ((typeof computeDepRollAndLineupOnlySec === 'function') ? computeDepRollAndLineupOnlySec(f) : rollBundleSecFallback) / 60);
+    const sttDepMin = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
+    return sobt + rotDepMin + sttDepMin;
+  }
+  function scheduledSobtFromStotMinutes(f, stotMin) {
+    const stot = stotMin != null && isFinite(stotMin) ? stotMin : 0;
+    const depRotSec = (typeof computeDepRotSecondsForFlight === 'function')
+      ? computeDepRotSecondsForFlight(f)
+      : Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
+    const rotDepMin = depRotSec / 60;
+    const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+    const rollBundleSecFallback = DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2);
+    const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function')
+      ? getBaseVttDepMinutesToLineup(f)
+      : Math.max(0, depBlockOutMin - ((typeof computeDepRollAndLineupOnlySec === 'function') ? computeDepRollAndLineupOnlySec(f) : rollBundleSecFallback) / 60);
+    const sttDepMin = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
+    return Math.max(0, stot - rotDepMin - sttDepMin);
+  }
+  function applyScheduledGateTimingFromSField(f, field, minutes) {
+    if (!f || flightBlockedLikeNoWay(f) || f.deferPathCompute) return false;
+    const m = Number(minutes);
+    if (!isFinite(m) || m < 0) return false;
+    let dwell = f.dwellMin != null ? f.dwellMin : 0;
+    let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+    dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+    minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+    if (minDwell > dwell) minDwell = dwell;
+    if (field === 'sldt') {
+      const vttArrMin = getBaseVttArrMinutes(f);
+      const rotArrMin = getArrRotMinutes(f);
+      f.sldtMin_orig = m;
+      const sibt = Math.max(0, m + vttArrMin + rotArrMin);
+      f.timeMin = sibt;
+      f.sibtMin_orig = sibt;
+      f.sobtMin_orig = sibt + dwell;
+      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      return true;
+    }
+    if (field === 'sibt') {
+      f.timeMin = m;
+      f.sibtMin_orig = m;
+      f.sldtMin_orig = scheduledSldtFromSibtMinutes(f, m);
+      f.sobtMin_orig = m + dwell;
+      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      return true;
+    }
+    if (field === 'sobt') {
+      const sibt = f.timeMin != null ? f.timeMin : 0;
+      let sobtAdj = Math.max(m, sibt + minDwell);
+      f.sobtMin_orig = sobtAdj;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobtAdj - sibt);
+      if (f.minDwellMin != null) {
+        f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
+      }
+      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      return true;
+    }
+    if (field === 'stot') {
+      const sibt = f.timeMin != null ? f.timeMin : 0;
+      const sobtGuess = scheduledSobtFromStotMinutes(f, m);
+      let sobtAdj = Math.max(sobtGuess, sibt + minDwell);
+      f.sobtMin_orig = sobtAdj;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobtAdj - sibt);
+      if (f.minDwellMin != null) {
+        f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
+      }
+      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      return true;
+    }
+    return false;
+  }
+
+  function computeScheduledDisplayTimes(flights) {
+    if (!flights || !flights.length) return;
+    flights.forEach(f => {
+      if (flightBlockedLikeNoWay(f)) return;
+      f.vttADelayMin = 0;
+      const tArrMin = f.timeMin != null ? f.timeMin : 0;
+      let dwell = f.dwellMin != null ? f.dwellMin : 0;
+      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+      if (minDwell > dwell) minDwell = dwell;
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      const sldtOrig = scheduledSldtFromSibtMinutes(f, tArrMin);
+      const sobtOrig = tArrMin + dwell;
+      const stotOrig = scheduledStotFromSobtMinutes(f, sobtOrig);
+      f.sldtMin_orig = sldtOrig;
+      f.sibtMin_orig = tArrMin;
+      f.sobtMin_orig = sobtOrig;
+      f.stotMin_orig = stotOrig;
+      f.sldtMin_d = f.sldtMin_orig;
+      f.sibtMin_d = tArrMin;
+      f.sobtMin_d = sobtOrig;
+      f.stotMin_d = stotOrig;
+    });
+    const standToFlights = {};
+    flights.forEach(f => {
+      if (flightBlockedLikeNoWay(f) || !f.standId) return;
+      const sid = f.standId;
+      if (!standToFlights[sid]) standToFlights[sid] = [];
+      standToFlights[sid].push(f);
+    });
+    Object.keys(standToFlights).forEach(standId => {
+      const list = standToFlights[standId];
+      list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
+      let prevSOBT = -1e9;
+      list.forEach(f => {
+        const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
+        const overlap = Math.max(0, prevSOBT - sibt0);
+        f.vttADelayMin = overlap;
+        f.sibtMin_d = sibt0 + overlap;
+        const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
+        const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
+        const minSobtByDwell = f.sibtMin_d + minDwell;
+        const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
+        f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
+        f.sldtMin_d = scheduledSldtFromSibtMinutes(f, f.sibtMin_d);
+        f.stotMin_d = scheduledStotFromSobtMinutes(f, f.sobtMin_d);
+        prevSOBT = f.sobtMin_d;
+      });
+    });
+    flights.forEach(f => {
+      if (!f || flightBlockedLikeNoWay(f) || !f.standId) return;
+      const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
+      const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
+      const sibt = (f.sibtMin_d != null ? f.sibtMin_d
+                   : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
+      const minSobtByDwell = sibt + minDwell;
+      const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
+      if (sobtCurrent < minSobtByDwell) {
+        const delta = minSobtByDwell - sobtCurrent;
+        f.sobtMin_d = minSobtByDwell;
+        if (typeof f.stotMin_d === 'number') f.stotMin_d += delta;
+      }
+    });
+    flights.forEach(f => {
+      if (flightBlockedLikeNoWay(f)) return;
+      f.sldtMin = f.sldtMin_d;
+      f.stotMin = f.stotMin_d;
+      f.sobtMin = f.sobtMin_d;
+    });
+  }
+
+  function computeScheduledDisplayTimesIncremental(allFlights, dirtyFlightIds, touchedStandIds) {
+    if (!allFlights || !allFlights.length) return;
+    const dirty = (dirtyFlightIds instanceof Set) ? dirtyFlightIds : new Set(dirtyFlightIds || []);
+    const touchedStands = (touchedStandIds instanceof Set) ? touchedStandIds : new Set(touchedStandIds || []);
+    const standsToRecompute = new Set();
+    touchedStands.forEach(function(sid) { if (sid != null && sid !== '') standsToRecompute.add(sid); });
+    const needStep1 = new Set();
+    dirty.forEach(function(id) { if (id != null && id !== '') needStep1.add(id); });
+    allFlights.forEach(function(f) {
+      if (!f || flightBlockedLikeNoWay(f)) return;
+      if (f.standId && standsToRecompute.has(f.standId)) needStep1.add(f.id);
+    });
+    allFlights.forEach(function(f) {
+      if (!f || !needStep1.has(f.id)) return;
+      if (flightBlockedLikeNoWay(f)) return;
+      f.vttADelayMin = 0;
+      const tArrMin = f.timeMin != null ? f.timeMin : 0;
+      let dwell = f.dwellMin != null ? f.dwellMin : 0;
+      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+      if (minDwell > dwell) minDwell = dwell;
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      const sldtOrig = scheduledSldtFromSibtMinutes(f, tArrMin);
+      const sobtOrig = tArrMin + dwell;
+      const stotOrig = scheduledStotFromSobtMinutes(f, sobtOrig);
+      f.sldtMin_orig = sldtOrig;
+      f.sibtMin_orig = tArrMin;
+      f.sobtMin_orig = sobtOrig;
+      f.stotMin_orig = stotOrig;
+      f.sldtMin_d = f.sldtMin_orig;
+      f.sibtMin_d = tArrMin;
+      f.sobtMin_d = sobtOrig;
+      f.stotMin_d = stotOrig;
+    });
+    standsToRecompute.forEach(function(standId) {
+      const list = allFlights.filter(function(f) {
+        return f && !flightBlockedLikeNoWay(f) && f.standId === standId;
+      });
+      list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
+      let prevSOBT = -1e9;
+      list.forEach(function(f) {
+        const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
+        const overlap = Math.max(0, prevSOBT - sibt0);
+        f.vttADelayMin = overlap;
+        f.sibtMin_d = sibt0 + overlap;
+        const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
+        const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
+        const minSobtByDwell = f.sibtMin_d + minDwell;
+        const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
+        f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
+        f.sldtMin_d = scheduledSldtFromSibtMinutes(f, f.sibtMin_d);
+        f.stotMin_d = scheduledStotFromSobtMinutes(f, f.sobtMin_d);
+        prevSOBT = f.sobtMin_d;
+      });
+    });
+    allFlights.forEach(function(f) {
+      if (!f || flightBlockedLikeNoWay(f) || !f.standId) return;
+      if (!standsToRecompute.has(f.standId)) return;
+      const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
+      const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
+      const sibt = (f.sibtMin_d != null ? f.sibtMin_d : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
+      const minSobtByDwell = sibt + minDwell;
+      const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
+      if (sobtCurrent < minSobtByDwell) {
+        const delta = minSobtByDwell - sobtCurrent;
+        f.sobtMin_d = minSobtByDwell;
+        if (typeof f.stotMin_d === 'number') f.stotMin_d += delta;
+      }
+    });
+    allFlights.forEach(function(f) {
+      if (!f || flightBlockedLikeNoWay(f)) return;
+      const onTouched = f.standId && standsToRecompute.has(f.standId);
+      if (!needStep1.has(f.id) && !onTouched) return;
+      f.sldtMin = f.sldtMin_d;
+      f.stotMin = f.stotMin_d;
+      f.sobtMin = f.sobtMin_d;
+    });
+  }
+
   function rsepGetSec(val) {
     const n = Number(val);
     return isFinite(n) && n >= 0 ? n : RSEP_MISSING_MATRIX_SEC;
@@ -563,479 +1095,3 @@
     const ac = (typeof getAircraftInfoByType === 'function') ? getAircraftInfoByType(f && f.aircraftType) : null;
     const a = ac && typeof ac.deceleration_avg_ms2 === 'number' ? ac.deceleration_avg_ms2 : null;
     if (typeof a === 'number' && isFinite(a) && a > 0.05) return Math.min(5, Math.max(0.05, a));
-    return 1.2;
-  }
-  function nearestTaxiInfraD2ForMidpoint(mid) {
-    let bestApronD2 = Infinity;
-    let bestTaxiD2 = Infinity;
-    let bestTw = null;
-    const apronList = state.apronLinks || [];
-    for (let ai = 0; ai < apronList.length; ai++) {
-      const poly = getApronLinkPolylineWorldPts(apronList[ai]);
-      if (!poly || poly.length < 2) continue;
-      for (let j = 0; j < poly.length - 1; j++) {
-        const pr = projectOnSegment(poly[j], poly[j + 1], mid);
-        const d2 = dist2(pr.p, mid);
-        if (d2 < bestApronD2) bestApronD2 = d2;
-      }
-    }
-    const list = state.taxiways || [];
-    for (let ti = 0; ti < list.length; ti++) {
-      const tw = list[ti];
-      const ot = getOrderedPoints(tw);
-      if (!ot || ot.length < 2) continue;
-      for (let j = 0; j < ot.length - 1; j++) {
-        const pr = projectOnSegment(ot[j], ot[j + 1], mid);
-        const d2 = dist2(pr.p, mid);
-        if (d2 < bestTaxiD2) { bestTaxiD2 = d2; bestTw = tw; }
-      }
-    }
-    return { bestApronD2, bestTaxiD2, bestTw };
-  }
-  function taxiHitFromMidpoint(mid) {
-    const { bestApronD2, bestTaxiD2, bestTw } = nearestTaxiInfraD2ForMidpoint(mid);
-    const hasA = bestApronD2 < Infinity;
-    const hasT = bestTaxiD2 < Infinity;
-    if (hasA && (!hasT || bestApronD2 <= bestTaxiD2)) return { kind: 'apron' };
-    if (hasT && bestTw) return { kind: 'tw', tw: bestTw };
-    return { kind: 'tw', tw: null };
-  }
-  function taxiSegmentVelocityMsFromHit(hit, carry) {
-    const fallback = getTaxiwayAvgMoveVelocityForPath(null);
-    if (hit.kind === 'apron') return Math.max(0.1, APRON_TAXIWAY_SPEED_MS);
-    const tw = hit.tw;
-    if (!tw) return Math.max(1, fallback);
-    const pt = tw.pathType || 'taxiway';
-    if (pt === 'runway_exit') {
-      const v = carry.lastTaxiwayMs;
-      return Math.max(1, (typeof v === 'number' && v > 0) ? v : fallback);
-    }
-    if (pt === 'taxiway') {
-      const v = getTaxiwayAvgMoveVelocityForPath(tw);
-      carry.lastTaxiwayMs = v;
-      return Math.max(1, v);
-    }
-    if (pt === 'runway') return Math.max(1, getTaxiwayAvgMoveVelocityForPath(tw));
-    return Math.max(1, getTaxiwayAvgMoveVelocityForPath(tw));
-  }
-  function taxiSegmentVelocityMsForPolylineSegment(p1, p2, carry) {
-    const mx = (p1[0] + p2[0]) * 0.5, my = (p1[1] + p2[1]) * 0.5;
-    const hit = taxiHitFromMidpoint([mx, my]);
-    return taxiSegmentVelocityMsFromHit(hit, carry);
-  }
-  function makeTaxiSegmentVelocityCallback() {
-    const carry = { lastTaxiwayMs: null };
-    return function(i, a, b) { return taxiSegmentVelocityMsForPolylineSegment(a, b, carry); };
-  }
-  function polylineRawDurationSegmentVelocities(pts, velForSeg) {
-    if (!pts || pts.length < 2) return 0;
-    let total = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const len = pathDist(pts[i], pts[i + 1]);
-      if (len < 1e-9) continue;
-      const v = Math.max(1, velForSeg(i, pts[i], pts[i + 1]));
-      total += len / v;
-    }
-    return total;
-  }
-  function polylineTimelineBySegmentSpeeds(pts, tStart, tEnd, velForSeg) {
-    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
-      const p = pts && pts.length ? pts[0] : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }];
-    }
-    const lengths = [];
-    for (let i = 0; i < pts.length - 1; i++) lengths.push(pathDist(pts[i], pts[i + 1]));
-    const rawDts = [];
-    for (let i = 0; i < lengths.length; i++) {
-      const v = Math.max(1, velForSeg(i, pts[i], pts[i + 1]));
-      rawDts.push((lengths[i] < 1e-9 ? 0 : lengths[i] / v));
-    }
-    const rawTotal = rawDts.reduce(function(s, x) { return s + x; }, 0);
-    const window = tEnd - tStart;
-    if (rawTotal < 1e-9) {
-      return [
-        { t: tStart, x: pts[0][0], y: pts[0][1] },
-        { t: tEnd, x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] },
-      ];
-    }
-    const scale = window / rawTotal;
-    const tl = [{ t: tStart, x: pts[0][0], y: pts[0][1] }];
-    let acc = 0;
-    for (let i = 0; i < lengths.length; i++) {
-      acc += rawDts[i] * scale;
-      tl.push({ t: Math.min(tStart + acc, tEnd), x: pts[i + 1][0], y: pts[i + 1][1] });
-    }
-    tl[tl.length - 1].t = tEnd;
-    return tl;
-  }
-  function polylineTimelineConstantAccelFromRest(pts, tStart, tEnd, accelMs2) {
-    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
-      const p = pts && pts.length ? polylinePointAtDistance(pts, 0) : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }, { t: tEnd, x: p[0], y: p[1] }];
-    }
-    const L = polylineTotalLength(pts);
-    const a = Math.max(0.1, accelMs2);
-    const tPhys = L < 1e-9 ? 0 : Math.sqrt(2 * L / a);
-    const win = tEnd - tStart;
-    const n = Math.max(8, Math.min(48, Math.ceil(Math.max(L, 1) / 25)));
-    const tl = [];
-    for (let i = 0; i <= n; i++) {
-      const u = i / n;
-      const tt = tStart + u * win;
-      const tau = u * tPhys;
-      const s = Math.min(L, 0.5 * a * tau * tau);
-      const pt = polylinePointAtDistance(pts, s);
-      tl.push({ t: tt, x: pt[0], y: pt[1] });
-    }
-    tl[0].t = tStart;
-    tl[tl.length - 1].t = tEnd;
-    return tl;
-  }
-  function polylineTimelineLinearRetSpeed(pts, tStart, tEnd, vIn, vOut) {
-    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
-      const p = pts && pts.length ? pts[0] : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }];
-    }
-    const lengths = [];
-    let totalLen = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const len = pathDist(pts[i], pts[i + 1]);
-      lengths.push(len);
-      totalLen += len;
-    }
-    const rawDts = [];
-    let accLen = 0;
-    for (let i = 0; i < lengths.length; i++) {
-      const midLen = accLen + lengths[i] * 0.5;
-      const u = totalLen > 1e-9 ? midLen / totalLen : 0;
-      const v = Math.max(1, vIn + (vOut - vIn) * u);
-      rawDts.push(lengths[i] < 1e-9 ? 0 : lengths[i] / v);
-      accLen += lengths[i];
-    }
-    const rawTotal = rawDts.reduce(function(s, x) { return s + x; }, 0);
-    const window = tEnd - tStart;
-    if (rawTotal < 1e-9) {
-      return [
-        { t: tStart, x: pts[0][0], y: pts[0][1] },
-        { t: tEnd, x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] },
-      ];
-    }
-    const scale = window / rawTotal;
-    const tl = [{ t: tStart, x: pts[0][0], y: pts[0][1] }];
-    let acc = 0;
-    for (let i = 0; i < lengths.length; i++) {
-      acc += rawDts[i] * scale;
-      tl.push({ t: Math.min(tStart + acc, tEnd), x: pts[i + 1][0], y: pts[i + 1][1] });
-    }
-    tl[tl.length - 1].t = tEnd;
-    return tl;
-  }
-  function polylineRawDurationLinearRetSpeed(pts, vIn, vOut) {
-    if (!pts || pts.length < 2) return 0;
-    const lengths = [];
-    let totalLen = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const len = pathDist(pts[i], pts[i + 1]);
-      lengths.push(len);
-      totalLen += len;
-    }
-    let rawTotal = 0;
-    let accLen = 0;
-    for (let i = 0; i < lengths.length; i++) {
-      const midLen = accLen + lengths[i] * 0.5;
-      const u = totalLen > 1e-9 ? midLen / totalLen : 0;
-      const v = Math.max(1, vIn + (vOut - vIn) * u);
-      rawTotal += lengths[i] < 1e-9 ? 0 : lengths[i] / v;
-      accLen += lengths[i];
-    }
-    return rawTotal;
-  }
-  function splitTaxiInPartsForTimeline(f, runwayId, taxiInPts) {
-    const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-    if (!taxiInPts || taxiInPts.length < 2) {
-      return {
-        vTaxiBase,
-        runwayPts: [],
-        retPts: [],
-        taxiPts: [],
-        phyRw: 0,
-        phyRet: 0,
-        phyTaxi: 0,
-        useRwPhy: false,
-        runwayLenM: 0,
-        vTd: 0,
-        aDec: 0,
-        vRetIn: 0,
-        vRetOut: 0,
-        vRetResolved: vTaxiBase,
-        carryAfterRunway: { lastTaxiwayMs: null },
-      };
-    }
-    const vTd = touchdownSpeedMsForTimeline(f);
-    let vRetIn = typeof f.arrVRetInMs === 'number' && isFinite(f.arrVRetInMs) && f.arrVRetInMs > 0 ? f.arrVRetInMs : getMinArrVelocityMpsForRunwayId(runwayId);
-    let vRetOut = typeof f.arrVRetOutMs === 'number' && isFinite(f.arrVRetOutMs) && f.arrVRetOutMs > 0 ? f.arrVRetOutMs : vTaxiBase;
-    if (f.arrRetFailed) {
-      vRetIn = getMinArrVelocityMpsForRunwayId(runwayId);
-      vRetOut = vTaxiBase;
-    }
-    const aDec = aircraftDecelMs2ForTimeline(f);
-    let runwayLenM = 0;
-    if (typeof f.arrRetDistM === 'number' && isFinite(f.arrRetDistM) && typeof f.arrTdDistM === 'number' && isFinite(f.arrTdDistM)) {
-      runwayLenM = Math.abs(f.arrRetDistM - f.arrTdDistM);
-    }
-    const totalInLen = polylineTotalLength(taxiInPts);
-    runwayLenM = Math.min(runwayLenM, Math.max(0, totalInLen));
-    const splitRw = polylineSplitAtDistance(taxiInPts, runwayLenM);
-    const runwayPts = splitRw.first;
-    const afterRw = splitRw.second;
-    let retLenM = 0;
-    if (f.sampledArrRet) {
-      const retTw = (state.taxiways || []).find(function(t) { return t.id === f.sampledArrRet; });
-      const rPts = retTw ? getOrderedPoints(retTw) : null;
-      if (rPts && rPts.length >= 2) {
-        retLenM = polylineTotalLength(rPts);
-        const remLen = polylineTotalLength(afterRw);
-        retLenM = Math.min(retLenM, Math.max(0, remLen));
-      }
-    }
-    const splitRet = polylineSplitAtDistance(afterRw, retLenM);
-    const retPts = splitRet.first;
-    const taxiPts = splitRet.second;
-    const useRwPhy = runwayLenM > 1 && runwayPts.length >= 2;
-    let phyRw = 0;
-    if (useRwPhy) {
-      phyRw = polylineRawDurationLinearRetSpeed(runwayPts, vTd, vRetIn);
-    } else if (runwayPts.length >= 2) {
-      phyRw = polylineTotalLength(runwayPts) / vTaxiBase;
-    }
-    const carryRw = { lastTaxiwayMs: null };
-    if (runwayPts.length >= 2) {
-      for (let ri = 0; ri < runwayPts.length - 1; ri++) {
-        taxiSegmentVelocityMsForPolylineSegment(runwayPts[ri], runwayPts[ri + 1], carryRw);
-      }
-    }
-    const vFallback = getTaxiwayAvgMoveVelocityForPath(null);
-    const vRetResolved = (typeof carryRw.lastTaxiwayMs === 'number' && carryRw.lastTaxiwayMs > 0)
-      ? carryRw.lastTaxiwayMs
-      : vFallback;
-    const retPathLen = polylineTotalLength(retPts);
-    const phyRet = (retPts.length >= 2 && retPathLen > 1e-3) ? polylineRawDurationLinearRetSpeed(retPts, vRetIn, vRetOut) : 0;
-    const carryTaxi = { lastTaxiwayMs: carryRw.lastTaxiwayMs };
-    const phyTaxi = taxiPts.length >= 2
-      ? polylineRawDurationSegmentVelocities(taxiPts, function(i, a, b) {
-          return taxiSegmentVelocityMsForPolylineSegment(a, b, carryTaxi);
-        })
-      : 0;
-    return {
-      vTaxiBase, runwayPts, retPts, taxiPts, phyRw, phyRet, phyTaxi, useRwPhy, runwayLenM, vTd, aDec, vRetIn, vRetOut,
-      vRetResolved, carryAfterRunway: { lastTaxiwayMs: carryRw.lastTaxiwayMs },
-    };
-  }
-  
-  function buildRunwayAndRetTimelineInWindow(f, runwayId, taxiInPts, tStart, tEnd) {
-    const parts = splitTaxiInPartsForTimeline(f, runwayId, taxiInPts);
-    const vTaxiBase = parts.vTaxiBase;
-    const runwayPts = parts.runwayPts;
-    const retPts = parts.retPts;
-    const phyRw = parts.phyRw;
-    const phyRet = parts.phyRet;
-    const useRwPhy = parts.useRwPhy;
-    const runwayLenM = parts.runwayLenM;
-    const vTd = parts.vTd;
-    const vRetIn = parts.vRetIn;
-    const vRetOut = parts.vRetOut;
-    if (!taxiInPts || taxiInPts.length < 2 || tEnd <= tStart + 1e-6) {
-      const p = taxiInPts && taxiInPts.length ? taxiInPts[0] : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }, { t: tEnd, x: p[0], y: p[1] }];
-    }
-    const window = Math.max(1e-6, tEnd - tStart);
-    const rawSum = phyRw + phyRet;
-    if (rawSum < 1e-9) {
-      return polylineSpeedScaledToWindow(runwayPts.length >= 2 ? runwayPts : taxiInPts, tStart, tEnd, vTaxiBase);
-    }
-    const scale = window / rawSum;
-    let tCur = tStart;
-    let merged = null;
-    if (runwayPts.length >= 2 && (useRwPhy ? runwayLenM > 1 : phyRw > 1e-9)) {
-      const tSegEnd = tCur + phyRw * scale;
-      const seg = useRwPhy
-        ? polylineTimelineLinearRetSpeed(runwayPts, tCur, tSegEnd, vTd, vRetIn)
-        : polylineSpeedScaledToWindow(runwayPts, tCur, tSegEnd, vTaxiBase);
-      merged = seg;
-      tCur = tSegEnd;
-    }
-    if (retPts.length >= 2 && phyRet > 1e-9) {
-      const tSegEnd = tCur + phyRet * scale;
-      const seg = polylineTimelineLinearRetSpeed(retPts, tCur, tSegEnd, vRetIn, vRetOut);
-      merged = merged ? mergeTimelineSegments(merged, seg) : seg;
-      tCur = tSegEnd;
-    }
-    if (!merged) {
-      return polylineSpeedScaledToWindow(taxiInPts, tStart, tEnd, vTaxiBase);
-    }
-    if (tCur < tEnd - 1e-3) {
-      const last = merged[merged.length - 1];
-      merged = mergeTimelineSegments(merged, [{ t: tCur, x: last.x, y: last.y }, { t: tEnd, x: last.x, y: last.y }]);
-    }
-    return merged;
-  }
-  function buildApronTaxiTimelineAfterRet(f, runwayId, taxiInPts, tStart, tEnd) {
-    const parts = splitTaxiInPartsForTimeline(f, runwayId, taxiInPts);
-    const taxiPts = parts.taxiPts;
-    const phyTaxi = parts.phyTaxi;
-    const vTaxiBase = parts.vTaxiBase;
-    const cr = parts.carryAfterRunway || { lastTaxiwayMs: null };
-    const carryApron = { lastTaxiwayMs: cr.lastTaxiwayMs };
-    if (!taxiInPts || taxiInPts.length < 2 || tEnd <= tStart + 1e-6) {
-      const p = taxiInPts && taxiInPts.length ? taxiInPts[taxiInPts.length - 1] : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }, { t: tEnd, x: p[0], y: p[1] }];
-    }
-    if (taxiPts.length >= 2 && phyTaxi > 1e-9) {
-      return polylineTimelineBySegmentSpeeds(taxiPts, tStart, tEnd, function(i, a, b) {
-        return taxiSegmentVelocityMsForPolylineSegment(a, b, carryApron);
-      });
-    }
-    const last = taxiInPts[taxiInPts.length - 1];
-    return [{ t: tStart, x: last[0], y: last[1] }, { t: tEnd, x: last[0], y: last[1] }];
-  }
-  function buildTaxiInCompositeTimeline(f, runwayId, taxiInPts, tTaxiStart, eibtS) {
-    if (!taxiInPts || taxiInPts.length < 2) {
-      const p = taxiInPts && taxiInPts.length ? taxiInPts[0] : [0, 0];
-      return [{ t: tTaxiStart, x: p[0], y: p[1] }, { t: eibtS, x: p[0], y: p[1] }];
-    }
-    const parts = splitTaxiInPartsForTimeline(f, runwayId, taxiInPts);
-    const { vTaxiBase, runwayPts, retPts, taxiPts, phyRw, phyRet, phyTaxi, useRwPhy, runwayLenM, vTd, vRetIn, vRetOut, carryAfterRunway } = parts;
-    const crComp = carryAfterRunway || { lastTaxiwayMs: null };
-    const carryCompTaxi = { lastTaxiwayMs: crComp.lastTaxiwayMs };
-    const window = Math.max(1e-6, eibtS - tTaxiStart);
-    let rawSum = phyRw + phyRet + phyTaxi;
-    if (rawSum < 1e-9) {
-      return polylineSpeedScaledToWindow(taxiInPts, tTaxiStart, eibtS, vTaxiBase);
-    }
-    const scale = window / rawSum;
-    let tCur = tTaxiStart;
-    let merged = null;
-    if (runwayPts.length >= 2 && (useRwPhy ? runwayLenM > 1 : phyRw > 1e-9)) {
-      const tEnd = tCur + phyRw * scale;
-      const seg = useRwPhy
-        ? polylineTimelineLinearRetSpeed(runwayPts, tCur, tEnd, vTd, vRetIn)
-        : polylineSpeedScaledToWindow(runwayPts, tCur, tEnd, vTaxiBase);
-      merged = seg;
-      tCur = tEnd;
-    }
-    if (retPts.length >= 2 && phyRet > 1e-9) {
-      const tEnd = tCur + phyRet * scale;
-      const seg = polylineTimelineLinearRetSpeed(retPts, tCur, tEnd, vRetIn, vRetOut);
-      merged = merged ? mergeTimelineSegments(merged, seg) : seg;
-      tCur = tEnd;
-    }
-    if (taxiPts.length >= 2 && phyTaxi > 1e-9) {
-      const seg = polylineTimelineBySegmentSpeeds(taxiPts, tCur, eibtS, function(i, a, b) {
-        return taxiSegmentVelocityMsForPolylineSegment(a, b, carryCompTaxi);
-      });
-      merged = merged ? mergeTimelineSegments(merged, seg) : seg;
-      tCur = eibtS;
-    }
-    if (!merged) {
-      return polylineSpeedScaledToWindow(taxiInPts, tTaxiStart, eibtS, vTaxiBase);
-    }
-    if (tCur < eibtS - 1e-3) {
-      const last = merged[merged.length - 1];
-      merged = mergeTimelineSegments(merged, [{ t: tCur, x: last.x, y: last.y }, { t: eibtS, x: last.x, y: last.y }]);
-    }
-    return merged;
-  }
-  function polylineSpeedScaledToWindow(pts, tStart, tEnd, velocityMs) {
-    const v = Math.max(1, velocityMs);
-    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-6) {
-      const p = pts && pts.length ? pts[0] : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }];
-    }
-    const lengths = [];
-    for (let i = 0; i < pts.length - 1; i++) lengths.push(pathDist(pts[i], pts[i + 1]));
-    const rawDts = lengths.map(function(len) { return len / v; });
-    const rawTotal = rawDts.reduce(function(s, x) { return s + x; }, 0);
-    const window = tEnd - tStart;
-    if (rawTotal < 1e-6) {
-      return [
-        { t: tStart, x: pts[0][0], y: pts[0][1] },
-        { t: tEnd, x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] },
-      ];
-    }
-    const scale = window / rawTotal;
-    const tl = [{ t: tStart, x: pts[0][0], y: pts[0][1] }];
-    let acc = 0;
-    for (let i = 0; i < lengths.length; i++) {
-      acc += rawDts[i] * scale;
-      const tt = tStart + acc;
-      tl.push({ t: Math.min(tt, tEnd), x: pts[i + 1][0], y: pts[i + 1][1] });
-    }
-    tl[tl.length - 1].t = tEnd;
-    return tl;
-  }
-  
-  function splitDeparturePathLineupAndRunwayTail(f) {
-    const depFull = getPathForFlightDeparture(f);
-    const depToLineup = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, { onlyToLineup: true }) : null;
-    if (!depFull || depFull.length < 2 || !depToLineup || depToLineup.length < 2) return null;
-    const lastLu = depToLineup[depToLineup.length - 1];
-    const tol = 0.25;
-    let k = -1;
-    for (let i = 0; i < depFull.length; i++) {
-      if (dist2(depFull[i], lastLu) <= tol) k = i;
-    }
-    let runwayTail = (k >= 0) ? depFull.slice(k) : null;
-    if (!runwayTail || runwayTail.length < 2) {
-      const runwayId = f.depRunwayId || (f.token && f.token.depRunwayId) || (f.token && f.token.runwayId) || f.arrRunwayId;
-      const rp = runwayId ? getRunwayPath(runwayId) : null;
-      const rEnd = rp && rp.endPx ? rp.endPx : (rp && rp.pts && rp.pts.length >= 2 ? rp.pts[rp.pts.length - 1] : null);
-      if (rEnd && Array.isArray(rEnd) && rEnd.length >= 2) {
-        const lx = lastLu[0], ly = lastLu[1];
-        if (!runwayTail || runwayTail.length < 1) runwayTail = [[lx, ly], [rEnd[0], rEnd[1]]];
-        else if (runwayTail.length === 1 && dist2(runwayTail[0], rEnd) > 1e-6) runwayTail = [runwayTail[0], [rEnd[0], rEnd[1]]];
-      }
-    }
-    if (!runwayTail || runwayTail.length < 2) runwayTail = null;
-    return { toLineup: depToLineup, runwayTail: runwayTail };
-  }
-  function buildDepartureSurfaceTimelineSegments(f, eobtS, etotS) {
-    const eps = 1e-3;
-    const split = splitDeparturePathLineupAndRunwayTail(f);
-    if (!split || !split.toLineup || split.toLineup.length < 2) return null;
-    const depTaxiLineupMin = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
-    const depTaxiLineupSecReq = Math.max(0, depTaxiLineupMin) * 60;
-    const depTaxiDelaySecReq = (typeof f.depTaxiDelayMin === 'number' && isFinite(f.depTaxiDelayMin))
-      ? Math.max(0, f.depTaxiDelayMin) * 60 : 0;
-    const t0 = eobtS;
-    const t3 = etotS;
-    const toLineupOrig = split.toLineup;
-    const totalLen = polylineTotalLength(toLineupOrig);
-    const lineupPt = toLineupOrig[toLineupOrig.length - 1];
-    const runwayId = f.depRunwayId || (f.token && (f.token.depRunwayId != null ? f.token.depRunwayId : f.token.runwayId)) || f.arrRunwayId;
-    const rwTw = (state.taxiways || []).find(function(t) { return t && t.id === runwayId && t.pathType === 'runway'; });
-    const exp = rwTw ? expandRtxCandidateIdsTouchingLineup(rwTw, lineupPt) : { allIds: new Set() };
-    const holdPick = findLastRunwayHoldingOnDeparturePath(toLineupOrig, exp.allIds);
-    const alongCut = Math.max(1e-6, totalLen);
-    const backClamped = 0;
-    const splitCut = polylineSplitAtDistance(toLineupOrig, alongCut);
-    let pathToQueue = (splitCut.first && splitCut.first.length >= 2) ? splitCut.first : toLineupOrig;
-    if (pathToQueue.length < 2) pathToQueue = toLineupOrig;
-    const distHold = (holdPick && holdPick.distAlong > 1e-3 && holdPick.distAlong < alongCut - 1e-3) ? holdPick.distAlong : -1;
-    let p1 = null, p2 = null;
-    if (distHold > 0) {
-      const splH = polylineSplitAtDistance(toLineupOrig, distHold);
-      p1 = splH.first && splH.first.length >= 2 ? splH.first : null;
-      const rest = splH.second;
-      if (rest && rest.length >= 2 && alongCut > distHold + 1e-6) {
-        const splQ = polylineSplitAtDistance(rest, alongCut - distHold);
-        p2 = splQ.first && splQ.first.length >= 2 ? splQ.first : null;
-      }
-    }
-    const validHold = !!(p1 && p2 && p1.length >= 2 && p2.length >= 2);
-    let tau1 = 0, tau2 = 0;
-    if (validHold) {
-      tau1 = polylineDurationSecTaxi(p1);
-      tau2 = polylineDurationSecTaxi(p2);
-    }
-    const tauSum = tau1 + tau2;
-    const makeVelTaxi = makeTaxiSegmentVelocityCallback();

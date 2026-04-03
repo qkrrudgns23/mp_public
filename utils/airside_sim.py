@@ -9,7 +9,7 @@ seconds). Outputs ``schedule`` with S, Sd echo, and E times (ELDT/EIBT/EOBT/ETOT
 lengths and ``dwellMin``.
 
 ``positions`` timelines use ``t`` = sim seconds from day base (ELDT anchor + local sim time);
-``v`` is m/s.
+``Dep_taxi`` motion starts after gate dwell so playback time aligns with EOBT. ``v`` is m/s.
 """
 from __future__ import annotations
 
@@ -44,12 +44,24 @@ _INFORMATION_PATH = (_ROOT / "data" / "Info_storage" / "Information.json").resol
 _DEFAULT_RW_DIR = "clockwise"
 TAXI_SPEED_MPS = 15.0
 MIN_LANDING_VELOCITY_MS = 15.0
+MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS = 15.0
 ARR_RET_DECEL_MS2 = 0.5
 Point = Tuple[float, float]
 PHASE_LANDING = "Landing"
 PHASE_ARR_TAXI = "Arr_taxi"
 PHASE_DEP_TAXI = "Dep_taxi"
 _EXTRACT_LEG_PHASES: Tuple[str, str, str] = (PHASE_LANDING, PHASE_ARR_TAXI, PHASE_DEP_TAXI)
+
+
+def _arr_ret_decel_floor_ms(phase: str, path_type: str, accel_ms2: float) -> float:
+    """지정 RET(Arr_taxi·runway_exit·감속): 착륙/고속탈출과 동일 최소 속도 바닥."""
+    if (
+        phase == PHASE_ARR_TAXI
+        and str(path_type or "") == "runway_exit"
+        and float(accel_ms2) < -1e-12
+    ):
+        return float(MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
+    return 0.0
 
 
 def _flight_rw_dir_for_leg(flight: Dict[str, Any], leg_index: int) -> str:
@@ -343,8 +355,10 @@ class Flight:
     velocity_ms: float = 0.0
     segment_v0_ms: List[float] = field(default_factory=list)
     segment_accel_ms2: List[float] = field(default_factory=list)
+    segment_path_types: List[str] = field(default_factory=list)
     history: List[Tuple[float, float, float, float]] = field(default_factory=list)
     eldt_anchor_sec: Optional[float] = None
+    dep_taxi_start_sim_time: Optional[float] = None
 
 
 def resolve_route_endpoint_index(
@@ -758,8 +772,11 @@ def extract_point_to_paths(
     ]
 
 
-def _avg_move_velocity_ms_for_link(layout: Dict[str, Any], link_id: str, flight_id: str) -> float:
-    lid = str(link_id).strip()
+def _avg_move_velocity_ms_for_taxiway_id(
+    layout: Dict[str, Any], taxiway_id: str, flight_id: str
+) -> Optional[float]:
+    """Return avg speed (m/s) if ``taxiway_id`` matches a taxiway-like record; ``None`` if no match."""
+    tid = str(taxiway_id).strip()
     for bucket in (
         layout.get("taxiways"),
         layout.get("runwayTaxiways"),
@@ -768,19 +785,47 @@ def _avg_move_velocity_ms_for_link(layout: Dict[str, Any], link_id: str, flight_
         if not isinstance(bucket, list):
             continue
         for obj in bucket:
-            if not isinstance(obj, dict) or str(obj.get("id", "")).strip() != lid:
+            if not isinstance(obj, dict) or str(obj.get("id", "")).strip() != tid:
                 continue
             v = _safe_float(obj.get("avgMoveVelocity"), float("nan"))
             if math.isfinite(v) and v > 0:
                 return float(v)
             raise ValueError(
-                f"avgMoveVelocity missing or invalid for link_id={lid!r} (flight_id={flight_id!r})"
+                f"avgMoveVelocity missing or invalid for link_id={tid!r} (flight_id={flight_id!r})"
             )
-    raise ValueError(f"link_id={lid!r} not found in layout taxiways/runwayTaxiways/runwayPaths (flight_id={flight_id!r})")
+    return None
+
+
+def _avg_move_velocity_ms_for_link(layout: Dict[str, Any], link_id: str, flight_id: str) -> float:
+    lid = str(link_id).strip()
+    direct = _avg_move_velocity_ms_for_taxiway_id(layout, lid, flight_id)
+    if direct is not None:
+        return direct
+    for al in layout.get("apronLinks") or []:
+        if not isinstance(al, dict) or str(al.get("id", "")).strip() != lid:
+            continue
+        tw = al.get("taxiwayId")
+        if tw is not None and str(tw).strip() != "":
+            from_tw = _avg_move_velocity_ms_for_taxiway_id(layout, str(tw).strip(), flight_id)
+            if from_tw is not None:
+                return from_tw
+        v = _safe_float(al.get("avgMoveVelocity"), float("nan"))
+        if math.isfinite(v) and v > 0:
+            return float(v)
+        return float(TAXI_SPEED_MPS)
+    raise ValueError(
+        f"link_id={lid!r} not found in layout taxiways/runwayTaxiways/runwayPaths/apronLinks "
+        f"(flight_id={flight_id!r})"
+    )
 
 
 def _velocity_ms_at_distance_on_segment(
-    v0_ms: float, accel_ms2: float, s_m: float, apply_landing_velocity_floor: bool
+    v0_ms: float,
+    accel_ms2: float,
+    s_m: float,
+    apply_landing_velocity_floor: bool,
+    *,
+    decel_floor_ms: float = 0.0,
 ) -> float:
     if abs(accel_ms2) < 1e-12:
         v = float(v0_ms)
@@ -789,6 +834,15 @@ def _velocity_ms_at_distance_on_segment(
         v = math.sqrt(max(0.0, inner))
     if apply_landing_velocity_floor and float(accel_ms2) < -1e-12:
         v = max(v, MIN_LANDING_VELOCITY_MS)
+    elif float(decel_floor_ms) > 1e-12 and float(accel_ms2) < -1e-12:
+        v = max(v, float(decel_floor_ms))
+    elif (
+        not apply_landing_velocity_floor
+        and float(accel_ms2) < -1e-12
+        and v < 1e-6
+    ):
+        # 기타 감속: 정지 후 폴리라인 잔여 — RET는 decel_floor_ms로 처리
+        v = max(v, 1.0)
     return float(v)
 
 
@@ -798,18 +852,24 @@ def _duration_slice_sec(
     s0_m: float,
     s1_m: float,
     apply_landing_velocity_floor: bool,
+    *,
+    decel_floor_ms: float = 0.0,
 ) -> float:
     if s1_m <= s0_m + 1e-12:
         return 0.0
     if abs(accel_ms2) < 1e-12:
-        v = _velocity_ms_at_distance_on_segment(v0_ms, accel_ms2, s0_m, apply_landing_velocity_floor)
+        v = _velocity_ms_at_distance_on_segment(
+            v0_ms, accel_ms2, s0_m, apply_landing_velocity_floor, decel_floor_ms=decel_floor_ms
+        )
         return (s1_m - s0_m) / max(v, 1e-9)
     n = max(8, min(128, int((s1_m - s0_m) / 3.0) + 1))
     ds = (s1_m - s0_m) / float(n)
     t = 0.0
     for i in range(n):
         sm = s0_m + (i + 0.5) * ds
-        vm = _velocity_ms_at_distance_on_segment(v0_ms, accel_ms2, sm, apply_landing_velocity_floor)
+        vm = _velocity_ms_at_distance_on_segment(
+            v0_ms, accel_ms2, sm, apply_landing_velocity_floor, decel_floor_ms=decel_floor_ms
+        )
         t += ds / max(vm, 1e-6)
     return float(t)
 
@@ -883,6 +943,8 @@ def _annotate_segment_kinematics(
             dur_out[i] = _duration_slice_sec(v0_out[i], a_out[i], 0.0, seg_m, apply_floor)
             v_end = _velocity_ms_at_distance_on_segment(v0_out[i], a_out[i], seg_m, apply_floor)
             v_cur = float(v_end)
+            if pt == "runway_taxiway":
+                v_cur = max(v_cur, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
             continue
 
         if phase == PHASE_ARR_TAXI or phase == PHASE_DEP_TAXI:
@@ -894,15 +956,33 @@ def _annotate_segment_kinematics(
                     )
                 prev_lid = str(segment_link_ids[i - 1])
                 v_t = _avg_move_velocity_ms_for_link(layout, prev_lid, flight_id)
+                if phase == PHASE_ARR_TAXI:
+                    v_t = max(float(v_t), MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
                 v0_out[i] = float(v_t)
                 a_out[i] = 0.0
                 v_cur = float(v_t)
             elif is_ret:
+                _ret_floor = float(MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
+                # RET micro-segments: after speed drops ~0, do not integrate decel from v0≈0 (durations explode).
+                if float(v_cur) < 1e-3:
+                    v_t = _avg_move_velocity_ms_for_link(layout, link_id, flight_id)
+                    v_t = max(float(v_t), _ret_floor)
+                    v0_out[i] = float(v_t)
+                    a_out[i] = 0.0
+                    v_cur = float(v_t)
+                    dur_out[i] = _duration_slice_sec(
+                        v0_out[i], a_out[i], 0.0, seg_m, False
+                    )
+                    continue
                 v0_out[i] = float(v_cur)
                 a_out[i] = -float(ARR_RET_DECEL_MS2)
-                dur_out[i] = _duration_slice_sec(v0_out[i], a_out[i], 0.0, seg_m, False)
-                v_end = _velocity_ms_at_distance_on_segment(v0_out[i], a_out[i], seg_m, False)
-                v_cur = float(v_end)
+                dur_out[i] = _duration_slice_sec(
+                    v0_out[i], a_out[i], 0.0, seg_m, False, decel_floor_ms=_ret_floor
+                )
+                v_end = _velocity_ms_at_distance_on_segment(
+                    v0_out[i], a_out[i], seg_m, False, decel_floor_ms=_ret_floor
+                )
+                v_cur = max(float(v_end), _ret_floor)
                 continue
             else:
                 v_t = _avg_move_velocity_ms_for_link(layout, link_id, flight_id)
@@ -982,6 +1062,27 @@ def _finished_entry(
         row["start_velocity_ms"] = float(v0_full[j])
         row["acceleration_ms2"] = float(acc_full[j])
     return row
+
+
+def _collapse_finished_edges_for_export(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """폴리라인 마이크로 조각은 시뮬에만 쓰고, 결과 JSON은 동일 (edge_id, phase) 연속 구간을 한 줄로 합친다."""
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        if not row or not isinstance(row, dict):
+            continue
+        eid = str(row.get("edge_id", "")).strip()
+        ph = str(row.get("phase", "")).strip()
+        if not eid:
+            continue
+        if out:
+            p = out[-1]
+            if (
+                str(p.get("edge_id", "")).strip() == eid
+                and str(p.get("phase", "")).strip() == ph
+            ):
+                continue
+        out.append(dict(row))
+    return out
 
 
 def _split_flight_path_at_touchdown(
@@ -1328,10 +1429,22 @@ def _finish_edge_segment(agent: Flight) -> None:
         }
     )
     agent.segment_endpoints.pop(0)
+    if agent.segment_path_types:
+        agent.segment_path_types.pop(0)
 
 
-def move_agent(agent: Flight, dt: float, pixels_per_meter: float) -> None:
-    """Advance along ``segment_endpoints`` using per-segment :math:`v_0` + constant ``acceleration_ms2``."""
+def move_agent(
+    agent: Flight,
+    dt: float,
+    pixels_per_meter: float,
+    sim_time: Optional[float] = None,
+) -> None:
+    """Advance along ``segment_endpoints`` using per-segment :math:`v_0` + constant ``acceleration_ms2``.
+
+    If ``sim_time`` is set, the first ``Dep_taxi`` segment does not move until
+    ``dep_taxi_start_sim_time`` (EOBT minus ELDT in local sim time: taxi-in + dwell).
+    Use ``sim_time=None`` to skip this (e.g. drain pass).
+    """
     col0, row0 = agent.col, agent.row
     rem_t = float(dt)
     ppm = max(float(pixels_per_meter), 1e-9)
@@ -1343,6 +1456,21 @@ def move_agent(agent: Flight, dt: float, pixels_per_meter: float) -> None:
         or len(agent.edge_phases) != len(agent.edge_ids)
         or len(agent.segment_v0_ms) != len(agent.edge_ids)
         or len(agent.segment_accel_ms2) != len(agent.edge_ids)
+    ):
+        agent.velocity_ms = 0.0
+        return
+    if (
+        agent.segment_path_types
+        and len(agent.segment_path_types) != len(agent.edge_ids)
+    ):
+        agent.velocity_ms = 0.0
+        return
+    if (
+        sim_time is not None
+        and agent.dep_taxi_start_sim_time is not None
+        and agent.edge_phases
+        and agent.edge_phases[0] == PHASE_DEP_TAXI
+        and float(sim_time) + 1e-9 < float(agent.dep_taxi_start_sim_time)
     ):
         agent.velocity_ms = 0.0
         return
@@ -1363,6 +1491,12 @@ def move_agent(agent: Flight, dt: float, pixels_per_meter: float) -> None:
         ph = agent.edge_phases[0]
         apply_floor = ph == PHASE_LANDING and ac < -1e-12
         seg_len_m = seg_len_px / ppm
+        _pt0 = (
+            str(agent.segment_path_types[0] or "")
+            if agent.segment_path_types
+            else ""
+        )
+        _ret_floor_ma = _arr_ret_decel_floor_ms(ph, _pt0, ac)
 
         s_m = agent.edge_s_along_px / ppm
         room_m = seg_len_m - s_m
@@ -1372,7 +1506,12 @@ def move_agent(agent: Flight, dt: float, pixels_per_meter: float) -> None:
             agent.col, agent.row = p1[0], p1[1]
             continue
 
-        v_now = _velocity_ms_at_distance_on_segment(v0s, ac, s_m, apply_floor)
+        v_now = _velocity_ms_at_distance_on_segment(
+            v0s, ac, s_m, apply_floor, decel_floor_ms=_ret_floor_ma
+        )
+        if agent.segment_path_types and str(agent.segment_path_types[0] or "") == "runway_taxiway":
+            if ph == PHASE_LANDING or ph == PHASE_ARR_TAXI:
+                v_now = max(v_now, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
         dt_step = min(0.05, rem_t)
         ds = v_now * dt_step
         dt_used = dt_step
@@ -1392,6 +1531,24 @@ def move_agent(agent: Flight, dt: float, pixels_per_meter: float) -> None:
 
     dist_px = math.hypot(agent.col - col0, agent.row - row0)
     agent.velocity_ms = (dist_px / max(float(dt), 1e-9)) / ppm
+    if (
+        agent.edge_ids
+        and agent.segment_path_types
+        and len(agent.segment_path_types) == len(agent.edge_ids)
+        and agent.edge_phases
+        and agent.segment_accel_ms2
+        and len(agent.segment_accel_ms2) == len(agent.edge_ids)
+    ):
+        _ptn = str(agent.segment_path_types[0] or "")
+        _phn = agent.edge_phases[0]
+        _acn = float(agent.segment_accel_ms2[0])
+        if (
+            _ptn == "runway_taxiway"
+            and (_phn == PHASE_LANDING or _phn == PHASE_ARR_TAXI)
+        ) or _arr_ret_decel_floor_ms(_phn, _ptn, _acn) > 1e-12:
+            agent.velocity_ms = max(
+                agent.velocity_ms, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS
+            )
 
 
 def _sim_time_step_sec(information: Dict[str, Any], dt: float) -> float:
@@ -1479,12 +1636,19 @@ def _taxi_in_out_sec_from_prep(
         s0_m = along0_px / ppm
         if s0_m >= seg_m - 1e-9:
             return 0.0
+        _pty = (
+            str(prep.segment_path_types[g] or "")
+            if len(prep.segment_path_types) == len(segs)
+            else ""
+        )
+        _df = _arr_ret_decel_floor_ms(str(phs[g]), _pty, float(accs[g]))
         return _duration_slice_sec(
             float(v0s[g]),
             float(accs[g]),
             s0_m,
             seg_m,
             phs[g] == PHASE_LANDING and float(accs[g]) < -1e-12,
+            decel_floor_ms=_df,
         )
 
     taxi_in = 0.0
@@ -1501,6 +1665,13 @@ def _taxi_in_out_sec_from_prep(
     return taxi_in, taxi_out
 
 
+def _dwell_sec_from_flight(fobj: Dict[str, Any]) -> float:
+    dwell_sec = _safe_float(fobj.get("dwellMin"), float("nan")) * 60.0
+    if not math.isfinite(dwell_sec) or dwell_sec < 0:
+        return 0.0
+    return dwell_sec
+
+
 def _build_schedule_row(
     fobj: Dict[str, Any],
     fid: str,
@@ -1512,9 +1683,7 @@ def _build_schedule_row(
     S series from ``*_Min_orig``; Sd echo from ``*_Min_d``; E series from path timing + dwell.
     ELDT anchor and taxi splits use Sd-only fields (see ``_sd_eldt_sec``).
     """
-    dwell_sec = _safe_float(fobj.get("dwellMin"), float("nan")) * 60.0
-    if not math.isfinite(dwell_sec) or dwell_sec < 0:
-        dwell_sec = 0.0
+    dwell_sec = _dwell_sec_from_flight(fobj)
 
     eldt_sec = _sd_eldt_sec(fobj)
 
@@ -1628,11 +1797,26 @@ def run_simulation(
                     prep.segment_accel_ms2,
                 )
             )
+            _prep_n = len(prep.edge_ids)
+            _pt_src = prep.segment_path_types
+            if (
+                len(_pt_src) == _prep_n
+                and 0 <= int(g_start) <= _prep_n
+                and len(_pt_src[int(g_start) :]) == len(eids)
+            ):
+                path_rem: List[str] = list(_pt_src[int(g_start) :])
+            else:
+                path_rem = []
             prep.spawn_skip_landing_px = float(skip_ldg)
             prep.spawn_along_first_segment_px = float(along0)
             prep.playback_first_segment_index = int(g_start)
             anchor = _sd_eldt_sec(fobj)
             ppm = max(float(pixels_per_meter), 1e-9)
+            ti_hold, _to_unused = _taxi_in_out_sec_from_prep(prep, ppm)
+            dwell_s = _dwell_sec_from_flight(fobj if isinstance(fobj, dict) else {})
+            dep_start_sim = (
+                float(ti_hold) + float(dwell_s) if ti_hold is not None else None
+            )
             ag_new = Flight(
                 id=fid,
                 edge_ids=list(eids),
@@ -1646,22 +1830,43 @@ def run_simulation(
                 eldt_anchor_sec=float(anchor) if anchor is not None else None,
                 segment_v0_ms=list(v0_rem),
                 segment_accel_ms2=list(acc_rem),
+                segment_path_types=path_rem,
+                dep_taxi_start_sim_time=dep_start_sim,
             )
             if v0_rem and acc_rem and eph:
-                ag_new.velocity_ms = _velocity_ms_at_distance_on_segment(
+                _v_apply = eph[0] == PHASE_LANDING and float(acc_rem[0]) < -1e-12
+                _pt0s = str(path_rem[0] or "") if path_rem else ""
+                _rf = _arr_ret_decel_floor_ms(str(eph[0]), _pt0s, float(acc_rem[0]))
+                v_init = _velocity_ms_at_distance_on_segment(
                     float(v0_rem[0]),
                     float(acc_rem[0]),
                     float(along0) / ppm,
-                    eph[0] == PHASE_LANDING and float(acc_rem[0]) < -1e-12,
+                    _v_apply,
+                    decel_floor_ms=_rf,
                 )
+                if (
+                    path_rem
+                    and str(path_rem[0] or "") == "runway_taxiway"
+                    and eph[0] in (PHASE_LANDING, PHASE_ARR_TAXI)
+                ):
+                    v_init = max(v_init, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
+                if _rf > 1e-12:
+                    v_init = max(v_init, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
+                ag_new.velocity_ms = v_init
             agents_by_id[fid] = ag_new
         if progress_cb:
             progress_cb(float(i + 1), float(total))
 
     max_dur = 0.0
-    for prep in prep_list:
+    for pi, prep in enumerate(prep_list):
         if prep.ok and prep.segment_duration_sec:
-            max_dur = max(max_dur, float(sum(prep.segment_duration_sec)))
+            base = float(sum(prep.segment_duration_sec))
+            fo = (
+                flights_raw[pi]
+                if pi < len(flights_raw) and isinstance(flights_raw[pi], dict)
+                else {}
+            )
+            max_dur = max(max_dur, base + _dwell_sec_from_flight(fo))
     total_end = max(dt_sec, max_dur + 3.0 * dt_sec)
 
     agents = list(agents_by_id.values())
@@ -1676,7 +1881,7 @@ def run_simulation(
         if current_time > total_end + 1e-6:
             break
         for ag in agents:
-            move_agent(ag, dt_sec, pixels_per_meter)
+            move_agent(ag, dt_sec, pixels_per_meter, current_time)
             ag.history.append((current_time + dt_sec, ag.col, ag.row, ag.velocity_ms))
         current_time += dt_sec
         if progress_cb:
@@ -1689,7 +1894,7 @@ def run_simulation(
             break
         for ag in agents:
             if ag.edge_ids:
-                move_agent(ag, drain_dt, pixels_per_meter)
+                move_agent(ag, drain_dt, pixels_per_meter, None)
     for ag in agents:
         if not ag.edge_ids:
             ag.edge_phases.clear()
@@ -1730,11 +1935,12 @@ def run_simulation(
                 base_date,
             )
         )
+        _fin_raw = list(ag.edge_ids_finished) if ag else []
         flights_detail.append(
             {
                 "flight_id": fid,
                 "edge_list": list(ag.edge_ids) if ag else [],
-                "edge_list_finished": list(ag.edge_ids_finished) if ag else [],
+                "edge_list_finished": _collapse_finished_edges_for_export(_fin_raw),
                 "ok": prep.ok and ag is not None,
             }
         )

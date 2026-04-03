@@ -1,3 +1,180 @@
+    }
+    for (let i = state.pbbStands.length - 1; i >= 0; i--) {
+      const pbb = state.pbbStands[i];
+      const corners = getPBBStandCorners(pbb);
+      if (pointInPolygonXY(click, corners))
+        return { type: 'pbb', id: pbb.id, obj: pbb };
+    }
+    for (let i = state.terminals.length - 1; i >= 0; i--) {
+      const t = state.terminals[i];
+      if (t.closed && t.vertices.length >= 3 && pointInPolygon(click, t.vertices))
+        return { type: 'terminal', id: t.id, obj: t };
+    }
+    const hpHit = hitTestHoldingPoint(wx, wy);
+    if (hpHit) return hpHit;
+    const apronLkHit = hitTestApronLink(wx, wy);
+    if (apronLkHit) return apronLkHit;
+    if (!state.taxiwayDrawingId) {
+      for (let i = state.taxiways.length - 1; i >= 0; i--) {
+        const tw = state.taxiways[i];
+        if (tw.vertices.length < 2) continue;
+        const halfW = (tw.width != null ? tw.width : 23) / 2;
+        const hitD2 = (CELL_SIZE * HIT_TW_SEG_CF + halfW) ** 2;
+        for (let j = 0; j < tw.vertices.length - 1; j++) {
+          const [x1, y1] = cellToPixel(tw.vertices[j].col, tw.vertices[j].row);
+          const [x2, y2] = cellToPixel(tw.vertices[j + 1].col, tw.vertices[j + 1].row);
+          const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+          if (near && dist2(near, click) < hitD2) return { type: 'taxiway', id: tw.id, obj: tw };
+        }
+      }
+    }
+    return null;
+  }
+
+  function hitTestTerminalVertex(wx, wy) {
+    const maxD2 = (CELL_SIZE * HIT_TERM_VTX_CF) ** 2;
+    const cands = [];
+    state.terminals.forEach(t => {
+      t.vertices.forEach((v, idx) => {
+        cands.push({ terminalId: t.id, index: idx, v });
+      });
+    });
+    const best = findNearestItem(cands, c => cellToPixel(c.v.col, c.v.row), wx, wy, maxD2);
+    return best ? { terminalId: best.terminalId, index: best.index } : null;
+  }
+
+  function hitTestTaxiwayVertex(wx, wy) {
+    if (!state.selectedObject || state.selectedObject.type !== 'taxiway') return null;
+    const tw = state.selectedObject.obj;
+    if (!tw || !tw.vertices || tw.vertices.length === 0) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    tw.vertices.forEach((v, idx) => {
+      const [vx, vy] = cellToPixel(v.col, v.row);
+      const d2 = dist2([vx, vy], click);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = { taxiwayId: tw.id, index: idx };
+      }
+    });
+    return best;
+  }
+  function hitTestPbbEditablePoint(wx, wy) {
+    if (!state.selectedObject || state.selectedObject.type !== 'pbb') return null;
+    const pbb = state.selectedObject.obj;
+    if (!pbb || pbb.id !== state.selectedObject.id) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    (Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : []).forEach(function(bridge, bridgeIdx) {
+      (Array.isArray(bridge.points) ? bridge.points : []).forEach(function(pt, ptIdx) {
+        const d2 = dist2([Number(pt.x) || 0, Number(pt.y) || 0], click);
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          best = { type: 'bridge', bridgeIndex: bridgeIdx, pointIndex: ptIdx };
+        }
+      });
+    });
+    const apronPt = getStandConnectionPx(pbb);
+    const apronD2 = dist2(apronPt, click);
+    if (apronD2 < bestD2) best = { type: 'apronSite' };
+    return best;
+  }
+  function findInsertSegment(vertices, closed, wx, wy) {
+    if (!Array.isArray(vertices) || vertices.length < 2) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * INSERT_VERTEX_HIT_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    const lastSeg = closed ? vertices.length : (vertices.length - 1);
+    function vertexToPixel(v) {
+      if (Array.isArray(v) && v.length >= 2) return [Number(v[0]) || 0, Number(v[1]) || 0];
+      if (v && v.x != null && v.y != null) return [Number(v.x) || 0, Number(v.y) || 0];
+      return cellToPixel(v.col, v.row);
+    }
+    for (let i = 0; i < lastSeg; i++) {
+      const curr = vertices[i];
+      const next = vertices[(i + 1) % vertices.length];
+      const p1 = vertexToPixel(curr);
+      const p2 = vertexToPixel(next);
+      const near = closestPointOnSegment(p1, p2, click);
+      if (!near) continue;
+      const d2 = dist2(near, click);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = { insertIndex: i + 1, near: near };
+      }
+    }
+    return best;
+  }
+  function insertSelectedVertexAt(wx, wy, snapToGrid) {
+    if (!state.selectedObject || !state.selectedObject.obj) return false;
+    const sel = state.selectedObject;
+    if (sel.type === 'terminal') {
+      const term = sel.obj;
+      const hit = findInsertSegment(term.vertices, !!term.closed, wx, wy);
+      if (!hit) return false;
+      const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
+      pushUndo();
+      term.vertices.splice(hit.insertIndex, 0, pt);
+      state.selectedVertex = { type: 'terminal', id: term.id, index: hit.insertIndex };
+      updateObjectInfo();
+      draw();
+      return true;
+    }
+    if (sel.type === 'taxiway') {
+      const tw = sel.obj;
+      const hit = findInsertSegment(tw.vertices, false, wx, wy);
+      if (!hit) return false;
+      const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
+      pushUndo();
+      tw.vertices.splice(hit.insertIndex, 0, pt);
+      if (typeof syncStartEndFromVertices === 'function') syncStartEndFromVertices(tw);
+      state.selectedVertex = { type: 'taxiway', id: tw.id, index: hit.insertIndex };
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    if (sel.type === 'apronLink') {
+      const lk = sel.obj;
+      const mids = (Array.isArray(lk.midVertices) ? lk.midVertices.slice() : []);
+      const poly = [getApronLinkStandEndPx(lk)].concat(mids.map(function(v) { return cellToPixel(v.col, v.row); })).concat([[Number(lk.tx), Number(lk.ty)]]);
+      const hit = findInsertSegment(poly, false, wx, wy);
+      if (!hit) return false;
+      const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
+      pushUndo();
+      if (!Array.isArray(lk.midVertices)) lk.midVertices = [];
+      lk.midVertices.splice(Math.max(0, hit.insertIndex - 1), 0, pt);
+      state.selectedVertex = { type: 'apronLink', id: lk.id, kind: 'mid', midIndex: Math.max(0, hit.insertIndex - 1) };
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    return false;
+  }
+
+  function snapWorldPointToTaxiwayPolyline(wx, wy, taxiwayId) {
+    const tw = (state.taxiways || []).find(t => t.id === taxiwayId);
+    if (!tw || !tw.vertices || tw.vertices.length < 2) return null;
+    const click = [wx, wy];
+    let best = null;
+    let bestD2 = Infinity;
+    for (let i = 0; i < tw.vertices.length - 1; i++) {
+      const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+      const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
+      const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+      if (!near) continue;
+      const d2 = dist2(near, click);
+      if (d2 < bestD2) { bestD2 = d2; best = near; }
+    }
+    return best;
+  }
+
+  function hitTestApronLinkVertex(wx, wy) {
+    if (!state.selectedObject || state.selectedObject.type !== 'apronLink') return null;
     const lk = state.selectedObject.obj;
     if (!lk || lk.id !== state.selectedObject.id) return null;
     const click = [wx, wy];
@@ -451,180 +628,3 @@
         const fb = pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
         tw.width = clampTaxiwayWidthM(pathType, el('taxiwayWidth').value, fb);
       }
-      if (el('taxiwayMaxExitVel')) {
-        const mv = Number(el('taxiwayMaxExitVel').value);
-        if (tw.pathType === 'runway_exit') tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
-        else delete tw.maxExitVelocity;
-      }
-      if (el('taxiwayMinExitVel') && tw.pathType === 'runway_exit') {
-        const mv2 = Number(el('taxiwayMinExitVel').value);
-        let v = isFinite(mv2) && mv2 > 0 ? mv2 : 15;
-        if (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && v > tw.maxExitVelocity) v = tw.maxExitVelocity;
-        tw.minExitVelocity = v;
-        tw.allowedRwDirections = getRunwayExitAllowedDirectionsFromPanel();
-      } else if (tw.pathType !== 'runway_exit') {
-        delete tw.minExitVelocity;
-        delete tw.allowedRwDirections;
-      }
-      if (el('taxiwayDirectionMode')) {
-        let dirVal = el('taxiwayDirectionMode').value || '';
-        if (tw.pathType === 'runway') tw.direction = (dirVal === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
-        else tw.direction = dirVal || 'both';
-      }
-      if (el('taxiwayAvgMoveVelocity')) {
-        var v = Number(el('taxiwayAvgMoveVelocity').value);
-        tw.avgMoveVelocity = (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
-      }
-      if (el('runwayMinArrVelocity')) {
-        const mav = Number(el('runwayMinArrVelocity').value);
-        if (tw.pathType === 'runway') {
-          tw.minArrVelocity = (typeof mav === 'number' && isFinite(mav) && mav > 0) ? Math.max(1, Math.min(150, mav)) : 15;
-        } else {
-          delete tw.minArrVelocity;
-        }
-      }
-      if (el('runwayLineupDistM') && tw.pathType === 'runway') {
-        const lx = Number(el('runwayLineupDistM').value);
-        tw.lineupDistM = (typeof lx === 'number' && isFinite(lx) && lx >= 0) ? lx : 0;
-      } else if (tw.pathType !== 'runway') {
-        delete tw.lineupDistM;
-      }
-      if (tw.pathType === 'runway') {
-        const startDisp = Number(el('runwayStartDisplacedThresholdM') ? el('runwayStartDisplacedThresholdM').value : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
-        const startBlast = Number(el('runwayStartBlastPadM') ? el('runwayStartBlastPadM').value : RUNWAY_START_BLAST_PAD_DEFAULT_M);
-        const endDisp = Number(el('runwayEndDisplacedThresholdM') ? el('runwayEndDisplacedThresholdM').value : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
-        const endBlast = Number(el('runwayEndBlastPadM') ? el('runwayEndBlastPadM').value : RUNWAY_END_BLAST_PAD_DEFAULT_M);
-        tw.startDisplacedThresholdM = (typeof startDisp === 'number' && isFinite(startDisp) && startDisp >= 0) ? startDisp : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.startBlastPadM = (typeof startBlast === 'number' && isFinite(startBlast) && startBlast >= 0) ? startBlast : RUNWAY_START_BLAST_PAD_DEFAULT_M;
-        tw.endDisplacedThresholdM = (typeof endDisp === 'number' && isFinite(endDisp) && endDisp >= 0) ? endDisp : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.endBlastPadM = (typeof endBlast === 'number' && isFinite(endBlast) && endBlast >= 0) ? endBlast : RUNWAY_END_BLAST_PAD_DEFAULT_M;
-      } else {
-        delete tw.startDisplacedThresholdM;
-        delete tw.startBlastPadM;
-        delete tw.endDisplacedThresholdM;
-        delete tw.endBlastPadM;
-      }
-    }
-  }
-
-  function syncSettingsPaneToMode() {
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
-    if (layoutModeTabs) {
-      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
-      });
-    }
-    document.querySelectorAll('.settings-pane').forEach(el => { el.style.display = 'none'; });
-    const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
-    const pane = document.getElementById('settings-' + paneKey);
-    if (pane) pane.style.display = 'block';
-    if (isPathLayoutMode(mode)) {
-      const pt = pathTypeFromLayoutMode(mode);
-      syncPathFieldVisibilityForPathType(pt);
-      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
-        const nameInput = document.getElementById('taxiwayName');
-        if (nameInput) nameInput.value = getDefaultPathName(pt);
-        const widthInput = document.getElementById('taxiwayWidth');
-        if (widthInput) {
-          widthInput.value = pt === 'runway'
-            ? RUNWAY_PATH_DEFAULT_WIDTH
-            : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-        }
-        if (pt === 'runway') {
-          const startDispInput = document.getElementById('runwayStartDisplacedThresholdM');
-          if (startDispInput) startDispInput.value = String(RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
-          const startBlastInput = document.getElementById('runwayStartBlastPadM');
-          if (startBlastInput) startBlastInput.value = String(RUNWAY_START_BLAST_PAD_DEFAULT_M);
-          const endDispInput = document.getElementById('runwayEndDisplacedThresholdM');
-          if (endDispInput) endDispInput.value = String(RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
-          const endBlastInput = document.getElementById('runwayEndBlastPadM');
-          if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
-        }
-      }
-    }
-    if (typeof renderObjectList === 'function') renderObjectList();
-  }
-
-  settingModeSelect.addEventListener('change', function() {
-    cancelActiveLayoutDrawingState();
-    state.selectedObject = null;
-    syncSettingsPaneToMode();
-  });
-  if (layoutModeTabs && settingModeSelect) {
-    layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const mode = this.getAttribute('data-mode') || 'grid';
-        if (settingModeSelect.value === mode) {
-          cancelActiveLayoutDrawingState();
-          syncSettingsPaneToMode();
-          return;
-        }
-        settingModeSelect.value = mode;
-        settingModeSelect.dispatchEvent(new Event('change'));
-      });
-    });
-  }
-  syncSettingsPaneToMode();
-
-  let activeTab = 'settings';
-  function switchToTab(tabId) {
-    activeTab = tabId;
-    cancelActiveLayoutDrawingState();
-    document.querySelectorAll('.right-panel-tab').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    const tabBtn = document.querySelector('.right-panel-tab[data-tab="' + tabId + '"]');
-    const tabEl = document.getElementById('tab-' + tabId);
-    if (tabBtn) tabBtn.classList.add('active');
-    if (tabEl) tabEl.classList.add('active');
-    if (tabId === 'flight') {
-      if (state.selectedObject && state.selectedObject.type === 'flight' && typeof hookSyncFlightPanelFromSelection === 'function')
-        hookSyncFlightPanelFromSelection();
-    }
-    if (tabId === 'allocation' && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
-    if (tabId === 'rwysep') {
-      const rwyPanel = document.getElementById('rwySepPanel');
-      if (
-        state.rwySepPanelDirty === false &&
-        rwyPanel &&
-        document.getElementById('rwysep-standard') &&
-        typeof drawRwySeparationTimeline === 'function'
-      ) {
-        drawRwySeparationTimeline(rwyPanel);
-      } else if (typeof renderRunwaySeparation === 'function') {
-        renderRunwaySeparation();
-      }
-    }
-  }
-  document.querySelectorAll('.right-panel-tab').forEach(btn => {
-    btn.addEventListener('click', function() { switchToTab(this.getAttribute('data-tab')); });
-  });
-
-  ['chkShowSPoints', 'chkShowEBar', 'chkShowEPoints', 'chkShowSBars'].forEach(function(chkId) {
-    const el = document.getElementById(chkId);
-    if (el) el.addEventListener('change', function() {
-      if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
-    });
-  });
-
-  document.getElementById('gridCellSize').addEventListener('change', function() { CELL_SIZE = Math.max(5, Number(this.value) || 5); invalidateGridUnderlay(); draw(); });
-  document.getElementById('gridCols').addEventListener('change', function() { GRID_COLS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); invalidateGridUnderlay(); draw(); });
-  document.getElementById('gridRows').addEventListener('change', function() { GRID_ROWS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); invalidateGridUnderlay(); draw(); });
-  function commitGridLayoutImageNumericChange(inputId, applyFn) {
-    const input = document.getElementById(inputId);
-    if (!input) return;
-    input.addEventListener('change', function() {
-      if (!state.layoutImageOverlay) {
-        syncPanelFromState();
-        return;
-      }
-      const before = JSON.stringify(state.layoutImageOverlay);
-      const snapshot = JSON.parse(before);
-      applyFn(this);
-      const after = JSON.stringify(state.layoutImageOverlay);
-      if (before === after) {
-        syncPanelFromState();
-        invalidateGridUnderlay();
-        draw();
-        return;
-      }
-      undoStack.push({

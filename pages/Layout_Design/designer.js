@@ -641,6 +641,36 @@
   function isPathLayoutMode(m) {
     return PATH_LAYOUT_MODES.indexOf(m) >= 0;
   }
+  function standHasApronTaxiwayLink(standId) {
+    if (standId == null || standId === '') return false;
+    const links = state.apronLinks || [];
+    const tws = state.taxiways || [];
+    for (let i = 0; i < links.length; i++) {
+      const lk = links[i];
+      if (!lk || lk.pbbId !== standId) continue;
+      const tid = lk.taxiwayId;
+      for (let j = 0; j < tws.length; j++) {
+        if (tws[j] && tws[j].id === tid) return true;
+      }
+    }
+    return false;
+  }
+  function ganttESeriesMinutesFromTimelineMeta(f) {
+    const m = f && f.timeline_meta;
+    if (!m || typeof m !== 'object') {
+      return { eldt: NaN, eibt: NaN, eobt: NaN, etot: NaN };
+    }
+    const toMin = function(sec) {
+      const n = sec != null ? Number(sec) : NaN;
+      return (isFinite(n) ? n / 60 : NaN);
+    };
+    return {
+      eldt: toMin(m.eldtSec),
+      eibt: toMin(m.eibtSec),
+      eobt: toMin(m.eobtSec),
+      etot: toMin(m.etotSec),
+    };
+  }
   function settingModeValueForHit(hit) {
     if (!hit || !hit.type) return null;
     if (hit.type === 'terminal') return 'terminal';
@@ -1090,10 +1120,8 @@
     if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-    else {
-      if (typeof renderFlightList === 'function') renderFlightList();
-      draw();
-    }
+    else draw();
+    if (typeof renderFlightList === 'function') renderFlightList();
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
@@ -4595,6 +4623,15 @@
   }
 
   const FLIGHT_SCHED_TABLE_COL_COUNT = 29;
+  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). */
+  const FLIGHT_SCHED_TD_SLD = 12;
+  const FLIGHT_SCHED_TD_SIBTD = 13;
+  const FLIGHT_SCHED_TD_SOBTD = 14;
+  const FLIGHT_SCHED_TD_STOTD = 15;
+  const FLIGHT_SCHED_TD_ELDT = 16;
+  const FLIGHT_SCHED_TD_EIBT = 17;
+  const FLIGHT_SCHED_TD_EOBT = 18;
+  const FLIGHT_SCHED_TD_ETOT = 19;
   function ensureFlightAssignStripWired() {
     if (window.__flightAssignStripWired) return;
     const wrap = document.getElementById('flightAssignStrip');
@@ -4672,82 +4709,20 @@
   }
   function getBaseVttArrMinutes(f) {
     if (!f) return 0;
-    if (f.deferPathCompute) return 0;
-    const rev = state.vttArrCacheRev | 0;
-    if (f.__schedVttArrRev === rev && f.__schedVttArrMin != null && isFinite(f.__schedVttArrMin)) {
-      return f.__schedVttArrMin;
-    }
-    if (typeof sampleArrRetRotForFlightIfNeeded === 'function') {
-      const retStatsAll = getScheduleRetStatsAll();
-      const rotCfgMap = {};
-      sampleArrRetRotForFlightIfNeeded(f, retStatsAll, rotCfgMap, false);
-    }
-    const arrPts = (typeof getPathForFlight === 'function') ? getPathForFlight(f) : null;
-    let vttArrMin = 0;
-    if (arrPts && arrPts.length >= 2) {
-      let startIdx = 0;
-      if (f.sampledArrRet) {
-        const tw = (state.taxiways || []).find(t => t.id === f.sampledArrRet);
-        if (tw && Array.isArray(tw.vertices) && tw.vertices.length) {
-          const last = tw.vertices[tw.vertices.length - 1];
-          const retOutPt = cellToPixel(last.col, last.row);
-          let bestD2 = Infinity;
-          let bestIdx = 0;
-          for (let i = 0; i < arrPts.length; i++) {
-            const dx = arrPts[i][0] - retOutPt[0];
-            const dy = arrPts[i][1] - retOutPt[1];
-            const d2 = dx*dx + dy*dy;
-            if (d2 < bestD2) { bestD2 = d2; bestIdx = i; }
-          }
-          startIdx = Math.min(bestIdx, arrPts.length - 2);
-        }
-      }
-      const carry = { lastTaxiwayMs: null };
-      let sec = 0;
-      for (let i = startIdx; i < arrPts.length - 1; i++) {
-        const len = pathDist(arrPts[i], arrPts[i + 1]);
-        if (len < 1e-9) continue;
-        const v = taxiSegmentVelocityMsForPolylineSegment(arrPts[i], arrPts[i + 1], carry);
-        sec += len / Math.max(0.1, v);
-      }
-      vttArrMin = sec / 60;
-    }
-    f.__schedVttArrMin = vttArrMin;
-    f.__schedVttArrRev = rev;
-    return vttArrMin;
+    return 0;
   }
   function getArrRotMinutes(f) {
-    const rotSec = f && f.arrRotSec;
-    return (rotSec != null && isFinite(rotSec) && rotSec >= 0) ? rotSec / 60 : 0;
+    if (!f) return 0;
+    return 0;
   }
   function getBaseVttDepMinutes(f) {
-    if (!f || f.deferPathCompute) return 0;
-    const depPts = (typeof getPathForFlightDeparture === 'function') ? getPathForFlightDeparture(f) : null;
-    if (!depPts || depPts.length < 2) return 0;
-    const carry = { lastTaxiwayMs: null };
-    let sec = 0;
-    for (let i = 0; i < depPts.length - 1; i++) {
-      const len = pathDist(depPts[i], depPts[i + 1]);
-      if (len < 1e-9) continue;
-      const v = taxiSegmentVelocityMsForPolylineSegment(depPts[i], depPts[i + 1], carry);
-      sec += len / Math.max(0.1, v);
-    }
-    return sec / 60;
+    if (!f) return 0;
+    return 0;
   }
   
   function getBaseVttDepMinutesToLineup(f) {
-    if (!f || f.deferPathCompute) return 0;
-    const depPts = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, { onlyToLineup: true }) : null;
-    if (!depPts || depPts.length < 2) return 0;
-    const carry = { lastTaxiwayMs: null };
-    let sec = 0;
-    for (let i = 0; i < depPts.length - 1; i++) {
-      const len = pathDist(depPts[i], depPts[i + 1]);
-      if (len < 1e-9) continue;
-      const v = taxiSegmentVelocityMsForPolylineSegment(depPts[i], depPts[i + 1], carry);
-      sec += len / Math.max(0.1, v);
-    }
-    return sec / 60;
+    if (!f) return 0;
+    return 0;
   }
   
   function getDepBlockOutMin(f) {
@@ -4791,27 +4766,7 @@
   }
 
   function pinEarliestEldtToSldtPerRunway(flights) {
-    if (!Array.isArray(flights)) return;
-    const byRwy = {};
-    flights.forEach(f => {
-      if (!f || arrivalAirsideBlocked(f)) return;
-      const rwy = f.arrRunwayId || (f.token && (f.token.arrRunwayId != null ? f.token.arrRunwayId : f.token.runwayId));
-      if (rwy == null || rwy === '') return;
-      const sldt = f.sldtMin_d;
-      if (sldt == null || !isFinite(sldt)) return;
-      if (!byRwy[rwy]) byRwy[rwy] = [];
-      byRwy[rwy].push(f);
-    });
-    Object.keys(byRwy).forEach(function(rwyId) {
-      const list = byRwy[rwyId];
-      let minS = Infinity;
-      let chosen = null;
-      list.forEach(function(f) {
-        const s = f.sldtMin_d;
-        if (s != null && isFinite(s) && s < minS) { minS = s; chosen = f; }
-      });
-      if (chosen) chosen.eldtMin = chosen.sldtMin_d;
-    });
+    void flights;
   }
 
   var __schedRetStatsBatchActive = false;
@@ -4835,8 +4790,7 @@
   }
 
   function warmFlightPathsForSchedule(flights) {
-    if (!Array.isArray(flights)) return;
-    flights.forEach(function(f) { ensureFlightPaths(f); });
+    void flights;
   }
 
   function warmPathsEnsureArrRetRot(flights, forceResampleRet) {
@@ -4881,13 +4835,10 @@
       return true;
     });
   }
+  /** Runway-exit (RET) sampling + runway-only ROT physics for Arrival Configuration / schedule RET column. No taxi graph / Dijkstra. */
   function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {
     if (!f) return;
     const rev = state.vttArrCacheRev | 0;
-    if (!forceResample && f.deferPathCompute) {
-      f.__schedRetRotRev = rev;
-      return;
-    }
     if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
     if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
         f.sampledArrRet != null && f.arrRetFailed === false && f.arrRotSec != null && isFinite(f.arrRotSec) &&
@@ -5087,108 +5038,42 @@
       const retInfo = retStatsAll.find(r => r.exit && r.exit.id === f.sampledArrRet);
       sampledRetName = retInfo ? (retInfo.name || 'RET') : 'RET';
     }
-    if (f.deferPathCompute) {
-      const tArrMin = f.timeMin != null ? f.timeMin : 0;
-      const dwell = f.dwellMin != null ? f.dwellMin : 0;
-      const tDepMin = tArrMin + dwell;
-      const tArr = formatMinutesToHHMMSS(tArrMin);
-      const tDep = formatMinutesToHHMMSS(tDepMin);
-      const dash = '—';
-      const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
-      const termId = f.terminalId || (f.token && f.token.terminalId);
-      const arrRwRead = escapeHtml(getRunwayDisplayLabelById(arrRunwayId));
-      const buildingRead = escapeHtml(getTerminalDisplayLabelById(termId));
-      const depRwRead = escapeHtml(getRunwayDisplayLabelById(depRunwayId));
-      const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
-      const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
-      const pathPendingClass = ' flight-row-path-pending';
-      const pathPendingTitle = ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"';
-      return '' +
-        '<tr class="flight-data-row obj-item' + pathPendingClass + '"' + pathPendingTitle + ' data-id="' + f.id + '">' +
-          '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + '</td>' +
-          '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
-          '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
-          '<td class="flight-td-readonly">' + arrRwRead + '</td>' +
-          '<td class="flight-td-arr-ret' + (arrRetFailed ? ' flight-td-arr-ret-failed' : '') + '">' + (arrRetFailed ? 'Failed' : escapeHtml(sampledRetName)) + '</td>' +
-          '<td class="flight-td-readonly">' + buildingRead + '</td>' +
-          '<td class="flight-td-reg">' + (function() { var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); })() + '</td>' +
-          '<td class="flight-td-readonly">' + depRwRead + '</td>' +
-          '<td class="flight-td-time flight-col-s flight-col-s-start">' + dash + '</td>' +
-          '<td class="flight-td-time flight-td-sibt flight-col-s">' + tArr + '</td>' +
-          '<td class="flight-td-time flight-col-s">' + tDep + '</td>' +
-          '<td class="flight-td-time flight-col-s flight-col-s-last">' + dash + '</td>' +
-          '<td class="flight-td-time flight-col-sd flight-col-sd-start">' + dash + '</td>' +
-          '<td class="flight-td-time flight-col-sd">' + dash + '</td>' +
-          '<td class="flight-td-time flight-col-sd">' + dash + '</td>' +
-          '<td class="flight-td-time flight-col-sd flight-col-sd-last">' + dash + '</td>' +
-          '<td class="flight-td-time flight-col-e flight-col-e-start">' + dash + '</td>' +
-          '<td class="flight-td-time flight-col-e">' + dash + '</td>' +
-          '<td class="flight-td-time flight-col-e">' + dash + '</td>' +
-          '<td class="flight-td-time flight-col-e">' + dash + '</td>' +
-          '<td class="flight-td-time flight-col-e flight-col-rot">' + dash + '</td>' +
-          '<td class="flight-td-time">' + dash + '</td>' +
-          '<td class="flight-td-time">' + dash + '</td>' +
-          '<td class="flight-td-time">' + dash + '</td>' +
-          '<td class="flight-td-time">' + dash + '</td>' +
-          '<td class="flight-td-time">' + dash + '</td>' +
-          '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
-          '<td>' + escapeHtml(codeIcao) + '</td>' +
-          '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
-        '</tr>';
-    }
     const tArrMin = f.timeMin != null ? f.timeMin : 0;
     const dwell = f.dwellMin != null ? f.dwellMin : 0;
     const tDepMin = tArrMin + dwell;
-    const vttArrMin = getBaseVttArrMinutes(f);
-    const rotArrMin = getArrRotMinutes(f);
-    const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-    const rollBundleSecFallback = DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2);
-    const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function')
-      ? getBaseVttDepMinutesToLineup(f)
-      : Math.max(0, depBlockOutMin - ((typeof computeDepRollAndLineupOnlySec === 'function') ? computeDepRollAndLineupOnlySec(f) : rollBundleSecFallback) / 60);
-    const vttDepMinSlot = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
-    const depRotSecVal = (typeof computeDepRotSecondsForFlight === 'function') ? computeDepRotSecondsForFlight(f) : Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
-    const rotDepMin = depRotSecVal / 60;
-    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin - rotArrMin));
+    const schedDepRotMin = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
+    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin));
     const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
     const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + rotDepMin + vttDepMinSlot);
+    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + schedDepRotMin);
     const sldtStr = formatMinutesToHHMMSS(f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc);
     const stotStr = formatMinutesToHHMMSS(stotOrig);
     const sldtStr_d = formatMinutesToHHMMSS(f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
     const sibtStr_d = formatMinutesToHHMMSS(f.sibtMin_d != null ? f.sibtMin_d : tArrMin);
     const sobtStr_d = formatMinutesToHHMMSS(f.sobtMin_d != null ? f.sobtMin_d : tDepMin);
     const stotStr_d = formatMinutesToHHMMSS(f.stotMin_d != null ? f.stotMin_d : stotOrig);
-    const eldtMin = f.eldtMin != null ? f.eldtMin : (f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
-    const etotCandMin = f.etotMin != null ? f.etotMin : (f.stotMin_d != null ? f.stotMin_d : stotOrig);
-    f.eldtMin = eldtMin;
     const tArr = formatMinutesToHHMMSS(tArrMin);
     const tDep = formatMinutesToHHMMSS(tDepMin);
-    const vttADelayMin = f.vttADelayMin != null ? f.vttADelayMin : 0;
-    const eibtMin = eldtMin + rotArrMin + vttArrMin + vttADelayMin;
-    f.eibtMin = eibtMin;
-    applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotCandMin);
-    const eobtMin = f.eobtMin != null ? f.eobtMin : (f.etotMin != null ? f.etotMin - depBlockOutMin : 0);
-    const etotMin = f.etotMin != null ? f.etotMin : (eobtMin + depBlockOutMin);
     if (f.sobtMin_orig == null) {
       f.sldtMin_orig = sldtOrig;
       f.sibtMin_orig = tArrMin;
       f.sobtMin_orig = sobtOrig;
       f.stotMin_orig = stotOrig;
-      f.eldtMin_orig = eldtMin;
-      f.eibtMin_orig = eibtMin;
-      f.eobtMin_orig = eobtMin;
-      f.etotMin_orig = etotMin;
     }
-    const eldtStr = formatMinutesToHHMMSS(eldtMin);
-    const etotStr = formatMinutesToHHMMSS(etotMin);
-    const eibtStr = formatMinutesToHHMMSS(eibtMin);
-    const eobtStr = formatMinutesToHHMMSS(eobtMin);
-    const vttArrStr = formatMinutesToHHMMSS(vttArrMin);
-    const vttADelayStr = formatMinutesToHHMMSS(vttADelayMin);
-    const vttDepStr = formatMinutesToHHMMSS(vttDepMinSlot);
-    const depRotStr = formatTotalSecondsToHHMMSS(depRotSecVal);
-    const depTaxiDelayStr = formatSignedMinutesToHHMMSS(f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
+    function fmtFlightESchedCell(minVal) {
+      return (typeof minVal === 'number' && isFinite(minVal)) ? formatMinutesToHHMMSS(minVal) : '—';
+    }
+    const eldtStr = fmtFlightESchedCell(f.eldtMin);
+    const eibtStr = fmtFlightESchedCell(f.eibtMin);
+    const eobtStr = fmtFlightESchedCell(f.eobtMin);
+    const etotStr = fmtFlightESchedCell(f.etotMin);
+    const dash = '—';
+    const rotArrCell = (f.arrRotSec != null && isFinite(f.arrRotSec)) ? (Math.round(f.arrRotSec) + ' s') : dash;
+    const rotDepCell = (f.depRotSec != null && isFinite(f.depRotSec)) ? (Math.round(f.depRotSec) + ' s') : dash;
+    const sttArrCell = (typeof f.sttArrMin === 'number' && isFinite(f.sttArrMin)) ? formatMinutesToHHMMSS(f.sttArrMin) : dash;
+    const attArrCell = (typeof f.attArrMin === 'number' && isFinite(f.attArrMin)) ? formatMinutesToHHMMSS(f.attArrMin) : dash;
+    const sttDepCell = (typeof f.sttDepMin === 'number' && isFinite(f.sttDepMin)) ? formatMinutesToHHMMSS(f.sttDepMin) : dash;
+    const attDepCell = (typeof f.attDepMin === 'number' && isFinite(f.attDepMin)) ? formatMinutesToHHMMSS(f.attDepMin) : dash;
     const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
     const termId = f.terminalId || (f.token && f.token.terminalId);
     const arrRwRead = escapeHtml(getRunwayDisplayLabelById(arrRunwayId));
@@ -5196,10 +5081,8 @@
     const depRwRead = escapeHtml(getRunwayDisplayLabelById(depRunwayId));
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
-    const pathPendingClass = f.deferPathCompute ? ' flight-row-path-pending' : '';
-    const pathPendingTitle = f.deferPathCompute ? ' title="' + escapeAttr('경로 미계산 — Update로 반영') + '"' : '';
     return '' +
-      '<tr class="flight-data-row obj-item' + pathPendingClass + '"' + pathPendingTitle + ' data-id="' + f.id + '">' +
+      '<tr class="flight-data-row obj-item" data-id="' + f.id + '">' +
         '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
@@ -5208,10 +5091,10 @@
         '<td class="flight-td-readonly">' + buildingRead + '</td>' +
         '<td class="flight-td-reg">' + (function() { var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); })() + '</td>' +
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
-        '<td class="flight-td-time flight-col-s flight-col-s-start">' + sldtStr + '</td>' +
-        '<td class="flight-td-time flight-td-sibt flight-col-s">' + tArr + '</td>' +
-        '<td class="flight-td-time flight-col-s">' + tDep + '</td>' +
-        '<td class="flight-td-time flight-col-s flight-col-s-last">' + stotStr + '</td>' +
+        '<td class="flight-td-time flight-col-s flight-col-s-start">' + escapeHtml(sldtStr) + '</td>' +
+        '<td class="flight-td-time flight-td-sibt flight-col-s">' + escapeHtml(tArr) + '</td>' +
+        '<td class="flight-td-time flight-col-s">' + escapeHtml(tDep) + '</td>' +
+        '<td class="flight-td-time flight-col-s flight-col-s-last">' + escapeHtml(stotStr) + '</td>' +
         '<td class="flight-td-time flight-col-sd flight-col-sd-start">' + sldtStr_d + '</td>' +
         '<td class="flight-td-time flight-col-sd">' + sibtStr_d + '</td>' +
         '<td class="flight-td-time flight-col-sd">' + sobtStr_d + '</td>' +
@@ -5220,12 +5103,12 @@
         '<td class="flight-td-time flight-col-e">' + eibtStr + '</td>' +
         '<td class="flight-td-time flight-col-e">' + eobtStr + '</td>' +
         '<td class="flight-td-time flight-col-e">' + etotStr + '</td>' +
-        '<td class="flight-td-time flight-col-e flight-col-rot">' + (f.arrRotSec != null && isFinite(f.arrRotSec) ? (Math.round(f.arrRotSec) + ' s') : '—') + '</td>' +
-        '<td class="flight-td-time">' + vttArrStr + '</td>' +
-        '<td class="flight-td-time">' + vttADelayStr + '</td>' +
-        '<td class="flight-td-time">' + depRotStr + '</td>' +
-        '<td class="flight-td-time">' + vttDepStr + '</td>' +
-        '<td class="flight-td-time">' + depTaxiDelayStr + '</td>' +
+        '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
+        '<td class="flight-td-time">' + sttArrCell + '</td>' +
+        '<td class="flight-td-time">' + attArrCell + '</td>' +
+        '<td class="flight-td-time">' + rotDepCell + '</td>' +
+        '<td class="flight-td-time">' + sttDepCell + '</td>' +
+        '<td class="flight-td-time">' + attDepCell + '</td>' +
         '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
         '<td>' + escapeHtml(codeIcao) + '</td>' +
         '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
@@ -5245,14 +5128,9 @@
     const headerRow = _buildFlightListHeaderHtml();
     const dirtyIds = [];
     dirtySet.forEach(function(id) { if (id != null && id !== '') dirtyIds.push(id); });
-    const deferOnlyDirty = dirtyIds.length > 0 && dirtyIds.every(function(fid) {
-      const ff = flightsSorted.find(function(x) { return x.id === fid; });
-      return ff && ff.deferPathCompute;
-    });
+    const deferOnlyDirty = false;
     if (schedFull) {
       if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
-      if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
-      pinEarliestEldtToSldtPerRunway(flightsSorted);
     } else {
       if (!deferOnlyDirty && typeof computeScheduledDisplayTimesIncremental === 'function')
         computeScheduledDisplayTimesIncremental(state.flights, dirtySet, standSet);
@@ -5300,7 +5178,7 @@
         : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
     } else {
       const dirtyFlights = flightsSorted.filter(function(f) { return dirtySet.has(f.id); });
-      const dirtyForRet = dirtyFlights.filter(function(f) { return f && !f.deferPathCompute; });
+      const dirtyForRet = dirtyFlights.filter(function(f) { return f; });
       if (dirtyForRet.length && typeof ensureArrRetRotSampled === 'function')
         retStatsAll = ensureArrRetRotSampled(dirtyForRet, false);
       else
@@ -5349,26 +5227,6 @@
     function runTail() {
       _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl);
       if (cb) cb();
-    }
-    const useBatchedPathEnsure = schedFull && cb && flightsSorted.length >= FLIGHT_LIST_ASYNC_PATH_MIN;
-    if (useBatchedPathEnsure) {
-      let idx = 0;
-      function pathChunk() {
-        const end = Math.min(idx + FLIGHT_LIST_PATH_YIELD_CHUNK, flightsSorted.length);
-        for (; idx < end; idx++) ensureFlightPaths(flightsSorted[idx]);
-        if (idx < flightsSorted.length) setTimeout(pathChunk, 0);
-        else runTail();
-      }
-      setTimeout(pathChunk, 0);
-      return;
-    }
-    if (schedFull) {
-      flightsSorted.forEach(function(f) { ensureFlightPaths(f); });
-    } else {
-      dirtySet.forEach(function(fid) {
-        const ff = flightsSorted.find(function(x) { return x.id === fid; });
-        if (ff) ensureFlightPaths(ff);
-      });
     }
     runTail();
   }
@@ -5642,9 +5500,8 @@
     const perFlightBody = flightsSorted.map(function(f) {
       const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
       const typeLabel = ac ? (ac.name || ac.id || f.aircraftType || '—') : (f.aircraftType || '—');
-      const trCls = f.deferPathCompute ? ' class="flight-config-sampled-row-pending"' : '';
       return '' +
-        '<tr' + trCls + '>' +
+        '<tr>' +
           '<td>' + escapeHtml(f.reg || '—') + '</td>' +
           '<td>' + escapeHtml(f.airlineCode || '—') + '</td>' +
           '<td>' + escapeHtml(f.flightNumber || '—') + '</td>' +
@@ -5793,10 +5650,7 @@
       return;
     }
     if (!skipPathPrep) {
-      flights.forEach(function(f) { ensureFlightPaths(f); });
-      if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(flights, false);
       if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
-      if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
     }
 
     let intervals = [];
@@ -5810,7 +5664,7 @@
         const f = flights.find(ff => ff.id === id);
         if (!f) return;
         const tds = Array.from(row.querySelectorAll('td'));
-        if (tds.length < 15) return;
+        if (tds.length <= FLIGHT_SCHED_TD_ETOT) return;
         const getMin = (idx) => {
           const txt = (tds[idx] && tds[idx].textContent || '').trim();
           if (!txt) return 0;
@@ -5820,14 +5674,15 @@
             return 0;
           }
         };
-        const sldt_d = getMin(7);
-        const sibt_d = getMin(8);
-        const sobt_d = getMin(9);
-        const stot_d = getMin(10);
-        const eldt   = getMin(11);
-        const eibt   = getMin(12);
-        const eobt   = getMin(13);
-        const etot   = getMin(14);
+        const sldt_d = getMin(FLIGHT_SCHED_TD_SLD);
+        const sibt_d = getMin(FLIGHT_SCHED_TD_SIBTD);
+        const sobt_d = getMin(FLIGHT_SCHED_TD_SOBTD);
+        const stot_d = getMin(FLIGHT_SCHED_TD_STOTD);
+        const eSer = ganttESeriesMinutesFromTimelineMeta(f);
+        const eldt = eSer.eldt;
+        const eibt = eSer.eibt;
+        const eobt = eSer.eobt;
+        const etot = eSer.etot;
         const t0 = sibt_d;
         const t1 = sobt_d || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
         const sldt = sldt_d || t0;
@@ -5844,10 +5699,11 @@
         const t1 = f.sobtMin_d != null ? f.sobtMin_d : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
         const sldt = f.sldtMin_d != null ? f.sldtMin_d : t0;
         const stot = f.stotMin_d != null ? f.stotMin_d : t1;
-        const eibt = f.eibtMin != null ? f.eibtMin : t0;
-        const eobt = f.eobtMin != null ? f.eobtMin : t1;
-        const eldt = f.eldtMin != null ? f.eldtMin : sldt;
-        const etot = f.etotMin != null ? f.etotMin : stot;
+        const eSer2 = ganttESeriesMinutesFromTimelineMeta(f);
+        const eibt = eSer2.eibt;
+        const eobt = eSer2.eobt;
+        const eldt = eSer2.eldt;
+        const etot = eSer2.etot;
         const sldtOrig = sldt;
         const sobtOrig = f.sobtMin_d != null ? f.sobtMin_d : t1;
         const stotOrig = stot;
@@ -5859,7 +5715,7 @@
     let maxE = -Infinity;
     intervals.forEach(it => {
       if (it.sldt < minS) minS = it.sldt;
-      const etot0 = (it.f && it.f.etotMin != null) ? it.f.etotMin : it.stot;
+      const etot0 = (it.etot != null && isFinite(it.etot)) ? it.etot : it.stot;
       if (etot0 > maxE) maxE = etot0;
     });
     if (minS <= 0 && intervals.length) {
@@ -6041,6 +5897,9 @@
           '</div>';
       }).join('');
       const sidAttr = standId ? String(standId) : '';
+      const apronDropOk = standId == null || standHasApronTaxiwayLink(standId);
+      const rowNoLinkClass = (!apronDropOk && standId != null) ? ' alloc-row-no-apron-link' : '';
+      const apronLinkDataAttr = ' data-apron-link-ok="' + (apronDropOk ? '1' : '0') + '"';
       const bgSlots = (tickPositions.length > 1)
         ? tickPositions.slice(0, -1).map((tp, idx) => {
             const next = tickPositions[idx + 1];
@@ -6053,12 +5912,12 @@
           }).join('')
         : '';
       const labelHtml =
-        '<div class="alloc-row-label" data-stand-id="' + sidAttr + '">' +
+        '<div class="alloc-row-label' + rowNoLinkClass + '" data-stand-id="' + sidAttr + '"' + apronLinkDataAttr + '>' +
           escapeHtml(label) +
         '</div>';
       const trackHtml =
-        '<div class="alloc-row" data-stand-id="' + sidAttr + '">' +
-          '<div class="alloc-row-track" data-stand-id="' + sidAttr + '">' +
+        '<div class="alloc-row' + rowNoLinkClass + '" data-stand-id="' + sidAttr + '"' + apronLinkDataAttr + '>' +
+          '<div class="alloc-row-track" data-stand-id="' + sidAttr + '"' + apronLinkDataAttr + '>' +
             bgSlots +
             blocks +
             (showEibtBars && eBars ? eBars.join('') : '') +
@@ -6342,6 +6201,75 @@
     return null;
   }
 
+  var _allocGanttPreviewTimer = null;
+  var _allocGanttPreviewLastKey = '';
+  function _allocGanttDragStandPreviewAllowed(f, standId) {
+    if (!standId) return true;
+    var allStands = (state.pbbStands || []).concat(state.remoteStands || []);
+    var stand = allStands.find(function(s) { return s.id === standId; });
+    if (!stand) return false;
+    return typeof flightCanUseStand === 'function' ? flightCanUseStand(f, stand) : true;
+  }
+  function _scheduleAllocGanttDragSchedulePreview(st, candStandId) {
+    var ctxAtSchedule = st._allocGanttDrag;
+    if (!ctxAtSchedule || !ctxAtSchedule.flightId) return;
+    var seqWant = ctxAtSchedule.seq;
+    if (_allocGanttPreviewTimer) clearTimeout(_allocGanttPreviewTimer);
+    _allocGanttPreviewTimer = setTimeout(function() {
+      _allocGanttPreviewTimer = null;
+      var ctx = st._allocGanttDrag;
+      if (!ctx || !ctx.flightId || ctx.seq !== seqWant) return;
+      var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
+      if (!f) return;
+      var sid = candStandId || null;
+      if (!_allocGanttDragStandPreviewAllowed(f, sid)) return;
+      var key = ctx.flightId + '|' + (sid || '');
+      if (key === _allocGanttPreviewLastKey) return;
+      _allocGanttPreviewLastKey = key;
+      f.standId = sid;
+      if (f.token) f.token.apronId = sid;
+      var touched = [];
+      if (ctx.prevStandId) touched.push(ctx.prevStandId);
+      if (sid) touched.push(sid);
+      if (typeof renderFlightList === 'function')
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctx.flightId], touchedStandIds: touched });
+    }, 70);
+  }
+  if (!document._allocGanttGlobalDragEndBound) {
+    document._allocGanttGlobalDragEndBound = true;
+    document.addEventListener('dragend', function() {
+      if (_allocGanttPreviewTimer) {
+        clearTimeout(_allocGanttPreviewTimer);
+        _allocGanttPreviewTimer = null;
+      }
+      var st = state;
+      var ctx = st._allocGanttDrag;
+      if (!ctx || !ctx.flightId) return;
+      if (st._allocGanttDropHandled) {
+        st._allocGanttDrag = null;
+        st._allocGanttDropHandled = false;
+        _allocGanttPreviewLastKey = '';
+        return;
+      }
+      var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
+      if (f) {
+        f.standId = ctx.prevStandId || null;
+        if (f.token) f.token.apronId = ctx.prevApron != null ? ctx.prevApron : (ctx.prevStandId || null);
+      }
+      var ctxFid = ctx.flightId;
+      var prevSt = ctx.prevStandId;
+      st._allocGanttDrag = null;
+      st._allocGanttDropHandled = false;
+      _allocGanttPreviewLastKey = '';
+      if (f && typeof renderFlightList === 'function') {
+        var touched = [];
+        if (prevSt) touched.push(prevSt);
+        if (f.standId) touched.push(f.standId);
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctxFid], touchedStandIds: touched });
+      }
+    });
+  }
+
   function _ganttWireInteractions(ganttEl, st) {
     const newScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
     if (newScrollCol && !newScrollCol._allocWheelBound) {
@@ -6369,6 +6297,17 @@
         }
         if (!track) track = _ganttFindTrackAtPoint(sc, x, ev.clientY);
         ganttEl._lastDropTrack = track || null;
+        if (track && track.getAttribute('data-apron-link-ok') === '0') {
+          ev.preventDefault();
+          ev.dataTransfer.dropEffect = 'none';
+          return;
+        }
+        if (st._allocGanttDrag && st._allocGanttDrag.flightId) {
+          var candPrev = null;
+          if (track && track.getAttribute('data-runway-legend') !== '1')
+            candPrev = track.getAttribute('data-stand-id') || null;
+          _scheduleAllocGanttDragSchedulePreview(st, candPrev);
+        }
         if (!ev.target.closest('.alloc-row-track')) {
           ev.preventDefault();
           ev.dataTransfer.dropEffect = 'move';
@@ -6393,11 +6332,13 @@
         }
         if (!track) return;
         if (track.getAttribute('data-runway-legend') === '1') return;
+        if (track.getAttribute('data-apron-link-ok') === '0') return;
         const flightId = ev.dataTransfer.getData('text/plain');
         if (!flightId) return;
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
-        assignStandToFlight(f, track.getAttribute('data-stand-id') || null);
+        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null)) return;
+        st._allocGanttDropHandled = true;
       }, true);
     }
     if (!ganttEl._allocZoomBound) {
@@ -6414,8 +6355,21 @@
     }
     ganttEl.querySelectorAll('.alloc-flight').forEach(function(el) {
       el.addEventListener('dragstart', function(ev) {
-        ev.dataTransfer.setData('text/plain', this.getAttribute('data-flight-id') || '');
+        var flightId = this.getAttribute('data-flight-id') || '';
+        ev.dataTransfer.setData('text/plain', flightId);
         ev.dataTransfer.effectAllowed = 'move';
+        var fDrag = st.flights.find(function(x) { return x.id === flightId; });
+        if (fDrag) {
+          st._allocGanttDragSeq = (st._allocGanttDragSeq || 0) + 1;
+          st._allocGanttDrag = {
+            flightId: flightId,
+            prevStandId: fDrag.standId || null,
+            prevApron: (fDrag.token && fDrag.token.apronId) ? fDrag.token.apronId : null,
+            seq: st._allocGanttDragSeq
+          };
+          st._allocGanttDropHandled = false;
+          _allocGanttPreviewLastKey = '';
+        }
       });
       el.addEventListener('click', function(ev) {
         ev.stopPropagation();
@@ -6460,17 +6414,24 @@
     ganttEl.querySelectorAll('.alloc-row-track').forEach(function(track) {
       track.addEventListener('dragover', function(ev) {
         if (this.getAttribute('data-runway-legend') === '1') return;
+        if (this.getAttribute('data-apron-link-ok') === '0') {
+          ev.preventDefault();
+          ev.dataTransfer.dropEffect = 'none';
+          return;
+        }
         ev.preventDefault();
         ev.dataTransfer.dropEffect = 'move';
       });
       track.addEventListener('drop', function(ev) {
         ev.preventDefault();
         if (this.getAttribute('data-runway-legend') === '1') return;
+        if (this.getAttribute('data-apron-link-ok') === '0') return;
         const flightId = ev.dataTransfer.getData('text/plain');
         if (!flightId) return;
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
-        assignStandToFlight(f, this.getAttribute('data-stand-id') || null);
+        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null)) return;
+        st._allocGanttDropHandled = true;
       });
     });
   }
@@ -7163,6 +7124,77 @@
     const sttDepMin = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
     return sobt + rotDepMin + sttDepMin;
   }
+  function scheduledSobtFromStotMinutes(f, stotMin) {
+    const stot = stotMin != null && isFinite(stotMin) ? stotMin : 0;
+    const depRotSec = (typeof computeDepRotSecondsForFlight === 'function')
+      ? computeDepRotSecondsForFlight(f)
+      : Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
+    const rotDepMin = depRotSec / 60;
+    const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+    const rollBundleSecFallback = DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2);
+    const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function')
+      ? getBaseVttDepMinutesToLineup(f)
+      : Math.max(0, depBlockOutMin - ((typeof computeDepRollAndLineupOnlySec === 'function') ? computeDepRollAndLineupOnlySec(f) : rollBundleSecFallback) / 60);
+    const sttDepMin = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
+    return Math.max(0, stot - rotDepMin - sttDepMin);
+  }
+  function applyScheduledGateTimingFromSField(f, field, minutes) {
+    if (!f || flightBlockedLikeNoWay(f)) return false;
+    const m = Number(minutes);
+    if (!isFinite(m) || m < 0) return false;
+    let dwell = f.dwellMin != null ? f.dwellMin : 0;
+    let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+    dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+    minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+    if (minDwell > dwell) minDwell = dwell;
+    if (field === 'sldt') {
+      const vttArrMin = getBaseVttArrMinutes(f);
+      const rotArrMin = getArrRotMinutes(f);
+      f.sldtMin_orig = m;
+      const sibt = Math.max(0, m + vttArrMin + rotArrMin);
+      f.timeMin = sibt;
+      f.sibtMin_orig = sibt;
+      f.sobtMin_orig = sibt + dwell;
+      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      return true;
+    }
+    if (field === 'sibt') {
+      f.timeMin = m;
+      f.sibtMin_orig = m;
+      f.sldtMin_orig = scheduledSldtFromSibtMinutes(f, m);
+      f.sobtMin_orig = m + dwell;
+      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      return true;
+    }
+    if (field === 'sobt') {
+      const sibt = f.timeMin != null ? f.timeMin : 0;
+      let sobtAdj = Math.max(m, sibt + minDwell);
+      f.sobtMin_orig = sobtAdj;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobtAdj - sibt);
+      if (f.minDwellMin != null) {
+        f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
+      }
+      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      return true;
+    }
+    if (field === 'stot') {
+      const sibt = f.timeMin != null ? f.timeMin : 0;
+      const sobtGuess = scheduledSobtFromStotMinutes(f, m);
+      let sobtAdj = Math.max(sobtGuess, sibt + minDwell);
+      f.sobtMin_orig = sobtAdj;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobtAdj - sibt);
+      if (f.minDwellMin != null) {
+        f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
+      }
+      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      return true;
+    }
+    return false;
+  }
 
   function computeScheduledDisplayTimes(flights) {
     if (!flights || !flights.length) return;
@@ -7503,112 +7535,7 @@
   }
 
   function computeSeparationAdjustedTimes() {
-    const flights = state.flights || [];
-    flights.forEach(f => { delete f.eldtMin; delete f.etotMin; });
-    const runwaysRaw = (state.taxiways || []).filter(t => t.pathType === 'runway');
-    if (!runwaysRaw.length) return {};
-
-    const runways = (function() {
-      const idToIndex = {};
-      runwaysRaw.forEach((r, i) => { if (r && r.id != null) idToIndex[r.id] = i; });
-      const n = runwaysRaw.length;
-      const indeg = new Array(n).fill(0);
-      const adj = new Array(n).fill(0).map(() => []);
-      flights.forEach(f => {
-        if (!f) return;
-        let arrRwy = f.arrRunwayId || (f.token && f.token.runwayId);
-        let depRwy = f.depRunwayId || (f.token && f.token.depRunwayId);
-        if (!arrRwy || !depRwy || arrRwy === depRwy) return;
-        const ai = idToIndex[arrRwy];
-        const di = idToIndex[depRwy];
-        if (ai == null || di == null) return;
-        adj[ai].push(di);
-        indeg[di] += 1;
-      });
-      const q = [];
-      for (let i = 0; i < n; i++) if (indeg[i] === 0) q.push(i);
-      const orderIdx = [];
-      while (q.length) {
-        const i = q.shift();
-        orderIdx.push(i);
-        adj[i].forEach(j => {
-          indeg[j] -= 1;
-          if (indeg[j] === 0) q.push(j);
-        });
-      }
-      if (orderIdx.length !== n) return runwaysRaw;
-      return orderIdx.map(i => runwaysRaw[i]);
-    })();
-
-    const byRunway = {};
-    runSeparationPass(runways, flights, byRunway, 'initial');
-    flights.forEach(f => {
-      if (flightBlockedLikeNoWay(f)) return;
-      const vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
-      const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
-      f.eibtMin = (f.eldtMin != null ? f.eldtMin : 0) + rotArrMin + vttArrMin + vttADelay;
-      applyForwardEobtEtotAndDepTaxiDelay(f, f.eibtMin, null);
-    });
-    const standToFlightsE = {};
-    flights.forEach(f => { if (f && !flightBlockedLikeNoWay(f)) f.eOverlapPushed = false; });
-    flights.forEach(f => {
-      if (flightBlockedLikeNoWay(f) || !f.standId) return;
-      const sid = f.standId;
-      if (!standToFlightsE[sid]) standToFlightsE[sid] = [];
-      standToFlightsE[sid].push(f);
-    });
-    Object.keys(standToFlightsE).forEach(standId => {
-      const list = standToFlightsE[standId];
-      list.sort((a, b) => (a.eibtMin != null ? a.eibtMin : 0) - (b.eibtMin != null ? b.eibtMin : 0));
-      let prevEOBT = -1e9;
-      list.forEach(f => {
-        const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-        const vttArrMin = getBaseVttArrMinutes(f);
-        const rotArrMin = getArrRotMinutes(f);
-        const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
-        const eibtMin = f.eibtMin != null ? f.eibtMin : 0;
-        const overlap = Math.max(0, prevEOBT - eibtMin);
-        f.eOverlapPushed = overlap > 0;
-        f.eibtMin = eibtMin + overlap;
-        const runwayEtotCand = f.etotMin != null ? f.etotMin : ((f.eobtMin != null ? f.eobtMin : f.eibtMin) + depBlockOutMin);
-        applyForwardEobtEtotAndDepTaxiDelay(f, f.eibtMin, runwayEtotCand);
-        f.eldtMin = f.eibtMin - rotArrMin - vttArrMin - vttADelay;
-        const sldtBase = (f.sldtMin_d != null ? f.sldtMin_d
-                         : (f.sldtMin_orig != null ? f.sldtMin_orig : 0));
-        if (f.eldtMin < sldtBase) {
-          f.eldtMin = sldtBase;
-          f.eibtMin = f.eldtMin + rotArrMin + vttArrMin + vttADelay;
-          applyForwardEobtEtotAndDepTaxiDelay(f, f.eibtMin, f.etotMin);
-        }
-        prevEOBT = f.eobtMin;
-      });
-    });
-    runSeparationPass(runways, flights, byRunway, 'refine');
-    runways.forEach(rwy => {
-      const data = byRunway[rwy.id];
-      if (!data || !data.events) return;
-      const arrEvs = data.events.filter(e => e.type === 'arr');
-      if (!arrEvs.length) return;
-      let minSldt = Infinity, earliestArrFlight = null;
-      arrEvs.forEach(ev => {
-        const sldt = (ev.flight.sldtMin_d != null ? ev.flight.sldtMin_d : (ev.flight.sldtMin_orig != null ? ev.flight.sldtMin_orig : Infinity));
-        if (sldt < minSldt) { minSldt = sldt; earliestArrFlight = ev.flight; }
-      });
-      if (earliestArrFlight) {
-        const sldtBase = earliestArrFlight.sldtMin_d != null ? earliestArrFlight.sldtMin_d : (earliestArrFlight.sldtMin_orig != null ? earliestArrFlight.sldtMin_orig : 0);
-        earliestArrFlight.eldtMin = sldtBase;
-      }
-    });
-    flights.forEach(f => {
-      if (!f || flightBlockedLikeNoWay(f)) return;
-      const vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
-      const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
-      f.eibtMin = (f.eldtMin != null ? f.eldtMin : 0) + rotArrMin + vttArrMin + vttADelay;
-      applyForwardEobtEtotAndDepTaxiDelay(f, f.eibtMin, f.etotMin);
-    });
-    return byRunway;
+    return {};
   }
 
   function getRunwayPath(runwayId) {
@@ -10112,35 +10039,10 @@
     return d;
   }
 
+  /** RET gate filtering only: exit direction is not chosen via taxi Dijkstra. Use flight token / defaults. */
   function probePreferredArrivalRunwayDir(f) {
-    const token = f.token || {};
-    let runwayId = resolveArrivalRunwayIdForFlight(f);
-    const apronId = f.standId != null ? f.standId : (token.apronId || null);
-    if (!apronId || runwayId == null || runwayId === '') return 'both';
-    const r = getRunwayPath(runwayId);
-    if (!r || !findStandById(apronId)) return 'both';
-    function solveByRunwayDir(rwDir) {
-      const runwayPx = rwDir === 'counter_clockwise' ? r.endPx : r.startPx;
-      const excludeRunwayGround = DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT !== true;
-      const gFull = buildPathGraph(null, rwDir, { pureGroundExcludeRunway: excludeRunwayGround });
-      const endNodeFull = gFull.standIdToNodeIndex && gFull.standIdToNodeIndex[apronId];
-      if (endNodeFull == null) return { chosen: null };
-      const g = buildPathGraph(null, rwDir);
-      const endNode = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
-      if (endNode == null) return { chosen: null };
-      const startNode = nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx);
-      const p = pathDijkstra(g, startNode, endNode);
-      if (!p || p.length < 2) return { chosen: null };
-      const d = pathTotalDist(g, p);
-      if (!(d < REVERSE_COST)) return { chosen: null };
-      return { chosen: { totalD: d, runwayDir: rwDir } };
-    }
-    const candCw = solveByRunwayDir('clockwise').chosen;
-    const candCcw = solveByRunwayDir('counter_clockwise').chosen;
-    let chosen = candCw;
-    if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) chosen = candCcw;
-    if (!chosen || !chosen.runwayDir) return 'both';
-    return chosen.runwayDir;
+    void f;
+    return 'both';
   }
   function resolveArrivalRunwayDirForRetGate(f) {
     const fromFlight = normalizeRwDirectionValue(f.arrRunwayDirUsed);
@@ -10151,317 +10053,19 @@
   }
 
   function graphPathArrival(f) {
-    if (f && f.deferPathCompute) return null;
-    f._noWayArrDetail = '';
-    const token = f.token || {};
-    let runwayId = resolveArrivalRunwayIdForFlight(f);
-    const apronId = f.standId != null ? f.standId : (token.apronId || null);
-    if (!apronId) {
-      f.noWayArr = true;
-      f._noWayArrDetail = '게이트(스탠드)가 없습니다. 스케줄·배정 또는 기종·터미널 조건으로 주기장을 찾지 못했을 수 있습니다.';
-      return null;
+    if (f) {
+      f.noWayArr = false;
+      delete f._noWayArrDetail;
     }
-    if (!runwayId && state.taxiways && state.taxiways.length) {
-      const runways = state.taxiways.filter(t => t.pathType === 'runway' && t.vertices && t.vertices.length >= 2);
-      if (runways.length) runwayId = runways[Math.floor(Math.random() * runways.length)].id;
-    }
-    if (!runwayId) {
-      f.noWayArr = true;
-      f._noWayArrDetail = '도착 활주로가 지정되지 않았고 레이아웃에 활주로 정의도 없습니다.';
-      return null;
-    }
-    const r = getRunwayPath(runwayId);
-    if (!r) {
-      f.noWayArr = true;
-      f._noWayArrDetail = '도착 활주로 폴리라인을 불러오지 못했습니다.';
-      return null;
-    }
-    const stand = findStandById(apronId);
-    if (!stand) {
-      f.noWayArr = true;
-      f._noWayArrDetail = '스탠드 ID가 레이아웃에 없습니다.';
-      return null;
-    }
-    const scheduleArrRetTrim = (f.scheduleArrRetId != null && String(f.scheduleArrRetId).trim()) ? String(f.scheduleArrRetId).trim() : '';
-    let selectedArrRetId = f.sampledArrRet != null ? f.sampledArrRet : null;
-    if (scheduleArrRetTrim && (state.taxiways || []).some(function(t) { return t && t.id === scheduleArrRetTrim && t.pathType === 'runway_exit'; }))
-      selectedArrRetId = scheduleArrRetTrim;
-    const validSelectedArrRetId = (selectedArrRetId != null && (state.taxiways || []).some(function(t) {
-      return t && t.id === selectedArrRetId && t.pathType === 'runway_exit';
-    })) ? selectedArrRetId : null;
-    if (selectedArrRetId != null && validSelectedArrRetId == null) {
-      f.sampledArrRet = null;
-      f.arrRetFailed = false;
-      f.arrRotSec = null;
-    }
-    function solveByRunwayDir(rwDir) {
-      const dirTag = rwDir === 'clockwise' ? '(시계) ' : '(반시계) ';
-      const runwayPx = rwDir === 'counter_clockwise' ? r.endPx : r.startPx;
-      const splitDiag = validSelectedArrRetId != null ? { rwDir: rwDir, retId: validSelectedArrRetId } : null;
-      const excludeRunwayGround = DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT !== true;
-      const gFullOpts = { pureGroundExcludeRunway: excludeRunwayGround };
-      const gFull = buildPathGraph(null, rwDir, gFullOpts);
-      const endNodeFull = gFull.standIdToNodeIndex && gFull.standIdToNodeIndex[apronId];
-      if (endNodeFull == null) {
-        return {
-          chosen: null,
-          hint: dirTag + '순전 지상 그래프에 스탠드가 연결되어 있지 않습니다. 에이프런 링크·택시웨이를 확인하세요. (활주로 중심선을 순전 지상에 쓰려면 Information.json의 flight_schedule.defaultAllowRunwayInGroundSegment를 true로 두세요.)',
-          splitDiag: splitDiag
-        };
-      }
-      if (validSelectedArrRetId != null) {
-        const retTw = (state.taxiways || []).find(function(t) {
-          return t && t.id === validSelectedArrRetId && t.pathType === 'runway_exit';
-        });
-        const rPts = retTw ? getOrderedPoints(retTw) : null;
-        if (!(rPts && rPts.length >= 2)) {
-          if (splitDiag) splitDiag.retSplitFail = 'ret_polyline_short_or_missing';
-        } else {
-          const retEndPx = rPts[rPts.length - 1];
-          const g1 = buildPathGraph(validSelectedArrRetId, rwDir, { omitOtherRunwayExits: true });
-          const startNode = nearestPathNodeOnRunwayPolyline(g1, runwayId, runwayPx);
-          const pivotIdx = nearestPathNode(g1, retEndPx);
-          const pivotPxG1 = g1.nodes[pivotIdx] || retEndPx;
-          const p1 = pathDijkstra(g1, startNode, pivotIdx);
-          let p2 = null;
-          let pivotIdxFull = null;
-          if (p1 && p1.length) {
-            const candIdx = gatherRetExitPivotIndicesOnGFull(gFull, retEndPx, pivotPxG1, rPts);
-            const leg2 = pathDijkstraFromRetExitToStand(gFull, endNodeFull, candIdx);
-            p2 = leg2.path;
-            pivotIdxFull = leg2.startIdx;
-            if (splitDiag) splitDiag.p2CandidateCount = candIdx.length;
-          }
-          if (splitDiag) {
-            splitDiag.startNode = startNode;
-            splitDiag.pivotIdx = pivotIdx;
-            splitDiag.pivotIdxFull = pivotIdxFull;
-            splitDiag.p1Len = p1 ? p1.length : 0;
-            splitDiag.p2Len = p2 ? p2.length : 0;
-          }
-          if (p1 && p1.length >= 2 && p2 && p2.length >= 2) {
-            const merged = retSplitPathIndicesOnGFull(g1, gFull, p1, p2, pivotIdx, pivotIdxFull);
-            const d = pathTotalDist(g1, p1) + pathTotalDist(gFull, p2);
-            if (splitDiag) {
-              splitDiag.mergedLen = merged ? merged.length : 0;
-              splitDiag.splitTotalD = d;
-            }
-            if (merged && merged.length >= 2 && d < REVERSE_COST) {
-              if (splitDiag) splitDiag.retSplitOk = true;
-              return { chosen: { g: gFull, pathIndices: merged, totalD: d, runwayDir: rwDir, usedRetSplit: true }, hint: '', splitDiag: splitDiag };
-            }
-            if (splitDiag) {
-              if (!merged || merged.length < 2) splitDiag.retSplitFail = 'merge_short_or_null';
-              else if (!(d < REVERSE_COST)) splitDiag.retSplitFail = 'split_cost_reverse_or_limit';
-            }
-          } else if (splitDiag) {
-            splitDiag.retSplitFail = (!p1 || p1.length < 2) ? 'p1_too_short' : 'p2_too_short_or_null';
-          }
-        }
-      }
-      const g = buildPathGraph(validSelectedArrRetId, rwDir);
-      const endNode = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
-      if (endNode == null) {
-        return {
-          chosen: null,
-          hint: dirTag + '경로 그래프에 스탠드 노드가 없습니다.',
-          splitDiag: splitDiag
-        };
-      }
-      const startNode = nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx);
-      const p = pathDijkstra(g, startNode, endNode);
-      if (!p || p.length < 2) {
-        return {
-          chosen: null,
-          hint: dirTag + '활주로 쪽에서 스탠드까지 그래프가 끊어져 있습니다.',
-          splitDiag: splitDiag
-        };
-      }
-      const d = pathTotalDist(g, p);
-      if (!(d < REVERSE_COST)) {
-        return {
-          chosen: null,
-          hint: dirTag + '택시 경로 비용이 허용 한도를 초과했습니다(역방향·금지 구간).',
-          splitDiag: splitDiag
-        };
-      }
-      if (splitDiag) splitDiag.fellThroughToDirect = true;
-      return { chosen: { g: g, pathIndices: p, totalD: d, runwayDir: rwDir, usedRetSplit: false }, hint: '', splitDiag: splitDiag };
-    }
-    const tryCw = solveByRunwayDir('clockwise');
-    const tryCcw = solveByRunwayDir('counter_clockwise');
-    const candCw = tryCw.chosen;
-    const candCcw = tryCcw.chosen;
-    let chosen = candCw;
-    if (validSelectedArrRetId != null) {
-      const splitCw = !!(candCw && candCw.usedRetSplit);
-      const splitCcw = !!(candCcw && candCcw.usedRetSplit);
-      if (splitCw && !splitCcw) chosen = candCw;
-      else if (splitCcw && !splitCw) chosen = candCcw;
-      else if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) chosen = candCcw;
-    } else if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) {
-      chosen = candCcw;
-    }
-    if (!chosen) {
-      f.noWayArr = true;
-      const hints = [tryCw.hint, tryCcw.hint].filter(function(h) { return h && String(h).trim(); });
-      f._noWayArrDetail = hints.length ? Array.from(new Set(hints)).join(' ') : '시계·반시계 모두 도착 택시 경로를 찾지 못했습니다.';
-      return null;
-    }
-    f.noWayArr = false;
-    f._noWayArrDetail = '';
-    state.pathGraphJunctions = chosen.g.junctions || [];
-    f.arrRunwayDirUsed = chosen.runwayDir;
-    return buildPathFromIndices(chosen.g, chosen.pathIndices);
+    return null;
   }
 
   function graphPathDeparture(f, opts) {
-    if (f && f.deferPathCompute) return null;
-    f._noWayDepDetail = '';
-    opts = opts || {};
-    const onlyToLineup = !!opts.onlyToLineup;
-    const token = f.token || {};
-    let runwayId = token.depRunwayId || token.runwayId || f.depRunwayId || f.arrRunwayId;
-    const apronId = f.standId != null ? f.standId : (token.apronId || null);
-    if (!apronId) {
-      f.noWayDep = true;
-      f._noWayDepDetail = '게이트(스탠드)가 없어 출발 경로를 시작할 수 없습니다.';
-      return null;
+    if (f) {
+      f.noWayDep = false;
+      delete f._noWayDepDetail;
     }
-    if (!runwayId && state.taxiways && state.taxiways.length) {
-      const runways = state.taxiways.filter(t => t.pathType === 'runway' && t.vertices && t.vertices.length >= 2);
-      if (runways.length) runwayId = runways[Math.floor(Math.random() * runways.length)].id;
-    }
-    if (!runwayId) {
-      f.noWayDep = true;
-      f._noWayDepDetail = '출발 활주로가 없습니다.';
-      return null;
-    }
-    const r = getRunwayPath(runwayId);
-    if (!r) {
-      f.noWayDep = true;
-      f._noWayDepDetail = '출발 활주로 폴리라인을 불러오지 못했습니다.';
-      return null;
-    }
-    const rwTw = (state.taxiways || []).find(t => t.id === runwayId && t.pathType === 'runway');
-    const stand = findStandById(apronId);
-    if (!stand) {
-      f.noWayDep = true;
-      f._noWayDepDetail = '스탠드 ID가 레이아웃에 없습니다.';
-      return null;
-    }
-    const useLineup = rwTw && rwTw.pathType === 'runway';
-    const runwayDirPref = normalizeRwDirectionValue(getTaxiwayDirection(rwTw));
-    function solveDepartureByRunwayDir(rwDir) {
-      const dirTag = rwDir === 'clockwise' ? '(시계) ' : '(반시계) ';
-      const excludeRg = DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT !== true;
-      const g = buildPathGraph(null, rwDir, { pureGroundExcludeRunway: excludeRg });
-      const startIdx = (g.standIdToNodeIndex && g.standIdToNodeIndex[apronId] != null) ? g.standIdToNodeIndex[apronId] : null;
-      if (startIdx == null) {
-        return {
-          chosen: null,
-          hint: dirTag + '순전 지상 그래프에 스탠드가 없습니다. 에이프런 링크를 확인하세요. (필요 시 Information.json flight_schedule.defaultAllowRunwayInGroundSegment.)'
-        };
-      }
-      const useReverse = rwDir === 'counter_clockwise';
-      const rPts = useReverse ? r.pts.slice().reverse() : r.pts.slice();
-      const rStart = rPts[0];
-      const rEnd = rPts[rPts.length - 1];
-      if (useLineup) {
-        const ldm = getEffectiveRunwayLineupDistM(rwTw);
-        const lenPx = runwayPolylineLengthPx(rPts);
-        const dPx = Math.min(Math.max(0, ldm), lenPx);
-        const lineupFrame = getPolylinePointAndFrameAtDistance(rPts, dPx);
-        const lineupPx = lineupFrame ? lineupFrame.point : null;
-        if (!lineupPx) {
-          return {
-            chosen: null,
-            hint: dirTag + '활주로 라인업 지점을 계산하지 못했습니다.'
-          };
-        }
-        const runwayNodeSet = new Set(
-          g.runwayNodeIndicesById && g.runwayNodeIndicesById[runwayId]
-            ? Array.from(g.runwayNodeIndicesById[runwayId])
-            : []
-        );
-        const lineupIdx = nearestPathNodeFromSet(g, runwayNodeSet, lineupPx) ?? nearestPathNode(g, lineupPx);
-        const pathIndices = pathDijkstra(g, startIdx, lineupIdx);
-        const totalD = pathIndices ? pathTotalDist(g, pathIndices) : Infinity;
-        if (!pathIndices || pathIndices.length < 2 || totalD >= REVERSE_COST) {
-          return {
-            chosen: null,
-            hint: dirTag + '스탠드에서 라인업 지점까지 경로가 없거나 금지 비용 한도를 초과했습니다.'
-          };
-        }
-        let pts = buildPathFromIndices(g, pathIndices);
-        if (!pts || pts.length < 2) {
-          return {
-            chosen: null,
-            hint: dirTag + '라인업 구간 폴리라인을 만들지 못했습니다.'
-          };
-        }
-        if (onlyToLineup) {
-          return { chosen: { pts: pts, runwayDir: rwDir, totalD: totalD, g: g }, hint: '' };
-        }
-        const tail = polylineTailFromDistancePx(rPts, dPx);
-        if (tail.length) {
-          const last = pts[pts.length - 1];
-          const firstTail = tail[0];
-          if (dist2(last, firstTail) <= SPLIT_TOL_D2) pts = pts.concat(tail.slice(1));
-          else pts = pts.concat(tail);
-        }
-        if (rEnd && Array.isArray(rEnd) && rEnd.length === 2) {
-          const last = pts[pts.length - 1];
-          if (pathDist(last, rEnd) > 1e-3) pts.push([rEnd[0], rEnd[1]]);
-        }
-        return { chosen: { pts: pts, runwayDir: rwDir, totalD: totalD, g: g }, hint: '' };
-      }
-      const runwayTargetIdx = nearestPathNode(g, rStart);
-      const pathIndices = pathDijkstra(g, startIdx, runwayTargetIdx);
-      const totalD = pathIndices ? pathTotalDist(g, pathIndices) : Infinity;
-      if (!pathIndices || pathIndices.length < 2 || totalD >= REVERSE_COST) {
-        return {
-          chosen: null,
-          hint: dirTag + '스탠드에서 활주로 쪽 접점까지 경로가 없거나 금지 비용을 초과했습니다.'
-        };
-      }
-      const pts = buildPathFromIndices(g, pathIndices);
-      if (!pts || pts.length < 2) {
-        return {
-          chosen: null,
-          hint: dirTag + '출발 택시 폴리라인을 만들지 못했습니다.'
-        };
-      }
-      return { chosen: { pts: pts, runwayDir: rwDir, totalD: totalD, g: g }, hint: '' };
-    }
-    let chosen = null;
-    let depFailHints = [];
-    if (runwayDirPref === 'clockwise' || runwayDirPref === 'counter_clockwise') {
-      const one = solveDepartureByRunwayDir(runwayDirPref);
-      chosen = one.chosen;
-      if (!chosen && one.hint) depFailHints.push(one.hint);
-    } else {
-      const tryCw = solveDepartureByRunwayDir('clockwise');
-      const tryCcw = solveDepartureByRunwayDir('counter_clockwise');
-      const candCw = tryCw.chosen;
-      const candCcw = tryCcw.chosen;
-      chosen = candCw;
-      if (candCcw && (!candCw || candCcw.totalD < candCw.totalD)) chosen = candCcw;
-      if (!chosen) {
-        if (tryCw.hint) depFailHints.push(tryCw.hint);
-        if (tryCcw.hint) depFailHints.push(tryCcw.hint);
-      }
-    }
-    if (!chosen) {
-      f.noWayDep = true;
-      const uniq = Array.from(new Set(depFailHints.filter(function(h) { return h && String(h).trim(); })));
-      f._noWayDepDetail = uniq.length ? uniq.join(' ') : '출발 택시 경로를 찾지 못했습니다.';
-      return null;
-    }
-    f.noWayDep = false;
-    f._noWayDepDetail = '';
-    f.depRunwayDirUsed = chosen.runwayDir;
-    return chosen.pts;
+    return null;
   }
 
   function clonePathPtsForCache(pts) {
@@ -10485,62 +10089,22 @@
   }
 
   function getPathForFlight(f) {
-    if (f && f.deferPathCompute) return null;
+    if (!f) return null;
     resolveStand(f);
-    const arrRetKey = normalizedArrRetCacheKey(f);
-    if (
-      f._pathPolylineCacheRev === state.pathPolylineCacheRev &&
-      String(f._pathPolylineArrRetKey || '') === arrRetKey &&
-      Array.isArray(f.cachedArrPathPts) &&
-      f.cachedArrPathPts.length >= 2 &&
-      !arrivalAirsideBlocked(f)
-    ) {
-      return f.cachedArrPathPts;
-    }
-    const pts = graphPathArrival(f);
-    if (pts && pts.length >= 2 && !arrivalAirsideBlocked(f)) {
-      const cloned = clonePathPtsForCache(pts);
-      if (cloned) {
-        f.cachedArrPathPts = cloned;
-        f._pathPolylineCacheRev = state.pathPolylineCacheRev;
-        f._pathPolylineArrRetKey = normalizedArrRetCacheKey(f);
-      }
-    } else {
-      delete f.cachedArrPathPts;
-      delete f._pathPolylineArrRetKey;
-    }
-    return pts;
+    delete f.cachedArrPathPts;
+    delete f._pathPolylineArrRetKey;
+    return null;
   }
 
   function getPathForFlightDeparture(f) {
-    if (f && f.deferPathCompute) return null;
+    if (!f) return null;
     resolveStand(f);
-    if (
-      f._pathPolylineCacheRev === state.pathPolylineCacheRev &&
-      Array.isArray(f.cachedDepPathPts) &&
-      f.cachedDepPathPts.length >= 2 &&
-      !f.noWayDep
-    ) {
-      return f.cachedDepPathPts;
-    }
-    const pts = graphPathDeparture(f);
-    if (pts && pts.length >= 2 && !f.noWayDep) {
-      const cloned = clonePathPtsForCache(pts);
-      if (cloned) {
-        f.cachedDepPathPts = cloned;
-        f._pathPolylineCacheRev = state.pathPolylineCacheRev;
-      }
-    } else {
-      delete f.cachedDepPathPts;
-    }
-    return pts;
+    delete f.cachedDepPathPts;
+    return null;
   }
 
   function ensureFlightPaths(f) {
-    if (f && f.deferPathCompute) return;
-    getPathForFlight(f);
-    getPathForFlightDeparture(f);
-    if (flightBlockedLikeNoWay(f)) f.timeline = null;
+    void f;
   }
 
   function findStandById(id) {
@@ -10571,89 +10135,17 @@
   }
 
   function computeFlightPath(flight, direction) {
-    if (flight && flight.deferPathCompute) {
-      delete flight.deferPathCompute;
-      delete flight.__schedVttArrMin;
-      delete flight.__schedVttArrRev;
-      delete flight.__schedRetRotRev;
-    }
-    resolveStand(flight);
-    if (direction === 'arrival') {
-      const pts = graphPathArrival(flight);
-      if (pts && pts.length >= 2 && !arrivalAirsideBlocked(flight)) {
-        const cloned = clonePathPtsForCache(pts);
-        if (cloned) {
-          flight.cachedArrPathPts = cloned;
-          flight._pathPolylineCacheRev = state.pathPolylineCacheRev;
-          flight._pathPolylineArrRetKey = normalizedArrRetCacheKey(flight);
-        }
-      } else {
-        delete flight.cachedArrPathPts;
-        delete flight._pathPolylineArrRetKey;
-      }
-      return { pts: pts || null, timeline: null };
-    }
-    const pts = graphPathDeparture(flight);
-    if (pts && pts.length >= 2 && !flight.noWayDep) {
-      const cloned = clonePathPtsForCache(pts);
-      if (cloned) {
-        flight.cachedDepPathPts = cloned;
-        flight._pathPolylineCacheRev = state.pathPolylineCacheRev;
-      }
-    } else {
-      delete flight.cachedDepPathPts;
-    }
-    return { pts: pts || null, timeline: null };
+    void flight;
+    void direction;
+    return { pts: null, timeline: null };
   }
 
   const FLIGHT_PATH_PROGRESS_PCT_START = 22;
   const FLIGHT_PATH_PROGRESS_PCT_END = 48;
   const PATH_DIRECTION_ARROWS_MAX = 48;
   function updateAllFlightPaths(onDone) {
-    if (!state.flights || !state.flights.length) {
-      draw();
-      if (typeof onDone === 'function') onDone();
-      return;
-    }
-    const flights = state.flights;
-    const asyncDone = typeof onDone === 'function';
-    function applyPathsForFlight(f) {
-      computeFlightPath(f, 'arrival');
-      computeFlightPath(f, 'departure');
-      if (flightBlockedLikeNoWay(f)) f.timeline = null;
-    }
-    function finishPaths() {
-      if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines();
-      if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
-      if (typeof renderFlightList === 'function') renderFlightList(true);
-      draw();
-      if (asyncDone) onDone();
-    }
-    if (!asyncDone) {
-      flights.forEach(applyPathsForFlight);
-      finishPaths();
-      return;
-    }
-    const totalFlights = flights.length;
-    let i = 0;
-    function pathChunk() {
-      if (i >= totalFlights) {
-        finishPaths();
-        return;
-      }
-      applyPathsForFlight(flights[i]);
-      i++;
-      if (typeof setGlobalUpdateProgressUi === 'function') {
-        const span = FLIGHT_PATH_PROGRESS_PCT_END - FLIGHT_PATH_PROGRESS_PCT_START;
-        const pct = totalFlights > 0
-          ? FLIGHT_PATH_PROGRESS_PCT_START + Math.round(span * (i / totalFlights))
-          : FLIGHT_PATH_PROGRESS_PCT_START;
-        setGlobalUpdateProgressUi(true, '항공 경로 ' + i + '/' + totalFlights, pct);
-      }
-      if (i < totalFlights) setTimeout(pathChunk, 0);
-      else finishPaths();
-    }
-    setTimeout(pathChunk, 0);
+    draw();
+    if (typeof onDone === 'function') onDone();
   }
 
   function drawPathJunctions() {
@@ -10985,140 +10477,11 @@
     }
   }
   function drawFlightPathHighlight() {
-    const sel = state.selectedObject;
-    if (!sel || sel.type !== 'flight' || !sel.obj) return;
-    const f = sel.obj;
-    if (arrivalAirsideBlocked(f)) return;
-    const pathPts = getPathForFlight(f);
-    if (!pathPts || pathPts.length < 2) return;
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 10;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(pathPts[0][0], pathPts[0][1]);
-    for (let i = 1; i < pathPts.length; i++) ctx.lineTo(pathPts[i][0], pathPts[i][1]);
-    ctx.stroke();
-    drawPolylineDirectionArrows(pathPts, _canvas2dStyle.pathArrivalArrowStroke || 'rgba(252, 165, 165, 0.9)', 'rgba(252, 165, 165, 0.8)', 6, 26.4, 6.6);
-
-    ctx.font = 'bold ' + Math.max(9, CELL_SIZE * 0.35) + 'px system-ui';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillStyle = '#fca5a5';
-    function anchorOffPathForLabel(pt, perpPx) {
-      if (!pt || !pathPts || pathPts.length < 2) return pt;
-      let bestSeg = 0, bestD2 = Infinity;
-      for (let si = 0; si < pathPts.length - 1; si++) {
-        const near = closestPointOnSegment(pathPts[si], pathPts[si + 1], pt);
-        if (!near) continue;
-        const d2 = dist2(near, pt);
-        if (d2 < bestD2) { bestD2 = d2; bestSeg = si; }
-      }
-      const p0 = pathPts[bestSeg], p1 = pathPts[bestSeg + 1];
-      const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
-      const len = Math.hypot(dx, dy) || 1;
-      let nx = -dy / len, ny = dx / len;
-      if (ny > 0) { nx = -nx; ny = -ny; }
-      const d = Math.max(14, perpPx || 22);
-      return [pt[0] + nx * d, pt[1] + ny * d];
-    }
-    function drawSpeedLabel(pt, label) {
-      if (!pt) return;
-      const ox = 4, oy = -4;
-      ctx.fillText(label, pt[0] + ox, pt[1] + oy);
-    }
-    function drawTouchDownLabel(pt, distM, speedMs) {
-      if (!pt) return;
-      const a = anchorOffPathForLabel(pt, Math.max(18, CELL_SIZE * 0.55));
-      const ox = 2, oy = -6;
-      const x = a[0] + ox, yBot = a[1] + oy;
-      const lh = Math.max(11, Math.round(CELL_SIZE * 0.36));
-      let distPart = '---m';
-      if (typeof distM === 'number' && isFinite(distM)) {
-        const r = Math.round(distM);
-        distPart = (r >= 1000 ? String(r) : String(r).padStart(3, '0')) + 'm';
-      }
-      let spdPart = '--.-m/s';
-      if (typeof speedMs === 'number' && isFinite(speedMs)) {
-        spdPart = speedMs.toFixed(1) + 'm/s';
-      }
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      ctx.strokeStyle = 'rgba(15, 23, 42, 0.92)';
-      ctx.lineWidth = 3;
-      ctx.lineJoin = 'round';
-      const line1 = '(' + distPart + ',  ' + spdPart + ')';
-      const line2 = 'Touch Down';
-      ctx.strokeText(line1, x, yBot);
-      ctx.strokeText(line2, x, yBot - lh);
-      ctx.fillStyle = '#fca5a5';
-      ctx.fillText(line1, x, yBot);
-      ctx.fillText(line2, x, yBot - lh);
-    }
-    let tdPt = null, retInPt = null, retOutPt = null;
-    if (f.arrRunwayIdUsed && typeof getRunwayPointAtDistance === 'function') {
-      if (typeof f.arrTdDistM === 'number' && isFinite(f.arrTdDistM)) {
-        tdPt = getRunwayPointAtDistance(f.arrRunwayIdUsed, f.arrTdDistM);
-      }
-      if (typeof f.arrRetDistM === 'number' && isFinite(f.arrRetDistM)) {
-        retInPt = getRunwayPointAtDistance(f.arrRunwayIdUsed, f.arrRetDistM);
-      }
-    }
-    if (!retOutPt && f.sampledArrRet) {
-      const tw = (state.taxiways || []).find(t => t.id === f.sampledArrRet);
-      if (tw && Array.isArray(tw.vertices) && tw.vertices.length) {
-        const last = tw.vertices[tw.vertices.length - 1];
-        retOutPt = cellToPixel(last.col, last.row);
-      }
-    }
-    if (!tdPt && pathPts.length >= 1) tdPt = pathPts[0];
-    if (!retInPt && pathPts.length >= 3) {
-      const idxIn = Math.max(1, Math.floor(pathPts.length * 0.4));
-      retInPt = pathPts[Math.min(idxIn, pathPts.length - 1)];
-    }
-    if (!retOutPt && pathPts.length >= 3) {
-      const idxOut = Math.max(2, Math.floor(pathPts.length * 0.7));
-      retOutPt = pathPts[Math.min(idxOut, pathPts.length - 1)];
-    }
-    if (tdPt && ((typeof f.arrVTdMs === 'number' && isFinite(f.arrVTdMs)) || (typeof f.arrTdDistM === 'number' && isFinite(f.arrTdDistM)))) {
-      drawTouchDownLabel(tdPt, f.arrTdDistM, f.arrVTdMs);
-    }
-    if (!f.arrRetFailed && typeof f.arrVRetInMs === 'number' && isFinite(f.arrVRetInMs)) {
-      drawSpeedLabel(retInPt, 'RET IN ' + f.arrVRetInMs.toFixed(1) + ' m/s');
-    }
-    if (!f.arrRetFailed && typeof f.arrVRetOutMs === 'number' && isFinite(f.arrVRetOutMs)) {
-      drawSpeedLabel(retOutPt, 'RET OUT ' + f.arrVRetOutMs.toFixed(1) + ' m/s');
-    }
-    ctx.restore();
+    return;
   }
 
   function drawDeparturePathHighlight() {
-    const sel = state.selectedObject;
-    if (!sel || sel.type !== 'flight' || !sel.obj) return;
-    const f = sel.obj;
-    if (f.noWayDep) return;
-    const pathPts = getPathForFlightDeparture(f);
-    if (!pathPts || pathPts.length < 2) return;
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    ctx.strokeStyle = _canvas2dStyle.pathDepartureStroke || '#000000';
-    ctx.lineWidth = 4.8;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(pathPts[0][0], pathPts[0][1]);
-    for (let i = 1; i < pathPts.length; i++) ctx.lineTo(pathPts[i][0], pathPts[i][1]);
-    ctx.stroke();
-    drawPolylineDirectionArrows(pathPts, _canvas2dStyle.pathDepartureArrowStroke || '#111827', _canvas2dStyle.pathDepartureArrowStroke || '#111827', 6, 40, 10);
-    ctx.restore();
+    return;
   }
 
   function drawApproachPreviewPaths2D() {
@@ -11594,6 +10957,9 @@
     const simSlider = document.getElementById('flightSimSlider');
     const speedSelect = document.getElementById('flightSpeed');
     const timeInputEl = document.getElementById('flightTime');
+    const schedSldtEl = document.getElementById('flightSchedSldt');
+    const schedSobtEl = document.getElementById('flightSchedSobt');
+    const schedStotEl = document.getElementById('flightSchedStot');
     const aircraftEl = document.getElementById('flightAircraftType');
     const regEl = document.getElementById('flightReg');
     const layoutNameInput = document.getElementById('layoutName');
@@ -11603,6 +10969,55 @@
     const globalUpdateBtn = document.getElementById('btnGlobalUpdate');
     if (!arrDepEl) return;
     populateAircraftSelect(aircraftEl);
+
+    function formatFlightScheduleGateInputs(f) {
+      if (!f) return;
+      const tArrMin = f.timeMin != null ? f.timeMin : 0;
+      const dwell = f.dwellMin != null ? f.dwellMin : 0;
+      const tDepMin = tArrMin + dwell;
+      const schedDepRotMin = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
+      const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin));
+      const sldtVal = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
+      const sobtVal = f.sobtMin_orig != null ? f.sobtMin_orig : tDepMin;
+      const stotVal = f.stotMin_orig != null ? f.stotMin_orig : (tDepMin + schedDepRotMin);
+      if (schedSldtEl) schedSldtEl.value = formatMinutesToHHMMSS(sldtVal);
+      if (timeInputEl) timeInputEl.value = formatMinutesToHHMMSS(tArrMin);
+      if (schedSobtEl) schedSobtEl.value = formatMinutesToHHMMSS(sobtVal);
+      if (schedStotEl) schedStotEl.value = formatMinutesToHHMMSS(stotVal);
+    }
+    function bindFlightScheduleGateFieldChange(el, field) {
+      if (!el) return;
+      el.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        const m = typeof parseTimeToMinutes === 'function' ? parseTimeToMinutes(this.value || '0') : NaN;
+        if (!isFinite(m)) {
+          formatFlightScheduleGateInputs(f);
+          return;
+        }
+        if (typeof applyScheduledGateTimingFromSField !== 'function') {
+          formatFlightScheduleGateInputs(f);
+          return;
+        }
+        const ok = applyScheduledGateTimingFromSField(f, field, m);
+        if (!ok) {
+          formatFlightScheduleGateInputs(f);
+          return;
+        }
+        if (dwellEl) dwellEl.value = f.dwellMin != null ? f.dwellMin : 0;
+        if (minDwellEl) minDwellEl.value = f.minDwellMin != null ? f.minDwellMin : 0;
+        formatFlightScheduleGateInputs(f);
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        const touched = f.standId ? [f.standId] : [];
+        if (typeof renderFlightList === 'function')
+          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touched });
+        if (typeof draw === 'function') draw();
+      });
+    }
+    bindFlightScheduleGateFieldChange(schedSldtEl, 'sldt');
+    bindFlightScheduleGateFieldChange(timeInputEl, 'sibt');
+    bindFlightScheduleGateFieldChange(schedSobtEl, 'sobt');
+    bindFlightScheduleGateFieldChange(schedStotEl, 'stot');
 
     function randomAirlineCode() { return DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)]; }
     function randomFlightNumber(airlineCode) { return (airlineCode || randomAirlineCode()) + String(Math.floor(1000 + Math.random() * 9000)); }
@@ -11918,17 +11333,20 @@
             terminalId: null
           }
         };
-        f.deferPathCompute = true;
         state.flights.push(f);
         if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
         else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         var addTouched = f.standId ? [f.standId] : [];
         renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: addTouched });
-        if (timeInputEl) {
-          const nextDef = getDefaultSibtMinutes();
-          timeInputEl.value = formatMinutesToHHMMSS(nextDef);
-        }
+        const nextDef = getDefaultSibtMinutes();
+        const dwellN = dwellEl ? Math.max(SCHED_DWELL_FLOOR_MIN, parseFloat(dwellEl.value) || 0) : SCHED_DWELL_FLOOR_MIN;
+        const sobN = nextDef + dwellN;
+        const rotN = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
+        if (schedSldtEl) schedSldtEl.value = formatMinutesToHHMMSS(nextDef);
+        if (timeInputEl) timeInputEl.value = formatMinutesToHHMMSS(nextDef);
+        if (schedSobtEl) schedSobtEl.value = formatMinutesToHHMMSS(sobN);
+        if (schedStotEl) schedStotEl.value = formatMinutesToHHMMSS(sobN + rotN);
         updateFlightError('');
       });
     }
@@ -11944,7 +11362,7 @@
         minDwellEl.disabled = false;
         minDwellEl.value = f.minDwellMin != null ? f.minDwellMin : 0;
       }
-      if (timeInputEl) timeInputEl.value = formatMinutesToHHMMSS(f.timeMin);
+      formatFlightScheduleGateInputs(f);
       if (aircraftEl) {
         if (f.aircraftType && AIRCRAFT_BY_ID[f.aircraftType]) aircraftEl.value = f.aircraftType;
         else {
@@ -11974,30 +11392,11 @@
       if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
       if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
       const f = state.selectedObject.obj;
-      computeFlightPath(f, 'arrival');
-      computeFlightPath(f, 'departure');
-      const isArr = f.arrDep !== 'Dep';
-      if (isArr && arrivalAirsideBlocked(f)) {
-        updateFlightError(f.arrRetFailed && !f.noWayArr ? '도착 경로(RET)를 계산하지 못했습니다.' : '도착 경로를 찾을 수 없습니다.');
-        f.timeline = null;
-        draw();
-        return;
-      }
-      if (!isArr && f.noWayDep) {
-        updateFlightError('출발 경로를 찾을 수 없습니다.');
-        f.timeline = null;
-        draw();
-        return;
-      }
-      if (typeof buildFullAirsideTimelineForFlight === 'function') buildFullAirsideTimelineForFlight(f);
-      if (!f.timeline || !f.timeline.length) {
-        updateFlightError('No valid route found on that network. (After changing settings)');
-        return;
-      }
-      if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
-      else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+      updateFlightError('');
+      draw();
       var sidSched = f.standId || null;
-      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: sidSched ? [sidSched] : [] });
+      if (typeof renderFlightList === 'function')
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: sidSched ? [sidSched] : [] });
     }
     if (arrDepEl) {
       arrDepEl.addEventListener('change', function() {
@@ -12023,16 +11422,6 @@
             minDwellEl.value = f.minDwellMin;
           }
         }
-        rebuildSelectedFlightTimeline();
-      });
-    }
-    if (timeInputEl) {
-      timeInputEl.addEventListener('change', function() {
-        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
-        const f = state.selectedObject.obj;
-        const mins = parseTimeToMinutes(this.value || '0');
-        f.timeMin = mins;
-        this.value = formatMinutesToHHMMSS(mins);
         rebuildSelectedFlightTimeline();
       });
     }
@@ -12237,7 +11626,7 @@
         const f = state.flights.find(function(ff) { return ff && ff.id === fid; });
         if (!f) return;
         const tds = Array.from(row.querySelectorAll('td'));
-        if (tds.length < 15) return;
+        if (tds.length <= FLIGHT_SCHED_TD_ETOT) return;
         const getMin = function(idx) {
           const txt = (tds[idx] && tds[idx].textContent || '').trim();
           if (!txt) return null;
@@ -12252,8 +11641,14 @@
           return isNaN(n) ? null : n;
         };
         const map = {
-          sldtMin_d: 7, sibtMin_d: 8, sobtMin_d: 9,  stotMin_d: 10,
-          eldtMin:  11, eibtMin:  12, eobtMin:  13, etotMin:   14
+          sldtMin_d: FLIGHT_SCHED_TD_SLD,
+          sibtMin_d: FLIGHT_SCHED_TD_SIBTD,
+          sobtMin_d: FLIGHT_SCHED_TD_SOBTD,
+          stotMin_d: FLIGHT_SCHED_TD_STOTD,
+          eldtMin: FLIGHT_SCHED_TD_ELDT,
+          eibtMin: FLIGHT_SCHED_TD_EIBT,
+          eobtMin: FLIGHT_SCHED_TD_EOBT,
+          etotMin: FLIGHT_SCHED_TD_ETOT
         };
         Object.keys(map).forEach(function(key) {
           const v = getMin(map[key]);
@@ -13418,8 +12813,11 @@
       const ex = apronPt[0], ey = apronPt[1];
       const angle = getPBBStandAngle(pbb);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === pbb.id);
-      ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : 'rgba(22,163,74,0.18)');
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : '#22c55e');
+      const apronLinked = standHasApronTaxiwayLink(pbb.id);
+      const idleFill = apronLinked ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
+      const idleStroke = apronLinked ? '#22c55e' : '#9ca3af';
+      ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFill);
+      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStroke);
       ctx.lineWidth = sel ? 2.5 : 1.5;
       ctx.save();
       ctx.translate(ex, ey);
@@ -13440,7 +12838,7 @@
       const pad = 3;
       const tx = endSize / 2 - pad;
       const ty = -endSize / 2 + pad;
-      ctx.fillStyle = '#bbf7d0';
+      ctx.fillStyle = apronLinked ? '#bbf7d0' : '#d1d5db';
       ctx.font = '8px system-ui';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';
@@ -13448,7 +12846,7 @@
       ctx.restore();
       ctx.save();
       ctx.beginPath();
-      ctx.fillStyle = sel ? '#22c55e' : 'rgba(34,197,94,0.9)';
+      ctx.fillStyle = sel ? '#22c55e' : (apronLinked ? 'rgba(34,197,94,0.9)' : 'rgba(156,163,175,0.95)');
       ctx.arc(apronPt[0], apronPt[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
@@ -13472,11 +12870,14 @@
       const sel = state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.id === st.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
+      const apronLinkedR = standHasApronTaxiwayLink(st.id);
+      const idleFillR = apronLinkedR ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
+      const idleStrokeR = apronLinkedR ? '#22c55e' : '#9ca3af';
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
-      ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : 'rgba(22,163,74,0.18)');
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : '#22c55e');
+      ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillR);
+      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStrokeR);
       ctx.lineWidth = sel ? 2.5 : 1.5;
       ctx.beginPath();
       ctx.rect(-size/2, -size/2, size, size);
@@ -13491,7 +12892,7 @@
       ctx.restore();
       if (mode === 'apronTaxiway') {
         ctx.save();
-        ctx.fillStyle = sel ? '#f97316' : '#e5e7eb';
+        ctx.fillStyle = sel ? '#f97316' : (apronLinkedR ? '#e5e7eb' : '#9ca3af');
         ctx.beginPath();
         ctx.arc(cx, cy, 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
         ctx.fill();
@@ -13500,7 +12901,7 @@
       const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
       const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
       const label = labelPrefix + ' / ' + nameRaw;
-      ctx.fillStyle = '#bbf7d0';
+      ctx.fillStyle = apronLinkedR ? '#bbf7d0' : '#d1d5db';
       ctx.font = '8px system-ui';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';

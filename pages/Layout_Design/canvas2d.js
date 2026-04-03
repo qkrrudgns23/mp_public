@@ -1,3 +1,718 @@
+                  .then(function(r) {
+                    if (!r.ok) throw new Error('시뮬 결과를 불러오지 못했습니다.');
+                    return r.json();
+                  })
+                  .then(function(data) {
+                    if (typeof applyAirsideSimulationResultPayload === 'function') applyAirsideSimulationResultPayload(data);
+                  })
+                  .catch(function(e) {
+                    console.warn('Pro Sim result fetch', e && e.message ? e.message : e);
+                  })
+                  .finally(function() {
+                    if (applyBtnEl) applyBtnEl.disabled = false;
+                  });
+              })
+              .catch(function(e) {
+                failProSim(e && e.message ? e.message : 'sim-progress 요청 실패');
+              });
+          }
+          pollProgress();
+        }).catch(function(e) {
+          failProSim(e && e.message ? e.message : String(e));
+        });
+      });
+    }
+    const btnApplySimResult = document.getElementById('btnApplySimResult');
+    if (btnApplySimResult) {
+      btnApplySimResult.addEventListener('click', function() {
+        const base = proSimApiBase();
+        if (!base) {
+          alert('Layout API가 설정되지 않았습니다.');
+          return;
+        }
+        const layoutName = (state.currentLayoutName && String(state.currentLayoutName).trim()) || INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout';
+        btnApplySimResult.disabled = true;
+        fetch(base + '/api/load-sim-result?name=' + encodeURIComponent(layoutName))
+          .then(function(r) {
+            if (!r.ok) throw new Error('시뮬 결과를 찾을 수 없습니다. Pro Sim을 먼저 완료하세요.');
+            return r.json();
+          })
+          .then(function(data) {
+            applyAirsideSimulationResultPayload(data);
+          })
+          .catch(function(e) {
+            console.error('Apply sim result', e);
+            alert(e && e.message ? e.message : 'Apply failed');
+            btnApplySimResult.disabled = false;
+          });
+      });
+    }
+    const btnShowPlayDock = document.getElementById('btnShowPlayDock');
+    if (btnShowPlayDock) {
+      btnShowPlayDock.addEventListener('click', function() {
+        state.simPlaybackDockVisible = true;
+        if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+      });
+    }
+    function applyTokenNodesFromCheckboxes() {
+      const nodes = [];
+      TOKEN_NODE_ORDER.forEach((node, i) => {
+        const cb = document.getElementById('token' + node.charAt(0).toUpperCase() + node.slice(1));
+        if (cb && cb.checked) nodes.push(node);
+        else return;
+      });
+      return nodes;
+    }
+    function setTokenCheckboxesFromNodes(nodes) {
+      const arr = Array.isArray(nodes) ? nodes : [];
+      TOKEN_NODE_ORDER.forEach((node, i) => {
+        const cb = document.getElementById('token' + node.charAt(0).toUpperCase() + node.slice(1));
+        if (cb) cb.checked = arr.indexOf(node) >= 0;
+      });
+      updateTokenPanesVisibility(arr.length ? arr : TOKEN_NODE_ORDER);
+    }
+    ['Runway','Taxiway','Apron','Building'].forEach((name, i) => {
+      const cb = document.getElementById('token' + name);
+      if (!cb) return;
+      cb.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        if (!f.token) f.token = { nodes: TOKEN_NODE_ORDER.slice(), runwayId: null, apronId: null, terminalId: null };
+        if (this.checked) {
+          f.token.nodes = TOKEN_NODE_ORDER.slice(0, i + 1);
+          setTokenCheckboxesFromNodes(f.token.nodes);
+        } else {
+          f.token.nodes = TOKEN_NODE_ORDER.slice(0, i);
+          setTokenCheckboxesFromNodes(f.token.nodes);
+        }
+        updateTokenPanesVisibility(f.token.nodes);
+        rebuildSelectedFlightTimeline();
+      });
+    });
+    const tokenRunwaySel = document.getElementById('tokenRunwaySelect');
+    const tokenTerminalSel = document.getElementById('tokenTerminalSelect');
+    if (tokenRunwaySel) tokenRunwaySel.addEventListener('change', function() {
+      if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+      const f = state.selectedObject.obj;
+      if (!f.token) f.token = { nodes: TOKEN_NODE_ORDER.slice(), runwayId: null, apronId: null, terminalId: null };
+      f.token.runwayId = this.value || null;
+      rebuildSelectedFlightTimeline();
+    });
+    if (tokenTerminalSel) tokenTerminalSel.addEventListener('change', function() {
+      if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+      const f = state.selectedObject.obj;
+      if (!f.token) f.token = { nodes: TOKEN_NODE_ORDER.slice(), runwayId: null, apronId: null, terminalId: null };
+      f.token.terminalId = this.value || null;
+      rebuildSelectedFlightTimeline();
+    });
+    const flightSubtabButtons = document.querySelectorAll('.flight-subtab');
+    const flightPaneSchedule = document.getElementById('flightPaneSchedule');
+    const flightPaneConfig = document.getElementById('flightPaneConfig');
+    if (flightSubtabButtons && flightPaneSchedule && flightPaneConfig) {
+      flightSubtabButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+          const target = this.getAttribute('data-flight-subtab') || 'schedule';
+          flightSubtabButtons.forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          if (target === 'config') {
+            flightPaneSchedule.style.display = 'none';
+            flightPaneConfig.style.display = 'block';
+          } else {
+            flightPaneSchedule.style.display = 'block';
+            flightPaneConfig.style.display = 'none';
+          }
+        });
+      });
+    }
+    if (addBtn) {
+      addBtn.addEventListener('click', function() {
+        const networkErrors = validateNetworkForFlights();
+        if (networkErrors.length) {
+          updateFlightError(networkErrors);
+          alert('Flightcannot be created:\\n' + networkErrors.join('\\n'));
+          return;
+        }
+        let timeStr = (document.getElementById('flightTime').value || '').trim();
+        if (!timeStr) {
+          const defMin = getDefaultSibtMinutes();
+          timeStr = formatMinutesToHHMMSS(defMin);
+          if (timeInputEl) timeInputEl.value = timeStr;
+        }
+        const timeMin = parseTimeToMinutes(timeStr);
+        const aircraftType = (document.getElementById('flightAircraftType').value || 'A320').trim();
+        const code = getCodeForAircraft(aircraftType);
+        const reg = (document.getElementById('flightReg').value || '').trim();
+        let airlineCode = (document.getElementById('flightAirlineCode') && document.getElementById('flightAirlineCode').value || '').trim();
+        let flightNumber = (document.getElementById('flightFlightNumber') && document.getElementById('flightFlightNumber').value || '').trim();
+        if (!airlineCode) airlineCode = randomAirlineCode();
+        if (!flightNumber) flightNumber = randomFlightNumber(airlineCode);
+        let dwellMin = parseFloat(document.getElementById('flightDwell').value);
+        let minDwellMin = parseFloat(document.getElementById('flightMinDwell').value);
+        dwellMin = (typeof dwellMin === 'number' && !isNaN(dwellMin) && dwellMin >= 0) ? dwellMin : 0;
+        minDwellMin = (typeof minDwellMin === 'number' && !isNaN(minDwellMin) && minDwellMin >= 0) ? minDwellMin : 0;
+        dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, dwellMin);
+        minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, minDwellMin);
+        if (minDwellMin > dwellMin) minDwellMin = dwellMin;
+        const arrDep = 'Arr';
+        const runwayOptions = getRunwayOptions();
+        const defaultRunwayId = runwayOptions.length ? (runwayOptions[0].id || null) : null;
+        const f = {
+          id: id(),
+          arrDep,
+          timeMin,
+          aircraftType,
+          code,
+          reg,
+          airlineCode,
+          flightNumber,
+          dwellMin,
+          minDwellMin,
+          arrRunwayId: defaultRunwayId,
+          depRunwayId: defaultRunwayId,
+          timeline: null,
+          token: {
+            nodes: ['runway','taxiway','apron','terminal'],
+            runwayId: defaultRunwayId,
+            arrRunwayId: defaultRunwayId,
+            depRunwayId: defaultRunwayId,
+            apronId: null,
+            terminalId: null
+          }
+        };
+        f.deferPathCompute = true;
+        state.flights.push(f);
+        if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+        else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        var addTouched = f.standId ? [f.standId] : [];
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: addTouched });
+        if (timeInputEl) {
+          const nextDef = getDefaultSibtMinutes();
+          timeInputEl.value = formatMinutesToHHMMSS(nextDef);
+        }
+        updateFlightError('');
+      });
+    }
+    function syncFlightPanelFromSelection() {
+      if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+      const f = state.selectedObject.obj;
+      if (arrDepEl) arrDepEl.value = 'Arr';
+      if (dwellEl) {
+        dwellEl.disabled = false;
+        dwellEl.value = f.dwellMin || 0;
+      }
+      if (minDwellEl) {
+        minDwellEl.disabled = false;
+        minDwellEl.value = f.minDwellMin != null ? f.minDwellMin : 0;
+      }
+      if (timeInputEl) timeInputEl.value = formatMinutesToHHMMSS(f.timeMin);
+      if (aircraftEl) {
+        if (f.aircraftType && AIRCRAFT_BY_ID[f.aircraftType]) aircraftEl.value = f.aircraftType;
+        else {
+          const match = AIRCRAFT_TYPES.find(a => a.icao === (f.code || 'C'));
+          aircraftEl.value = match ? match.id : (AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320';
+        }
+      }
+      if (regEl) regEl.value = f.reg || '';
+      const airlineCodeEl = document.getElementById('flightAirlineCode');
+      const flightNumberEl = document.getElementById('flightFlightNumber');
+      if (airlineCodeEl) airlineCodeEl.value = f.airlineCode || '';
+      if (flightNumberEl) flightNumberEl.value = f.flightNumber || '';
+      if (!f.token) f.token = { nodes: TOKEN_NODE_ORDER.slice(), runwayId: null, apronId: null, terminalId: null };
+      fillTokenSelects(f.code);
+      setTokenCheckboxesFromNodes(f.token.nodes);
+      if (tokenRunwaySel) tokenRunwaySel.value = f.token.runwayId || '';
+      if (tokenTerminalSel) tokenTerminalSel.value = f.token.terminalId || '';
+      if (typeof syncFlightAssignStrip === 'function') syncFlightAssignStrip();
+    }
+    hookSyncFlightPanelFromSelection = syncFlightPanelFromSelection;
+    const origSyncPanel = syncPanelFromState;
+    syncPanelFromState = function() {
+      origSyncPanel();
+      if (activeTab === 'flight') syncFlightPanelFromSelection();
+    };
+    function rebuildSelectedFlightTimeline() {
+      if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      const f = state.selectedObject.obj;
+      computeFlightPath(f, 'arrival');
+      computeFlightPath(f, 'departure');
+      const isArr = f.arrDep !== 'Dep';
+      if (isArr && arrivalAirsideBlocked(f)) {
+        updateFlightError(f.arrRetFailed && !f.noWayArr ? '도착 경로(RET)를 계산하지 못했습니다.' : '도착 경로를 찾을 수 없습니다.');
+        f.timeline = null;
+        draw();
+        return;
+      }
+      if (!isArr && f.noWayDep) {
+        updateFlightError('출발 경로를 찾을 수 없습니다.');
+        f.timeline = null;
+        draw();
+        return;
+      }
+      if (typeof buildFullAirsideTimelineForFlight === 'function') buildFullAirsideTimelineForFlight(f);
+      if (!f.timeline || !f.timeline.length) {
+        updateFlightError('No valid route found on that network. (After changing settings)');
+        return;
+      }
+      if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+      else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+      var sidSched = f.standId || null;
+      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: sidSched ? [sidSched] : [] });
+    }
+    if (arrDepEl) {
+      arrDepEl.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        f.arrDep = this.value === 'Dep' ? 'Dep' : 'Arr';
+        if (dwellEl) {
+          dwellEl.disabled = f.arrDep !== 'Arr';
+          if (f.arrDep !== 'Arr') {
+            f.dwellMin = 0;
+            dwellEl.value = 0;
+          } else {
+            f.dwellMin = parseFloat(dwellEl.value) || 0;
+          }
+        }
+        if (minDwellEl) {
+          minDwellEl.disabled = f.arrDep !== 'Arr';
+          if (f.arrDep !== 'Arr') {
+            f.minDwellMin = 0;
+            minDwellEl.value = 0;
+          } else {
+            f.minDwellMin = Math.max(0, parseFloat(minDwellEl.value) || 0);
+            minDwellEl.value = f.minDwellMin;
+          }
+        }
+        rebuildSelectedFlightTimeline();
+      });
+    }
+    if (timeInputEl) {
+      timeInputEl.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        const mins = parseTimeToMinutes(this.value || '0');
+        f.timeMin = mins;
+        this.value = formatMinutesToHHMMSS(mins);
+        rebuildSelectedFlightTimeline();
+      });
+    }
+    if (aircraftEl) {
+      aircraftEl.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        f.aircraftType = this.value || 'A320';
+        f.code = getCodeForAircraft(f.aircraftType);
+        rebuildSelectedFlightTimeline();
+      });
+    }
+    if (regEl) {
+      regEl.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        f.reg = this.value || '';
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        var rs = f.standId || null;
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rs ? [rs] : [] });
+        updateObjectInfo();
+      });
+    }
+    const airlineCodeEl = document.getElementById('flightAirlineCode');
+    const flightNumberEl = document.getElementById('flightFlightNumber');
+    if (airlineCodeEl) {
+      airlineCodeEl.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        f.airlineCode = this.value || '';
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        var rs2 = f.standId || null;
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rs2 ? [rs2] : [] });
+        updateObjectInfo();
+      });
+    }
+    if (flightNumberEl) {
+      flightNumberEl.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        f.flightNumber = this.value || '';
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        var rs3 = f.standId || null;
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rs3 ? [rs3] : [] });
+        updateObjectInfo();
+      });
+    }
+    if (dwellEl) {
+      dwellEl.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        let v = parseFloat(this.value);
+        v = (typeof v === 'number' && !isNaN(v) && v >= 0) ? v : 0;
+        let dwell = Math.max(SCHED_DWELL_FLOOR_MIN, v);
+        let minDwell = f.minDwellMin != null ? f.minDwellMin : dwell;
+        minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+        if (minDwell > dwell) minDwell = dwell;
+        f.dwellMin = dwell;
+        f.minDwellMin = minDwell;
+        this.value = f.dwellMin;
+        if (minDwellEl) minDwellEl.value = f.minDwellMin;
+        rebuildSelectedFlightTimeline();
+      });
+    }
+    if (minDwellEl) {
+      minDwellEl.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        let dwell = f.dwellMin != null ? f.dwellMin : 0;
+        dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+        let v = parseFloat(this.value);
+        v = (typeof v === 'number' && !isNaN(v) && v >= 0) ? v : 0;
+        let minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, v);
+        if (minDwell > dwell) minDwell = dwell;
+        f.dwellMin = dwell;
+        f.minDwellMin = minDwell;
+        if (dwellEl) dwellEl.value = f.dwellMin;
+        this.value = f.minDwellMin;
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        var rs4 = f.standId || null;
+        if (typeof renderFlightList === 'function')
+          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rs4 ? [rs4] : [] });
+      });
+    }
+    if (playBtn) {
+      playBtn.addEventListener('click', function() {
+        const errs = validateNetworkForFlights();
+        if (errs.length) {
+          state.simPlaying = false;
+          updateFlightError(errs);
+          alert('Simulation cannot be played:\\n' + errs.join('\\n'));
+          return;
+        }
+        if (!state.flights.length) {
+          updateFlightError('registered FlightThere is no.');
+          alert('registered FlightThere is no.');
+          return;
+        }
+        if (!state.globalUpdateFresh) {
+          alert('Pro Sim(새로고침)이 필요합니다. 빨간 동기화 표시일 때는 타임라인이 비어 있어 재생할 수 없습니다.');
+          return;
+        }
+        if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+        const lo = state.simStartSec, hi = state.simDurationSec;
+        let t = snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, state.simTimeSec)));
+        if (hi > lo && t >= hi - 1e-3) t = snapSimTimeSecForSlider(lo);
+        state.simTimeSec = t;
+        if (simSlider) simSlider.value = state.simTimeSec;
+        state.simSliderScrubbing = false;
+        if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+        if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
+        state.simPlaying = true;
+        ensureSimLoop._lastTs = null;
+        ensureSimLoop._playKick = true;
+        ensureSimLoop();
+        try { draw(); } catch(e) {}
+        if (typeof update3DScene === 'function') update3DScene();
+      });
+    }
+    if (pauseBtn) {
+      pauseBtn.addEventListener('click', function() {
+        state.simPlaying = false;
+        if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+      });
+    }
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function() {
+        state.simPlaying = false;
+        if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+        state.simTimeSec = snapSimTimeSecForSlider(state.simStartSec);
+        if (simSlider) simSlider.value = state.simTimeSec;
+        if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+        try { draw(); } catch(e) {}
+        if (typeof update3DScene === 'function') update3DScene();
+      });
+    }
+    let simSliderPointerActive = false;
+    function finalizeSimSliderPointerDrag() {
+      if (!simSliderPointerActive) return;
+      simSliderPointerActive = false;
+      state.simSliderScrubbing = false;
+      if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
+      if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+      try { draw(); } catch(e) {}
+      if (typeof update3DScene === 'function') update3DScene();
+    }
+    if (simSlider) {
+      simSlider.addEventListener('pointerdown', function(e) {
+        if (e.button != null && e.button !== 0) return;
+        if (e.isPrimary === false) return;
+        simSliderPointerActive = true;
+        state.simSliderScrubbing = true;
+        try { simSlider.setPointerCapture(e.pointerId); } catch (err) {}
+      });
+      simSlider.addEventListener('pointerup', function(e) {
+        if (!simSliderPointerActive) return;
+        try { simSlider.releasePointerCapture(e.pointerId); } catch (err2) {}
+        finalizeSimSliderPointerDrag();
+      });
+      simSlider.addEventListener('pointercancel', function() {
+        finalizeSimSliderPointerDrag();
+      });
+      simSlider.addEventListener('lostpointercapture', function() {
+        finalizeSimSliderPointerDrag();
+      });
+      simSlider.addEventListener('input', function() {
+        const secs = parseFloat(this.value);
+        if (!isNaN(secs)) {
+          const snapped = snapSimTimeSecForSlider(secs);
+          state.simTimeSec = snapped;
+          this.value = snapped;
+          if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+          if (state.simSliderScrubbing) return;
+          if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
+          try { draw(); } catch(e) {}
+          if (typeof update3DScene === 'function') update3DScene();
+        }
+      });
+    }
+    if (speedSelect) {
+      speedSelect.addEventListener('change', function() {
+        const v = parseFloat(this.value);
+        state.simSpeed = !isNaN(v) && v > 0 ? v : 1;
+      });
+      const v0 = parseFloat(speedSelect.value);
+      state.simSpeed = !isNaN(v0) && v0 > 0 ? v0 : _dc.defaultSimSpeed;
+    }
+    const btnHideSimBar = document.getElementById('btnHideSimPlaybackBar');
+    if (btnHideSimBar) {
+      btnHideSimBar.addEventListener('click', function() {
+        state.simPlaybackDockVisible = false;
+        if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+      });
+    }
+    function syncTableToFlightState() {
+      const schedTable = document.querySelector('.flight-schedule-table');
+      if (!schedTable || !Array.isArray(state.flights)) return;
+      const rows = Array.from(schedTable.querySelectorAll('tbody tr.flight-data-row'));
+      rows.forEach(function(row) {
+        const fid = row.getAttribute('data-id');
+        if (!fid) return;
+        const f = state.flights.find(function(ff) { return ff && ff.id === fid; });
+        if (!f) return;
+        const tds = Array.from(row.querySelectorAll('td'));
+        if (tds.length < 15) return;
+        const getMin = function(idx) {
+          const txt = (tds[idx] && tds[idx].textContent || '').trim();
+          if (!txt) return null;
+          const parts = txt.split(':');
+          if (parts.length >= 2) {
+            const h = parseInt(parts[0], 10) || 0;
+            const m = parseInt(parts[1], 10) || 0;
+            const s = parts.length >= 3 ? (parseInt(parts[2], 10) || 0) : 0;
+            return h * 60 + m + s / 60;
+          }
+          const n = parseFloat(txt);
+          return isNaN(n) ? null : n;
+        };
+        const map = {
+          sldtMin_d: 7, sibtMin_d: 8, sobtMin_d: 9,  stotMin_d: 10,
+          eldtMin:  11, eibtMin:  12, eobtMin:  13, etotMin:   14
+        };
+        Object.keys(map).forEach(function(key) {
+          const v = getMin(map[key]);
+          if (v != null) f[key] = v;
+        });
+      });
+    }
+    function setLayoutMessage(msg, isError) {
+      if (!layoutMsgEl) return;
+      layoutMsgEl.textContent = msg || '';
+      layoutMsgEl.style.color = isError ? '#f97316' : '#9ca3af';
+    }
+    if (saveLayoutBtn) {
+      saveLayoutBtn.addEventListener('click', function() {
+        const name = (layoutNameInput && layoutNameInput.value || '').trim();
+        if (!name) {
+          setLayoutMessage('Please enter a save name.', true);
+          return;
+        }
+        try {
+          if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
+          if (typeof syncTableToFlightState === 'function') syncTableToFlightState();
+          const data = serializeCurrentLayout();
+          fetchSaveLayout(name, data).then(function(r) {
+            if (r.ok) {
+              if (typeof updateLayoutNameBar === 'function') updateLayoutNameBar(name);
+              setLayoutMessage('Saved to Layout_storage as "' + name + '.json"', false);
+            } else setLayoutMessage('save failed (status ' + r.status + ') — python run_app.pyAfter running with http://127.0.0.1:8501 connection', true);
+          }).catch(function(e) {
+            console.warn('Layout save fetch failed', e);
+            setLayoutMessage('Connection failed: ' + (e && e.message) + ' — python run_app.pyAfter running with http://127.0.0.1:8501 connection', true);
+          });
+        } catch (e) {
+          console.error(e);
+          setLayoutMessage('Unable to save layout.', true);
+        }
+      });
+    }
+    function switchLayoutTab(tabId) {
+      const root = document.getElementById('tab-saveload');
+      if (!root) return;
+      root.querySelectorAll('.layout-save-load-tab').forEach(btn => btn.classList.remove('active'));
+      root.querySelectorAll('.layout-save-load-pane').forEach(p => p.classList.remove('active'));
+      const btn = root.querySelector('.layout-save-load-tab[data-sltab="' + tabId + '"]');
+      const pane = document.getElementById('layout-' + tabId + '-pane');
+      if (btn) btn.classList.add('active');
+      if (pane) pane.classList.add('active');
+      if (tabId === 'load') fetchAndRefreshLayoutList();
+    }
+    const layoutMessageSaveEl = document.getElementById('layoutMessageSave');
+    const btnSaveCurrent = document.getElementById('btnSaveCurrentLayout');
+    if (btnSaveCurrent) btnSaveCurrent.addEventListener('click', function() {
+      const name = (state.currentLayoutName && state.currentLayoutName.trim()) || (INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout');
+      try {
+        if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
+        if (typeof syncTableToFlightState === 'function') syncTableToFlightState();
+        const data = serializeCurrentLayout();
+        fetchSaveLayout(name, data).then(function(r) {
+          if (r.ok) {
+            if (layoutMessageSaveEl) { layoutMessageSaveEl.textContent = 'saved: ' + name + '.json'; layoutMessageSaveEl.style.color = '#9ca3af'; }
+          } else if (layoutMessageSaveEl) { layoutMessageSaveEl.textContent = 'save failed (status ' + r.status + ')'; layoutMessageSaveEl.style.color = '#f97316'; }
+        }).catch(function(e) {
+          console.warn('Object save fetch failed', e);
+          if (layoutMessageSaveEl) { layoutMessageSaveEl.textContent = 'Connection failed: ' + (e && e.message); layoutMessageSaveEl.style.color = '#f97316'; }
+        });
+      } catch (e) { if (layoutMessageSaveEl) { layoutMessageSaveEl.textContent = 'error: ' + (e && e.message); layoutMessageSaveEl.style.color = '#f97316'; } }
+    });
+    const saveLoadTabRoot = document.getElementById('tab-saveload');
+    if (saveLoadTabRoot) {
+      saveLoadTabRoot.querySelectorAll('.layout-save-load-tab[data-sltab]').forEach(btn => {
+        btn.addEventListener('click', function() { switchLayoutTab(this.getAttribute('data-sltab')); });
+      });
+    }
+    function getLayoutApiBase() {
+      if (LAYOUT_API_URL && LAYOUT_API_URL !== 'null') return LAYOUT_API_URL;
+      try { if (window.location && window.location.origin && window.location.origin !== 'null') return window.location.origin; } catch(e) {}
+      return '';
+    }
+    function fetchSaveLayout(name, data) {
+      const apiBase = (typeof getLayoutApiBase === 'function') ? getLayoutApiBase() : (LAYOUT_API_URL || '');
+      return fetch(apiBase + '/api/save-layout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layout: data, name: name })
+      });
+    }
+    function fetchAndRefreshLayoutList() {
+      if (!layoutLoadListEl) return;
+      layoutLoadListEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">Loading list...</div>';
+      const apiBase = getLayoutApiBase();
+      fetch(apiBase + '/api/list-layouts').then(function(r) {
+        if (!r.ok) throw new Error('API Connection failed (status ' + r.status + ')');
+        return r.json();
+      }).then(function(data) {
+        const names = (data && data.names) ? data.names : (Array.isArray(LAYOUT_NAMES) ? LAYOUT_NAMES : []);
+        refreshLayoutLoadList(names);
+      }).catch(function(e) {
+        console.warn('Layout list fetch failed', e);
+        layoutLoadListEl.innerHTML = '<div style="font-size:11px;color:#f97316;">Connection failed: ' + (e && e.message) + '</div><div style="font-size:10px;color:#9ca3af;margin-top:4px;">python run_app.py After running with http://127.0.0.1:8501 connection</div>';
+      });
+    }
+    function refreshLayoutLoadList(namesFromApi) {
+      if (!layoutLoadListEl) return;
+      const names = namesFromApi != null ? (Array.isArray(namesFromApi) ? namesFromApi : []) : (Array.isArray(LAYOUT_NAMES) ? LAYOUT_NAMES : []);
+      if (!names.length) {
+        layoutLoadListEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">There are no saved layouts.</div>';
+        return;
+      }
+      const reserved = { 'default_layout': true, 'current_layout': true };
+      layoutLoadListEl.innerHTML = names.map(function(name) {
+        const n = (name || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const showDel = !reserved[(name || '').toLowerCase()];
+        const delBtn = showDel ? '<button type="button" class="layout-load-delete" title="Delete" data-name="' + (name || '').replace(/"/g, '&quot;') + '">×</button>' : '';
+        return '<div class="layout-load-item" data-name="' + (name || '').replace(/"/g, '&quot;') + '"><span class="layout-load-name">' + n + '</span>' + delBtn + '</div>';
+      }).join('');
+      layoutLoadListEl.querySelectorAll('.layout-load-item').forEach(function(el) {
+        const name = el.getAttribute('data-name');
+        el.addEventListener('click', function(ev) {
+          if (ev.target && ev.target.classList && ev.target.classList.contains('layout-load-delete')) return;
+          if (!name) return;
+          var apiBase = getLayoutApiBase();
+          if (layoutMsgEl) { layoutMsgEl.textContent = 'Loading...'; layoutMsgEl.style.color = '#9ca3af'; }
+          fetch(apiBase + '/api/load-layout?name=' + encodeURIComponent(name)).then(function(r) {
+            if (!r.ok) throw new Error('not_found');
+            return r.json();
+          }).then(function(obj) {
+            if (!obj || typeof obj !== 'object') { throw new Error('invalid_response'); }
+            try {
+              state.hasSimulationResult = false;
+              applyLayoutObject(obj);
+              resizeCanvas();
+              reset2DView();
+              syncPanelFromState();
+              if (typeof draw === 'function') draw();
+              if (typeof update3DScene === 'function') update3DScene();
+              if (typeof updateLayoutNameBar === 'function') updateLayoutNameBar(name);
+              if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+              if (layoutMsgEl) { layoutMsgEl.textContent = 'Loaded \"' + name + '\"'; layoutMsgEl.style.color = '#9ca3af'; }
+            } catch (err) {
+              console.error('applyLayoutObject error', err);
+              throw err;
+            }
+          }).catch(function(e) {
+            console.warn('Layout load fetch failed', e);
+            if (layoutMsgEl) { layoutMsgEl.textContent = 'Failed to load: ' + ((e && e.message) || name || '') + ' — python run_app.pyAfter running with http://127.0.0.1:8501 connection'; layoutMsgEl.style.color = '#f97316'; }
+          });
+        });
+        el.querySelector('.layout-load-delete') && el.querySelector('.layout-load-delete').addEventListener('click', function(ev) {
+          ev.stopPropagation();
+          const n = this.getAttribute('data-name');
+          if (!n) return;
+          const apiBase = getLayoutApiBase();
+          fetch(apiBase + '/api/delete-layout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: n })
+          }).then(function(r) {
+            if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Deletion failed'); });
+            return fetch(apiBase + '/api/list-layouts').then(function(r2) { return r2.json(); });
+          }).then(function(data) {
+            if (data && data.names) refreshLayoutLoadList(data.names);
+            if (layoutMsgEl) { layoutMsgEl.textContent = 'deleted.'; layoutMsgEl.style.color = '#9ca3af'; }
+          }).catch(function(e) {
+            console.warn('Layout delete fetch failed', e);
+            if (layoutMsgEl) { layoutMsgEl.textContent = ((e && e.message) || 'Deletion failed') + ' — python run_app.pyAfter running with http://127.0.0.1:8501 connection'; layoutMsgEl.style.color = '#f97316'; }
+          });
+        });
+      });
+    }
+    fetch((getLayoutApiBase() || '') + '/api/list-layouts').then(function(r) {
+      if (r.ok) return;
+      var banner = document.getElementById('api-warning-banner');
+      if (banner) banner.style.display = 'block';
+    }).catch(function(e) {
+      console.warn('API health check failed', e);
+      var banner = document.getElementById('api-warning-banner');
+      if (banner) banner.style.display = 'block';
+    });
+  })();
+
+  document.getElementById('btnTerminalDraw').addEventListener('click', function() {
+    state.selectedObject = null;
+    if (state.terminalDrawingId) {
+      const t = state.terminals.find(x => x.id === state.terminalDrawingId);
+      if (t && !t.closed && t.vertices.length >= 3) {
+        t.closed = true;
+        if (terminalOverlapsAnyTaxiway(t)) {
+          alert('this Apron/Terminalsilver Taxiway Overlaps the center line. Please place it in a different location.');
+          state.terminals = state.terminals.filter(term => term.id !== t.id);
+        }
+      }
+      state.terminalDrawingId = null;
+      state.layoutPathDrawPointer = null;
+      syncPanelFromState();
+      draw();
+      return;
+    }
+    const selectedBuildingType = normalizeBuildingType(document.getElementById('buildingType') ? document.getElementById('buildingType').value : BUILDING_TYPE_DEFAULT);
     const nameBase = document.getElementById('terminalName').value.trim() || getDefaultBuildingNameForType(selectedBuildingType);
     const floorsEl = document.getElementById('terminalFloors');
     const f2fEl = document.getElementById('terminalFloorToFloor');
@@ -964,8 +1679,11 @@
       const ex = apronPt[0], ey = apronPt[1];
       const angle = getPBBStandAngle(pbb);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === pbb.id);
-      ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : 'rgba(22,163,74,0.18)');
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : '#22c55e');
+      const apronLinked = standHasApronTaxiwayLink(pbb.id);
+      const idleFill = apronLinked ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
+      const idleStroke = apronLinked ? '#22c55e' : '#9ca3af';
+      ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFill);
+      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStroke);
       ctx.lineWidth = sel ? 2.5 : 1.5;
       ctx.save();
       ctx.translate(ex, ey);
@@ -986,725 +1704,7 @@
       const pad = 3;
       const tx = endSize / 2 - pad;
       const ty = -endSize / 2 + pad;
-      ctx.fillStyle = '#bbf7d0';
+      ctx.fillStyle = apronLinked ? '#bbf7d0' : '#d1d5db';
       ctx.font = '8px system-ui';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';
-      ctx.fillText(String(label), tx, ty);
-      ctx.restore();
-      ctx.save();
-      ctx.beginPath();
-      ctx.fillStyle = sel ? '#22c55e' : 'rgba(34,197,94,0.9)';
-      ctx.arc(apronPt[0], apronPt[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      if (sel) {
-        drawStandRotationHandle(getPbbRotationOriginPx(pbb), getPbbRotationHandlePx(pbb), rotationActive);
-      }
-    });
-    ctx.restore();
-  }
-
-  function drawRemoteStands() {
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
-    state.remoteStands.forEach(st => {
-      const [cx, cy] = getRemoteStandCenterPx(st);
-      const size = getStandSizeMeters(st.category || 'C');
-      const angle = getRemoteStandAngleRad(st);
-      const sel = state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.id === st.id;
-      const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
-      const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(angle);
-      ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : 'rgba(22,163,74,0.18)');
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : '#22c55e');
-      ctx.lineWidth = sel ? 2.5 : 1.5;
-      ctx.beginPath();
-      ctx.rect(-size/2, -size/2, size, size);
-      ctx.fill();
-      if (sel) {
-        ctx.save();
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-      }
-      ctx.stroke();
-      if (sel) ctx.restore();
-      ctx.restore();
-      if (mode === 'apronTaxiway') {
-        ctx.save();
-        ctx.fillStyle = sel ? '#f97316' : '#e5e7eb';
-        ctx.beginPath();
-        ctx.arc(cx, cy, 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-      const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
-      const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
-      const label = labelPrefix + ' / ' + nameRaw;
-      ctx.fillStyle = '#bbf7d0';
-      ctx.font = '8px system-ui';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
-      const labelOffset = 2;
-      ctx.fillText(label, cx + size/2 - labelOffset, cy - size/2 + labelOffset);
-      if (sel) {
-        drawStandRotationHandle([cx, cy], getRemoteRotationHandlePx(st), rotationActive);
-      }
-    });
-    ctx.restore();
-  }
-
-  function renderRunwaySeparation() {
-    const panel = document.getElementById('rwySepPanel');
-    if (!panel) return;
-    const runways = (state.taxiways || []).filter(tw => tw.pathType === 'runway');
-    if (!runways.length) {
-      panel.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No runway paths. Layout Mode <strong>Runway</strong>Draw the runway polyline first with.</div>';
-      return;
-    }
-    if (!state.activeRwySepId || !runways.some(r => r.id === state.activeRwySepId)) {
-      state.activeRwySepId = runways[0].id;
-    }
-    const active = runways.find(r => r.id === state.activeRwySepId) || runways[0];
-    const cfg = rsepGetConfigForRunway(active);
-    const stdKey = cfg.standard || 'ICAO';
-    const cats = RSEP_STD_CATS[stdKey] || RSEP_STD_CATS['ICAO'];
-    const mode = cfg.mode || 'MIX';
-    const seq = cfg.activeSeq || (RSEP_MODE_SEQS[mode] && RSEP_MODE_SEQS[mode][0]) || 'ARR→ARR';
-    const seqType = RSEP_SEQ_TYPES[seq] || 'matrix';
-    const seqMeta = rsepGetSeqMeta(seq);
-
-    let html = '';
-    html += '<div class="rwysep-rwy-bar">';
-    html += '<div class="rwysep-rwy-tabs">';
-    runways.forEach(rw => {
-      const isActive = rw.id === active.id;
-      const label = escapeHtml(rw.name || ('Runway ' + rw.id));
-      html += '<button type="button" class="rwysep-rwy-btn' + (isActive ? ' active' : '') + '" data-rwy-id="' + rw.id + '">' + label + '</button>';
-    });
-    html += '</div></div>';
-
-    const activeSub = 'noname';
-    html += '<div class="layout-save-load-tabs" style="margin-top:8px;">';
-    html += '<button type="button" class="layout-save-load-tab rwysep-subtab-btn active" data-subtab="noname">No Name</button>';
-    html += '</div>';
-
-    html += '<div id="rwysep-subtab-input" style="">';
-    html += '<div class="rwysep-block">';
-    html += '<div class="rwysep-label">Standard &amp; Mode</div>';
-    html += '<div class="rwysep-row">';
-    html += '<label style="font-size:11px;color:#9ca3af;">Standard&nbsp;</label>';
-    html += '<select id="rwysep-standard">';
-    html += '<option value="ICAO"' + (stdKey === 'ICAO' ? ' selected' : '') + '>ICAO (J/H/M/L)</option>';
-    html += '<option value="RECAT-EU"' + (stdKey === 'RECAT-EU' ? ' selected' : '') + '>RECAT-EU (A~F)</option>';
-    html += '</select>';
-    html += '<label style="font-size:11px;color:#9ca3af;margin-left:8px;">Mode&nbsp;</label>';
-    html += '<select id="rwysep-mode">';
-    ['ARR','DEP','MIX'].forEach(m => {
-      const txt = m === 'ARR' ? 'Arrivals only' : (m === 'DEP' ? 'Departures only' : 'Mixed (Arr/Dep)');
-      html += '<option value="' + m + '"' + (mode === m ? ' selected' : '') + '>' + txt + '</option>';
-    });
-    html += '</select>';
-    html += '<label style="font-size:11px;color:#9ca3af;margin-left:8px;">Seq&nbsp;</label>';
-    html += '<select id="rwysep-seq">';
-    (RSEP_MODE_SEQS[mode] || []).forEach(s => {
-      const lbl = s;
-      html += '<option value="' + s + '"' + (seq === s ? ' selected' : '') + '>' + lbl + '</option>';
-    });
-    html += '</select>';
-    html += '</div></div>';
-
-    if (seqMeta) {
-      html += '<div class="rwysep-block" style="margin-top:4px;">';
-      html += '<div class="rwysep-label">Concept summary</div>';
-      html += '<div style="font-size:10px;color:#d1d5db;line-height:1.5;background:#020617;border-radius:6px;border:1px solid #111827;padding:6px 8px;">';
-      html += '<div><span style="color:#9ca3af;">Driving factor</span>&nbsp;&nbsp;: ' + escapeHtml(seqMeta.driver) + '</div>';
-      html += '<div><span style="color:#9ca3af;">Reference point</span>&nbsp;: ' + escapeHtml(seqMeta.refPoint) + '</div>';
-      html += '<div><span style="color:#9ca3af;">Input structure</span>: ' + escapeHtml(seqMeta.input) + '</div>';
-      html += '</div>';
-      html += '</div>';
-    }
-
-    if (seq === 'ARR→DEP') {
-      html += '<div class="rwysep-block">';
-      html += '<div style="font-size:10px;color:#9ca3af;line-height:1.5;margin-bottom:6px;">Separation combines leading aircraft ROT with trailing aircraft lineup–gear-off time, using the ROT inputs above per wake category.</div>';
-
-      const totalRot = cats.length;
-      let filledRot = 0;
-      cats.forEach(c => {
-        const val = cfg.rot && cfg.rot[c] != null ? cfg.rot[c] : '';
-        if (val !== '' && val != null) filledRot += 1;
-      });
-      html += rsepLegendHtml(filledRot, totalRot);
-
-      html += '<div class="rwysep-row" style="flex-wrap:wrap;">';
-      cats.forEach(c => {
-        const rawVal = cfg.rot && cfg.rot[c] != null ? cfg.rot[c] : '';
-        const valStr = rawVal === null || rawVal === undefined ? '' : String(rawVal);
-        const sub = rsepGetCatLabel(stdKey, c);
-        const colInfo = rsepColorForValue(valStr);
-        html += '<div style="min-width:90px;margin-right:6px;margin-bottom:4px;">';
-        html += '<div style="font-size:10px;color:#9ca3af;margin-bottom:2px;line-height:1.2;">';
-        html += 'Cat ' + c;
-        if (sub) {
-          html += '<div style="font-size:9px;color:#6b7280;margin-top:1px;">' + escapeHtml(sub) + '</div>';
-        }
-        html += '</div>';
-        html += '<input type="number" min="0" step="5" data-rwysep-rot="' + c + '" value="' + escapeHtml(valStr) + '" style="width:64px;background:' + colInfo.bg + ';border:1px solid ' + colInfo.border + ';color:' + colInfo.color + ';font-size:10px;padding:3px 4px;border-radius:3px;text-align:center;" />';
-        html += ' <span style="font-size:9px;color:#6b7280;">sec</span>';
-        html += '</div>';
-      });
-      html += '</div></div>';
-    }
-
-    if (seq !== 'ARR→DEP') {
-      html += '<div class="rwysep-block">';
-      html += '<div class="rwysep-label">Separation (sec) — ' + escapeHtml(seq) + '</div>';
-      if (seqType === 'matrix') {
-        const data = cfg.seqData && cfg.seqData[seq] ? cfg.seqData[seq] : rsepMakeMatrix(cats, null);
-        const total = cats.length * cats.length;
-        let filled = 0;
-        cats.forEach(lead => {
-          cats.forEach(trail => {
-            const v = data[lead] && data[lead][trail] != null ? data[lead][trail] : '';
-            if (v !== '' && v != null) filled += 1;
-          });
-        });
-        html += rsepLegendHtml(filled, total);
-
-        html += '<div class="rwysep-matrix-wrap"><table class="rwysep-table"><thead><tr>';
-        html += '<th>Lead↓ / Trail→</th>';
-        cats.forEach(c => {
-          const sub = rsepGetCatLabel(stdKey, c);
-          html += '<th><div style="line-height:1.2;">' + c;
-          if (sub) {
-            html += '<div style="font-size:9px;color:#9ca3af;margin-top:1px;">' + escapeHtml(sub) + '</div>';
-          }
-          html += '</div></th>';
-        });
-        html += '</tr></thead><tbody>';
-        cats.forEach(lead => {
-          const leadSub = rsepGetCatLabel(stdKey, lead);
-          html += '<tr><td><div style="line-height:1.2;">' + lead;
-          if (leadSub) {
-            html += '<div style="font-size:9px;color:#9ca3af;margin-top:1px;">' + escapeHtml(leadSub) + '</div>';
-          }
-          html += '</div></td>';
-          cats.forEach(trail => {
-            const v = data[lead] && data[lead][trail] != null ? data[lead][trail] : '';
-            const colInfo = rsepColorForValue(v);
-            html += '<td><input type="number" min="0" step="5" data-rwysep-matrix-lead="' + lead + '" data-rwysep-matrix-trail="' + trail + '" value="' + escapeHtml(String(v)) + '" style="width:64px;background:' + colInfo.bg + ';border:1px solid ' + colInfo.border + ';color:' + colInfo.color + ';font-size:10px;padding:3px 4px;border-radius:3px;text-align:center;" /></td>';
-          });
-          html += '</tr>';
-        });
-        html += '</tbody></table></div>';
-      } else {
-        const data1d = cfg.seqData && cfg.seqData[seq] ? cfg.seqData[seq] : rsepMake1D(cats, null);
-        const total = cats.length;
-        let filled = 0;
-        cats.forEach(cat => {
-          const v = data1d[cat] != null ? data1d[cat] : '';
-          if (v !== '' && v != null) filled += 1;
-        });
-        html += rsepLegendHtml(filled, total);
-
-        html += '<div class="rwysep-row" style="flex-wrap:wrap;margin-top:4px;">';
-        cats.forEach(cat => {
-          const v = data1d[cat] != null ? data1d[cat] : '';
-          const colInfo = rsepColorForValue(v);
-          const sub = rsepGetCatLabel(stdKey, cat);
-          html += '<div style="min-width:90px;margin-right:6px;margin-bottom:4px;border:1px solid #1f2937;border-radius:6px;padding:6px 8px;background:#020617;">';
-          html += '<div style="font-size:10px;color:#9ca3af;margin-bottom:2px;line-height:1.2;">Cat ' + cat;
-          if (sub) {
-            html += '<div style="font-size:9px;color:#6b7280;margin-top:1px;">' + escapeHtml(sub) + '</div>';
-          }
-          html += '</div>';
-          html += '<input type="number" min="0" step="5" data-rwysep-1d="' + cat + '" value="' + escapeHtml(String(v)) + '" style="width:64px;background:' + colInfo.bg + ';border:1px solid ' + colInfo.border + ';color:' + colInfo.color + ';font-size:10px;padding:3px 4px;border-radius:3px;text-align:center;" />';
-          html += ' <span style="font-size:9px;color:#6b7280;">sec</span>';
-          html += '</div>';
-        });
-        html += '</div>';
-      }
-      html += '</div>';
-    }
-    html += '</div>'; // end subtab input
-
-    html += '<div id="rwysep-subtab-timeline" style="' + (activeSub === 'timeline' ? '' : 'display:none;') + '">';
-    html += '<div class="rwysep-block" style="margin-top:8px;">';
-    html += '<div class="rwysep-label">Separation Timeline (Reg × Time)</div>';
-    html += '<div id="rwySepTimeWrap" style="width:100%;background:#020617;border-radius:8px;border:1px solid #1f2937;position:relative;overflow-x:auto;overflow-y:auto;margin-top:4px;max-height:calc(40px * 12 + 80px);"></div>';
-    html += '<div style="font-size:9px;color:#9ca3af;margin-top:4px;">';
-    html += 'Y: Reg Number · X: Time · Bars = S-series (SLDT–STOT) · Lines = E-series (ELDT–ETOT)';
-    html += '</div></div>';
-    html += '</div>'; // end subtab timeline
-
-    panel.innerHTML = html;
-
-    function drawRwySeparationTimeline() {
-      if (state.activeRwySepSubtab && state.activeRwySepSubtab !== 'timeline') return;
-      const wrap = panel.querySelector('#rwySepTimeWrap');
-      if (!wrap) return;
-
-      const allData = typeof buildRunwaySeparationTimelineByRunwaySnapshot === 'function'
-        ? buildRunwaySeparationTimelineByRunwaySnapshot(state.flights)
-        : null;
-      const data = allData && active && active.id != null ? allData[active.id] : null;
-      if (!data || !data.events || !data.events.length) {
-        wrap.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:8px 10px;">No SLDT/STOT events for this runway.</div>';
-        return;
-      }
-
-      const byFlight = new Map();
-      data.events.forEach(ev => {
-        const f = ev.flight;
-        if (!f) return;
-        let lane = byFlight.get(f);
-        if (!lane) {
-          const reg = f.reg || f.id || '';
-          lane = {
-            flight: f,
-            reg,
-            hasArr: false,
-            hasDep: false,
-            sldt: null,
-            eldt: null,
-            stot: null,
-            etot: null
-          };
-          byFlight.set(f, lane);
-        }
-        if (ev.type === 'arr') {
-          lane.hasArr = true;
-          lane.sldt = ev.time;
-          lane.eldt = (f.eldtMin != null ? f.eldtMin : ev.time);
-        } else if (ev.type === 'dep') {
-          lane.hasDep = true;
-          lane.stot = ev.time;
-          lane.etot = (f.etotMin != null ? f.etotMin : ev.time);
-        }
-      });
-
-      const lanes = Array.from(byFlight.values());
-      if (!lanes.length) {
-        wrap.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:8px 10px;">No SLDT/STOT events for this runway.</div>';
-        return;
-      }
-
-      let minT0 = Infinity;
-      let maxT0 = -Infinity;
-      lanes.forEach(ln => {
-        if (ln.sldt != null && ln.sldt < minT0) minT0 = ln.sldt;
-        if (ln.etot != null && ln.etot > maxT0) maxT0 = ln.etot;
-      });
-      if (minT0 <= 0 && lanes.length) {
-        const pos = lanes.map(function(ln) { return ln.sldt; }).filter(function(v) { return v != null && isFinite(v) && v > 1e-6; });
-        if (pos.length) minT0 = Math.min.apply(null, pos);
-      }
-      if (!isFinite(minT0) || !isFinite(maxT0)) {
-        minT0 = data.minT;
-        maxT0 = data.maxT;
-      }
-      let baseMinT = Math.max(0, minT0 - RWY_SEP_TIMELINE_PAD_MIN);
-      let baseMaxT = maxT0 + RWY_SEP_TIMELINE_PAD_MIN;
-      if (baseMaxT <= baseMinT) baseMaxT = baseMinT + 60;
-      const baseSpan = baseMaxT - baseMinT;
-      const zoom = (state.rwySepTimeZoom && state.rwySepTimeZoom > 1) ? state.rwySepTimeZoom : 1;
-      const span = baseSpan;
-      const minT = baseMinT;
-      const maxT = baseMaxT;
-
-      lanes.sort((a, b) => {
-        const ta = (a.sldt ?? a.stot ?? a.eldt ?? a.etot ?? 0);
-        const tb = (b.sldt ?? b.stot ?? b.eldt ?? b.etot ?? 0);
-        return ta - tb;
-      });
-
-      const tickPositions = buildTimeAxisTicks(minT, maxT, baseMinT, baseSpan, zoom);
-
-      const sMarkers = [];
-      const eMarkers = [];
-
-      const rows = [];
-      lanes.forEach(ln => {
-        const reg = ln.reg || '';
-        const sStart = (ln.sldt != null ? ln.sldt : null);
-        const sEnd = (ln.stot != null ? ln.stot : null);
-        const eStart = (ln.eldt != null ? ln.eldt : null);
-        const eEnd = (ln.etot != null ? ln.etot : null);
-
-        let blocks = '';
-        if (sStart != null && sEnd != null && span > 0) {
-          const s1 = Math.max(sStart, baseMinT);
-          const s2 = Math.min(sEnd, baseMaxT);
-          if (s2 <= s1) return;
-          const leftPct = ((s1 - baseMinT) / baseSpan) * 100 * zoom;
-          const widthPct = Math.max(1, ((s2 - s1) / baseSpan) * 100 * zoom);
-          const rightPct = leftPct + widthPct;
-          sMarkers.push({ t: sStart, leftPct, type: 'start' });
-          sMarkers.push({ t: sEnd, leftPct: rightPct, type: 'end' });
-          blocks +=
-            '<div class="rwysep-line-s" style="' +
-              'left:' + leftPct + '%;' +
-              'width:' + widthPct + '%;' +
-            '"></div>' +
-            '<div class="rwysep-tri" style="' +
-              'top:20%;' +
-              'left:' + leftPct + '%;' +
-              'border-top:6px solid ' + GANTT_COLORS.S_SERIES + ';' +
-            '"></div>' +
-            '<div class="rwysep-tri" style="' +
-              'top:20%;' +
-              'left:' + rightPct + '%;' +
-              'border-bottom:6px solid ' + GANTT_COLORS.S_SERIES + ';' +
-            '"></div>';
-        }
-        if (eStart != null && eEnd != null && span > 0) {
-          const e1 = Math.max(eStart, baseMinT);
-          const e2 = Math.min(eEnd, baseMaxT);
-          if (e2 <= e1) return;
-          const leftPct2 = ((e1 - baseMinT) / baseSpan) * 100 * zoom;
-          const widthPct2 = Math.max(0.5, ((e2 - e1) / baseSpan) * 100 * zoom);
-          const rightPct2 = leftPct2 + widthPct2;
-          eMarkers.push({ t: eStart, leftPct: leftPct2, type: 'start' });
-          eMarkers.push({ t: eEnd, leftPct: rightPct2, type: 'end' });
-          blocks +=
-            '<div class="rwysep-line-e" style="' +
-              'left:' + leftPct2 + '%;' +
-              'width:' + widthPct2 + '%;' +
-            '"></div>' +
-            '<div class="rwysep-tri" style="' +
-              'top:54%;' +
-              'left:' + leftPct2 + '%;' +
-              'border-top:6px solid ' + GANTT_COLORS.E_SERIES + ';' +
-            '"></div>' +
-            '<div class="rwysep-tri" style="' +
-              'top:54%;' +
-              'left:' + rightPct2 + '%;' +
-              'border-bottom:6px solid ' + GANTT_COLORS.E_SERIES + ';' +
-            '"></div>';
-        }
-
-        rows.push(
-          '<div class="alloc-row">' +
-            '<div class="alloc-row-label">' + escapeHtml(reg) + '</div>' +
-            '<div class="alloc-row-track" style="background:transparent;border:none;">' + blocks + '</div>' +
-          '</div>'
-        );
-      });
-
-      sMarkers.sort((a, b) => a.t - b.t);
-      eMarkers.sort((a, b) => a.t - b.t);
-
-      const sHeadMarks = sMarkers.map(m =>
-        '<div class="rwysep-tri" style="' +
-          'top:60%;' +
-          'left:' + m.leftPct + '%;' +
-          (m.type === 'start'
-            ? 'border-top:6px solid ' + GANTT_COLORS.S_SERIES + ';'
-            : 'border-bottom:6px solid ' + GANTT_COLORS.S_SERIES + ';') +
-        '"></div>'
-      ).join('');
-
-      const eHeadMarks = eMarkers.map(m =>
-        '<div class="rwysep-tri" style="' +
-          'top:60%;' +
-          'left:' + m.leftPct + '%;' +
-          (m.type === 'start'
-            ? 'border-top:6px solid ' + GANTT_COLORS.E_SERIES + ';'
-            : 'border-bottom:6px solid ' + GANTT_COLORS.E_SERIES + ';') +
-        '"></div>'
-      ).join('');
-
-      const headHtml =
-        '<div class="rwysep-head-row">' +
-          '<div class="rwysep-head-label">S-series</div>' +
-          '<div class="rwysep-head-track">' + sHeadMarks + '</div>' +
-        '</div>' +
-        '<div class="rwysep-head-row">' +
-          '<div class="rwysep-head-label">E-series</div>' +
-          '<div class="rwysep-head-track">' + eHeadMarks + '</div>' +
-        '</div>';
-
-      const axisTicks = tickPositions.map(tp =>
-        '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
-          '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
-        '</div>'
-      );
-      const axisHtml =
-        '<div class="alloc-time-axis-overlay">' +
-          '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
-        '</div>';
-
-      const rwyGridOverlay =
-        '<div class="alloc-gantt-grid-overlay">' +
-          tickPositions.map(function(tp) {
-            return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
-          }).join('') +
-        '</div>';
-      const rowsHtml = '<div class="rwysep-rows">' + rwyGridOverlay + rows.join('') + '</div>';
-      wrap.innerHTML = headHtml + rowsHtml + axisHtml;
-
-      if (!wrap._rwySepZoomBound) {
-        wrap._rwySepZoomBound = true;
-        wrap.addEventListener('wheel', function(e) {
-          if (!e.shiftKey) return;
-          e.preventDefault();
-          const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
-          let z = state.rwySepTimeZoom || 1;
-          z *= factor;
-          if (z < 1) z = 1;
-          if (z > 8) z = 8;
-          state.rwySepTimeZoom = z;
-          if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
-        }, { passive: false });
-      }
-
-      if (!wrap._rwySepScrollBound) {
-        wrap._rwySepScrollBound = true;
-        wrap.addEventListener('scroll', function() {
-          if (wrap._rwySepScrollRecalc) return;
-          const currentLeft = wrap.scrollLeft;
-          wrap._rwySepScrollRecalc = true;
-          drawRwySeparationTimeline();
-          wrap.scrollLeft = currentLeft;
-          wrap._rwySepScrollRecalc = false;
-        });
-      }
-    }
-
-    drawRwySeparationTimeline();
-
-    _rwySepWireInputHandlers(panel, cfg, cats, seq, state);
-  }
-
-  function _rwySepWireInputHandlers(panel, cfg, cats, seq, st) {
-    panel.querySelectorAll('.rwysep-rwy-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const id = this.getAttribute('data-rwy-id');
-        if (!id) return;
-        st.activeRwySepId = id;
-        renderRunwaySeparation();
-      });
-    });
-    panel.querySelectorAll('.rwysep-subtab-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const sub = this.getAttribute('data-subtab') || 'input';
-        st.activeRwySepSubtab = sub;
-        renderRunwaySeparation();
-      });
-    });
-    var stdSel = panel.querySelector('#rwysep-standard');
-    if (stdSel) {
-      stdSel.addEventListener('change', function() {
-        cfg.standard = this.value || 'ICAO';
-        cfg.seqData = rsepMakeSeqData(cfg.standard);
-        var catsNew = RSEP_STD_CATS[cfg.standard] || [];
-        var rotNew = RSEP_STANDARDS[cfg.standard] && RSEP_STANDARDS[cfg.standard].ROT || {};
-        cfg.rot = {};
-        catsNew.forEach(function(c) { cfg.rot[c] = rotNew[c] != null ? String(rotNew[c]) : ''; });
-        renderRunwaySeparation();
-      });
-    }
-    var modeSel = panel.querySelector('#rwysep-mode');
-    if (modeSel) {
-      modeSel.addEventListener('change', function() {
-        cfg.mode = this.value || 'MIX';
-        var seqs = RSEP_MODE_SEQS[cfg.mode] || ['ARR→ARR'];
-        if (!seqs.includes(cfg.activeSeq)) cfg.activeSeq = seqs[0];
-        renderRunwaySeparation();
-      });
-    }
-    var seqSel = panel.querySelector('#rwysep-seq');
-    if (seqSel) {
-      seqSel.addEventListener('change', function() {
-        cfg.activeSeq = this.value || 'ARR→ARR';
-        renderRunwaySeparation();
-      });
-    }
-    function _applyColorOnChange(inp) {
-      var colInfo = rsepColorForValue(inp.value);
-      inp.style.background = colInfo.bg;
-      inp.style.borderColor = colInfo.border;
-      inp.style.color = colInfo.color;
-    }
-    panel.querySelectorAll('input[data-rwysep-rot]').forEach(function(inp) {
-      inp.addEventListener('change', function() {
-        var cat = this.getAttribute('data-rwysep-rot');
-        if (!cat) return;
-        cfg.rot[cat] = this.value;
-        _applyColorOnChange(this);
-      });
-    });
-    panel.querySelectorAll('input[data-rwysep-matrix-lead]').forEach(function(inp) {
-      inp.addEventListener('change', function() {
-        var lead = this.getAttribute('data-rwysep-matrix-lead');
-        var trail = this.getAttribute('data-rwysep-matrix-trail');
-        if (!lead || !trail) return;
-        if (!cfg.seqData[seq]) cfg.seqData[seq] = rsepMakeMatrix(cats, null);
-        if (!cfg.seqData[seq][lead]) cfg.seqData[seq][lead] = {};
-        cfg.seqData[seq][lead][trail] = this.value;
-        _applyColorOnChange(this);
-      });
-    });
-    panel.querySelectorAll('input[data-rwysep-1d]').forEach(function(inp) {
-      inp.addEventListener('change', function() {
-        var cat = this.getAttribute('data-rwysep-1d');
-        if (!cat) return;
-        if (!cfg.seqData[seq]) cfg.seqData[seq] = rsepMake1D(cats, null);
-        cfg.seqData[seq][cat] = this.value;
-        _applyColorOnChange(this);
-      });
-    });
-  }
-
-  function drawTaxiways() {
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    state.taxiways.forEach(tw => {
-      const drawing = state.taxiwayDrawingId === tw.id;
-      if (tw.vertices.length < 2 && !drawing) return;
-      const isRunwayPath = tw.pathType === 'runway';
-      const isRunwayExit = tw.pathType === 'runway_exit';
-      const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-      const width = tw.width != null ? tw.width : widthDefault;
-      const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
-      const pathLineCap = 'butt';
-      if (sel) {
-        ctx.strokeStyle = c2dObjectSelectedStroke();
-        ctx.fillStyle = c2dObjectSelectedFill();
-      } else if (isRunwayPath || isRunwayExit) {
-        ctx.strokeStyle = c2dRunwayStroke();
-        ctx.fillStyle = c2dRunwayFill();
-      } else {
-        ctx.strokeStyle = drawing ? 'rgba(56, 189, 248, 0.72)' : c2dRunwayStroke();
-        ctx.fillStyle = drawing ? 'rgba(56, 189, 248, 0.14)' : c2dRunwayFill();
-      }
-      ctx.lineWidth = width;
-      ctx.lineCap = pathLineCap;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      for (let i = 0; i < tw.vertices.length; i++) {
-        const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      if (state.showRoadWidth && tw.vertices.length >= 2) {
-        if (sel) {
-          ctx.save();
-          ctx.shadowColor = c2dObjectSelectedGlow();
-          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-          ctx.stroke();
-          ctx.restore();
-        } else ctx.stroke();
-      }
-      if (!isRunwayPath) {
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
-        ctx.beginPath();
-        for (let i = 0; i < tw.vertices.length; i++) {
-          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        if (tw.vertices.length >= 2) ctx.stroke();
-      }
-      if (isRunwayPath && tw.vertices.length >= 2) {
-        const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
-        drawRunwayDecorations(tw, runwayPts, width);
-      }
-      const dir = getTaxiwayDirection(tw);
-      if (dir !== 'both' && tw.vertices.length >= 2) {
-        const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
-        const totalLen = pts.reduce((acc, p, i) => acc + (i > 0 ? Math.hypot(p[0]-pts[i-1][0], p[1]-pts[i-1][1]) : 0), 0);
-        const arrowSpacing = Math.max(22, Math.min(42, totalLen / 10));
-        const numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
-        const arrLen = CELL_SIZE * 0.54;
-        ctx.fillStyle = isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
-        for (let k = 1; k <= numArrows; k++) {
-          const targetDist = totalLen * (k / (numArrows + 1));
-          let acc = 0;
-          let ax = pts[0][0], ay = pts[0][1];
-          let angle = Math.atan2(pts[1][1]-pts[0][1], pts[1][0]-pts[0][0]);
-          for (let i = 1; i < pts.length; i++) {
-            const seg = Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
-            angle = Math.atan2(pts[i][1]-pts[i-1][1], pts[i][0]-pts[i-1][0]);
-            if (acc + seg >= targetDist) {
-              const t = seg > 0 ? (targetDist - acc) / seg : 0;
-              ax = pts[i-1][0] + t * (pts[i][0]-pts[i-1][0]);
-              ay = pts[i-1][1] + t * (pts[i][1]-pts[i-1][1]);
-              break;
-            }
-            acc += seg;
-          }
-          if (dir === 'counter_clockwise') angle += Math.PI;
-          ctx.beginPath();
-          ctx.moveTo(ax + arrLen * Math.cos(angle), ay + arrLen * Math.sin(angle));
-          ctx.lineTo(ax - arrLen * 0.7 * Math.cos(angle) + arrLen * 0.4 * Math.sin(angle), ay - arrLen * 0.7 * Math.sin(angle) - arrLen * 0.4 * Math.cos(angle));
-          ctx.lineTo(ax - arrLen * 0.7 * Math.cos(angle) - arrLen * 0.4 * Math.sin(angle), ay - arrLen * 0.7 * Math.sin(angle) + arrLen * 0.4 * Math.cos(angle));
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
-      if (isRunwayPath && tw.vertices.length >= 2) {
-        const rp = getRunwayPath(tw.id);
-        if (rp && rp.pts.length >= 2) {
-          const lenPx = runwayPolylineLengthPx(rp.pts);
-          const d = Math.min(Math.max(0, getEffectiveRunwayLineupDistM(tw)), lenPx);
-          const lp = getRunwayPointAtDistance(tw.id, d);
-          if (lp) {
-            const lineupRtxOk = isLineupPointTouchingRunwayTaxiwayOnRunway(tw, lp);
-            ctx.save();
-            ctx.fillStyle = lineupRtxOk ? '#16a34a' : '#dc2626';
-            ctx.strokeStyle = lineupRtxOk ? '#14532d' : '#450a0a';
-            ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.arc(lp[0], lp[1], 5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            const labelText = 'Line up';
-            ctx.font = 'bold 11px system-ui, sans-serif';
-            const padX = 6, padY = 4, rad = 5;
-            const mLabel = ctx.measureText(labelText);
-            const bw = mLabel.width + padX * 2;
-            const bh = 11 + padY * 2;
-            const bx = lp[0] + 7;
-            const by = lp[1] - 4 - bh;
-            ctx.beginPath();
-            if (typeof ctx.roundRect === 'function') ctx.roundRect(bx, by, bw, bh, rad);
-            else ctx.rect(bx, by, bw, bh);
-            ctx.fillStyle = lineupRtxOk ? 'rgba(22, 163, 74, 0.92)' : 'rgba(220, 38, 38, 0.92)';
-            ctx.fill();
-            ctx.strokeStyle = lineupRtxOk ? '#14532d' : '#450a0a';
-            ctx.lineWidth = 1.2;
-            ctx.stroke();
-            ctx.fillStyle = '#ffffff';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(labelText, bx + bw / 2, by + bh / 2);
-            ctx.restore();
-            const hop1 = listRtxTouchingLineupOnRunway(tw, lp);
-            for (let hi = 0; hi < hop1.length; hi++) {
-              const rtx = hop1[hi];
-              if (!rtx) continue;
-              const nid = rtxRunwayExitNeighborIds(rtx);
-              if (typeof rtxSetHasRunwayHoldingHp === 'function' && rtxSetHasRunwayHoldingHp(nid)) continue;
-              const vts = rtx.vertices || [];
-              if (vts.length < 2) continue;
-              let sx = 0, sy = 0;
-              for (let vi = 0; vi < vts.length; vi++) {
-                const pp = cellToPixel(vts[vi].col, vts[vi].row);
-                sx += pp[0]; sy += pp[1];
-              }
-              const mx = sx / vts.length, my = sy / vts.length;
-              const badgeText = 'No Holding Point';
-              ctx.save();
-              ctx.font = 'bold 10px system-ui, sans-serif';
-              const padXB = 6, padYB = 3, radB = 4;
-              const mw = ctx.measureText(badgeText).width + padXB * 2;
-              const mh = 10 + padYB * 2;
-              const bxx = mx - mw / 2, byy = my - 22;

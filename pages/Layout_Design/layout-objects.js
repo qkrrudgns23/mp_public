@@ -1,15 +1,3 @@
-      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
-      if (btn) btn.disabled = true;
-    } else {
-      ov.classList.remove('is-visible');
-      ov.setAttribute('aria-hidden', 'true');
-      if (fill) fill.style.width = '0%';
-      if (btn) btn.disabled = false;
-    }
-  }
-  function scheduleAfterPaint(fn) {
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() { setTimeout(fn, 0); });
     });
   }
   const DEFAULT_AIRLINE_CODES = (function() {
@@ -32,6 +20,36 @@
   }
   function isPathLayoutMode(m) {
     return PATH_LAYOUT_MODES.indexOf(m) >= 0;
+  }
+  function standHasApronTaxiwayLink(standId) {
+    if (standId == null || standId === '') return false;
+    const links = state.apronLinks || [];
+    const tws = state.taxiways || [];
+    for (let i = 0; i < links.length; i++) {
+      const lk = links[i];
+      if (!lk || lk.pbbId !== standId) continue;
+      const tid = lk.taxiwayId;
+      for (let j = 0; j < tws.length; j++) {
+        if (tws[j] && tws[j].id === tid) return true;
+      }
+    }
+    return false;
+  }
+  function ganttESeriesMinutesFromTimelineMeta(f) {
+    const m = f && f.timeline_meta;
+    if (!m || typeof m !== 'object') {
+      return { eldt: NaN, eibt: NaN, eobt: NaN, etot: NaN };
+    }
+    const toMin = function(sec) {
+      const n = sec != null ? Number(sec) : NaN;
+      return (isFinite(n) ? n / 60 : NaN);
+    };
+    return {
+      eldt: toMin(m.eldtSec),
+      eibt: toMin(m.eibtSec),
+      eobt: toMin(m.eobtSec),
+      etot: toMin(m.etotSec),
+    };
   }
   function settingModeValueForHit(hit) {
     if (!hit || !hit.type) return null;
@@ -73,14 +91,6 @@
     const on = !!state.showImage;
     imageToggleBtn.classList.toggle('active', on);
     imageToggleBtn.title = on ? 'Image visible (click to hide)' : 'Image hidden (click to show)';
-  }
-  function syncRoadWidthToggleButton() {
-    if (!roadWidthToggleBtn) return;
-    const on = !!state.showRoadWidth;
-    roadWidthToggleBtn.classList.toggle('active', on);
-    roadWidthToggleBtn.title = on
-      ? 'Road width visible (click for schematic centerlines)'
-      : 'Schematic mode (click to show road width)';
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -479,15 +489,6 @@
         f.__schedVttArrMin = null;
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
-        f.deferPathCompute = true;
-        delete f.eldtMin;
-        delete f.eibtMin;
-        delete f.eobtMin;
-        delete f.etotMin;
-        delete f.eldtMin_orig;
-        delete f.eibtMin_orig;
-        delete f.eobtMin_orig;
-        delete f.etotMin_orig;
       });
     } else {
       state.flights = [];
@@ -500,16 +501,8 @@
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
     else {
+      if (typeof renderFlightList === 'function') renderFlightList();
       draw();
-    }
-    if (Array.isArray(state.flights) && state.flights.length) {
-      const flightTabBtn = document.querySelector('.right-panel-tab[data-tab="flight"]');
-      if (flightTabBtn) flightTabBtn.click();
-      if (typeof renderFlightList === 'function') {
-        renderFlightList(false, true);
-      }
-    } else if (typeof renderFlightList === 'function') {
-      renderFlightList();
     }
   }
   function applyAirsideSimulationResultPayload(payload) {
@@ -553,12 +546,6 @@
     scheduleList.forEach(function(s) {
       if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
     });
-    function secFromSimSched(srec, eKey, legacyAKey, sKey) {
-      if (srec[eKey] != null && srec[eKey] !== '') return Number(srec[eKey]);
-      if (legacyAKey && srec[legacyAKey] != null && srec[legacyAKey] !== '') return Number(srec[legacyAKey]);
-      if (sKey && srec[sKey] != null && srec[sKey] !== '') return Number(srec[sKey]);
-      return NaN;
-    }
     let mergedTimelines = 0;
     if (hasPositions) {
       (state.flights || []).forEach(function(f) {
@@ -578,24 +565,21 @@
         mergedTimelines++;
         f.timeline = tl;
         const srec = schedById[String(f.id)] || {};
-        const eldtS = secFromSimSched(srec, 'ELDT', 'ALDT', 'SLDT');
-        const eibtS = secFromSimSched(srec, 'EIBT', 'AIBT', 'SIBT');
-        const eobtS = secFromSimSched(srec, 'EOBT', 'AOBT', 'SOBT');
-        const etotS = secFromSimSched(srec, 'ETOT', 'ATOT', 'STOT');
+        const aldt = srec.ALDT != null ? Number(srec.ALDT) : (srec.SLDT != null ? Number(srec.SLDT) : NaN);
+        const aibt = srec.AIBT != null ? Number(srec.AIBT) : (srec.SIBT != null ? Number(srec.SIBT) : NaN);
+        const aobt = srec.AOBT != null ? Number(srec.AOBT) : (srec.SOBT != null ? Number(srec.SOBT) : NaN);
+        const atot = srec.ATOT != null ? Number(srec.ATOT) : (srec.STOT != null ? Number(srec.STOT) : NaN);
         f.timeline_meta = {
           playbackSource: 'des_result',
-          eldtSec: isFinite(eldtS) ? eldtS : undefined,
-          eibtSec: isFinite(eibtS) ? eibtS : undefined,
-          eobtSec: isFinite(eobtS) ? eobtS : undefined,
-          etotSec: isFinite(etotS) ? etotS : undefined,
+          eldtSec: isFinite(aldt) ? aldt : undefined,
+          eibtSec: isFinite(aibt) ? aibt : undefined,
+          eobtSec: isFinite(aobt) ? aobt : undefined,
+          etotSec: isFinite(atot) ? atot : undefined,
         };
-        if (isFinite(eldtS)) f.eldtMin = eldtS / 60;
-        if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
-        if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
-        if (isFinite(etotS)) f.etotMin = etotS / 60;
-      });
-      (state.flights || []).forEach(function(ff) {
-        if (ff) ff.deferPathCompute = true;
+        if (isFinite(aldt)) f.eldtMin = aldt / 60;
+        if (isFinite(aibt)) f.eibtMin = aibt / 60;
+        if (isFinite(aobt)) f.eobtMin = aobt / 60;
+        if (isFinite(atot)) f.etotMin = atot / 60;
       });
     }
     state.hasSimulationResult = mergedTimelines > 0;
@@ -844,55 +828,3 @@
     if (tw.direction != null) {
       const d = tw.direction;
       if (d === 'topToBottom') return 'clockwise';
-      if (d === 'bottomToTop') return 'counter_clockwise';
-      return d || 'both';
-    }
-    if (tw.directionModeId) {
-      const m = state.directionModes.find(d => d.id === tw.directionModeId);
-      if (m && m.direction) return m.direction;
-    }
-    return 'both';
-  }
-  function normalizeRwDirectionValue(dir) {
-    if (dir === 'clockwise' || dir === 'cw') return 'clockwise';
-    if (dir === 'counter_clockwise' || dir === 'ccw') return 'counter_clockwise';
-    return 'both';
-  }
-  function normalizeAllowedRunwayDirections(raw) {
-    const out = [];
-    const src = Array.isArray(raw) ? raw : [];
-    src.forEach(function(v) {
-      const d = normalizeRwDirectionValue(v);
-      if (d === 'clockwise' && out.indexOf('clockwise') < 0) out.push('clockwise');
-      if (d === 'counter_clockwise' && out.indexOf('counter_clockwise') < 0) out.push('counter_clockwise');
-    });
-    return out;
-  }
-  function getTaxiwayAllowedRunwayDirections(tw) {
-    if (!tw || tw.pathType !== 'runway_exit') return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
-    const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
-    if (!arr.length) return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
-    return arr;
-  }
-  function isRunwayExitDirectionAllowed(tw, runwayDir) {
-    const d = normalizeRwDirectionValue(runwayDir);
-    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
-    const allow = getTaxiwayAllowedRunwayDirections(tw);
-    return allow.indexOf(d) >= 0;
-  }
-  function getRunwayExitAllowedDirectionsFromPanel() {
-    const out = [];
-    const container = document.getElementById('runwayExitAllowedDirection');
-    if (!container) return out;
-    container.querySelectorAll('.runway-exit-dir-check').forEach(function(ch) {
-      if (!ch.checked) return;
-      const value = String(ch.getAttribute('data-item-id') || '').trim();
-      if (value === 'clockwise' || value === 'counter_clockwise') out.push(value);
-    });
-    return out;
-  }
-
-  const _rwy = _tiers.runway || {};
-  const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
-  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
-  const RSEP_COLOR_THRESHOLDS = (function() {

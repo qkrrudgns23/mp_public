@@ -1,3 +1,55 @@
+  function getPbbAnchorPx(pbb) {
+    const x1 = Number(pbb && pbb.x1);
+    const y1 = Number(pbb && pbb.y1);
+    if (Number.isFinite(x1) && Number.isFinite(y1)) return [x1, y1];
+    const bridges = Array.isArray(pbb && pbb.pbbBridges) ? pbb.pbbBridges : [];
+    const starts = bridges.map(function(bridge) {
+      const pts = Array.isArray(bridge.points) ? bridge.points : [];
+      return pts.length ? [Number(pts[0].x) || 0, Number(pts[0].y) || 0] : null;
+    }).filter(Boolean);
+    if (starts.length) {
+      let sx = 0, sy = 0;
+      starts.forEach(function(pt) { sx += pt[0]; sy += pt[1]; });
+      return [sx / starts.length, sy / starts.length];
+    }
+    return [0, 0];
+  }
+  function getPBBStandAngle(pbb) {
+    if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg) * Math.PI / 180;
+    const x1 = Number(pbb && pbb.x1), y1 = Number(pbb && pbb.y1);
+    const x2 = Number(pbb && pbb.x2), y2 = Number(pbb && pbb.y2);
+    if (Number.isFinite(x1) && Number.isFinite(y1) && Number.isFinite(x2) && Number.isFinite(y2) && (x1 !== x2 || y1 !== y2)) {
+      return Math.atan2(y2 - y1, x2 - x1);
+    }
+    const anchor = getPbbAnchorPx(pbb);
+    const center = getStandConnectionPx(pbb);
+    return Math.atan2(center[1] - anchor[1], center[0] - anchor[0]);
+  }
+  function getPBBStandCorners(pbb) {
+    const center = getStandConnectionPx(pbb);
+    const cx = center[0], cy = center[1];
+    const size = getStandSizeMeters(pbb.category || 'C');
+    const angle = getPBBStandAngle(pbb);
+    const h = size / 2;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    return [
+      [cx + (-h)*cos - (-h)*sin, cy + (-h)*sin + (-h)*cos],
+      [cx + ( h)*cos - (-h)*sin, cy + ( h)*sin + (-h)*cos],
+      [cx + ( h)*cos - ( h)*sin, cy + ( h)*sin + ( h)*cos],
+      [cx + (-h)*cos - ( h)*sin, cy + (-h)*sin + ( h)*cos]
+    ];
+  }
+  function pointInPolygonXY(p, verts) {
+    let inside = false;
+    const n = verts.length;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const vi = verts[i], vj = verts[j];
+      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
+    }
+    return inside;
+  }
+  function segIntersect(a1, a2, b1, b2) {
+    const [ax1,ay1]=a1,[ax2,ay2]=a2,[bx1,by1]=b1,[bx2,by2]=b2;
     const dax = ax2-ax1, day = ay2-ay1, dbx = bx2-bx1, dby = by2-by1;
     const den = dax*dby - day*dbx;
     if (Math.abs(den) < 1e-10) return false;
@@ -331,8 +383,8 @@
     let networkJunctions = pathJunctionsToNetworkJunctions(state.pathGraphJunctions);
     if (!networkJunctions.length && typeof buildPathGraph === 'function') {
       try {
-        const g = buildPathGraph(null);
-        const cj = (g && (g.connectedJunctions || g.junctions)) || [];
+        const gj = buildPathGraph(null);
+        const cj = (gj && (gj.connectedJunctions || gj.junctions)) || [];
         networkJunctions = pathJunctionsToNetworkJunctions(cj);
       } catch (e) { /* ignore */ }
     }
@@ -461,7 +513,7 @@
         };
         return copy;
       }),
-      simPathGraph: (typeof buildSimPathGraphExport === 'function' ? buildSimPathGraphExport() : null)
+      simPathGraph: buildSimPathGraphExport()
     };
   }
   function getExistingStandBounds() {
@@ -666,180 +718,3 @@
       const st = state.remoteStands[i];
       if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
         return { type: 'remote', id: st.id, obj: st };
-    }
-    for (let i = state.pbbStands.length - 1; i >= 0; i--) {
-      const pbb = state.pbbStands[i];
-      const corners = getPBBStandCorners(pbb);
-      if (pointInPolygonXY(click, corners))
-        return { type: 'pbb', id: pbb.id, obj: pbb };
-    }
-    for (let i = state.terminals.length - 1; i >= 0; i--) {
-      const t = state.terminals[i];
-      if (t.closed && t.vertices.length >= 3 && pointInPolygon(click, t.vertices))
-        return { type: 'terminal', id: t.id, obj: t };
-    }
-    const hpHit = hitTestHoldingPoint(wx, wy);
-    if (hpHit) return hpHit;
-    const apronLkHit = hitTestApronLink(wx, wy);
-    if (apronLkHit) return apronLkHit;
-    if (!state.taxiwayDrawingId) {
-      for (let i = state.taxiways.length - 1; i >= 0; i--) {
-        const tw = state.taxiways[i];
-        if (tw.vertices.length < 2) continue;
-        const halfW = (tw.width != null ? tw.width : 23) / 2;
-        const hitD2 = (CELL_SIZE * HIT_TW_SEG_CF + halfW) ** 2;
-        for (let j = 0; j < tw.vertices.length - 1; j++) {
-          const [x1, y1] = cellToPixel(tw.vertices[j].col, tw.vertices[j].row);
-          const [x2, y2] = cellToPixel(tw.vertices[j + 1].col, tw.vertices[j + 1].row);
-          const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-          if (near && dist2(near, click) < hitD2) return { type: 'taxiway', id: tw.id, obj: tw };
-        }
-      }
-    }
-    return null;
-  }
-
-  function hitTestTerminalVertex(wx, wy) {
-    const maxD2 = (CELL_SIZE * HIT_TERM_VTX_CF) ** 2;
-    const cands = [];
-    state.terminals.forEach(t => {
-      t.vertices.forEach((v, idx) => {
-        cands.push({ terminalId: t.id, index: idx, v });
-      });
-    });
-    const best = findNearestItem(cands, c => cellToPixel(c.v.col, c.v.row), wx, wy, maxD2);
-    return best ? { terminalId: best.terminalId, index: best.index } : null;
-  }
-
-  function hitTestTaxiwayVertex(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'taxiway') return null;
-    const tw = state.selectedObject.obj;
-    if (!tw || !tw.vertices || tw.vertices.length === 0) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    tw.vertices.forEach((v, idx) => {
-      const [vx, vy] = cellToPixel(v.col, v.row);
-      const d2 = dist2([vx, vy], click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = { taxiwayId: tw.id, index: idx };
-      }
-    });
-    return best;
-  }
-  function hitTestPbbEditablePoint(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'pbb') return null;
-    const pbb = state.selectedObject.obj;
-    if (!pbb || pbb.id !== state.selectedObject.id) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    (Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : []).forEach(function(bridge, bridgeIdx) {
-      (Array.isArray(bridge.points) ? bridge.points : []).forEach(function(pt, ptIdx) {
-        const d2 = dist2([Number(pt.x) || 0, Number(pt.y) || 0], click);
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = { type: 'bridge', bridgeIndex: bridgeIdx, pointIndex: ptIdx };
-        }
-      });
-    });
-    const apronPt = getStandConnectionPx(pbb);
-    const apronD2 = dist2(apronPt, click);
-    if (apronD2 < bestD2) best = { type: 'apronSite' };
-    return best;
-  }
-  function findInsertSegment(vertices, closed, wx, wy) {
-    if (!Array.isArray(vertices) || vertices.length < 2) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * INSERT_VERTEX_HIT_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    const lastSeg = closed ? vertices.length : (vertices.length - 1);
-    function vertexToPixel(v) {
-      if (Array.isArray(v) && v.length >= 2) return [Number(v[0]) || 0, Number(v[1]) || 0];
-      if (v && v.x != null && v.y != null) return [Number(v.x) || 0, Number(v.y) || 0];
-      return cellToPixel(v.col, v.row);
-    }
-    for (let i = 0; i < lastSeg; i++) {
-      const curr = vertices[i];
-      const next = vertices[(i + 1) % vertices.length];
-      const p1 = vertexToPixel(curr);
-      const p2 = vertexToPixel(next);
-      const near = closestPointOnSegment(p1, p2, click);
-      if (!near) continue;
-      const d2 = dist2(near, click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = { insertIndex: i + 1, near: near };
-      }
-    }
-    return best;
-  }
-  function insertSelectedVertexAt(wx, wy, snapToGrid) {
-    if (!state.selectedObject || !state.selectedObject.obj) return false;
-    const sel = state.selectedObject;
-    if (sel.type === 'terminal') {
-      const term = sel.obj;
-      const hit = findInsertSegment(term.vertices, !!term.closed, wx, wy);
-      if (!hit) return false;
-      const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
-      pushUndo();
-      term.vertices.splice(hit.insertIndex, 0, pt);
-      state.selectedVertex = { type: 'terminal', id: term.id, index: hit.insertIndex };
-      updateObjectInfo();
-      draw();
-      return true;
-    }
-    if (sel.type === 'taxiway') {
-      const tw = sel.obj;
-      const hit = findInsertSegment(tw.vertices, false, wx, wy);
-      if (!hit) return false;
-      const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
-      pushUndo();
-      tw.vertices.splice(hit.insertIndex, 0, pt);
-      if (typeof syncStartEndFromVertices === 'function') syncStartEndFromVertices(tw);
-      state.selectedVertex = { type: 'taxiway', id: tw.id, index: hit.insertIndex };
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      return true;
-    }
-    if (sel.type === 'apronLink') {
-      const lk = sel.obj;
-      const mids = (Array.isArray(lk.midVertices) ? lk.midVertices.slice() : []);
-      const poly = [getApronLinkStandEndPx(lk)].concat(mids.map(function(v) { return cellToPixel(v.col, v.row); })).concat([[Number(lk.tx), Number(lk.ty)]]);
-      const hit = findInsertSegment(poly, false, wx, wy);
-      if (!hit) return false;
-      const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
-      pushUndo();
-      if (!Array.isArray(lk.midVertices)) lk.midVertices = [];
-      lk.midVertices.splice(Math.max(0, hit.insertIndex - 1), 0, pt);
-      state.selectedVertex = { type: 'apronLink', id: lk.id, kind: 'mid', midIndex: Math.max(0, hit.insertIndex - 1) };
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      return true;
-    }
-    return false;
-  }
-
-  function snapWorldPointToTaxiwayPolyline(wx, wy, taxiwayId) {
-    const tw = (state.taxiways || []).find(t => t.id === taxiwayId);
-    if (!tw || !tw.vertices || tw.vertices.length < 2) return null;
-    const click = [wx, wy];
-    let best = null;
-    let bestD2 = Infinity;
-    for (let i = 0; i < tw.vertices.length - 1; i++) {
-      const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-      const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
-      const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-      if (!near) continue;
-      const d2 = dist2(near, click);
-      if (d2 < bestD2) { bestD2 = d2; best = near; }
-    }
-    return best;
-  }
-
-  function hitTestApronLinkVertex(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'apronLink') return null;

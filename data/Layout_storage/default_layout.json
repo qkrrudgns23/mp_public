@@ -5956,318 +5956,1825 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 9.68527514253508,
+      "sldtMin_orig": 9.210720611585739,
       "sibtMin_orig": 10.166666666666666,
       "sobtMin_orig": 70.16666666666667,
       "stotMin_orig": 70.5,
-      "sldtMin_d": 9.68527514253508,
-      "sibtMin_d": 9.683333333333334,
+      "sldtMin_d": 9.210720611585739,
+      "sibtMin_d": 9.216666666666667,
       "sobtMin_d": 10.166666666666666,
       "stotMin_d": 70.16666666666667,
-      "arrTdDistM": 409.72646881023246,
-      "arrVTdMs": 66.59260824808352,
-      "arrDecelMs2": 1.7862317075189742,
+      "arrTdDistM": 358.2590152333689,
+      "arrVTdMs": 59.93768175043989,
+      "arrDecelMs2": 1.4760741406215827,
       "edge_list": [
         {
-          "edge_id": "layout-edge-018",
-          "phase": "Landing"
+          "edge_id": "layout-edge-001",
+          "phase": "Landing",
+          "start_velocity_ms": 59.93768175043989,
+          "acceleration_ms2": -1.4760741406215827
         },
         {
-          "edge_id": "layout-edge-019",
-          "phase": "Landing"
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 50.41513241035467,
+          "acceleration_ms2": -1.4760741406215827
         },
         {
-          "edge_id": "layout-edge-021",
-          "phase": "Landing"
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 17.518260012824452,
+          "acceleration_ms2": -1.4760741406215827
         },
         {
-          "edge_id": "layout-edge-022",
-          "phase": "Landing"
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.4760741406215827
         },
         {
-          "edge_id": "layout-edge-023",
-          "phase": "Landing"
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.4760741406215827
         },
         {
-          "edge_id": "layout-edge-025",
-          "phase": "Landing"
+          "edge_id": "layout-edge-011",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
         },
         {
-          "edge_id": "layout-edge-027",
-          "phase": "Landing"
+          "edge_id": "layout-edge-041",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
         },
         {
-          "edge_id": "layout-edge-030",
-          "phase": "Arr_taxi"
+          "edge_id": "layout-edge-118",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-030",
-          "phase": "Arr_taxi"
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-030",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-061",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-061",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-061",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-061",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-061",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-060",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-060",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-059",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-066",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-066",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-024",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-065",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-088",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-087",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-087",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-086",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-084",
-          "phase": "Arr_taxi"
+          "edge_id": "layout-edge-116",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
           "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Dep_taxi"
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
           "edge_id": "layout-edge-083",
-          "phase": "Dep_taxi"
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-081",
-          "phase": "Dep_taxi"
+          "edge_id": "layout-edge-082",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-079",
-          "phase": "Dep_taxi"
+          "edge_id": "layout-edge-080",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-077",
-          "phase": "Dep_taxi"
+          "edge_id": "layout-edge-078",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-076",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-074",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
           "edge_id": "layout-edge-075",
-          "phase": "Dep_taxi"
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
           "edge_id": "layout-edge-073",
-          "phase": "Dep_taxi"
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-045",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-048",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-048",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-048",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-048",
-          "phase": "Dep_taxi"
+          "edge_id": "layout-edge-072",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
           "edge_id": "layout-edge-047",
-          "phase": "Dep_taxi"
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-047",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-047",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-047",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-047",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-047",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-047",
-          "phase": "Dep_taxi"
-        },
-        {
-          "edge_id": "layout-edge-047",
-          "phase": "Dep_taxi"
+          "edge_id": "layout-edge-046",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
         }
       ],
       "token": {
-        "arrRunwayId": "id_bo1ng9zhh",
-        "ExitTaxiwayId": "id_q5ohgqzlk",
-        "apronId": "id_ek6ojompd",
+        "arrRunwayId": "id_jnrp39cxa",
+        "ExitTaxiwayId": "id_446c3ycnm",
+        "apronId": "id_vz4tyump2",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
-        "arrRunwayId": "RW2",
-        "ExitTaxiwayId": "RTX12",
-        "apronId": "C003",
+        "arrRunwayId": "RW1",
+        "ExitTaxiwayId": "RTX4",
+        "apronId": "C011",
+        "terminalId": null,
+        "depRunwayId": "RW1"
+      }
+    },
+    {
+      "id": "id_nedrp1pem",
+      "reg": "RDDDD",
+      "airlineCode": "DL",
+      "flightNumber": "DL5204",
+      "aircraftType": "A320",
+      "code": "C",
+      "timeMin": 10.166666666666666,
+      "dwellMin": 60,
+      "minDwellMin": 20,
+      "noWayArr": false,
+      "noWayDep": false,
+      "arrRetFailed": false,
+      "serviceDate": "2026-03-31",
+      "sldtMin_orig": 9.620355893364836,
+      "sibtMin_orig": 10.166666666666666,
+      "sobtMin_orig": 70.16666666666667,
+      "stotMin_orig": 70.5,
+      "sldtMin_d": 9.620355893364836,
+      "sibtMin_d": 9.616666666666667,
+      "sobtMin_d": 10.166666666666666,
+      "stotMin_d": 70.16666666666667,
+      "arrTdDistM": 340.2734906563716,
+      "arrVTdMs": 59.19039248838763,
+      "arrDecelMs2": 1.7982771268280835,
+      "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Landing",
+          "start_velocity_ms": 59.19039248838763,
+          "acceleration_ms2": -1.7982771268280835
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 47.151682182306146,
+          "acceleration_ms2": -1.7982771268280835
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.7982771268280835
+        },
+        {
+          "edge_id": "layout-edge-007",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-037",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-114",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-053",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-112",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-111",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-045",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-072",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-098",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-099",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-099",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-098",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-072",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-047",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-046",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        }
+      ],
+      "token": {
+        "arrRunwayId": "id_jnrp39cxa",
+        "ExitTaxiwayId": "id_82mf1vx61",
+        "apronId": "id_dt2n7wpnl",
+        "terminalId": null,
+        "depRunwayId": "id_jnrp39cxa"
+      },
+      "token_name": {
+        "arrRunwayId": "RW1",
+        "ExitTaxiwayId": "RTX3_Right",
+        "apronId": "C014",
+        "terminalId": null,
+        "depRunwayId": "RW1"
+      }
+    },
+    {
+      "id": "id_xocmnln85",
+      "reg": "RDDDD",
+      "airlineCode": "DL",
+      "flightNumber": "DL5204",
+      "aircraftType": "A320",
+      "code": "C",
+      "timeMin": 10.166666666666666,
+      "dwellMin": 60,
+      "minDwellMin": 20,
+      "noWayArr": false,
+      "noWayDep": false,
+      "arrRetFailed": false,
+      "serviceDate": "2026-03-31",
+      "sldtMin_orig": 9.217820867468127,
+      "sibtMin_orig": 10.166666666666666,
+      "sobtMin_orig": 70.16666666666667,
+      "stotMin_orig": 70.5,
+      "sldtMin_d": 9.217820867468127,
+      "sibtMin_d": 9.216666666666667,
+      "sobtMin_d": 10.166666666666666,
+      "stotMin_d": 70.16666666666667,
+      "arrTdDistM": 429.83264877659286,
+      "arrVTdMs": 78.19999999999999,
+      "arrDecelMs2": 1.5174526736820642,
+      "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Landing",
+          "start_velocity_ms": 78.19999999999999,
+          "acceleration_ms2": -1.5174526736820642
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 70.95732422846213,
+          "acceleration_ms2": -1.5174526736820642
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 52.32110532921568,
+          "acceleration_ms2": -1.5174526736820642
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 44.07384502976396,
+          "acceleration_ms2": -1.5174526736820642
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 32.66407506919034,
+          "acceleration_ms2": -1.5174526736820642
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Landing",
+          "start_velocity_ms": 21.367107307397948,
+          "acceleration_ms2": -1.5174526736820642
+        },
+        {
+          "edge_id": "layout-edge-013",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-162",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-052",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-020",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-050",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-089",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-087",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-082",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-080",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-078",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-076",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-074",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-073",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-098",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-095",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-095",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-098",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-072",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-047",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-046",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        }
+      ],
+      "token": {
+        "arrRunwayId": "id_jnrp39cxa",
+        "ExitTaxiwayId": "id_6jclwcmft",
+        "apronId": "id_wcwzkq5ty",
+        "terminalId": null,
+        "depRunwayId": "id_jnrp39cxa"
+      },
+      "token_name": {
+        "arrRunwayId": "RW1",
+        "ExitTaxiwayId": "RTX200",
+        "apronId": "C015",
+        "terminalId": null,
+        "depRunwayId": "RW1"
+      }
+    },
+    {
+      "id": "id_d3sul5ts2",
+      "reg": "RDDDD",
+      "airlineCode": "DL",
+      "flightNumber": "DL5204",
+      "aircraftType": "A320",
+      "code": "C",
+      "timeMin": 10.166666666666666,
+      "dwellMin": 60,
+      "minDwellMin": 20,
+      "noWayArr": false,
+      "noWayDep": false,
+      "arrRetFailed": false,
+      "serviceDate": "2026-03-31",
+      "sldtMin_orig": 8.970675854877582,
+      "sibtMin_orig": 10.166666666666666,
+      "sobtMin_orig": 70.16666666666667,
+      "stotMin_orig": 70.5,
+      "sldtMin_d": 8.970675854877582,
+      "sibtMin_d": 8.966666666666667,
+      "sobtMin_d": 10.166666666666666,
+      "stotMin_d": 70.16666666666667,
+      "arrTdDistM": 445.95241403893687,
+      "arrVTdMs": 71.14556083424893,
+      "arrDecelMs2": 1.462727380118602,
+      "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Landing",
+          "start_velocity_ms": 71.14556083424893,
+          "acceleration_ms2": -1.462727380118602
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 63.406249494477564,
+          "acceleration_ms2": -1.462727380118602
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 42.49427618110697,
+          "acceleration_ms2": -1.462727380118602
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 32.24034538947454,
+          "acceleration_ms2": -1.462727380118602
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.462727380118602
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.462727380118602
+        },
+        {
+          "edge_id": "layout-edge-013",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-162",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-052",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-020",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-050",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-089",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-087",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-082",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-080",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-079",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-076",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-074",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-073",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-072",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-047",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-046",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        }
+      ],
+      "token": {
+        "arrRunwayId": "id_jnrp39cxa",
+        "ExitTaxiwayId": "id_6jclwcmft",
+        "apronId": "id_arkq0wlw2",
+        "terminalId": null,
+        "depRunwayId": "id_jnrp39cxa"
+      },
+      "token_name": {
+        "arrRunwayId": "RW1",
+        "ExitTaxiwayId": "RTX200",
+        "apronId": "C009",
+        "terminalId": null,
+        "depRunwayId": "RW1"
+      }
+    },
+    {
+      "id": "id_3v06w8q9e",
+      "reg": "RDDDD",
+      "airlineCode": "DL",
+      "flightNumber": "DL5204",
+      "aircraftType": "A320",
+      "code": "C",
+      "timeMin": 10.166666666666666,
+      "dwellMin": 60,
+      "minDwellMin": 20,
+      "noWayArr": false,
+      "noWayDep": false,
+      "arrRetFailed": false,
+      "serviceDate": "2026-03-31",
+      "sldtMin_orig": 9.48569540588562,
+      "sibtMin_orig": 10.166666666666666,
+      "sobtMin_orig": 70.16666666666667,
+      "stotMin_orig": 70.5,
+      "sldtMin_d": 9.48569540588562,
+      "sibtMin_d": 9.483333333333333,
+      "sobtMin_d": 10.166666666666666,
+      "stotMin_d": 70.16666666666667,
+      "arrTdDistM": 392.45467338224523,
+      "arrVTdMs": 64.52289964408268,
+      "arrDecelMs2": 1.36,
+      "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Landing",
+          "start_velocity_ms": 64.52289964408268,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 56.52432613680859,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 33.70372555646756,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 20.577570485440685,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-011",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-041",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-118",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-116",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-082",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-080",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-078",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-076",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-074",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-073",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-098",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-093",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-093",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-098",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-072",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-047",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-046",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        }
+      ],
+      "token": {
+        "arrRunwayId": "id_jnrp39cxa",
+        "ExitTaxiwayId": "id_446c3ycnm",
+        "apronId": "id_zcx0xbgmu",
+        "terminalId": null,
+        "depRunwayId": "id_jnrp39cxa"
+      },
+      "token_name": {
+        "arrRunwayId": "RW1",
+        "ExitTaxiwayId": "RTX4",
+        "apronId": "C016",
+        "terminalId": null,
+        "depRunwayId": "RW1"
+      }
+    },
+    {
+      "id": "id_okv3l4kon",
+      "reg": "RDDDD",
+      "airlineCode": "DL",
+      "flightNumber": "DL5204",
+      "aircraftType": "A320",
+      "code": "C",
+      "timeMin": 10.166666666666666,
+      "dwellMin": 60,
+      "minDwellMin": 20,
+      "noWayArr": false,
+      "noWayDep": false,
+      "arrRetFailed": false,
+      "serviceDate": "2026-03-31",
+      "sldtMin_orig": 9.219911719870172,
+      "sibtMin_orig": 10.166666666666666,
+      "sobtMin_orig": 70.16666666666667,
+      "stotMin_orig": 70.5,
+      "sldtMin_d": 9.219911719870172,
+      "sibtMin_d": 9.216666666666667,
+      "sobtMin_d": 10.166666666666666,
+      "stotMin_d": 70.16666666666667,
+      "arrTdDistM": 362.3485167430382,
+      "arrVTdMs": 63.17036702170428,
+      "arrDecelMs2": 1.7024900738856845,
+      "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Landing",
+          "start_velocity_ms": 63.17036702170428,
+          "acceleration_ms2": -1.7024900738856845
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 52.71115755500788,
+          "acceleration_ms2": -1.7024900738856845
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.7024900738856845
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.7024900738856845
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.7024900738856845
+        },
+        {
+          "edge_id": "layout-edge-011",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-041",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-118",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-116",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-082",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-080",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-078",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-076",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-074",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-073",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-105",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-105",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-072",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-047",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-046",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        }
+      ],
+      "token": {
+        "arrRunwayId": "id_jnrp39cxa",
+        "ExitTaxiwayId": "id_446c3ycnm",
+        "apronId": "id_k9jkud2gs",
+        "terminalId": null,
+        "depRunwayId": "id_jnrp39cxa"
+      },
+      "token_name": {
+        "arrRunwayId": "RW1",
+        "ExitTaxiwayId": "RTX4",
+        "apronId": "C012",
+        "terminalId": null,
+        "depRunwayId": "RW1"
+      }
+    },
+    {
+      "id": "id_gedp95dvr",
+      "reg": "RDDDD",
+      "airlineCode": "DL",
+      "flightNumber": "DL5204",
+      "aircraftType": "A320",
+      "code": "C",
+      "timeMin": 10.166666666666666,
+      "dwellMin": 60,
+      "minDwellMin": 20,
+      "noWayArr": false,
+      "noWayDep": false,
+      "arrRetFailed": false,
+      "serviceDate": "2026-03-31",
+      "sldtMin_orig": 9.078551461029646,
+      "sibtMin_orig": 10.166666666666666,
+      "sobtMin_orig": 70.16666666666667,
+      "stotMin_orig": 70.5,
+      "sldtMin_d": 69.07855146102965,
+      "sibtMin_d": 9.083333333333334,
+      "sobtMin_d": 10.166666666666666,
+      "stotMin_d": 70.16666666666667,
+      "arrTdDistM": 425.8008255274112,
+      "arrVTdMs": 74.37857320412668,
+      "arrDecelMs2": 1.4754960324490813,
+      "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Landing",
+          "start_velocity_ms": 74.37857320412668,
+          "acceleration_ms2": -1.4754960324490813
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 66.9458258475428,
+          "acceleration_ms2": -1.4754960324490813
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 47.41120880021138,
+          "acceleration_ms2": -1.4754960324490813
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 38.40324958852156,
+          "acceleration_ms2": -1.4754960324490813
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 24.969107298320345,
+          "acceleration_ms2": -1.4754960324490813
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.4754960324490813
+        },
+        {
+          "edge_id": "layout-edge-013",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-162",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-052",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-020",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-050",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-089",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-087",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-082",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-080",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-078",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-076",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-074",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-073",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-072",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-047",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-046",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        }
+      ],
+      "token": {
+        "arrRunwayId": "id_jnrp39cxa",
+        "ExitTaxiwayId": "id_6jclwcmft",
+        "apronId": "id_vz4tyump2",
+        "terminalId": null,
+        "depRunwayId": "id_jnrp39cxa"
+      },
+      "token_name": {
+        "arrRunwayId": "RW1",
+        "ExitTaxiwayId": "RTX200",
+        "apronId": "C011",
+        "terminalId": null,
+        "depRunwayId": "RW1"
+      }
+    },
+    {
+      "id": "id_kpc2h0amv",
+      "reg": "RDDDD",
+      "airlineCode": "DL",
+      "flightNumber": "DL5204",
+      "aircraftType": "A320",
+      "code": "C",
+      "timeMin": 70.16666666666667,
+      "dwellMin": 60,
+      "minDwellMin": 20,
+      "noWayArr": false,
+      "noWayDep": false,
+      "arrRetFailed": false,
+      "serviceDate": "2026-03-31",
+      "sldtMin_orig": 68.97708099509015,
+      "sibtMin_orig": 70.16666666666667,
+      "sobtMin_orig": 130.16666666666669,
+      "stotMin_orig": 130.50000000000003,
+      "sldtMin_d": 68.97708099509015,
+      "sibtMin_d": 68.98333333333333,
+      "sobtMin_d": 70.16666666666667,
+      "stotMin_d": 130.16666666666666,
+      "arrTdDistM": 405.87873495019437,
+      "arrVTdMs": 78.19999999999999,
+      "arrDecelMs2": 1.7777645131145388,
+      "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Landing",
+          "start_velocity_ms": 78.19999999999999,
+          "acceleration_ms2": -1.7777645131145388
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 69.6392261454945,
+          "acceleration_ms2": -1.7777645131145388
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 46.45495007214779,
+          "acceleration_ms2": -1.7777645131145388
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 35.02414353841174,
+          "acceleration_ms2": -1.7777645131145388
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.7777645131145388
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.7777645131145388
+        },
+        {
+          "edge_id": "layout-edge-013",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-162",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-052",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-020",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-050",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-089",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-087",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-082",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-080",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-078",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-076",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-074",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-073",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-072",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-047",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-046",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        }
+      ],
+      "token": {
+        "arrRunwayId": "id_jnrp39cxa",
+        "ExitTaxiwayId": "id_6jclwcmft",
+        "apronId": "id_kzql4nscf",
+        "terminalId": null,
+        "depRunwayId": "id_jnrp39cxa"
+      },
+      "token_name": {
+        "arrRunwayId": "RW1",
+        "ExitTaxiwayId": "RTX200",
+        "apronId": "C010",
         "terminalId": null,
         "depRunwayId": "RW1"
       }

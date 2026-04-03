@@ -1,3 +1,55 @@
+      if (d === 'bottomToTop') return 'counter_clockwise';
+      return d || 'both';
+    }
+    if (tw.directionModeId) {
+      const m = state.directionModes.find(d => d.id === tw.directionModeId);
+      if (m && m.direction) return m.direction;
+    }
+    return 'both';
+  }
+  function normalizeRwDirectionValue(dir) {
+    if (dir === 'clockwise' || dir === 'cw') return 'clockwise';
+    if (dir === 'counter_clockwise' || dir === 'ccw') return 'counter_clockwise';
+    return 'both';
+  }
+  function normalizeAllowedRunwayDirections(raw) {
+    const out = [];
+    const src = Array.isArray(raw) ? raw : [];
+    src.forEach(function(v) {
+      const d = normalizeRwDirectionValue(v);
+      if (d === 'clockwise' && out.indexOf('clockwise') < 0) out.push('clockwise');
+      if (d === 'counter_clockwise' && out.indexOf('counter_clockwise') < 0) out.push('counter_clockwise');
+    });
+    return out;
+  }
+  function getTaxiwayAllowedRunwayDirections(tw) {
+    if (!tw || tw.pathType !== 'runway_exit') return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
+    const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
+    if (!arr.length) return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
+    return arr;
+  }
+  function isRunwayExitDirectionAllowed(tw, runwayDir) {
+    const d = normalizeRwDirectionValue(runwayDir);
+    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
+    const allow = getTaxiwayAllowedRunwayDirections(tw);
+    return allow.indexOf(d) >= 0;
+  }
+  function getRunwayExitAllowedDirectionsFromPanel() {
+    const out = [];
+    const container = document.getElementById('runwayExitAllowedDirection');
+    if (!container) return out;
+    container.querySelectorAll('.runway-exit-dir-check').forEach(function(ch) {
+      if (!ch.checked) return;
+      const value = String(ch.getAttribute('data-item-id') || '').trim();
+      if (value === 'clockwise' || value === 'counter_clockwise') out.push(value);
+    });
+    return out;
+  }
+
+  const _rwy = _tiers.runway || {};
+  const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
+  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
+  const RSEP_COLOR_THRESHOLDS = (function() {
     const arr = _sepUi.inputColorThresholdsSec;
     if (Array.isArray(arr) && arr.length) {
       return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
@@ -266,55 +318,3 @@
   function rectsOverlap(a, b) {
     return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
   }
-  function getPbbAnchorPx(pbb) {
-    const x1 = Number(pbb && pbb.x1);
-    const y1 = Number(pbb && pbb.y1);
-    if (Number.isFinite(x1) && Number.isFinite(y1)) return [x1, y1];
-    const bridges = Array.isArray(pbb && pbb.pbbBridges) ? pbb.pbbBridges : [];
-    const starts = bridges.map(function(bridge) {
-      const pts = Array.isArray(bridge.points) ? bridge.points : [];
-      return pts.length ? [Number(pts[0].x) || 0, Number(pts[0].y) || 0] : null;
-    }).filter(Boolean);
-    if (starts.length) {
-      let sx = 0, sy = 0;
-      starts.forEach(function(pt) { sx += pt[0]; sy += pt[1]; });
-      return [sx / starts.length, sy / starts.length];
-    }
-    return [0, 0];
-  }
-  function getPBBStandAngle(pbb) {
-    if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg) * Math.PI / 180;
-    const x1 = Number(pbb && pbb.x1), y1 = Number(pbb && pbb.y1);
-    const x2 = Number(pbb && pbb.x2), y2 = Number(pbb && pbb.y2);
-    if (Number.isFinite(x1) && Number.isFinite(y1) && Number.isFinite(x2) && Number.isFinite(y2) && (x1 !== x2 || y1 !== y2)) {
-      return Math.atan2(y2 - y1, x2 - x1);
-    }
-    const anchor = getPbbAnchorPx(pbb);
-    const center = getStandConnectionPx(pbb);
-    return Math.atan2(center[1] - anchor[1], center[0] - anchor[0]);
-  }
-  function getPBBStandCorners(pbb) {
-    const center = getStandConnectionPx(pbb);
-    const cx = center[0], cy = center[1];
-    const size = getStandSizeMeters(pbb.category || 'C');
-    const angle = getPBBStandAngle(pbb);
-    const h = size / 2;
-    const cos = Math.cos(angle), sin = Math.sin(angle);
-    return [
-      [cx + (-h)*cos - (-h)*sin, cy + (-h)*sin + (-h)*cos],
-      [cx + ( h)*cos - (-h)*sin, cy + ( h)*sin + (-h)*cos],
-      [cx + ( h)*cos - ( h)*sin, cy + ( h)*sin + ( h)*cos],
-      [cx + (-h)*cos - ( h)*sin, cy + (-h)*sin + ( h)*cos]
-    ];
-  }
-  function pointInPolygonXY(p, verts) {
-    let inside = false;
-    const n = verts.length;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const vi = verts[i], vj = verts[j];
-      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
-    }
-    return inside;
-  }
-  function segIntersect(a1, a2, b1, b2) {
-    const [ax1,ay1]=a1,[ax2,ay2]=a2,[bx1,by1]=b1,[bx2,by2]=b2;

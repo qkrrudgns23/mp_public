@@ -700,7 +700,10 @@ def _build_designer_context() -> dict:
 
 _DESIGNER_ASSET_DIR = Path(__file__).resolve().parent / "Layout_Design"
 
-_DESIGNER_JS_PARTS: tuple[str, ...] = (
+# Split chunks (`split_designer_js.py`) use fixed line cuts; when `designer.js` changes length they drift and
+# produce invalid JS. The iframe must load the monolithic bundle so Layout Design matches the repo.
+_DESIGNER_JS_MONOLITH = "designer.js"
+_DESIGNER_JS_PARTS_LEGACY: tuple[str, ...] = (
     "config.js",
     "state.js",
     "layout-objects.js",
@@ -850,7 +853,7 @@ def _build_designer_html() -> str:
         },
     )
 
-    js_combined = "\n\n".join(_load_designer_asset(n) for n in _DESIGNER_JS_PARTS)
+    js_combined = _load_designer_asset(_DESIGNER_JS_MONOLITH)
     cfg_json = json.dumps(_designer_js_config_dict(), ensure_ascii=False)
     out = (
         "<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\" />\n  <style>\n"

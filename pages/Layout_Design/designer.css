@@ -419,6 +419,8 @@
     .alloc-row-track { flex:1; position:relative; height:28px; margin:0; border-radius:6px; background:transparent; border:none; overflow:visible; z-index:1; }
     
     .alloc-row-track[data-runway-legend="1"] { pointer-events: none; }
+    .alloc-row-label.alloc-row-no-apron-link { color:#9ca3af; }
+    .alloc-row.alloc-row-no-apron-link .alloc-row-track { background:rgba(55,65,81,0.2); }
     .alloc-runway-legend-label { font-size:10px; color:var(--ui-text-secondary); letter-spacing:0.02em; }
     .alloc-time-grid-line { position:absolute; top:0; bottom:0; width:1px; background:var(--ui-border-strong); opacity:var(--style-gantt-grid-opacity, 0.4); transform:translateX(-0.5px); pointer-events:none; }
     .alloc-apron-bg-slot { position:absolute; top:4px; bottom:4px; display:flex; align-items:center; justify-content:center; font-size:4px; font-weight:600; color:rgba(148,163,184,0.35); opacity:var(--style-gantt-apron-slot-opacity, 0.35); pointer-events:none; white-space:nowrap; }
