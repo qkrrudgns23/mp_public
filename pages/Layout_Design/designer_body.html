@@ -40,6 +40,7 @@
     </div>
     <div id="canvas-container">
       <canvas id="grid-canvas"></canvas>
+      <div id="flight-grid-hud" class="flight-grid-hud" hidden aria-live="polite"></div>
       <div id="cursor-pixel-readout" class="cursor-pixel-readout" aria-live="polite" title="Layout coordinates (px) under cursor">—</div>
     </div>
     <div id="info-bar">
@@ -327,20 +328,12 @@
           </select>
           <div id="flightPaneSchedule" class="compact-form">
             <div class="compact-field wide">
-              <label>SLDT (Scheduled Landing)</label>
-              <input type="text" id="flightSchedSldt" placeholder="e.g. 03/31 12:30 (MM/DD HH:MM)" />
+              <label>SIBT (Date)</label>
+              <input type="date" id="flightSibtDate" value="__DEFAULT_SIBT_DATE__" aria-label="SIBT (Date)" />
             </div>
             <div class="compact-field wide">
-              <label>SIBT (Scheduled In Block)</label>
-              <input type="text" id="flightTime" placeholder="e.g. 03/31 12:30 (MM/DD HH:MM)" />
-            </div>
-            <div class="compact-field wide">
-              <label>SOBT (Scheduled Off Block)</label>
-              <input type="text" id="flightSchedSobt" placeholder="e.g. 03/31 12:30 (MM/DD HH:MM)" />
-            </div>
-            <div class="compact-field wide">
-              <label>STOT (Scheduled Take-Off)</label>
-              <input type="text" id="flightSchedStot" placeholder="e.g. 03/31 12:30 (MM/DD HH:MM)" />
+              <label>SIBT (HH:MM:SS)</label>
+              <input type="text" id="flightTime" value="07:00:00" inputmode="text" autocomplete="off" aria-label="SIBT (HH:MM:SS)" />
             </div>
             <div class="compact-field">
               <label>Aircraft type</label>
@@ -368,7 +361,7 @@
               <label>Min dwell (min)</label>
               <input type="number" id="flightMinDwell" min="0" max="__UI_FLIGHT_DWELL_MAX__" value="__UI_FLIGHT_MIN_DWELL__" step="__UI_FLIGHT_DWELL_STEP__" title="In case of delayed arrival EOBT = EIBT + Min Dwell Adjust to (0Not applicable to this side)" />
             </div>
-            <div id="flightAssignStrip" class="flight-assign-strip-wrap" style="margin:0 0 10px;" aria-label="Arrival runway, building, departure runway for selected flight">
+            <div id="flightAssignStrip" class="flight-assign-strip-wrap" style="margin:0 0 6px;" aria-label="Arrival runway, building, departure runway for selected flight">
               <div class="flight-assign-strip-row">
                 <div class="compact-field">
                   <label for="flightAssignStripArr">Arr Rw</label>

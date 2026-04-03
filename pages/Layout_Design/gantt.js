@@ -149,7 +149,7 @@
         const f = flights.find(ff => ff.id === id);
         if (!f) return;
         const tds = Array.from(row.querySelectorAll('td'));
-        if (tds.length < 15) return;
+        if (tds.length < 18) return;
         const getMin = (idx) => {
           const txt = (tds[idx] && tds[idx].textContent || '').trim();
           if (!txt) return 0;
@@ -159,10 +159,10 @@
             return 0;
           }
         };
-        const sldt_d = getMin(7);
-        const sibt_d = getMin(8);
-        const sobt_d = getMin(9);
-        const stot_d = getMin(10);
+        const sldt_d = getMin(10);
+        const sibt_d = getMin(11);
+        const sobt_d = getMin(12);
+        const stot_d = getMin(13);
         const eSer = ganttESeriesMinutesFromTimelineMeta(f);
         const eldt = eSer.eldt;
         const eibt = eSer.eibt;

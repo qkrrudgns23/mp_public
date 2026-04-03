@@ -498,7 +498,7 @@
         const f = state.flights.find(function(ff) { return ff && ff.id === fid; });
         if (!f) return;
         const tds = Array.from(row.querySelectorAll('td'));
-        if (tds.length < 15) return;
+        if (tds.length < 18) return;
         const getMin = function(idx) {
           const txt = (tds[idx] && tds[idx].textContent || '').trim();
           if (!txt) return null;
@@ -513,8 +513,8 @@
           return isNaN(n) ? null : n;
         };
         const map = {
-          sldtMin_d: 7, sibtMin_d: 8, sobtMin_d: 9,  stotMin_d: 10,
-          eldtMin:  11, eibtMin:  12, eobtMin:  13, etotMin:   14
+          sldtMin_d: 10, sibtMin_d: 11, sobtMin_d: 12, stotMin_d: 13,
+          eldtMin: 14, eibtMin: 15, eobtMin: 16, etotMin: 17
         };
         Object.keys(map).forEach(function(key) {
           const v = getMin(map[key]);

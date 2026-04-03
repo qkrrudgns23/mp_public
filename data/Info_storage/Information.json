@@ -1218,7 +1218,8 @@
         "panelResizeCollapsedPx": 44,
         "panelResizeCollapseBelowPx": 96,
         "panelResizeMinExpandedPx": 220,
-        "panelResizeViewportMarginPx": 8
+        "panelResizeViewportMarginPx": 8,
+        "flightScheduleFormRowGapPx": 6
       },
       "gantt": {
         "sBar": "#007aff",
@@ -1243,8 +1244,8 @@
         "eBarOpacity": 0.45,
         "e2BarOpacity": 0.9,
         "apronSlotLabelOpacity": 0.35,
-        "visibleWindowMin": 360,
-        "panStepMin": 120
+        "visibleWindowMin": 1440,
+        "panStepMin": 360
       },
       "flightScheduleTable": {
         "colS": "#22c55e",
@@ -1345,6 +1346,9 @@
         "objectSelectedDashStroke": "rgba(255, 252, 255, 0.55)",
         "objectSelectedGlow": "rgba(167, 139, 250, 0.45)",
         "objectSelectedGlowBlur": 22,
+        "flightSelectedRingStroke": "#facc15",
+        "flightSelectedRingGlow": "rgba(250, 204, 21, 0.55)",
+        "flightSelectedRingGlowBlur": 18,
         "pathDrawStartMarkerRadiusPx": 3.5,
         "pathDrawStartMarkerStrokePx": 1,
         "pathDrawStartLabelFontPx": 8,

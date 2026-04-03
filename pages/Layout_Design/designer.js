@@ -19,6 +19,13 @@
   let GRID_COLS = _dc.gridCols;
   let GRID_ROWS = _dc.gridRows;
   let CELL_SIZE = _dc.cellSize;
+  const DEFAULT_SIBT_DATE = (function() {
+    const s = (_dc.defaultFlightServiceDate != null) ? String(_dc.defaultFlightServiceDate).trim() : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return '2026-03-31';
+  })();
+  /** Minutes from midnight for default SIBT time panel / empty Add Flight (07:00:00). */
+  const DEFAULT_SIBT_TIME_MIN = 420;
   function readCheckedDataItemIds(rootOrId, selectorClass) {
     const root = typeof rootOrId === 'string' ? document.getElementById(rootOrId) : rootOrId;
     const scope = root || document;
@@ -66,8 +73,8 @@
   const PATH_JUNCTION_MERGE_RADIUS_PX = (isFinite(_junctionMergeRadiusRaw) && _junctionMergeRadiusRaw >= 0) ? _junctionMergeRadiusRaw : 7;
   const _styleTier = _tiers.style || {};
   const _ganttStyle = _styleTier.gantt || {};
-  const GANTT_VISIBLE_WINDOW_MIN = Math.max(60, Number(_ganttStyle.visibleWindowMin) || 360);
-  const GANTT_PAN_STEP_MIN = Math.max(15, Number(_ganttStyle.panStepMin) || 120);
+  const GANTT_VISIBLE_WINDOW_MIN = Math.max(60, Number(_ganttStyle.visibleWindowMin) || 1440);
+  const GANTT_PAN_STEP_MIN = Math.max(15, Number(_ganttStyle.panStepMin) || 360);
   const _canvas2dStyle = _styleTier.canvas2d || {};
   const TAXIWAY_WIDTH_MIN = Math.max(1, Math.min(100, Number(_taxiwayTier.minWidth) || 1));
   const RUNWAY_EXIT_WIDTH_MIN = Math.max(1, Math.min(100, Number(_runwayExitTier.minWidth) || 1));
@@ -112,6 +119,12 @@
   function c2dObjectSelectedGlowBlur() {
     const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
     return (isFinite(n) && n >= 0) ? n : 22;
+  }
+  function c2dFlightSelectedRingStroke() { return _canvas2dStyle.flightSelectedRingStroke || '#facc15'; }
+  function c2dFlightSelectedRingGlow() { return _canvas2dStyle.flightSelectedRingGlow || 'rgba(250, 204, 21, 0.55)'; }
+  function c2dFlightSelectedRingGlowBlur() {
+    const n = Number(_canvas2dStyle.flightSelectedRingGlowBlur);
+    return (isFinite(n) && n >= 0) ? n : 18;
   }
   function c2dSimPreTouchdownHaloStroke() { return _canvas2dStyle.simPreTouchdownHaloStroke || 'rgba(239, 68, 68, 0.92)'; }
   function c2dSimPreTouchdownHaloFill() { return _canvas2dStyle.simPreTouchdownHaloFill || 'rgba(239, 68, 68, 0.18)'; }
@@ -212,6 +225,9 @@
     const v = Number(_schedAlgo.dwellFloorMin);
     return (isFinite(v) && v >= 0) ? v : 20;
   })();
+  /** Dispatched schedule (d): SLDT(d) = SIBT(d) − this many minutes; STOT(d) = SOBT(d) + SCHED_SD_STOT_PLUS_SOBD_MIN. */
+  const SCHED_SD_SIBT_MINUS_SLD_MIN = 3;
+  const SCHED_SD_STOT_PLUS_SOBD_MIN = 3;
   const RSEP_MISSING_MATRIX_SEC = (function() {
     const v = Number(_schedAlgo.rsepMissingMatrixSeparationSec);
     return (isFinite(v) && v >= 0) ? v : 90;
@@ -284,6 +300,7 @@
   const LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR = Math.max(0.25, Math.min(1.5, _interactionConfigNum('layoutSelectedVertexRadiusFactor', 0.7)));
   const GRID_VISIBLE_DEFAULT = _ixBool('showGridDefault', true);
   const IMAGE_VISIBLE_DEFAULT = _ixBool('showImageDefault', true);
+  const ROAD_WIDTH_VISIBLE_DEFAULT = _ixBool('showRoadWidthDefault', true);
   const RW_EXIT_ALLOWED_DEFAULT = normalizeAllowedRunwayDirections(_dc.rwExitAllowedDefaultRaw);
   function layoutPathVertexRadiusPx(vertexSelected, pathSelected) {
     if (vertexSelected) return 6 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR;
@@ -325,6 +342,7 @@
   const resetViewBtn = document.getElementById('btnResetView');
   const gridToggleBtn = document.getElementById('btnGridToggle');
   const imageToggleBtn = document.getElementById('btnImageToggle');
+  const roadWidthToggleBtn = document.getElementById('btnRoadWidthToggle');
   const GRID_LAYOUT_IMAGE_DEFAULTS = {
     opacity: _dc.gridLayoutImage.opacity,
     opacityMin: _dc.gridLayoutImage.opacityMin,
@@ -504,6 +522,7 @@
     simPlaybackDockVisible: false,
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
+    showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
     currentTerminalId: null,
     selectedObject: null,
     terminalDrawingId: null,
@@ -711,6 +730,14 @@
     const on = !!state.showImage;
     imageToggleBtn.classList.toggle('active', on);
     imageToggleBtn.title = on ? 'Image visible (click to hide)' : 'Image hidden (click to show)';
+  }
+  function syncRoadWidthToggleButton() {
+    if (!roadWidthToggleBtn) return;
+    const on = !!state.showRoadWidth;
+    roadWidthToggleBtn.classList.toggle('active', on);
+    roadWidthToggleBtn.title = on
+      ? 'Road width visible (click for centerline-only schematic)'
+      : 'Schematic mode: centerlines only (click to show road width)';
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -1011,9 +1038,11 @@
       if (typeof obj.grid.cellSize === 'number') CELL_SIZE = obj.grid.cellSize;
       if (typeof obj.grid.showGrid === 'boolean') state.showGrid = obj.grid.showGrid;
       if (typeof obj.grid.showImage === 'boolean') state.showImage = obj.grid.showImage;
+      if (typeof obj.grid.showRoadWidth === 'boolean') state.showRoadWidth = obj.grid.showRoadWidth;
     }
     if (typeof obj.showGrid === 'boolean') state.showGrid = obj.showGrid;
     if (typeof obj.showImage === 'boolean') state.showImage = obj.showImage;
+    if (typeof obj.showRoadWidth === 'boolean') state.showRoadWidth = obj.showRoadWidth;
     state.layoutImageOverlay = normalizeLayoutImageOverlay(
       (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
     );
@@ -1021,6 +1050,7 @@
     syncLayoutImageBitmap();
     syncGridToggleButton();
     syncImageToggleButton();
+    syncRoadWidthToggleButton();
     if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
     if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
     if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
@@ -2220,6 +2250,7 @@
         cellSize: CELL_SIZE,
         showGrid: !!state.showGrid,
         showImage: !!state.showImage,
+        showRoadWidth: !!state.showRoadWidth,
         layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
       },
       networkJunctions: networkJunctions,
@@ -2252,6 +2283,7 @@
           'aircraftType',
           'code',
           'timeMin',
+          'sibtDate',
           'dwellMin',
           'minDwellMin',
           'noWayArr',
@@ -2327,6 +2359,13 @@
           terminalId: _labelOrId(termId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
           depRunwayId: _labelOrId(depRwyId, typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById : null),
         };
+        const schedExport = flightScheduleMinutesForRow(f);
+        copy.sibtDateTime = formatFlightScheduleDateTime(f, schedExport.sibt);
+        copy.sobtDateTime = formatFlightScheduleDateTime(f, schedExport.sobt);
+        copy.sldtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sldt_d);
+        copy.sibtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sibt_d);
+        copy.sobtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sobt_d);
+        copy.stotDateTime_d = formatFlightScheduleDateTime(f, schedExport.stot_d);
         return copy;
       }),
       simPathGraph: buildSimPathGraphExport()
@@ -2565,6 +2604,29 @@
       }
     }
     return null;
+  }
+
+  function hitTestSimFlightAtWorld(wx, wy) {
+    if (!state.hasSimulationResult || !state.flights || !state.flights.length) return null;
+    if (!state.globalUpdateFresh) return null;
+    const tSec = state.simTimeSec;
+    if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
+    let best = null;
+    let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
+    const flights = state.flights;
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f || flightBlockedLikeNoWay(f)) continue;
+      const pose = getFlightPoseAtTimeForDraw(f, tSec);
+      if (!pose) continue;
+      const dx = pose.x - wx, dy = pose.y - wy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = f;
+      }
+    }
+    return best;
   }
 
   function hitTestTerminalVertex(wx, wy) {
@@ -3970,6 +4032,13 @@
     if (!val) return 0;
     const s = String(val).trim();
     if (!s) return 0;
+    const isoDt = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (isoDt) {
+      const h = parseInt(isoDt[4], 10) || 0;
+      const m = parseInt(isoDt[5], 10) || 0;
+      const sec = isoDt[6] ? (parseInt(isoDt[6], 10) || 0) : 0;
+      return Math.max(0, h * 60 + m + sec / 60);
+    }
     if (s.includes(':')) {
       const parts = s.split(':');
       const h = parseInt(parts[0], 10) || 0;
@@ -4088,6 +4157,27 @@
   }
   function formatMinutesToHHMMSS(minsRaw) {
     return formatTotalSecondsToHHMMSS(_normalizeTimeToSeconds(minsRaw, 'minutes', 'round'));
+  }
+  function flightScheduleBaseDateIso(f) {
+    if (!f) return DEFAULT_SIBT_DATE;
+    const raw = f.sibtDate != null ? f.sibtDate : (f.serviceDate != null ? f.serviceDate : null);
+    const d = (raw == null ? '' : String(raw)).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    return DEFAULT_SIBT_DATE;
+  }
+  function formatFlightScheduleDateTime(f, minsRaw) {
+    const base = flightScheduleBaseDateIso(f);
+    const sec = _normalizeTimeToSeconds(minsRaw, 'minutes', 'round');
+    const minTotal = sec / 60;
+    const ps = base.split('-');
+    const Y = parseInt(ps[0], 10);
+    const Mo = parseInt(ps[1], 10) - 1;
+    const D = parseInt(ps[2], 10);
+    if (!isFinite(Y) || !isFinite(Mo) || !isFinite(D)) return formatMinutesToHHMMSS(minsRaw);
+    const t0 = new Date(Y, Mo, D, 0, 0, 0);
+    t0.setMinutes(t0.getMinutes() + minTotal);
+    const pad = function(n) { return (n < 10 ? '0' : '') + n; };
+    return t0.getFullYear() + '-' + pad(t0.getMonth() + 1) + '-' + pad(t0.getDate()) + ' ' + pad(t0.getHours()) + ':' + pad(t0.getMinutes()) + ':' + pad(t0.getSeconds());
   }
   function formatSignedMinutesToHHMMSS(minsRaw) {
     const n = Number(minsRaw);
@@ -4670,16 +4760,16 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  const FLIGHT_SCHED_TABLE_COL_COUNT = 29;
-  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). */
-  const FLIGHT_SCHED_TD_SLD = 12;
-  const FLIGHT_SCHED_TD_SIBTD = 13;
-  const FLIGHT_SCHED_TD_SOBTD = 14;
-  const FLIGHT_SCHED_TD_STOTD = 15;
-  const FLIGHT_SCHED_TD_ELDT = 16;
-  const FLIGHT_SCHED_TD_EIBT = 17;
-  const FLIGHT_SCHED_TD_EOBT = 18;
-  const FLIGHT_SCHED_TD_ETOT = 19;
+  const FLIGHT_SCHED_TABLE_COL_COUNT = 27;
+  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). S-group SLDT/STOT columns removed. */
+  const FLIGHT_SCHED_TD_SLD = 10;
+  const FLIGHT_SCHED_TD_SIBTD = 11;
+  const FLIGHT_SCHED_TD_SOBTD = 12;
+  const FLIGHT_SCHED_TD_STOTD = 13;
+  const FLIGHT_SCHED_TD_ELDT = 14;
+  const FLIGHT_SCHED_TD_EIBT = 15;
+  const FLIGHT_SCHED_TD_EOBT = 16;
+  const FLIGHT_SCHED_TD_ETOT = 17;
   function ensureFlightAssignStripWired() {
     if (window.__flightAssignStripWired) return;
     const wrap = document.getElementById('flightAssignStrip');
@@ -5031,6 +5121,25 @@
     return isFlightArrRetFailedInConfigTable(f, retStats) && !!arrivalConfigColumnKeyForFlight(f);
   }
 
+  function flightScheduleMinutesForRow(f) {
+    const tArrMin = f.timeMin != null ? f.timeMin : 0;
+    const dwell = f.dwellMin != null ? f.dwellMin : 0;
+    const tDepMin = tArrMin + dwell;
+    const schedDepRotMin = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
+    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin));
+    const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
+    const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
+    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + schedDepRotMin);
+    return {
+      sibt: tArrMin,
+      sobt: tDepMin,
+      sldt_d: f.sldtMin_d != null ? f.sldtMin_d : sldtOrig,
+      sibt_d: f.sibtMin_d != null ? f.sibtMin_d : tArrMin,
+      sobt_d: f.sobtMin_d != null ? f.sobtMin_d : tDepMin,
+      stot_d: f.stotMin_d != null ? f.stotMin_d : stotOrig,
+    };
+  }
+
   function _buildFlightListHeaderHtml() {
     return '' +
       '<table class="flight-schedule-table">' +
@@ -5043,10 +5152,8 @@
         '<th>Building</th>' +
         '<th>Apron</th>' +
         '<th>Dep Rw</th>' +
-        '<th class="flight-col-s flight-col-s-start">SLDT</th>' +
-        '<th class="flight-td-sibt flight-col-s">SIBT</th>' +
-        '<th class="flight-col-s">SOBT</th>' +
-        '<th class="flight-col-s flight-col-s-last">STOT</th>' +
+        '<th class="flight-col-s flight-col-s-start flight-td-sibt">SIBT</th>' +
+        '<th class="flight-col-s flight-col-s-last">SOBT</th>' +
         '<th class="flight-col-sd flight-col-sd-start">SLDT(d)</th>' +
         '<th class="flight-col-sd">SIBT(d)</th>' +
         '<th class="flight-col-sd">SOBT(d)</th>' +
@@ -5086,20 +5193,19 @@
     const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
     const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
     const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + schedDepRotMin);
-    const sldtStr = formatMinutesToHHMMSS(f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc);
-    const stotStr = formatMinutesToHHMMSS(stotOrig);
-    const sldtStr_d = formatMinutesToHHMMSS(f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
-    const sibtStr_d = formatMinutesToHHMMSS(f.sibtMin_d != null ? f.sibtMin_d : tArrMin);
-    const sobtStr_d = formatMinutesToHHMMSS(f.sobtMin_d != null ? f.sobtMin_d : tDepMin);
-    const stotStr_d = formatMinutesToHHMMSS(f.stotMin_d != null ? f.stotMin_d : stotOrig);
-    const tArr = formatMinutesToHHMMSS(tArrMin);
-    const tDep = formatMinutesToHHMMSS(tDepMin);
     if (f.sobtMin_orig == null) {
       f.sldtMin_orig = sldtOrig;
       f.sibtMin_orig = tArrMin;
       f.sobtMin_orig = sobtOrig;
       f.stotMin_orig = stotOrig;
     }
+    const schedM = flightScheduleMinutesForRow(f);
+    const sibtDisp = formatFlightScheduleDateTime(f, schedM.sibt);
+    const sobtDisp = formatFlightScheduleDateTime(f, schedM.sobt);
+    const sldtStr_d = formatFlightScheduleDateTime(f, schedM.sldt_d);
+    const sibtStr_d = formatFlightScheduleDateTime(f, schedM.sibt_d);
+    const sobtStr_d = formatFlightScheduleDateTime(f, schedM.sobt_d);
+    const stotStr_d = formatFlightScheduleDateTime(f, schedM.stot_d);
     function fmtFlightESchedCell(minVal) {
       return (typeof minVal === 'number' && isFinite(minVal)) ? formatMinutesToHHMMSS(minVal) : '—';
     }
@@ -5131,14 +5237,12 @@
         '<td class="flight-td-readonly">' + buildingRead + '</td>' +
         '<td class="flight-td-reg">' + (function() { var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); })() + '</td>' +
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
-        '<td class="flight-td-time flight-col-s flight-col-s-start">' + escapeHtml(sldtStr) + '</td>' +
-        '<td class="flight-td-time flight-td-sibt flight-col-s">' + escapeHtml(tArr) + '</td>' +
-        '<td class="flight-td-time flight-col-s">' + escapeHtml(tDep) + '</td>' +
-        '<td class="flight-td-time flight-col-s flight-col-s-last">' + escapeHtml(stotStr) + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-start">' + sldtStr_d + '</td>' +
-        '<td class="flight-td-time flight-col-sd">' + sibtStr_d + '</td>' +
-        '<td class="flight-td-time flight-col-sd">' + sobtStr_d + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-last">' + stotStr_d + '</td>' +
+        '<td class="flight-td-time flight-col-s flight-col-s-start flight-td-sibt" data-sched-min="' + schedM.sibt + '">' + escapeHtml(sibtDisp) + '</td>' +
+        '<td class="flight-td-time flight-col-s flight-col-s-last" data-sched-min="' + schedM.sobt + '">' + escapeHtml(sobtDisp) + '</td>' +
+        '<td class="flight-td-time flight-col-sd flight-col-sd-start" data-sched-min="' + schedM.sldt_d + '">' + escapeHtml(sldtStr_d) + '</td>' +
+        '<td class="flight-td-time flight-col-sd" data-sched-min="' + schedM.sibt_d + '">' + escapeHtml(sibtStr_d) + '</td>' +
+        '<td class="flight-td-time flight-col-sd" data-sched-min="' + schedM.sobt_d + '">' + escapeHtml(sobtStr_d) + '</td>' +
+        '<td class="flight-td-time flight-col-sd flight-col-sd-last" data-sched-min="' + schedM.stot_d + '">' + escapeHtml(stotStr_d) + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-e-start">' + eldtStr + '</td>' +
         '<td class="flight-td-time flight-col-e">' + eibtStr + '</td>' +
         '<td class="flight-td-time flight-col-e">' + eobtStr + '</td>' +
@@ -5706,7 +5810,14 @@
         const tds = Array.from(row.querySelectorAll('td'));
         if (tds.length <= FLIGHT_SCHED_TD_ETOT) return;
         const getMin = (idx) => {
-          const txt = (tds[idx] && tds[idx].textContent || '').trim();
+          const td = tds[idx];
+          if (!td) return 0;
+          const dm = td.getAttribute('data-sched-min');
+          if (dm != null && String(dm).trim() !== '') {
+            const n = parseFloat(dm);
+            return isFinite(n) ? n : 0;
+          }
+          const txt = (td.textContent || '').trim();
           if (!txt) return 0;
           try {
             return parseTimeToMinutes(txt);
@@ -5768,10 +5879,7 @@
     }
     const baseMinT = Math.max(0, minS - GANTT_PAD_MIN);
     const baseMaxT0 = maxE + GANTT_PAD_MIN;
-    const baseMaxT = Math.min(
-      (baseMaxT0 <= baseMinT) ? (baseMinT + 60) : baseMaxT0,
-      baseMinT + 1440
-    );
+    const baseMaxT = (baseMaxT0 <= baseMinT) ? (baseMinT + 60) : baseMaxT0;
     const baseSpan = baseMaxT - baseMinT;
     const dataSpan = Math.max(1e-9, baseSpan);
     const visibleSpan = Math.min(GANTT_VISIBLE_WINDOW_MIN, dataSpan);
@@ -5882,8 +5990,8 @@
         const conflictClass = (conflictMap[f.id] || flightBlockedLikeNoWay(f)) ? ' conflict' : '';
         const selectedClass = (state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id) ? ' alloc-flight-selected' : '';
         const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
-        const sibtLabel = formatMinutesToHHMM(t0);
-        const sobtLabel = formatMinutesToHHMM(t1);
+        const sibtLabel = formatFlightScheduleDateTime(f, t0);
+        const sobtLabel = formatFlightScheduleDateTime(f, t1);
         const barTitle =
           'SIBT: ' + sibtLabel +
           '\\nSOBT: ' + sobtLabel +
@@ -7236,6 +7344,18 @@
     return false;
   }
 
+  function applySdDispDeltaFromSibtSobt(f) {
+    if (!f || flightBlockedLikeNoWay(f)) return;
+    const sibt = f.sibtMin_d;
+    const sobt = f.sobtMin_d;
+    if (typeof sibt === 'number' && isFinite(sibt)) {
+      f.sldtMin_d = Math.max(0, sibt - SCHED_SD_SIBT_MINUS_SLD_MIN);
+    }
+    if (typeof sobt === 'number' && isFinite(sobt)) {
+      f.stotMin_d = sobt + SCHED_SD_STOT_PLUS_SOBD_MIN;
+    }
+  }
+
   function computeScheduledDisplayTimes(flights) {
     if (!flights || !flights.length) return;
     flights.forEach(f => {
@@ -7256,10 +7376,9 @@
       f.sibtMin_orig = tArrMin;
       f.sobtMin_orig = sobtOrig;
       f.stotMin_orig = stotOrig;
-      f.sldtMin_d = f.sldtMin_orig;
       f.sibtMin_d = tArrMin;
       f.sobtMin_d = sobtOrig;
-      f.stotMin_d = stotOrig;
+      applySdDispDeltaFromSibtSobt(f);
     });
     const standToFlights = {};
     flights.forEach(f => {
@@ -7282,8 +7401,7 @@
         const minSobtByDwell = f.sibtMin_d + minDwell;
         const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
         f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-        f.sldtMin_d = scheduledSldtFromSibtMinutes(f, f.sibtMin_d);
-        f.stotMin_d = scheduledStotFromSobtMinutes(f, f.sobtMin_d);
+        applySdDispDeltaFromSibtSobt(f);
         prevSOBT = f.sobtMin_d;
       });
     });
@@ -7296,9 +7414,8 @@
       const minSobtByDwell = sibt + minDwell;
       const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
       if (sobtCurrent < minSobtByDwell) {
-        const delta = minSobtByDwell - sobtCurrent;
         f.sobtMin_d = minSobtByDwell;
-        if (typeof f.stotMin_d === 'number') f.stotMin_d += delta;
+        applySdDispDeltaFromSibtSobt(f);
       }
     });
     flights.forEach(f => {
@@ -7340,10 +7457,9 @@
       f.sibtMin_orig = tArrMin;
       f.sobtMin_orig = sobtOrig;
       f.stotMin_orig = stotOrig;
-      f.sldtMin_d = f.sldtMin_orig;
       f.sibtMin_d = tArrMin;
       f.sobtMin_d = sobtOrig;
-      f.stotMin_d = stotOrig;
+      applySdDispDeltaFromSibtSobt(f);
     });
     standsToRecompute.forEach(function(standId) {
       const list = allFlights.filter(function(f) {
@@ -7361,8 +7477,7 @@
         const minSobtByDwell = f.sibtMin_d + minDwell;
         const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
         f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-        f.sldtMin_d = scheduledSldtFromSibtMinutes(f, f.sibtMin_d);
-        f.stotMin_d = scheduledStotFromSobtMinutes(f, f.sobtMin_d);
+        applySdDispDeltaFromSibtSobt(f);
         prevSOBT = f.sobtMin_d;
       });
     });
@@ -7375,9 +7490,8 @@
       const minSobtByDwell = sibt + minDwell;
       const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
       if (sobtCurrent < minSobtByDwell) {
-        const delta = minSobtByDwell - sobtCurrent;
         f.sobtMin_d = minSobtByDwell;
-        if (typeof f.stotMin_d === 'number') f.stotMin_d += delta;
+        applySdDispDeltaFromSibtSobt(f);
       }
     });
     allFlights.forEach(function(f) {
@@ -10678,10 +10792,10 @@
         ctx.save();
         ctx.beginPath();
         ctx.arc(x, y, sizeRef * 0.62, 0, Math.PI * 2);
-        ctx.strokeStyle = c2dObjectSelectedStroke();
+        ctx.strokeStyle = c2dFlightSelectedRingStroke();
         ctx.lineWidth = 2.5;
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+        ctx.shadowColor = c2dFlightSelectedRingGlow();
+        ctx.shadowBlur = c2dFlightSelectedRingGlowBlur();
         ctx.stroke();
         ctx.restore();
       }
@@ -10768,7 +10882,13 @@
     const opts = AIRCRAFT_TYPES.map(a => '<option value="' + escapeHtml(String(a.id || a.name || '')) + '">' + escapeHtml(a.name || a.id || '') + '</option>').join('');
     sel.innerHTML = opts || '<option value="A320">Airbus A320</option>';
     if (!opts && sel.options.length) sel.value = 'A320';
-    else if (sel.options.length) sel.value = sel.options[0].value;
+    else if (sel.options.length) {
+      let hasA320 = false;
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === 'A320') { hasA320 = true; break; }
+      }
+      sel.value = hasA320 ? 'A320' : sel.options[0].value;
+    }
   }
   function getAircraftConstraintOptions() {
     return AIRCRAFT_TYPES.map(function(a) {
@@ -10997,9 +11117,7 @@
     const simSlider = document.getElementById('flightSimSlider');
     const speedSelect = document.getElementById('flightSpeed');
     const timeInputEl = document.getElementById('flightTime');
-    const schedSldtEl = document.getElementById('flightSchedSldt');
-    const schedSobtEl = document.getElementById('flightSchedSobt');
-    const schedStotEl = document.getElementById('flightSchedStot');
+    const sibtDateInputEl = document.getElementById('flightSibtDate');
     const aircraftEl = document.getElementById('flightAircraftType');
     const regEl = document.getElementById('flightReg');
     const layoutNameInput = document.getElementById('layoutName');
@@ -11010,20 +11128,19 @@
     if (!arrDepEl) return;
     populateAircraftSelect(aircraftEl);
 
+    function normalizeSibtDate(raw) {
+      const s = (raw == null ? '' : String(raw)).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      return DEFAULT_SIBT_DATE;
+    }
     function formatFlightScheduleGateInputs(f) {
       if (!f) return;
       const tArrMin = f.timeMin != null ? f.timeMin : 0;
-      const dwell = f.dwellMin != null ? f.dwellMin : 0;
-      const tDepMin = tArrMin + dwell;
-      const schedDepRotMin = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
-      const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin));
-      const sldtVal = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
-      const sobtVal = f.sobtMin_orig != null ? f.sobtMin_orig : tDepMin;
-      const stotVal = f.stotMin_orig != null ? f.stotMin_orig : (tDepMin + schedDepRotMin);
-      if (schedSldtEl) schedSldtEl.value = formatMinutesToHHMMSS(sldtVal);
       if (timeInputEl) timeInputEl.value = formatMinutesToHHMMSS(tArrMin);
-      if (schedSobtEl) schedSobtEl.value = formatMinutesToHHMMSS(sobtVal);
-      if (schedStotEl) schedStotEl.value = formatMinutesToHHMMSS(stotVal);
+      if (sibtDateInputEl) {
+        const dateRaw = f.sibtDate != null ? f.sibtDate : (f.serviceDate != null ? f.serviceDate : DEFAULT_SIBT_DATE);
+        sibtDateInputEl.value = normalizeSibtDate(dateRaw);
+      }
     }
     function bindFlightScheduleGateFieldChange(el, field) {
       if (!el) return;
@@ -11054,10 +11171,21 @@
         if (typeof draw === 'function') draw();
       });
     }
-    bindFlightScheduleGateFieldChange(schedSldtEl, 'sldt');
     bindFlightScheduleGateFieldChange(timeInputEl, 'sibt');
-    bindFlightScheduleGateFieldChange(schedSobtEl, 'sobt');
-    bindFlightScheduleGateFieldChange(schedStotEl, 'stot');
+    if (sibtDateInputEl) {
+      sibtDateInputEl.addEventListener('change', function() {
+        if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
+        const f = state.selectedObject.obj;
+        f.sibtDate = normalizeSibtDate(this.value);
+        f.serviceDate = f.sibtDate;
+        this.value = f.sibtDate;
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        const touched = f.standId ? [f.standId] : [];
+        if (typeof renderFlightList === 'function')
+          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touched });
+        if (typeof draw === 'function') draw();
+      });
+    }
 
     function randomAirlineCode() { return DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)]; }
     function randomFlightNumber(airlineCode) { return (airlineCode || randomAirlineCode()) + String(Math.floor(1000 + Math.random() * 9000)); }
@@ -11328,11 +11456,12 @@
         }
         let timeStr = (document.getElementById('flightTime').value || '').trim();
         if (!timeStr) {
-          const defMin = getDefaultSibtMinutes();
-          timeStr = formatMinutesToHHMMSS(defMin);
+          timeStr = formatMinutesToHHMMSS(DEFAULT_SIBT_TIME_MIN);
           if (timeInputEl) timeInputEl.value = timeStr;
         }
         const timeMin = parseTimeToMinutes(timeStr);
+        const sibtDateForFlight = sibtDateInputEl ? normalizeSibtDate(sibtDateInputEl.value || DEFAULT_SIBT_DATE) : DEFAULT_SIBT_DATE;
+        if (sibtDateInputEl) sibtDateInputEl.value = sibtDateForFlight;
         const aircraftType = (document.getElementById('flightAircraftType').value || 'A320').trim();
         const code = getCodeForAircraft(aircraftType);
         const reg = (document.getElementById('flightReg').value || '').trim();
@@ -11354,6 +11483,8 @@
           id: id(),
           arrDep,
           timeMin,
+          sibtDate: sibtDateForFlight,
+          serviceDate: sibtDateForFlight,
           aircraftType,
           code,
           reg,
@@ -11380,13 +11511,7 @@
         var addTouched = f.standId ? [f.standId] : [];
         renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: addTouched });
         const nextDef = getDefaultSibtMinutes();
-        const dwellN = dwellEl ? Math.max(SCHED_DWELL_FLOOR_MIN, parseFloat(dwellEl.value) || 0) : SCHED_DWELL_FLOOR_MIN;
-        const sobN = nextDef + dwellN;
-        const rotN = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
-        if (schedSldtEl) schedSldtEl.value = formatMinutesToHHMMSS(nextDef);
         if (timeInputEl) timeInputEl.value = formatMinutesToHHMMSS(nextDef);
-        if (schedSobtEl) schedSobtEl.value = formatMinutesToHHMMSS(sobN);
-        if (schedStotEl) schedStotEl.value = formatMinutesToHHMMSS(sobN + rotN);
         updateFlightError('');
       });
     }
@@ -11523,6 +11648,20 @@
         f.minDwellMin = minDwell;
         this.value = f.dwellMin;
         if (minDwellEl) minDwellEl.value = f.minDwellMin;
+        const tArr = f.timeMin != null ? f.timeMin : 0;
+        f.sobtMin_orig = tArr + dwell;
+        f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+        f.sldtMin_orig = scheduledSldtFromSibtMinutes(f, tArr);
+        if (typeof computeScheduledDisplayTimesIncremental === 'function') {
+          const touched = f.standId ? [f.standId] : [];
+          computeScheduledDisplayTimesIncremental(state.flights, new Set([f.id]), new Set(touched));
+        }
+        formatFlightScheduleGateInputs(f);
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        if (typeof renderFlightList === 'function') {
+          const rsD = f.standId ? [f.standId] : [];
+          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rsD });
+        }
         rebuildSelectedFlightTimeline();
       });
     }
@@ -11668,17 +11807,17 @@
         const tds = Array.from(row.querySelectorAll('td'));
         if (tds.length <= FLIGHT_SCHED_TD_ETOT) return;
         const getMin = function(idx) {
-          const txt = (tds[idx] && tds[idx].textContent || '').trim();
-          if (!txt) return null;
-          const parts = txt.split(':');
-          if (parts.length >= 2) {
-            const h = parseInt(parts[0], 10) || 0;
-            const m = parseInt(parts[1], 10) || 0;
-            const s = parts.length >= 3 ? (parseInt(parts[2], 10) || 0) : 0;
-            return h * 60 + m + s / 60;
+          const td = tds[idx];
+          if (!td) return null;
+          const dm = td.getAttribute('data-sched-min');
+          if (dm != null && String(dm).trim() !== '') {
+            const n = parseFloat(dm);
+            return isFinite(n) ? n : null;
           }
-          const n = parseFloat(txt);
-          return isNaN(n) ? null : n;
+          const txt = (td.textContent || '').trim();
+          if (!txt) return null;
+          const parsed = parseTimeToMinutes(txt);
+          return isFinite(parsed) ? parsed : null;
         };
         const map = {
           sldtMin_d: FLIGHT_SCHED_TD_SLD,
@@ -12441,6 +12580,29 @@
     }
   }
 
+  function updateFlightGridHud() {
+    const el = document.getElementById('flight-grid-hud');
+    if (!el) return;
+    const sel = state.selectedObject;
+    if (sel && sel.type === 'flight' && sel.obj) {
+      const o = sel.obj;
+      const fmtE = function(m) {
+        return (typeof m === 'number' && isFinite(m)) ? formatMinutesToHHMMSS(m) : '—';
+      };
+      const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(o.aircraftType) : null;
+      const typeLabel = ac ? (ac.name || ac.id || o.aircraftType || '—') : (o.aircraftType || '—');
+      el.removeAttribute('hidden');
+      el.innerHTML =
+        '<div class="flight-grid-hud-reg">' + escapeHtml(o.reg || '—') + '</div>' +
+        '<div class="flight-grid-hud-type">' + escapeHtml(typeLabel) + '</div>' +
+        '<div class="flight-grid-hud-e">ELDT ' + escapeHtml(fmtE(o.eldtMin)) + ' · EIBT ' + escapeHtml(fmtE(o.eibtMin)) + '</div>' +
+        '<div class="flight-grid-hud-e">EOBT ' + escapeHtml(fmtE(o.eobtMin)) + ' · ETOT ' + escapeHtml(fmtE(o.etotMin)) + '</div>';
+    } else {
+      el.setAttribute('hidden', '');
+      el.innerHTML = '';
+    }
+  }
+
   function updateObjectInfo() {
     if (state.selectedObject) {
       const o = state.selectedObject.obj;
@@ -12535,8 +12697,9 @@
           '<br>Polyline points: ' + (ed && ed.pts ? ed.pts.length : 2);
       } else if (state.selectedObject.type === 'flight') {
         const dir = o.arrDep === 'Dep' ? 'Departure' : 'Arrival';
-        const sibt = formatMinutesToHHMMSS(o.sibtMin_d != null ? o.sibtMin_d : (o.timeMin != null ? o.timeMin : 0));
-        const sobt = formatMinutesToHHMMSS(o.sobtMin_d != null ? o.sobtMin_d : ((o.timeMin != null ? o.timeMin : 0) + (o.dwellMin != null ? o.dwellMin : 0)));
+        const smInfo = flightScheduleMinutesForRow(o);
+        const sibt = formatFlightScheduleDateTime(o, smInfo.sibt_d);
+        const sobt = formatFlightScheduleDateTime(o, smInfo.sobt_d);
         const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(o.aircraftType) : null;
         const acName = ac ? (ac.name || ac.id || '') : (o.aircraftType || '—');
         const codeIcao = (ac && ac.icao) ? ac.icao : (o.code || '—');
@@ -12554,6 +12717,7 @@
       }
     } else
       objectInfoEl.textContent = 'Select an object on the grid or from the list.';
+    updateFlightGridHud();
     renderObjectList();
   }
 
@@ -13462,15 +13626,22 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    state.taxiways.forEach(tw => {
+    function taxiwayDrawContext(tw) {
       const drawing = state.taxiwayDrawingId === tw.id;
-      if (tw.vertices.length < 2 && !drawing) return;
+      if (tw.vertices.length < 2 && !drawing) return null;
       const isRunwayPath = tw.pathType === 'runway';
       const isRunwayExit = tw.pathType === 'runway_exit';
       const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
       const width = tw.width != null ? tw.width : widthDefault;
       const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
       const pathLineCap = 'butt';
+      const showRoadWidth = !!state.showRoadWidth;
+      return { drawing, isRunwayPath, isRunwayExit, width, widthDefault, sel, pathLineCap, showRoadWidth };
+    }
+    state.taxiways.forEach(tw => {
+      const g = taxiwayDrawContext(tw);
+      if (!g) return;
+      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, width = g.width, sel = g.sel, pathLineCap = g.pathLineCap, showRoadWidth = g.showRoadWidth;
       if (sel) {
         ctx.strokeStyle = c2dObjectSelectedStroke();
         ctx.fillStyle = c2dObjectSelectedFill();
@@ -13481,15 +13652,68 @@
         ctx.strokeStyle = drawing ? 'rgba(56, 189, 248, 0.72)' : c2dRunwayStroke();
         ctx.fillStyle = drawing ? 'rgba(56, 189, 248, 0.14)' : c2dRunwayFill();
       }
-      ctx.lineWidth = width;
-      ctx.lineCap = pathLineCap;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      for (let i = 0; i < tw.vertices.length; i++) {
-        const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      if (showRoadWidth) {
+        ctx.lineWidth = width;
+        ctx.lineCap = pathLineCap;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        if (tw.vertices.length >= 2) {
+          if (sel) {
+            ctx.save();
+            ctx.shadowColor = c2dObjectSelectedGlow();
+            ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+            ctx.stroke();
+            ctx.restore();
+          } else ctx.stroke();
+        }
       }
-      if (tw.vertices.length >= 2) {
+      if (isRunwayPath && tw.vertices.length >= 2 && showRoadWidth) {
+        const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
+        drawRunwayDecorations(tw, runwayPts, width);
+      }
+    });
+    state.taxiways.forEach(tw => {
+      const g = taxiwayDrawContext(tw);
+      if (!g || tw.vertices.length < 2) return;
+      const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, sel = g.sel, showRoadWidth = g.showRoadWidth, pathLineCap = g.pathLineCap;
+      if (showRoadWidth) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke()));
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        if (sel) {
+          ctx.save();
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+          ctx.stroke();
+          ctx.restore();
+        } else ctx.stroke();
+      } else if (!isRunwayPath) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      } else {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#f5930b';
+        ctx.lineCap = pathLineCap;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
         if (sel) {
           ctx.save();
           ctx.shadowColor = c2dObjectSelectedGlow();
@@ -13498,20 +13722,11 @@
           ctx.restore();
         } else ctx.stroke();
       }
-      if (!isRunwayPath) {
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
-        ctx.beginPath();
-        for (let i = 0; i < tw.vertices.length; i++) {
-          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        if (tw.vertices.length >= 2) ctx.stroke();
-      }
-      if (isRunwayPath && tw.vertices.length >= 2) {
-        const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
-        drawRunwayDecorations(tw, runwayPts, width);
-      }
+    });
+    state.taxiways.forEach(tw => {
+      const g = taxiwayDrawContext(tw);
+      if (!g) return;
+      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, width = g.width, sel = g.sel;
       const dir = getTaxiwayDirection(tw);
       if (dir !== 'both' && tw.vertices.length >= 2) {
         const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
@@ -14687,6 +14902,12 @@
         return;
       }
       const hit = hitTest(wx, wy);
+      let pickHit = hit;
+      if (mode !== 'edge' && !(mode === 'apronTaxiway' && state.apronLinkDrawing) &&
+          !state.terminalDrawingId && !state.taxiwayDrawingId) {
+        const sf = hitTestSimFlightAtWorld(wx, wy);
+        if (sf) pickHit = { type: 'flight', id: sf.id, obj: sf };
+      }
       if (mode === 'apronTaxiway' && state.apronLinkDrawing) {
         const pbbHit = hitTestPbbEnd(wx, wy);
         const twHit = hitTestAnyTaxiwayVertex(wx, wy);
@@ -14748,13 +14969,13 @@
           }
           draw();
         }
-      } else if (hit) {
+      } else if (pickHit) {
         state.flightPathRevealFlightId = null;
-        state.selectedObject = hit;
-        if (hit.type === 'terminal') state.currentTerminalId = hit.id;
-        const sm = settingModeValueForHit(hit);
+        state.selectedObject = pickHit;
+        if (pickHit.type === 'terminal') state.currentTerminalId = pickHit.id;
+        const sm = settingModeValueForHit(pickHit);
         if (sm) settingModeSelect.value = sm;
-        if (hit.type === 'flight' && typeof switchToTab === 'function') switchToTab('flight');
+        if (pickHit.type === 'flight' && typeof switchToTab === 'function') switchToTab('flight');
         if (typeof syncSettingsPaneToMode === 'function') syncSettingsPaneToMode();
         syncPanelFromState();
         renderObjectList();
@@ -14890,6 +15111,14 @@
       state.showImage = !state.showImage;
       syncImageToggleButton();
       invalidateGridUnderlay();
+      draw();
+    });
+  }
+  if (roadWidthToggleBtn) {
+    syncRoadWidthToggleButton();
+    roadWidthToggleBtn.addEventListener('click', function() {
+      state.showRoadWidth = !state.showRoadWidth;
+      syncRoadWidthToggleButton();
       draw();
     });
   }

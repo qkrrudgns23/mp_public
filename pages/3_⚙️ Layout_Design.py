@@ -560,6 +560,7 @@ def _style_root_css_from_information(info: dict) -> str:
     _rp_px("--style-right-panel-resize-collapse-below", "panelResizeCollapseBelowPx", 96)
     _rp_px("--style-right-panel-resize-min-expanded", "panelResizeMinExpandedPx", 220)
     _rp_px("--style-right-panel-resize-viewport-margin", "panelResizeViewportMarginPx", 8)
+    _rp_px("--flight-schedule-form-row-gap", "flightScheduleFormRowGapPx", 6)
     lines.append("}")
     return "\n".join(lines)
 
@@ -850,6 +851,7 @@ def _build_designer_html() -> str:
             "UI_FLIGHT_DWELL": str(_ui_flight_dwell),
             "UI_FLIGHT_DWELL_STEP": str(_ui_flight_dwell_step),
             "UI_FLIGHT_MIN_DWELL": str(_ui_flight_min_dwell),
+            "DEFAULT_SIBT_DATE": str(_default_flight_service_date).strip() or "2026-03-31",
         },
     )
 
