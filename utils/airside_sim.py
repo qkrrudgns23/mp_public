@@ -5,8 +5,8 @@ deceleration, and runway-exit decel (see ``layoutPixelsPerMeter`` in Information
 
 Schedule inputs: S series (``*_Min_orig``) and Sd series (``*_Min_d`` minutes) are read from each
 flight; routing and time axis use Sd only (``eldtMin_d`` or ``sldtMin_d`` → ELDT anchor in sim
-seconds). Outputs ``schedule`` with S, Sd echo, and E times (ELDT/EIBT/EOBT/ETOT) derived from path
-lengths and ``dwellMin``.
+seconds). Outputs ``schedule`` with S, Sd echo, E times (ELDT/EIBT/EOBT/ETOT) from path
+lengths and ``dwellMin``, and ``ARR_ROT_SEC`` (landing-leg occupancy after touchdown).
 
 ``positions`` timelines use ``t`` = sim seconds from day base (ELDT anchor + local sim time);
 ``Dep_taxi`` motion starts after gate dwell so playback time aligns with EOBT. ``v`` is m/s.
@@ -1665,6 +1665,69 @@ def _taxi_in_out_sec_from_prep(
     return taxi_in, taxi_out
 
 
+def _arr_rot_sec_from_prep(
+    prep: PreparedFlightPath,
+    pixels_per_meter: float,
+) -> Optional[float]:
+    """Runway occupancy from touchdown through end of landing-leg micro-segments (sim seconds)."""
+    if not prep.ok:
+        return None
+    durs = prep.segment_duration_sec
+    segs = prep.segment_endpoints
+    phs = prep.segment_phases
+    v0s = prep.segment_start_velocity_ms
+    accs = prep.segment_accel_ms2
+    if (
+        not durs
+        or len(durs) != len(segs)
+        or not prep.leg_micro_counts
+        or len(v0s) != len(segs)
+        or len(accs) != len(segs)
+        or len(phs) != len(segs)
+    ):
+        return None
+    c0 = int(prep.leg_micro_counts[0])
+    if c0 <= 0 or c0 > len(segs):
+        return None
+    gi = max(0, int(prep.playback_first_segment_index))
+    if gi >= c0:
+        return 0.0
+    along0_px = float(prep.spawn_along_first_segment_px or 0.0)
+    ppm = max(float(pixels_per_meter), 1e-9)
+
+    def dur_full(g: int) -> float:
+        return float(durs[g])
+
+    def dur_from_playback_start(g: int) -> float:
+        if g != gi or along0_px <= 1e-9:
+            return dur_full(g)
+        p0, p1 = segs[g]
+        seg_px = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+        seg_m = seg_px / ppm
+        s0_m = along0_px / ppm
+        if s0_m >= seg_m - 1e-9:
+            return 0.0
+        _pty = (
+            str(prep.segment_path_types[g] or "")
+            if len(prep.segment_path_types) == len(segs)
+            else ""
+        )
+        _df = _arr_ret_decel_floor_ms(str(phs[g]), _pty, float(accs[g]))
+        return _duration_slice_sec(
+            float(v0s[g]),
+            float(accs[g]),
+            s0_m,
+            seg_m,
+            phs[g] == PHASE_LANDING and float(accs[g]) < -1e-12,
+            decel_floor_ms=_df,
+        )
+
+    rot = 0.0
+    for g in range(gi, c0):
+        rot += dur_from_playback_start(g)
+    return rot
+
+
 def _dwell_sec_from_flight(fobj: Dict[str, Any]) -> float:
     dwell_sec = _safe_float(fobj.get("dwellMin"), float("nan")) * 60.0
     if not math.isfinite(dwell_sec) or dwell_sec < 0:
@@ -1713,6 +1776,10 @@ def _build_schedule_row(
     if eobt_sec is not None and taxi_out_sec is not None:
         etot_sec = float(eobt_sec) + float(taxi_out_sec)
 
+    arr_rot_sec: Optional[float] = None
+    if prep.ok:
+        arr_rot_sec = _arr_rot_sec_from_prep(prep, pixels_per_meter)
+
     def _sf(x: Optional[int]) -> Optional[float]:
         return float(x) if x is not None else None
 
@@ -1741,7 +1808,7 @@ def _build_schedule_row(
         "ELDT_dt": _sec_to_datetime_str(_sf(eldt_sec), base_date),
         "EXIT_RUNWAY": None,
         "EXIT_RUNWAY_dt": None,
-        "ARR_ROT_SEC": None,
+        "ARR_ROT_SEC": _sim_sec_optional(arr_rot_sec) if arr_rot_sec is not None else None,
         "EIBT": _sim_sec_optional(eibt_sec) if eibt_sec is not None else None,
         "EIBT_dt": _sec_to_datetime_str(eibt_sec, base_date),
         "EOBT": _sim_sec_optional(eobt_sec) if eobt_sec is not None else None,

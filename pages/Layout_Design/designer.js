@@ -1107,6 +1107,14 @@
         f.__schedRetRotRev = null;
         f.__schedVttArrRev = null;
         f.__schedVttArrMin = null;
+        delete f.eldtMin;
+        delete f.eibtMin;
+        delete f.eobtMin;
+        delete f.etotMin;
+        delete f.eldtMin_orig;
+        delete f.eibtMin_orig;
+        delete f.eobtMin_orig;
+        delete f.etotMin_orig;
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
       });
@@ -1122,6 +1130,42 @@
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
     else draw();
     if (typeof renderFlightList === 'function') renderFlightList();
+  }
+  /** E-series minutes and ARR_ROT_SEC from ``airside_sim`` schedule row only (seconds → minutes). */
+  function applyAirsideScheduleRowToFlight(f, srec) {
+    if (!f) return;
+    if (!srec || typeof srec !== 'object') {
+      delete f.eldtMin;
+      delete f.eibtMin;
+      delete f.eobtMin;
+      delete f.etotMin;
+      delete f.eldtMin_orig;
+      delete f.eibtMin_orig;
+      delete f.eobtMin_orig;
+      delete f.etotMin_orig;
+      f.arrRotSec = null;
+      return;
+    }
+    function secOpt(key) {
+      if (srec[key] == null || srec[key] === '') return NaN;
+      const n = Number(srec[key]);
+      return isFinite(n) ? n : NaN;
+    }
+    const eldtS = secOpt('ELDT');
+    const eibtS = secOpt('EIBT');
+    const eobtS = secOpt('EOBT');
+    const etotS = secOpt('ETOT');
+    if (isFinite(eldtS)) f.eldtMin = eldtS / 60;
+    else delete f.eldtMin;
+    if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
+    else delete f.eibtMin;
+    if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
+    else delete f.eobtMin;
+    if (isFinite(etotS)) f.etotMin = etotS / 60;
+    else delete f.etotMin;
+    const rotS = secOpt('ARR_ROT_SEC');
+    if (isFinite(rotS)) f.arrRotSec = rotS;
+    else f.arrRotSec = null;
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
@@ -1165,41 +1209,45 @@
       if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
     });
     let mergedTimelines = 0;
-    if (hasPositions) {
-      (state.flights || []).forEach(function(f) {
-        if (!f || f.id == null) return;
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const srec = schedById[String(f.id)] || null;
+      if (hasPositions) {
         const rawPts = positions[f.id];
-        if (rawPts == null) return;
-        const pts = Array.isArray(rawPts) ? rawPts : [];
-        if (pts.length < 2) return;
-        const tl = pts.map(function(p) {
-          const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
-          const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-          return { t: Number(p.t), x: x, y: y };
-        }).filter(function(k) {
-          return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
-        }).sort(function(a, b) { return a.t - b.t; });
-        if (tl.length < 2) return;
-        mergedTimelines++;
-        f.timeline = tl;
-        const srec = schedById[String(f.id)] || {};
-        const aldt = srec.ALDT != null ? Number(srec.ALDT) : (srec.SLDT != null ? Number(srec.SLDT) : NaN);
-        const aibt = srec.AIBT != null ? Number(srec.AIBT) : (srec.SIBT != null ? Number(srec.SIBT) : NaN);
-        const aobt = srec.AOBT != null ? Number(srec.AOBT) : (srec.SOBT != null ? Number(srec.SOBT) : NaN);
-        const atot = srec.ATOT != null ? Number(srec.ATOT) : (srec.STOT != null ? Number(srec.STOT) : NaN);
+        if (rawPts != null) {
+          const pts = Array.isArray(rawPts) ? rawPts : [];
+          if (pts.length >= 2) {
+            const tl = pts.map(function(p) {
+              const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+              const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+              return { t: Number(p.t), x: x, y: y };
+            }).filter(function(k) {
+              return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+            }).sort(function(a, b) { return a.t - b.t; });
+            if (tl.length >= 2) {
+              mergedTimelines++;
+              f.timeline = tl;
+            }
+          }
+        }
+      }
+      if (srec && f.timeline && f.timeline.length >= 2) {
+        const eldtS = srec.ELDT != null ? Number(srec.ELDT) : NaN;
+        const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
+        const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
+        const etotS = srec.ETOT != null ? Number(srec.ETOT) : NaN;
         f.timeline_meta = {
           playbackSource: 'des_result',
-          eldtSec: isFinite(aldt) ? aldt : undefined,
-          eibtSec: isFinite(aibt) ? aibt : undefined,
-          eobtSec: isFinite(aobt) ? aobt : undefined,
-          etotSec: isFinite(atot) ? atot : undefined,
+          eldtSec: isFinite(eldtS) ? eldtS : undefined,
+          eibtSec: isFinite(eibtS) ? eibtS : undefined,
+          eobtSec: isFinite(eobtS) ? eobtS : undefined,
+          etotSec: isFinite(etotS) ? etotS : undefined,
         };
-        if (isFinite(aldt)) f.eldtMin = aldt / 60;
-        if (isFinite(aibt)) f.eibtMin = aibt / 60;
-        if (isFinite(aobt)) f.eobtMin = aobt / 60;
-        if (isFinite(atot)) f.etotMin = atot / 60;
-      });
-    }
+      } else {
+        delete f.timeline_meta;
+      }
+      applyAirsideScheduleRowToFlight(f, srec);
+    });
     state.hasSimulationResult = mergedTimelines > 0;
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
@@ -4835,13 +4883,13 @@
       return true;
     });
   }
-  /** Runway-exit (RET) sampling + runway-only ROT physics for Arrival Configuration / schedule RET column. No taxi graph / Dijkstra. */
+  /** Runway-exit (RET) sampling for Arrival Configuration / schedule RET column. ROT(arr) seconds come from Pro Sim schedule (``ARR_ROT_SEC``), not from this function. */
   function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {
     if (!f) return;
     const rev = state.vttArrCacheRev | 0;
     if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
     if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
-        f.sampledArrRet != null && f.arrRetFailed === false && f.arrRotSec != null && isFinite(f.arrRotSec) &&
+        f.sampledArrRet != null && f.arrRetFailed === false &&
         isValidSampledArrRetForFlight(f, retStatsAll)) {
       f.__schedRetRotRev = rev;
       return;
@@ -4849,7 +4897,6 @@
     if (f.sampledArrRet != null && !isValidSampledArrRetForFlight(f, retStatsAll)) {
       f.sampledArrRet = null;
       f.arrRetFailed = false;
-      f.arrRotSec = null;
       f.arrDecelMs2 = null;
     }
     const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
@@ -4899,15 +4946,9 @@
       const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
       const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
       const vAtChosen = rtRunway.vAtRet;
-      const tToRetEntrance = rtRunway.tSec;
       const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
         ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
         : 15;
-      let tExit = 0;
-      if (vAtChosen > minExitVel) {
-        tExit = (vAtChosen - minExitVel) / aDecRot;
-      }
-      f.arrRotSec = tToRetEntrance + tExit;
       f.arrRunwayIdUsed = arrRunwayId;
       f.arrTdDistM = dTd;
       f.arrRetDistM = chosen.distM;
@@ -4918,7 +4959,6 @@
     } else {
       f.sampledArrRet = null;
       f.arrRetFailed = true;
-      f.arrRotSec = null;
       f.arrDecelMs2 = null;
     }
     f.__schedRetRotRev = rev;
