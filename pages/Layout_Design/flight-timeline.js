@@ -734,24 +734,39 @@
       return { x: a.x, y: a.y, dx: 1, dy: 0 };
     }
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
-    const chordEps2 = 1e-12;
+    const motionChordEps = 0.08;
+    const motionChordEps2 = motionChordEps * motionChordEps;
     function segmentUnitDir(segIdx) {
       if (segIdx < 0 || segIdx > tl.length - 2) return null;
       const p = tl[segIdx], q = tl[segIdx + 1];
       const ddx = q.x - p.x, ddy = q.y - p.y;
       const l2 = ddx * ddx + ddy * ddy;
-      if (l2 < chordEps2) return null;
+      if (l2 < motionChordEps2) return null;
       const inv = 1 / Math.sqrt(l2);
       return { dx: ddx * inv, dy: ddy * inv };
+    }
+    function lastMotionUnitDirBefore(i) {
+      for (let j = i - 1; j >= 0; j--) {
+        const u = segmentUnitDir(j);
+        if (u) return u;
+      }
+      return null;
+    }
+    function firstMotionUnitDirFrom(startSeg) {
+      for (let j = startSeg; j <= tl.length - 2; j++) {
+        const u = segmentUnitDir(j);
+        if (u) return u;
+      }
+      return null;
     }
     function headingForInterval(i) {
       const a = tl[i], b = tl[i + 1];
       const dx = b.x - a.x, dy = b.y - a.y;
       const l2 = dx * dx + dy * dy;
-      if (l2 >= chordEps2) return { dx: dx, dy: dy };
-      const prev = segmentUnitDir(i - 1);
+      if (l2 >= motionChordEps2) return { dx: dx, dy: dy };
+      const prev = lastMotionUnitDirBefore(i);
       if (prev) return { dx: prev.dx, dy: prev.dy };
-      const next = segmentUnitDir(i + 1);
+      const next = firstMotionUnitDirFrom(i + 1);
       if (next) return { dx: next.dx, dy: next.dy };
       return { dx: 1, dy: 0 };
     }
