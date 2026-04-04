@@ -153,14 +153,17 @@
     ctx.restore();
   }
 
-  const PRO_SIM_PHASE_Z = { Landing: 0, Arr_taxi: 1, Dep_taxi: 2 };
+  const PRO_SIM_PHASE_Z = { Landing: 0, Arr_taxi: 1, Dep_taxi: 2, Holding_lineup: 3, Lineup_departure: 4 };
   function proSimPhaseStrokeStyle(phaseRaw) {
     const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : 'Landing';
     if (p === 'Arr_taxi') {
       return { wMul: 1.72, stroke: '#3b82f6' };
     }
-    if (p === 'Dep_taxi') {
+    if (p === 'Dep_taxi' || p === 'Holding_lineup') {
       return { wMul: 0.58, stroke: '#ef4444' };
+    }
+    if (p === 'Lineup_departure') {
+      return { wMul: 0.45, stroke: '#f97316' };
     }
     return { wMul: 1.72, stroke: '#22c55e' };
   }

@@ -9768,6 +9768,20 @@
             }
           });
         }
+        if (obj.pathType === 'runway_exit') {
+          const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+          const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
+          (state.holdingPoints || []).forEach(function(hp) {
+            if (!hp) return;
+            const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
+            if (k !== 'runway_holding') return;
+            if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
+            const pr = projectOnSegment(a, b, [hp.x, hp.y]);
+            if (pr.t >= 0 && pr.t <= 1 && dist2(pr.p, [hp.x, hp.y]) <= hpTolD2) {
+              junctions.push({ tAlong: seg + pr.t, p: pr.p });
+            }
+          });
+        }
       }
       if (obj.pathType === 'runway') {
         const ldm = getEffectiveRunwayLineupDistM(obj);
@@ -10400,14 +10414,17 @@
     ctx.restore();
   }
 
-  const PRO_SIM_PHASE_Z = { Landing: 0, Arr_taxi: 1, Dep_taxi: 2 };
+  const PRO_SIM_PHASE_Z = { Landing: 0, Arr_taxi: 1, Dep_taxi: 2, Holding_lineup: 3, Lineup_departure: 4 };
   function proSimPhaseStrokeStyle(phaseRaw) {
     const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : 'Landing';
     if (p === 'Arr_taxi') {
       return { wMul: 1.72, stroke: '#3b82f6' };
     }
-    if (p === 'Dep_taxi') {
+    if (p === 'Dep_taxi' || p === 'Holding_lineup') {
       return { wMul: 0.58, stroke: '#ef4444' };
+    }
+    if (p === 'Lineup_departure') {
+      return { wMul: 0.45, stroke: '#f97316' };
     }
     return { wMul: 1.72, stroke: '#22c55e' };
   }

@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from utils.designer_path_graph import (
     DirectedEdgeRecord,
     PathGraph,
+    SPLIT_TOL_D2,
     _stand_end_node_index,
     _vertex_to_px,
     build_path_graph,
@@ -55,7 +56,17 @@ Point = Tuple[float, float]
 PHASE_LANDING = "Landing"
 PHASE_ARR_TAXI = "Arr_taxi"
 PHASE_DEP_TAXI = "Dep_taxi"
-_EXTRACT_LEG_PHASES: Tuple[str, str, str] = (PHASE_LANDING, PHASE_ARR_TAXI, PHASE_DEP_TAXI)
+PHASE_HOLDING_LINEUP = "Holding_lineup"
+PHASE_LINEUP_DEPARTURE = "Lineup_departure"
+
+
+_EXTRACT_LEG_PHASES: Tuple[str, ...] = (
+    PHASE_LANDING,
+    PHASE_ARR_TAXI,
+    PHASE_DEP_TAXI,
+    PHASE_HOLDING_LINEUP,
+    PHASE_LINEUP_DEPARTURE,
+)
 SIM_MAX_TIME_SEC = 200_000.0
 
 _LOG = logging.getLogger(__name__)
@@ -101,7 +112,7 @@ def _flight_rw_dir_for_leg(flight: Dict[str, Any], leg_index: int) -> str:
     Operations direction matching Layout_Design path graph export:
     ``simPathGraph.clockwise`` vs ``simPathGraph.counter_clockwise``.
 
-    Legs 0–1 use arrival runway direction; leg 2 uses departure when present, else arrival.
+    Legs 0–1 use arrival runway direction; legs 2+ use departure when present, else arrival.
     Reads ``arrRunwayDirUsed`` / ``arrRunwayDir``, ``depRunwayDirUsed`` / ``depRunwayDir``, and token.
     """
     token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
@@ -397,6 +408,8 @@ class Flight:
     dep_taxi_start_abs_sec: Optional[float] = None
     arr_runway_id: Optional[str] = None
     arr_runway_dir: Optional[str] = None
+    dep_runway_id: Optional[str] = None
+    lineup_hold_release_abs_sec: Optional[float] = None
     exit_runway_abs_sec: Optional[float] = None
     # 터치다운(eldt)부터 Landing 마이크로 구간 종료까지 시초(내부 간격·활주로 시간 점유).
     runway_rot_sec: float = 0.0
@@ -947,22 +960,332 @@ def _arr_touchdown_point_xy(
     return out if out is not None else (float(coords[0][0]), float(coords[0][1]))
 
 
+def _lineup_clearance_hold_sec(information: Dict[str, Any]) -> float:
+    v = _deep_get(information, "tiers", "algorithm", "simulation", "lineupClearanceHoldSec")
+    if v is not None:
+        try:
+            x = float(v)
+            if math.isfinite(x) and x >= 0:
+                return x
+        except (TypeError, ValueError):
+            pass
+    return 20.0
+
+
+def _dep_takeoff_accel_ms2(information: Dict[str, Any]) -> float:
+    v = _deep_get(information, "tiers", "algorithm", "simulation", "depTakeoffAccelMs2")
+    if v is not None:
+        try:
+            x = float(v)
+            if math.isfinite(x) and x > 0:
+                return x
+        except (TypeError, ValueError):
+            pass
+    return 2.0
+
+
+def _holding_point_kind_runway_holding(hp: Dict[str, Any]) -> bool:
+    k = hp.get("hpKind")
+    return str(k).strip() == "runway_holding"
+
+
+def _holding_point_xy_px(hp: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    if not isinstance(hp, dict):
+        return None
+    try:
+        x, y = float(hp.get("x")), float(hp.get("y"))
+    except (TypeError, ValueError):
+        return None
+    if math.isfinite(x) and math.isfinite(y):
+        return (x, y)
+    return None
+
+
+def _polyline_touches_polyline_for_graph(
+    a: List[Tuple[float, float]], b: List[Tuple[float, float]]
+) -> bool:
+    touch_d2 = max(float(SPLIT_TOL_D2), 4.0)
+    for i in range(len(a) - 1):
+        for j in range(len(b) - 1):
+            ip = segment_segment_intersection(a[i], a[i + 1], b[j], b[j + 1])
+            if ip is not None:
+                return True
+    for i in range(len(a) - 1):
+        for vb in b:
+            if (
+                _point_segment_distance_sq(vb[0], vb[1], a[i][0], a[i][1], a[i + 1][0], a[i + 1][1])
+                <= touch_d2
+            ):
+                return True
+    for j in range(len(b) - 1):
+        for va in a:
+            if (
+                _point_segment_distance_sq(va[0], va[1], b[j][0], b[j][1], b[j + 1][0], b[j + 1][1])
+                <= touch_d2
+            ):
+                return True
+    return False
+
+
+def _point_near_polyline_sq(
+    px: float, py: float, verts: List[Tuple[float, float]], tol_d2: float
+) -> bool:
+    if len(verts) < 2:
+        return False
+    for i in range(len(verts) - 1):
+        if _point_segment_distance_sq(px, py, verts[i][0], verts[i][1], verts[i + 1][0], verts[i + 1][1]) <= tol_d2:
+            return True
+    return False
+
+
+def _layout_runway_object_for_lineup_expansion(
+    layout: Dict[str, Any], runway_id: str
+) -> Optional[Dict[str, Any]]:
+    """Runway centerline source: ``taxiways`` entry with ``pathType`` runway, else ``runwayPaths``."""
+    rid = str(runway_id).strip()
+    for tw in layout.get("taxiways") or []:
+        if isinstance(tw, dict) and str(tw.get("id", "")) == rid and tw.get("pathType") == "runway":
+            return tw
+    for rw in layout.get("runwayPaths") or []:
+        if isinstance(rw, dict) and str(rw.get("id", "")) == rid:
+            return rw
+    return None
+
+
+def _iter_layout_rtx_objects(layout: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Runway taxiway polylines: ``taxiways`` with ``runway_exit`` / ``runway_taxiway``, then ``runwayTaxiways`` (dedup by id)."""
+    seen: set[str] = set()
+    out: List[Dict[str, Any]] = []
+    for tx in layout.get("taxiways") or []:
+        if not isinstance(tx, dict):
+            continue
+        pt = str(tx.get("pathType") or "").strip()
+        if pt not in ("runway_exit", "runway_taxiway"):
+            continue
+        tid = str(tx.get("id", "")).strip()
+        if tid and tid not in seen:
+            seen.add(tid)
+            out.append(tx)
+    for tx in layout.get("runwayTaxiways") or []:
+        if not isinstance(tx, dict):
+            continue
+        tid = str(tx.get("id", "")).strip()
+        if tid and tid not in seen:
+            seen.add(tid)
+            out.append(tx)
+    return out
+
+
+def _list_rtx_touching_lineup_on_runway(
+    layout: Dict[str, Any],
+    cell_size: float,
+    runway_tw: Dict[str, Any],
+    lineup_pt: Tuple[float, float],
+) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    rw_pts_raw = get_ordered_points(runway_tw, layout, cell_size)
+    rw_pts = _as_xy_pairs(rw_pts_raw or [])
+    if len(rw_pts) < 2:
+        return out
+    cs = max(float(cell_size), 1e-9)
+    touch_d2 = max(float(SPLIT_TOL_D2), (cs * 0.2) ** 2)
+    lx, ly = float(lineup_pt[0]), float(lineup_pt[1])
+    for tx in _iter_layout_rtx_objects(layout):
+        rtx_raw = get_ordered_points(tx, layout, cell_size)
+        rtx = _as_xy_pairs(rtx_raw or [])
+        if len(rtx) < 2:
+            continue
+        if not _polyline_touches_polyline_for_graph(rtx, rw_pts) and not _polyline_touches_polyline_for_graph(
+            rw_pts, rtx
+        ):
+            continue
+        if _point_near_polyline_sq(lx, ly, rtx, touch_d2):
+            out.append(tx)
+    return out
+
+
+def _rtx_polylines_touch(
+    layout: Dict[str, Any], cell_size: float, rtx_a: Dict[str, Any], rtx_b: Dict[str, Any]
+) -> bool:
+    pa = _as_xy_pairs(get_ordered_points(rtx_a, layout, cell_size) or [])
+    pb = _as_xy_pairs(get_ordered_points(rtx_b, layout, cell_size) or [])
+    if len(pa) < 2 or len(pb) < 2:
+        return False
+    return _polyline_touches_polyline_for_graph(pa, pb) or _polyline_touches_polyline_for_graph(pb, pa)
+
+
+def _expand_rtx_candidate_ids_touching_lineup(
+    layout: Dict[str, Any],
+    cell_size: float,
+    runway_tw: Optional[Dict[str, Any]],
+    lineup_pt: Tuple[float, float],
+) -> set[str]:
+    ids: set[str] = set()
+    if runway_tw is None:
+        return ids
+    hop1 = _list_rtx_touching_lineup_on_runway(layout, cell_size, runway_tw, lineup_pt)
+    for tx in hop1:
+        if isinstance(tx, dict) and tx.get("id") is not None:
+            ids.add(str(tx["id"]))
+    rtx_list = _iter_layout_rtx_objects(layout)
+    for a in hop1:
+        for b in rtx_list:
+            if b.get("id") == a.get("id"):
+                continue
+            bid = str(b.get("id", ""))
+            if bid in ids:
+                continue
+            if _rtx_polylines_touch(layout, cell_size, a, b):
+                ids.add(bid)
+    return ids
+
+
+def _runway_holding_near_rtx_candidate_set(
+    layout: Dict[str, Any],
+    cell_size: float,
+    hp: Dict[str, Any],
+    cand_ids: set[str],
+) -> bool:
+    p = _holding_point_xy_px(hp)
+    if p is None or not _holding_point_kind_runway_holding(hp):
+        return False
+    cs = max(float(cell_size), 1e-9)
+    tol_d2 = max(float(SPLIT_TOL_D2), (cs * 0.35) ** 2)
+    px, py = p[0], p[1]
+    for tx in _iter_layout_rtx_objects(layout):
+        tid = str(tx.get("id", ""))
+        if tid not in cand_ids:
+            continue
+        rtx = _as_xy_pairs(get_ordered_points(tx, layout, cell_size) or [])
+        if len(rtx) >= 2 and _point_near_polyline_sq(px, py, rtx, tol_d2):
+            return True
+    return False
+
+
+def _cumulative_dist_along_polyline_to_point(
+    pts: List[Tuple[float, float]], q: Tuple[float, float]
+) -> Optional[Tuple[float, Tuple[float, float]]]:
+    if len(pts) < 2:
+        return None
+    best_d2 = float("inf")
+    best_cum = 0.0
+    best_proj = (float(q[0]), float(q[1]))
+    acc = 0.0
+    for i in range(len(pts) - 1):
+        p1, p2 = pts[i], pts[i + 1]
+        seg_len = path_dist(p1, p2)
+        if seg_len < 1e-9:
+            continue
+        _t, proj = project_on_segment(p1, p2, q)
+        t = max(0.0, min(1.0, float(_t)))
+        d2 = (q[0] - proj[0]) ** 2 + (q[1] - proj[1]) ** 2
+        cand_cum = acc + t * seg_len
+        if d2 < best_d2:
+            best_d2 = d2
+            best_cum = cand_cum
+            best_proj = (float(proj[0]), float(proj[1]))
+        acc += seg_len
+    return (best_cum, best_proj)
+
+
+def _find_last_runway_holding_on_departure_path(
+    layout: Dict[str, Any],
+    cell_size: float,
+    to_lineup_pts: List[Tuple[float, float]],
+    cand_ids: set[str],
+) -> Optional[Tuple[Dict[str, Any], float, Tuple[float, float]]]:
+    if len(to_lineup_pts) < 2 or not cand_ids:
+        return None
+    hps = layout.get("holdingPoints") or []
+    best: Optional[Tuple[Dict[str, Any], float, Tuple[float, float]]] = None
+    cs = max(float(cell_size), 1e-9)
+    tol_line_d2 = max(float(SPLIT_TOL_D2), (cs * 0.45) ** 2)
+    for hp in hps:
+        if not isinstance(hp, dict):
+            continue
+        if not _holding_point_kind_runway_holding(hp):
+            continue
+        if not _runway_holding_near_rtx_candidate_set(layout, cell_size, hp, cand_ids):
+            continue
+        p = _holding_point_xy_px(hp)
+        if p is None:
+            continue
+        if not _point_near_polyline_sq(p[0], p[1], to_lineup_pts, tol_line_d2):
+            continue
+        cum = _cumulative_dist_along_polyline_to_point(to_lineup_pts, p)
+        if cum is None:
+            continue
+        dist_along, proj = cum[0], cum[1]
+        if dist_along <= 1e-3:
+            continue
+        if best is None or dist_along > best[1]:
+            best = (hp, float(dist_along), proj)
+    if best is None:
+        return None
+    return best
+
+
+def _world_xy_chain_from_graph_path(
+    g: PathGraph,
+    path: List[int],
+    pair_index: Dict[Tuple[int, int], str],
+) -> List[Tuple[float, float]]:
+    del pair_index
+    if len(path) < 2:
+        return []
+    chain: List[Tuple[float, float]] = []
+    n_nodes = len(g.nodes)
+    for i in range(len(path) - 1):
+        u, v = path[i], path[i + 1]
+        rec = g.edge_map.get(f"{u}:{v}")
+        if rec is None:
+            return []
+        if len(rec.pts) >= 2:
+            for j in range(len(rec.pts)):
+                pj = rec.pts[j]
+                p = (float(pj[0]), float(pj[1]))
+                if not chain or (chain[-1][0] - p[0]) ** 2 + (chain[-1][1] - p[1]) ** 2 > 1e-12:
+                    chain.append(p)
+        else:
+            if u < 0 or u >= n_nodes or v < 0 or v >= n_nodes:
+                return []
+            pu = (float(g.nodes[u][0]), float(g.nodes[u][1]))
+            pv = (float(g.nodes[v][0]), float(g.nodes[v][1]))
+            if not chain:
+                chain.append(pu)
+            if (pu[0] - pv[0]) ** 2 + (pu[1] - pv[1]) ** 2 > 1e-12:
+                chain.append(pv)
+    return chain
+
+
+def _dep_runway_far_end_xy(
+    layout: Dict[str, Any],
+    cell_size: float,
+    dep_rwy_id: str,
+    dep_ops_dir: str,
+) -> Optional[Tuple[float, float]]:
+    coords = _runway_polyline_coords_px(layout, cell_size, str(dep_rwy_id))
+    if not coords or len(coords) < 2:
+        return None
+    rd = normalize_rw_direction_value(str(dep_ops_dir).strip() if dep_ops_dir else _DEFAULT_RW_DIR)
+    if rd == "counter_clockwise":
+        coords = list(reversed(coords))
+    last = coords[-1]
+    return (float(last[0]), float(last[1]))
+
+
 def extract_point_to_paths(
     flight: Dict[str, Any],
     layout: Dict[str, Any],
     cell_size: float,
+    *,
+    information: Optional[Dict[str, Any]] = None,
 ) -> List[List[float]]:
     """
-    Token pixels as path legs for combined arrival + departure:
-    runway threshold → Arr RET on runway → apron → lineup.
+    Token pixels as path legs: threshold → RET → apron → runway holding (RTX·lineup) → lineup → rwy end.
 
-    Leg semantics (for phase tagging downstream): leg 0 = ``Landing``, leg 1 = ``Arr_taxi``,
-    leg 2 = ``Dep_taxi``.
-
-    Leg 0 uses the runway **start Point** (threshold) to the RET junction so graph routing keeps all
-    runway edges. Playback starts at the touchdown pixel (``arrTdDistM``); see
-    ``_split_flight_path_at_touchdown`` in ``run_simulation``.
-    Each leg is ``[start_x, start_y, end_x, end_y]``. Returns ``[]`` if required ids or anchors are missing.
+    Leg phases: ``Landing``, ``Arr_taxi``, ``Dep_taxi``, ``Holding_lineup``, ``Lineup_departure``.
+    Requires a ``runway_holding`` on the apron→lineup route near lineup-connected RET; else ``[]``.
     """
     token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
     arr_rwy = flight.get("arrRunwayId") or token.get("arrRunwayId")
@@ -1005,14 +1328,72 @@ def extract_point_to_paths(
         or dep_rw_lineup_point is None
     ):
         return []
-    wx, wy = thr_point
-    ret_x, ret_y = ret_on_rw
+
+    info = information if isinstance(information, dict) else _load_information_json()
+    reverse_cost, merge_r, taxiway_h = _path_search_params(info)
+    pair_index = _pair_index_from_layout_edge(layout)
+    if not pair_index:
+        g0 = _graph_for_direction(
+            layout,
+            cell_size,
+            _flight_rw_dir_for_leg(flight, 2),
+            reverse_cost,
+            merge_r,
+            taxiway_h,
+            info,
+            pure_ground_exclude_runway=False,
+        )
+        pair_index = _pair_index_from_path_graph(g0) if g0 else {}
+    if not pair_index:
+        return []
+
     px, py = apron_point
     lx, ly = dep_rw_lineup_point
+    _edges_apron, dv_apron, path_apron, g_apron = _flight_route_impl(
+        layout,
+        cell_size,
+        pair_index,
+        reverse_cost,
+        merge_r,
+        taxiway_h,
+        info,
+        _flight_rw_dir_for_leg(flight, 2),
+        RouteEndpoint(token_pixel_xy=(float(px), float(py))),
+        RouteEndpoint(token_pixel_xy=(float(lx), float(ly))),
+    )
+    if dv_apron or path_apron is None or g_apron is None or len(path_apron) < 2:
+        return []
+    to_lineup_pts = _world_xy_chain_from_graph_path(g_apron, path_apron, pair_index)
+    if len(to_lineup_pts) < 2:
+        return []
+
+    runway_tw = _layout_runway_object_for_lineup_expansion(layout, str(dep_rwy))
+    cand_ids = _expand_rtx_candidate_ids_touching_lineup(
+        layout, cell_size, runway_tw, (float(lx), float(ly))
+    )
+    hold_pick = _find_last_runway_holding_on_departure_path(
+        layout, cell_size, to_lineup_pts, cand_ids
+    )
+    if hold_pick is None:
+        return []
+    _hp_obj, _d_along, hp_proj = hold_pick
+    hx, hy = float(hp_proj[0]), float(hp_proj[1])
+
+    rw_end = _dep_runway_far_end_xy(
+        layout, cell_size, str(dep_rwy), _flight_rw_dir_for_leg(flight, 2)
+    )
+    if rw_end is None:
+        return []
+
+    wx, wy = thr_point
+    ret_x, ret_y = ret_on_rw
+    ex, ey = rw_end
     return [
         [float(wx), float(wy), float(ret_x), float(ret_y)],
         [float(ret_x), float(ret_y), float(px), float(py)],
-        [float(px), float(py), float(lx), float(ly)],
+        [float(px), float(py), float(hx), float(hy)],
+        [float(hx), float(hy), float(lx), float(ly)],
+        [float(lx), float(ly), float(ex), float(ey)],
     ]
 
 
@@ -1127,6 +1508,7 @@ def _annotate_segment_kinematics(
     segment_path_types: List[str],
     pixels_per_meter: float,
     flight_id: str,
+    information: Dict[str, Any],
 ) -> Tuple[List[float], List[float], List[float]]:
     """
     Parallel to micro-segments: start velocity (m/s) and constant acceleration (m/s^2) on each segment,
@@ -1191,7 +1573,7 @@ def _annotate_segment_kinematics(
                 v_cur = max(v_cur, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
             continue
 
-        if phase == PHASE_ARR_TAXI or phase == PHASE_DEP_TAXI:
+        if phase in (PHASE_ARR_TAXI, PHASE_DEP_TAXI, PHASE_HOLDING_LINEUP):
             is_ret = pt == "runway_exit" and str(link_id) == exit_tw_s
             if pt == "runway_taxiway":
                 if i == 0:
@@ -1235,6 +1617,16 @@ def _annotate_segment_kinematics(
                 v_cur = float(v_t)
             apply_floor = False
             dur_out[i] = _duration_slice_sec(v0_out[i], a_out[i], 0.0, seg_m, apply_floor)
+            continue
+
+        if phase == PHASE_LINEUP_DEPARTURE:
+            takeoff_a = _dep_takeoff_accel_ms2(information)
+            v0_out[i] = float(v_cur)
+            a_out[i] = abs(float(takeoff_a))
+            dur_out[i] = _duration_slice_sec(v0_out[i], a_out[i], 0.0, seg_m, False)
+            v_cur = float(
+                _velocity_ms_at_distance_on_segment(v0_out[i], a_out[i], seg_m, False)
+            )
             continue
 
         raise ValueError(f"unknown phase {phase!r} for kinematics (flight_id={flight_id!r})")
@@ -1506,7 +1898,7 @@ def prepare_flight_path(
     ``token_pixel_xy`` 끝점만으로 ``flight_route``, 역주행 패널티 구간이면 전체 ``edge_list`` 비움.
     재생용 세그먼트는 각 레그의 노드 경로를 ``_expand_geometry_from_graph_path``로 확장한다.
     """
-    paths = extract_point_to_paths(flight, layout, cell_size)
+    paths = extract_point_to_paths(flight, layout, cell_size, information=information)
     if not paths:
         return PreparedFlightPath()
     pair_index = _pair_index_from_layout_edge(layout)
@@ -1619,6 +2011,7 @@ def prepare_flight_path(
                 segment_path_types,
                 ppm,
                 fid,
+                information,
             )
         except ValueError:
             return PreparedFlightPath(
@@ -1679,7 +2072,8 @@ def _snap_agent_to_first_segment(agent: Flight) -> None:
     agent.edge_s_along_px = float(t) * seg_len_px
 
 
-def _finish_edge_segment(agent: Flight) -> None:
+def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None) -> None:
+    old_ph = str(agent.edge_phases[0]) if agent.edge_phases else ""
     eid = agent.edge_ids.pop(0)
     ph = agent.edge_phases.pop(0)
     v0 = float(agent.segment_v0_ms.pop(0))
@@ -1695,6 +2089,15 @@ def _finish_edge_segment(agent: Flight) -> None:
     agent.segment_endpoints.pop(0)
     if agent.segment_path_types:
         agent.segment_path_types.pop(0)
+    new_ph = str(agent.edge_phases[0]) if agent.edge_phases else ""
+    if (
+        sim_time_abs is not None
+        and old_ph == PHASE_HOLDING_LINEUP
+        and new_ph == PHASE_LINEUP_DEPARTURE
+    ):
+        agent.lineup_hold_release_abs_sec = float(sim_time_abs) + _lineup_clearance_hold_sec(
+            _load_information_json()
+        )
 
 
 def move_agent(
@@ -1754,6 +2157,15 @@ def move_agent(
     if agent.control_halt:
         agent.velocity_ms = 0.0
         return
+    if (
+        sim_time_abs is not None
+        and agent.lineup_hold_release_abs_sec is not None
+        and agent.edge_phases
+        and agent.edge_phases[0] == PHASE_LINEUP_DEPARTURE
+        and float(sim_time_abs) + 1e-9 < float(agent.lineup_hold_release_abs_sec)
+    ):
+        agent.velocity_ms = 0.0
+        return
 
     while rem_t > 1e-12 and agent.edge_ids and agent.segment_endpoints:
         p0, p1 = agent.segment_endpoints[0]
@@ -1761,7 +2173,7 @@ def move_agent(
         dy = p1[1] - p0[1]
         seg_len_px = math.hypot(dx, dy)
         if seg_len_px < 1e-9:
-            _finish_edge_segment(agent)
+            _finish_edge_segment(agent, sim_time_abs=sim_time_abs)
             agent.edge_s_along_px = 0.0
             agent.col, agent.row = p1[0], p1[1]
             continue
@@ -1781,7 +2193,7 @@ def move_agent(
         s_m = agent.edge_s_along_px / ppm
         room_m = seg_len_m - s_m
         if room_m <= 1e-9:
-            _finish_edge_segment(agent)
+            _finish_edge_segment(agent, sim_time_abs=sim_time_abs)
             agent.edge_s_along_px = 0.0
             agent.col, agent.row = p1[0], p1[1]
             continue
@@ -1807,7 +2219,7 @@ def move_agent(
         agent.row = p0[1] + t_along * dy
         rem_t -= dt_used
         if s_new_m >= seg_len_m - 1e-9:
-            _finish_edge_segment(agent)
+            _finish_edge_segment(agent, sim_time_abs=sim_time_abs)
             agent.edge_s_along_px = 0.0
             agent.col, agent.row = p1[0], p1[1]
 
@@ -2026,23 +2438,26 @@ def _taxi_in_out_sec_from_prep(
     phs = prep.segment_phases
     v0s = prep.segment_start_velocity_ms
     accs = prep.segment_accel_ms2
+    counts = prep.leg_micro_counts
     if (
         not durs
         or len(durs) != len(segs)
-        or len(prep.leg_micro_counts) < 3
+        or len(counts) < 5
         or len(v0s) != len(segs)
         or len(accs) != len(segs)
         or len(phs) != len(segs)
     ):
         return None, None
-    c0, c1, c2 = (
-        int(prep.leg_micro_counts[0]),
-        int(prep.leg_micro_counts[1]),
-        int(prep.leg_micro_counts[2]),
+    c0, c1, c2, c3, c4 = (
+        int(counts[0]),
+        int(counts[1]),
+        int(counts[2]),
+        int(counts[3]),
+        int(counts[4]),
     )
     c01 = c0 + c1
-    c012 = c01 + c2
-    if c012 != len(segs):
+    c01234 = c01 + c2 + c3 + c4
+    if c01234 != len(segs):
         return None, None
     gi = max(0, int(prep.playback_first_segment_index))
     along0_px = float(prep.spawn_along_first_segment_px or 0.0)
@@ -2082,11 +2497,34 @@ def _taxi_in_out_sec_from_prep(
         taxi_in += dur_from_playback_start(g)
 
     taxi_out = 0.0
-    for g in range(c01, c012):
+    for g in range(c01, c01234):
         if g < 0 or g >= len(segs):
             continue
         taxi_out += dur_full(g)
     return taxi_in, taxi_out
+
+
+def _departure_leg_durations_sec_for_schedule(
+    prep: PreparedFlightPath,
+) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    """Sums of segment_duration_sec for legs 2,3,4 (Dep_taxi, Holding_lineup, Lineup_departure)."""
+    if not prep.ok:
+        return None, None, None
+    durs = prep.segment_duration_sec
+    counts = prep.leg_micro_counts
+    if not durs or len(counts) < 5 or sum(int(c) for c in counts) != len(durs):
+        return None, None, None
+    c0, c1, c2, c3, c4 = (int(counts[0]), int(counts[1]), int(counts[2]), int(counts[3]), int(counts[4]))
+    i2 = c0 + c1
+    i3 = i2 + c2
+    i4 = i3 + c3
+    end = i4 + c4
+    if end != len(durs):
+        return None, None, None
+    t2 = sum(float(durs[g]) for g in range(i2, i3))
+    t3 = sum(float(durs[g]) for g in range(i3, i4))
+    t4 = sum(float(durs[g]) for g in range(i4, end))
+    return t2, t3, t4
 
 
 def _arr_rot_sec_from_prep(
@@ -2284,6 +2722,7 @@ def _build_schedule_row(
     exit_runway_abs_sec: Optional[float] = None,
     eldt_schedule_sec: Optional[int] = None,
     actual_eibt_abs_sec: Optional[float] = None,
+    information: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     S series from ``*_Min_orig``; Sd echo from ``*_Min_d``; E series from path timing + dwell.
@@ -2313,8 +2752,19 @@ def _build_schedule_row(
     if ti is not None and to_out is not None:
         taxi_in_sec, taxi_out_sec = ti, to_out
 
+    info = information if isinstance(information, dict) else _load_information_json()
+    lineup_hold = _lineup_clearance_hold_sec(info)
+    t_dep2: Optional[float] = None
+    t_dep3: Optional[float] = None
+    t_dep4: Optional[float] = None
+    d2, d3, d4 = _departure_leg_durations_sec_for_schedule(prep)
+    if d2 is not None and d3 is not None and d4 is not None:
+        t_dep2, t_dep3, t_dep4 = d2, d3, d4
+
     eibt_sec: Optional[float] = None
     eobt_sec: Optional[float] = None
+    e_hold_sec: Optional[float] = None
+    e_lineup_sec: Optional[float] = None
     etot_sec: Optional[float] = None
     if actual_eibt_abs_sec is not None:
         eibt_sec = float(actual_eibt_abs_sec)
@@ -2322,8 +2772,12 @@ def _build_schedule_row(
         eibt_sec = float(eldt_sec) + float(taxi_in_sec)
     if eibt_sec is not None:
         eobt_sec = float(eibt_sec) + float(dwell_sec)
-    if eobt_sec is not None and taxi_out_sec is not None:
-        etot_sec = float(eobt_sec) + float(taxi_out_sec)
+    if eobt_sec is not None and t_dep2 is not None:
+        e_hold_sec = float(eobt_sec) + float(t_dep2)
+    if e_hold_sec is not None and t_dep3 is not None:
+        e_lineup_sec = float(e_hold_sec) + float(t_dep3) + float(lineup_hold)
+    if e_lineup_sec is not None and t_dep4 is not None:
+        etot_sec = float(e_lineup_sec) + float(t_dep4)
 
     def _sf(x: Optional[int]) -> Optional[float]:
         return float(x) if x is not None else None
@@ -2363,6 +2817,10 @@ def _build_schedule_row(
         "EIBT_dt": _sec_to_datetime_str(eibt_sec, base_date),
         "EOBT": _sim_sec_optional(eobt_sec) if eobt_sec is not None else None,
         "EOBT_dt": _sec_to_datetime_str(eobt_sec, base_date),
+        "E_HOLD": _sim_sec_optional(e_hold_sec) if e_hold_sec is not None else None,
+        "E_HOLD_dt": _sec_to_datetime_str(e_hold_sec, base_date),
+        "E_LINEUP": _sim_sec_optional(e_lineup_sec) if e_lineup_sec is not None else None,
+        "E_LINEUP_dt": _sec_to_datetime_str(e_lineup_sec, base_date),
         "ETOT": _sim_sec_optional(etot_sec) if etot_sec is not None else None,
         "ETOT_dt": _sec_to_datetime_str(etot_sec, base_date),
     }
@@ -2554,6 +3012,21 @@ def refresh_resource_occupancy(
             rr = control_state.runway_resources.get(str(er.runway_id))
             if rr and ag.id not in rr.occupied_by:
                 rr.occupied_by.append(ag.id)
+        dep_rw = str(ag.dep_runway_id or "").strip()
+        ph0 = str(ag.edge_phases[0]) if ag.edge_phases else ""
+        pt0 = (
+            str(ag.segment_path_types[0] or "")
+            if ag.segment_path_types and len(ag.segment_path_types) == len(ag.edge_ids)
+            else ""
+        )
+        if (
+            dep_rw
+            and ph0 in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE)
+            and pt0 in ("runway", "runway_taxiway")
+        ):
+            rr_d = control_state.runway_resources.get(dep_rw)
+            if rr_d and ag.id not in rr_d.occupied_by:
+                rr_d.occupied_by.append(ag.id)
         if not g or not er or not ag.segment_endpoints:
             continue
         pxy = (float(ag.col), float(ag.row))
@@ -2587,9 +3060,15 @@ def get_agent_priority_rank(agent: Flight) -> int:
         return 1
     if ph == PHASE_DEP_TAXI and pt in ("runway", "runway_taxiway"):
         return 2
+    if ph == PHASE_HOLDING_LINEUP and pt in ("runway", "runway_taxiway"):
+        return 2
+    if ph == PHASE_LINEUP_DEPARTURE:
+        return 2
     if ph == PHASE_ARR_TAXI:
         return 3
     if ph == PHASE_DEP_TAXI:
+        return 4
+    if ph == PHASE_HOLDING_LINEUP:
         return 4
     return 5
 
@@ -2753,6 +3232,26 @@ def can_reserve_path(
             return False, f"unknown_edge:{eid}"
         if er.forced_open:
             continue
+        ph0 = str(agent.edge_phases[0]) if agent.edge_phases else ""
+        pt0 = (
+            str(agent.segment_path_types[0] or "")
+            if agent.segment_path_types and len(agent.segment_path_types) == len(agent.edge_ids)
+            else ""
+        )
+        dep_rwy = str(agent.dep_runway_id or "").strip()
+        if (
+            idx == 0
+            and dep_rwy
+            and ph0 == PHASE_HOLDING_LINEUP
+            and pt0 in ("runway", "runway_taxiway")
+        ):
+            rr_dep = control_state.runway_resources.get(dep_rwy)
+            if rr_dep is not None and not rr_dep.forced_open:
+                if _runway_rot_reservation_blocked(t_abs, dep_rwy, aid, agents):
+                    return False, f"runway_rot_busy:{dep_rwy}"
+                ou_d = _resource_use_count(rr_dep.occupied_by, rr_dep.reserved_by, aid)
+                if ou_d >= max(1, int(rr_dep.capacity)):
+                    return False, f"runway_dep_busy:{dep_rwy}"
         if er.runway_id:
             rwid = str(er.runway_id)
             rr = control_state.runway_resources.get(rwid)
@@ -3096,6 +3595,12 @@ def _leg_index_for_phase(phase: str) -> int:
         return 0
     if phase == PHASE_ARR_TAXI:
         return 1
+    if phase == PHASE_DEP_TAXI:
+        return 2
+    if phase == PHASE_HOLDING_LINEUP:
+        return 3
+    if phase == PHASE_LINEUP_DEPARTURE:
+        return 4
     return 2
 
 
@@ -3104,9 +3609,11 @@ def _reroute_leg_destination_xy(
     layout: Dict[str, Any],
     cell_size: float,
     phase: str,
+    information: Optional[Dict[str, Any]] = None,
 ) -> Optional[Tuple[float, float]]:
-    paths = extract_point_to_paths(flight, layout, cell_size)
-    if not paths:
+    info = information if isinstance(information, dict) else _load_information_json()
+    paths = extract_point_to_paths(flight, layout, cell_size, information=info)
+    if not paths or len(paths) < 5:
         return None
     if phase == PHASE_LANDING and paths[0] and len(paths[0]) >= 4:
         return (float(paths[0][2]), float(paths[0][3]))
@@ -3114,6 +3621,10 @@ def _reroute_leg_destination_xy(
         return (float(paths[1][2]), float(paths[1][3]))
     if phase == PHASE_DEP_TAXI and len(paths) > 2 and len(paths[2]) >= 4:
         return (float(paths[2][2]), float(paths[2][3]))
+    if phase == PHASE_HOLDING_LINEUP and len(paths) > 3 and len(paths[3]) >= 4:
+        return (float(paths[3][2]), float(paths[3][3]))
+    if phase == PHASE_LINEUP_DEPARTURE and len(paths) > 4 and len(paths[4]) >= 4:
+        return (float(paths[4][2]), float(paths[4][3]))
     return None
 
 
@@ -3285,6 +3796,7 @@ def build_reroute_path_from_xy(
             ptyps,
             ppm,
             fid,
+            information,
         )
     except ValueError:
         return None
@@ -3436,7 +3948,7 @@ def _try_reroute_agent_off_path_block(
     if not aggressive and int(st.reroute_attempts) >= int(REROUTE_MAX_ATTEMPTS):
         return False
     phase = str(agent.edge_phases[0])
-    dest = _reroute_leg_destination_xy(flight, layout, cell_size, phase)
+    dest = _reroute_leg_destination_xy(flight, layout, cell_size, phase, information=information)
     if dest is None:
         return False
     la = get_lookahead_edges(agent, control_state.lookahead_edges)
@@ -3981,6 +4493,8 @@ def run_simulation(
                 float(ti_hold) + float(dwell_s) if ti_hold is not None else None
             )
             _arr_rid = str(arr_rwy_o).strip() if arr_rwy_o else ""
+            dep_rwy_o = fobj.get("depRunwayId") or token_o.get("depRunwayId")
+            _dep_rid = str(dep_rwy_o).strip() if dep_rwy_o else ""
             ag_new = Flight(
                 id=fid,
                 edge_ids=list(eids),
@@ -4007,6 +4521,7 @@ def run_simulation(
                 arr_runway_dir=_flight_rw_dir_for_leg(fobj if isinstance(fobj, dict) else {}, 0)
                 if _arr_rid
                 else None,
+                dep_runway_id=_dep_rid if _dep_rid else None,
                 runway_rot_sec=rot_sec,
             )
             if v0_rem and acc_rem and eph:
@@ -4160,6 +4675,7 @@ def run_simulation(
             base_date,
             eldt_schedule_sec=eldt_adjust_map.get(fid),
             actual_eibt_abs_sec=(ag.actual_eibt_abs_sec if ag else None),
+            information=information,
         )
         eibt_raw = sched_row.get("EIBT")
         eobt_raw = sched_row.get("EOBT")
@@ -4200,6 +4716,7 @@ def run_simulation(
                 exit_runway_abs_sec=(ag.exit_runway_abs_sec if ag else None),
                 eldt_schedule_sec=eldt_adjust_map.get(str(fid)),
                 actual_eibt_abs_sec=(ag.actual_eibt_abs_sec if ag else None),
+                information=information,
             )
         )
         _fin_raw = list(ag.edge_ids_finished) if ag else []

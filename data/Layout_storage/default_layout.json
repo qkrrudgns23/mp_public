@@ -5,6 +5,7 @@
     "cellSize": 10,
     "showGrid": false,
     "showImage": true,
+    "showRoadWidth": true,
     "layoutImageOverlay": {
       "name": "Airport Chart_page-0001.jpg",
       "type": "image/jpeg",
@@ -5944,7 +5945,7 @@
   "flights": [
     {
       "id": "id_qfyfxgod4",
-      "reg": "R2222",
+      "reg": "R1",
       "airlineCode": "7C",
       "flightNumber": "7C1729",
       "aircraftType": "A320",
@@ -5956,47 +5957,47 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 9.210720611585739,
+      "sldtMin_orig": 10.166666666666666,
       "sibtMin_orig": 10.166666666666666,
       "sobtMin_orig": 70.16666666666667,
       "stotMin_orig": 70.5,
-      "sldtMin_d": 9.210720611585739,
-      "sibtMin_d": 9.216666666666667,
-      "sobtMin_d": 10.166666666666666,
-      "stotMin_d": 70.16666666666667,
-      "arrTdDistM": 358.2590152333689,
-      "arrVTdMs": 59.93768175043989,
-      "arrDecelMs2": 1.4760741406215827,
+      "sldtMin_d": 7.166666666666666,
+      "sibtMin_d": 10.166666666666666,
+      "sobtMin_d": 70.16666666666667,
+      "stotMin_d": 73.16666666666667,
+      "arrTdDistM": 354.4055219628868,
+      "arrVTdMs": 62.51127982552715,
+      "arrDecelMs2": 1.4734778276990328,
       "edge_list": [
         {
           "edge_id": "layout-edge-001",
           "phase": "Landing",
-          "start_velocity_ms": 59.93768175043989,
-          "acceleration_ms2": -1.4760741406215827
+          "start_velocity_ms": 62.51127982552715,
+          "acceleration_ms2": -1.4734778276990328
         },
         {
           "edge_id": "layout-edge-002",
           "phase": "Landing",
-          "start_velocity_ms": 50.41513241035467,
-          "acceleration_ms2": -1.4760741406215827
+          "start_velocity_ms": 53.46651609443078,
+          "acceleration_ms2": -1.4734778276990328
         },
         {
           "edge_id": "layout-edge-004",
           "phase": "Landing",
-          "start_velocity_ms": 17.518260012824452,
-          "acceleration_ms2": -1.4760741406215827
+          "start_velocity_ms": 25.055998362763834,
+          "acceleration_ms2": -1.4734778276990328
         },
         {
           "edge_id": "layout-edge-006",
           "phase": "Landing",
           "start_velocity_ms": 15,
-          "acceleration_ms2": -1.4760741406215827
+          "acceleration_ms2": -1.4734778276990328
         },
         {
           "edge_id": "layout-edge-008",
           "phase": "Landing",
           "start_velocity_ms": 15,
-          "acceleration_ms2": -1.4760741406215827
+          "acceleration_ms2": -1.4734778276990328
         },
         {
           "edge_id": "layout-edge-011",
@@ -6120,11 +6121,17 @@
         "apronId": "C011",
         "terminalId": null,
         "depRunwayId": "RW1"
-      }
+      },
+      "sibtDateTime": "2026-03-31 00:10:00",
+      "sobtDateTime": "2026-03-31 01:10:00",
+      "sldtDateTime_d": "2026-03-31 00:07:00",
+      "sibtDateTime_d": "2026-03-31 00:10:00",
+      "sobtDateTime_d": "2026-03-31 01:10:00",
+      "stotDateTime_d": "2026-03-31 01:13:00"
     },
     {
       "id": "id_nedrp1pem",
-      "reg": "RDDDD",
+      "reg": "R2",
       "airlineCode": "DL",
       "flightNumber": "DL5204",
       "aircraftType": "A320",
@@ -6136,87 +6143,153 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 9.620355893364836,
+      "sldtMin_orig": 10.166666666666666,
       "sibtMin_orig": 10.166666666666666,
       "sobtMin_orig": 70.16666666666667,
       "stotMin_orig": 70.5,
-      "sldtMin_d": 9.620355893364836,
-      "sibtMin_d": 9.616666666666667,
-      "sobtMin_d": 10.166666666666666,
-      "stotMin_d": 70.16666666666667,
-      "arrTdDistM": 340.2734906563716,
-      "arrVTdMs": 59.19039248838763,
-      "arrDecelMs2": 1.7982771268280835,
+      "sldtMin_d": 7.166666666666666,
+      "sibtMin_d": 10.166666666666666,
+      "sobtMin_d": 70.16666666666667,
+      "stotMin_d": 73.16666666666667,
+      "arrTdDistM": 398.41301073928145,
+      "arrVTdMs": 78.19999999999999,
+      "arrDecelMs2": 1.5639617826177956,
       "arrDep": "Arr",
       "edge_list": [
         {
           "edge_id": "layout-edge-001",
           "phase": "Landing",
-          "start_velocity_ms": 59.19039248838763,
-          "acceleration_ms2": -1.7982771268280835
+          "start_velocity_ms": 78.19999999999999,
+          "acceleration_ms2": -1.5639617826177956
         },
         {
           "edge_id": "layout-edge-002",
           "phase": "Landing",
-          "start_velocity_ms": 47.151682182306146,
-          "acceleration_ms2": -1.7982771268280835
+          "start_velocity_ms": 70.7236262100522,
+          "acceleration_ms2": -1.5639617826177956
         },
         {
           "edge_id": "layout-edge-004",
           "phase": "Landing",
-          "start_velocity_ms": 15,
-          "acceleration_ms2": -1.7982771268280835
+          "start_velocity_ms": 51.32223775100895,
+          "acceleration_ms2": -1.5639617826177956
         },
         {
-          "edge_id": "layout-edge-007",
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 42.59825928579466,
+          "acceleration_ms2": -1.5639617826177956
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 30.202883527349613,
+          "acceleration_ms2": -1.5639617826177956
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Landing",
+          "start_velocity_ms": 16.826097814358626,
+          "acceleration_ms2": -1.5639617826177956
+        },
+        {
+          "edge_id": "layout-edge-013",
           "phase": "Arr_taxi",
           "start_velocity_ms": 15,
           "acceleration_ms2": -0.5
         },
         {
-          "edge_id": "layout-edge-037",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 15,
-          "acceleration_ms2": -0.5
-        },
-        {
-          "edge_id": "layout-edge-114",
+          "edge_id": "layout-edge-162",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-053",
+          "edge_id": "layout-edge-052",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-112",
+          "edge_id": "layout-edge-020",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-111",
+          "edge_id": "layout-edge-050",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-045",
+          "edge_id": "layout-edge-090",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-044",
+          "edge_id": "layout-edge-089",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-072",
+          "edge_id": "layout-edge-087",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-082",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-080",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-078",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-076",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-074",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-073",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
@@ -6326,22 +6399,28 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_82mf1vx61",
+        "ExitTaxiwayId": "id_6jclwcmft",
         "apronId": "id_dt2n7wpnl",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3_Right",
+        "ExitTaxiwayId": "RTX200",
         "apronId": "C014",
         "terminalId": null,
         "depRunwayId": "RW1"
-      }
+      },
+      "sibtDateTime": "2026-03-31 00:10:00",
+      "sobtDateTime": "2026-03-31 01:10:00",
+      "sldtDateTime_d": "2026-03-31 00:07:00",
+      "sibtDateTime_d": "2026-03-31 00:10:00",
+      "sobtDateTime_d": "2026-03-31 01:10:00",
+      "stotDateTime_d": "2026-03-31 01:13:00"
     },
     {
       "id": "id_xocmnln85",
-      "reg": "RDDDD",
+      "reg": "R3",
       "airlineCode": "DL",
       "flightNumber": "DL5204",
       "aircraftType": "A320",
@@ -6353,54 +6432,54 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 9.217820867468127,
+      "sldtMin_orig": 10.166666666666666,
       "sibtMin_orig": 10.166666666666666,
       "sobtMin_orig": 70.16666666666667,
       "stotMin_orig": 70.5,
-      "sldtMin_d": 9.217820867468127,
-      "sibtMin_d": 9.216666666666667,
-      "sobtMin_d": 10.166666666666666,
-      "stotMin_d": 70.16666666666667,
-      "arrTdDistM": 429.83264877659286,
+      "sldtMin_d": 7.166666666666666,
+      "sibtMin_d": 10.166666666666666,
+      "sobtMin_d": 70.16666666666667,
+      "stotMin_d": 73.16666666666667,
+      "arrTdDistM": 417.16423568078164,
       "arrVTdMs": 78.19999999999999,
-      "arrDecelMs2": 1.5174526736820642,
+      "arrDecelMs2": 1.477245369974694,
       "arrDep": "Arr",
       "edge_list": [
         {
           "edge_id": "layout-edge-001",
           "phase": "Landing",
           "start_velocity_ms": 78.19999999999999,
-          "acceleration_ms2": -1.5174526736820642
+          "acceleration_ms2": -1.477245369974694
         },
         {
           "edge_id": "layout-edge-002",
           "phase": "Landing",
-          "start_velocity_ms": 70.95732422846213,
-          "acceleration_ms2": -1.5174526736820642
+          "start_velocity_ms": 71.15873850736938,
+          "acceleration_ms2": -1.477245369974694
         },
         {
           "edge_id": "layout-edge-004",
           "phase": "Landing",
-          "start_velocity_ms": 52.32110532921568,
-          "acceleration_ms2": -1.5174526736820642
+          "start_velocity_ms": 53.16950880775688,
+          "acceleration_ms2": -1.477245369974694
         },
         {
           "edge_id": "layout-edge-006",
           "phase": "Landing",
-          "start_velocity_ms": 44.07384502976396,
-          "acceleration_ms2": -1.5174526736820642
+          "start_velocity_ms": 45.310782900730686,
+          "acceleration_ms2": -1.477245369974694
         },
         {
           "edge_id": "layout-edge-008",
           "phase": "Landing",
-          "start_velocity_ms": 32.66407506919034,
-          "acceleration_ms2": -1.5174526736820642
+          "start_velocity_ms": 34.65118221747014,
+          "acceleration_ms2": -1.477245369974694
         },
         {
           "edge_id": "layout-edge-010",
           "phase": "Landing",
-          "start_velocity_ms": 21.367107307397948,
-          "acceleration_ms2": -1.5174526736820642
+          "start_velocity_ms": 24.626999635268866,
+          "acceleration_ms2": -1.477245369974694
         },
         {
           "edge_id": "layout-edge-013",
@@ -6644,11 +6723,17 @@
         "apronId": "C015",
         "terminalId": null,
         "depRunwayId": "RW1"
-      }
+      },
+      "sibtDateTime": "2026-03-31 00:10:00",
+      "sobtDateTime": "2026-03-31 01:10:00",
+      "sldtDateTime_d": "2026-03-31 00:07:00",
+      "sibtDateTime_d": "2026-03-31 00:10:00",
+      "sobtDateTime_d": "2026-03-31 01:10:00",
+      "stotDateTime_d": "2026-03-31 01:13:00"
     },
     {
       "id": "id_d3sul5ts2",
-      "reg": "RDDDD",
+      "reg": "R4",
       "airlineCode": "DL",
       "flightNumber": "DL5204",
       "aircraftType": "A320",
@@ -6660,105 +6745,75 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 8.970675854877582,
+      "sldtMin_orig": 10.166666666666666,
       "sibtMin_orig": 10.166666666666666,
       "sobtMin_orig": 70.16666666666667,
       "stotMin_orig": 70.5,
-      "sldtMin_d": 8.970675854877582,
-      "sibtMin_d": 8.966666666666667,
-      "sobtMin_d": 10.166666666666666,
-      "stotMin_d": 70.16666666666667,
-      "arrTdDistM": 445.95241403893687,
-      "arrVTdMs": 71.14556083424893,
-      "arrDecelMs2": 1.462727380118602,
+      "sldtMin_d": 7.166666666666666,
+      "sibtMin_d": 10.166666666666666,
+      "sobtMin_d": 70.16666666666667,
+      "stotMin_d": 73.16666666666667,
+      "arrTdDistM": 415.6650257314285,
+      "arrVTdMs": 72.41879843452122,
+      "arrDecelMs2": 1.5717207435424683,
       "arrDep": "Arr",
       "edge_list": [
         {
           "edge_id": "layout-edge-001",
           "phase": "Landing",
-          "start_velocity_ms": 71.14556083424893,
-          "acceleration_ms2": -1.462727380118602
+          "start_velocity_ms": 72.41879843452122,
+          "acceleration_ms2": -1.5717207435424683
         },
         {
           "edge_id": "layout-edge-002",
           "phase": "Landing",
-          "start_velocity_ms": 63.406249494477564,
-          "acceleration_ms2": -1.462727380118602
+          "start_velocity_ms": 64.23044407560153,
+          "acceleration_ms2": -1.5717207435424683
         },
         {
           "edge_id": "layout-edge-004",
           "phase": "Landing",
-          "start_velocity_ms": 42.49427618110697,
-          "acceleration_ms2": -1.462727380118602
+          "start_velocity_ms": 41.78448944540015,
+          "acceleration_ms2": -1.5717207435424683
         },
         {
           "edge_id": "layout-edge-006",
           "phase": "Landing",
-          "start_velocity_ms": 32.24034538947454,
-          "acceleration_ms2": -1.462727380118602
+          "start_velocity_ms": 30.37298538086715,
+          "acceleration_ms2": -1.5717207435424683
         },
         {
           "edge_id": "layout-edge-008",
           "phase": "Landing",
           "start_velocity_ms": 15,
-          "acceleration_ms2": -1.462727380118602
+          "acceleration_ms2": -1.5717207435424683
         },
         {
-          "edge_id": "layout-edge-010",
-          "phase": "Landing",
-          "start_velocity_ms": 15,
-          "acceleration_ms2": -1.462727380118602
-        },
-        {
-          "edge_id": "layout-edge-013",
+          "edge_id": "layout-edge-011",
           "phase": "Arr_taxi",
           "start_velocity_ms": 15,
           "acceleration_ms2": -0.5
         },
         {
-          "edge_id": "layout-edge-162",
+          "edge_id": "layout-edge-041",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-118",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-052",
+          "edge_id": "layout-edge-119",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-020",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-050",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-090",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-087",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-086",
+          "edge_id": "layout-edge-116",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
@@ -6838,22 +6893,28 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_6jclwcmft",
+        "ExitTaxiwayId": "id_446c3ycnm",
         "apronId": "id_arkq0wlw2",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX200",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C009",
         "terminalId": null,
         "depRunwayId": "RW1"
-      }
+      },
+      "sibtDateTime": "2026-03-31 00:10:00",
+      "sobtDateTime": "2026-03-31 01:10:00",
+      "sldtDateTime_d": "2026-03-31 00:07:00",
+      "sibtDateTime_d": "2026-03-31 00:10:00",
+      "sobtDateTime_d": "2026-03-31 01:10:00",
+      "stotDateTime_d": "2026-03-31 01:13:00"
     },
     {
       "id": "id_3v06w8q9e",
-      "reg": "RDDDD",
+      "reg": "R5",
       "airlineCode": "DL",
       "flightNumber": "DL5204",
       "aircraftType": "A320",
@@ -6865,48 +6926,48 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 9.48569540588562,
+      "sldtMin_orig": 10.166666666666666,
       "sibtMin_orig": 10.166666666666666,
       "sobtMin_orig": 70.16666666666667,
       "stotMin_orig": 70.5,
-      "sldtMin_d": 9.48569540588562,
-      "sibtMin_d": 9.483333333333333,
-      "sobtMin_d": 10.166666666666666,
-      "stotMin_d": 70.16666666666667,
-      "arrTdDistM": 392.45467338224523,
-      "arrVTdMs": 64.52289964408268,
-      "arrDecelMs2": 1.36,
+      "sldtMin_d": 7.166666666666666,
+      "sibtMin_d": 10.166666666666666,
+      "sobtMin_d": 70.16666666666667,
+      "stotMin_d": 73.16666666666667,
+      "arrTdDistM": 387.1070719205999,
+      "arrVTdMs": 64.45752544628391,
+      "arrDecelMs2": 1.3989421848551569,
       "arrDep": "Arr",
       "edge_list": [
         {
           "edge_id": "layout-edge-001",
           "phase": "Landing",
-          "start_velocity_ms": 64.52289964408268,
-          "acceleration_ms2": -1.36
+          "start_velocity_ms": 64.45752544628391,
+          "acceleration_ms2": -1.3989421848551569
         },
         {
           "edge_id": "layout-edge-002",
           "phase": "Landing",
-          "start_velocity_ms": 56.52432613680859,
-          "acceleration_ms2": -1.36
+          "start_velocity_ms": 56.20359336262208,
+          "acceleration_ms2": -1.3989421848551569
         },
         {
           "edge_id": "layout-edge-004",
           "phase": "Landing",
-          "start_velocity_ms": 33.70372555646756,
-          "acceleration_ms2": -1.36
+          "start_velocity_ms": 32.2618441093894,
+          "acceleration_ms2": -1.3989421848551569
         },
         {
           "edge_id": "layout-edge-006",
           "phase": "Landing",
-          "start_velocity_ms": 20.577570485440685,
-          "acceleration_ms2": -1.36
+          "start_velocity_ms": 17.547650699748544,
+          "acceleration_ms2": -1.3989421848551569
         },
         {
           "edge_id": "layout-edge-008",
           "phase": "Landing",
           "start_velocity_ms": 15,
-          "acceleration_ms2": -1.36
+          "acceleration_ms2": -1.3989421848551569
         },
         {
           "edge_id": "layout-edge-011",
@@ -7138,11 +7199,17 @@
         "apronId": "C016",
         "terminalId": null,
         "depRunwayId": "RW1"
-      }
+      },
+      "sibtDateTime": "2026-03-31 00:10:00",
+      "sobtDateTime": "2026-03-31 01:10:00",
+      "sldtDateTime_d": "2026-03-31 00:07:00",
+      "sibtDateTime_d": "2026-03-31 00:10:00",
+      "sobtDateTime_d": "2026-03-31 01:10:00",
+      "stotDateTime_d": "2026-03-31 01:13:00"
     },
     {
       "id": "id_okv3l4kon",
-      "reg": "RDDDD",
+      "reg": "R6",
       "airlineCode": "DL",
       "flightNumber": "DL5204",
       "aircraftType": "A320",
@@ -7154,48 +7221,48 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 9.219911719870172,
+      "sldtMin_orig": 10.166666666666666,
       "sibtMin_orig": 10.166666666666666,
       "sobtMin_orig": 70.16666666666667,
       "stotMin_orig": 70.5,
-      "sldtMin_d": 9.219911719870172,
-      "sibtMin_d": 9.216666666666667,
-      "sobtMin_d": 10.166666666666666,
-      "stotMin_d": 70.16666666666667,
-      "arrTdDistM": 362.3485167430382,
-      "arrVTdMs": 63.17036702170428,
-      "arrDecelMs2": 1.7024900738856845,
+      "sldtMin_d": 7.166666666666666,
+      "sibtMin_d": 10.166666666666666,
+      "sobtMin_d": 70.16666666666667,
+      "stotMin_d": 73.16666666666667,
+      "arrTdDistM": 397.4741569346542,
+      "arrVTdMs": 67.85926011553504,
+      "arrDecelMs2": 1.8399999999999999,
       "arrDep": "Arr",
       "edge_list": [
         {
           "edge_id": "layout-edge-001",
           "phase": "Landing",
-          "start_velocity_ms": 63.17036702170428,
-          "acceleration_ms2": -1.7024900738856845
+          "start_velocity_ms": 67.85926011553504,
+          "acceleration_ms2": -1.8399999999999999
         },
         {
           "edge_id": "layout-edge-002",
           "phase": "Landing",
-          "start_velocity_ms": 52.71115755500788,
-          "acceleration_ms2": -1.7024900738856845
+          "start_velocity_ms": 57.40169502175098,
+          "acceleration_ms2": -1.8399999999999999
         },
         {
           "edge_id": "layout-edge-004",
           "phase": "Landing",
-          "start_velocity_ms": 15,
-          "acceleration_ms2": -1.7024900738856845
+          "start_velocity_ms": 22.564791014654663,
+          "acceleration_ms2": -1.8399999999999999
         },
         {
           "edge_id": "layout-edge-006",
           "phase": "Landing",
           "start_velocity_ms": 15,
-          "acceleration_ms2": -1.7024900738856845
+          "acceleration_ms2": -1.8399999999999999
         },
         {
           "edge_id": "layout-edge-008",
           "phase": "Landing",
           "start_velocity_ms": 15,
-          "acceleration_ms2": -1.7024900738856845
+          "acceleration_ms2": -1.8399999999999999
         },
         {
           "edge_id": "layout-edge-011",
@@ -7355,11 +7422,17 @@
         "apronId": "C012",
         "terminalId": null,
         "depRunwayId": "RW1"
-      }
+      },
+      "sibtDateTime": "2026-03-31 00:10:00",
+      "sobtDateTime": "2026-03-31 01:10:00",
+      "sldtDateTime_d": "2026-03-31 00:07:00",
+      "sibtDateTime_d": "2026-03-31 00:10:00",
+      "sobtDateTime_d": "2026-03-31 01:10:00",
+      "stotDateTime_d": "2026-03-31 01:13:00"
     },
     {
       "id": "id_gedp95dvr",
-      "reg": "RDDDD",
+      "reg": "R7",
       "airlineCode": "DL",
       "flightNumber": "DL5204",
       "aircraftType": "A320",
@@ -7371,111 +7444,93 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 9.078551461029646,
+      "sldtMin_orig": 10.166666666666666,
       "sibtMin_orig": 10.166666666666666,
       "sobtMin_orig": 70.16666666666667,
       "stotMin_orig": 70.5,
-      "sldtMin_d": 69.07855146102965,
-      "sibtMin_d": 9.083333333333334,
-      "sobtMin_d": 10.166666666666666,
-      "stotMin_d": 70.16666666666667,
-      "arrTdDistM": 425.8008255274112,
-      "arrVTdMs": 74.37857320412668,
-      "arrDecelMs2": 1.4754960324490813,
+      "sldtMin_d": 67.16666666666667,
+      "sibtMin_d": 70.16666666666667,
+      "sobtMin_d": 90.16666666666667,
+      "stotMin_d": 93.16666666666667,
+      "arrTdDistM": 364.5046664208187,
+      "arrVTdMs": 61.625364240170605,
+      "arrDecelMs2": 1.494619111518711,
       "arrDep": "Arr",
       "edge_list": [
         {
           "edge_id": "layout-edge-001",
           "phase": "Landing",
-          "start_velocity_ms": 74.37857320412668,
-          "acceleration_ms2": -1.4754960324490813
+          "start_velocity_ms": 61.625364240170605,
+          "acceleration_ms2": -1.494619111518711
         },
         {
           "edge_id": "layout-edge-002",
           "phase": "Landing",
-          "start_velocity_ms": 66.9458258475428,
-          "acceleration_ms2": -1.4754960324490813
+          "start_velocity_ms": 52.28425142540827,
+          "acceleration_ms2": -1.494619111518711
         },
         {
           "edge_id": "layout-edge-004",
           "phase": "Landing",
-          "start_velocity_ms": 47.41120880021138,
-          "acceleration_ms2": -1.4754960324490813
+          "start_velocity_ms": 21.69722261415614,
+          "acceleration_ms2": -1.494619111518711
         },
         {
           "edge_id": "layout-edge-006",
           "phase": "Landing",
-          "start_velocity_ms": 38.40324958852156,
-          "acceleration_ms2": -1.4754960324490813
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.494619111518711
         },
         {
           "edge_id": "layout-edge-008",
           "phase": "Landing",
-          "start_velocity_ms": 24.969107298320345,
-          "acceleration_ms2": -1.4754960324490813
-        },
-        {
-          "edge_id": "layout-edge-010",
-          "phase": "Landing",
           "start_velocity_ms": 15,
-          "acceleration_ms2": -1.4754960324490813
+          "acceleration_ms2": -1.494619111518711
         },
         {
-          "edge_id": "layout-edge-013",
+          "edge_id": "layout-edge-011",
           "phase": "Arr_taxi",
           "start_velocity_ms": 15,
           "acceleration_ms2": -0.5
         },
         {
-          "edge_id": "layout-edge-162",
+          "edge_id": "layout-edge-041",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-118",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-052",
+          "edge_id": "layout-edge-119",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-020",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-050",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-090",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-089",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-087",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-086",
+          "edge_id": "layout-edge-116",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
           "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-113",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
@@ -7555,22 +7610,28 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_6jclwcmft",
+        "ExitTaxiwayId": "id_446c3ycnm",
         "apronId": "id_vz4tyump2",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX200",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C011",
         "terminalId": null,
         "depRunwayId": "RW1"
-      }
+      },
+      "sibtDateTime": "2026-03-31 00:10:00",
+      "sobtDateTime": "2026-03-31 01:10:00",
+      "sldtDateTime_d": "2026-03-31 01:07:00",
+      "sibtDateTime_d": "2026-03-31 01:10:00",
+      "sobtDateTime_d": "2026-03-31 01:30:00",
+      "stotDateTime_d": "2026-03-31 01:33:00"
     },
     {
       "id": "id_kpc2h0amv",
-      "reg": "RDDDD",
+      "reg": "R8",
       "airlineCode": "DL",
       "flightNumber": "DL5204",
       "aircraftType": "A320",
@@ -7582,123 +7643,99 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 68.97708099509015,
+      "sldtMin_orig": 70.16666666666667,
       "sibtMin_orig": 70.16666666666667,
       "sobtMin_orig": 130.16666666666669,
       "stotMin_orig": 130.50000000000003,
-      "sldtMin_d": 68.97708099509015,
-      "sibtMin_d": 68.98333333333333,
-      "sobtMin_d": 70.16666666666667,
-      "stotMin_d": 130.16666666666666,
-      "arrTdDistM": 405.87873495019437,
-      "arrVTdMs": 78.19999999999999,
-      "arrDecelMs2": 1.7777645131145388,
+      "sldtMin_d": 67.16666666666667,
+      "sibtMin_d": 70.16666666666667,
+      "sobtMin_d": 130.16666666666669,
+      "stotMin_d": 133.16666666666669,
+      "arrTdDistM": 459.4600068603574,
+      "arrVTdMs": 69.2133814663724,
+      "arrDecelMs2": 1.470125425080897,
       "arrDep": "Arr",
       "edge_list": [
         {
           "edge_id": "layout-edge-001",
           "phase": "Landing",
-          "start_velocity_ms": 78.19999999999999,
-          "acceleration_ms2": -1.7777645131145388
+          "start_velocity_ms": 69.2133814663724,
+          "acceleration_ms2": -1.470125425080897
         },
         {
           "edge_id": "layout-edge-002",
           "phase": "Landing",
-          "start_velocity_ms": 69.6392261454945,
-          "acceleration_ms2": -1.7777645131145388
+          "start_velocity_ms": 61.18731109778913,
+          "acceleration_ms2": -1.470125425080897
         },
         {
           "edge_id": "layout-edge-004",
           "phase": "Landing",
-          "start_velocity_ms": 46.45495007214779,
-          "acceleration_ms2": -1.7777645131145388
+          "start_velocity_ms": 38.96276854640719,
+          "acceleration_ms2": -1.470125425080897
         },
         {
           "edge_id": "layout-edge-006",
           "phase": "Landing",
-          "start_velocity_ms": 35.02414353841174,
-          "acceleration_ms2": -1.7777645131145388
+          "start_velocity_ms": 27.34772121883555,
+          "acceleration_ms2": -1.470125425080897
         },
         {
           "edge_id": "layout-edge-008",
           "phase": "Landing",
           "start_velocity_ms": 15,
-          "acceleration_ms2": -1.7777645131145388
+          "acceleration_ms2": -1.470125425080897
         },
         {
-          "edge_id": "layout-edge-010",
-          "phase": "Landing",
-          "start_velocity_ms": 15,
-          "acceleration_ms2": -1.7777645131145388
-        },
-        {
-          "edge_id": "layout-edge-013",
+          "edge_id": "layout-edge-011",
           "phase": "Arr_taxi",
           "start_velocity_ms": 15,
           "acceleration_ms2": -0.5
         },
         {
-          "edge_id": "layout-edge-162",
+          "edge_id": "layout-edge-041",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-118",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-052",
+          "edge_id": "layout-edge-119",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-020",
+          "edge_id": "layout-edge-115",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-050",
+          "edge_id": "layout-edge-053",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-090",
+          "edge_id": "layout-edge-112",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-089",
+          "edge_id": "layout-edge-111",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
         },
         {
-          "edge_id": "layout-edge-087",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-086",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-085",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-083",
-          "phase": "Arr_taxi",
-          "start_velocity_ms": 10,
-          "acceleration_ms2": 0
-        },
-        {
-          "edge_id": "layout-edge-082",
+          "edge_id": "layout-edge-110",
           "phase": "Arr_taxi",
           "start_velocity_ms": 10,
           "acceleration_ms2": 0
@@ -7766,18 +7803,24 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_6jclwcmft",
+        "ExitTaxiwayId": "id_446c3ycnm",
         "apronId": "id_kzql4nscf",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX200",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C010",
         "terminalId": null,
         "depRunwayId": "RW1"
-      }
+      },
+      "sibtDateTime": "2026-03-31 01:10:00",
+      "sobtDateTime": "2026-03-31 02:10:00",
+      "sldtDateTime_d": "2026-03-31 01:07:00",
+      "sibtDateTime_d": "2026-03-31 01:10:00",
+      "sobtDateTime_d": "2026-03-31 02:10:00",
+      "stotDateTime_d": "2026-03-31 02:13:00"
     }
   ],
   "simPathGraph": {

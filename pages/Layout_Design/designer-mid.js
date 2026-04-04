@@ -1782,6 +1782,20 @@
             }
           });
         }
+        if (obj.pathType === 'runway_exit') {
+          const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+          const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
+          (state.holdingPoints || []).forEach(function(hp) {
+            if (!hp) return;
+            const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
+            if (k !== 'runway_holding') return;
+            if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
+            const pr = projectOnSegment(a, b, [hp.x, hp.y]);
+            if (pr.t >= 0 && pr.t <= 1 && dist2(pr.p, [hp.x, hp.y]) <= hpTolD2) {
+              junctions.push({ tAlong: seg + pr.t, p: pr.p });
+            }
+          });
+        }
       }
       if (obj.pathType === 'runway') {
         const ldm = getEffectiveRunwayLineupDistM(obj);

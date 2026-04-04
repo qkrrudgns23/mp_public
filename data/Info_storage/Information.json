@@ -1408,7 +1408,9 @@
         "aircraftFuselageLengthM": 50,
         "trailLengthM": 300,
         "preTouchdownHaloEnabled": true,
-        "baseDate": "2026-03-31"
+        "baseDate": "2026-03-31",
+        "lineupClearanceHoldSec": 20,
+        "depTakeoffAccelMs2": 2
       }
     }
   }

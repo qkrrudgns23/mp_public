@@ -248,7 +248,8 @@ def normalize_allowed_runway_directions(raw: Any) -> List[str]:
 def get_taxiway_allowed_runway_directions(
     tw: dict, rw_exit_allowed_default: List[str]
 ) -> List[str]:
-    if not tw or tw.get("pathType") != "runway_exit":
+    pt = str(tw.get("pathType") or "") if tw else ""
+    if not tw or pt not in ("runway_exit", "runway_taxiway"):
         base = rw_exit_allowed_default[:] if rw_exit_allowed_default else ["clockwise", "counter_clockwise"]
         return base
     arr = normalize_allowed_runway_directions(tw.get("allowedRwDirections"))
@@ -600,7 +601,7 @@ def build_path_graph(
         if (
             omit_other_runway_exits
             and selected_arr_ret_id is not None
-            and obj.get("pathType") == "runway_exit"
+            and str(obj.get("pathType") or "") in ("runway_exit", "runway_taxiway")
             and str(obj.get("id", "")) != str(selected_arr_ret_id)
         ):
             continue
@@ -673,6 +674,27 @@ def build_path_graph(
                             apron_node_stand.append(
                                 {"nodeP": p, "standPt": stand_pt, "standId": lk.get("pbbId"), "chain": chain}
                             )
+            if str(obj.get("pathType") or "") in ("runway_exit", "runway_taxiway"):
+                cs_hp = max(float(cell_size), 1e-9)
+                hp_tol_d2 = max(float(SPLIT_TOL_D2), (cs_hp * 0.35) ** 2)
+                for hp in layout.get("holdingPoints") or []:
+                    if not isinstance(hp, dict):
+                        continue
+                    if str(hp.get("hpKind", "")).strip() != "runway_holding":
+                        continue
+                    hx_raw, hy_raw = hp.get("x"), hp.get("y")
+                    if hx_raw is None or hy_raw is None:
+                        continue
+                    try:
+                        hx_f, hy_f = float(hx_raw), float(hy_raw)
+                    except (TypeError, ValueError):
+                        continue
+                    t_h, p_h = project_on_segment(a, b, (hx_f, hy_f))
+                    if (
+                        0.0 <= float(t_h) <= 1.0
+                        and _dist2(p_h, (hx_f, hy_f)) <= hp_tol_d2
+                    ):
+                        junctions.append((seg + float(t_h), p_h))
         if obj.get("pathType") == "runway":
             ldm = get_effective_runway_lineup_dist_m(obj)
             rpath = get_runway_path_px(layout, cell_size, obj.get("id"))
@@ -716,7 +738,7 @@ def build_path_graph(
             for t_along, p, _is_j in chain:
                 st.add(get_or_add(p))
         dir_s = get_taxiway_direction(obj, direction_modes)
-        is_runway_exit = obj.get("pathType") == "runway_exit"
+        is_runway_exit = str(obj.get("pathType") or "") in ("runway_exit", "runway_taxiway")
         is_taxiway = obj.get("pathType") == "taxiway"
         path_type = str(obj.get("pathType", "taxiway") or "taxiway")
         for i in range(len(chain) - 1):
