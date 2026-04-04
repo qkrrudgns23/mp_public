@@ -3344,6 +3344,74 @@ def _apply_reroute_prepared_flight_state(
     st.progress_snapshot_along_m = 0.0
 
 
+def _append_future_leg_suffix_to_reroute_prep(
+    agent: Flight,
+    prep: PreparedFlightPath,
+) -> PreparedFlightPath:
+    if not agent.edge_phases or not prep.edge_ids:
+        return prep
+    current_leg_i = _leg_index_for_phase(str(agent.edge_phases[0]))
+    suffix_start = next(
+        (
+            i
+            for i, ph in enumerate(agent.edge_phases)
+            if _leg_index_for_phase(str(ph)) > current_leg_i
+        ),
+        None,
+    )
+    if suffix_start is None:
+        return prep
+    suffix_edge_ids = list(agent.edge_ids[suffix_start:])
+    suffix_phases = list(agent.edge_phases[suffix_start:])
+    suffix_segs = list(agent.segment_endpoints[suffix_start:])
+    suffix_v0s = list(agent.segment_v0_ms[suffix_start:])
+    suffix_accs = list(agent.segment_accel_ms2[suffix_start:])
+    suffix_ptypes = list(agent.segment_path_types[suffix_start:])
+    if (
+        not suffix_edge_ids
+        or len(suffix_segs) != len(suffix_edge_ids)
+        or len(suffix_phases) != len(suffix_edge_ids)
+        or len(suffix_v0s) != len(suffix_edge_ids)
+        or len(suffix_accs) != len(suffix_edge_ids)
+    ):
+        return prep
+    if suffix_ptypes and len(suffix_ptypes) != len(suffix_edge_ids):
+        suffix_ptypes = []
+    merged_edge_ids = list(prep.edge_ids) + suffix_edge_ids
+    merged_phases = list(prep.segment_phases) + suffix_phases
+    merged_logical = list(prep.logical_edge_list) + [
+        {"edge_id": str(e), "phase": str(ph)}
+        for e, ph in zip(suffix_edge_ids, suffix_phases)
+    ]
+    merged_segs = list(prep.segment_endpoints) + suffix_segs
+    merged_ptypes = (
+        list(prep.segment_path_types) + suffix_ptypes
+        if prep.segment_path_types or suffix_ptypes
+        else []
+    )
+    merged_v0s = list(prep.segment_start_velocity_ms) + suffix_v0s
+    merged_accs = list(prep.segment_accel_ms2) + suffix_accs
+    merged_durs = list(prep.segment_duration_sec) + [0.0] * len(suffix_edge_ids)
+    return PreparedFlightPath(
+        edge_ids=merged_edge_ids,
+        segment_phases=merged_phases,
+        logical_edge_list=merged_logical,
+        segment_endpoints=merged_segs,
+        leg_lengths_px=list(prep.leg_lengths_px),
+        leg_micro_counts=list(prep.leg_micro_counts),
+        segment_link_ids=list(prep.segment_link_ids),
+        segment_path_types=merged_ptypes,
+        segment_start_velocity_ms=merged_v0s,
+        segment_accel_ms2=merged_accs,
+        segment_duration_sec=merged_durs,
+        spawn_skip_landing_px=float(prep.spawn_skip_landing_px),
+        spawn_along_first_segment_px=float(prep.spawn_along_first_segment_px),
+        playback_first_segment_index=int(prep.playback_first_segment_index),
+        ok=prep.ok,
+        direction_violation=prep.direction_violation,
+    )
+
+
 def _try_reroute_agent_off_path_block(
     agent: Flight,
     flight: Dict[str, Any],
@@ -3392,6 +3460,7 @@ def _try_reroute_agent_off_path_block(
     )
     if prep is None or not prep.ok or not prep.edge_ids:
         return False
+    prep = _append_future_leg_suffix_to_reroute_prep(agent, prep)
     _apply_reroute_prepared_flight_state(agent, prep, control_state, sim_time)
     _LOG.info(
         "REROUTE_OK flight=%s t=%.1f attempts=%s edges=%s aggressive=%s",
