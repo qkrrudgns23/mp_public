@@ -1250,7 +1250,8 @@
             const tl = pts.map(function(p) {
               const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
               const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-              return { t: Number(p.t), x: x, y: y };
+              const mf = p.motionForward !== false && p.motion_forward !== false;
+              return { t: Number(p.t), x: x, y: y, motionForward: mf };
             }).filter(function(k) {
               return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
             }).sort(function(a, b) { return a.t - b.t; });
@@ -4437,6 +4438,7 @@
     if (tl.length === 1) {
       const a = tl[0];
       if (tSec + 1e-6 < a.t || tSec - 1e-6 > a.t) return null;
+      if (a.motionForward === false) return { x: a.x, y: a.y, dx: -1, dy: 0 };
       return { x: a.x, y: a.y, dx: 1, dy: 0 };
     }
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
@@ -4484,7 +4486,15 @@
         const x = a.x + (b.x - a.x) * u;
         const y = a.y + (b.y - a.y) * u;
         const h = headingForInterval(i);
-        return { x, y, dx: h.dx, dy: h.dy };
+        const mfB = b.motionForward !== false;
+        let rdx = h.dx, rdy = h.dy;
+        if (mfB === false) {
+          const len = Math.hypot(rdx, rdy) || 1;
+          const ang = Math.atan2(rdy, rdx) + Math.PI;
+          rdx = Math.cos(ang) * len;
+          rdy = Math.sin(ang) * len;
+        }
+        return { x, y, dx: rdx, dy: rdy };
       }
     }
     return null;
@@ -12813,7 +12823,7 @@
     canvas.style.height = h + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     invalidateGridUnderlay();
-    safeDraw();
+    safeDraw({ bypassSimScrubGuard: true });
   }
 
   let _gridUnderlayCanvas = null;
@@ -14350,7 +14360,7 @@
 
   let _safeDrawErrLogged = false;
   let _drawRafId = 0;
-  function safeDraw() { try { draw(); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
+  function safeDraw(drawOpts) { try { draw(drawOpts); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
   function flushDrawNow() {
     if (_drawRafId) {
       cancelAnimationFrame(_drawRafId);
@@ -14365,9 +14375,9 @@
       safeDraw();
     });
   }
-  function draw() {
+  function draw(drawOpts) {
     if (!ctx || !canvas) return;
-    if (state.simSliderScrubbing) return;
+    if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
     drawGrid();
     drawTerminals();
     drawTaxiways();

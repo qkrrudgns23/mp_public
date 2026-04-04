@@ -8,10 +8,16 @@ flight; routing and time axis use Sd only (``eldtMin_d`` or ``sldtMin_d`` → EL
 seconds). Same arrival runway: ``ELDT`` is pushed forward so the next landing is not earlier than
 the previous touchdown plus landing-leg duration (touchdown through end of Landing micro-legs)
 plus ``RWY_ARRIVAL_SPACING_BUFFER_SEC`` (taxing / hold-wait margin). Outputs ``schedule`` with S, Sd echo,
-E times (ELDT/EIBT/EOBT/ETOT) from path lengths and ``dwellMin``.
+E times (ELDT/EIBT/EOBT/ETOT); ``EIBT`` is apron in-blocks at Arr_taxi→Dep_taxi transition; ``EOBT`` is
+the first absolute time after ``dep_taxi_start_abs_sec`` (in-blocks + dwell) when Dep_taxi motion is not
+control-halted and speed exceeds a small threshold (so it matches real restart of taxi-out), else path
+timing + ``dwellMin`` when motion was not recorded.
 
 ``positions`` timelines use ``t`` = absolute schedule seconds (day base, same as ELDT scale);
-``Dep_taxi`` motion starts after gate dwell so playback time aligns with EOBT. ``v`` is m/s.
+``Dep_taxi`` motion is gated until apron in-blocks + ``dwell_sec`` (updated when arrival reaches stand).
+``EDGE_RESERVATION_DEPTH`` counts a maximal run of ``taxiway`` + ``apron_taxiway`` edges as one slot.
+Each apron stand has capacity 1 from in-blocks until off-blocks (blocks Arr_taxi on ``apron_link`` when busy).
+``v`` is m/s.
 """
 from __future__ import annotations
 
@@ -47,17 +53,14 @@ from utils.designer_path_graph import (
 
 _ROOT = Path(__file__).resolve().parents[1]
 _INFORMATION_PATH = (_ROOT / "data" / "Info_storage" / "Information.json").resolve()
-_DEFAULT_RW_DIR = "clockwise"
-TAXI_SPEED_MPS = 15.0
-MIN_LANDING_VELOCITY_MS = 15.0
-MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS = 15.0
-ARR_RET_DECEL_MS2 = 0.5
+
 Point = Tuple[float, float]
 PHASE_LANDING = "Landing"
 PHASE_ARR_TAXI = "Arr_taxi"
 PHASE_DEP_TAXI = "Dep_taxi"
 PHASE_HOLDING_LINEUP = "Holding_lineup"
 PHASE_LINEUP_DEPARTURE = "Lineup_departure"
+_DEFAULT_RW_DIR = "clockwise"
 
 
 _EXTRACT_LEG_PHASES: Tuple[str, ...] = (
@@ -71,20 +74,25 @@ SIM_MAX_TIME_SEC = 200_000.0
 
 _LOG = logging.getLogger(__name__)
 
+TAXI_SPEED_MPS = 15.0
+MIN_LANDING_VELOCITY_MS = 15.0
+MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS = 15.0
+ARR_RET_DECEL_MS2 = 0.5
 DEFAULT_EDGE_CAPACITY = 1
 DEFAULT_INTERSECTION_CAPACITY = 1
 DEFAULT_RUNWAY_CAPACITY = 1
+DEFAULT_STAND_CAPACITY = 1
 DEFAULT_MIN_SEPARATION_M = 60.0
-LOOKAHEAD_EDGE_COUNT = 6
-EDGE_RESERVATION_DEPTH = 2
-RWY_ARRIVAL_SPACING_BUFFER_SEC = 60.0
+LOOKAHEAD_EDGE_COUNT = 9 ####
+EDGE_RESERVATION_DEPTH = 6 ####
+RWY_ARRIVAL_SPACING_BUFFER_SEC = 25 #### 홪주로 이탈시간 여유분분
 HEAVY_DECISION_INTERVAL_SEC = 5.0
-DEADLOCK_THRESHOLD_SEC = 900.0
-DEADLOCK_FORCE_MOVE_DURATION_SEC = 120.0
-DEADLOCK_FORCED_OPEN_EXTRA_SEC = 60.0
+DEADLOCK_THRESHOLD_SEC = 300.0
+DEADLOCK_FORCE_MOVE_DURATION_SEC = 60.0
+DEADLOCK_FORCED_OPEN_EXTRA_SEC = 0
 STAGNATION_PROGRESS_EPS_M = 2.0
-REROUTE_WAIT_THRESHOLD_SEC = 30.0
-REROUTE_IMPROVEMENT_RATIO = 0.85
+REROUTE_WAIT_THRESHOLD_SEC = 60.0
+REROUTE_IMPROVEMENT_RATIO = 1.2
 REROUTE_MAX_ATTEMPTS = 12
 REVERSE_PENALTY_COST = 1_000_000.0
 REROUTE_YIELD_EDGE_PENALTY = REVERSE_PENALTY_COST
@@ -367,6 +375,7 @@ class PreparedFlightPath:
     segment_start_velocity_ms: List[float] = field(default_factory=list)
     segment_accel_ms2: List[float] = field(default_factory=list)
     segment_duration_sec: List[float] = field(default_factory=list)
+    segment_graph_uv: List[Tuple[int, int]] = field(default_factory=list)
     spawn_skip_landing_px: float = 0.0
     spawn_along_first_segment_px: float = 0.0
     playback_first_segment_index: int = 0
@@ -399,11 +408,15 @@ class Flight:
     segment_v0_ms: List[float] = field(default_factory=list)
     segment_accel_ms2: List[float] = field(default_factory=list)
     segment_path_types: List[str] = field(default_factory=list)
-    history: List[Tuple[float, float, float, float]] = field(default_factory=list)
+    history: List[Tuple[float, float, float, float, bool]] = field(default_factory=list)
     eldt_anchor_sec: Optional[float] = None
     eldt_raw_sec: Optional[float] = None
     dwell_sec: float = 0.0
-    actual_eibt_abs_sec: Optional[float] = None
+    # Apron in-blocks: Arr_taxi → Dep_taxi segment transition (arrival complete at stand).
+    actual_apron_inblocks_abs_sec: Optional[float] = None
+    # Apron off-blocks: first Dep_taxi motion (pushback / taxi-out start from stand).
+    actual_apron_offblocks_abs_sec: Optional[float] = None
+    apron_stand_id: Optional[str] = None
     dep_taxi_start_sim_time: Optional[float] = None
     dep_taxi_start_abs_sec: Optional[float] = None
     arr_runway_id: Optional[str] = None
@@ -418,6 +431,10 @@ class Flight:
     current_edge_id: Optional[str] = None
     next_edge_id: Optional[str] = None
     heading_rad: Optional[float] = None
+    # True = nose along segment p0→p1; False = reverse (e.g. tow on apron_link).
+    motion_is_forward: bool = True
+    segment_graph_uv: List[Tuple[int, int]] = field(default_factory=list)
+    completed_directed_hops: List[Tuple[str, int, int, str]] = field(default_factory=list)
     control_halt: bool = False
     control_speed_cap_ms: Optional[float] = None
 
@@ -437,6 +454,7 @@ class EdgeResource:
     reserved_by: List[str] = field(default_factory=list)
     forced_open: bool = False
     forced_open_until_sec: Optional[float] = None
+    path_type: str = "taxiway"
 
 
 @dataclass
@@ -458,6 +476,13 @@ class RunwayResource:
     reserved_by: List[str] = field(default_factory=list)
     forced_open: bool = False
     forced_open_until_sec: Optional[float] = None
+
+
+@dataclass
+class StandResource:
+    stand_id: str
+    capacity: int = DEFAULT_STAND_CAPACITY
+    occupied_by: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -484,6 +509,7 @@ class SimulationControlState:
     edge_resources: Dict[str, EdgeResource] = field(default_factory=dict)
     intersection_resources: Dict[str, IntersectionResource] = field(default_factory=dict)
     runway_resources: Dict[str, RunwayResource] = field(default_factory=dict)
+    stand_resources: Dict[str, StandResource] = field(default_factory=dict)
     agent_states: Dict[str, AgentControlState] = field(default_factory=dict)
     decision_interval_sec: float = HEAVY_DECISION_INTERVAL_SEC
     lookahead_edges: int = LOOKAHEAD_EDGE_COUNT
@@ -1639,26 +1665,35 @@ def _expand_geometry_from_graph_path(
     merged_nodes: List[int],
     pair_index: Dict[Tuple[int, int], str],
     leg_phase: str,
-) -> Tuple[List[str], List[Tuple[Point, Point]], List[str], List[str], List[str]]:
+) -> Tuple[
+    List[str],
+    List[Tuple[Point, Point]],
+    List[str],
+    List[str],
+    List[str],
+    List[Tuple[int, int]],
+]:
     """
     One layout edge id per graph hop; duplicate ids when splitting ``DirectedEdgeRecord.pts`` polylines.
     ``leg_phase`` is repeated for every expanded sub-segment on this leg.
+    ``segment_graph_uv`` repeats ``(u, v)`` for each micro-segment from the same graph hop.
     """
     expanded_ids: List[str] = []
     segments: List[Tuple[Point, Point]] = []
     phases: List[str] = []
     link_ids: List[str] = []
     path_types: List[str] = []
+    graph_uv: List[Tuple[int, int]] = []
     n_nodes = len(g.nodes)
     for i in range(len(merged_nodes) - 1):
         u, v = merged_nodes[i], merged_nodes[i + 1]
         lo, hi = (u, v) if u <= v else (v, u)
         eid = pair_index.get((lo, hi))
         if not eid:
-            return [], [], [], [], []
+            return [], [], [], [], [], []
         rec = g.edge_map.get(f"{u}:{v}")
         if rec is None:
-            return [], [], [], [], []
+            return [], [], [], [], [], []
         lid = str(rec.link_id)
         pt = str(rec.path_type or "")
         if len(rec.pts) >= 2:
@@ -1673,9 +1708,10 @@ def _expand_geometry_from_graph_path(
                 phases.append(leg_phase)
                 link_ids.append(lid)
                 path_types.append(pt)
+                graph_uv.append((int(u), int(v)))
         else:
             if u < 0 or u >= n_nodes or v < 0 or v >= n_nodes:
-                return [], [], [], [], []
+                return [], [], [], [], [], []
             p0 = g.nodes[u]
             p1 = g.nodes[v]
             expanded_ids.append(str(eid))
@@ -1683,7 +1719,8 @@ def _expand_geometry_from_graph_path(
             phases.append(leg_phase)
             link_ids.append(lid)
             path_types.append(pt)
-    return expanded_ids, segments, phases, link_ids, path_types
+            graph_uv.append((int(u), int(v)))
+    return expanded_ids, segments, phases, link_ids, path_types, graph_uv
 
 
 def _finished_entry(
@@ -1952,6 +1989,7 @@ def prepare_flight_path(
     segments: List[Tuple[Point, Point]] = []
     segment_link_ids: List[str] = []
     segment_path_types: List[str] = []
+    expanded_graph_uv: List[Tuple[int, int]] = []
     leg_lengths_px: List[float] = []
     leg_micro_counts: List[int] = []
     if not direction_violation:
@@ -1963,7 +2001,7 @@ def prepare_flight_path(
                 leg_lengths_px.append(0.0)
                 leg_micro_counts.append(0)
                 continue
-            ex_ids, segs, phs, lnks, ptyps = _expand_geometry_from_graph_path(
+            ex_ids, segs, phs, lnks, ptyps, guvs = _expand_geometry_from_graph_path(
                 g, path, pair_index, phase
             )
             if (
@@ -1974,6 +2012,7 @@ def prepare_flight_path(
                 or len(ex_ids) != len(phs)
                 or len(lnks) != len(ex_ids)
                 or len(ptyps) != len(ex_ids)
+                or len(guvs) != len(ex_ids)
             ):
                 return PreparedFlightPath(
                     logical_edge_list=logical_edge_list,
@@ -1985,6 +2024,7 @@ def prepare_flight_path(
             segment_phases.extend(phs)
             segment_link_ids.extend(lnks)
             segment_path_types.extend(ptyps)
+            expanded_graph_uv.extend(guvs)
             leg_lengths_px.append(_path_length_px(segs))
             leg_micro_counts.append(len(ex_ids))
 
@@ -1994,6 +2034,7 @@ def prepare_flight_path(
         and len(expanded_ids) == len(segments) == len(segment_phases)
         and len(segment_link_ids) == len(expanded_ids)
         and len(segment_path_types) == len(expanded_ids)
+        and len(expanded_graph_uv) == len(expanded_ids)
     )
     v0s: List[float] = []
     accs: List[float] = []
@@ -2021,6 +2062,7 @@ def prepare_flight_path(
                 segment_endpoints=list(segments),
                 segment_link_ids=list(segment_link_ids),
                 segment_path_types=list(segment_path_types),
+                segment_graph_uv=list(expanded_graph_uv),
                 leg_lengths_px=list(leg_lengths_px),
                 leg_micro_counts=list(leg_micro_counts),
                 direction_violation=False,
@@ -2044,6 +2086,7 @@ def prepare_flight_path(
         leg_micro_counts=list(leg_micro_counts),
         segment_link_ids=list(segment_link_ids),
         segment_path_types=list(segment_path_types),
+        segment_graph_uv=list(expanded_graph_uv),
         segment_start_velocity_ms=list(v0s),
         segment_accel_ms2=list(accs),
         segment_duration_sec=list(durs),
@@ -2078,6 +2121,12 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
     ph = agent.edge_phases.pop(0)
     v0 = float(agent.segment_v0_ms.pop(0))
     acc = float(agent.segment_accel_ms2.pop(0))
+    pt_done = ""
+    if agent.segment_path_types:
+        pt_done = str(agent.segment_path_types[0] or "")
+    guv_done: Optional[Tuple[int, int]] = None
+    if agent.segment_graph_uv:
+        guv_done = agent.segment_graph_uv.pop(0)
     agent.edge_ids_finished.append(
         {
             "edge_id": str(eid),
@@ -2089,6 +2138,8 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
     agent.segment_endpoints.pop(0)
     if agent.segment_path_types:
         agent.segment_path_types.pop(0)
+    if guv_done is not None:
+        agent.completed_directed_hops.append((str(eid), int(guv_done[0]), int(guv_done[1]), pt_done))
     new_ph = str(agent.edge_phases[0]) if agent.edge_phases else ""
     if (
         sim_time_abs is not None
@@ -2098,6 +2149,19 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
         agent.lineup_hold_release_abs_sec = float(sim_time_abs) + _lineup_clearance_hold_sec(
             _load_information_json()
         )
+    if (
+        sim_time_abs is not None
+        and old_ph == PHASE_ARR_TAXI
+        and new_ph == PHASE_DEP_TAXI
+        and agent.actual_apron_inblocks_abs_sec is None
+    ):
+        t_in = float(sim_time_abs)
+        agent.actual_apron_inblocks_abs_sec = t_in
+        agent.dep_taxi_start_abs_sec = t_in + float(agent.dwell_sec)
+        if agent.eldt_anchor_sec is not None:
+            agent.dep_taxi_start_sim_time = float(agent.dep_taxi_start_abs_sec) - float(
+                agent.eldt_anchor_sec
+            )
 
 
 def move_agent(
@@ -2110,9 +2174,9 @@ def move_agent(
     """Advance along ``segment_endpoints`` using per-segment :math:`v_0` + constant ``acceleration_ms2``.
 
     If ``sim_time`` is set, the first ``Dep_taxi`` segment does not move until
-    ``dep_taxi_start_sim_time`` (EOBT minus ELDT in local sim time: taxi-in + dwell).
+    ``dep_taxi_start_sim_time`` (apron in-blocks + dwell minus ELDT in local sim time when known).
     If ``sim_time_abs`` and ``dep_taxi_start_abs_sec`` are available, the absolute
-    schedule gate takes precedence so exported ``EOBT`` can remain on-stand.
+    schedule gate takes precedence.
     Use ``sim_time=None`` to skip this (e.g. drain pass).
     """
     col0, row0 = agent.col, agent.row
@@ -2243,6 +2307,15 @@ def move_agent(
             agent.velocity_ms = max(
                 agent.velocity_ms, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS
             )
+    if agent.edge_phases and agent.segment_path_types and agent.edge_ids:
+        _ptm = str(agent.segment_path_types[0] or "")
+        _phm = str(agent.edge_phases[0])
+        if _ptm == "apron_link" and _phm == PHASE_DEP_TAXI:
+            agent.motion_is_forward = False
+        elif _ptm == "apron_link" and _phm == PHASE_ARR_TAXI:
+            agent.motion_is_forward = True
+        elif _ptm != "apron_link":
+            agent.motion_is_forward = True
 
 
 def _sim_time_step_sec(information: Dict[str, Any], dt: float) -> float:
@@ -2652,15 +2725,40 @@ def _dwell_sec_from_flight(fobj: Dict[str, Any]) -> float:
     return dwell_sec
 
 
+def _backfill_actual_apron_offblocks_from_history(ag: Flight) -> None:
+    """If loop never stamped off-blocks, use first post-gate motion sample (same rule as main loop)."""
+    if ag.actual_apron_offblocks_abs_sec is not None:
+        return
+    ds = ag.dep_taxi_start_abs_sec
+    if ds is None or not ag.history:
+        return
+    ds_f = float(ds)
+    for row in ag.history:
+        if len(row) < 4:
+            continue
+        t_abs = float(row[0])
+        v = float(row[3])
+        if t_abs <= ds_f + 1e-9:
+            continue
+        if abs(v) > 0.01:
+            ag.actual_apron_offblocks_abs_sec = t_abs
+            return
+
+
 def _compress_agent_history_for_dwell_export(
-    history: List[Tuple[float, float, float, float]],
+    history: List[Tuple[float, float, float, float, bool]],
     anchor_sec: Optional[float],
     eibt_sec: Optional[float],
     eobt_sec: Optional[float],
-) -> List[Tuple[float, float, float, float]]:
+    dep_taxi_start_abs_sec: Optional[float] = None,
+) -> List[Tuple[float, float, float, float, bool]]:
     """
-    Drop interior samples while gate dwell (EIBT..EOBT inclusive), keeping endpoints only.
-    Absolute time per row matches export: ``anchor_sec + t_rel``.
+    Drop interior samples while on-stand dwell only, keeping endpoints only.
+
+    Band is ``[EIBT, min(EOBT, dep_taxi_start_abs_sec)]`` when ``dep_taxi_start_abs_sec`` is set and
+    begins before nominal EOBT (early pushback). Otherwise the full scheduled ``[EIBT, EOBT]``.
+    Samples after the band end (taxi-out before nominal EOBT) must not be removed or playback
+    interpolates a straight line across the grid.
     """
     if anchor_sec is None or eibt_sec is None or eobt_sec is None:
         return history
@@ -2668,21 +2766,27 @@ def _compress_agent_history_for_dwell_export(
     eobt = float(eobt_sec)
     if eobt <= eibt + 1e-9:
         return history
-    anch = float(anchor_sec)
+    band_hi = float(eobt)
+    if dep_taxi_start_abs_sec is not None:
+        ds = float(dep_taxi_start_abs_sec)
+        if math.isfinite(ds) and ds < band_hi - 1e-9:
+            band_hi = min(band_hi, ds)
+    if band_hi <= eibt + 1e-9:
+        return history
     n = len(history)
     if n <= 2:
         return history
     in_band: List[int] = []
     for i in range(n):
         t_abs = float(history[i][0])
-        if eibt - 1e-9 <= t_abs <= eobt + 1e-9:
+        if eibt - 1e-9 <= t_abs <= band_hi + 1e-9:
             in_band.append(i)
     if len(in_band) <= 2:
         return history
     first_i = int(in_band[0])
     next_i = int(in_band[1])
-    first_t, first_x, first_y, first_v = history[first_i]
-    next_t, next_x, next_y, next_v = history[next_i]
+    first_t, first_x, first_y, first_v, first_mf = history[first_i]
+    next_t, next_x, next_y, next_v, next_mf = history[next_i]
     if (
         abs(float(first_t) - eibt) <= 1e-9
         and (
@@ -2692,14 +2796,14 @@ def _compress_agent_history_for_dwell_export(
         )
     ):
         hist_mut = list(history)
-        hist_mut[first_i] = (float(first_t), float(next_x), float(next_y), 0.0)
+        hist_mut[first_i] = (float(first_t), float(next_x), float(next_y), 0.0, bool(next_mf))
         history = hist_mut
     last_i = int(in_band[-1])
     prev_i = int(in_band[-2])
-    last_t, last_x, last_y, last_v = history[last_i]
-    prev_t, prev_x, prev_y, prev_v = history[prev_i]
+    last_t, last_x, last_y, last_v, last_mf = history[last_i]
+    prev_t, prev_x, prev_y, prev_v, prev_mf = history[prev_i]
     if (
-        abs(float(last_t) - eobt) <= 1e-9
+        abs(float(last_t) - band_hi) <= 1e-9
         and (
             abs(float(last_x) - float(prev_x)) > 1e-9
             or abs(float(last_y) - float(prev_y)) > 1e-9
@@ -2707,7 +2811,7 @@ def _compress_agent_history_for_dwell_export(
         )
     ):
         hist_mut = list(history)
-        hist_mut[last_i] = (float(last_t), float(prev_x), float(prev_y), 0.0)
+        hist_mut[last_i] = (float(last_t), float(prev_x), float(prev_y), 0.0, bool(prev_mf))
         history = hist_mut
     drop = set(in_band[1:-1])
     return [history[i] for i in range(n) if i not in drop]
@@ -2721,12 +2825,15 @@ def _build_schedule_row(
     base_date: str,
     exit_runway_abs_sec: Optional[float] = None,
     eldt_schedule_sec: Optional[int] = None,
-    actual_eibt_abs_sec: Optional[float] = None,
+    actual_apron_inblocks_abs_sec: Optional[float] = None,
+    actual_apron_offblocks_abs_sec: Optional[float] = None,
     information: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     S series from ``*_Min_orig``; Sd echo from ``*_Min_d``; E series from path timing + dwell.
     ``eldt_schedule_sec``가 있으면 동일 활주로 간격 조정된 ELDT를 쓰고, 없으면 ``_sd_eldt_sec``만 쓴다.
+    ``EIBT``/``EOBT`` use measured apron times when set (sim motion); ``EOBT`` is first taxi-out motion
+    after ``dep_taxi_start_abs_sec``; else path/nominal fallbacks.
     """
     dwell_sec = _dwell_sec_from_flight(fobj)
 
@@ -2766,11 +2873,13 @@ def _build_schedule_row(
     e_hold_sec: Optional[float] = None
     e_lineup_sec: Optional[float] = None
     etot_sec: Optional[float] = None
-    if actual_eibt_abs_sec is not None:
-        eibt_sec = float(actual_eibt_abs_sec)
+    if actual_apron_inblocks_abs_sec is not None:
+        eibt_sec = float(actual_apron_inblocks_abs_sec)
     elif eldt_sec is not None and taxi_in_sec is not None:
         eibt_sec = float(eldt_sec) + float(taxi_in_sec)
-    if eibt_sec is not None:
+    if actual_apron_offblocks_abs_sec is not None:
+        eobt_sec = float(actual_apron_offblocks_abs_sec)
+    elif eibt_sec is not None:
         eobt_sec = float(eibt_sec) + float(dwell_sec)
     if eobt_sec is not None and t_dep2 is not None:
         e_hold_sec = float(eobt_sec) + float(t_dep2)
@@ -2850,6 +2959,40 @@ def _edge_direction_mode_from_graph_rec(rec: DirectedEdgeRecord) -> str:
     if d == "both":
         return "bidirectional"
     return "one_way"
+
+
+def _flight_apron_stand_id_from_fobj(fobj: Dict[str, Any]) -> Optional[str]:
+    tok = fobj.get("token") if isinstance(fobj.get("token"), dict) else {}
+    raw = (
+        fobj.get("standId")
+        or fobj.get("apronId")
+        or tok.get("apronId")
+        or tok.get("standId")
+    )
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s if s else None
+
+
+def _collect_stand_ids_for_resource_model(layout: Dict[str, Any]) -> List[str]:
+    out: List[str] = []
+    seen: set[str] = set()
+    for st in layout.get("pbbStands") or []:
+        if not isinstance(st, dict) or st.get("id") is None:
+            continue
+        s = str(st["id"]).strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    for fobj in layout.get("flights") or []:
+        if not isinstance(fobj, dict):
+            continue
+        sid = _flight_apron_stand_id_from_fobj(fobj)
+        if sid and sid not in seen:
+            seen.add(sid)
+            out.append(sid)
+    return out
 
 
 def build_resource_model(
@@ -2934,6 +3077,7 @@ def build_resource_model(
             runway_id=runway_id,
             intersection_in=n_in,
             intersection_out=n_out,
+            path_type=str(path_type or "taxiway"),
         )
         edge_resources[eid] = er
         if runway_id is not None:
@@ -2948,10 +3092,17 @@ def build_resource_model(
         rr = RunwayResource(runway_id=str(rwid), capacity=DEFAULT_RUNWAY_CAPACITY)
         rr.edge_ids = set(eids)
         runway_resources[str(rwid)] = rr
+    stand_resources: Dict[str, StandResource] = {}
+    for sid in _collect_stand_ids_for_resource_model(layout):
+        stand_resources[str(sid)] = StandResource(
+            stand_id=str(sid),
+            capacity=max(1, int(DEFAULT_STAND_CAPACITY)),
+        )
     return SimulationControlState(
         edge_resources=edge_resources,
         intersection_resources=intersection_resources,
         runway_resources=runway_resources,
+        stand_resources=stand_resources,
         agent_states={},
         path_graph=g,
         pixels_per_meter=ppm,
@@ -2972,7 +3123,14 @@ def refresh_agent_edge_fsm(agents: Iterable[Flight]) -> None:
             ag.next_edge_id = str(ag.edge_ids[1]) if len(ag.edge_ids) > 1 else None
             if ag.segment_endpoints:
                 p0, p1 = ag.segment_endpoints[0]
-                ag.heading_rad = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
+                h = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
+                if (
+                    not ag.motion_is_forward
+                    and ag.segment_path_types
+                    and str(ag.segment_path_types[0] or "") == "apron_link"
+                ):
+                    h += math.pi
+                ag.heading_rad = h
             ag.fsm_state = str(ag.edge_phases[0]) if ag.edge_phases else "TAXI"
         else:
             ag.current_edge_id = None
@@ -2993,6 +3151,8 @@ def refresh_resource_occupancy(
         ir.occupied_by.clear()
     for rr in control_state.runway_resources.values():
         rr.occupied_by.clear()
+    for sr in control_state.stand_resources.values():
+        sr.occupied_by.clear()
     g = control_state.path_graph
     ppm = max(float(pixels_per_meter), 1e-9)
     rad_px = NODE_OCCUPANCY_RADIUS_M * ppm
@@ -3043,6 +3203,15 @@ def refresh_resource_occupancy(
                 ir = control_state.intersection_resources.get(nid)
                 if ir and ag.id not in ir.occupied_by:
                     ir.occupied_by.append(ag.id)
+        sid = str(ag.apron_stand_id or "").strip()
+        if sid:
+            ib = ag.actual_apron_inblocks_abs_sec
+            if ib is not None:
+                ob = ag.actual_apron_offblocks_abs_sec
+                if ob is None or t_abs + 1e-9 < float(ob):
+                    sr = control_state.stand_resources.get(sid)
+                    if sr is not None and ag.id not in sr.occupied_by:
+                        sr.occupied_by.append(ag.id)
 
 
 def get_agent_priority_rank(agent: Flight) -> int:
@@ -3116,6 +3285,105 @@ def get_lookahead_edges(agent: Flight, n: int) -> List[str]:
         return []
     nn = max(0, int(n))
     return [str(x) for x in agent.edge_ids[:nn]]
+
+
+def _layout_edge_path_type(control_state: SimulationControlState, eid: str) -> str:
+    er = control_state.edge_resources.get(str(eid))
+    if er is None:
+        return "taxiway"
+    return str(er.path_type or "taxiway")
+
+
+def _taxiway_apron_taxiway_merged_depth_segment(path_type: str) -> bool:
+    """``taxiway`` and ``apron_taxiway`` chain as one logical edge for ``EDGE_RESERVATION_DEPTH``."""
+    p = str(path_type or "").strip()
+    return p in ("taxiway", "apron_taxiway")
+
+
+def _lookahead_depth_billed_count(
+    agent: Flight,
+    up_to_idx_inclusive: int,
+    control_state: SimulationControlState,
+) -> int:
+    c = 0
+    hi = int(up_to_idx_inclusive)
+    in_run = False
+    for j in range(0, hi + 1):
+        if not agent.edge_ids or j >= len(agent.edge_ids):
+            break
+        pt = _layout_edge_path_type(control_state, str(agent.edge_ids[j]))
+        if _taxiway_apron_taxiway_merged_depth_segment(pt):
+            if not in_run:
+                c += 1
+                in_run = True
+        else:
+            in_run = False
+            c += 1
+    return c
+
+
+def _edge_uses_full_depth_reservation(
+    agent: Flight,
+    idx: int,
+    control_state: SimulationControlState,
+) -> bool:
+    """Interior of a taxiway↔apron_taxiway merged run uses occupied-only (no extra depth slot)."""
+    if not agent.edge_ids or idx < 0 or idx >= len(agent.edge_ids):
+        return True
+    pt = _layout_edge_path_type(control_state, str(agent.edge_ids[idx]))
+    if not _taxiway_apron_taxiway_merged_depth_segment(pt):
+        return True
+    if idx == 0:
+        return True
+    ptp = _layout_edge_path_type(control_state, str(agent.edge_ids[idx - 1]))
+    return not _taxiway_apron_taxiway_merged_depth_segment(ptp)
+
+
+def _stand_held_by_other_at(
+    agents: List[Flight],
+    stand_id: str,
+    self_id: str,
+    t_abs: float,
+) -> bool:
+    w = str(stand_id).strip()
+    if not w:
+        return False
+    tt = float(t_abs)
+    for ag in agents:
+        if ag.id == self_id:
+            continue
+        if str(ag.apron_stand_id or "").strip() != w:
+            continue
+        ib = ag.actual_apron_inblocks_abs_sec
+        if ib is None:
+            continue
+        ob = ag.actual_apron_offblocks_abs_sec
+        if ob is not None and tt + 1e-9 >= float(ob):
+            continue
+        return True
+    return False
+
+
+def _stand_arr_junction_blocked(
+    ag: Flight,
+    agents: List[Flight],
+    t_abs: float,
+) -> bool:
+    sid = str(ag.apron_stand_id or "").strip()
+    if not sid:
+        return False
+    if ag.actual_apron_inblocks_abs_sec is not None:
+        return False
+    if not ag.edge_phases or str(ag.edge_phases[0]) != PHASE_ARR_TAXI:
+        return False
+    if (
+        not ag.segment_path_types
+        or len(ag.segment_path_types) != len(ag.edge_ids)
+    ):
+        return False
+    if str(ag.segment_path_types[0] or "") != "apron_link":
+        return False
+    return _stand_held_by_other_at(agents, sid, ag.id, t_abs)
 
 
 def _agents_on_edge(eid: str, agents: List[Flight]) -> List[Flight]:
@@ -3260,7 +3528,9 @@ def can_reserve_path(
                     return False, f"runway_rot_busy:{rwid}"
         else:
             depth_cap = max(1, int(EDGE_RESERVATION_DEPTH))
-            if idx >= depth_cap:
+            billed = _lookahead_depth_billed_count(agent, idx, control_state)
+            interior = not _edge_uses_full_depth_reservation(agent, idx, control_state)
+            if interior or billed > depth_cap:
                 cap_use = _resource_use_count(er.occupied_by, [], aid)
             else:
                 cap_use = _resource_use_count(er.occupied_by, er.reserved_by, aid)
@@ -3282,7 +3552,11 @@ def can_reserve_path(
                 ir = control_state.intersection_resources.get(ir_id)
                 if ir is not None and not ir.forced_open:
                     depth_ir = max(1, int(EDGE_RESERVATION_DEPTH))
-                    if idx >= depth_ir:
+                    billed_ir = _lookahead_depth_billed_count(agent, idx, control_state)
+                    interior_ir = not _edge_uses_full_depth_reservation(
+                        agent, idx, control_state
+                    )
+                    if interior_ir or billed_ir > depth_ir:
                         iu = _resource_use_count(ir.occupied_by, [], aid)
                     else:
                         iu = _resource_use_count(ir.occupied_by, ir.reserved_by, aid)
@@ -3340,6 +3614,10 @@ def _update_deadlock_stagnation_probe(
             st.progress_snapshot_edge_id = None
             continue
         if st.wait_reason == "pre_eldt":
+            st.stagnation_anchor_sec = None
+            st.progress_snapshot_edge_id = None
+            continue
+        if st.wait_reason == "stand_occupied":
             st.stagnation_anchor_sec = None
             st.progress_snapshot_edge_id = None
             continue
@@ -3411,21 +3689,40 @@ def reserve_path(
     st.reserved_edges = list(lookahead)
     st.reserved_intersections.clear()
     aid = agent.id
-    depth = min(len(lookahead), max(1, int(EDGE_RESERVATION_DEPTH)))
-    for eid in lookahead[:depth]:
+    depth_cap = max(1, int(EDGE_RESERVATION_DEPTH))
+    for idx, eid in enumerate(lookahead):
         er = control_state.edge_resources.get(eid)
         if er is None:
             continue
-        if aid not in er.reserved_by:
-            er.reserved_by.append(aid)
         if er.runway_id:
+            if idx >= depth_cap:
+                continue
+            if aid not in er.reserved_by:
+                er.reserved_by.append(aid)
             rr = control_state.runway_resources.get(str(er.runway_id))
             if rr is not None and aid not in rr.reserved_by:
                 rr.reserved_by.append(aid)
-    for k in range(max(0, depth - 1)):
+            continue
+        if not _edge_uses_full_depth_reservation(agent, idx, control_state):
+            continue
+        billed = _lookahead_depth_billed_count(agent, idx, control_state)
+        if billed > depth_cap:
+            continue
+        if aid not in er.reserved_by:
+            er.reserved_by.append(aid)
+    for k in range(len(lookahead) - 1):
         er_k = control_state.edge_resources.get(lookahead[k])
         if er_k is None or not er_k.intersection_out:
             continue
+        if er_k.runway_id:
+            if k >= depth_cap:
+                continue
+        else:
+            if not _edge_uses_full_depth_reservation(agent, k, control_state):
+                continue
+            bk = _lookahead_depth_billed_count(agent, k, control_state)
+            if bk > depth_cap:
+                continue
         iid = er_k.intersection_out
         ir = control_state.intersection_resources.get(iid)
         if ir is not None and aid not in ir.reserved_by:
@@ -3660,6 +3957,31 @@ def _estimate_remaining_route_length_m(
     return s
 
 
+def _graph_path_has_disallowed_reverse_of_prior_hops(
+    g: PathGraph,
+    path: List[int],
+    pair_index: Dict[Tuple[int, int], str],
+    completed: List[Tuple[str, int, int, str]],
+) -> bool:
+    """True if path uses a layout edge opposite to a prior traversal (aircraft may not reverse)."""
+    if not completed:
+        return False
+    for i in range(len(path) - 1):
+        u, v = int(path[i]), int(path[i + 1])
+        lo, hi = (u, v) if u <= v else (v, u)
+        eid = pair_index.get((lo, hi))
+        if not eid:
+            continue
+        rec = g.edge_map.get(f"{u}:{v}")
+        cand_pt = str(rec.path_type or "") if rec is not None else ""
+        for ceid, u0, v0, _cpt in completed:
+            if ceid != eid:
+                continue
+            if u == v0 and v == u0 and cand_pt != "apron_link":
+                return True
+    return False
+
+
 def _slice_expanded_reroute_at_current_edge(
     agent: Flight,
     ex_ids: List[str],
@@ -3667,20 +3989,32 @@ def _slice_expanded_reroute_at_current_edge(
     phs: List[str],
     lnks: List[str],
     ptyps: List[str],
-) -> Tuple[List[str], List[Tuple[Point, Point]], List[str], List[str], List[str]]:
+    guvs: Optional[List[Tuple[int, int]]] = None,
+) -> Tuple[
+    List[str],
+    List[Tuple[Point, Point]],
+    List[str],
+    List[str],
+    List[str],
+    Optional[List[Tuple[int, int]]],
+]:
     if not ex_ids or not segs or not agent.edge_ids:
-        return ex_ids, segs, phs, lnks, ptyps
+        return ex_ids, segs, phs, lnks, ptyps, guvs
     if len(segs) != len(ex_ids) or len(phs) != len(ex_ids):
-        return ex_ids, segs, phs, lnks, ptyps
+        return ex_ids, segs, phs, lnks, ptyps, guvs
     cur = str(agent.edge_ids[0])
     idx = next((i for i, e in enumerate(ex_ids) if str(e) == cur), None)
     if idx is None:
-        return ex_ids, segs, phs, lnks, ptyps
+        return ex_ids, segs, phs, lnks, ptyps, guvs
+    orig_n = len(ex_ids)
     ex_ids = ex_ids[idx:]
     segs = list(segs[idx:])
     phs = phs[idx:]
     lnks = lnks[idx:]
     ptyps = ptyps[idx:]
+    guv_out: Optional[List[Tuple[int, int]]] = None
+    if guvs is not None and len(guvs) == orig_n:
+        guv_out = list(guvs[idx:])
     if segs:
         _p0, p1 = segs[0]
         _t, proj = project_on_segment(
@@ -3689,7 +4023,7 @@ def _slice_expanded_reroute_at_current_edge(
             (float(agent.col), float(agent.row)),
         )
         segs[0] = (proj, (float(p1[0]), float(p1[1])))
-    return ex_ids, segs, phs, lnks, ptyps
+    return ex_ids, segs, phs, lnks, ptyps, guv_out
 
 
 def build_reroute_path_from_xy(
@@ -3755,6 +4089,11 @@ def build_reroute_path_from_xy(
     )
     if dv or path is None or g is None or len(path) < 2:
         return None
+    if _graph_path_has_disallowed_reverse_of_prior_hops(
+        g, path, pair_index, agent.completed_directed_hops
+    ):
+        _LOG.info("reroute rejected (no reverse) flight=%s", agent.id)
+        return None
     ppm = max(float(_layout_pixels_per_meter(information)), 1e-9)
     old_remaining = _estimate_remaining_route_length_m(agent, control_state)
     new_len_m = path_total_dist(g, path) / ppm
@@ -3770,7 +4109,9 @@ def build_reroute_path_from_xy(
                 old_remaining,
             )
             return None
-    ex_ids, segs, phs, lnks, ptyps = _expand_geometry_from_graph_path(g, path, pair_index, phase)
+    ex_ids, segs, phs, lnks, ptyps, guvs = _expand_geometry_from_graph_path(
+        g, path, pair_index, phase
+    )
     if (
         not ex_ids
         or not segs
@@ -3778,12 +4119,15 @@ def build_reroute_path_from_xy(
         or len(phs) != len(ex_ids)
         or len(lnks) != len(ex_ids)
         or len(ptyps) != len(ex_ids)
+        or len(guvs) != len(ex_ids)
     ):
         return None
-    ex_ids, segs, phs, lnks, ptyps = _slice_expanded_reroute_at_current_edge(
-        agent, ex_ids, segs, phs, lnks, ptyps
+    ex_ids, segs, phs, lnks, ptyps, guvs = _slice_expanded_reroute_at_current_edge(
+        agent, ex_ids, segs, phs, lnks, ptyps, guvs
     )
     if not ex_ids:
+        return None
+    if guvs is None or len(guvs) != len(ex_ids):
         return None
     fid = str(flight.get("id", agent.id))
     try:
@@ -3811,6 +4155,7 @@ def build_reroute_path_from_xy(
         leg_micro_counts=[len(ex_ids)],
         segment_link_ids=list(lnks),
         segment_path_types=list(ptyps),
+        segment_graph_uv=list(guvs),
         segment_start_velocity_ms=list(v0s),
         segment_accel_ms2=list(accs),
         segment_duration_sec=list(durs),
@@ -3834,6 +4179,7 @@ def _apply_reroute_prepared_flight_state(
     agent.segment_v0_ms = list(prep.segment_start_velocity_ms)
     agent.segment_accel_ms2 = list(prep.segment_accel_ms2)
     agent.segment_path_types = list(prep.segment_path_types)
+    agent.segment_graph_uv = list(prep.segment_graph_uv) if prep.segment_graph_uv else []
     if agent.segment_endpoints:
         p0, p1 = agent.segment_endpoints[0]
         seg_len = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
@@ -3879,6 +4225,13 @@ def _append_future_leg_suffix_to_reroute_prep(
     suffix_v0s = list(agent.segment_v0_ms[suffix_start:])
     suffix_accs = list(agent.segment_accel_ms2[suffix_start:])
     suffix_ptypes = list(agent.segment_path_types[suffix_start:])
+    suffix_guvs = (
+        list(agent.segment_graph_uv[suffix_start:])
+        if agent.segment_graph_uv
+        and len(agent.segment_graph_uv) >= suffix_start
+        and len(agent.segment_graph_uv) == len(agent.edge_ids)
+        else []
+    )
     if (
         not suffix_edge_ids
         or len(suffix_segs) != len(suffix_edge_ids)
@@ -3889,6 +4242,8 @@ def _append_future_leg_suffix_to_reroute_prep(
         return prep
     if suffix_ptypes and len(suffix_ptypes) != len(suffix_edge_ids):
         suffix_ptypes = []
+    if suffix_guvs and len(suffix_guvs) != len(suffix_edge_ids):
+        suffix_guvs = []
     merged_edge_ids = list(prep.edge_ids) + suffix_edge_ids
     merged_phases = list(prep.segment_phases) + suffix_phases
     merged_logical = list(prep.logical_edge_list) + [
@@ -3900,6 +4255,15 @@ def _append_future_leg_suffix_to_reroute_prep(
         list(prep.segment_path_types) + suffix_ptypes
         if prep.segment_path_types or suffix_ptypes
         else []
+    )
+    _pg_uv = (
+        list(prep.segment_graph_uv)
+        if prep.segment_graph_uv and len(prep.segment_graph_uv) == len(prep.edge_ids)
+        else []
+    )
+    _sg_uv = suffix_guvs if suffix_guvs and len(suffix_guvs) == len(suffix_edge_ids) else []
+    merged_guvs = (
+        _pg_uv + _sg_uv if len(_pg_uv) + len(_sg_uv) == len(merged_edge_ids) else []
     )
     merged_v0s = list(prep.segment_start_velocity_ms) + suffix_v0s
     merged_accs = list(prep.segment_accel_ms2) + suffix_accs
@@ -3913,6 +4277,7 @@ def _append_future_leg_suffix_to_reroute_prep(
         leg_micro_counts=list(prep.leg_micro_counts),
         segment_link_ids=list(prep.segment_link_ids),
         segment_path_types=merged_ptypes,
+        segment_graph_uv=merged_guvs,
         segment_start_velocity_ms=merged_v0s,
         segment_accel_ms2=merged_accs,
         segment_duration_sec=merged_durs,
@@ -4228,6 +4593,10 @@ def update_decisions_every_10s(
                 st2.clearance = "WAIT"
                 st2.wait_reason = "pre_eldt"
                 continue
+            if _stand_arr_junction_blocked(ag2, agents, t_dec):
+                st2.clearance = "WAIT"
+                st2.wait_reason = "stand_occupied"
+                continue
             la2 = get_lookahead_edges(ag2, control_state.lookahead_edges)
             ok2, reason2 = can_reserve_path(
                 ag2, la2, control_state, agents, ppm, sim_time, rw_lag
@@ -4254,6 +4623,10 @@ def update_decisions_every_10s(
         if motion_td is not None and t_dec + 1e-9 < float(motion_td):
             st.clearance = "WAIT"
             st.wait_reason = "pre_eldt"
+            continue
+        if _stand_arr_junction_blocked(ag, agents, t_dec):
+            st.clearance = "WAIT"
+            st.wait_reason = "stand_occupied"
             continue
         la = get_lookahead_edges(ag, control_state.lookahead_edges)
         ok, reason = can_reserve_path(
@@ -4391,6 +4764,7 @@ def apply_movement_controls(
             continue
         eldt_eff = float(td) if td is not None else t_end
         if ag.control_halt:
+            ag.velocity_ms = 0.0
             prev_h = ag.motion_integrated_until_abs_sec
             t_from_h = float(prev_h) if prev_h is not None else eldt_eff
             if t_from_h < eldt_eff:
@@ -4443,7 +4817,6 @@ def run_simulation(
     eldt_adjust_map = _adjust_eldt_for_runway_arrival_spacing(
         flights_raw, prep_list, pixels_per_meter
     )
-
     for i, fobj in enumerate(flights_raw):
         prep = prep_list[i] if i < len(prep_list) else PreparedFlightPath()
         fid = str(fobj.get("id", ""))
@@ -4475,6 +4848,29 @@ def run_simulation(
                 path_rem: List[str] = list(_pt_src[int(g_start) :])
             else:
                 path_rem = []
+            _guv_src = prep.segment_graph_uv
+            _cdh: List[Tuple[str, int, int, str]] = []
+            _guv_rem: List[Tuple[int, int]] = []
+            if (
+                _guv_src
+                and len(_guv_src) == _prep_n
+                and _pt_src
+                and len(_pt_src) == _prep_n
+            ):
+                _gs0 = int(g_start)
+                for _j in range(_gs0):
+                    _cdh.append(
+                        (
+                            str(prep.edge_ids[_j]),
+                            int(_guv_src[_j][0]),
+                            int(_guv_src[_j][1]),
+                            str(_pt_src[_j] or ""),
+                        )
+                    )
+                _guv_rem = list(_guv_src[_gs0:])
+            if len(_guv_rem) != len(eids):
+                _guv_rem = []
+                _cdh = []
             prep.spawn_skip_landing_px = float(skip_ldg)
             prep.spawn_along_first_segment_px = float(along0)
             prep.playback_first_segment_index = int(g_start)
@@ -4487,14 +4883,21 @@ def run_simulation(
                 anchor_use = float(anchor_raw) if anchor_raw is not None else None
             rot_opt = _arr_rot_sec_from_prep(prep, ppm)
             rot_sec = float(rot_opt) if rot_opt is not None else 0.0
-            ti_hold, _to_unused = _taxi_in_out_sec_from_prep(prep, ppm)
+            taxi_in_sec, _taxi_out_unused = _taxi_in_out_sec_from_prep(prep, ppm)
             dwell_s = _dwell_sec_from_flight(fobj if isinstance(fobj, dict) else {})
             dep_start_sim = (
-                float(ti_hold) + float(dwell_s) if ti_hold is not None else None
+                float(taxi_in_sec) + float(dwell_s) if taxi_in_sec is not None else None
             )
             _arr_rid = str(arr_rwy_o).strip() if arr_rwy_o else ""
             dep_rwy_o = fobj.get("depRunwayId") or token_o.get("depRunwayId")
             _dep_rid = str(dep_rwy_o).strip() if dep_rwy_o else ""
+            _mf0 = True
+            if path_rem and eph:
+                if (
+                    str(path_rem[0] or "") == "apron_link"
+                    and str(eph[0]) == PHASE_DEP_TAXI
+                ):
+                    _mf0 = False
             ag_new = Flight(
                 id=fid,
                 edge_ids=list(eids),
@@ -4508,9 +4911,15 @@ def run_simulation(
                 eldt_anchor_sec=anchor_use,
                 eldt_raw_sec=float(anchor_raw) if anchor_raw is not None else None,
                 dwell_sec=float(dwell_s),
+                apron_stand_id=_flight_apron_stand_id_from_fobj(
+                    fobj if isinstance(fobj, dict) else {}
+                ),
                 segment_v0_ms=list(v0_rem),
                 segment_accel_ms2=list(acc_rem),
                 segment_path_types=path_rem,
+                segment_graph_uv=list(_guv_rem),
+                completed_directed_hops=list(_cdh),
+                motion_is_forward=_mf0,
                 dep_taxi_start_sim_time=dep_start_sim,
                 dep_taxi_start_abs_sec=(
                     float(anchor_use) + float(dep_start_sim)
@@ -4619,14 +5028,23 @@ def run_simulation(
             if td_h is not None and current_time_abs <= float(td_h) + 1e-9:
                 continue
             if (
-                ag.actual_eibt_abs_sec is None
+                ag.actual_apron_offblocks_abs_sec is None
                 and ag.edge_phases
                 and str(ag.edge_phases[0]) == PHASE_DEP_TAXI
-                and abs(float(ag.velocity_ms)) <= 1e-9
+                and ag.dep_taxi_start_abs_sec is not None
+                and float(current_time_abs) > float(ag.dep_taxi_start_abs_sec) + 1e-9
+                and abs(float(ag.velocity_ms)) > 0.01
             ):
-                ag.actual_eibt_abs_sec = float(current_time_abs)
-                ag.dep_taxi_start_abs_sec = float(current_time_abs) + float(ag.dwell_sec)
-            ag.history.append((current_time_abs, ag.col, ag.row, ag.velocity_ms))
+                ag.actual_apron_offblocks_abs_sec = float(current_time_abs)
+            ag.history.append(
+                (
+                    current_time_abs,
+                    ag.col,
+                    ag.row,
+                    ag.velocity_ms,
+                    bool(ag.motion_is_forward),
+                )
+            )
             rel_after_td = (
                 current_time_abs - float(td_h) if td_h is not None else 0.0
             )
@@ -4644,7 +5062,8 @@ def run_simulation(
         if progress_cb:
             progress_cb(current_time_abs - float(ref_t0), SIM_MAX_TIME_SEC)
 
-
+    for ag in agents:
+        _backfill_actual_apron_offblocks_from_history(ag)
 
     # 불필요한 ag 안의 것들을 정리하는것
     for ag in agents:
@@ -4674,7 +5093,12 @@ def run_simulation(
             pixels_per_meter,
             base_date,
             eldt_schedule_sec=eldt_adjust_map.get(fid),
-            actual_eibt_abs_sec=(ag.actual_eibt_abs_sec if ag else None),
+            actual_apron_inblocks_abs_sec=(
+                ag.actual_apron_inblocks_abs_sec if ag else None
+            ),
+            actual_apron_offblocks_abs_sec=(
+                ag.actual_apron_offblocks_abs_sec if ag else None
+            ),
             information=information,
         )
         eibt_raw = sched_row.get("EIBT")
@@ -4686,19 +5110,25 @@ def run_simulation(
             ag.eldt_anchor_sec,
             float(eibt_raw),
             float(eobt_raw),
+            ag.dep_taxi_start_abs_sec,
         )
 
     positions: Dict[str, List[Dict[str, Any]]] = {}
     for ag in agents:
-        positions[ag.id] = [
-            {
-                "t": int(round(float(t))),
-                "x": round(c, 3),
-                "y": round(r, 3),
-                "v": round(v, 3),
-            }
-            for t, c, r, v in ag.history
-        ]
+        _plist: List[Dict[str, Any]] = []
+        for row in ag.history:
+            t, c, r, v = float(row[0]), float(row[1]), float(row[2]), float(row[3])
+            _mf = bool(row[4]) if len(row) > 4 else True
+            _plist.append(
+                {
+                    "t": int(round(t)),
+                    "x": round(c, 3),
+                    "y": round(r, 3),
+                    "v": round(v, 3),
+                    "motionForward": _mf,
+                }
+            )
+        positions[ag.id] = _plist
 
     schedule_list: List[Dict[str, Any]] = []
     flights_detail: List[Dict[str, Any]] = []
@@ -4715,7 +5145,12 @@ def run_simulation(
                 base_date,
                 exit_runway_abs_sec=(ag.exit_runway_abs_sec if ag else None),
                 eldt_schedule_sec=eldt_adjust_map.get(str(fid)),
-                actual_eibt_abs_sec=(ag.actual_eibt_abs_sec if ag else None),
+                actual_apron_inblocks_abs_sec=(
+                    ag.actual_apron_inblocks_abs_sec if ag else None
+                ),
+                actual_apron_offblocks_abs_sec=(
+                    ag.actual_apron_offblocks_abs_sec if ag else None
+                ),
                 information=information,
             )
         )

@@ -731,6 +731,7 @@
     if (tl.length === 1) {
       const a = tl[0];
       if (tSec + 1e-6 < a.t || tSec - 1e-6 > a.t) return null;
+      if (a.motionForward === false) return { x: a.x, y: a.y, dx: -1, dy: 0 };
       return { x: a.x, y: a.y, dx: 1, dy: 0 };
     }
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
@@ -778,7 +779,15 @@
         const x = a.x + (b.x - a.x) * u;
         const y = a.y + (b.y - a.y) * u;
         const h = headingForInterval(i);
-        return { x, y, dx: h.dx, dy: h.dy };
+        const mfB = b.motionForward !== false;
+        let rdx = h.dx, rdy = h.dy;
+        if (mfB === false) {
+          const len = Math.hypot(rdx, rdy) || 1;
+          const ang = Math.atan2(rdy, rdx) + Math.PI;
+          rdx = Math.cos(ang) * len;
+          rdy = Math.sin(ang) * len;
+        }
+        return { x, y, dx: rdx, dy: rdy };
       }
     }
     return null;

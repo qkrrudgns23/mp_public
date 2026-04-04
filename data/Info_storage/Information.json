@@ -1392,7 +1392,7 @@
         "junctionMergeRadiusPx": 7
       },
       "simulation": {
-        "description": "SLDT = scheduled touchdown (ELDT on-time target). Runway roll: arrDecelMs2 required; MIN_ARR_RUNWAY_VELOCITY_MS floor in code. ARR_ROT_SEC is path-timing output. EXIT_RUNWAY / EXIT_RUNWAY_dt: after Arr RET (first active segment not Landing), first time perpendicular distance from aircraft center to oriented arr runway centerline ≥ exitRunwayMinPerpendicularDistanceFromCenterlineM (default 120 m). defaultArrRunwayDir / defaultDepRunwayDir / defaultDwellMin / defaultIcaoCategory apply when a flight omits those fields. playbackLeadBeforeFirstTouchdownSec, approachOffsetM (layout pixels), timeStepSec, trail, aircraft dimensions.",
+        "description": "SLDT = scheduled touchdown (ELDT on-time target). Runway roll: arrDecelMs2 required; MIN_ARR_RUNWAY_VELOCITY_MS floor in code. ARR_ROT_SEC is path-timing output. EXIT_RUNWAY / EXIT_RUNWAY_dt: after Arr RET (first active segment not Landing), first time perpendicular distance from aircraft center to oriented arr runway centerline ≥ exitRunwayMinPerpendicularDistanceFromCenterlineM (default 120 m). defaultArrRunwayDir / defaultDepRunwayDir / defaultDwellMin / defaultIcaoCategory apply when a flight omits those fields. playbackLeadBeforeFirstTouchdownSec, approachOffsetM (layout pixels), timeStepSec, trail, aircraft dimensions. positions[].motionForward: false on apron_link Dep_taxi (tow reverse heading in designer). Same stand: one aircraft from apron in-blocks until off-blocks (code).",
         "maxLazyTimelineBuildsPerFrame": 6,
         "defaultArrRunwayDir": "clockwise",
         "defaultDepRunwayDir": "clockwise",

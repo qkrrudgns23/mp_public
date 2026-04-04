@@ -143,6 +143,7 @@ _rw_exit_allowed_default_raw = _cfg_list(
 _flight_info = _dict_or_empty(_info_path("tiers", "flight_schedule") or _info_path("tiers", "flight"))
 _algo_tier = _dict_or_empty(_info_path("tiers", "algorithm"))
 _algo_sim = _dict_or_empty(_algo_tier.get("simulation"))
+# Simulation positions JSON may include motionForward (apron tow / reverse heading); designer.js consumes it.
 _default_flight_service_date = _cfg_str(
     _flight_info, "defaultServiceDate", _cfg_str(_algo_sim, "baseDate", "2026-03-31")
 )
