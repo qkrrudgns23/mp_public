@@ -240,6 +240,31 @@ def _sd_eldt_sec(flight: Dict[str, Any]) -> Optional[int]:
     return _schedule_sd_sec(flight, "sldtMin_d")
 
 
+def _sim_progress_elapsed_total_sec(
+    flights_raw: List[Any], ref_t0: float
+) -> float:
+    """Pro Sim progress denominator (same units as ``current_time_abs - ref_t0``).
+
+    ``max(STOT_sd) + 3600 - ref_t0`` where ``STOT_sd`` comes from ``stotMin_d`` (Sd axis).
+    If no ``stotMin_d`` on any flight, fall back to ``SIM_MAX_TIME_SEC``.
+    """
+    max_stot: Optional[float] = None
+    for fobj in flights_raw:
+        if not isinstance(fobj, dict):
+            continue
+        st = _schedule_sd_sec(fobj, "stotMin_d")
+        if st is None:
+            continue
+        v = float(st)
+        max_stot = v if max_stot is None else max(max_stot, v)
+    if max_stot is None:
+        return float(SIM_MAX_TIME_SEC)
+    span = max_stot + 3600.0 - float(ref_t0)
+    if not math.isfinite(span) or span <= 1e-6:
+        return float(SIM_MAX_TIME_SEC)
+    return float(span)
+
+
 def _path_search_params(information: Dict[str, Any]) -> Tuple[float, float, float]:
     algo = _deep_get(information, "tiers", "algorithm", default={}) or {}
     path_cfg = algo.get("pathSearch") if isinstance(algo.get("pathSearch"), dict) else {}
@@ -423,6 +448,7 @@ class Flight:
     arr_runway_dir: Optional[str] = None
     dep_runway_id: Optional[str] = None
     lineup_hold_release_abs_sec: Optional[float] = None
+    path_completed_abs_sec: Optional[float] = None
     exit_runway_abs_sec: Optional[float] = None
     # 터치다운(eldt)부터 Landing 마이크로 구간 종료까지 시초(내부 간격·활주로 시간 점유).
     runway_rot_sec: float = 0.0
@@ -2140,6 +2166,8 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
         agent.segment_path_types.pop(0)
     if guv_done is not None:
         agent.completed_directed_hops.append((str(eid), int(guv_done[0]), int(guv_done[1]), pt_done))
+    if sim_time_abs is not None and not agent.edge_ids:
+        agent.path_completed_abs_sec = float(sim_time_abs)
     new_ph = str(agent.edge_phases[0]) if agent.edge_phases else ""
     if (
         sim_time_abs is not None
@@ -3407,8 +3435,9 @@ def _runway_rot_reservation_blocked(
     """동일 도착 활주로: 다른 기체가 아직 이탈 전이면 점유로 본다.
 
     구간은 ``[ELDT, release)`` 이고, ``release``는 ``exit_runway_abs_sec``가
-    있으면 그 절대 시각이다. 이탈 시각이 아직 없으면 선행기가 경로상으로 활주로를
-    빠져나올 때까지 점유가 끝나지 않은 것으로 본다(``release = +inf``).
+    있으면 그 절대 시각이다. 이탈 시각이 아직 없으면 **착륙/활주로(또는 활주로
+    연결 활주로) 상의 도착 레그**에 있을 때만 점유로 본다. 경로가 끝났거나 이미
+    일반 택시로 이탈한 기체는 ``arr_runway_id``만 같아도 무한 점유로 막지 않는다.
     """
     w = str(rwid).strip()
     if not w:
@@ -3422,15 +3451,27 @@ def _runway_rot_reservation_blocked(
         if o.eldt_anchor_sec is None:
             continue
         t0 = float(o.eldt_anchor_sec)
-        ex = o.exit_runway_abs_sec
-        if ex is not None:
-            t1 = float(ex)
-        else:
-            t1 = float("inf")
         if tt + 1e-9 <= t0:
             continue
-        if tt + 1e-9 < t1:
+        ex = o.exit_runway_abs_sec
+        if ex is not None:
+            if tt + 1e-9 < float(ex):
+                return True
+            continue
+        if not o.edge_ids or not o.edge_phases:
+            continue
+        ph0 = str(o.edge_phases[0])
+        if ph0 == PHASE_LANDING:
             return True
+        if ph0 == PHASE_ARR_TAXI:
+            pt0 = (
+                str(o.segment_path_types[0] or "")
+                if o.segment_path_types
+                and len(o.segment_path_types) == len(o.edge_ids)
+                else ""
+            )
+            if pt0 in ("runway", "runway_taxiway"):
+                return True
     return False
 
 
@@ -3510,7 +3551,7 @@ def can_reserve_path(
         if (
             idx == 0
             and dep_rwy
-            and ph0 == PHASE_HOLDING_LINEUP
+            and ph0 in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE)
             and pt0 in ("runway", "runway_taxiway")
         ):
             rr_dep = control_state.runway_resources.get(dep_rwy)
@@ -3526,6 +3567,9 @@ def can_reserve_path(
             if rr is not None and not rr.forced_open:
                 if _runway_rot_reservation_blocked(t_abs, rwid, aid, agents):
                     return False, f"runway_rot_busy:{rwid}"
+                ou_rw = _resource_use_count(rr.occupied_by, rr.reserved_by, aid)
+                if ou_rw >= max(1, int(rr.capacity)):
+                    return False, f"runway_capacity:{rwid}"
         else:
             depth_cap = max(1, int(EDGE_RESERVATION_DEPTH))
             billed = _lookahead_depth_billed_count(agent, idx, control_state)
@@ -4982,6 +5026,9 @@ def run_simulation(
     ]
     ref_t0 = min(eldt_vals) if eldt_vals else 0.0
     current_time_abs = float(ref_t0)
+    progress_elapsed_total_sec = _sim_progress_elapsed_total_sec(
+        flights_raw, float(ref_t0)
+    )
 
     while True:
         if not any(ag.edge_ids for ag in agents):
@@ -5060,7 +5107,9 @@ def run_simulation(
             if st_w and st_w.clearance in ("WAIT", "YIELD"):
                 st_w.total_wait_sec += float(dt_sec)
         if progress_cb:
-            progress_cb(current_time_abs - float(ref_t0), SIM_MAX_TIME_SEC)
+            progress_cb(
+                current_time_abs - float(ref_t0), progress_elapsed_total_sec
+            )
 
     for ag in agents:
         _backfill_actual_apron_offblocks_from_history(ag)
@@ -5116,8 +5165,11 @@ def run_simulation(
     positions: Dict[str, List[Dict[str, Any]]] = {}
     for ag in agents:
         _plist: List[Dict[str, Any]] = []
+        _pc = ag.path_completed_abs_sec
         for row in ag.history:
             t, c, r, v = float(row[0]), float(row[1]), float(row[2]), float(row[3])
+            if _pc is not None and t > float(_pc) + 1e-9:
+                continue
             _mf = bool(row[4]) if len(row) > 4 else True
             _plist.append(
                 {
