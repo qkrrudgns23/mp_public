@@ -739,7 +739,7 @@ def build_path_graph(
                 st.add(get_or_add(p))
         dir_s = get_taxiway_direction(obj, direction_modes)
         is_runway_exit = str(obj.get("pathType") or "") in ("runway_exit", "runway_taxiway")
-        is_taxiway = obj.get("pathType") == "taxiway"
+        is_taxiway = str(obj.get("pathType") or "") in ("taxiway", "apron_taxiway")
         path_type = str(obj.get("pathType", "taxiway") or "taxiway")
         for i in range(len(chain) - 1):
             seg_pts = polyline_points_between_along(pts, chain[i][0], chain[i + 1][0])
@@ -945,7 +945,10 @@ def path_graph_from_layout_sim_export(
             continue
         base_cost = float(e.get("dist", 0))
         raw_d = float(e.get("rawDist", base_cost))
-        if apply_taxiway_ret_heuristic and str(e.get("pathType") or "") == "taxiway":
+        if apply_taxiway_ret_heuristic and str(e.get("pathType") or "") in (
+            "taxiway",
+            "apron_taxiway",
+        ):
             base_cost += th
         if base_cost >= rc * 0.999 or base_cost < 1e-6:
             continue

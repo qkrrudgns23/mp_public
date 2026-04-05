@@ -363,7 +363,10 @@
       delete ser.pathType;
       if (pt === 'runway') runwayPaths.push(ser);
       else if (pt === 'runway_exit') runwayTaxiways.push(ser);
-      else taxiways.push(ser);
+      else {
+        if (pt === 'apron_taxiway') ser.pathType = 'apron_taxiway';
+        taxiways.push(ser);
+      }
     });
     return { runwayPaths: runwayPaths, runwayTaxiways: runwayTaxiways, taxiways: taxiways };
   }

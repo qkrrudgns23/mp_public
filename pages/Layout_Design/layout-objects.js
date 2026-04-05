@@ -4,10 +4,11 @@
     const a = _flightTier.defaultAirlineCodes;
     return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
   })();
-  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
+  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway', 'apronTaxiwayPath'];
   function pathTypeFromLayoutMode(layoutMode) {
     if (layoutMode === 'runwayPath') return 'runway';
     if (layoutMode === 'runwayTaxiway') return 'runway_exit';
+    if (layoutMode === 'apronTaxiwayPath') return 'apron_taxiway';
     if (layoutMode === 'taxiway') return 'taxiway';
     return 'taxiway';
   }
@@ -16,6 +17,7 @@
   function layoutModeFromPathType(pt) {
     if (pt === 'runway') return 'runwayPath';
     if (pt === 'runway_exit') return 'runwayTaxiway';
+    if (pt === 'apron_taxiway') return 'apronTaxiwayPath';
     return 'taxiway';
   }
   function isPathLayoutMode(m) {
@@ -283,7 +285,7 @@
     const maxExitWrap = document.getElementById('runwayMaxExitVelWrap');
     const minExitWrap = document.getElementById('runwayMinExitVelWrap');
     const rwDirWrap = document.getElementById('runwayExitAllowedDirectionWrap');
-    if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway') ? 'grid' : 'none';
+    if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway' || pt === 'apron_taxiway') ? 'grid' : 'none';
     if (runwayMinArrWrap) runwayMinArrWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
     if (runwayLineupWrap) runwayLineupWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
     if (runwayStartDispWrap) runwayStartDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
@@ -365,7 +367,7 @@
       });
       (obj.taxiways || []).forEach(function(tw) {
         const o = Object.assign({}, tw);
-        if (o.pathType !== 'runway' && o.pathType !== 'runway_exit') o.pathType = 'taxiway';
+        if (o.pathType !== 'runway' && o.pathType !== 'runway_exit' && o.pathType !== 'apron_taxiway') o.pathType = 'taxiway';
         if (o.pathType !== 'runway') delete o.rwySepConfig;
         normalizeTaxiwayVerticesFromPersistLoad(o);
         out.push(o);

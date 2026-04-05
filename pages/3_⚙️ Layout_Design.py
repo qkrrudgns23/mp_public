@@ -627,6 +627,11 @@ def _build_layout_mode_tabs_html() -> tuple[str, str]:
             _layout_mode_button_html("runwayPath", "Runway", "layout_mode_runway.svg"),
             _layout_mode_button_html("runwayTaxiway", "Runway Taxiway", "layout_mode_runway_taxiway.svg"),
             _layout_mode_button_html("taxiway", "Taxiway", "layout_mode_taxiway.svg"),
+            _layout_mode_button_html(
+                "apronTaxiwayPath",
+                "Apron TW Path",
+                "layout_mode_apron_taxiway.svg",
+            ),
             _layout_mode_button_html("holdingPoint", "Holding Point", "layout_mode_holding_point.svg"),
             _layout_mode_button_html("edge", "Edge", "layout_mode_edge.svg"),
         ]

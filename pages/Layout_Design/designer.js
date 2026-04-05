@@ -643,10 +643,11 @@
     const a = _flightTier.defaultAirlineCodes;
     return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
   })();
-  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
+  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway', 'apronTaxiwayPath'];
   function pathTypeFromLayoutMode(layoutMode) {
     if (layoutMode === 'runwayPath') return 'runway';
     if (layoutMode === 'runwayTaxiway') return 'runway_exit';
+    if (layoutMode === 'apronTaxiwayPath') return 'apron_taxiway';
     if (layoutMode === 'taxiway') return 'taxiway';
     return 'taxiway';
   }
@@ -655,6 +656,7 @@
   function layoutModeFromPathType(pt) {
     if (pt === 'runway') return 'runwayPath';
     if (pt === 'runway_exit') return 'runwayTaxiway';
+    if (pt === 'apron_taxiway') return 'apronTaxiwayPath';
     return 'taxiway';
   }
   function isPathLayoutMode(m) {
@@ -930,7 +932,7 @@
     const maxExitWrap = document.getElementById('runwayMaxExitVelWrap');
     const minExitWrap = document.getElementById('runwayMinExitVelWrap');
     const rwDirWrap = document.getElementById('runwayExitAllowedDirectionWrap');
-    if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway') ? 'grid' : 'none';
+    if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway' || pt === 'apron_taxiway') ? 'grid' : 'none';
     if (runwayMinArrWrap) runwayMinArrWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
     if (runwayLineupWrap) runwayLineupWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
     if (runwayStartDispWrap) runwayStartDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
@@ -1012,7 +1014,7 @@
       });
       (obj.taxiways || []).forEach(function(tw) {
         const o = Object.assign({}, tw);
-        if (o.pathType !== 'runway' && o.pathType !== 'runway_exit') o.pathType = 'taxiway';
+        if (o.pathType !== 'runway' && o.pathType !== 'runway_exit' && o.pathType !== 'apron_taxiway') o.pathType = 'taxiway';
         if (o.pathType !== 'runway') delete o.rwySepConfig;
         normalizeTaxiwayVerticesFromPersistLoad(o);
         out.push(o);
@@ -1320,7 +1322,7 @@
     return String(Math.max(0, Number(num) || 0)).padStart(width, '0');
   }
   function getDefaultPathName(pathType, currentId) {
-    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : 'TX');
+    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : (pathType === 'apron_taxiway' ? 'ATX' : 'TX'));
     const sameType = (state.taxiways || []).filter(function(tw) { return tw && tw.id !== currentId && tw.pathType === pathType; });
     const used = new Set(sameType.map(function(tw) { return (tw.name && String(tw.name).trim()) || ''; }).filter(Boolean));
     let n = 1;
@@ -2210,7 +2212,10 @@
       delete ser.pathType;
       if (pt === 'runway') runwayPaths.push(ser);
       else if (pt === 'runway_exit') runwayTaxiways.push(ser);
-      else taxiways.push(ser);
+      else {
+        if (pt === 'apron_taxiway') ser.pathType = 'apron_taxiway';
+        taxiways.push(ser);
+      }
     });
     return { runwayPaths: runwayPaths, runwayTaxiways: runwayTaxiways, taxiways: taxiways };
   }
@@ -9857,7 +9862,7 @@
       const tw_id = String(obj.id || '');
       const path_type = String(obj.pathType || 'taxiway');
       const isRunwayExit = obj.pathType === 'runway_exit';
-      const isTaxiway = obj.pathType === 'taxiway';
+      const isTaxiway = obj.pathType === 'taxiway' || obj.pathType === 'apron_taxiway';
       for (let i = 0; i < chain.length - 1; i++) {
         const segPts = polylinePointsBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
         let d = polylineDistanceBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
@@ -12492,7 +12497,7 @@
         const serTw = serializeTaxiwayWithEndpoints(tw);
         const startStr = serTw.start_point != null ? '(' + serTw.start_point.col + ',' + serTw.start_point.row + ')' : '—';
         const endStr = serTw.end_point != null ? '(' + serTw.end_point.col + ',' + serTw.end_point.row + ')' : '—';
-        const heading = tw.pathType === 'runway' ? 'Runway' : (tw.pathType === 'runway_exit' ? 'Runway Taxiway' : 'Taxiway');
+        const heading = tw.pathType === 'runway' ? 'Runway' : (tw.pathType === 'runway_exit' ? 'Runway Taxiway' : (tw.pathType === 'apron_taxiway' ? 'Apron taxiway' : 'Taxiway'));
         const avgVel = (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) ? tw.avgMoveVelocity : 10;
         const maxExit = (tw.pathType === 'runway_exit' && typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0) ? tw.maxExitVelocity : null;
         const minExit = (tw.pathType === 'runway_exit' && typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
@@ -12516,7 +12521,7 @@
             (minExit != null ? '<br>Min exit velocity: ' + minExit + ' m/s' : '') +
             (minArrDisplay != null ? '<br>Min arr velocity: ' + minArrDisplay + ' m/s' : '') +
             (tw.pathType === 'runway' ? '<br>Line up: ' + getEffectiveRunwayLineupDistM(tw) + ' m (start→end)' : '') +
-            (tw.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
+            ((tw.pathType === 'taxiway' || tw.pathType === 'apron_taxiway') ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
             '<br>Start point: ' + startStr +
             '<br>End point: ' + endStr
         });
@@ -12719,7 +12724,7 @@
       else if (state.selectedObject.type === 'taxiway') {
         const dirVal = getTaxiwayDirection(o);
         const dirLabel = dirVal === 'clockwise' ? 'Clockwise' : (dirVal === 'counter_clockwise' ? 'Counter Clockwise' : 'Both');
-        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : 'Taxiway');
+        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : (o.pathType === 'apron_taxiway' ? 'Apron taxiway' : 'Taxiway'));
         const ser = serializeTaxiwayWithEndpoints(o);
         const startStr = ser.start_point != null ? '(' + ser.start_point.col + ', ' + ser.start_point.row + ')' : '—';
         const endStr = ser.end_point != null ? '(' + ser.end_point.col + ', ' + ser.end_point.row + ')' : '—';
@@ -12733,7 +12738,7 @@
         objectInfoEl.innerHTML = '<strong>' + heading + '</strong><br>Name: ' + (o.name || '—') +
           '<br>Direction: ' + dirLabel +
           '<br>Width: ' + (o.width != null ? o.width : 23) + ' m' +
-          (o.pathType === 'taxiway' ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
+          ((o.pathType === 'taxiway' || o.pathType === 'apron_taxiway') ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
           (minArr != null ? '<br>Min arr velocity: ' + minArr + ' m/s' : '') +
           (o.pathType === 'runway' ? '<br>Line up: ' + lineupStr : '') +
           (maxEx != null ? '<br>Max exit velocity: ' + maxEx + ' m/s' : '') +
@@ -13695,23 +13700,27 @@
       if (tw.vertices.length < 2 && !drawing) return null;
       const isRunwayPath = tw.pathType === 'runway';
       const isRunwayExit = tw.pathType === 'runway_exit';
+      const isApronTaxiwayPath = tw.pathType === 'apron_taxiway';
       const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
       const width = tw.width != null ? tw.width : widthDefault;
       const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
       const pathLineCap = 'butt';
       const showRoadWidth = !!state.showRoadWidth;
-      return { drawing, isRunwayPath, isRunwayExit, width, widthDefault, sel, pathLineCap, showRoadWidth };
+      return { drawing, isRunwayPath, isRunwayExit, isApronTaxiwayPath, width, widthDefault, sel, pathLineCap, showRoadWidth };
     }
     state.taxiways.forEach(tw => {
       const g = taxiwayDrawContext(tw);
       if (!g) return;
-      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, width = g.width, sel = g.sel, pathLineCap = g.pathLineCap, showRoadWidth = g.showRoadWidth;
+      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel, pathLineCap = g.pathLineCap, showRoadWidth = g.showRoadWidth;
       if (sel) {
         ctx.strokeStyle = c2dObjectSelectedStroke();
         ctx.fillStyle = c2dObjectSelectedFill();
       } else if (isRunwayPath || isRunwayExit) {
         ctx.strokeStyle = c2dRunwayStroke();
         ctx.fillStyle = c2dRunwayFill();
+      } else if (isApronTaxiwayPath) {
+        ctx.strokeStyle = drawing ? 'rgba(34, 197, 94, 0.85)' : '#15803d';
+        ctx.fillStyle = drawing ? 'rgba(34, 197, 94, 0.12)' : 'rgba(22, 163, 74, 0.18)';
       } else {
         ctx.strokeStyle = drawing ? 'rgba(56, 189, 248, 0.72)' : c2dRunwayStroke();
         ctx.fillStyle = drawing ? 'rgba(56, 189, 248, 0.14)' : c2dRunwayFill();
@@ -13743,10 +13752,10 @@
     state.taxiways.forEach(tw => {
       const g = taxiwayDrawContext(tw);
       if (!g || tw.vertices.length < 2) return;
-      const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, sel = g.sel, showRoadWidth = g.showRoadWidth, pathLineCap = g.pathLineCap;
+      const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, showRoadWidth = g.showRoadWidth, pathLineCap = g.pathLineCap;
       if (showRoadWidth) {
         ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke()));
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke())));
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
@@ -13761,7 +13770,7 @@
         } else ctx.stroke();
       } else if (!isRunwayPath) {
         ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
@@ -13790,7 +13799,7 @@
     state.taxiways.forEach(tw => {
       const g = taxiwayDrawContext(tw);
       if (!g) return;
-      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, width = g.width, sel = g.sel;
+      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel;
       const dir = getTaxiwayDirection(tw);
       if (dir !== 'both' && tw.vertices.length >= 2) {
         const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
@@ -13798,7 +13807,7 @@
         const arrowSpacing = Math.max(22, Math.min(42, totalLen / 10));
         const numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
         const arrLen = CELL_SIZE * 0.54;
-        ctx.fillStyle = isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+        ctx.fillStyle = isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
         for (let k = 1; k <= numArrows; k++) {
           const targetDist = totalLen * (k / (numArrows + 1));
           let acc = 0;

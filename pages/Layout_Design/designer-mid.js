@@ -1846,7 +1846,7 @@
       const tw_id = String(obj.id || '');
       const path_type = String(obj.pathType || 'taxiway');
       const isRunwayExit = obj.pathType === 'runway_exit';
-      const isTaxiway = obj.pathType === 'taxiway';
+      const isTaxiway = obj.pathType === 'taxiway' || obj.pathType === 'apron_taxiway';
       for (let i = 0; i < chain.length - 1; i++) {
         const segPts = polylinePointsBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
         let d = polylineDistanceBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
