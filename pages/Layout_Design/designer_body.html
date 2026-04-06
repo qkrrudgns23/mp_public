@@ -15,11 +15,11 @@
             <button class="tool-btn active" id="btnGridToggle" title="Toggle grid visibility">Grid</button>
             <button class="tool-btn active" id="btnImageToggle" title="Toggle background image visibility">Image</button>
             <button class="tool-btn active" id="btnRoadWidthToggle" title="Toggle road width vs schematic (centerlines on top)">Width</button>
+            <button type="button" class="tool-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle layout AI assistant (placeholder UI)">AI mode</button>
             <span class="global-update-wrap">
-              <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Run Pro Sim, then Apply to load timelines for playback" role="status" aria-label="Pro Sim and Apply status"></span>
+              <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Pro Sim loads the latest sim JSON into the designer when it finishes" role="status" aria-label="Pro Sim sync status"></span>
               <button class="tool-btn" id="btnGlobalUpdate" title="Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage">Pro Sim</button>
-              <button type="button" class="tool-btn" id="btnApplySimResult" disabled title="Pro Sim 완료 후 활성화 — 저장된 시뮬 JSON을 불러옵니다">Apply</button>
-              <button type="button" class="tool-btn" id="btnShowPlayDock" disabled title="Apply 완료 후 활성화 — 재생 바를 엽니다">Play</button>
+              <button type="button" class="tool-btn" id="btnShowPlayDock" disabled title="시뮬 타임라인이 있을 때 활성화 — 재생 바를 엽니다">Play</button>
             </span>
           </div>
         </div>
@@ -74,7 +74,6 @@
           <option value="runwayPath">Runway</option>
           <option value="runwayTaxiway">Runway Taxiway</option>
           <option value="taxiway">Taxiway</option>
-          <option value="apronTaxiwayPath">Apron TW Path</option>
           <option value="holdingPoint">Holding Point</option>
           <option value="edge">Edge</option>
           <option value="terminal">Building</option>
@@ -106,9 +105,12 @@
             <label>Opacity</label>
             <input type="number" id="gridLayoutImageOpacity" min="__UI_G_IMG_OPACITY_MIN__" max="__UI_G_IMG_OPACITY_MAX__" step="__UI_G_IMG_OPACITY_STEP__" value="__UI_G_IMG_OPACITY__" />
           </div>
-          <div class="compact-field">
-            <label>Width (m)</label>
-            <input type="number" id="gridLayoutImageWidthM" min="1" step="__UI_G_IMG_SIZE_STEP__" value="__UI_G_IMG_WIDTH_M__" />
+          <div class="compact-field compact-field-width-ai">
+            <label for="gridLayoutImageWidthM">Width (m)</label>
+            <div class="compact-field-width-ai-controls">
+              <button type="button" class="ai-mode-toggle-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle layout AI assistant (placeholder UI)">AI mode</button>
+              <input type="number" id="gridLayoutImageWidthM" min="1" step="__UI_G_IMG_SIZE_STEP__" value="__UI_G_IMG_WIDTH_M__" />
+            </div>
           </div>
           <div class="compact-field">
             <label>Height (m)</label>
@@ -477,4 +479,34 @@
         <div class="global-update-progress-track"><div id="globalUpdateProgressFill" class="global-update-progress-fill"></div></div>
       </div>
     </div>
+    <aside id="aiAssistantDock" class="ai-assistant-dock" hidden aria-hidden="true" aria-label="AI assistant placeholder">
+      <div class="ai-assistant-dock-header">
+        <span class="ai-assistant-dock-title">Agent</span>
+        <button type="button" class="ai-assistant-dock-close" id="btnAiAssistantDockClose" aria-label="Close AI assistant">×</button>
+      </div>
+      <div class="ai-assistant-dock-scroll">
+        <div class="ai-assistant-dock-thread" role="log">
+          <div class="ai-assistant-msg ai-assistant-msg-user">
+            <div class="ai-assistant-msg-meta">You</div>
+            <div class="ai-assistant-msg-body">Match the background image width to the apron outline.</div>
+          </div>
+          <div class="ai-assistant-msg ai-assistant-msg-agent">
+            <div class="ai-assistant-msg-meta">Assistant</div>
+            <div class="ai-assistant-msg-body">Placeholder only — wire an agent here later to edit the layout from natural language.</div>
+          </div>
+        </div>
+        <div class="ai-assistant-composer">
+          <div class="ai-assistant-composer-inner">
+            <textarea id="aiAssistantComposerInput" class="ai-assistant-input" rows="3" placeholder="Plan, search, build anything" tabindex="0"></textarea>
+            <div class="ai-assistant-composer-footer">
+              <div class="ai-assistant-composer-hints">
+                <span class="ai-assistant-chip">∞ Agent</span>
+                <span class="ai-assistant-chip muted">Auto</span>
+              </div>
+              <button type="button" class="ai-assistant-send" disabled aria-label="Send (not connected)">↑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
   </div>

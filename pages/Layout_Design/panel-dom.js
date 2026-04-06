@@ -500,8 +500,6 @@
           console.error('Pro Sim:', m);
           if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
           if (typeof alert === 'function') alert(m);
-          const ab = document.getElementById('btnApplySimResult');
-          if (ab) ab.disabled = true;
         }
         const base = proSimApiBase();
         if (!base) {
@@ -510,9 +508,7 @@
         }
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines();
-        const applyBtnEl = document.getElementById('btnApplySimResult');
         const playDockBtnEl = document.getElementById('btnShowPlayDock');
-        if (applyBtnEl) applyBtnEl.disabled = true;
         if (playDockBtnEl) playDockBtnEl.disabled = true;
         try {
           if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
@@ -577,9 +573,6 @@
                   })
                   .catch(function(e) {
                     console.warn('Pro Sim result fetch', e && e.message ? e.message : e);
-                  })
-                  .finally(function() {
-                    if (applyBtnEl) applyBtnEl.disabled = false;
                   });
               })
               .catch(function(e) {
@@ -590,31 +583,6 @@
         }).catch(function(e) {
           failProSim(e && e.message ? e.message : String(e));
         });
-      });
-    }
-    const btnApplySimResult = document.getElementById('btnApplySimResult');
-    if (btnApplySimResult) {
-      btnApplySimResult.addEventListener('click', function() {
-        const base = proSimApiBase();
-        if (!base) {
-          alert('Layout API가 설정되지 않았습니다.');
-          return;
-        }
-        const layoutName = (state.currentLayoutName && String(state.currentLayoutName).trim()) || INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout';
-        btnApplySimResult.disabled = true;
-        fetch(base + '/api/load-sim-result?name=' + encodeURIComponent(layoutName))
-          .then(function(r) {
-            if (!r.ok) throw new Error('시뮬 결과를 찾을 수 없습니다. Pro Sim을 먼저 완료하세요.');
-            return r.json();
-          })
-          .then(function(data) {
-            applyAirsideSimulationResultPayload(data);
-          })
-          .catch(function(e) {
-            console.error('Apply sim result', e);
-            alert(e && e.message ? e.message : 'Apply failed');
-            btnApplySimResult.disabled = false;
-          });
       });
     }
     const btnShowPlayDock = document.getElementById('btnShowPlayDock');

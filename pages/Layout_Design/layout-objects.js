@@ -36,11 +36,10 @@
     const a = _flightTier.defaultAirlineCodes;
     return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
   })();
-  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway', 'apronTaxiwayPath'];
+  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
   function pathTypeFromLayoutMode(layoutMode) {
     if (layoutMode === 'runwayPath') return 'runway';
     if (layoutMode === 'runwayTaxiway') return 'runway_exit';
-    if (layoutMode === 'apronTaxiwayPath') return 'apron_taxiway';
     if (layoutMode === 'taxiway') return 'taxiway';
     return 'taxiway';
   }
@@ -49,7 +48,7 @@
   function layoutModeFromPathType(pt) {
     if (pt === 'runway') return 'runwayPath';
     if (pt === 'runway_exit') return 'runwayTaxiway';
-    if (pt === 'apron_taxiway') return 'apronTaxiwayPath';
+    if (pt === 'apron_taxiway') return 'taxiway';
     return 'taxiway';
   }
   function isPathLayoutMode(m) {
@@ -695,9 +694,7 @@
     if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
     if (typeof draw === 'function') draw();
     if (typeof scene3d !== 'undefined' && scene3d && typeof update3DScene === 'function') update3DScene();
-    const applyBtn = document.getElementById('btnApplySimResult');
     const playDockBtn = document.getElementById('btnShowPlayDock');
-    if (applyBtn) applyBtn.disabled = true;
     if (playDockBtn) playDockBtn.disabled = !state.hasSimulationResult;
   }
   function applyInitialLayoutFromJson() {

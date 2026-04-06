@@ -536,6 +536,7 @@
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
     showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
+    aiAssistantDockOpen: false,
     currentTerminalId: null,
     selectedObject: null,
     terminalDrawingId: null,
@@ -609,7 +610,7 @@
     if (dot) {
       dot.classList.remove('fresh');
       dot.classList.add('stale');
-      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim 후 Apply로 재동기화');
+      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim으로 재동기화 (완료 시 결과 자동 반영)');
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
@@ -656,11 +657,10 @@
     const a = _flightTier.defaultAirlineCodes;
     return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
   })();
-  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway', 'apronTaxiwayPath'];
+  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
   function pathTypeFromLayoutMode(layoutMode) {
     if (layoutMode === 'runwayPath') return 'runway';
     if (layoutMode === 'runwayTaxiway') return 'runway_exit';
-    if (layoutMode === 'apronTaxiwayPath') return 'apron_taxiway';
     if (layoutMode === 'taxiway') return 'taxiway';
     return 'taxiway';
   }
@@ -669,7 +669,7 @@
   function layoutModeFromPathType(pt) {
     if (pt === 'runway') return 'runwayPath';
     if (pt === 'runway_exit') return 'runwayTaxiway';
-    if (pt === 'apron_taxiway') return 'apronTaxiwayPath';
+    if (pt === 'apron_taxiway') return 'taxiway';
     return 'taxiway';
   }
   function isPathLayoutMode(m) {
@@ -1315,9 +1315,7 @@
     if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
     if (typeof draw === 'function') draw();
     if (typeof scene3d !== 'undefined' && scene3d && typeof update3DScene === 'function') update3DScene();
-    const applyBtn = document.getElementById('btnApplySimResult');
     const playDockBtn = document.getElementById('btnShowPlayDock');
-    if (applyBtn) applyBtn.disabled = true;
     if (playDockBtn) playDockBtn.disabled = !state.hasSimulationResult;
   }
   function applyInitialLayoutFromJson() {
@@ -11356,8 +11354,6 @@
           console.error('Pro Sim:', m);
           if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
           if (typeof alert === 'function') alert(m);
-          const ab = document.getElementById('btnApplySimResult');
-          if (ab) ab.disabled = true;
         }
         const base = proSimApiBase();
         if (!base) {
@@ -11366,9 +11362,7 @@
         }
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines();
-        const applyBtnEl = document.getElementById('btnApplySimResult');
         const playDockBtnEl = document.getElementById('btnShowPlayDock');
-        if (applyBtnEl) applyBtnEl.disabled = true;
         if (playDockBtnEl) playDockBtnEl.disabled = true;
         try {
           if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
@@ -11433,9 +11427,6 @@
                   })
                   .catch(function(e) {
                     console.warn('Pro Sim result fetch', e && e.message ? e.message : e);
-                  })
-                  .finally(function() {
-                    if (applyBtnEl) applyBtnEl.disabled = false;
                   });
               })
               .catch(function(e) {
@@ -11446,31 +11437,6 @@
         }).catch(function(e) {
           failProSim(e && e.message ? e.message : String(e));
         });
-      });
-    }
-    const btnApplySimResult = document.getElementById('btnApplySimResult');
-    if (btnApplySimResult) {
-      btnApplySimResult.addEventListener('click', function() {
-        const base = proSimApiBase();
-        if (!base) {
-          alert('Layout API가 설정되지 않았습니다.');
-          return;
-        }
-        const layoutName = (state.currentLayoutName && String(state.currentLayoutName).trim()) || INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout';
-        btnApplySimResult.disabled = true;
-        fetch(base + '/api/load-sim-result?name=' + encodeURIComponent(layoutName))
-          .then(function(r) {
-            if (!r.ok) throw new Error('시뮬 결과를 찾을 수 없습니다. Pro Sim을 먼저 완료하세요.');
-            return r.json();
-          })
-          .then(function(data) {
-            applyAirsideSimulationResultPayload(data);
-          })
-          .catch(function(e) {
-            console.error('Apply sim result', e);
-            alert(e && e.message ? e.message : 'Apply failed');
-            btnApplySimResult.disabled = false;
-          });
       });
     }
     const btnShowPlayDock = document.getElementById('btnShowPlayDock');
@@ -15239,6 +15205,39 @@
       state.showRoadWidth = !state.showRoadWidth;
       syncRoadWidthToggleButton();
       draw();
+    });
+  }
+  const aiAssistantDock = document.getElementById('aiAssistantDock');
+  const btnAiAssistantDockClose = document.getElementById('btnAiAssistantDockClose');
+  const aiModeToggleEls = document.querySelectorAll('[data-ai-mode-toggle]');
+  function setAiAssistantDockOpen(open) {
+    state.aiAssistantDockOpen = !!open;
+    if (aiAssistantDock) {
+      if (state.aiAssistantDockOpen) {
+        aiAssistantDock.removeAttribute('hidden');
+        aiAssistantDock.classList.add('is-open');
+        aiAssistantDock.setAttribute('aria-hidden', 'false');
+      } else {
+        aiAssistantDock.setAttribute('hidden', '');
+        aiAssistantDock.classList.remove('is-open');
+        aiAssistantDock.setAttribute('aria-hidden', 'true');
+      }
+    }
+    aiModeToggleEls.forEach(function(el) {
+      el.classList.toggle('active', state.aiAssistantDockOpen);
+      el.setAttribute('aria-pressed', state.aiAssistantDockOpen ? 'true' : 'false');
+    });
+  }
+  if (aiAssistantDock && aiModeToggleEls.length) {
+    aiModeToggleEls.forEach(function(el) {
+      el.addEventListener('click', function() {
+        setAiAssistantDockOpen(!state.aiAssistantDockOpen);
+      });
+    });
+  }
+  if (btnAiAssistantDockClose) {
+    btnAiAssistantDockClose.addEventListener('click', function() {
+      setAiAssistantDockOpen(false);
     });
   }
   class Grid3DMapper {
