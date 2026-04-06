@@ -1,576 +1,3 @@
-      ctx.fillText(String(label), tx, ty);
-      ctx.restore();
-      ctx.save();
-      ctx.beginPath();
-      ctx.fillStyle = sel ? '#22c55e' : (apronLinked ? 'rgba(34,197,94,0.9)' : 'rgba(156,163,175,0.95)');
-      ctx.arc(apronPt[0], apronPt[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      if (sel) {
-        drawStandRotationHandle(getPbbRotationOriginPx(pbb), getPbbRotationHandlePx(pbb), rotationActive);
-      }
-    });
-    ctx.restore();
-  }
-
-  function drawRemoteStands() {
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
-    state.remoteStands.forEach(st => {
-      const [cx, cy] = getRemoteStandCenterPx(st);
-      const size = getStandSizeMeters(st.category || 'C');
-      const angle = getRemoteStandAngleRad(st);
-      const sel = state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.id === st.id;
-      const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
-      const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
-      const apronLinkedR = standHasApronTaxiwayLink(st.id);
-      const idleFillR = apronLinkedR ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
-      const idleStrokeR = apronLinkedR ? '#22c55e' : '#9ca3af';
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(angle);
-      ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillR);
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStrokeR);
-      ctx.lineWidth = sel ? 2.5 : 1.5;
-      ctx.beginPath();
-      ctx.rect(-size/2, -size/2, size, size);
-      ctx.fill();
-      if (sel) {
-        ctx.save();
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-      }
-      ctx.stroke();
-      if (sel) ctx.restore();
-      ctx.restore();
-      if (mode === 'apronTaxiway') {
-        ctx.save();
-        ctx.fillStyle = sel ? '#f97316' : (apronLinkedR ? '#e5e7eb' : '#9ca3af');
-        ctx.beginPath();
-        ctx.arc(cx, cy, 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-      const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
-      const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
-      const label = labelPrefix + ' / ' + nameRaw;
-      ctx.fillStyle = apronLinkedR ? '#bbf7d0' : '#d1d5db';
-      ctx.font = '8px system-ui';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
-      const labelOffset = 2;
-      ctx.fillText(label, cx + size/2 - labelOffset, cy - size/2 + labelOffset);
-      if (sel) {
-        drawStandRotationHandle([cx, cy], getRemoteRotationHandlePx(st), rotationActive);
-      }
-    });
-    ctx.restore();
-  }
-
-  function renderRunwaySeparation() {
-    const panel = document.getElementById('rwySepPanel');
-    if (!panel) return;
-    const runways = (state.taxiways || []).filter(tw => tw.pathType === 'runway');
-    if (!runways.length) {
-      panel.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No runway paths. Layout Mode <strong>Runway</strong>Draw the runway polyline first with.</div>';
-      return;
-    }
-    if (!state.activeRwySepId || !runways.some(r => r.id === state.activeRwySepId)) {
-      state.activeRwySepId = runways[0].id;
-    }
-    const active = runways.find(r => r.id === state.activeRwySepId) || runways[0];
-    const cfg = rsepGetConfigForRunway(active);
-    const stdKey = cfg.standard || 'ICAO';
-    const cats = RSEP_STD_CATS[stdKey] || RSEP_STD_CATS['ICAO'];
-    const mode = cfg.mode || 'MIX';
-    const seq = cfg.activeSeq || (RSEP_MODE_SEQS[mode] && RSEP_MODE_SEQS[mode][0]) || 'ARR→ARR';
-    const seqType = RSEP_SEQ_TYPES[seq] || 'matrix';
-    const seqMeta = rsepGetSeqMeta(seq);
-
-    let html = '';
-    html += '<div class="rwysep-rwy-bar">';
-    html += '<div class="rwysep-rwy-tabs">';
-    runways.forEach(rw => {
-      const isActive = rw.id === active.id;
-      const label = escapeHtml(rw.name || ('Runway ' + rw.id));
-      html += '<button type="button" class="rwysep-rwy-btn' + (isActive ? ' active' : '') + '" data-rwy-id="' + rw.id + '">' + label + '</button>';
-    });
-    html += '</div></div>';
-
-    const activeSub = 'noname';
-    html += '<div class="layout-save-load-tabs" style="margin-top:8px;">';
-    html += '<button type="button" class="layout-save-load-tab rwysep-subtab-btn active" data-subtab="noname">No Name</button>';
-    html += '</div>';
-
-    html += '<div id="rwysep-subtab-input" style="">';
-    html += '<div class="rwysep-block">';
-    html += '<div class="rwysep-label">Standard &amp; Mode</div>';
-    html += '<div class="rwysep-row">';
-    html += '<label style="font-size:11px;color:#9ca3af;">Standard&nbsp;</label>';
-    html += '<select id="rwysep-standard">';
-    html += '<option value="ICAO"' + (stdKey === 'ICAO' ? ' selected' : '') + '>ICAO (J/H/M/L)</option>';
-    html += '<option value="RECAT-EU"' + (stdKey === 'RECAT-EU' ? ' selected' : '') + '>RECAT-EU (A~F)</option>';
-    html += '</select>';
-    html += '<label style="font-size:11px;color:#9ca3af;margin-left:8px;">Mode&nbsp;</label>';
-    html += '<select id="rwysep-mode">';
-    ['ARR','DEP','MIX'].forEach(m => {
-      const txt = m === 'ARR' ? 'Arrivals only' : (m === 'DEP' ? 'Departures only' : 'Mixed (Arr/Dep)');
-      html += '<option value="' + m + '"' + (mode === m ? ' selected' : '') + '>' + txt + '</option>';
-    });
-    html += '</select>';
-    html += '<label style="font-size:11px;color:#9ca3af;margin-left:8px;">Seq&nbsp;</label>';
-    html += '<select id="rwysep-seq">';
-    (RSEP_MODE_SEQS[mode] || []).forEach(s => {
-      const lbl = s;
-      html += '<option value="' + s + '"' + (seq === s ? ' selected' : '') + '>' + lbl + '</option>';
-    });
-    html += '</select>';
-    html += '</div></div>';
-
-    if (seqMeta) {
-      html += '<div class="rwysep-block" style="margin-top:4px;">';
-      html += '<div class="rwysep-label">Concept summary</div>';
-      html += '<div style="font-size:10px;color:#d1d5db;line-height:1.5;background:#020617;border-radius:6px;border:1px solid #111827;padding:6px 8px;">';
-      html += '<div><span style="color:#9ca3af;">Driving factor</span>&nbsp;&nbsp;: ' + escapeHtml(seqMeta.driver) + '</div>';
-      html += '<div><span style="color:#9ca3af;">Reference point</span>&nbsp;: ' + escapeHtml(seqMeta.refPoint) + '</div>';
-      html += '<div><span style="color:#9ca3af;">Input structure</span>: ' + escapeHtml(seqMeta.input) + '</div>';
-      html += '</div>';
-      html += '</div>';
-    }
-
-    if (seq === 'ARR→DEP') {
-      html += '<div class="rwysep-block">';
-      html += '<div style="font-size:10px;color:#9ca3af;line-height:1.5;margin-bottom:6px;">Separation combines leading aircraft ROT with trailing aircraft lineup–gear-off time, using the ROT inputs above per wake category.</div>';
-
-      const totalRot = cats.length;
-      let filledRot = 0;
-      cats.forEach(c => {
-        const val = cfg.rot && cfg.rot[c] != null ? cfg.rot[c] : '';
-        if (val !== '' && val != null) filledRot += 1;
-      });
-      html += rsepLegendHtml(filledRot, totalRot);
-
-      html += '<div class="rwysep-row" style="flex-wrap:wrap;">';
-      cats.forEach(c => {
-        const rawVal = cfg.rot && cfg.rot[c] != null ? cfg.rot[c] : '';
-        const valStr = rawVal === null || rawVal === undefined ? '' : String(rawVal);
-        const sub = rsepGetCatLabel(stdKey, c);
-        const colInfo = rsepColorForValue(valStr);
-        html += '<div style="min-width:90px;margin-right:6px;margin-bottom:4px;">';
-        html += '<div style="font-size:10px;color:#9ca3af;margin-bottom:2px;line-height:1.2;">';
-        html += 'Cat ' + c;
-        if (sub) {
-          html += '<div style="font-size:9px;color:#6b7280;margin-top:1px;">' + escapeHtml(sub) + '</div>';
-        }
-        html += '</div>';
-        html += '<input type="number" min="0" step="5" data-rwysep-rot="' + c + '" value="' + escapeHtml(valStr) + '" style="width:64px;background:' + colInfo.bg + ';border:1px solid ' + colInfo.border + ';color:' + colInfo.color + ';font-size:10px;padding:3px 4px;border-radius:3px;text-align:center;" />';
-        html += ' <span style="font-size:9px;color:#6b7280;">sec</span>';
-        html += '</div>';
-      });
-      html += '</div></div>';
-    }
-
-    if (seq !== 'ARR→DEP') {
-      html += '<div class="rwysep-block">';
-      html += '<div class="rwysep-label">Separation (sec) — ' + escapeHtml(seq) + '</div>';
-      if (seqType === 'matrix') {
-        const data = cfg.seqData && cfg.seqData[seq] ? cfg.seqData[seq] : rsepMakeMatrix(cats, null);
-        const total = cats.length * cats.length;
-        let filled = 0;
-        cats.forEach(lead => {
-          cats.forEach(trail => {
-            const v = data[lead] && data[lead][trail] != null ? data[lead][trail] : '';
-            if (v !== '' && v != null) filled += 1;
-          });
-        });
-        html += rsepLegendHtml(filled, total);
-
-        html += '<div class="rwysep-matrix-wrap"><table class="rwysep-table"><thead><tr>';
-        html += '<th>Lead↓ / Trail→</th>';
-        cats.forEach(c => {
-          const sub = rsepGetCatLabel(stdKey, c);
-          html += '<th><div style="line-height:1.2;">' + c;
-          if (sub) {
-            html += '<div style="font-size:9px;color:#9ca3af;margin-top:1px;">' + escapeHtml(sub) + '</div>';
-          }
-          html += '</div></th>';
-        });
-        html += '</tr></thead><tbody>';
-        cats.forEach(lead => {
-          const leadSub = rsepGetCatLabel(stdKey, lead);
-          html += '<tr><td><div style="line-height:1.2;">' + lead;
-          if (leadSub) {
-            html += '<div style="font-size:9px;color:#9ca3af;margin-top:1px;">' + escapeHtml(leadSub) + '</div>';
-          }
-          html += '</div></td>';
-          cats.forEach(trail => {
-            const v = data[lead] && data[lead][trail] != null ? data[lead][trail] : '';
-            const colInfo = rsepColorForValue(v);
-            html += '<td><input type="number" min="0" step="5" data-rwysep-matrix-lead="' + lead + '" data-rwysep-matrix-trail="' + trail + '" value="' + escapeHtml(String(v)) + '" style="width:64px;background:' + colInfo.bg + ';border:1px solid ' + colInfo.border + ';color:' + colInfo.color + ';font-size:10px;padding:3px 4px;border-radius:3px;text-align:center;" /></td>';
-          });
-          html += '</tr>';
-        });
-        html += '</tbody></table></div>';
-      } else {
-        const data1d = cfg.seqData && cfg.seqData[seq] ? cfg.seqData[seq] : rsepMake1D(cats, null);
-        const total = cats.length;
-        let filled = 0;
-        cats.forEach(cat => {
-          const v = data1d[cat] != null ? data1d[cat] : '';
-          if (v !== '' && v != null) filled += 1;
-        });
-        html += rsepLegendHtml(filled, total);
-
-        html += '<div class="rwysep-row" style="flex-wrap:wrap;margin-top:4px;">';
-        cats.forEach(cat => {
-          const v = data1d[cat] != null ? data1d[cat] : '';
-          const colInfo = rsepColorForValue(v);
-          const sub = rsepGetCatLabel(stdKey, cat);
-          html += '<div style="min-width:90px;margin-right:6px;margin-bottom:4px;border:1px solid #1f2937;border-radius:6px;padding:6px 8px;background:#020617;">';
-          html += '<div style="font-size:10px;color:#9ca3af;margin-bottom:2px;line-height:1.2;">Cat ' + cat;
-          if (sub) {
-            html += '<div style="font-size:9px;color:#6b7280;margin-top:1px;">' + escapeHtml(sub) + '</div>';
-          }
-          html += '</div>';
-          html += '<input type="number" min="0" step="5" data-rwysep-1d="' + cat + '" value="' + escapeHtml(String(v)) + '" style="width:64px;background:' + colInfo.bg + ';border:1px solid ' + colInfo.border + ';color:' + colInfo.color + ';font-size:10px;padding:3px 4px;border-radius:3px;text-align:center;" />';
-          html += ' <span style="font-size:9px;color:#6b7280;">sec</span>';
-          html += '</div>';
-        });
-        html += '</div>';
-      }
-      html += '</div>';
-    }
-    html += '</div>'; // end subtab input
-
-    html += '<div id="rwysep-subtab-timeline" style="' + (activeSub === 'timeline' ? '' : 'display:none;') + '">';
-    html += '<div class="rwysep-block" style="margin-top:8px;">';
-    html += '<div class="rwysep-label">Separation Timeline (Reg × Time)</div>';
-    html += '<div id="rwySepTimeWrap" style="width:100%;background:#020617;border-radius:8px;border:1px solid #1f2937;position:relative;overflow-x:auto;overflow-y:auto;margin-top:4px;max-height:calc(40px * 12 + 80px);"></div>';
-    html += '<div style="font-size:9px;color:#9ca3af;margin-top:4px;">';
-    html += 'Y: Reg Number · X: Time · Bars = S-series (SLDT–STOT) · Lines = E-series (ELDT–ETOT)';
-    html += '</div></div>';
-    html += '</div>'; // end subtab timeline
-
-    panel.innerHTML = html;
-
-    function drawRwySeparationTimeline() {
-      if (state.activeRwySepSubtab && state.activeRwySepSubtab !== 'timeline') return;
-      const wrap = panel.querySelector('#rwySepTimeWrap');
-      if (!wrap) return;
-
-      const allData = typeof buildRunwaySeparationTimelineByRunwaySnapshot === 'function'
-        ? buildRunwaySeparationTimelineByRunwaySnapshot(state.flights)
-        : null;
-      const data = allData && active && active.id != null ? allData[active.id] : null;
-      if (!data || !data.events || !data.events.length) {
-        wrap.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:8px 10px;">No SLDT/STOT events for this runway.</div>';
-        return;
-      }
-
-      const byFlight = new Map();
-      data.events.forEach(ev => {
-        const f = ev.flight;
-        if (!f) return;
-        let lane = byFlight.get(f);
-        if (!lane) {
-          const reg = f.reg || f.id || '';
-          lane = {
-            flight: f,
-            reg,
-            hasArr: false,
-            hasDep: false,
-            sldt: null,
-            eldt: null,
-            stot: null,
-            etot: null
-          };
-          byFlight.set(f, lane);
-        }
-        if (ev.type === 'arr') {
-          lane.hasArr = true;
-          lane.sldt = ev.time;
-          lane.eldt = (f.eldtMin != null ? f.eldtMin : ev.time);
-        } else if (ev.type === 'dep') {
-          lane.hasDep = true;
-          lane.stot = ev.time;
-          lane.etot = (f.etotMin != null ? f.etotMin : ev.time);
-        }
-      });
-
-      const lanes = Array.from(byFlight.values());
-      if (!lanes.length) {
-        wrap.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:8px 10px;">No SLDT/STOT events for this runway.</div>';
-        return;
-      }
-
-      let minT0 = Infinity;
-      let maxT0 = -Infinity;
-      lanes.forEach(ln => {
-        if (ln.sldt != null && ln.sldt < minT0) minT0 = ln.sldt;
-        if (ln.etot != null && ln.etot > maxT0) maxT0 = ln.etot;
-      });
-      if (minT0 <= 0 && lanes.length) {
-        const pos = lanes.map(function(ln) { return ln.sldt; }).filter(function(v) { return v != null && isFinite(v) && v > 1e-6; });
-        if (pos.length) minT0 = Math.min.apply(null, pos);
-      }
-      if (!isFinite(minT0) || !isFinite(maxT0)) {
-        minT0 = data.minT;
-        maxT0 = data.maxT;
-      }
-      let baseMinT = Math.max(0, minT0 - RWY_SEP_TIMELINE_PAD_MIN);
-      let baseMaxT = maxT0 + RWY_SEP_TIMELINE_PAD_MIN;
-      if (baseMaxT <= baseMinT) baseMaxT = baseMinT + 60;
-      const baseSpan = baseMaxT - baseMinT;
-      const zoom = (state.rwySepTimeZoom && state.rwySepTimeZoom > 1) ? state.rwySepTimeZoom : 1;
-      const span = baseSpan;
-      const minT = baseMinT;
-      const maxT = baseMaxT;
-
-      lanes.sort((a, b) => {
-        const ta = (a.sldt ?? a.stot ?? a.eldt ?? a.etot ?? 0);
-        const tb = (b.sldt ?? b.stot ?? b.eldt ?? b.etot ?? 0);
-        return ta - tb;
-      });
-
-      const tickPositions = buildTimeAxisTicks(minT, maxT, baseMinT, baseSpan, zoom);
-
-      const sMarkers = [];
-      const eMarkers = [];
-
-      const rows = [];
-      lanes.forEach(ln => {
-        const reg = ln.reg || '';
-        const sStart = (ln.sldt != null ? ln.sldt : null);
-        const sEnd = (ln.stot != null ? ln.stot : null);
-        const eStart = (ln.eldt != null ? ln.eldt : null);
-        const eEnd = (ln.etot != null ? ln.etot : null);
-
-        let blocks = '';
-        if (sStart != null && sEnd != null && span > 0) {
-          const s1 = Math.max(sStart, baseMinT);
-          const s2 = Math.min(sEnd, baseMaxT);
-          if (s2 <= s1) return;
-          const leftPct = ((s1 - baseMinT) / baseSpan) * 100 * zoom;
-          const widthPct = Math.max(1, ((s2 - s1) / baseSpan) * 100 * zoom);
-          const rightPct = leftPct + widthPct;
-          sMarkers.push({ t: sStart, leftPct, type: 'start' });
-          sMarkers.push({ t: sEnd, leftPct: rightPct, type: 'end' });
-          blocks +=
-            '<div class="rwysep-line-s" style="' +
-              'left:' + leftPct + '%;' +
-              'width:' + widthPct + '%;' +
-            '"></div>' +
-            '<div class="rwysep-tri" style="' +
-              'top:20%;' +
-              'left:' + leftPct + '%;' +
-              'border-top:6px solid ' + GANTT_COLORS.S_SERIES + ';' +
-            '"></div>' +
-            '<div class="rwysep-tri" style="' +
-              'top:20%;' +
-              'left:' + rightPct + '%;' +
-              'border-bottom:6px solid ' + GANTT_COLORS.S_SERIES + ';' +
-            '"></div>';
-        }
-        if (eStart != null && eEnd != null && span > 0) {
-          const e1 = Math.max(eStart, baseMinT);
-          const e2 = Math.min(eEnd, baseMaxT);
-          if (e2 <= e1) return;
-          const leftPct2 = ((e1 - baseMinT) / baseSpan) * 100 * zoom;
-          const widthPct2 = Math.max(0.5, ((e2 - e1) / baseSpan) * 100 * zoom);
-          const rightPct2 = leftPct2 + widthPct2;
-          eMarkers.push({ t: eStart, leftPct: leftPct2, type: 'start' });
-          eMarkers.push({ t: eEnd, leftPct: rightPct2, type: 'end' });
-          blocks +=
-            '<div class="rwysep-line-e" style="' +
-              'left:' + leftPct2 + '%;' +
-              'width:' + widthPct2 + '%;' +
-            '"></div>' +
-            '<div class="rwysep-tri" style="' +
-              'top:54%;' +
-              'left:' + leftPct2 + '%;' +
-              'border-top:6px solid ' + GANTT_COLORS.E_SERIES + ';' +
-            '"></div>' +
-            '<div class="rwysep-tri" style="' +
-              'top:54%;' +
-              'left:' + rightPct2 + '%;' +
-              'border-bottom:6px solid ' + GANTT_COLORS.E_SERIES + ';' +
-            '"></div>';
-        }
-
-        rows.push(
-          '<div class="alloc-row">' +
-            '<div class="alloc-row-label">' + escapeHtml(reg) + '</div>' +
-            '<div class="alloc-row-track" style="background:transparent;border:none;">' + blocks + '</div>' +
-          '</div>'
-        );
-      });
-
-      sMarkers.sort((a, b) => a.t - b.t);
-      eMarkers.sort((a, b) => a.t - b.t);
-
-      const sHeadMarks = sMarkers.map(m =>
-        '<div class="rwysep-tri" style="' +
-          'top:60%;' +
-          'left:' + m.leftPct + '%;' +
-          (m.type === 'start'
-            ? 'border-top:6px solid ' + GANTT_COLORS.S_SERIES + ';'
-            : 'border-bottom:6px solid ' + GANTT_COLORS.S_SERIES + ';') +
-        '"></div>'
-      ).join('');
-
-      const eHeadMarks = eMarkers.map(m =>
-        '<div class="rwysep-tri" style="' +
-          'top:60%;' +
-          'left:' + m.leftPct + '%;' +
-          (m.type === 'start'
-            ? 'border-top:6px solid ' + GANTT_COLORS.E_SERIES + ';'
-            : 'border-bottom:6px solid ' + GANTT_COLORS.E_SERIES + ';') +
-        '"></div>'
-      ).join('');
-
-      const headHtml =
-        '<div class="rwysep-head-row">' +
-          '<div class="rwysep-head-label">S-series</div>' +
-          '<div class="rwysep-head-track">' + sHeadMarks + '</div>' +
-        '</div>' +
-        '<div class="rwysep-head-row">' +
-          '<div class="rwysep-head-label">E-series</div>' +
-          '<div class="rwysep-head-track">' + eHeadMarks + '</div>' +
-        '</div>';
-
-      const axisTicks = tickPositions.map(tp =>
-        '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
-          '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
-        '</div>'
-      );
-      const axisHtml =
-        '<div class="alloc-time-axis-overlay">' +
-          '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
-        '</div>';
-
-      const rwyGridOverlay =
-        '<div class="alloc-gantt-grid-overlay">' +
-          tickPositions.map(function(tp) {
-            return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
-          }).join('') +
-        '</div>';
-      const rowsHtml = '<div class="rwysep-rows">' + rwyGridOverlay + rows.join('') + '</div>';
-      wrap.innerHTML = headHtml + rowsHtml + axisHtml;
-
-      if (!wrap._rwySepZoomBound) {
-        wrap._rwySepZoomBound = true;
-        wrap.addEventListener('wheel', function(e) {
-          if (!e.shiftKey) return;
-          e.preventDefault();
-          const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
-          let z = state.rwySepTimeZoom || 1;
-          z *= factor;
-          if (z < 1) z = 1;
-          if (z > 8) z = 8;
-          state.rwySepTimeZoom = z;
-          if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
-        }, { passive: false });
-      }
-
-      if (!wrap._rwySepScrollBound) {
-        wrap._rwySepScrollBound = true;
-        wrap.addEventListener('scroll', function() {
-          if (wrap._rwySepScrollRecalc) return;
-          const currentLeft = wrap.scrollLeft;
-          wrap._rwySepScrollRecalc = true;
-          drawRwySeparationTimeline();
-          wrap.scrollLeft = currentLeft;
-          wrap._rwySepScrollRecalc = false;
-        });
-      }
-    }
-
-    drawRwySeparationTimeline();
-
-    _rwySepWireInputHandlers(panel, cfg, cats, seq, state);
-  }
-
-  function _rwySepWireInputHandlers(panel, cfg, cats, seq, st) {
-    panel.querySelectorAll('.rwysep-rwy-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const id = this.getAttribute('data-rwy-id');
-        if (!id) return;
-        st.activeRwySepId = id;
-        renderRunwaySeparation();
-      });
-    });
-    panel.querySelectorAll('.rwysep-subtab-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const sub = this.getAttribute('data-subtab') || 'input';
-        st.activeRwySepSubtab = sub;
-        renderRunwaySeparation();
-      });
-    });
-    var stdSel = panel.querySelector('#rwysep-standard');
-    if (stdSel) {
-      stdSel.addEventListener('change', function() {
-        cfg.standard = this.value || 'ICAO';
-        cfg.seqData = rsepMakeSeqData(cfg.standard);
-        var catsNew = RSEP_STD_CATS[cfg.standard] || [];
-        var rotNew = RSEP_STANDARDS[cfg.standard] && RSEP_STANDARDS[cfg.standard].ROT || {};
-        cfg.rot = {};
-        catsNew.forEach(function(c) { cfg.rot[c] = rotNew[c] != null ? String(rotNew[c]) : ''; });
-        renderRunwaySeparation();
-      });
-    }
-    var modeSel = panel.querySelector('#rwysep-mode');
-    if (modeSel) {
-      modeSel.addEventListener('change', function() {
-        cfg.mode = this.value || 'MIX';
-        var seqs = RSEP_MODE_SEQS[cfg.mode] || ['ARR→ARR'];
-        if (!seqs.includes(cfg.activeSeq)) cfg.activeSeq = seqs[0];
-        renderRunwaySeparation();
-      });
-    }
-    var seqSel = panel.querySelector('#rwysep-seq');
-    if (seqSel) {
-      seqSel.addEventListener('change', function() {
-        cfg.activeSeq = this.value || 'ARR→ARR';
-        renderRunwaySeparation();
-      });
-    }
-    function _applyColorOnChange(inp) {
-      var colInfo = rsepColorForValue(inp.value);
-      inp.style.background = colInfo.bg;
-      inp.style.borderColor = colInfo.border;
-      inp.style.color = colInfo.color;
-    }
-    panel.querySelectorAll('input[data-rwysep-rot]').forEach(function(inp) {
-      inp.addEventListener('change', function() {
-        var cat = this.getAttribute('data-rwysep-rot');
-        if (!cat) return;
-        cfg.rot[cat] = this.value;
-        _applyColorOnChange(this);
-      });
-    });
-    panel.querySelectorAll('input[data-rwysep-matrix-lead]').forEach(function(inp) {
-      inp.addEventListener('change', function() {
-        var lead = this.getAttribute('data-rwysep-matrix-lead');
-        var trail = this.getAttribute('data-rwysep-matrix-trail');
-        if (!lead || !trail) return;
-        if (!cfg.seqData[seq]) cfg.seqData[seq] = rsepMakeMatrix(cats, null);
-        if (!cfg.seqData[seq][lead]) cfg.seqData[seq][lead] = {};
-        cfg.seqData[seq][lead][trail] = this.value;
-        _applyColorOnChange(this);
-      });
-    });
-    panel.querySelectorAll('input[data-rwysep-1d]').forEach(function(inp) {
-      inp.addEventListener('change', function() {
-        var cat = this.getAttribute('data-rwysep-1d');
-        if (!cat) return;
-        if (!cfg.seqData[seq]) cfg.seqData[seq] = rsepMake1D(cats, null);
-        cfg.seqData[seq][cat] = this.value;
-        _applyColorOnChange(this);
-      });
-    });
   }
 
   function drawTaxiways() {
@@ -578,34 +5,98 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    state.taxiways.forEach(tw => {
+    function taxiwayDrawContext(tw) {
       const drawing = state.taxiwayDrawingId === tw.id;
-      if (tw.vertices.length < 2 && !drawing) return;
+      if (tw.vertices.length < 2 && !drawing) return null;
       const isRunwayPath = tw.pathType === 'runway';
       const isRunwayExit = tw.pathType === 'runway_exit';
+      const isApronTaxiwayPath = tw.pathType === 'apron_taxiway';
       const widthDefault = isRunwayPath ? RUNWAY_PATH_DEFAULT_WIDTH : (isRunwayExit ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
       const width = tw.width != null ? tw.width : widthDefault;
       const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
       const pathLineCap = 'butt';
+      const showRoadWidth = !!state.showRoadWidth;
+      return { drawing, isRunwayPath, isRunwayExit, isApronTaxiwayPath, width, widthDefault, sel, pathLineCap, showRoadWidth };
+    }
+    state.taxiways.forEach(tw => {
+      const g = taxiwayDrawContext(tw);
+      if (!g) return;
+      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel, pathLineCap = g.pathLineCap, showRoadWidth = g.showRoadWidth;
       if (sel) {
         ctx.strokeStyle = c2dObjectSelectedStroke();
         ctx.fillStyle = c2dObjectSelectedFill();
       } else if (isRunwayPath || isRunwayExit) {
         ctx.strokeStyle = c2dRunwayStroke();
         ctx.fillStyle = c2dRunwayFill();
+      } else if (isApronTaxiwayPath) {
+        ctx.strokeStyle = drawing ? 'rgba(34, 197, 94, 0.85)' : '#15803d';
+        ctx.fillStyle = drawing ? 'rgba(34, 197, 94, 0.12)' : 'rgba(22, 163, 74, 0.18)';
       } else {
         ctx.strokeStyle = drawing ? 'rgba(56, 189, 248, 0.72)' : c2dRunwayStroke();
         ctx.fillStyle = drawing ? 'rgba(56, 189, 248, 0.14)' : c2dRunwayFill();
       }
-      ctx.lineWidth = width;
-      ctx.lineCap = pathLineCap;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      for (let i = 0; i < tw.vertices.length; i++) {
-        const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      if (showRoadWidth) {
+        ctx.lineWidth = width;
+        ctx.lineCap = pathLineCap;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        if (tw.vertices.length >= 2) {
+          if (sel) {
+            ctx.save();
+            ctx.shadowColor = c2dObjectSelectedGlow();
+            ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+            ctx.stroke();
+            ctx.restore();
+          } else ctx.stroke();
+        }
       }
-      if (tw.vertices.length >= 2) {
+      if (isRunwayPath && tw.vertices.length >= 2 && showRoadWidth) {
+        const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
+        drawRunwayDecorations(tw, runwayPts, width);
+      }
+    });
+    state.taxiways.forEach(tw => {
+      const g = taxiwayDrawContext(tw);
+      if (!g || tw.vertices.length < 2) return;
+      const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, showRoadWidth = g.showRoadWidth, pathLineCap = g.pathLineCap;
+      if (showRoadWidth) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke())));
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        if (sel) {
+          ctx.save();
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+          ctx.stroke();
+          ctx.restore();
+        } else ctx.stroke();
+      } else if (!isRunwayPath) {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      } else {
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#f5930b';
+        ctx.lineCap = pathLineCap;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (let i = 0; i < tw.vertices.length; i++) {
+          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
         if (sel) {
           ctx.save();
           ctx.shadowColor = c2dObjectSelectedGlow();
@@ -614,20 +105,11 @@
           ctx.restore();
         } else ctx.stroke();
       }
-      if (!isRunwayPath) {
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
-        ctx.beginPath();
-        for (let i = 0; i < tw.vertices.length; i++) {
-          const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        if (tw.vertices.length >= 2) ctx.stroke();
-      }
-      if (isRunwayPath && tw.vertices.length >= 2) {
-        const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
-        drawRunwayDecorations(tw, runwayPts, width);
-      }
+    });
+    state.taxiways.forEach(tw => {
+      const g = taxiwayDrawContext(tw);
+      if (!g) return;
+      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel;
       const dir = getTaxiwayDirection(tw);
       if (dir !== 'both' && tw.vertices.length >= 2) {
         const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
@@ -635,7 +117,7 @@
         const arrowSpacing = Math.max(22, Math.min(42, totalLen / 10));
         const numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
         const arrLen = CELL_SIZE * 0.54;
-        ctx.fillStyle = isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+        ctx.fillStyle = isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
         for (let k = 1; k <= numArrows; k++) {
           const targetDist = totalLen * (k / (numArrows + 1));
           let acc = 0;
@@ -1197,7 +679,7 @@
 
   let _safeDrawErrLogged = false;
   let _drawRafId = 0;
-  function safeDraw() { try { draw(); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
+  function safeDraw(drawOpts) { try { draw(drawOpts); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
   function flushDrawNow() {
     if (_drawRafId) {
       cancelAnimationFrame(_drawRafId);
@@ -1212,9 +694,9 @@
       safeDraw();
     });
   }
-  function draw() {
+  function draw(drawOpts) {
     if (!ctx || !canvas) return;
-    if (state.simSliderScrubbing) return;
+    if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
     drawGrid();
     drawTerminals();
     drawTaxiways();
@@ -1274,6 +756,15 @@
     if (!state.selectedObject) return;
     const type = state.selectedObject.type;
     const id = state.selectedObject.id;
+    if (type === 'layoutEdge') {
+      state.selectedObject = null;
+      state.selectedVertex = null;
+      syncPanelFromState();
+      updateObjectInfo();
+      draw();
+      ev.preventDefault();
+      return;
+    }
     if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'holdingPoint' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight') return;
     pushUndo();
     removeLayoutObjectFromState(type, id);
@@ -1299,6 +790,7 @@
 
   container.addEventListener('mousedown', function(ev) {
     if (ev.button !== 0) return;
+    focusCanvasForLayoutHotkeys();
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
     const [wx, wy] = screenToWorld(sx, sy);
@@ -1803,6 +1295,12 @@
         return;
       }
       const hit = hitTest(wx, wy);
+      let pickHit = hit;
+      if (mode !== 'edge' && !(mode === 'apronTaxiway' && state.apronLinkDrawing) &&
+          !state.terminalDrawingId && !state.taxiwayDrawingId) {
+        const sf = hitTestSimFlightAtWorld(wx, wy);
+        if (sf) pickHit = { type: 'flight', id: sf.id, obj: sf };
+      }
       if (mode === 'apronTaxiway' && state.apronLinkDrawing) {
         const pbbHit = hitTestPbbEnd(wx, wy);
         const twHit = hitTestAnyTaxiwayVertex(wx, wy);
@@ -1864,13 +1362,13 @@
           }
           draw();
         }
-      } else if (hit) {
+      } else if (pickHit) {
         state.flightPathRevealFlightId = null;
-        state.selectedObject = hit;
-        if (hit.type === 'terminal') state.currentTerminalId = hit.id;
-        const sm = settingModeValueForHit(hit);
+        state.selectedObject = pickHit;
+        if (pickHit.type === 'terminal') state.currentTerminalId = pickHit.id;
+        const sm = settingModeValueForHit(pickHit);
         if (sm) settingModeSelect.value = sm;
-        if (hit.type === 'flight' && typeof switchToTab === 'function') switchToTab('flight');
+        if (pickHit.type === 'flight' && typeof switchToTab === 'function') switchToTab('flight');
         if (typeof syncSettingsPaneToMode === 'function') syncSettingsPaneToMode();
         syncPanelFromState();
         renderObjectList();
@@ -2006,6 +1504,14 @@
       state.showImage = !state.showImage;
       syncImageToggleButton();
       invalidateGridUnderlay();
+      draw();
+    });
+  }
+  if (roadWidthToggleBtn) {
+    syncRoadWidthToggleButton();
+    roadWidthToggleBtn.addEventListener('click', function() {
+      state.showRoadWidth = !state.showRoadWidth;
+      syncRoadWidthToggleButton();
       draw();
     });
   }

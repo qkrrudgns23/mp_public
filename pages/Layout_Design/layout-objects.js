@@ -1,3 +1,35 @@
+      dot.classList.add('fresh');
+      dot.setAttribute('title', 'All views match the last Pro Sim run');
+    }
+    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+  }
+  function redrawLayoutAfterEdit() {
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof draw === 'function') draw();
+    if (typeof scene3d !== 'undefined' && scene3d && typeof update3DScene === 'function') update3DScene();
+  }
+  function setGlobalUpdateProgressUi(visible, label, pct) {
+    const ov = document.getElementById('globalUpdateOverlay');
+    const fill = document.getElementById('globalUpdateProgressFill');
+    const lab = document.getElementById('globalUpdateOverlayLabel');
+    const btn = document.getElementById('btnGlobalUpdate');
+    if (!ov) return;
+    if (visible) {
+      ov.classList.add('is-visible');
+      ov.setAttribute('aria-hidden', 'false');
+      if (lab && label != null) lab.textContent = label;
+      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (btn) btn.disabled = true;
+    } else {
+      ov.classList.remove('is-visible');
+      ov.setAttribute('aria-hidden', 'true');
+      if (fill) fill.style.width = '0%';
+      if (btn) btn.disabled = false;
+    }
+  }
+  function scheduleAfterPaint(fn) {
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() { setTimeout(fn, 0); });
     });
   }
   const DEFAULT_AIRLINE_CODES = (function() {
@@ -93,6 +125,14 @@
     const on = !!state.showImage;
     imageToggleBtn.classList.toggle('active', on);
     imageToggleBtn.title = on ? 'Image visible (click to hide)' : 'Image hidden (click to show)';
+  }
+  function syncRoadWidthToggleButton() {
+    if (!roadWidthToggleBtn) return;
+    const on = !!state.showRoadWidth;
+    roadWidthToggleBtn.classList.toggle('active', on);
+    roadWidthToggleBtn.title = on
+      ? 'Road width visible (click for centerline-only schematic)'
+      : 'Schematic mode: centerlines only (click to show road width)';
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -393,9 +433,11 @@
       if (typeof obj.grid.cellSize === 'number') CELL_SIZE = obj.grid.cellSize;
       if (typeof obj.grid.showGrid === 'boolean') state.showGrid = obj.grid.showGrid;
       if (typeof obj.grid.showImage === 'boolean') state.showImage = obj.grid.showImage;
+      if (typeof obj.grid.showRoadWidth === 'boolean') state.showRoadWidth = obj.grid.showRoadWidth;
     }
     if (typeof obj.showGrid === 'boolean') state.showGrid = obj.showGrid;
     if (typeof obj.showImage === 'boolean') state.showImage = obj.showImage;
+    if (typeof obj.showRoadWidth === 'boolean') state.showRoadWidth = obj.showRoadWidth;
     state.layoutImageOverlay = normalizeLayoutImageOverlay(
       (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
     );
@@ -403,6 +445,7 @@
     syncLayoutImageBitmap();
     syncGridToggleButton();
     syncImageToggleButton();
+    syncRoadWidthToggleButton();
     if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
     if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
     if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
@@ -489,6 +532,14 @@
         f.__schedRetRotRev = null;
         f.__schedVttArrRev = null;
         f.__schedVttArrMin = null;
+        delete f.eldtMin;
+        delete f.eibtMin;
+        delete f.eobtMin;
+        delete f.etotMin;
+        delete f.eldtMin_orig;
+        delete f.eibtMin_orig;
+        delete f.eobtMin_orig;
+        delete f.etotMin_orig;
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
       });
@@ -502,13 +553,53 @@
     if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-    else {
-      if (typeof renderFlightList === 'function') renderFlightList();
-      draw();
+    else draw();
+    if (typeof renderFlightList === 'function') renderFlightList();
+  }
+  /** E-series minutes and ARR_ROT_SEC from ``airside_sim`` schedule row only (seconds → minutes). */
+  function applyAirsideScheduleRowToFlight(f, srec) {
+    if (!f) return;
+    if (!srec || typeof srec !== 'object') {
+      delete f.eldtMin;
+      delete f.eibtMin;
+      delete f.eobtMin;
+      delete f.etotMin;
+      delete f.eldtMin_orig;
+      delete f.eibtMin_orig;
+      delete f.eobtMin_orig;
+      delete f.etotMin_orig;
+      f.arrRotSec = null;
+      return;
     }
+    function secOpt(key) {
+      if (srec[key] == null || srec[key] === '') return NaN;
+      const n = Number(srec[key]);
+      return isFinite(n) ? n : NaN;
+    }
+    const eldtS = secOpt('ELDT');
+    const eibtS = secOpt('EIBT');
+    const eobtS = secOpt('EOBT');
+    const etotS = secOpt('ETOT');
+    if (isFinite(eldtS)) f.eldtMin = eldtS / 60;
+    else delete f.eldtMin;
+    if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
+    else delete f.eibtMin;
+    if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
+    else delete f.eobtMin;
+    if (isFinite(etotS)) f.etotMin = etotS / 60;
+    else delete f.etotMin;
+    const rotS = secOpt('ARR_ROT_SEC');
+    if (isFinite(rotS)) f.arrRotSec = rotS;
+    else f.arrRotSec = null;
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
+    state.simPlaybackEndCapSec = null;
+    if (payload.simulation_truncated_deadlock === true) {
+      const rawCap = payload.simulation_playback_end_abs_sec;
+      const c = Number(rawCap);
+      if (isFinite(c)) state.simPlaybackEndCapSec = c;
+    }
     const flightsDetail = Array.isArray(payload.flights_detail) ? payload.flights_detail : null;
     if (flightsDetail) {
       const byId = {};
@@ -549,41 +640,47 @@
       if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
     });
     let mergedTimelines = 0;
-    if (hasPositions) {
-      (state.flights || []).forEach(function(f) {
-        if (!f || f.id == null) return;
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const srec = schedById[String(f.id)] || null;
+      if (hasPositions) {
         const rawPts = positions[f.id];
-        if (rawPts == null) return;
-        const pts = Array.isArray(rawPts) ? rawPts : [];
-        if (pts.length < 2) return;
-        const tl = pts.map(function(p) {
-          const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
-          const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-          return { t: Number(p.t), x: x, y: y };
-        }).filter(function(k) {
-          return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
-        }).sort(function(a, b) { return a.t - b.t; });
-        if (tl.length < 2) return;
-        mergedTimelines++;
-        f.timeline = tl;
-        const srec = schedById[String(f.id)] || {};
-        const aldt = srec.ALDT != null ? Number(srec.ALDT) : (srec.SLDT != null ? Number(srec.SLDT) : NaN);
-        const aibt = srec.AIBT != null ? Number(srec.AIBT) : (srec.SIBT != null ? Number(srec.SIBT) : NaN);
-        const aobt = srec.AOBT != null ? Number(srec.AOBT) : (srec.SOBT != null ? Number(srec.SOBT) : NaN);
-        const atot = srec.ATOT != null ? Number(srec.ATOT) : (srec.STOT != null ? Number(srec.STOT) : NaN);
+        if (rawPts != null) {
+          const pts = Array.isArray(rawPts) ? rawPts : [];
+          if (pts.length >= 2) {
+            const tl = pts.map(function(p) {
+              const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+              const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+              const mf = p.motionForward !== false && p.motion_forward !== false;
+              const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
+              return { t: Number(p.t), x: x, y: y, motionForward: mf, deadlockGhost: dg };
+            }).filter(function(k) {
+              return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+            }).sort(function(a, b) { return a.t - b.t; });
+            if (tl.length >= 2) {
+              mergedTimelines++;
+              f.timeline = tl;
+            }
+          }
+        }
+      }
+      if (srec && f.timeline && f.timeline.length >= 2) {
+        const eldtS = srec.ELDT != null ? Number(srec.ELDT) : NaN;
+        const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
+        const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
+        const etotS = srec.ETOT != null ? Number(srec.ETOT) : NaN;
         f.timeline_meta = {
           playbackSource: 'des_result',
-          eldtSec: isFinite(aldt) ? aldt : undefined,
-          eibtSec: isFinite(aibt) ? aibt : undefined,
-          eobtSec: isFinite(aobt) ? aobt : undefined,
-          etotSec: isFinite(atot) ? atot : undefined,
+          eldtSec: isFinite(eldtS) ? eldtS : undefined,
+          eibtSec: isFinite(eibtS) ? eibtS : undefined,
+          eobtSec: isFinite(eobtS) ? eobtS : undefined,
+          etotSec: isFinite(etotS) ? etotS : undefined,
         };
-        if (isFinite(aldt)) f.eldtMin = aldt / 60;
-        if (isFinite(aibt)) f.eibtMin = aibt / 60;
-        if (isFinite(aobt)) f.eobtMin = aobt / 60;
-        if (isFinite(atot)) f.etotMin = atot / 60;
-      });
-    }
+      } else {
+        delete f.timeline_meta;
+      }
+      applyAirsideScheduleRowToFlight(f, srec);
+    });
     state.hasSimulationResult = mergedTimelines > 0;
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
@@ -625,7 +722,7 @@
     return String(Math.max(0, Number(num) || 0)).padStart(width, '0');
   }
   function getDefaultPathName(pathType, currentId) {
-    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : 'TX');
+    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : (pathType === 'apron_taxiway' ? 'ATX' : 'TX'));
     const sameType = (state.taxiways || []).filter(function(tw) { return tw && tw.id !== currentId && tw.pathType === pathType; });
     const used = new Set(sameType.map(function(tw) { return (tw.name && String(tw.name).trim()) || ''; }).filter(Boolean));
     let n = 1;
@@ -731,102 +828,3 @@
       for (let i = 0; i < arr.length; i++) {
         const o = arr[i];
         if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'holdingPoint', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'taxiway') {
-      const arr = state.taxiways || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'taxiway', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'apronLink') {
-      const arr = state.apronLinks || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = getApronLinkDisplayName(o);
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'apronLink', existing: disp };
-      }
-      return null;
-    }
-    if (objectKind === 'layoutEdge') {
-      const map = state.layoutEdgeNames || {};
-      const edgeIds = Object.keys(map);
-      for (let ki = 0; ki < edgeIds.length; ki++) {
-        const kid = edgeIds[ki];
-        if (!isOther(kid)) continue;
-        const disp = map[kid];
-        if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
-      }
-      return null;
-    }
-    return null;
-  }
-  function alertDuplicateLayoutName() {
-    alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
-  }
-  function ensureDefaultDirectionModes() {
-    if (state.directionModes.length === 0) {
-      state.directionModes = [
-        { id: id(), name: 'Mode A', direction: 'clockwise' },
-        { id: id(), name: 'Mode B', direction: 'counter_clockwise' },
-        { id: id(), name: 'Mode C', direction: 'both' }
-      ];
-    }
-  }
-  const undoStack = [];
-  const maxUndoLevels = _interactionConfigNum('maxUndoLevels', 50);
-  function pushUndo() {
-    const snap = {
-      terminals: JSON.parse(JSON.stringify(state.terminals || [])),
-      pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
-      remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
-      holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
-      taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
-      apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
-      layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
-      layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
-      directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
-      flights: cloneFlightsWithoutPathPolylineCache(state.flights)
-    };
-    undoStack.push(snap);
-    if (undoStack.length > maxUndoLevels) undoStack.shift();
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-  }
-  function undo() {
-    if (!undoStack.length) return;
-    const snap = undoStack.pop();
-    state.terminals = snap.terminals;
-    state.pbbStands = snap.pbbStands;
-    state.remoteStands = snap.remoteStands;
-    state.holdingPoints = snap.holdingPoints || [];
-    state.taxiways = snap.taxiways;
-    state.apronLinks = snap.apronLinks;
-    state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
-    syncLayoutImageBitmap();
-    state.layoutEdgeNames = snap.layoutEdgeNames || {};
-    state.directionModes = snap.directionModes;
-    state.flights = snap.flights;
-    state.selectedObject = null;
-    state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
-    state.terminalDrawingId = null;
-    state.taxiwayDrawingId = null;
-    state.layoutPathDrawPointer = null;
-    syncPanelFromState();
-    updateObjectInfo();
-    renderObjectList();
-    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-  }
-  function getTaxiwayDirection(tw) {
-    if (!tw) return 'both';
-    if (tw.direction != null) {
-      const d = tw.direction;
-      if (d === 'topToBottom') return 'clockwise';

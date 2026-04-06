@@ -1,3 +1,33 @@
+  if (canvas) {
+    canvas.draggable = false;
+    canvas.setAttribute('tabindex', '-1');
+    canvas.style.outline = 'none';
+  }
+  function focusCanvasForLayoutHotkeys() {
+    if (!canvas) return;
+    try {
+      canvas.focus({ preventScroll: true });
+    } catch (e) {
+      try { canvas.focus(); } catch (e2) {}
+    }
+  }
+  const container = document.getElementById('canvas-container');
+  const coordEl = document.getElementById('coord');
+  const cursorPixelReadoutEl = document.getElementById('cursor-pixel-readout');
+  const objectInfoEl = document.getElementById('object-info');
+  const objectListEl = document.getElementById('object-list');
+  const flightTooltip = document.getElementById('flight-tooltip');
+  const settingModeSelect = document.getElementById('settingMode');
+  const layoutModeTabs = document.getElementById('layoutModeTabs');
+  const panel = document.getElementById('right-panel');
+  const panelToggle = document.getElementById('panel-toggle');
+  const resetViewBtn = document.getElementById('btnResetView');
+  const gridToggleBtn = document.getElementById('btnGridToggle');
+  const imageToggleBtn = document.getElementById('btnImageToggle');
+  const roadWidthToggleBtn = document.getElementById('btnRoadWidthToggle');
+  const GRID_LAYOUT_IMAGE_DEFAULTS = {
+    opacity: _dc.gridLayoutImage.opacity,
+    opacityMin: _dc.gridLayoutImage.opacityMin,
     opacityMax: _dc.gridLayoutImage.opacityMax,
     widthM: _dc.gridLayoutImage.widthM,
     heightM: _dc.gridLayoutImage.heightM,
@@ -167,6 +197,7 @@
     simTimeSec: 0,
     simStartSec: 0,
     simDurationSec: 0,
+    simPlaybackEndCapSec: null,
     simPlaying: false,
     simSliderScrubbing: false,
     simSpeed: _dc.defaultSimSpeed,
@@ -174,6 +205,7 @@
     simPlaybackDockVisible: false,
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
+    showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
     currentTerminalId: null,
     selectedObject: null,
     terminalDrawingId: null,
@@ -256,35 +288,3 @@
     const dot = document.getElementById('globalUpdateSyncDot');
     if (dot) {
       dot.classList.remove('stale');
-      dot.classList.add('fresh');
-      dot.setAttribute('title', 'All views match the last Pro Sim run');
-    }
-    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
-  }
-  function redrawLayoutAfterEdit() {
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    if (typeof draw === 'function') draw();
-    if (typeof scene3d !== 'undefined' && scene3d && typeof update3DScene === 'function') update3DScene();
-  }
-  function setGlobalUpdateProgressUi(visible, label, pct) {
-    const ov = document.getElementById('globalUpdateOverlay');
-    const fill = document.getElementById('globalUpdateProgressFill');
-    const lab = document.getElementById('globalUpdateOverlayLabel');
-    const btn = document.getElementById('btnGlobalUpdate');
-    if (!ov) return;
-    if (visible) {
-      ov.classList.add('is-visible');
-      ov.setAttribute('aria-hidden', 'false');
-      if (lab && label != null) lab.textContent = label;
-      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
-      if (btn) btn.disabled = true;
-    } else {
-      ov.classList.remove('is-visible');
-      ov.setAttribute('aria-hidden', 'true');
-      if (fill) fill.style.width = '0%';
-      if (btn) btn.disabled = false;
-    }
-  }
-  function scheduleAfterPaint(fn) {
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() { setTimeout(fn, 0); });

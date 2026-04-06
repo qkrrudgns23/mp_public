@@ -1,33 +1,16 @@
-      var field = el.getAttribute('data-s-field');
-      if (!fid || !field) return;
-      var f = state.flights.find(function(x) { return x.id === fid; });
-      if (!f || f.deferPathCompute) return;
-      var prev = el.getAttribute('data-s-prev') || '';
-      var txt = (el.textContent || '').trim();
-      if (txt === prev) return;
-      var m = typeof parseTimeToMinutes === 'function' ? parseTimeToMinutes(txt) : NaN;
-      if (!isFinite(m)) {
-        el.textContent = prev;
-        return;
-      }
-      if (typeof applyScheduledGateTimingFromSField !== 'function') {
-        el.textContent = prev;
-        return;
-      }
-      var ok = applyScheduledGateTimingFromSField(f, field, m);
-      if (!ok) {
-        el.textContent = prev;
-        return;
-      }
-      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-      var touched = f.standId ? [f.standId] : [];
-      if (typeof renderFlightList === 'function')
-        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [fid], touchedStandIds: touched });
+    if (!ganttRoot || !ganttRoot.querySelector('.alloc-gantt-root')) return;
+    ganttRoot.querySelectorAll('.alloc-flight').forEach(function(el) {
+      el.classList.remove('alloc-flight-selected');
+    });
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'flight' || !sel.id) return;
+    const wantId = String(sel.id);
+    ganttRoot.querySelectorAll('.alloc-flight').forEach(function(el) {
+      if (el.getAttribute('data-flight-id') === wantId) el.classList.add('alloc-flight-selected');
     });
   }
 
   function _flightListWireEvents(listEl, st) {
-    ensureFlightSchedSColumnEditWired(listEl);
     listEl.querySelectorAll('.obj-item-delete').forEach(function(btn) {
       btn.addEventListener('click', function(ev) {
         var idVal = this.getAttribute('data-del');
@@ -45,8 +28,6 @@
     listEl.querySelectorAll('.obj-item').forEach(function(row) {
       row.addEventListener('click', function(ev) {
         if ((ev.target.classList && ev.target.classList.contains('obj-item-delete')) || ev.target.getAttribute('data-del')) return;
-        if ((ev.target.classList && ev.target.classList.contains('flight-sched-s-edit')) ||
-            (ev.target.closest && ev.target.closest('.flight-sched-s-edit'))) return;
         var idVal = this.getAttribute('data-id');
         var f = st.flights.find(function(x) { return x.id === idVal; });
         if (!f) return;
@@ -61,8 +42,6 @@
       });
       row.addEventListener('dblclick', function(ev) {
         if ((ev.target.classList && ev.target.classList.contains('obj-item-delete')) || ev.target.getAttribute('data-del')) return;
-        if ((ev.target.classList && ev.target.classList.contains('flight-sched-s-edit')) ||
-            (ev.target.closest && ev.target.closest('.flight-sched-s-edit'))) return;
         ev.preventDefault();
         var idVal = this.getAttribute('data-id');
         var f = st.flights.find(function(x) { return x.id === idVal; });
@@ -132,10 +111,7 @@
       return;
     }
     if (!skipPathPrep) {
-      flights.forEach(function(f) { ensureFlightPaths(f); });
-      if (typeof ensureArrRetRotSampled === 'function') ensureArrRetRotSampled(flights, false);
       if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
-      if (typeof computeSeparationAdjustedTimes === 'function') computeSeparationAdjustedTimes();
     }
 
     let intervals = [];
@@ -149,9 +125,16 @@
         const f = flights.find(ff => ff.id === id);
         if (!f) return;
         const tds = Array.from(row.querySelectorAll('td'));
-        if (tds.length < 18) return;
+        if (tds.length <= FLIGHT_SCHED_TD_ETOT) return;
         const getMin = (idx) => {
-          const txt = (tds[idx] && tds[idx].textContent || '').trim();
+          const td = tds[idx];
+          if (!td) return 0;
+          const dm = td.getAttribute('data-sched-min');
+          if (dm != null && String(dm).trim() !== '') {
+            const n = parseFloat(dm);
+            return isFinite(n) ? n : 0;
+          }
+          const txt = (td.textContent || '').trim();
           if (!txt) return 0;
           try {
             return parseTimeToMinutes(txt);
@@ -159,10 +142,10 @@
             return 0;
           }
         };
-        const sldt_d = getMin(10);
-        const sibt_d = getMin(11);
-        const sobt_d = getMin(12);
-        const stot_d = getMin(13);
+        const sldt_d = getMin(FLIGHT_SCHED_TD_SLD);
+        const sibt_d = getMin(FLIGHT_SCHED_TD_SIBTD);
+        const sobt_d = getMin(FLIGHT_SCHED_TD_SOBTD);
+        const stot_d = getMin(FLIGHT_SCHED_TD_STOTD);
         const eSer = ganttESeriesMinutesFromTimelineMeta(f);
         const eldt = eSer.eldt;
         const eibt = eSer.eibt;
@@ -213,10 +196,7 @@
     }
     const baseMinT = Math.max(0, minS - GANTT_PAD_MIN);
     const baseMaxT0 = maxE + GANTT_PAD_MIN;
-    const baseMaxT = Math.min(
-      (baseMaxT0 <= baseMinT) ? (baseMinT + 60) : baseMaxT0,
-      baseMinT + 1440
-    );
+    const baseMaxT = (baseMaxT0 <= baseMinT) ? (baseMinT + 60) : baseMaxT0;
     const baseSpan = baseMaxT - baseMinT;
     const dataSpan = Math.max(1e-9, baseSpan);
     const visibleSpan = Math.min(GANTT_VISIBLE_WINDOW_MIN, dataSpan);
@@ -327,8 +307,8 @@
         const conflictClass = (conflictMap[f.id] || flightBlockedLikeNoWay(f)) ? ' conflict' : '';
         const selectedClass = (state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id) ? ' alloc-flight-selected' : '';
         const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
-        const sibtLabel = formatMinutesToHHMM(t0);
-        const sobtLabel = formatMinutesToHHMM(t1);
+        const sibtLabel = formatFlightScheduleDateTime(f, t0);
+        const sobtLabel = formatFlightScheduleDateTime(f, t1);
         const barTitle =
           'SIBT: ' + sibtLabel +
           '\\nSOBT: ' + sobtLabel +
@@ -548,3 +528,23 @@
         labelRows.push(row.labelHtml);
         trackRows.push(row.trackHtml);
       });
+    }
+    const axisTicks = tickPositions.map(tp =>
+      '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
+        '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
+      '</div>'
+    );
+    const axisHtml =
+      '<div class="alloc-time-axis-overlay">' +
+        '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
+      '</div>';
+
+    labelRows.push('<div class="alloc-label-axis-spacer"></div>');
+
+    const labelColHtml =
+      '<div class="alloc-gantt-label-col">' +
+        labelRows.join('') +
+      '</div>';
+    const innerMinWidthPct = Math.max(100, Math.round(zoom * 100));
+    const gridOverlayHtml =
+      '<div class="alloc-gantt-grid-overlay">' +

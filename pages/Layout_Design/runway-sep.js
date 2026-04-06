@@ -1,23 +1,3 @@
-    });
-  }
-
-  function validateNetworkForFlights() {
-    const msgs = [];
-    const hasRunwayPath = state.taxiways && state.taxiways.some(tw => tw.pathType === 'runway');
-    if (!hasRunwayPath) msgs.push('RunwayThere is no.');
-    if (!state.taxiways || !state.taxiways.length) msgs.push('TaxiwayThere is no.');
-    const stands = (state.pbbStands || []).concat(state.remoteStands || []);
-    const linked = state.apronLinks || [];
-    const hasApronLink = stands.some(pbb =>
-      linked.some(lk =>
-        lk.pbbId === pbb.id &&
-        state.taxiways &&
-        state.taxiways.some(tw => tw.id === lk.taxiwayId)
-      )
-    );
-    if (!stands.length || !hasApronLink) msgs.push('Apron(PBB)class TaxiwayAt least one link is required to connect.');
-    const termsForLabel = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) { return {
-      id: t.id,
       name: (t.name || '').trim() || 'Building'
     }; });
     function termNameById(id) {
@@ -383,3 +363,23 @@
       const depRotSec = (f && f.arrDep === 'Dep' && typeof computeDepRotSecondsForFlight === 'function')
         ? computeDepRotSecondsForFlight(f)
         : ((typeof SCHED_DEP_ROT_MIN === 'number' && isFinite(SCHED_DEP_ROT_MIN)) ? SCHED_DEP_ROT_MIN * 60 : null);
+      const arrTaxiDelayMin = kpiToNumber(f && f.vttADelayMin != null ? f.vttADelayMin : 0);
+      const depTaxiDelayMin = kpiToNumber(f && f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
+      const sibt = kpiToNumber(f && f.sibtMin_orig != null ? f.sibtMin_orig : (f && f.timeMin != null ? f.timeMin : null));
+      const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiMin != null && rotSec != null ? Math.max(0, sibt - arrTaxiMin - rotSec / 60) : null));
+      const dwellMin = kpiToNumber(f && f.dwellMin != null ? f.dwellMin : null);
+      const sobt = kpiToNumber(f && f.sobtMin_orig != null ? f.sobtMin_orig : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
+      const sttDepMinK = kpiToNumber(typeof getBaseVttDepMinutesToHoldingSlot === 'function' ? getBaseVttDepMinutesToHoldingSlot(f) : depTaxiMin);
+      const depRotMinK = depRotSec != null && isFinite(depRotSec) ? depRotSec / 60 : null;
+      const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depRotMinK != null && sttDepMinK != null ? sobt + depRotMinK + sttDepMinK : (sobt != null && depBlockOutMin != null ? sobt + depBlockOutMin : null)));
+      const eldt = kpiToNumber(f && f.eldtMin != null ? f.eldtMin : (f && f.sldtMin_d != null ? f.sldtMin_d : sldt));
+      const eibt = kpiToNumber(f && f.eibtMin != null ? f.eibtMin : (eldt != null && arrTaxiMin != null && rotSec != null ? eldt + arrTaxiMin + rotSec / 60 + (kpiToNumber(f.vttADelayMin) || 0) : sibt));
+      const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
+      const etot = kpiToNumber(f && f.etotMin != null ? f.etotMin : (f && f.stotMin_d != null ? f.stotMin_d : stot));
+      const failed = !!(f && flightBlockedLikeNoWay(f));
+      const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
+      const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
+      const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
+      const acDepDelay = (etot != null && stot != null) ? Math.max(0, etot - stot) : null;
+      return {
+        flight: f,

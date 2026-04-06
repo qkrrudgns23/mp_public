@@ -1,3 +1,102 @@
+    const cfg = rw.rwySepConfig;
+    if (!RSEP_STD_CATS[cfg.standard]) {
+      rw.rwySepConfig = rsepMakeConfig('ICAO');
+      return rw.rwySepConfig;
+    }
+    return cfg;
+  }
+  let dpr = window.devicePixelRatio || 1;
+  let ctx = (canvas && typeof canvas.getContext === 'function') ? canvas.getContext('2d') : null;
+
+  function screenToWorld(sx, sy) {
+    return [(sx - state.panX) / state.scale, (sy - state.panY) / state.scale];
+  }
+  function cellToPixel(col, row) { return [col * CELL_SIZE, row * CELL_SIZE]; }
+  function getTaxiwayAvgMoveVelocityForPath(path) {
+    if (path && typeof path.avgMoveVelocity === 'number' && isFinite(path.avgMoveVelocity) && path.avgMoveVelocity > 0)
+      return Math.max(1, Math.min(50, path.avgMoveVelocity));
+    const el = document.getElementById('taxiwayAvgMoveVelocity');
+    const v = el ? Number(el.value) : 10;
+    return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
+  }
+  function roundToStep(value, step) {
+    const n = Number(value);
+    const s = Number(step);
+    if (!isFinite(n)) return 0;
+    if (!isFinite(s) || s <= 0) return n;
+    return Math.round(n / s) * s;
+  }
+  function clampToGridBounds(col, row) {
+    const c = Math.max(0, Math.min(GRID_COLS, Number(col) || 0));
+    const r = Math.max(0, Math.min(GRID_ROWS, Number(row) || 0));
+    return [c, r];
+  }
+  function pixelToCell(x, y) {
+    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
+    const snappedCol = roundToStep(x / cs, GRID_SNAP_STEP_CELL);
+    const snappedRow = roundToStep(y / cs, GRID_SNAP_STEP_CELL);
+    return clampToGridBounds(snappedCol, snappedRow);
+  }
+  function worldPointToCellPoint(wx, wy, snapToGrid) {
+    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
+    const step = snapToGrid ? GRID_SNAP_STEP_CELL : FREE_DRAW_STEP_CELL;
+    const col = roundToStep(wx / cs, step);
+    const row = roundToStep(wy / cs, step);
+    const clamped = clampToGridBounds(col, row);
+    return { col: clamped[0], row: clamped[1] };
+  }
+  function worldPointToPixel(wx, wy, snapToGrid) {
+    const pt = worldPointToCellPoint(wx, wy, snapToGrid);
+    return cellToPixel(pt.col, pt.row);
+  }
+  const ICAO_STAND_SIZE_M = (function() {
+    const m = _layoutTier.standSizesMByIcaoCategory;
+    if (m && typeof m === 'object') {
+      const o = {};
+      Object.keys(m).forEach(k => { o[k] = Number(m[k]); });
+      return o;
+    }
+    return { A: 20, B: 30, C: 40, D: 50, E: 60, F: 80 };
+  })();
+  function getStandSizeMeters(cat) { return ICAO_STAND_SIZE_M[cat] || 40; }
+  function getStandBoundsRect(cx, cy, sizeM) {
+    const h = sizeM / 2;
+    return { left: cx - h, right: cx + h, top: cy - h, bottom: cy + h };
+  }
+  function normalizeAngleDeg(deg) {
+    let a = Number(deg);
+    if (!isFinite(a)) a = 0;
+    while (a > 180) a -= 360;
+    while (a <= -180) a += 360;
+    return a;
+  }
+  function getRemoteStandCenterPx(st) {
+    if (!st) return [0, 0];
+    if (typeof st.x === 'number' && isFinite(st.x) && typeof st.y === 'number' && isFinite(st.y)) {
+      return [Number(st.x), Number(st.y)];
+    }
+    return cellToPixel(st.col || 0, st.row || 0);
+  }
+  function getRemoteStandAngleRad(st) {
+    const deg = normalizeAngleDeg(st && st.angleDeg != null ? st.angleDeg : 0);
+    return deg * Math.PI / 180;
+  }
+  function getRemoteStandCorners(stLike) {
+    const [cx, cy] = getRemoteStandCenterPx(stLike);
+    const size = getStandSizeMeters((stLike && stLike.category) || 'C');
+    const h = size / 2;
+    const angle = getRemoteStandAngleRad(stLike);
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    return [
+      [cx + (-h)*cos - (-h)*sin, cy + (-h)*sin + (-h)*cos],
+      [cx + ( h)*cos - (-h)*sin, cy + ( h)*sin + (-h)*cos],
+      [cx + ( h)*cos - ( h)*sin, cy + ( h)*sin + ( h)*cos],
+      [cx + (-h)*cos - ( h)*sin, cy + (-h)*sin + ( h)*cos]
+    ];
+  }
+  function rectsOverlap(a, b) {
+    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+  }
   function getPbbAnchorPx(pbb) {
     const x1 = Number(pbb && pbb.x1);
     const y1 = Number(pbb && pbb.y1);
@@ -407,6 +506,7 @@
         cellSize: CELL_SIZE,
         showGrid: !!state.showGrid,
         showImage: !!state.showImage,
+        showRoadWidth: !!state.showRoadWidth,
         layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
       },
       networkJunctions: networkJunctions,
@@ -439,6 +539,7 @@
           'aircraftType',
           'code',
           'timeMin',
+          'sibtDate',
           'dwellMin',
           'minDwellMin',
           'noWayArr',
@@ -514,6 +615,13 @@
           terminalId: _labelOrId(termId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
           depRunwayId: _labelOrId(depRwyId, typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById : null),
         };
+        const schedExport = flightScheduleMinutesForRow(f);
+        copy.sibtDateTime = formatFlightScheduleDateTime(f, schedExport.sibt);
+        copy.sobtDateTime = formatFlightScheduleDateTime(f, schedExport.sobt);
+        copy.sldtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sldt_d);
+        copy.sibtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sibt_d);
+        copy.sobtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sobt_d);
+        copy.stotDateTime_d = formatFlightScheduleDateTime(f, schedExport.stot_d);
         return copy;
       }),
       simPathGraph: buildSimPathGraphExport()
@@ -610,114 +718,3 @@
         if (!near) continue;
         const d2 = dist2(near, click);
         if (d2 < bestD2) {
-          bestD2 = d2;
-          best = { point: near, term: term, edgeIndex: i };
-        }
-      }
-    });
-    return best;
-  }
-
-  function pointInPolygon(p, verts) {
-    let inside = false;
-    const n = verts.length;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const vi = cellToPixel(verts[i].col, verts[i].row);
-      const vj = cellToPixel(verts[j].col, verts[j].row);
-      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
-    }
-    return inside;
-  }
-
-  function getApronLinkStandEndPx(lk) {
-    if (!lk || !lk.pbbId) return null;
-    const stand = findStandById(lk.pbbId);
-    if (!stand) return null;
-    return getStandConnectionPx(stand);
-  }
-  function getApronLinkPolylineWorldPts(lk) {
-    if (!lk || lk.tx == null || lk.ty == null) return [];
-    const a = getApronLinkStandEndPx(lk);
-    if (!a) return [];
-    const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) {
-      if (v && isFinite(Number(v.x)) && isFinite(Number(v.y))) return [Number(v.x), Number(v.y)];
-      return cellToPixel(Number(v.col), Number(v.row));
-    });
-    const b = [Number(lk.tx), Number(lk.ty)];
-    return [a].concat(mids).concat([b]);
-  }
-  function hitTestApronLink(wx, wy) {
-    const click = [wx, wy];
-    const hitD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
-    const list = state.apronLinks || [];
-    for (let i = list.length - 1; i >= 0; i--) {
-      const lk = list[i];
-      const poly = getApronLinkPolylineWorldPts(lk);
-      if (poly.length < 2) continue;
-      for (let j = 0; j < poly.length - 1; j++) {
-        const near = closestPointOnSegment(poly[j], poly[j + 1], click);
-        if (!near) continue;
-        if (dist2(near, click) < hitD2) return { type: 'apronLink', id: lk.id, obj: lk };
-      }
-    }
-    return null;
-  }
-
-  function getDefaultHoldingPointLabel() {
-    let maxN = 0;
-    (state.holdingPoints || []).forEach(function(h) {
-      const m = /^Position(\d+)$/i.exec(String(h && h.name || '').trim());
-      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
-    });
-    return 'Position' + (maxN + 1);
-  }
-  function snapHoldingPointOnAllowedTaxiways(wx, wy) {
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    (state.taxiways || []).forEach(function(tw) {
-      const pt = tw.pathType || 'taxiway';
-      if (pt !== 'taxiway' && pt !== 'runway_exit') return;
-      if (!tw.vertices || tw.vertices.length < 2) return;
-      for (let i = 0; i < tw.vertices.length - 1; i++) {
-        const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
-        const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-        if (!near) continue;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2) { bestD2 = d2; best = { x: near[0], y: near[1], pathType: pt }; }
-      }
-    });
-    return best;
-  }
-  function hitTestHoldingPoint(wx, wy) {
-    const r = c2dHoldingPointDiameterM() * 0.5;
-    const rHit = r + Math.max(2, CELL_SIZE * 0.15);
-    const r2 = rHit * rHit;
-    const pts = state.holdingPoints || [];
-    for (let i = pts.length - 1; i >= 0; i--) {
-      const hp = pts[i];
-      if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) continue;
-      const dx = wx - hp.x, dy = wy - hp.y;
-      if (dx * dx + dy * dy <= r2) return { type: 'holdingPoint', id: hp.id, obj: hp };
-    }
-    return null;
-  }
-  function tryPlaceHoldingPointAt(x, y, pathType) {
-    const hpKind = pathTypeToHpKind(pathType || 'taxiway');
-    const nameInput = document.getElementById('holdingPointName');
-    const manual = nameInput && nameInput.value && String(nameInput.value).trim();
-    let baseName = manual ? String(nameInput.value).trim() : getDefaultHoldingPointLabel();
-    if (findDuplicateLayoutName('holdingPoint', null, baseName)) { alertDuplicateLayoutName(); return false; }
-    pushUndo();
-    state.holdingPoints.push({ id: id(), name: baseName, x: x, y: y, hpKind: hpKind });
-    return true;
-  }
-
-  function hitTest(wx, wy) {
-    const click = [wx, wy];
-    for (let i = state.remoteStands.length - 1; i >= 0; i--) {
-      const st = state.remoteStands[i];
-      if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
-        return { type: 'remote', id: st.id, obj: st };

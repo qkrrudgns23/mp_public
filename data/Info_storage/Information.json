@@ -1146,9 +1146,11 @@
         5,
         10,
         20,
-        30
+        30,
+        40,
+        50
       ],
-      "defaultSimSpeed": 5,
+      "defaultSimSpeed": 30,
       "simTimeSliderSnapSec": 1,
       "defaultAirlineCodes": [
         "KE",
@@ -1413,7 +1415,8 @@
         "depTakeoffAccelMs2": 2,
         "defaultApronStandCapacity": 1,
         "standArrivalStopRadiusM": 22,
-        "standStoppedVelocityMaxMs": 0.12
+        "standStoppedVelocityMaxMs": 0.12,
+        "deadlockResolveStopCount": 15
       }
     }
   }

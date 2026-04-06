@@ -8,15 +8,21 @@ flight; routing and time axis use Sd only (``eldtMin_d`` or ``sldtMin_d`` → EL
 seconds). Same arrival runway: ``ELDT`` is pushed forward so the next landing is not earlier than
 the previous touchdown plus landing-leg duration (touchdown through end of Landing micro-legs)
 plus ``RWY_ARRIVAL_SPACING_BUFFER_SEC`` (taxing / hold-wait margin). Outputs ``schedule`` with S, Sd echo,
-E times (ELDT/EIBT/EOBT/ETOT); ``EIBT`` is first time the aircraft is within ``standArrivalStopRadiusM`` of
-the stand token on Arr_taxi ``apron_link`` with speed below ``standStoppedVelocityMaxMs`` (phase-change
-fallback if stand px is missing); ``EOBT`` is first time on Dep_taxi ``apron_link`` after
-``dep_taxi_start_abs_sec`` with speed above a small threshold, else path timing + ``dwellMin`` when not
+E times (ELDT/EIBT/EOBT/ETOT); ``EIBT`` is **only** from simulation: first time within ``standArrivalStopRadiusM`` of
+the stand token on ``Arr_taxi`` (any path type except pure ``runway``) with speed below ``standStoppedVelocityMaxMs``, only when
+``PROCEED`` (not ``WAIT``/``YIELD``) and the destination stand pipeline has capacity (no cooldown). Phase-change
+fallback if stand px is missing. No schedule/path nominal fill-in for EIBT. ``EOBT`` is first time on Dep_taxi ``apron_link`` after
+``dep_taxi_start_abs_sec`` (set at in-blocks + dwell) with speed above a small threshold, else path timing + ``dwellMin`` when not
 recorded.
+``ETOT`` (when the path includes a ``Lineup_departure`` / takeoff-roll leg) is **only** the simulated time when the flight
+finishes the last path segment (``path_completed_abs_sec``); no nominal EOBT+leg projection. If the sim never completes that path,
+``ETOT`` is omitted (null).
 
 ``positions`` timelines use ``t`` = absolute schedule seconds (day base, same as ELDT scale);
-``Dep_taxi`` motion is gated until physical in-blocks at stand + ``dwell_sec`` (see ``standArrivalStopRadiusM``).
-Per-flight lookahead / reservation depth (arrival default, arrival with stand busy after ELDT, departure);
+``Dep_taxi`` pushback/taxi-out is gated until **physical** in-blocks at stand + ``dwell_sec`` (not ELDT+nominal taxi-in).
+Between heavy control ticks, a full reservation rebook runs every ``LIGHT_RESERVATION_RETRY_INTERVAL_SEC`` so agents
+re-check stand pipeline and departure-runway resources and regain ``PROCEED`` when slots free (same rules as ``can_reserve_path``).
+Per-flight lookahead / billed reservation depth by regime (runway, Dep_taxi, Arr_taxi, Arr_taxi stand-busy after ELDT);
 ``apron_taxiway`` edges use billed depth where those edges
 add no slot; consecutive ``taxiway`` edges still share one slot. Physical edges remain reserved along the path.
 Each apron stand has configurable capacity (layout ``pbbStands[].capacity`` or ``defaultApronStandCapacity``);
@@ -59,6 +65,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 _INFORMATION_PATH = (_ROOT / "data" / "Info_storage" / "Information.json").resolve()
 
 Point = Tuple[float, float]
+DestinationStandHistorySnap = Tuple[str, int, int, int, bool, bool]
 PHASE_LANDING = "Landing"
 PHASE_ARR_TAXI = "Arr_taxi"
 PHASE_DEP_TAXI = "Dep_taxi"
@@ -87,35 +94,54 @@ DEFAULT_INTERSECTION_CAPACITY = 1
 DEFAULT_RUNWAY_CAPACITY = 1
 DEFAULT_STAND_CAPACITY = 1
 DEFAULT_MIN_SEPARATION_M = 60.0
-# Arrival (Landing / Arr_taxi): default lookahead & billed reservation depth.
-LOOKAHEAD_ARRIVAL_DEFAULT = 5
-RESERV_DEPTH_ARRIVAL = 3
-# Arrival when sim ≥ ELDT and target apron stand is occupied by another flight: longer lookahead.
-LOOKAHEAD_ARRIVAL_STAND_BUSY = 10
-# Departure (Dep_taxi / holding / lineup).
-LOOKAHEAD_DEPARTURE = 5
-RESERV_DEPTH_DEPARTURE = 3
+# Lookahead edge count (T) and billed reservation depth per movement regime.
+# Runway: Landing, or first segment ``runway`` / ``runway_taxiway`` on Arr_taxi / Dep_taxi, or
+# Holding_lineup / Lineup_departure on those path types.
+LOOKAHEAD_RUNWAY = 0
+RESERV_DEPTH_RUNWAY = 0
+# Dep_taxi (and holding/lineup when first segment is not runway above).
+LOOKAHEAD_DEP_TAXI = 6
+RESERV_DEPTH_DEP_TAXI = 4
+# Arr_taxi (default).
+LOOKAHEAD_ARR_TAXI = 6
+RESERV_DEPTH_ARR_TAXI = 4
+# Arr_taxi when sim ≥ ELDT and target stand occupied / pushback cooldown.
+LOOKAHEAD_ARR_TAXI_BUSY = 12
+RESERV_DEPTH_ARR_TAXI_BUSY = 6
 # Upper bound for failsafe resource collection and control_state default.
 LOOKAHEAD_EDGE_COUNT_MAX = max(
-    LOOKAHEAD_ARRIVAL_DEFAULT,
-    LOOKAHEAD_ARRIVAL_STAND_BUSY,
-    LOOKAHEAD_DEPARTURE,
+    LOOKAHEAD_RUNWAY,
+    LOOKAHEAD_DEP_TAXI,
+    LOOKAHEAD_ARR_TAXI,
+    LOOKAHEAD_ARR_TAXI_BUSY,
 )
 RWY_ARRIVAL_SPACING_BUFFER_SEC = 25 #### 홪주로 이탈시간 여유분분
-HEAVY_DECISION_INTERVAL_SEC = 5.0
+HEAVY_DECISION_INTERVAL_SEC = 10
+# Between heavy ticks, re-run full reservation pass this often so Arr_taxi / Dep_taxi agents
+# re-observe stand + departure-runway resources and regain PROCEED when slots free.
+LIGHT_RESERVATION_RETRY_INTERVAL_SEC = 1.0
 DEADLOCK_THRESHOLD_SEC = 300.0
 DEADLOCK_FORCE_MOVE_DURATION_SEC = 60.0
-DEADLOCK_FORCED_OPEN_EXTRA_SEC = 0
+DEADLOCK_RESOLVE_STOP_COUNT = 10
 STAGNATION_PROGRESS_EPS_M = 2.0
 # After pushback from a stand, block other arrivals to that stand for this many seconds.
 STAND_POST_PUSHBACK_CLEARANCE_DELAY_SEC = 60.0
 REROUTE_WAIT_THRESHOLD_SEC = 60.0
-REROUTE_IMPROVEMENT_RATIO = 1.2
-REROUTE_MAX_ATTEMPTS = 12
+REROUTE_IMPROVEMENT_RATIO = 0.2
+REROUTE_MAX_ATTEMPTS = 25
 REVERSE_PENALTY_COST = 1_000_000.0
 REROUTE_YIELD_EDGE_PENALTY = REVERSE_PENALTY_COST
 REROUTE_MIN_OLD_PATH_M = 50.0
 NODE_OCCUPANCY_RADIUS_M = 12.0
+
+# --- Global movement priority (lower = higher priority) ---
+# Single source for decision ordering, head-on yield, and AgentControlState.priority_rank.
+AGENT_PRIORITY_RUNWAY_ARR_DEP = 1  # 활주로 출발·착륙·활주로/연계 구간
+AGENT_PRIORITY_LINEUP_HOLDING = 2  # 라인업·홀딩
+AGENT_PRIORITY_DEP_TAXI = 3  # Dep_taxi (일반 택시)
+AGENT_PRIORITY_ARR_TAXI = 4  # Arr_taxi (일반 택시)
+AGENT_PRIORITY_APRON_TRANSIT = 5  # 주기장(apron_link / apron_taxiway)
+AGENT_PRIORITY_UNKNOWN = 99
 
 
 def _sim_default_stand_capacity(information: Dict[str, Any]) -> int:
@@ -502,7 +528,9 @@ class Flight:
     segment_v0_ms: List[float] = field(default_factory=list)
     segment_accel_ms2: List[float] = field(default_factory=list)
     segment_path_types: List[str] = field(default_factory=list)
-    history: List[Tuple[float, float, float, float, bool]] = field(default_factory=list)
+    history: List[Tuple[float, float, float, float, bool, bool]] = field(
+        default_factory=list
+    )
     eldt_anchor_sec: Optional[float] = None
     eldt_raw_sec: Optional[float] = None
     dwell_sec: float = 0.0
@@ -583,7 +611,7 @@ class StandResource:
 @dataclass
 class AgentControlState:
     flight_id: str
-    priority_rank: int = 99
+    priority_rank: int = AGENT_PRIORITY_UNKNOWN
     clearance: str = "PROCEED"
     wait_reason: Optional[str] = None
     reserved_edges: List[str] = field(default_factory=list)
@@ -593,7 +621,7 @@ class AgentControlState:
     blocked_since_sec: Optional[float] = None
     reroute_attempts: int = 0
     deadlock_flag: bool = False
-    forced_move_until_sec: Optional[float] = None
+    deadlock_ghost_until_abs_sec: Optional[float] = None
     stagnation_anchor_sec: Optional[float] = None
     progress_snapshot_along_m: float = 0.0
     progress_snapshot_edge_id: Optional[str] = None
@@ -613,6 +641,21 @@ class SimulationControlState:
     pixels_per_meter: float = 1.0
     last_decision_sim_time: float = -1e30
     taxi_speed_assumed_mps: float = TAXI_SPEED_MPS
+    deadlock_resolve_event_count: int = 0
+    stand_arrival_book_snapshot: Dict[str, int] = field(default_factory=dict)
+    last_light_reservation_rebook_sim_time: float = -1e30
+
+
+CLEARANCE_DEADLOCK_GHOST = "DEADLOCK_GHOST"
+
+
+def _agent_deadlock_ghost_at_time(
+    st: Optional[AgentControlState], sim_time_abs: float
+) -> bool:
+    if st is None:
+        return False
+    u = st.deadlock_ghost_until_abs_sec
+    return u is not None and float(sim_time_abs) + 1e-9 < float(u)
 
 
 def resolve_route_endpoint_index(
@@ -2271,10 +2314,9 @@ def move_agent(
 ) -> None:
     """Advance along ``segment_endpoints`` using per-segment :math:`v_0` + constant ``acceleration_ms2``.
 
-    If ``sim_time`` is set, the first ``Dep_taxi`` segment does not move until
-    ``dep_taxi_start_sim_time`` (apron in-blocks + dwell minus ELDT in local sim time when known).
-    If ``sim_time_abs`` and ``dep_taxi_start_abs_sec`` are available, the absolute
-    schedule gate takes precedence.
+    If ``sim_time`` / ``sim_time_abs`` are set, the first ``Dep_taxi`` segment does not move until
+    ``dep_taxi_start_*`` is reached; those are set only when in-blocks is stamped (stand arrival + dwell),
+    not from ELDT+nominal taxi-in. If both are ``None``, Dep_taxi is not time-gated here.
     Use ``sim_time=None`` to skip this (e.g. drain pass).
     """
     col0, row0 = agent.col, agent.row
@@ -2675,6 +2717,13 @@ def _taxi_in_out_sec_from_prep(
     return taxi_in, taxi_out
 
 
+def _flight_path_has_lineup_departure(prep: PreparedFlightPath) -> bool:
+    """True if prepared path includes at least one takeoff-roll micro-segment."""
+    if not prep.segment_phases:
+        return False
+    return any(str(p) == PHASE_LINEUP_DEPARTURE for p in prep.segment_phases)
+
+
 def _departure_leg_durations_sec_for_schedule(
     prep: PreparedFlightPath,
 ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
@@ -2844,12 +2893,12 @@ def _backfill_actual_apron_offblocks_from_history(ag: Flight) -> None:
 
 
 def _compress_agent_history_for_dwell_export(
-    history: List[Tuple[float, float, float, float, bool]],
+    history: List[Tuple[float, ...]],
     anchor_sec: Optional[float],
     eibt_sec: Optional[float],
     eobt_sec: Optional[float],
     dep_taxi_start_abs_sec: Optional[float] = None,
-) -> List[Tuple[float, float, float, float, bool]]:
+) -> List[Tuple[float, ...]]:
     """
     Drop interior samples while on-stand dwell only, keeping endpoints only.
 
@@ -2883,8 +2932,10 @@ def _compress_agent_history_for_dwell_export(
         return history
     first_i = int(in_band[0])
     next_i = int(in_band[1])
-    first_t, first_x, first_y, first_v, first_mf = history[first_i]
-    next_t, next_x, next_y, next_v, next_mf = history[next_i]
+    first_t, first_x, first_y, first_v, first_mf = history[first_i][:5]
+    next_t, next_x, next_y, next_v, next_mf = history[next_i][:5]
+    first_gh = bool(history[first_i][5]) if len(history[first_i]) > 5 else False
+    next_gh = bool(history[next_i][5]) if len(history[next_i]) > 5 else False
     if (
         abs(float(first_t) - eibt) <= 1e-9
         and (
@@ -2894,12 +2945,23 @@ def _compress_agent_history_for_dwell_export(
         )
     ):
         hist_mut = list(history)
-        hist_mut[first_i] = (float(first_t), float(next_x), float(next_y), 0.0, bool(next_mf))
+        first_dst = history[first_i][6] if len(history[first_i]) > 6 else None
+        hist_mut[first_i] = (
+            float(first_t),
+            float(next_x),
+            float(next_y),
+            0.0,
+            bool(next_mf),
+            bool(next_gh or first_gh),
+            first_dst,
+        )
         history = hist_mut
     last_i = int(in_band[-1])
     prev_i = int(in_band[-2])
-    last_t, last_x, last_y, last_v, last_mf = history[last_i]
-    prev_t, prev_x, prev_y, prev_v, prev_mf = history[prev_i]
+    last_t, last_x, last_y, last_v, last_mf = history[last_i][:5]
+    prev_t, prev_x, prev_y, prev_v, prev_mf = history[prev_i][:5]
+    last_gh = bool(history[last_i][5]) if len(history[last_i]) > 5 else False
+    prev_gh = bool(history[prev_i][5]) if len(history[prev_i]) > 5 else False
     if (
         abs(float(last_t) - band_hi) <= 1e-9
         and (
@@ -2909,7 +2971,16 @@ def _compress_agent_history_for_dwell_export(
         )
     ):
         hist_mut = list(history)
-        hist_mut[last_i] = (float(last_t), float(prev_x), float(prev_y), 0.0, bool(prev_mf))
+        last_dst = history[last_i][6] if len(history[last_i]) > 6 else None
+        hist_mut[last_i] = (
+            float(last_t),
+            float(prev_x),
+            float(prev_y),
+            0.0,
+            bool(prev_mf),
+            bool(prev_gh or last_gh),
+            last_dst,
+        )
         history = hist_mut
     drop = set(in_band[1:-1])
     return [history[i] for i in range(n) if i not in drop]
@@ -2925,14 +2996,16 @@ def _build_schedule_row(
     eldt_schedule_sec: Optional[int] = None,
     actual_apron_inblocks_abs_sec: Optional[float] = None,
     actual_apron_offblocks_abs_sec: Optional[float] = None,
+    path_completed_abs_sec: Optional[float] = None,
     information: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     S series from ``*_Min_orig``; Sd echo from ``*_Min_d``; E series from path timing + dwell.
     ``eldt_schedule_sec``가 있으면 동일 활주로 간격 조정된 ELDT를 쓰고, 없으면 ``_sd_eldt_sec``만 쓴다.
-    ``EIBT``/``EOBT`` use measured times when set: EIBT = near stand token with negligible speed on
-    Arr_taxi ``apron_link`` (or phase-transition fallback); EOBT = first motion on Dep_taxi ``apron_link``
-    after ``dep_taxi_start_abs_sec``; else path/nominal fallbacks.
+    ``EIBT`` is measured only (near stand on Arr_taxi apron segment, or phase-transition fallback); no ``ELDT``+taxi-in estimate.
+    ``EOBT`` = measured off-blocks when set; else ``EIBT``+dwell when EIBT known; else path/nominal chain.
+    ``ETOT`` with a takeoff leg in ``prep`` uses ``path_completed_abs_sec`` only; otherwise nominal ``E_LINEUP``+takeoff duration
+    when that chain is available.
     """
     dwell_sec = _dwell_sec_from_flight(fobj)
 
@@ -2974,8 +3047,6 @@ def _build_schedule_row(
     etot_sec: Optional[float] = None
     if actual_apron_inblocks_abs_sec is not None:
         eibt_sec = float(actual_apron_inblocks_abs_sec)
-    elif eldt_sec is not None and taxi_in_sec is not None:
-        eibt_sec = float(eldt_sec) + float(taxi_in_sec)
     if actual_apron_offblocks_abs_sec is not None:
         eobt_sec = float(actual_apron_offblocks_abs_sec)
     elif eibt_sec is not None:
@@ -2984,7 +3055,13 @@ def _build_schedule_row(
         e_hold_sec = float(eobt_sec) + float(t_dep2)
     if e_hold_sec is not None and t_dep3 is not None:
         e_lineup_sec = float(e_hold_sec) + float(t_dep3) + float(lineup_hold)
-    if e_lineup_sec is not None and t_dep4 is not None:
+    if _flight_path_has_lineup_departure(prep):
+        etot_sec = (
+            float(path_completed_abs_sec)
+            if path_completed_abs_sec is not None
+            else None
+        )
+    elif e_lineup_sec is not None and t_dep4 is not None:
         etot_sec = float(e_lineup_sec) + float(t_dep4)
 
     def _sf(x: Optional[int]) -> Optional[float]:
@@ -3221,6 +3298,9 @@ def _agent_occupies_apron_stand_slot(
     if not sid:
         return None
     tt = float(t_abs)
+    st0 = control_state.agent_states.get(ag.id)
+    if st0 is not None and _agent_deadlock_ghost_at_time(st0, tt):
+        return None
     ob = ag.actual_apron_offblocks_abs_sec
     if ob is not None and tt + 1e-9 >= float(ob):
         return None
@@ -3253,8 +3333,10 @@ def _try_stamp_actual_apron_inblocks_from_stand_position(
     pixels_per_meter: float,
     information: Dict[str, Any],
     t_abs: float,
+    control_state: SimulationControlState,
+    agents: List[Flight],
 ) -> None:
-    """EIBT: first time near stand token on Arr_taxi ``apron_link`` with negligible speed."""
+    """EIBT: first time near stand token on Arr_taxi with negligible speed (any link except pure runway)."""
     if ag.actual_apron_inblocks_abs_sec is not None:
         return
     sid = str(ag.apron_stand_id or "").strip()
@@ -3262,11 +3344,10 @@ def _try_stamp_actual_apron_inblocks_from_stand_position(
         return
     if not ag.edge_phases or str(ag.edge_phases[0]) != PHASE_ARR_TAXI:
         return
-    if (
-        not ag.segment_path_types
-        or len(ag.segment_path_types) != len(ag.edge_ids)
-        or str(ag.segment_path_types[0] or "") != "apron_link"
-    ):
+    if not ag.segment_path_types or len(ag.segment_path_types) != len(ag.edge_ids):
+        return
+    pt0s = str(ag.segment_path_types[0] or "").strip()
+    if pt0s == "runway":
         return
     txy = _apron_token_xy(layout, float(cell_size), sid)
     if txy is None:
@@ -3278,6 +3359,15 @@ def _try_stamp_actual_apron_inblocks_from_stand_position(
     if d_m > r_m + 1e-6:
         return
     if abs(float(ag.velocity_ms)) > v_max + 1e-9:
+        return
+    st_ag = control_state.agent_states.get(ag.id)
+    if st_ag is not None and st_ag.clearance in ("WAIT", "YIELD"):
+        return
+    if st_ag is not None and _agent_deadlock_ghost_at_time(st_ag, float(t_abs)):
+        return
+    if not _stand_pipeline_allows_apron_inblocks_stamp(
+        ag, control_state, agents, float(t_abs)
+    ):
         return
     t_in = float(t_abs)
     ag.actual_apron_inblocks_abs_sec = t_in
@@ -3334,6 +3424,9 @@ def refresh_resource_occupancy(
         td = _arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
         if td is not None and t_abs + 1e-9 < float(td):
             continue
+        st_ag = control_state.agent_states.get(ag.id)
+        if st_ag is not None and _agent_deadlock_ghost_at_time(st_ag, t_abs):
+            continue
         if not ag.edge_ids:
             continue
         eid0 = str(ag.edge_ids[0])
@@ -3383,31 +3476,31 @@ def refresh_resource_occupancy(
 
 
 def get_agent_priority_rank(agent: Flight) -> int:
+    """Uses :data:`AGENT_PRIORITY_*` constants (global movement priority)."""
     if not agent.edge_phases:
-        return 99
+        return AGENT_PRIORITY_UNKNOWN
     ph = str(agent.edge_phases[0])
     pt = (
         str(agent.segment_path_types[0] or "")
         if agent.segment_path_types and len(agent.segment_path_types) == len(agent.edge_ids)
         else ""
     )
-    if ph == PHASE_DEP_TAXI and pt in ("runway", "runway_taxiway"):
-        return 1
-    if ph == PHASE_HOLDING_LINEUP and pt in ("runway", "runway_taxiway"):
-        return 1
-    if ph == PHASE_LINEUP_DEPARTURE:
-        return 1
+    pt_s = str(pt or "").strip()
+    rw_pts = ("runway", "runway_taxiway")
+    apron_pts = ("apron_link", "apron_taxiway")
     if ph == PHASE_LANDING:
-        return 2
-    if ph == PHASE_ARR_TAXI and pt in ("runway", "runway_taxiway"):
-        return 2
-    if ph == PHASE_ARR_TAXI:
-        return 3
+        return AGENT_PRIORITY_RUNWAY_ARR_DEP
+    if ph in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE):
+        return AGENT_PRIORITY_LINEUP_HOLDING
+    if ph in (PHASE_ARR_TAXI, PHASE_DEP_TAXI) and pt_s in rw_pts:
+        return AGENT_PRIORITY_RUNWAY_ARR_DEP
+    if pt_s in apron_pts:
+        return AGENT_PRIORITY_APRON_TRANSIT
     if ph == PHASE_DEP_TAXI:
-        return 4
-    if ph == PHASE_HOLDING_LINEUP:
-        return 4
-    return 5
+        return AGENT_PRIORITY_DEP_TAXI
+    if ph == PHASE_ARR_TAXI:
+        return AGENT_PRIORITY_ARR_TAXI
+    return AGENT_PRIORITY_UNKNOWN
 
 
 def _edge_progress_ratio(agent: Flight) -> float:
@@ -3502,20 +3595,85 @@ def _stand_pushback_clearance_cooldown_active(
     return False
 
 
+def _stand_pipeline_allows_apron_inblocks_stamp(
+    ag: Flight,
+    control_state: SimulationControlState,
+    agents: List[Flight],
+    t_abs: float,
+) -> bool:
+    """Destination stand can accept this arrival for EIBT: capacity and post-pushback cooldown."""
+    sid = str(ag.apron_stand_id or "").strip()
+    if not sid:
+        return False
+    sr = control_state.stand_resources.get(sid)
+    if sr is None:
+        return True
+    aid = str(ag.id)
+    cap = max(1, int(sr.capacity))
+    phys_others = len({str(x) for x in sr.occupied_by if str(x) != aid})
+    if phys_others >= cap:
+        return False
+    if _stand_pushback_clearance_cooldown_active(sid, aid, agents, float(t_abs)):
+        return False
+    return True
+
+
+def _destination_stand_history_snap(
+    ag: Flight,
+    control_state: SimulationControlState,
+    agents: List[Flight],
+    t_abs: float,
+) -> Optional[DestinationStandHistorySnap]:
+    """
+    Per-step stand/apron diagnostics for export: matches ``can_reserve_path`` stand slot check when
+    a stand resource exists (phys + pipeline book vs capacity, post-pushback cooldown). If the stand
+    id is missing from ``stand_resources``, reservation does not apply a stand block — export
+    ``capacity`` 0 and ``standPipelineOpen`` True.
+    Pipeline book uses the last heavy-decision tick snapshot (``stand_arrival_book_snapshot``).
+    """
+    sid = str(ag.apron_stand_id or "").strip()
+    if not sid:
+        return None
+    booked = int(control_state.stand_arrival_book_snapshot.get(sid, 0))
+    cd = _stand_pushback_clearance_cooldown_active(sid, str(ag.id), agents, float(t_abs))
+    sr = control_state.stand_resources.get(sid)
+    aid = ag.id
+    if sr is None:
+        return (sid, 0, 0, booked, cd, True)
+    cap = max(1, int(sr.capacity))
+    phys_others = len({x for x in sr.occupied_by if x != aid})
+    allow = phys_others + booked < cap and not cd
+    return (sid, cap, phys_others, booked, cd, allow)
+
+
 def _lookahead_and_reservation_depth_for_agent(
     agent: Flight,
     control_state: SimulationControlState,
     sim_time_abs: float,
     agents: List[Flight],
 ) -> Tuple[int, int]:
-    """(lookahead_edge_count, billed_reservation_depth) by arrival / departure and stand occupancy."""
+    """(lookahead_edge_count, billed_reservation_depth) by runway / Dep_taxi / Arr_taxi / Arr busy."""
     if not agent.edge_phases:
-        return (LOOKAHEAD_ARRIVAL_DEFAULT, RESERV_DEPTH_ARRIVAL)
+        return (LOOKAHEAD_ARR_TAXI, RESERV_DEPTH_ARR_TAXI)
     ph0 = str(agent.edge_phases[0])
-    if ph0 in (PHASE_DEP_TAXI, PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE):
-        return (LOOKAHEAD_DEPARTURE, RESERV_DEPTH_DEPARTURE)
-    if ph0 in (PHASE_LANDING, PHASE_ARR_TAXI):
-        depth = RESERV_DEPTH_ARRIVAL
+    pt0 = (
+        str(agent.segment_path_types[0] or "").strip()
+        if agent.segment_path_types and len(agent.segment_path_types) == len(agent.edge_ids)
+        else ""
+    )
+    rw_pts = ("runway", "runway_taxiway")
+    on_runway_seg = pt0 in rw_pts
+    if ph0 == PHASE_LANDING:
+        return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
+    if ph0 in (PHASE_ARR_TAXI, PHASE_DEP_TAXI) and on_runway_seg:
+        return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
+    if ph0 in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE):
+        if on_runway_seg:
+            return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
+        return (LOOKAHEAD_DEP_TAXI, RESERV_DEPTH_DEP_TAXI)
+    if ph0 == PHASE_DEP_TAXI:
+        return (LOOKAHEAD_DEP_TAXI, RESERV_DEPTH_DEP_TAXI)
+    if ph0 == PHASE_ARR_TAXI:
         eldt = agent.eldt_anchor_sec
         t_abs = float(sim_time_abs)
         eldt_reached = eldt is None or t_abs + 1e-9 >= float(eldt)
@@ -3525,9 +3683,9 @@ def _lookahead_and_reservation_depth_for_agent(
             and _stand_pushback_clearance_cooldown_active(sid, str(agent.id), agents, t_abs)
         )
         if eldt_reached and stand_busy:
-            return (LOOKAHEAD_ARRIVAL_STAND_BUSY, depth)
-        return (LOOKAHEAD_ARRIVAL_DEFAULT, depth)
-    return (LOOKAHEAD_ARRIVAL_DEFAULT, RESERV_DEPTH_ARRIVAL)
+            return (LOOKAHEAD_ARR_TAXI_BUSY, RESERV_DEPTH_ARR_TAXI_BUSY)
+        return (LOOKAHEAD_ARR_TAXI, RESERV_DEPTH_ARR_TAXI)
+    return (LOOKAHEAD_ARR_TAXI, RESERV_DEPTH_ARR_TAXI)
 
 
 def get_lookahead_edges(
@@ -3728,6 +3886,8 @@ def _current_edge_separation_ok(
         if o_td is not None and t_eff + 1e-9 < float(o_td):
             continue
         st_o = control_state.agent_states.get(o.id)
+        if _agent_deadlock_ghost_at_time(st_o, t_eff):
+            continue
         if (
             st_o
             and st_o.clearance == "YIELD"
@@ -3753,7 +3913,7 @@ def can_reserve_path(
     sim_time: float,
     runway_release_lag_sec: float = 0.0,
     stand_arrival_book: Optional[Dict[str, int]] = None,
-    reservation_depth: int = RESERV_DEPTH_ARRIVAL,
+    reservation_depth: int = RESERV_DEPTH_ARR_TAXI,
 ) -> Tuple[bool, str]:
     if not lookahead:
         return False, "empty_lookahead"
@@ -3895,7 +4055,7 @@ def _update_deadlock_stagnation_probe(
         st = control_state.agent_states.get(ag.id)
         if st is None:
             continue
-        if st.clearance == "FORCE_MOVE":
+        if _agent_deadlock_ghost_at_time(st, t):
             continue
         td_ag = _arr_touchdown_motion_abs_sec(ag, agents, float(runway_release_lag_sec))
         if td_ag is not None and t + 1e-9 < float(td_ag):
@@ -3931,62 +4091,12 @@ def _update_deadlock_stagnation_probe(
             st.progress_snapshot_along_m = along_m
 
 
-def _collect_fail_safe_resources_for_agents(
-    control_state: SimulationControlState,
-    agents_subset: List[Flight],
-    sim_time_abs: float,
-    agents: List[Flight],
-) -> Tuple[List[str], List[str], List[str]]:
-    edge_out: List[str] = []
-    int_out: List[str] = []
-    rw_out: List[str] = []
-    seen_e: set[str] = set()
-    seen_i: set[str] = set()
-    seen_r: set[str] = set()
-    n_la = max(int(control_state.lookahead_edges), 1)
-    t_abs = float(sim_time_abs)
-    if agents_subset:
-        n_la = max(
-            n_la,
-            max(
-                (
-                    _lookahead_and_reservation_depth_for_agent(ag, control_state, t_abs, agents)[0]
-                    for ag in agents_subset
-                    if ag.edge_ids
-                ),
-                default=1,
-            ),
-        )
-    for ag in agents_subset:
-        if not ag.edge_ids:
-            continue
-        la = get_lookahead_edges(ag, n_la, control_state)
-        for eid in la:
-            if eid in seen_e:
-                continue
-            seen_e.add(eid)
-            edge_out.append(eid)
-            er = control_state.edge_resources.get(eid)
-            if er is None:
-                continue
-            if er.intersection_in and er.intersection_in not in seen_i:
-                seen_i.add(er.intersection_in)
-                int_out.append(er.intersection_in)
-            if er.intersection_out and er.intersection_out not in seen_i:
-                seen_i.add(er.intersection_out)
-                int_out.append(er.intersection_out)
-            if er.runway_id and str(er.runway_id) not in seen_r:
-                seen_r.add(str(er.runway_id))
-                rw_out.append(str(er.runway_id))
-    return edge_out, int_out, rw_out
-
-
 def reserve_path(
     agent: Flight,
     lookahead: List[str],
     control_state: SimulationControlState,
     sim_time: float,
-    reservation_depth: int = RESERV_DEPTH_ARRIVAL,
+    reservation_depth: int = RESERV_DEPTH_ARR_TAXI,
 ) -> None:
     st = control_state.agent_states.get(agent.id)
     if st is None:
@@ -4035,6 +4145,16 @@ def reserve_path(
         st.reserved_intersections.append(iid)
 
 
+def _agent_reserved_lookahead_contains_edge(
+    st: Optional[AgentControlState], edge_id: str
+) -> bool:
+    """True if this tick's reserved lookahead includes the edge (after ``reserve_path``)."""
+    if st is None or not st.reserved_edges:
+        return False
+    e = str(edge_id)
+    return any(str(x) == e for x in st.reserved_edges)
+
+
 def detect_head_on_conflict(
     agent_a: Flight,
     agent_b: Flight,
@@ -4067,11 +4187,21 @@ def resolve_head_on_conflict(
 ) -> None:
     if not detect_head_on_conflict(agent_a, agent_b, control_state):
         return
+    eid0 = str(agent_a.edge_ids[0])
     sta = control_state.agent_states.get(agent_a.id)
     stb = control_state.agent_states.get(agent_b.id)
-    if sta and sta.clearance == "FORCE_MOVE":
+    if sta and _agent_deadlock_ghost_at_time(sta, sim_time):
         return
-    if stb and stb.clearance == "FORCE_MOVE":
+    if stb and _agent_deadlock_ghost_at_time(stb, sim_time):
+        return
+    if sta is None or stb is None:
+        return
+    if sta.clearance != "PROCEED" or stb.clearance != "PROCEED":
+        return
+    if not (
+        _agent_reserved_lookahead_contains_edge(sta, eid0)
+        and _agent_reserved_lookahead_contains_edge(stb, eid0)
+    ):
         return
     c = compare_agents(agent_a, agent_b, control_state)
     if c == 0:
@@ -4614,7 +4744,7 @@ def _try_reroute_agent_off_path_block(
     if str(agent.edge_phases[0]) == PHASE_LANDING:
         return False
     st = control_state.agent_states.get(agent.id)
-    if st is None or st.clearance == "FORCE_MOVE":
+    if st is None or _agent_deadlock_ghost_at_time(st, float(sim_time)):
         return False
     if not aggressive and int(st.reroute_attempts) >= int(REROUTE_MAX_ATTEMPTS):
         return False
@@ -4665,11 +4795,10 @@ def should_reroute_agent(
     sim_time: float,
     information: Dict[str, Any],
 ) -> bool:
-    del sim_time
     st = control_state.agent_states.get(agent.id)
     if st is None or not agent.edge_ids or not agent.edge_phases:
         return False
-    if st.clearance == "FORCE_MOVE":
+    if _agent_deadlock_ghost_at_time(st, float(sim_time)):
         return False
     if str(agent.edge_phases[0]) == PHASE_LANDING:
         return False
@@ -4768,7 +4897,7 @@ def detect_deadlock(
         st = control_state.agent_states.get(ag.id)
         if st is None:
             continue
-        if st.clearance == "FORCE_MOVE":
+        if _agent_deadlock_ghost_at_time(st, t):
             continue
         if st.clearance not in ("WAIT", "YIELD"):
             continue
@@ -4790,26 +4919,8 @@ def resolve_deadlock(
     if not deadlocked_ids:
         return
     id_set = {str(x) for x in deadlocked_ids}
-    ag_list = [ag for ag in agents if str(ag.id) in id_set]
-    force_until = float(sim_time) + float(DEADLOCK_FORCE_MOVE_DURATION_SEC)
-    open_until = force_until + float(DEADLOCK_FORCED_OPEN_EXTRA_SEC)
-    edge_ids, int_ids, rw_ids = _collect_fail_safe_resources_for_agents(
-        control_state, ag_list, float(sim_time), agents
-    )
-    for eid in edge_ids:
-        er = control_state.edge_resources.get(eid)
-        if er is None:
-            continue
-        er.forced_open = True
-        er.forced_open_until_sec = open_until
-    for iid in int_ids:
-        ir = control_state.intersection_resources.get(iid)
-        if ir is None:
-            continue
-        ir.forced_open = True
-        ir.forced_open_until_sec = open_until
-    # Do not force-open runway resources: multiple simultaneous runway occupants
-    # are worse than a ground deadlock; runway capacity must stay enforced.
+    control_state.deadlock_resolve_event_count = int(control_state.deadlock_resolve_event_count) + 1
+    ghost_until = float(sim_time) + float(DEADLOCK_FORCE_MOVE_DURATION_SEC)
     wait_snap: Dict[str, float] = {}
     stall_snap: Dict[str, Optional[float]] = {}
     for fid in id_set:
@@ -4817,57 +4928,55 @@ def resolve_deadlock(
         if st is None:
             continue
         st.deadlock_flag = True
-        st.clearance = "FORCE_MOVE"
-        st.wait_reason = "deadlock_failsafe"
-        st.forced_move_until_sec = force_until
+        st.clearance = CLEARANCE_DEADLOCK_GHOST
+        st.wait_reason = "deadlock_ghost"
+        st.deadlock_ghost_until_abs_sec = ghost_until
         wait_snap[fid] = float(st.total_wait_sec)
         stall_snap[fid] = st.stagnation_anchor_sec
         st.stagnation_anchor_sec = None
         st.progress_snapshot_edge_id = None
         st.wait_start_sec = None
     _LOG.warning(
-        "DEADLOCK_FAILSAFE t=%.1f flights=%s total_wait_sec=%s stagnation_anchor_sec=%s "
-        "force_move_until=%.1f forced_open_until=%.1f edges=%s intersections=%s runways=%s",
+        "DEADLOCK_GHOST t=%.1f flights=%s total_wait_sec=%s stagnation_anchor_sec=%s "
+        "ghost_until=%.1f duration_sec=%.1f",
         float(sim_time),
         sorted(id_set),
         wait_snap,
         stall_snap,
-        force_until,
-        open_until,
-        edge_ids,
-        int_ids,
-        rw_ids,
+        ghost_until,
+        float(DEADLOCK_FORCE_MOVE_DURATION_SEC),
     )
 
 
-def update_decisions_every_10s(
+def _single_full_reservation_pass(
     control_state: SimulationControlState,
     agents: List[Flight],
     sim_time: float,
-    layout: Dict[str, Any],
-    information: Dict[str, Any],
     pixels_per_meter: float,
-    cell_size: float,
-    flights_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
-) -> None:
-    control_state.last_decision_sim_time = float(sim_time)
+    runway_release_lag_sec: float,
+) -> Tuple[Dict[str, int], List[Flight]]:
+    """
+    One global rebook: clear reservations, reset non-ghost clearances, assign PROCEED/WAIT from
+    ``can_reserve_path`` (stands + departure runway + edges), then head-on resolution.
+    Used on heavy ticks, after reroute/deadlock rebooks, and on light ticks every
+    ``LIGHT_RESERVATION_RETRY_INTERVAL_SEC`` so blocked agents retry when destination resources free.
+    """
     ppm = max(float(pixels_per_meter), 1e-9)
-    rw_lag = _runway_release_lag_sec(information)
+    rw_lag = float(runway_release_lag_sec)
     _expire_forced_open_resources(control_state, float(sim_time))
     _clear_all_reservations(control_state)
     t_dec = float(sim_time)
     for st in control_state.agent_states.values():
-        fm = st.forced_move_until_sec
-        if fm is not None and t_dec < float(fm):
-            st.clearance = "FORCE_MOVE"
-            st.wait_reason = None
+        gu = st.deadlock_ghost_until_abs_sec
+        if gu is not None and t_dec + 1e-9 < float(gu):
+            st.clearance = CLEARANCE_DEADLOCK_GHOST
+            st.wait_reason = "deadlock_ghost"
             continue
-        if fm is not None and t_dec >= float(fm):
-            st.forced_move_until_sec = None
+        if gu is not None and t_dec >= float(gu):
+            st.deadlock_ghost_until_abs_sec = None
             st.deadlock_flag = False
         st.clearance = "PROCEED"
         st.wait_reason = None
-    _resolve_all_head_on(control_state, agents, sim_time)
 
     def _decision_sort_key(ag: Flight) -> Tuple[int, int, int, float, float, str]:
         st0 = control_state.agent_states.get(ag.id)
@@ -4890,61 +4999,21 @@ def update_decisions_every_10s(
 
     ordered = sorted([ag for ag in agents if ag.edge_ids], key=_decision_sort_key)
     stand_arrival_book: Dict[str, int] = {}
-
-    def _rebook_ordered_reservations() -> None:
-        _clear_all_reservations(control_state)
-        stand_arrival_book.clear()
-        for ag2 in ordered:
-            st2 = control_state.agent_states.get(ag2.id)
-            if st2 is None or st2.clearance == "FORCE_MOVE":
-                continue
-            motion_td2 = _arr_touchdown_motion_abs_sec(ag2, agents, rw_lag)
-            if motion_td2 is not None and t_dec + 1e-9 < float(motion_td2):
-                st2.clearance = "WAIT"
-                st2.wait_reason = "pre_eldt"
-                continue
-            la2_n, depth2 = _lookahead_and_reservation_depth_for_agent(
-                ag2, control_state, t_dec, agents
-            )
-            la2 = get_lookahead_edges(ag2, la2_n, control_state)
-            ok2, reason2 = can_reserve_path(
-                ag2,
-                la2,
-                control_state,
-                agents,
-                ppm,
-                sim_time,
-                rw_lag,
-                stand_arrival_book,
-                reservation_depth=depth2,
-            )
-            if ok2:
-                reserve_path(ag2, la2, control_state, sim_time, reservation_depth=depth2)
-                st2.clearance = "PROCEED"
-                st2.wait_reason = None
-                st2.wait_start_sec = None
-                _stand_arrival_book_if_pipeline_proceed(
-                    ag2, control_state, stand_arrival_book
-                )
-            else:
-                st2.clearance = "WAIT"
-                st2.wait_reason = reason2 or "reservation"
-                if st2.wait_start_sec is None:
-                    st2.wait_start_sec = float(sim_time)
-
     for ag in ordered:
         st = control_state.agent_states.get(ag.id)
         if st is None:
             continue
         st.priority_rank = get_agent_priority_rank(ag)
-        if st.clearance == "FORCE_MOVE":
+        if _agent_deadlock_ghost_at_time(st, t_dec):
             continue
         motion_td = _arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
         if motion_td is not None and t_dec + 1e-9 < float(motion_td):
             st.clearance = "WAIT"
             st.wait_reason = "pre_eldt"
             continue
-        la_n, depth_n = _lookahead_and_reservation_depth_for_agent(ag, control_state, t_dec, agents)
+        la_n, depth_n = _lookahead_and_reservation_depth_for_agent(
+            ag, control_state, t_dec, agents
+        )
         la = get_lookahead_edges(ag, la_n, control_state)
         ok, reason = can_reserve_path(
             ag,
@@ -4970,6 +5039,34 @@ def update_decisions_every_10s(
             st.wait_reason = reason or "reservation"
             if st.wait_start_sec is None:
                 st.wait_start_sec = float(sim_time)
+    _resolve_all_head_on(control_state, agents, sim_time)
+    return stand_arrival_book, ordered
+
+
+def update_decisions_every_10s(
+    control_state: SimulationControlState,
+    agents: List[Flight],
+    sim_time: float,
+    layout: Dict[str, Any],
+    information: Dict[str, Any],
+    pixels_per_meter: float,
+    cell_size: float,
+    flights_by_id: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> None:
+    control_state.last_decision_sim_time = float(sim_time)
+    ppm = max(float(pixels_per_meter), 1e-9)
+    rw_lag = _runway_release_lag_sec(information)
+
+    stand_arrival_book, ordered = _single_full_reservation_pass(
+        control_state, agents, sim_time, ppm, rw_lag
+    )
+
+    def _rebook_ordered_reservations() -> None:
+        nonlocal stand_arrival_book, ordered
+        stand_arrival_book, ordered = _single_full_reservation_pass(
+            control_state, agents, sim_time, ppm, rw_lag
+        )
+
     reverse_cost, merge_r, taxiway_h = _path_search_params(information)
     if flights_by_id:
         for ag in ordered:
@@ -5015,6 +5112,8 @@ def update_decisions_every_10s(
             cand = detect_deadlock(control_state, agents, sim_time)
     if cand:
         resolve_deadlock(control_state, agents, cand, sim_time)
+    control_state.stand_arrival_book_snapshot = dict(stand_arrival_book)
+    control_state.last_light_reservation_rebook_sim_time = float(sim_time)
     _LOG.info("airside control tick t=%.3f processed=%s deadlocked=%s", float(sim_time), len(ordered), len(cand))
 
 
@@ -5022,12 +5121,16 @@ def _apply_same_direction_following_caps(
     control_state: SimulationControlState,
     agents: List[Flight],
     ppm: float,
+    sim_time_abs: float,
 ) -> None:
     by_edge: Dict[str, List[Flight]] = {}
+    t_eff = float(sim_time_abs)
     for ag in agents:
         if not ag.edge_ids or ag.control_halt:
             continue
         st = control_state.agent_states.get(ag.id)
+        if st and _agent_deadlock_ghost_at_time(st, t_eff):
+            continue
         if st and st.clearance in ("WAIT", "YIELD"):
             continue
         eid = str(ag.edge_ids[0])
@@ -5080,11 +5183,11 @@ def apply_movement_controls(
         td0 = _arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
         if td0 is not None and t_end + 1e-12 < float(td0):
             ag.control_halt = True
+        elif _agent_deadlock_ghost_at_time(st, t_end):
+            ag.control_halt = True
         elif st.clearance in ("WAIT", "YIELD"):
             ag.control_halt = True
-        elif st.clearance == "FORCE_MOVE":
-            ag.control_halt = False
-    _apply_same_direction_following_caps(control_state, agents, ppm)
+    _apply_same_direction_following_caps(control_state, agents, ppm, t_end)
     for ag in agents:
         td = _arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
         if td is not None and t_end + 1e-12 < float(td):
@@ -5116,6 +5219,23 @@ def run_simulation(
     progress_cb: Optional[Callable[[float, float], None]] = None,
 ) -> Dict[str, Any]:
     information = _load_information_json()
+    deadlock_resolve_stop_n = max(
+        1,
+        int(
+            round(
+                float(
+                    _deep_get(
+                        information,
+                        "tiers",
+                        "algorithm",
+                        "simulation",
+                        "deadlockResolveStopCount",
+                        default=float(DEADLOCK_RESOLVE_STOP_COUNT),
+                    )
+                )
+            )
+        ),
+    )
     reverse_cost, merge_r, taxiway_h = _path_search_params(information)
     cell_size = float(layout.get("grid", {}).get("cellSize", 20.0))
     dt_sec = _sim_time_step_sec(information, dt)
@@ -5210,11 +5330,7 @@ def run_simulation(
                 anchor_use = float(anchor_raw) if anchor_raw is not None else None
             rot_opt = _arr_rot_sec_from_prep(prep, ppm)
             rot_sec = float(rot_opt) if rot_opt is not None else 0.0
-            taxi_in_sec, _taxi_out_unused = _taxi_in_out_sec_from_prep(prep, ppm)
             dwell_s = _dwell_sec_from_flight(fobj if isinstance(fobj, dict) else {})
-            dep_start_sim = (
-                float(taxi_in_sec) + float(dwell_s) if taxi_in_sec is not None else None
-            )
             _arr_rid = str(arr_rwy_o).strip() if arr_rwy_o else ""
             dep_rwy_o = fobj.get("depRunwayId") or token_o.get("depRunwayId")
             _dep_rid = str(dep_rwy_o).strip() if dep_rwy_o else ""
@@ -5247,12 +5363,8 @@ def run_simulation(
                 segment_graph_uv=list(_guv_rem),
                 completed_directed_hops=list(_cdh),
                 motion_is_forward=_mf0,
-                dep_taxi_start_sim_time=dep_start_sim,
-                dep_taxi_start_abs_sec=(
-                    float(anchor_use) + float(dep_start_sim)
-                    if anchor_use is not None and dep_start_sim is not None
-                    else None
-                ),
+                dep_taxi_start_sim_time=None,
+                dep_taxi_start_abs_sec=None,
                 arr_runway_id=_arr_rid if _arr_rid else None,
                 arr_runway_dir=_flight_rw_dir_for_leg(fobj if isinstance(fobj, dict) else {}, 0)
                 if _arr_rid
@@ -5312,6 +5424,7 @@ def run_simulation(
     progress_elapsed_total_sec = _sim_progress_elapsed_total_sec(
         flights_raw, float(ref_t0)
     )
+    truncation_abs_sec: Optional[float] = None
 
     while True:
         if not any(ag.edge_ids for ag in agents):
@@ -5345,6 +5458,23 @@ def run_simulation(
                 cell_size,
                 flights_by_id,
             )
+        elif (
+            float(current_time_abs)
+            - float(control_state.last_light_reservation_rebook_sim_time)
+            + 1e-9
+            >= float(LIGHT_RESERVATION_RETRY_INTERVAL_SEC)
+        ):
+            _book_lt, _ = _single_full_reservation_pass(
+                control_state,
+                agents,
+                current_time_abs,
+                pixels_per_meter,
+                rw_release_lag,
+            )
+            control_state.stand_arrival_book_snapshot = dict(_book_lt)
+            control_state.last_light_reservation_rebook_sim_time = float(
+                current_time_abs
+            )
         apply_movement_controls(
             control_state,
             agents,
@@ -5364,6 +5494,8 @@ def run_simulation(
                 pixels_per_meter,
                 information,
                 current_time_abs,
+                control_state,
+                agents,
             )
             _pt_eobt = (
                 str(ag.segment_path_types[0] or "")
@@ -5381,6 +5513,15 @@ def run_simulation(
                 and abs(float(ag.velocity_ms)) > 0.01
             ):
                 ag.actual_apron_offblocks_abs_sec = float(current_time_abs)
+            st_h = control_state.agent_states.get(ag.id)
+            _gh = (
+                _agent_deadlock_ghost_at_time(st_h, float(current_time_abs))
+                if st_h is not None
+                else False
+            )
+            _dst_snap = _destination_stand_history_snap(
+                ag, control_state, agents, float(current_time_abs)
+            )
             ag.history.append(
                 (
                     current_time_abs,
@@ -5388,6 +5529,8 @@ def run_simulation(
                     ag.row,
                     ag.velocity_ms,
                     bool(ag.motion_is_forward),
+                    bool(_gh),
+                    _dst_snap,
                 )
             )
             rel_after_td = (
@@ -5408,6 +5551,22 @@ def run_simulation(
             progress_cb(
                 current_time_abs - float(ref_t0), progress_elapsed_total_sec
             )
+        if int(control_state.deadlock_resolve_event_count) >= int(deadlock_resolve_stop_n):
+            truncation_abs_sec = float(current_time_abs)
+            _LOG.warning(
+                "SIM_STOP_DEADLOCK_CAP t=%.1f count=%s cap=%s",
+                float(current_time_abs),
+                int(control_state.deadlock_resolve_event_count),
+                int(deadlock_resolve_stop_n),
+            )
+            break
+
+    if truncation_abs_sec is not None:
+        t_cut = float(truncation_abs_sec)
+        for ag in agents:
+            ag.history = [
+                row for row in ag.history if float(row[0]) <= t_cut + 1e-9
+            ]
 
     for ag in agents:
         _backfill_actual_apron_offblocks_from_history(ag)
@@ -5446,6 +5605,9 @@ def run_simulation(
             actual_apron_offblocks_abs_sec=(
                 ag.actual_apron_offblocks_abs_sec if ag else None
             ),
+            path_completed_abs_sec=(
+                ag.path_completed_abs_sec if ag is not None else None
+            ),
             information=information,
         )
         eibt_raw = sched_row.get("EIBT")
@@ -5469,15 +5631,27 @@ def run_simulation(
             if _pc is not None and t > float(_pc) + 1e-9:
                 continue
             _mf = bool(row[4]) if len(row) > 4 else True
-            _plist.append(
-                {
-                    "t": int(round(t)),
-                    "x": round(c, 3),
-                    "y": round(r, 3),
-                    "v": round(v, 3),
-                    "motionForward": _mf,
+            _dghost = bool(row[5]) if len(row) > 5 else False
+            _pos: Dict[str, Any] = {
+                "t": int(round(t)),
+                "x": round(c, 3),
+                "y": round(r, 3),
+                "v": round(v, 3),
+                "motionForward": _mf,
+                "deadlockGhost": _dghost,
+            }
+            _dsnap = row[6] if len(row) > 6 else None
+            if _dsnap is not None:
+                _sid, _cap, _phys_o, _booked, _cd, _ok = _dsnap
+                _pos["destinationApron"] = {
+                    "standId": str(_sid),
+                    "capacity": int(_cap),
+                    "physicalOthersOnStand": int(_phys_o),
+                    "pipelineBooked": int(_booked),
+                    "pushbackCooldownActive": bool(_cd),
+                    "standPipelineOpen": bool(_ok),
                 }
-            )
+            _plist.append(_pos)
         positions[ag.id] = _plist
 
     schedule_list: List[Dict[str, Any]] = []
@@ -5501,6 +5675,9 @@ def run_simulation(
                 actual_apron_offblocks_abs_sec=(
                     ag.actual_apron_offblocks_abs_sec if ag else None
                 ),
+                path_completed_abs_sec=(
+                    ag.path_completed_abs_sec if ag is not None else None
+                ),
                 information=information,
             )
         )
@@ -5514,11 +5691,16 @@ def run_simulation(
             }
         )
 
-    return {
+    out: Dict[str, Any] = {
         "baseDate": base_date,
         "positions": positions,
         "schedule": schedule_list,
         "layout": None,
         "kpi": None,
         "flights_detail": flights_detail,
+        "deadlock_resolve_event_count": int(control_state.deadlock_resolve_event_count),
     }
+    if truncation_abs_sec is not None:
+        out["simulation_truncated_deadlock"] = True
+        out["simulation_playback_end_abs_sec"] = float(truncation_abs_sec)
+    return out

@@ -238,7 +238,7 @@ _flight_ui_defaults = _cfg_bundle(_flight_info, [
     ("min_dwell", "defaultMinDwellMin", 0, _cfg_int),
     ("dwell_max", "dwellInputMax", 600, _cfg_int),
     ("dwell_step", "dwellStep", 5, _cfg_int),
-    ("default_sim_speed", "defaultSimSpeed", 5.0, _cfg_float),
+    ("default_sim_speed", "defaultSimSpeed", 30.0, _cfg_float),
     ("sim_slider_snap_sec", "simTimeSliderSnapSec", 1, _cfg_int),
     ("allow_rw_ground", "defaultAllowRunwayInGroundSegment", False, _cfg_bool),
     ("dep_rot_min", "depRotMin", 2, _cfg_int),
@@ -288,7 +288,7 @@ _ui_flight_dwell = _flight_ui_defaults["dwell"]
 _ui_flight_min_dwell = _flight_ui_defaults["min_dwell"]
 _ui_flight_dwell_max = _flight_ui_defaults["dwell_max"]
 _ui_flight_dwell_step = _flight_ui_defaults["dwell_step"]
-_ui_sim_speeds = _cfg_list(_flight_info, "simSpeedOptions", [0.5, 1, 5, 10, 20, 30])
+_ui_sim_speeds = _cfg_list(_flight_info, "simSpeedOptions", [0.5, 1, 5, 10, 20, 30, 40, 50])
 _ui_default_sim_speed = _flight_ui_defaults["default_sim_speed"]
 _ui_flight_sim_slider_snap_sec = max(1, int(_flight_ui_defaults["sim_slider_snap_sec"]))
 _ui_flight_allow_rw_ground = _flight_ui_defaults["allow_rw_ground"]

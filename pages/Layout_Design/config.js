@@ -19,6 +19,13 @@
   let GRID_COLS = _dc.gridCols;
   let GRID_ROWS = _dc.gridRows;
   let CELL_SIZE = _dc.cellSize;
+  const DEFAULT_SIBT_DATE = (function() {
+    const s = (_dc.defaultFlightServiceDate != null) ? String(_dc.defaultFlightServiceDate).trim() : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return '2026-03-31';
+  })();
+  /** Minutes from midnight for default SIBT time panel / empty Add Flight (07:00:00). */
+  const DEFAULT_SIBT_TIME_MIN = 420;
   function readCheckedDataItemIds(rootOrId, selectorClass) {
     const root = typeof rootOrId === 'string' ? document.getElementById(rootOrId) : rootOrId;
     const scope = root || document;
@@ -66,8 +73,8 @@
   const PATH_JUNCTION_MERGE_RADIUS_PX = (isFinite(_junctionMergeRadiusRaw) && _junctionMergeRadiusRaw >= 0) ? _junctionMergeRadiusRaw : 7;
   const _styleTier = _tiers.style || {};
   const _ganttStyle = _styleTier.gantt || {};
-  const GANTT_VISIBLE_WINDOW_MIN = Math.max(60, Number(_ganttStyle.visibleWindowMin) || 360);
-  const GANTT_PAN_STEP_MIN = Math.max(15, Number(_ganttStyle.panStepMin) || 120);
+  const GANTT_VISIBLE_WINDOW_MIN = Math.max(60, Number(_ganttStyle.visibleWindowMin) || 1440);
+  const GANTT_PAN_STEP_MIN = Math.max(15, Number(_ganttStyle.panStepMin) || 360);
   const _canvas2dStyle = _styleTier.canvas2d || {};
   const TAXIWAY_WIDTH_MIN = Math.max(1, Math.min(100, Number(_taxiwayTier.minWidth) || 1));
   const RUNWAY_EXIT_WIDTH_MIN = Math.max(1, Math.min(100, Number(_runwayExitTier.minWidth) || 1));
@@ -112,6 +119,12 @@
   function c2dObjectSelectedGlowBlur() {
     const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
     return (isFinite(n) && n >= 0) ? n : 22;
+  }
+  function c2dFlightSelectedRingStroke() { return _canvas2dStyle.flightSelectedRingStroke || '#facc15'; }
+  function c2dFlightSelectedRingGlow() { return _canvas2dStyle.flightSelectedRingGlow || 'rgba(250, 204, 21, 0.55)'; }
+  function c2dFlightSelectedRingGlowBlur() {
+    const n = Number(_canvas2dStyle.flightSelectedRingGlowBlur);
+    return (isFinite(n) && n >= 0) ? n : 18;
   }
   function c2dSimPreTouchdownHaloStroke() { return _canvas2dStyle.simPreTouchdownHaloStroke || 'rgba(239, 68, 68, 0.92)'; }
   function c2dSimPreTouchdownHaloFill() { return _canvas2dStyle.simPreTouchdownHaloFill || 'rgba(239, 68, 68, 0.18)'; }
@@ -212,6 +225,9 @@
     const v = Number(_schedAlgo.dwellFloorMin);
     return (isFinite(v) && v >= 0) ? v : 20;
   })();
+  /** Dispatched schedule (d): SLDT(d) = SIBT(d) − this many minutes; STOT(d) = SOBT(d) + SCHED_SD_STOT_PLUS_SOBD_MIN. */
+  const SCHED_SD_SIBT_MINUS_SLD_MIN = 3;
+  const SCHED_SD_STOT_PLUS_SOBD_MIN = 3;
   const RSEP_MISSING_MATRIX_SEC = (function() {
     const v = Number(_schedAlgo.rsepMissingMatrixSeparationSec);
     return (isFinite(v) && v >= 0) ? v : 90;
@@ -284,6 +300,7 @@
   const LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR = Math.max(0.25, Math.min(1.5, _interactionConfigNum('layoutSelectedVertexRadiusFactor', 0.7)));
   const GRID_VISIBLE_DEFAULT = _ixBool('showGridDefault', true);
   const IMAGE_VISIBLE_DEFAULT = _ixBool('showImageDefault', true);
+  const ROAD_WIDTH_VISIBLE_DEFAULT = _ixBool('showRoadWidthDefault', true);
   const RW_EXIT_ALLOWED_DEFAULT = normalizeAllowedRunwayDirections(_dc.rwExitAllowedDefaultRaw);
   function layoutPathVertexRadiusPx(vertexSelected, pathSelected) {
     if (vertexSelected) return 6 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR;
@@ -311,20 +328,3 @@
   const PBB_PREVIEW_LEN_CF = _interactionConfigNum('pbbPreviewLengthCellFactor', 0.9);
 
   const canvas = document.getElementById('grid-canvas');
-  if (canvas) canvas.draggable = false;
-  const container = document.getElementById('canvas-container');
-  const coordEl = document.getElementById('coord');
-  const cursorPixelReadoutEl = document.getElementById('cursor-pixel-readout');
-  const objectInfoEl = document.getElementById('object-info');
-  const objectListEl = document.getElementById('object-list');
-  const flightTooltip = document.getElementById('flight-tooltip');
-  const settingModeSelect = document.getElementById('settingMode');
-  const layoutModeTabs = document.getElementById('layoutModeTabs');
-  const panel = document.getElementById('right-panel');
-  const panelToggle = document.getElementById('panel-toggle');
-  const resetViewBtn = document.getElementById('btnResetView');
-  const gridToggleBtn = document.getElementById('btnGridToggle');
-  const imageToggleBtn = document.getElementById('btnImageToggle');
-  const GRID_LAYOUT_IMAGE_DEFAULTS = {
-    opacity: _dc.gridLayoutImage.opacity,
-    opacityMin: _dc.gridLayoutImage.opacityMin,

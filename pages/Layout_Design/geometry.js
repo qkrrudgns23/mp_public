@@ -1,3 +1,102 @@
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'holdingPoint', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'taxiway') {
+      const arr = state.taxiways || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'taxiway', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'apronLink') {
+      const arr = state.apronLinks || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = getApronLinkDisplayName(o);
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'apronLink', existing: disp };
+      }
+      return null;
+    }
+    if (objectKind === 'layoutEdge') {
+      const map = state.layoutEdgeNames || {};
+      const edgeIds = Object.keys(map);
+      for (let ki = 0; ki < edgeIds.length; ki++) {
+        const kid = edgeIds[ki];
+        if (!isOther(kid)) continue;
+        const disp = map[kid];
+        if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
+      }
+      return null;
+    }
+    return null;
+  }
+  function alertDuplicateLayoutName() {
+    alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
+  }
+  function ensureDefaultDirectionModes() {
+    if (state.directionModes.length === 0) {
+      state.directionModes = [
+        { id: id(), name: 'Mode A', direction: 'clockwise' },
+        { id: id(), name: 'Mode B', direction: 'counter_clockwise' },
+        { id: id(), name: 'Mode C', direction: 'both' }
+      ];
+    }
+  }
+  const undoStack = [];
+  const maxUndoLevels = _interactionConfigNum('maxUndoLevels', 50);
+  function pushUndo() {
+    const snap = {
+      terminals: JSON.parse(JSON.stringify(state.terminals || [])),
+      pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
+      remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+      holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
+      taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
+      apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
+      layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
+      layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
+      directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
+      flights: cloneFlightsWithoutPathPolylineCache(state.flights)
+    };
+    undoStack.push(snap);
+    if (undoStack.length > maxUndoLevels) undoStack.shift();
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    const snap = undoStack.pop();
+    state.terminals = snap.terminals;
+    state.pbbStands = snap.pbbStands;
+    state.remoteStands = snap.remoteStands;
+    state.holdingPoints = snap.holdingPoints || [];
+    state.taxiways = snap.taxiways;
+    state.apronLinks = snap.apronLinks;
+    state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
+    syncLayoutImageBitmap();
+    state.layoutEdgeNames = snap.layoutEdgeNames || {};
+    state.directionModes = snap.directionModes;
+    state.flights = snap.flights;
+    state.selectedObject = null;
+    state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
+    state.terminalDrawingId = null;
+    state.taxiwayDrawingId = null;
+    state.layoutPathDrawPointer = null;
+    syncPanelFromState();
+    updateObjectInfo();
+    renderObjectList();
+    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+  }
+  function getTaxiwayDirection(tw) {
+    if (!tw) return 'both';
+    if (tw.direction != null) {
+      const d = tw.direction;
+      if (d === 'topToBottom') return 'clockwise';
       if (d === 'bottomToTop') return 'counter_clockwise';
       return d || 'both';
     }
@@ -219,102 +318,3 @@
     if (!rw.rwySepConfig) {
       rw.rwySepConfig = rsepMakeConfig('ICAO');
     }
-    const cfg = rw.rwySepConfig;
-    if (!RSEP_STD_CATS[cfg.standard]) {
-      rw.rwySepConfig = rsepMakeConfig('ICAO');
-      return rw.rwySepConfig;
-    }
-    return cfg;
-  }
-  let dpr = window.devicePixelRatio || 1;
-  let ctx = (canvas && typeof canvas.getContext === 'function') ? canvas.getContext('2d') : null;
-
-  function screenToWorld(sx, sy) {
-    return [(sx - state.panX) / state.scale, (sy - state.panY) / state.scale];
-  }
-  function cellToPixel(col, row) { return [col * CELL_SIZE, row * CELL_SIZE]; }
-  function getTaxiwayAvgMoveVelocityForPath(path) {
-    if (path && typeof path.avgMoveVelocity === 'number' && isFinite(path.avgMoveVelocity) && path.avgMoveVelocity > 0)
-      return Math.max(1, Math.min(50, path.avgMoveVelocity));
-    const el = document.getElementById('taxiwayAvgMoveVelocity');
-    const v = el ? Number(el.value) : 10;
-    return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
-  }
-  function roundToStep(value, step) {
-    const n = Number(value);
-    const s = Number(step);
-    if (!isFinite(n)) return 0;
-    if (!isFinite(s) || s <= 0) return n;
-    return Math.round(n / s) * s;
-  }
-  function clampToGridBounds(col, row) {
-    const c = Math.max(0, Math.min(GRID_COLS, Number(col) || 0));
-    const r = Math.max(0, Math.min(GRID_ROWS, Number(row) || 0));
-    return [c, r];
-  }
-  function pixelToCell(x, y) {
-    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-    const snappedCol = roundToStep(x / cs, GRID_SNAP_STEP_CELL);
-    const snappedRow = roundToStep(y / cs, GRID_SNAP_STEP_CELL);
-    return clampToGridBounds(snappedCol, snappedRow);
-  }
-  function worldPointToCellPoint(wx, wy, snapToGrid) {
-    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-    const step = snapToGrid ? GRID_SNAP_STEP_CELL : FREE_DRAW_STEP_CELL;
-    const col = roundToStep(wx / cs, step);
-    const row = roundToStep(wy / cs, step);
-    const clamped = clampToGridBounds(col, row);
-    return { col: clamped[0], row: clamped[1] };
-  }
-  function worldPointToPixel(wx, wy, snapToGrid) {
-    const pt = worldPointToCellPoint(wx, wy, snapToGrid);
-    return cellToPixel(pt.col, pt.row);
-  }
-  const ICAO_STAND_SIZE_M = (function() {
-    const m = _layoutTier.standSizesMByIcaoCategory;
-    if (m && typeof m === 'object') {
-      const o = {};
-      Object.keys(m).forEach(k => { o[k] = Number(m[k]); });
-      return o;
-    }
-    return { A: 20, B: 30, C: 40, D: 50, E: 60, F: 80 };
-  })();
-  function getStandSizeMeters(cat) { return ICAO_STAND_SIZE_M[cat] || 40; }
-  function getStandBoundsRect(cx, cy, sizeM) {
-    const h = sizeM / 2;
-    return { left: cx - h, right: cx + h, top: cy - h, bottom: cy + h };
-  }
-  function normalizeAngleDeg(deg) {
-    let a = Number(deg);
-    if (!isFinite(a)) a = 0;
-    while (a > 180) a -= 360;
-    while (a <= -180) a += 360;
-    return a;
-  }
-  function getRemoteStandCenterPx(st) {
-    if (!st) return [0, 0];
-    if (typeof st.x === 'number' && isFinite(st.x) && typeof st.y === 'number' && isFinite(st.y)) {
-      return [Number(st.x), Number(st.y)];
-    }
-    return cellToPixel(st.col || 0, st.row || 0);
-  }
-  function getRemoteStandAngleRad(st) {
-    const deg = normalizeAngleDeg(st && st.angleDeg != null ? st.angleDeg : 0);
-    return deg * Math.PI / 180;
-  }
-  function getRemoteStandCorners(stLike) {
-    const [cx, cy] = getRemoteStandCenterPx(stLike);
-    const size = getStandSizeMeters((stLike && stLike.category) || 'C');
-    const h = size / 2;
-    const angle = getRemoteStandAngleRad(stLike);
-    const cos = Math.cos(angle), sin = Math.sin(angle);
-    return [
-      [cx + (-h)*cos - (-h)*sin, cy + (-h)*sin + (-h)*cos],
-      [cx + ( h)*cos - (-h)*sin, cy + ( h)*sin + (-h)*cos],
-      [cx + ( h)*cos - ( h)*sin, cy + ( h)*sin + ( h)*cos],
-      [cx + (-h)*cos - ( h)*sin, cy + (-h)*sin + ( h)*cos]
-    ];
-  }
-  function rectsOverlap(a, b) {
-    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
-  }

@@ -674,14 +674,20 @@ def build_path_graph(
                             apron_node_stand.append(
                                 {"nodeP": p, "standPt": stand_pt, "standId": lk.get("pbbId"), "chain": chain}
                             )
-            if str(obj.get("pathType") or "") in ("runway_exit", "runway_taxiway"):
+            path_type = str(obj.get("pathType") or "")
+            if path_type in ("runway_exit", "runway_taxiway", "taxiway", "apron_taxiway"):
                 cs_hp = max(float(cell_size), 1e-9)
                 hp_tol_d2 = max(float(SPLIT_TOL_D2), (cs_hp * 0.35) ** 2)
                 for hp in layout.get("holdingPoints") or []:
                     if not isinstance(hp, dict):
                         continue
-                    if str(hp.get("hpKind", "")).strip() != "runway_holding":
-                        continue
+                    kind = str(hp.get("hpKind", "")).strip()
+                    if path_type in ("runway_exit", "runway_taxiway"):
+                        if kind != "runway_holding":
+                            continue
+                    else:
+                        if kind and kind != "intermediate":
+                            continue
                     hx_raw, hy_raw = hp.get("x"), hp.get("y")
                     if hx_raw is None or hy_raw is None:
                         continue

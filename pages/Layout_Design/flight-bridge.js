@@ -1,3 +1,137 @@
+      const selIsTerminal = state.selectedObject && state.selectedObject.type === 'terminal';
+      if (!selIsTerminal) {
+        const buildingTypeSel = document.getElementById('buildingType');
+        if (buildingTypeSel) {
+          buildingTypeSel.innerHTML = getBuildingTypeOptionsHtml(BUILDING_TYPE_DEFAULT);
+          buildingTypeSel.value = BUILDING_TYPE_DEFAULT;
+        }
+        const terminalNameInput = document.getElementById('terminalName');
+        if (terminalNameInput && rm === 'terminal') terminalNameInput.value = getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, null);
+      }
+      const standModeSel = document.getElementById('standCategoryMode');
+      if (standModeSel) standModeSel.value = normalizeStandCategoryMode(_pbbTier.defaultCategoryMode, 'icao');
+      syncStandConstraintVisibility('stand', standModeSel ? standModeSel.value : 'icao');
+      renderAircraftConstraintChoices('standAircraftAccess', []);
+      const remoteModeSel = document.getElementById('remoteCategoryMode');
+      if (remoteModeSel) remoteModeSel.value = normalizeStandCategoryMode(_remoteTier.defaultCategoryMode, 'icao');
+      syncStandConstraintVisibility('remote', remoteModeSel ? remoteModeSel.value : 'icao');
+      renderAircraftConstraintChoices('remoteAircraftAccess', []);
+      renderRemoteTerminalAccessChoices([]);
+      const apronLinkNameInput = document.getElementById('apronLinkName');
+      if (apronLinkNameInput && rm === 'apronTaxiway') apronLinkNameInput.value = '';
+      const edgeNameInput = document.getElementById('edgeName');
+      if (edgeNameInput && rm === 'edge') edgeNameInput.value = '';
+      const holdingPointNameInput = document.getElementById('holdingPointName');
+      if (holdingPointNameInput && rm === 'holdingPoint') holdingPointNameInput.value = getDefaultHoldingPointLabel();
+    }
+    syncDrawToggleButton('btnTaxiwayDraw', !!state.taxiwayDrawingId);
+    syncDrawToggleButton('btnApronLinkDraw', !!state.apronLinkDrawing);
+    syncDrawToggleButton('btnPbbDraw', !!state.pbbDrawing);
+    syncDrawToggleButton('btnRemoteDraw', !!state.remoteDrawing);
+    syncDrawToggleButton('btnHoldingPointDraw', !!state.holdingPointDrawing);
+    renderObjectList();
+  }
+
+  function syncStateFromPanel() {
+    var el = function(id) { return document.getElementById(id); };
+    if (el('gridCellSize')) CELL_SIZE = Math.max(5, Number(el('gridCellSize').value) || 5);
+    if (el('gridCols')) GRID_COLS = Math.max(5, Math.min(1000, parseInt(el('gridCols').value, 10) || 200));
+    if (el('gridRows')) GRID_ROWS = Math.max(5, Math.min(1000, parseInt(el('gridRows').value, 10) || 200));
+    if (state.layoutImageOverlay) {
+      state.layoutImageOverlay.opacity = clampLayoutImageOpacity(el('gridLayoutImageOpacity') ? el('gridLayoutImageOpacity').value : state.layoutImageOverlay.opacity);
+      state.layoutImageOverlay.widthM = clampLayoutImageSize(el('gridLayoutImageWidthM') ? el('gridLayoutImageWidthM').value : state.layoutImageOverlay.widthM, state.layoutImageOverlay.widthM);
+      state.layoutImageOverlay.heightM = clampLayoutImageSize(el('gridLayoutImageHeightM') ? el('gridLayoutImageHeightM').value : state.layoutImageOverlay.heightM, state.layoutImageOverlay.heightM);
+      state.layoutImageOverlay.topLeftCol = clampLayoutImagePoint(el('gridLayoutImageCol') ? el('gridLayoutImageCol').value : state.layoutImageOverlay.topLeftCol, state.layoutImageOverlay.topLeftCol);
+      state.layoutImageOverlay.topLeftRow = clampLayoutImagePoint(el('gridLayoutImageRow') ? el('gridLayoutImageRow').value : state.layoutImageOverlay.topLeftRow, state.layoutImageOverlay.topLeftRow);
+    }
+    var t = getCurrentTerminal();
+    if (t) {
+      if (el('terminalName')) {
+        const rawTn = (el('terminalName').value || '').trim();
+        if (rawTn && findDuplicateLayoutName('terminal', t.id, rawTn)) {
+          alertDuplicateLayoutName();
+          el('terminalName').value = t.name || '';
+        } else {
+          t.name = rawTn || t.name;
+        }
+      }
+      if (el('buildingType')) t.buildingType = normalizeBuildingType(el('buildingType').value || t.buildingType);
+      if (el('terminalFloors')) t.floors = Math.max(1, parseInt(el('terminalFloors').value, 10) || 1);
+      if (el('terminalFloorToFloor')) t.floorToFloor = Math.max(0.5, Number(el('terminalFloorToFloor').value) || 4);
+      t.floorHeight = (t.floors || 1) * (t.floorToFloor || 4);
+      if (el('terminalDepartureCapacity')) t.departureCapacity = Math.max(0, parseInt(el('terminalDepartureCapacity').value, 10) || 0);
+      if (el('terminalArrivalCapacity')) t.arrivalCapacity = Math.max(0, parseInt(el('terminalArrivalCapacity').value, 10) || 0);
+    }
+    if (state.selectedObject && state.selectedObject.type === 'pbb') {
+      var pbb = state.selectedObject.obj;
+      if (el('standName')) {
+        const rawSn = (el('standName').value || '').trim();
+        if (rawSn && findDuplicateLayoutName('pbb', pbb.id, rawSn)) {
+          alertDuplicateLayoutName();
+          el('standName').value = pbb.name || '';
+        } else {
+          pbb.name = rawSn;
+        }
+      }
+      pbb.categoryMode = normalizeStandCategoryMode(el('standCategoryMode') ? el('standCategoryMode').value : pbb.categoryMode, _pbbTier.defaultCategoryMode || 'icao');
+      if (el('standCategory')) pbb.category = el('standCategory').value || 'C';
+      pbb.allowedAircraftTypes = readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check');
+    }
+    if (state.selectedObject && state.selectedObject.type === 'remote') {
+      var st = state.selectedObject.obj;
+      if (el('remoteName')) {
+        const rawRn = (el('remoteName').value || '').trim();
+        if (rawRn && findDuplicateLayoutName('remote', st.id, rawRn)) {
+          alertDuplicateLayoutName();
+          el('remoteName').value = st.name || '';
+        } else {
+          st.name = rawRn;
+        }
+      }
+      st.categoryMode = normalizeStandCategoryMode(el('remoteCategoryMode') ? el('remoteCategoryMode').value : st.categoryMode, _remoteTier.defaultCategoryMode || 'icao');
+      if (el('remoteCategory')) st.category = el('remoteCategory').value || 'C';
+      st.allowedAircraftTypes = readCheckedDataItemIds('remoteAircraftAccess', '.aircraft-type-check');
+      const accWrap = document.getElementById('remoteTerminalAccess');
+      if (accWrap) {
+        const checks = accWrap.querySelectorAll('.remote-term-check');
+        const allowed = [];
+        checks.forEach(function(ch) {
+          if (ch.checked) {
+            const id = ch.getAttribute('data-item-id');
+            if (id) allowed.push(id);
+          }
+        });
+        st.allowedTerminals = allowed;
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
+      var hpo = state.selectedObject.obj;
+      if (el('holdingPointName')) {
+        const rawHp = (el('holdingPointName').value || '').trim();
+        if (rawHp && findDuplicateLayoutName('holdingPoint', hpo.id, rawHp)) {
+          alertDuplicateLayoutName();
+          el('holdingPointName').value = hpo.name || '';
+        } else {
+          hpo.name = rawHp;
+        }
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      var tw = state.selectedObject.obj;
+      if (el('taxiwayName')) {
+        const rawTw = (el('taxiwayName').value || '').trim();
+        if (rawTw && findDuplicateLayoutName('taxiway', tw.id, rawTw)) {
+          alertDuplicateLayoutName();
+          el('taxiwayName').value = tw.name || '';
+        } else {
+          tw.name = rawTw;
+        }
+      }
+      if (el('taxiwayWidth')) {
+        const pathType = tw.pathType || 'taxiway';
+        const fb = pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+        tw.width = clampTaxiwayWidthM(pathType, el('taxiwayWidth').value, fb);
+      }
       if (el('taxiwayMaxExitVel')) {
         const mv = Number(el('taxiwayMaxExitVel').value);
         if (tw.pathType === 'runway_exit') tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
@@ -314,137 +448,3 @@
       renderObjectList();
       draw();
       if (typeof update3DScene === 'function') update3DScene();
-      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    });
-  }
-  function recomputeTerminalFloorHeight() {
-    const t = getCurrentTerminal();
-    if (!t) return;
-    const floorsInput = document.getElementById('terminalFloors');
-    const f2fInput = document.getElementById('terminalFloorToFloor');
-    const totalInput = document.getElementById('terminalFloorHeight');
-    let floors = floorsInput ? parseInt(floorsInput.value, 10) : t.floors;
-    let f2f = f2fInput ? Number(f2fInput.value) : t.floorToFloor;
-    floors = Math.max(1, floors || 1);
-    f2f = Math.max(0.5, f2f || 4);
-    const totalH = floors * f2f;
-    t.floors = floors;
-    t.floorToFloor = f2f;
-    t.floorHeight = totalH;
-    if (floorsInput) floorsInput.value = floors;
-    if (f2fInput) f2fInput.value = f2f;
-    if (totalInput) totalInput.value = totalH;
-    draw();
-    updateObjectInfo();
-    if (typeof update3DScene === 'function') update3DScene();
-  }
-  document.getElementById('terminalFloors').addEventListener('change', recomputeTerminalFloorHeight);
-  document.getElementById('terminalFloorToFloor').addEventListener('change', recomputeTerminalFloorHeight);
-  document.getElementById('terminalDepartureCapacity').addEventListener('change', function() {
-    const t = getCurrentTerminal();
-    if (t) { t.departureCapacity = Math.max(0, parseInt(this.value, 10) || 0); updateObjectInfo(); }
-  });
-  document.getElementById('terminalArrivalCapacity').addEventListener('change', function() {
-    const t = getCurrentTerminal();
-    if (t) { t.arrivalCapacity = Math.max(0, parseInt(this.value, 10) || 0); updateObjectInfo(); }
-  });
-
-  document.getElementById('standName').addEventListener('change', function() {
-    if (state.selectedObject && state.selectedObject.type === 'pbb') {
-      const pbb = state.selectedObject.obj;
-      const raw = (this.value || '').trim();
-      if (raw && findDuplicateLayoutName('pbb', pbb.id, raw)) {
-        alertDuplicateLayoutName();
-        this.value = pbb.name || '';
-        return;
-      }
-      pbb.name = raw;
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-    }
-  });
-  document.getElementById('standCategory').addEventListener('change', function() {
-    const val = this.value || 'C';
-    if (state.selectedObject && state.selectedObject.type === 'pbb') {
-      state.selectedObject.obj.category = val;
-      rebuildPbbBridgeGeometry(state.selectedObject.obj);
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-      if (typeof update3DScene === 'function') update3DScene();
-    }
-  });
-  const standCategoryModeEl = document.getElementById('standCategoryMode');
-  if (standCategoryModeEl) {
-    standCategoryModeEl.addEventListener('change', function() {
-      syncStandConstraintVisibility('stand', this.value);
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        state.selectedObject.obj.categoryMode = normalizeStandCategoryMode(this.value, _pbbTier.defaultCategoryMode || 'icao');
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-      }
-    });
-  }
-  const pbbLengthInputEl = document.getElementById('pbbLength');
-  if (pbbLengthInputEl) {
-    pbbLengthInputEl.addEventListener('change', function() {
-      const requested = Number(this.value);
-      const nextLen = (isFinite(requested) && requested > 0) ? requested : 15;
-      this.value = String(Math.max(1, Math.round(nextLen)));
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        const pbb = state.selectedObject.obj;
-        setPbbGeometryFromAngleLength(pbb, getPbbAngleDeg(pbb), nextLen, true);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        if (typeof update3DScene === 'function') update3DScene();
-      }
-    });
-  }
-  const standAngleInputEl = document.getElementById('standAngle');
-  if (standAngleInputEl) {
-    standAngleInputEl.addEventListener('change', function() {
-      const nextDeg = normalizeAngleDeg(this.value);
-      this.value = String(Math.round(nextDeg));
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        const pbb = state.selectedObject.obj;
-        setPbbGeometryFromAngleLength(pbb, nextDeg, getPbbLengthMeters(pbb), true);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        if (typeof update3DScene === 'function') update3DScene();
-      }
-    });
-  }
-  const pbbBridgeCountInputEl = document.getElementById('pbbBridgeCount');
-  if (pbbBridgeCountInputEl) {
-    pbbBridgeCountInputEl.addEventListener('change', function() {
-      const nextCount = Math.max(1, Math.min(8, parseInt(this.value, 10) || 1));
-      this.value = String(nextCount);
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        const pbb = state.selectedObject.obj;
-        pbb.pbbCount = nextCount;
-        delete pbb.pbbBridges;
-        rebuildPbbBridgeGeometry(pbb);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        if (typeof update3DScene === 'function') update3DScene();
-      }
-    });
-  }
-  const standAircraftAccessEl = document.getElementById('standAircraftAccess');
-  if (standAircraftAccessEl) {
-    standAircraftAccessEl.addEventListener('change', function(ev) {
-      const target = ev.target;
-      if (!target || !target.classList.contains('aircraft-type-check')) return;
-      syncChoiceChipStates(standAircraftAccessEl);
-      if (!state.selectedObject || state.selectedObject.type !== 'pbb') return;
-      state.selectedObject.obj.allowedAircraftTypes = readCheckedDataItemIds(standAircraftAccessEl, '.aircraft-type-check');
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-    });
-  }

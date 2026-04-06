@@ -328,7 +328,19 @@
   const PBB_PREVIEW_LEN_CF = _interactionConfigNum('pbbPreviewLengthCellFactor', 0.9);
 
   const canvas = document.getElementById('grid-canvas');
-  if (canvas) canvas.draggable = false;
+  if (canvas) {
+    canvas.draggable = false;
+    canvas.setAttribute('tabindex', '-1');
+    canvas.style.outline = 'none';
+  }
+  function focusCanvasForLayoutHotkeys() {
+    if (!canvas) return;
+    try {
+      canvas.focus({ preventScroll: true });
+    } catch (e) {
+      try { canvas.focus(); } catch (e2) {}
+    }
+  }
   const container = document.getElementById('canvas-container');
   const coordEl = document.getElementById('coord');
   const cursorPixelReadoutEl = document.getElementById('cursor-pixel-readout');
@@ -515,6 +527,7 @@
     simTimeSec: 0,
     simStartSec: 0,
     simDurationSec: 0,
+    simPlaybackEndCapSec: null,
     simPlaying: false,
     simSliderScrubbing: false,
     simSpeed: _dc.defaultSimSpeed,
@@ -1201,6 +1214,12 @@
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
+    state.simPlaybackEndCapSec = null;
+    if (payload.simulation_truncated_deadlock === true) {
+      const rawCap = payload.simulation_playback_end_abs_sec;
+      const c = Number(rawCap);
+      if (isFinite(c)) state.simPlaybackEndCapSec = c;
+    }
     const flightsDetail = Array.isArray(payload.flights_detail) ? payload.flights_detail : null;
     if (flightsDetail) {
       const byId = {};
@@ -1253,7 +1272,8 @@
               const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
               const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
               const mf = p.motionForward !== false && p.motion_forward !== false;
-              return { t: Number(p.t), x: x, y: y, motionForward: mf };
+              const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
+              return { t: Number(p.t), x: x, y: y, motionForward: mf, deadlockGhost: dg };
             }).filter(function(k) {
               return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
             }).sort(function(a, b) { return a.t - b.t; });
@@ -4111,7 +4131,12 @@
         simLo = Math.max(0, firstTdS - PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC);
       }
     }
-    state.simDurationSec = Math.max(maxT, minT);
+    let durSec = Math.max(maxT, minT);
+    const capAbs = state.simPlaybackEndCapSec;
+    if (capAbs != null && isFinite(Number(capAbs))) {
+      durSec = Math.min(durSec, Number(capAbs));
+    }
+    state.simDurationSec = durSec;
     if (simLo > state.simDurationSec - 1e-6) {
       simLo = Math.max(0, state.simDurationSec - 1);
     }
@@ -4443,8 +4468,9 @@
     if (tl.length === 1) {
       const a = tl[0];
       if (tSec + 1e-6 < a.t || tSec - 1e-6 > a.t) return null;
-      if (a.motionForward === false) return { x: a.x, y: a.y, dx: -1, dy: 0 };
-      return { x: a.x, y: a.y, dx: 1, dy: 0 };
+      const dg = a.deadlockGhost === true;
+      if (a.motionForward === false) return { x: a.x, y: a.y, dx: -1, dy: 0, deadlockGhost: dg };
+      return { x: a.x, y: a.y, dx: 1, dy: 0, deadlockGhost: dg };
     }
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
     const motionChordEps = 0.08;
@@ -4499,7 +4525,8 @@
           rdx = Math.cos(ang) * len;
           rdy = Math.sin(ang) * len;
         }
-        return { x, y, dx: rdx, dy: rdy };
+        const dg = !!(a.deadlockGhost || b.deadlockGhost);
+        return { x, y, dx: rdx, dy: rdy, deadlockGhost: dg };
       }
     }
     return null;
@@ -9798,19 +9825,26 @@
             }
           });
         }
-        if (obj.pathType === 'runway_exit') {
-          const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
-          const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
-          (state.holdingPoints || []).forEach(function(hp) {
-            if (!hp) return;
-            const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
-            if (k !== 'runway_holding') return;
-            if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
-            const pr = projectOnSegment(a, b, [hp.x, hp.y]);
-            if (pr.t >= 0 && pr.t <= 1 && dist2(pr.p, [hp.x, hp.y]) <= hpTolD2) {
-              junctions.push({ tAlong: seg + pr.t, p: pr.p });
-            }
-          });
+        {
+          const ptHp = obj.pathType;
+          if (ptHp === 'runway_exit' || ptHp === 'taxiway' || ptHp === 'apron_taxiway') {
+            const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+            const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
+            (state.holdingPoints || []).forEach(function(hp) {
+              if (!hp) return;
+              const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
+              if (ptHp === 'runway_exit') {
+                if (k !== 'runway_holding') return;
+              } else {
+                if (k !== 'intermediate') return;
+              }
+              if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
+              const pr = projectOnSegment(a, b, [hp.x, hp.y]);
+              if (pr.t >= 0 && pr.t <= 1 && dist2(pr.p, [hp.x, hp.y]) <= hpTolD2) {
+                junctions.push({ tAlong: seg + pr.t, p: pr.p });
+              }
+            });
+          }
         }
       }
       if (obj.pathType === 'runway') {
@@ -10872,7 +10906,8 @@
       ctx.translate(x, y);
       const ang = Math.atan2(ny, nx);
       ctx.rotate(ang);
-      ctx.fillStyle = apron2DGlyphFill();
+      const isDeadlockGhost = pose.deadlockGhost === true;
+      ctx.fillStyle = isDeadlockGhost ? 'rgba(148, 163, 184, 0.45)' : apron2DGlyphFill();
       ctx.beginPath();
       if (useDetailSil) {
         ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
@@ -10887,11 +10922,11 @@
       }
       ctx.fill();
       if (outlineWidth > 0 && outlineColor) {
-        ctx.strokeStyle = outlineColor;
+        ctx.strokeStyle = isDeadlockGhost ? 'rgba(100, 116, 139, 0.55)' : outlineColor;
         ctx.lineWidth = outlineWidth;
         ctx.stroke();
       } else if (useDetailSil) {
-        ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+        ctx.strokeStyle = isDeadlockGhost ? 'rgba(100, 116, 139, 0.5)' : 'rgba(15,23,42,0.85)';
         ctx.lineWidth = 1.15;
         ctx.stroke();
       }
@@ -12635,6 +12670,7 @@
           state.flightPathRevealFlightId = null;
           state.selectedObject = { type: typ, id: idr, obj };
           if (typ === 'terminal') state.currentTerminalId = idr;
+          focusCanvasForLayoutHotkeys();
           syncPanelFromState();
           updateObjectInfo();
         } else {
@@ -14446,6 +14482,15 @@
     if (!state.selectedObject) return;
     const type = state.selectedObject.type;
     const id = state.selectedObject.id;
+    if (type === 'layoutEdge') {
+      state.selectedObject = null;
+      state.selectedVertex = null;
+      syncPanelFromState();
+      updateObjectInfo();
+      draw();
+      ev.preventDefault();
+      return;
+    }
     if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'holdingPoint' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight') return;
     pushUndo();
     removeLayoutObjectFromState(type, id);
@@ -14471,6 +14516,7 @@
 
   container.addEventListener('mousedown', function(ev) {
     if (ev.button !== 0) return;
+    focusCanvasForLayoutHotkeys();
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
     const [wx, wy] = screenToWorld(sx, sy);

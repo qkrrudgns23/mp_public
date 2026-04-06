@@ -151,7 +151,7 @@
     .section-title:first-child { margin-top: 0; }
     .layout-mode-tabs { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
     .layout-mode-tabs-row { display:grid; gap:6px; }
-    .layout-mode-tabs-row.primary { grid-template-columns:repeat(6, minmax(0, 1fr)); }
+    .layout-mode-tabs-row.primary { grid-template-columns:repeat(7, minmax(0, 1fr)); }
     .layout-mode-tabs-row.secondary { grid-template-columns:repeat(5, minmax(0, 1fr)); }
     .layout-mode-tab { min-height:51px; padding:6px 6px; border-radius:8px; border:1px solid var(--ui-border-default); background:var(--ui-bg-control); color:var(--ui-text-secondary); font-size:10px; font-weight:500; cursor:pointer; transition:var(--ui-transition); text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }
     .layout-mode-tab:hover { background:var(--ui-bg-overlay); color:var(--ui-text-primary); }

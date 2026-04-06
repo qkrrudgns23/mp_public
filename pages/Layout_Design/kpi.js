@@ -1,23 +1,3 @@
-    }
-    const axisTicks = tickPositions.map(tp =>
-      '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
-        '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
-      '</div>'
-    );
-    const axisHtml =
-      '<div class="alloc-time-axis-overlay">' +
-        '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
-      '</div>';
-
-    labelRows.push('<div class="alloc-label-axis-spacer"></div>');
-
-    const labelColHtml =
-      '<div class="alloc-gantt-label-col">' +
-        labelRows.join('') +
-      '</div>';
-    const innerMinWidthPct = Math.max(100, Math.round(zoom * 100));
-    const gridOverlayHtml =
-      '<div class="alloc-gantt-grid-overlay">' +
         tickPositions.map(function(tp) {
           return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
         }).join('') +
@@ -368,3 +348,23 @@
         if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null)) return;
         st._allocGanttDropHandled = true;
       });
+    });
+  }
+
+  function validateNetworkForFlights() {
+    const msgs = [];
+    const hasRunwayPath = state.taxiways && state.taxiways.some(tw => tw.pathType === 'runway');
+    if (!hasRunwayPath) msgs.push('RunwayThere is no.');
+    if (!state.taxiways || !state.taxiways.length) msgs.push('TaxiwayThere is no.');
+    const stands = (state.pbbStands || []).concat(state.remoteStands || []);
+    const linked = state.apronLinks || [];
+    const hasApronLink = stands.some(pbb =>
+      linked.some(lk =>
+        lk.pbbId === pbb.id &&
+        state.taxiways &&
+        state.taxiways.some(tw => tw.id === lk.taxiwayId)
+      )
+    );
+    if (!stands.length || !hasApronLink) msgs.push('Apron(PBB)class TaxiwayAt least one link is required to connect.');
+    const termsForLabel = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) { return {
+      id: t.id,
