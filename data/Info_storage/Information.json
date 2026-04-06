@@ -1084,7 +1084,8 @@
         "width": 1,
         "minWidth": 1,
         "avgMoveVelocity": 10,
-        "direction": "both"
+        "direction": "both",
+        "queueJunctionSpacingM": 40
       },
       "runwayPath": {
         "width": 60,
@@ -1405,7 +1406,7 @@
         "defaultIcaoCategory": "M",
         "exitRunwayMinPerpendicularDistanceFromCenterlineM": 120,
         "playbackLeadBeforeFirstTouchdownSec": 20,
-        "timeStepSec": 1,
+        "timeStepSec": 2,
         "layoutPixelsPerMeter": 1,
         "approachOffsetM": 10000,
         "approachStraightFinalM": 3000,

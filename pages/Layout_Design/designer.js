@@ -79,6 +79,7 @@
   const TAXIWAY_WIDTH_MIN = Math.max(1, Math.min(100, Number(_taxiwayTier.minWidth) || 1));
   const RUNWAY_EXIT_WIDTH_MIN = Math.max(1, Math.min(100, Number(_runwayExitTier.minWidth) || 1));
   const TAXIWAY_DEFAULT_WIDTH = Math.max(TAXIWAY_WIDTH_MIN, Math.min(100, Number(_taxiwayTier.width) || 1));
+  const QUEUE_TAXIWAY_JUNCTION_SPACING_M = Math.max(5, Number(_taxiwayTier.queueJunctionSpacingM) || 40);
   const RUNWAY_PATH_DEFAULT_WIDTH = Math.max(5, Math.min(100, Number(_runwayPathTier.width) || 60));
   const RUNWAY_EXIT_DEFAULT_WIDTH = Math.max(RUNWAY_EXIT_WIDTH_MIN, Math.min(100, Number(_runwayExitTier.width) || 1));
   function minWidthMForTaxiwayPathType(pathType) {
@@ -227,7 +228,7 @@
       if (wantRunway) {
         if (typ !== 'runway_exit') return;
       } else {
-        if (typ !== 'taxiway' && typ !== 'apron_taxiway') return;
+        if (typ !== 'taxiway' && typ !== 'apron_taxiway' && typ !== 'general_queue_taxiway') return;
       }
       if (!tw.vertices || tw.vertices.length < 2) return;
       for (let i = 0; i < tw.vertices.length - 1; i++) {
@@ -607,6 +608,10 @@
     const container = document.getElementById('remoteTerminalAccess');
     renderChoiceChipList(container, getNamedBuildings(), selectedIds, 'remote-term-check', 'remote-building');
   }
+  function renderTempStandTerminalAccessChoices(selectedIds) {
+    const container = document.getElementById('tempStandTerminalAccess');
+    renderChoiceChipList(container, getNamedBuildings(), selectedIds, 'remote-term-check', 'remote-building');
+  }
   function renderRunwayDirectionChoices(selectedIds) {
     const container = document.getElementById('runwayExitAllowedDirection');
     renderChoiceChipList(container, [
@@ -630,6 +635,7 @@
     terminals: [],
     pbbStands: [],
     remoteStands: [],
+    tempStands: [],
     holdingPoints: [],
     taxiways: [],
     apronLinks: [],
@@ -668,9 +674,11 @@
     dragStart: null,
     layoutImageOverlay: null,
     previewRemote: null,
+    previewTempStand: null,
     previewPbb: null,
     pbbDrawing: false,
     remoteDrawing: false,
+    tempStandDrawing: false,
     holdingPointDrawing: false,
     previewHoldingPoint: null,
     apronLinkDrawing: false,
@@ -783,6 +791,7 @@
     if (pt === 'runway') return 'runwayPath';
     if (pt === 'runway_exit') return 'runwayTaxiway';
     if (pt === 'apron_taxiway') return 'taxiway';
+    if (pt === 'general_queue_taxiway') return 'taxiway';
     return 'taxiway';
   }
   function isPathLayoutMode(m) {
@@ -823,6 +832,7 @@
     if (hit.type === 'terminal') return 'terminal';
     if (hit.type === 'pbb') return 'pbb';
     if (hit.type === 'remote') return 'remote';
+    if (hit.type === 'tempStand') return 'tempStand';
     if (hit.type === 'holdingPoint') return 'holdingPoint';
     if (hit.type === 'taxiway') return layoutModeFromPathType((hit.obj && hit.obj.pathType) || 'taxiway');
     if (hit.type === 'apronLink') return 'apronTaxiway';
@@ -831,6 +841,7 @@
   function cancelActiveLayoutDrawingState() {
     state.pbbDrawing = false;
     state.remoteDrawing = false;
+    state.tempStandDrawing = false;
     state.holdingPointDrawing = false;
     state.previewHoldingPoint = null;
     state.apronLinkDrawing = false;
@@ -840,6 +851,7 @@
     state.layoutPathDrawPointer = null;
     state.previewPbb = null;
     state.previewRemote = null;
+    state.previewTempStand = null;
   }
   function syncDrawToggleButton(elementId, isDrawing) {
     const btn = document.getElementById(elementId);
@@ -984,6 +996,11 @@
       if (prev && !prev.overlap && tryPlaceRemoteAt(prev.x, prev.y)) { syncPanelFromState(); draw(); }
       return true;
     }
+    if (mode === 'tempStand' && state.tempStandDrawing) {
+      const prev = state.previewTempStand;
+      if (prev && !prev.overlap && tryPlaceTempStandAt(prev.x, prev.y)) { syncPanelFromState(); draw(); }
+      return true;
+    }
     if (mode === 'holdingPoint' && state.holdingPointDrawing) {
       const prev = state.previewHoldingPoint;
       if (prev && tryPlaceHoldingPointAt(prev.x, prev.y, prev.pathType || 'taxiway')) { syncPanelFromState(); draw(); }
@@ -999,11 +1016,15 @@
     if (mode === 'remote' && state.remoteDrawing) {
       if (tryPlaceRemoteAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
     }
+    if (mode === 'tempStand' && state.tempStandDrawing) {
+      if (tryPlaceTempStandAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
+    }
   }
   function findLayoutObjectByListType(typ, idr) {
     if (typ === 'terminal') return state.terminals.find(t => t.id === idr);
     if (typ === 'pbb') return state.pbbStands.find(p => p.id === idr);
     if (typ === 'remote') return state.remoteStands.find(r => r.id === idr);
+    if (typ === 'tempStand') return (state.tempStands || []).find(function(s) { return s.id === idr; });
     if (typ === 'holdingPoint') return (state.holdingPoints || []).find(h => h.id === idr);
     if (typ === 'taxiway') return state.taxiways.find(tw => tw.id === idr);
     if (typ === 'apronLink') return state.apronLinks.find(lk => lk.id === idr);
@@ -1018,6 +1039,7 @@
     if (type === 'terminal') state.terminals = state.terminals.filter(t => t.id !== id);
     else if (type === 'pbb') state.pbbStands = state.pbbStands.filter(p => p.id !== id);
     else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
+    else if (type === 'tempStand') state.tempStands = (state.tempStands || []).filter(function(s) { return s.id !== id; });
     else if (type === 'holdingPoint') state.holdingPoints = (state.holdingPoints || []).filter(h => h.id !== id);
     else if (type === 'taxiway') state.taxiways = state.taxiways.filter(tw => tw.id !== id);
     else if (type === 'apronLink') state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
@@ -1058,7 +1080,9 @@
     const maxExitWrap = document.getElementById('runwayMaxExitVelWrap');
     const minExitWrap = document.getElementById('runwayMinExitVelWrap');
     const rwDirWrap = document.getElementById('runwayExitAllowedDirectionWrap');
-    if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway' || pt === 'apron_taxiway') ? 'grid' : 'none';
+    const taxiwayTypeWrap = document.getElementById('taxiwayTypeWrap');
+    if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway' || pt === 'apron_taxiway' || pt === 'general_queue_taxiway') ? 'grid' : 'none';
+    if (taxiwayTypeWrap) taxiwayTypeWrap.style.display = (pt === 'taxiway' || pt === 'general_queue_taxiway') ? 'grid' : 'none';
     if (runwayMinArrWrap) runwayMinArrWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
     if (runwayLineupWrap) runwayLineupWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
     if (runwayStartDispWrap) runwayStartDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
@@ -1140,7 +1164,7 @@
       });
       (obj.taxiways || []).forEach(function(tw) {
         const o = Object.assign({}, tw);
-        if (o.pathType !== 'runway' && o.pathType !== 'runway_exit' && o.pathType !== 'apron_taxiway') o.pathType = 'taxiway';
+        if (o.pathType !== 'runway' && o.pathType !== 'runway_exit' && o.pathType !== 'apron_taxiway' && o.pathType !== 'general_queue_taxiway') o.pathType = 'taxiway';
         if (o.pathType !== 'runway') delete o.rwySepConfig;
         normalizeTaxiwayVerticesFromPersistLoad(o);
         out.push(o);
@@ -1182,6 +1206,8 @@
     if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
     if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
     if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
+    if (Array.isArray(obj.tempStands)) state.tempStands = obj.tempStands.map(normalizeTempStandObject);
+    else state.tempStands = [];
     state.taxiways = mergeTaxiwaysFromLayoutObject(obj);
     if (Array.isArray(obj.holdingPoints)) {
       state.holdingPoints = obj.holdingPoints.map(function(h) {
@@ -1453,7 +1479,7 @@
     return String(Math.max(0, Number(num) || 0)).padStart(width, '0');
   }
   function getDefaultPathName(pathType, currentId) {
-    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : (pathType === 'apron_taxiway' ? 'ATX' : 'TX'));
+    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : (pathType === 'apron_taxiway' ? 'ATX' : (pathType === 'general_queue_taxiway' ? 'QTX' : 'TX')));
     const sameType = (state.taxiways || []).filter(function(tw) { return tw && tw.id !== currentId && tw.pathType === pathType; });
     const used = new Set(sameType.map(function(tw) { return (tw.name && String(tw.name).trim()) || ''; }).filter(Boolean));
     let n = 1;
@@ -1477,6 +1503,11 @@
     const stands = (state.remoteStands || []).filter(function(st) { return st && st.id !== currentId; });
     const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
     return uniqueNameAgainstSet('R' + zeroPadNumber(stands.length + 1, 3), used);
+  }
+  function getDefaultTempStandName(currentId) {
+    const stands = (state.tempStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('T' + zeroPadNumber(stands.length + 1, 3), used);
   }
   function getApronLinkDefaultName(linkOrId) {
     const linkId = (typeof linkOrId === 'object' && linkOrId) ? linkOrId.id : linkOrId;
@@ -1554,6 +1585,16 @@
       }
       return null;
     }
+    if (objectKind === 'tempStand') {
+      const arr = state.tempStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'tempStand', existing: disp || o.id };
+      }
+      return null;
+    }
     if (objectKind === 'holdingPoint') {
       const arr = state.holdingPoints || [];
       for (let i = 0; i < arr.length; i++) {
@@ -1616,6 +1657,7 @@
       terminals: JSON.parse(JSON.stringify(state.terminals || [])),
       pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
       remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+      tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
       holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
       taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
       apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
@@ -1634,6 +1676,7 @@
     state.terminals = snap.terminals;
     state.pbbStands = snap.pbbStands;
     state.remoteStands = snap.remoteStands;
+    state.tempStands = snap.tempStands || [];
     state.holdingPoints = snap.holdingPoints || [];
     state.taxiways = snap.taxiways;
     state.apronLinks = snap.apronLinks;
@@ -1958,6 +2001,14 @@
     }
     return cellToPixel(st.col || 0, st.row || 0);
   }
+  /** Temp stand: taxiway centerline snap (sim_input junctionX/Y); defaults to stand x,y. */
+  function getTempStandTaxiwayJunctionPx(st) {
+    if (!st) return [0, 0];
+    const jx = st.junctionX != null ? Number(st.junctionX) : NaN;
+    const jy = st.junctionY != null ? Number(st.junctionY) : NaN;
+    if (Number.isFinite(jx) && Number.isFinite(jy)) return [jx, jy];
+    return getRemoteStandCenterPx(st);
+  }
   function getRemoteStandAngleRad(st) {
     const deg = normalizeAngleDeg(st && st.angleDeg != null ? st.angleDeg : 0);
     return deg * Math.PI / 180;
@@ -2164,6 +2215,46 @@
     }));
     return true;
   }
+  function tryPlaceTempStandAt(wx, wy) {
+    const snap = snapTempStandOnTaxiwayCenterlines(wx, wy);
+    if (!snap) return false;
+    const sx = snap.x, sy = snap.y;
+    const categoryMode = normalizeStandCategoryMode(document.getElementById('tempStandCategoryMode') ? document.getElementById('tempStandCategoryMode').value : (_remoteTier.defaultCategoryMode || 'icao'), 'icao');
+    const category = document.getElementById('tempStandCategory') ? document.getElementById('tempStandCategory').value || 'C' : 'C';
+    const angleInput = document.getElementById('tempStandAngle');
+    const angleDeg = normalizeAngleDeg(angleInput ? angleInput.value : 0);
+    const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };
+    const candCorners = getRemoteStandCorners(candidate);
+    for (let i = 0; i < (state.tempStands || []).length; i++) {
+      if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.tempStands[i]))) return false;
+    }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) return false;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) return false;
+    }
+    const baseName = (document.getElementById('tempStandName') && document.getElementById('tempStandName').value.trim()) || getDefaultTempStandName();
+    if (findDuplicateLayoutName('tempStand', null, baseName)) {
+      alertDuplicateLayoutName();
+      return false;
+    }
+    pushUndo();
+    state.tempStands.push(normalizeTempStandObject({
+      id: id(),
+      x: Number(sx),
+      y: Number(sy),
+      junctionX: Number(sx),
+      junctionY: Number(sy),
+      category,
+      name: baseName,
+      angleDeg,
+      categoryMode: categoryMode,
+      allowedAircraftTypes: readCheckedDataItemIds('tempStandAircraftAccess', '.aircraft-type-check'),
+      allowedTerminals: Array.from((document.getElementById('tempStandTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
+    }));
+    return true;
+  }
   function taxiwayOverlapsAnyTerminal(tw) {
     if (!tw || !tw.vertices || tw.vertices.length < 2) return false;
     const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
@@ -2345,6 +2436,7 @@
       else if (pt === 'runway_exit') runwayTaxiways.push(ser);
       else {
         if (pt === 'apron_taxiway') ser.pathType = 'apron_taxiway';
+        else if (pt === 'general_queue_taxiway') ser.pathType = 'general_queue_taxiway';
         taxiways.push(ser);
       }
     });
@@ -2399,6 +2491,7 @@
       }),
       pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
       remoteStands: state.remoteStands.slice(),
+      tempStands: (state.tempStands || []).slice(),
       holdingPoints: (state.holdingPoints || []).slice(),
       ...(function() {
         const p = partitionTaxiwaysForPersist(state.taxiways);
@@ -2684,6 +2777,27 @@
     });
     return best;
   }
+  function snapTempStandOnTaxiwayCenterlines(wx, wy) {
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    const allowPt = { taxiway: 1, runway_exit: 1, runway_taxiway: 1, general_queue_taxiway: 1 };
+    (state.taxiways || []).forEach(function(tw) {
+      const pt = tw.pathType || 'taxiway';
+      if (!allowPt[pt]) return;
+      if (!tw.vertices || tw.vertices.length < 2) return;
+      for (let i = 0; i < tw.vertices.length - 1; i++) {
+        const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+        const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
+        const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2) { bestD2 = d2; best = { x: near[0], y: near[1], pathType: pt }; }
+      }
+    });
+    return best;
+  }
   function hitTestHoldingPoint(wx, wy) {
     const hitPadSq = Math.pow(Math.max(5, CELL_SIZE * 0.22), 2);
     const lineW = c2dHoldingPointMarkingLineWidthWorld();
@@ -2718,6 +2832,12 @@
 
   function hitTest(wx, wy) {
     const click = [wx, wy];
+    const temps = state.tempStands || [];
+    for (let i = temps.length - 1; i >= 0; i--) {
+      const st = temps[i];
+      if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
+        return { type: 'tempStand', id: st.id, obj: st };
+    }
     for (let i = state.remoteStands.length - 1; i >= 0; i--) {
       const st = state.remoteStands[i];
       if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
@@ -3145,6 +3265,20 @@
       renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st));
       renderRemoteTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
     }
+    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+      const st = state.selectedObject.obj;
+      const nameInput = document.getElementById('tempStandName');
+      const angleInput = document.getElementById('tempStandAngle');
+      const modeSel = document.getElementById('tempStandCategoryMode');
+      const catSel = document.getElementById('tempStandCategory');
+      if (nameInput) nameInput.value = st.name || '';
+      if (angleInput) angleInput.value = String(Math.round(normalizeAngleDeg(st.angleDeg != null ? st.angleDeg : 0)));
+      if (modeSel) modeSel.value = getStandCategoryMode(st);
+      if (catSel) catSel.value = st.category || 'C';
+      syncStandConstraintVisibility('tempStand', getStandCategoryMode(st));
+      renderAircraftConstraintChoices('tempStandAircraftAccess', getStandAllowedAircraftTypes(st));
+      renderTempStandTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
+    }
     if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
       const hp = state.selectedObject.obj;
       const nameInput = document.getElementById('holdingPointName');
@@ -3201,6 +3335,11 @@
       let d = getTaxiwayDirection(tw);
       if (tw.pathType === 'runway' && d === 'both') d = 'clockwise';
       if (modeSel) modeSel.value = d;
+      const kindSel = document.getElementById('taxiwayPathTypeKind');
+      if (kindSel) {
+        const ptk = tw.pathType || 'taxiway';
+        kindSel.value = (ptk === 'general_queue_taxiway') ? 'queue' : 'normal';
+      }
     } else if (state.selectedObject && state.selectedObject.type === 'apronLink') {
       const lk = state.selectedObject.obj;
       const nameInput = document.getElementById('apronLinkName');
@@ -3218,6 +3357,8 @@
           const allowDef = (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT : ['clockwise', 'counter_clockwise'];
           renderRunwayDirectionChoices(allowDef);
         }
+        const twKindIdle = document.getElementById('taxiwayPathTypeKind');
+        if (twKindIdle && ptx === 'taxiway') twKindIdle.value = 'normal';
       }
       else {
         const maxExitWrap = document.getElementById('runwayMaxExitVelWrap');
@@ -3240,6 +3381,8 @@
         if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = 'none';
         const rwDirWrap = document.getElementById('runwayExitAllowedDirectionWrap');
         if (rwDirWrap) rwDirWrap.style.display = 'none';
+        const taxiwayTypeWrapIdle = document.getElementById('taxiwayTypeWrap');
+        if (taxiwayTypeWrapIdle) taxiwayTypeWrapIdle.style.display = 'none';
       }
       const selIsTerminal = state.selectedObject && state.selectedObject.type === 'terminal';
       if (!selIsTerminal) {
@@ -3260,6 +3403,13 @@
       syncStandConstraintVisibility('remote', remoteModeSel ? remoteModeSel.value : 'icao');
       renderAircraftConstraintChoices('remoteAircraftAccess', []);
       renderRemoteTerminalAccessChoices([]);
+      const tempModeSel = document.getElementById('tempStandCategoryMode');
+      if (tempModeSel) tempModeSel.value = normalizeStandCategoryMode(_remoteTier.defaultCategoryMode, 'icao');
+      syncStandConstraintVisibility('tempStand', tempModeSel ? tempModeSel.value : 'icao');
+      renderAircraftConstraintChoices('tempStandAircraftAccess', []);
+      renderTempStandTerminalAccessChoices([]);
+      const tempStandNameInput = document.getElementById('tempStandName');
+      if (tempStandNameInput && rm === 'tempStand') tempStandNameInput.value = getDefaultTempStandName();
       const apronLinkNameInput = document.getElementById('apronLinkName');
       if (apronLinkNameInput && rm === 'apronTaxiway') apronLinkNameInput.value = '';
       const edgeNameInput = document.getElementById('edgeName');
@@ -3271,6 +3421,7 @@
     syncDrawToggleButton('btnApronLinkDraw', !!state.apronLinkDrawing);
     syncDrawToggleButton('btnPbbDraw', !!state.pbbDrawing);
     syncDrawToggleButton('btnRemoteDraw', !!state.remoteDrawing);
+    syncDrawToggleButton('btnTempStandDraw', !!state.tempStandDrawing);
     syncDrawToggleButton('btnHoldingPointDraw', !!state.holdingPointDrawing);
     renderObjectList();
   }
@@ -3347,6 +3498,33 @@
         st.allowedTerminals = allowed;
       }
     }
+    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+      var tst = state.selectedObject.obj;
+      if (el('tempStandName')) {
+        const rawTn = (el('tempStandName').value || '').trim();
+        if (rawTn && findDuplicateLayoutName('tempStand', tst.id, rawTn)) {
+          alertDuplicateLayoutName();
+          el('tempStandName').value = tst.name || '';
+        } else {
+          tst.name = rawTn;
+        }
+      }
+      tst.categoryMode = normalizeStandCategoryMode(el('tempStandCategoryMode') ? el('tempStandCategoryMode').value : tst.categoryMode, _remoteTier.defaultCategoryMode || 'icao');
+      if (el('tempStandCategory')) tst.category = el('tempStandCategory').value || 'C';
+      tst.allowedAircraftTypes = readCheckedDataItemIds('tempStandAircraftAccess', '.aircraft-type-check');
+      const tempAccWrap = document.getElementById('tempStandTerminalAccess');
+      if (tempAccWrap) {
+        const checks = tempAccWrap.querySelectorAll('.remote-term-check');
+        const allowed = [];
+        checks.forEach(function(ch) {
+          if (ch.checked) {
+            const id = ch.getAttribute('data-item-id');
+            if (id) allowed.push(id);
+          }
+        });
+        tst.allowedTerminals = allowed;
+      }
+    }
     if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
       var hpo = state.selectedObject.obj;
       if (el('holdingPointName')) {
@@ -3394,6 +3572,13 @@
         let dirVal = el('taxiwayDirectionMode').value || '';
         if (tw.pathType === 'runway') tw.direction = (dirVal === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
         else tw.direction = dirVal || 'both';
+      }
+      if (el('taxiwayPathTypeKind')) {
+        const ptCur = tw.pathType || 'taxiway';
+        if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
+          const kind = String(el('taxiwayPathTypeKind').value || 'normal');
+          tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+        }
       }
       if (el('taxiwayAvgMoveVelocity')) {
         var v = Number(el('taxiwayAvgMoveVelocity').value);
@@ -3555,6 +3740,7 @@
         terminals: JSON.parse(JSON.stringify(state.terminals || [])),
         pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
         remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+        tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
         holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
         taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
         apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
@@ -3939,6 +4125,100 @@
       draw();
     });
   }
+  const tempStandNameInput = document.getElementById('tempStandName');
+  if (tempStandNameInput) {
+    tempStandNameInput.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+        const st = state.selectedObject.obj;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('tempStand', st.id, raw)) {
+          alertDuplicateLayoutName();
+          this.value = st.name || '';
+          return;
+        }
+        st.name = raw;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        if (typeof update3DScene === 'function') update3DScene();
+      }
+    });
+  }
+  const tempStandCategorySelect = document.getElementById('tempStandCategory');
+  if (tempStandCategorySelect) {
+    tempStandCategorySelect.addEventListener('change', function() {
+      const val = this.value || 'C';
+      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+        state.selectedObject.obj.category = val;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        if (typeof update3DScene === 'function') update3DScene();
+      }
+    });
+  }
+  const tempStandCategoryModeEl = document.getElementById('tempStandCategoryMode');
+  if (tempStandCategoryModeEl) {
+    tempStandCategoryModeEl.addEventListener('change', function() {
+      syncStandConstraintVisibility('tempStand', this.value);
+      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+        state.selectedObject.obj.categoryMode = normalizeStandCategoryMode(this.value, _remoteTier.defaultCategoryMode || 'icao');
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+      }
+    });
+  }
+  const tempStandAngleInput = document.getElementById('tempStandAngle');
+  if (tempStandAngleInput) {
+    tempStandAngleInput.addEventListener('change', function() {
+      const nextDeg = normalizeAngleDeg(this.value);
+      this.value = String(Math.round(nextDeg));
+      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+        state.selectedObject.obj.angleDeg = nextDeg;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        if (typeof update3DScene === 'function') update3DScene();
+      }
+    });
+  }
+  const tempStandTerminalAccessEl = document.getElementById('tempStandTerminalAccess');
+  if (tempStandTerminalAccessEl) {
+    tempStandTerminalAccessEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('remote-term-check')) return;
+      syncChoiceChipStates(tempStandTerminalAccessEl);
+      if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
+      const st = state.selectedObject.obj;
+      const checks = tempStandTerminalAccessEl.querySelectorAll('.remote-term-check');
+      const allowed = [];
+      checks.forEach(function(ch) {
+        if (ch.checked) {
+          const id = ch.getAttribute('data-item-id');
+          if (id) allowed.push(id);
+        }
+      });
+      st.allowedTerminals = allowed;
+      if (typeof syncPanelFromState === 'function') syncPanelFromState();
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    });
+  }
+  const tempStandAircraftAccessEl = document.getElementById('tempStandAircraftAccess');
+  if (tempStandAircraftAccessEl) {
+    tempStandAircraftAccessEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('aircraft-type-check')) return;
+      syncChoiceChipStates(tempStandAircraftAccessEl);
+      if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
+      state.selectedObject.obj.allowedAircraftTypes = readCheckedDataItemIds(tempStandAircraftAccessEl, '.aircraft-type-check');
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    });
+  }
 
   document.getElementById('taxiwayName').addEventListener('change', function() {
     if (state.selectedObject && state.selectedObject.type === 'taxiway') {
@@ -4095,6 +4375,23 @@
       if (typeof update3DScene === 'function') update3DScene();
     }
   });
+  const taxiwayPathTypeKindEl = document.getElementById('taxiwayPathTypeKind');
+  if (taxiwayPathTypeKindEl) {
+    taxiwayPathTypeKindEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        const ptCur = tw.pathType || 'taxiway';
+        if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
+          const kind = String(this.value || 'normal');
+          tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+        }
+        updateObjectInfo();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        draw();
+        if (typeof update3DScene === 'function') update3DScene();
+      }
+    });
+  }
   const runwayMinArrVelEl = document.getElementById('runwayMinArrVelocity');
   if (runwayMinArrVelEl) {
     runwayMinArrVelEl.addEventListener('change', function() {
@@ -9798,6 +10095,34 @@
     return out;
   }
 
+  function queueTaxiwayAutoJunctionMarkersAlong(tw, spacingM) {
+    const verts = tw && tw.vertices;
+    if (!verts || verts.length < 2 || !isFinite(spacingM) || spacingM < 1e-6) return [];
+    if (String(tw.pathType || '') !== 'general_queue_taxiway') return [];
+    const out = [];
+    let alongM = 0;
+    let nextMark = spacingM;
+    for (let i = 0; i < verts.length - 1; i++) {
+      const v0 = verts[i], v1 = verts[i + 1];
+      const dc = Number(v1.col) - Number(v0.col);
+      const dr = Number(v1.row) - Number(v0.row);
+      const segM = Math.hypot(dc, dr) * CELL_SIZE;
+      if (segM < 1e-12) continue;
+      while (alongM + segM >= nextMark - 1e-9) {
+        const intoSegM = nextMark - alongM;
+        const u = intoSegM / segM;
+        const pu = Math.max(0, Math.min(1, u));
+        const col = Number(v0.col) + pu * dc;
+        const row = Number(v0.row) + pu * dr;
+        const p = cellToPixel(col, row);
+        out.push({ tAlong: i + pu, p });
+        nextMark += spacingM;
+      }
+      alongM += segM;
+    }
+    return out;
+  }
+
   function buildPathGraph(selectedArrRetId, runwayDirectionForExit, pathGraphOpts) {
     const opts = pathGraphOpts && typeof pathGraphOpts === 'object' ? pathGraphOpts : {};
     const pureGroundExcludeRunway = !!opts.pureGroundExcludeRunway;
@@ -9950,7 +10275,7 @@
         }
         {
           const ptHp = obj.pathType;
-          if (ptHp === 'runway_exit' || ptHp === 'taxiway' || ptHp === 'apron_taxiway') {
+          if (ptHp === 'runway_exit' || ptHp === 'taxiway' || ptHp === 'apron_taxiway' || ptHp === 'general_queue_taxiway') {
             const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
             const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
             (state.holdingPoints || []).forEach(function(hp) {
@@ -9969,6 +10294,11 @@
             });
           }
         }
+      }
+      if (obj.pathType === 'general_queue_taxiway') {
+        queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
+          junctions.push(qj);
+        });
       }
       if (obj.pathType === 'runway') {
         const ldm = getEffectiveRunwayLineupDistM(obj);
@@ -10019,7 +10349,7 @@
       const tw_id = String(obj.id || '');
       const path_type = String(obj.pathType || 'taxiway');
       const isRunwayExit = obj.pathType === 'runway_exit';
-      const isTaxiway = obj.pathType === 'taxiway' || obj.pathType === 'apron_taxiway';
+      const isTaxiway = obj.pathType === 'taxiway' || obj.pathType === 'apron_taxiway' || obj.pathType === 'general_queue_taxiway';
       for (let i = 0; i < chain.length - 1; i++) {
         const segPts = polylinePointsBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
         let d = polylineDistanceBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
@@ -10486,7 +10816,8 @@
 
   function findStandById(id) {
     return (state.pbbStands || []).find(function(s) { return s.id === id; }) ||
-           (state.remoteStands || []).find(function(s) { return s.id === id; });
+           (state.remoteStands || []).find(function(s) { return s.id === id; }) ||
+           (state.tempStands || []).find(function(s) { return s.id === id; });
   }
 
   function buildTimeAxisTicks(minT, maxT, baseMinT, baseSpan, zoom) {
@@ -10562,6 +10893,29 @@
       if (!a || !b) return;
       const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
       ctx.fillText(Math.round(e.dist).toString(), mx, my);
+    });
+    ctx.restore();
+  }
+
+  function drawQueueTaxiwayLaneMarkers() {
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    const r = Math.max(3.5, CELL_SIZE * 0.22) * LAYOUT_VERTEX_DOT_SCALE;
+    (state.taxiways || []).forEach(function(tw) {
+      if (!tw || tw.pathType !== 'general_queue_taxiway' || !tw.vertices || tw.vertices.length < 2) return;
+      const jm = queueTaxiwayAutoJunctionMarkersAlong(tw, QUEUE_TAXIWAY_JUNCTION_SPACING_M);
+      for (let j = 0; j < jm.length; j++) {
+        const xy = jm[j].p;
+        ctx.beginPath();
+        ctx.arc(xy[0], xy[1], r, 0, Math.PI * 2);
+        ctx.fillStyle = '#22c55e';
+        ctx.fill();
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+      }
     });
     ctx.restore();
   }
@@ -11202,6 +11556,13 @@
         return { type: 'remote', id: st.id };
       }
     }
+    if (state.selectedObject && state.selectedObject.type === 'tempStand' && state.selectedObject.obj) {
+      const st = state.selectedObject.obj;
+      const handle = getRemoteRotationHandlePx(st);
+      if (dist2(handle, [wx, wy]) <= maxD2) {
+        return { type: 'tempStand', id: st.id };
+      }
+    }
     return null;
   }
   function drawStandRotationHandle(originPx, handlePx, active) {
@@ -11307,6 +11668,21 @@
     stand.categoryMode = getStandCategoryMode(stand);
     stand.allowedAircraftTypes = getStandAllowedAircraftTypes(stand);
     stand.angleDeg = normalizeAngleDeg(stand.angleDeg != null ? stand.angleDeg : 0);
+    return stand;
+  }
+  function normalizeTempStandObject(rawStand) {
+    const stand = normalizeRemoteStandObject(rawStand || {});
+    const x = Number(stand.x);
+    const y = Number(stand.y);
+    if (stand.junctionX == null || stand.junctionY == null) {
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        stand.junctionX = x;
+        stand.junctionY = y;
+      }
+    } else {
+      stand.junctionX = Number(stand.junctionX);
+      stand.junctionY = Number(stand.junctionY);
+    }
     return stand;
   }
 
@@ -12268,7 +12644,12 @@
       return;
     }
     const layoutMode = settingModeSelect ? settingModeSelect.value : 'taxiway';
-    const pathType = pathTypeFromLayoutMode(isPathLayoutMode(layoutMode) ? layoutMode : 'taxiway');
+    let pathType = pathTypeFromLayoutMode(isPathLayoutMode(layoutMode) ? layoutMode : 'taxiway');
+    if (pathType === 'taxiway') {
+      const kindEl = document.getElementById('taxiwayPathTypeKind');
+      const kind = kindEl ? String(kindEl.value || 'normal') : 'normal';
+      if (kind === 'queue') pathType = 'general_queue_taxiway';
+    }
     const nameInputEl = document.getElementById('taxiwayName');
     const defaultPathName = getDefaultPathName(pathType);
     if (hadSelection && nameInputEl) nameInputEl.value = defaultPathName;
@@ -12357,6 +12738,10 @@
   const btnRemoteDrawEl = document.getElementById('btnRemoteDraw');
   if (btnRemoteDrawEl) btnRemoteDrawEl.addEventListener('click', function() {
     toggleLayoutDrawMode('remoteDrawing', 'previewRemote', null);
+  });
+  const btnTempStandDrawEl = document.getElementById('btnTempStandDraw');
+  if (btnTempStandDrawEl) btnTempStandDrawEl.addEventListener('click', function() {
+    toggleLayoutDrawMode('tempStandDrawing', 'previewTempStand', null);
   });
   const btnHoldingPointDrawEl = document.getElementById('btnHoldingPointDraw');
   if (btnHoldingPointDrawEl) btnHoldingPointDrawEl.addEventListener('click', function() {
@@ -12599,12 +12984,47 @@
             '<br>available buildings: ' + allowedLabel
         });
       });
+    } else if (mode === 'tempStand') {
+      (state.tempStands || []).forEach(function(st, idx) {
+        if (seen['tempStand_' + st.id]) return;
+        seen['tempStand_' + st.id] = true;
+        const baseName = (st.name && st.name.trim()) ? st.name.trim() : ('T' + String(idx + 1).padStart(3, '0'));
+        let allowedLabel = 'All (by proximity)';
+        if (Array.isArray(st.allowedTerminals) && st.allowedTerminals.length) {
+          const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) { return {
+            id: t.id,
+            name: (t.name || '').trim() || 'Building'
+          }; });
+          const names = st.allowedTerminals.map(function(id) {
+            const tt = terms.find(function(t) { return t.id === id; });
+            return tt ? tt.name : id;
+          });
+          if (names.length) allowedLabel = names.join(', ');
+        }
+        const rcxcy = getRemoteStandCenterPx(st);
+        const rcol = rcxcy[0] / CELL_SIZE;
+        const rrow = rcxcy[1] / CELL_SIZE;
+        items.push({
+          type: 'tempStand',
+          id: st.id,
+          title: uniqueTitle('Temp stand | ' + baseName),
+          tag: 'Category ' + (st.category || 'C'),
+          details:
+            'Category: ' + (st.category || '—') +
+            '<br>Position: (' + rcol.toFixed(1) + ',' + rrow.toFixed(1) + ')' +
+            '<br>Angle: ' + normalizeAngleDeg(st.angleDeg != null ? st.angleDeg : 0).toFixed(0) + '°' +
+            '<br>available buildings: ' + allowedLabel +
+            '<br>Taxiway centerline only'
+        });
+      });
     } else if (isPathLayoutMode(mode)) {
       const wantPt = pathTypeFromLayoutMode(mode);
       state.taxiways.forEach((tw, idx) => {
         if (seen['taxiway_' + tw.id]) return;
         const pt = tw.pathType || 'taxiway';
-        if (pt !== wantPt) return;
+        if (wantPt === 'taxiway') {
+          if (pt !== 'taxiway' && pt !== 'general_queue_taxiway') return;
+        } else if (pt !== wantPt) return;
         seen['taxiway_' + tw.id] = true;
         const baseName = (tw.name && tw.name.trim()) ? tw.name.trim() : ('Taxiway ' + (idx + 1));
         const dirVal = getTaxiwayDirection(tw);
@@ -12628,7 +13048,7 @@
         const serTw = serializeTaxiwayWithEndpoints(tw);
         const startStr = serTw.start_point != null ? '(' + serTw.start_point.col + ',' + serTw.start_point.row + ')' : '—';
         const endStr = serTw.end_point != null ? '(' + serTw.end_point.col + ',' + serTw.end_point.row + ')' : '—';
-        const heading = tw.pathType === 'runway' ? 'Runway' : (tw.pathType === 'runway_exit' ? 'Runway Taxiway' : (tw.pathType === 'apron_taxiway' ? 'Apron taxiway' : 'Taxiway'));
+        const heading = tw.pathType === 'runway' ? 'Runway' : (tw.pathType === 'runway_exit' ? 'Runway Taxiway' : (tw.pathType === 'apron_taxiway' ? 'Apron taxiway' : (tw.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
         const avgVel = (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) ? tw.avgMoveVelocity : 10;
         const maxExit = (tw.pathType === 'runway_exit' && typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0) ? tw.maxExitVelocity : null;
         const minExit = (tw.pathType === 'runway_exit' && typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
@@ -12652,7 +13072,7 @@
             (minExit != null ? '<br>Min exit velocity: ' + minExit + ' m/s' : '') +
             (minArrDisplay != null ? '<br>Min arr velocity: ' + minArrDisplay + ' m/s' : '') +
             (tw.pathType === 'runway' ? '<br>Line up: ' + getEffectiveRunwayLineupDistM(tw) + ' m (start→end)' : '') +
-            ((tw.pathType === 'taxiway' || tw.pathType === 'apron_taxiway') ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
+            ((tw.pathType === 'taxiway' || tw.pathType === 'apron_taxiway' || tw.pathType === 'general_queue_taxiway') ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
             '<br>Start point: ' + startStr +
             '<br>End point: ' + endStr
         });
@@ -12843,6 +13263,30 @@
           '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) +
           '<br>Cell: (' + remoteCell[0].toFixed(1) + ',' + remoteCell[1].toFixed(1) + ')' +
           '<br>available buildings: ' + allowedLabel;
+      } else if (state.selectedObject.type === 'tempStand') {
+        let allowedLabelT = 'All (by proximity)';
+        if (Array.isArray(o.allowedTerminals) && o.allowedTerminals.length) {
+          const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) { return {
+            id: t.id,
+            name: (t.name || '').trim() || 'Building'
+          }; });
+          const names = o.allowedTerminals.map(function(id) {
+            const tt = terms.find(function(t) { return t.id === id; });
+            return tt ? tt.name : id;
+          });
+          if (names.length) allowedLabelT = names.join(', ');
+        }
+        const tpx = getRemoteStandCenterPx(o);
+        const tcell = [tpx[0] / CELL_SIZE, tpx[1] / CELL_SIZE];
+        const junc = getTempStandTaxiwayJunctionPx(o);
+        objectInfoEl.innerHTML =
+          '<strong>Temp stand</strong>' +
+          '<br>Name: ' + (o.name || '—') +
+          '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) +
+          '<br>Cell: (' + tcell[0].toFixed(1) + ',' + tcell[1].toFixed(1) + ')' +
+          '<br>Taxiway junction (px): (' + junc[0].toFixed(1) + ', ' + junc[1].toFixed(1) + ') → sim_input junctionX/Y' +
+          '<br>available buildings: ' + allowedLabelT +
+          '<br>Placement: taxiway centerline (no apron link)';
       } else if (state.selectedObject.type === 'holdingPoint') {
         const hx = Number(o.x), hy = Number(o.y);
         const hCol = hx / CELL_SIZE, hRow = hy / CELL_SIZE;
@@ -12856,7 +13300,7 @@
       else if (state.selectedObject.type === 'taxiway') {
         const dirVal = getTaxiwayDirection(o);
         const dirLabel = dirVal === 'clockwise' ? 'Clockwise' : (dirVal === 'counter_clockwise' ? 'Counter Clockwise' : 'Both');
-        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : (o.pathType === 'apron_taxiway' ? 'Apron taxiway' : 'Taxiway'));
+        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : (o.pathType === 'apron_taxiway' ? 'Apron taxiway' : (o.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
         const ser = serializeTaxiwayWithEndpoints(o);
         const startStr = ser.start_point != null ? '(' + ser.start_point.col + ', ' + ser.start_point.row + ')' : '—';
         const endStr = ser.end_point != null ? '(' + ser.end_point.col + ', ' + ser.end_point.row + ')' : '—';
@@ -12870,7 +13314,7 @@
         objectInfoEl.innerHTML = '<strong>' + heading + '</strong><br>Name: ' + (o.name || '—') +
           '<br>Direction: ' + dirLabel +
           '<br>Width: ' + (o.width != null ? o.width : 23) + ' m' +
-          ((o.pathType === 'taxiway' || o.pathType === 'apron_taxiway') ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
+          ((o.pathType === 'taxiway' || o.pathType === 'apron_taxiway' || o.pathType === 'general_queue_taxiway') ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
           (minArr != null ? '<br>Min arr velocity: ' + minArr + ' m/s' : '') +
           (o.pathType === 'runway' ? '<br>Line up: ' + lineupStr : '') +
           (maxEx != null ? '<br>Max exit velocity: ' + maxEx + ' m/s' : '') +
@@ -13312,6 +13756,82 @@
       ctx.textBaseline = 'top';
       const labelOffset = 2;
       ctx.fillText(label, cx + size/2 - labelOffset, cy - size/2 + labelOffset);
+      if (sel) {
+        drawStandRotationHandle([cx, cy], getRemoteRotationHandlePx(st), rotationActive);
+      }
+    });
+    ctx.restore();
+  }
+
+  function drawTempStands() {
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
+    const temps = state.tempStands || [];
+    temps.forEach(function(st) {
+      const cxcy = getRemoteStandCenterPx(st);
+      const cx = cxcy[0], cy = cxcy[1];
+      const size = getStandSizeMeters(st.category || 'C');
+      const angle = getRemoteStandAngleRad(st);
+      const sel = state.selectedObject && state.selectedObject.type === 'tempStand' && state.selectedObject.id === st.id;
+      const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
+      const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
+      const idleFillT = 'rgba(139,92,246,0.2)';
+      const idleStrokeT = '#a78bfa';
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.setLineDash([5, 4]);
+      ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillT);
+      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStrokeT);
+      ctx.lineWidth = sel ? 2.5 : 1.5;
+      ctx.beginPath();
+      ctx.rect(-size / 2, -size / 2, size, size);
+      ctx.fill();
+      if (sel) {
+        ctx.save();
+        ctx.shadowColor = c2dObjectSelectedGlow();
+        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+      }
+      ctx.stroke();
+      if (sel) ctx.restore();
+      ctx.setLineDash([]);
+      ctx.restore();
+      if (mode === 'apronTaxiway') {
+        ctx.save();
+        ctx.fillStyle = sel ? '#c4b5fd' : '#7c3aed';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      const idx = temps.indexOf(st);
+      const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('T' + String(idx + 1).padStart(3, '0'));
+      const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
+      const label = labelPrefix + ' / ' + nameRaw;
+      ctx.fillStyle = '#e9d5ff';
+      ctx.font = '8px system-ui';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'top';
+      const labelOffset = 2;
+      ctx.fillText(label, cx + size / 2 - labelOffset, cy - size / 2 + labelOffset);
+      const junc = getTempStandTaxiwayJunctionPx(st);
+      const jx = junc[0], jy = junc[1];
+      const jr = Math.max(3.2, 3.6 / Math.max(state.scale, 0.08));
+      ctx.save();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = sel ? '#22d3ee' : 'rgba(34,211,238,0.95)';
+      ctx.lineWidth = sel ? 2.25 : 1.75;
+      ctx.beginPath();
+      ctx.arc(jx, jy, jr, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = sel ? '#ecfeff' : 'rgba(236,254,255,0.92)';
+      ctx.beginPath();
+      ctx.arc(jx, jy, jr * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
       if (sel) {
         drawStandRotationHandle([cx, cy], getRemoteRotationHandlePx(st), rotationActive);
       }
@@ -14463,6 +14983,36 @@
       ctx.stroke();
       ctx.restore();
     }
+    if (mode === 'tempStand' && state.previewTempStand) {
+      const cx = Number(state.previewTempStand.x), cy = Number(state.previewTempStand.y);
+      const category = document.getElementById('tempStandCategory') ? document.getElementById('tempStandCategory').value || 'C' : 'C';
+      const size = getStandSizeMeters(category);
+      const angle = normalizeAngleDeg(document.getElementById('tempStandAngle') ? document.getElementById('tempStandAngle').value : 0) * Math.PI / 180;
+      const overlap = state.previewTempStand.overlap;
+      ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(167,139,250,0.28)';
+      ctx.strokeStyle = overlap ? '#ef4444' : '#a78bfa';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.rect(-size / 2, -size / 2, size, size);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      ctx.setLineDash([]);
+      const pjr = Math.max(3, 3.5 / Math.max(state.scale, 0.08));
+      ctx.strokeStyle = '#22d3ee';
+      ctx.lineWidth = 1.75;
+      ctx.beginPath();
+      ctx.arc(cx, cy, pjr, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(236,254,255,0.85)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, pjr * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+    }
     if (mode === 'pbb' && state.previewPbb) {
       const ex = state.previewPbb.x2, ey = state.previewPbb.y2;
       const size = getStandSizeMeters(state.previewPbb.category || 'C');
@@ -14515,6 +15065,7 @@
     drawHoldingPoints2D();
     drawPBBs();
     drawRemoteStands();
+    drawTempStands();
     drawApronTaxiwayLinks();
     drawStandPreview();
     drawSelectedLayoutEdge();
@@ -14531,6 +15082,7 @@
     drawHoldingQueueGhostFlights2D();
     drawFlights2D();
     drawPathJunctions();
+    drawQueueTaxiwayLaneMarkers();
   }
 
   document.addEventListener('keydown', function(ev) {
@@ -14542,7 +15094,7 @@
     }
     if (ev.key === 'Escape') {
       if (inInput) return;
-      const anyLayoutDraw = !!(state.pbbDrawing || state.remoteDrawing || state.holdingPointDrawing || state.apronLinkDrawing ||
+      const anyLayoutDraw = !!(state.pbbDrawing || state.remoteDrawing || state.tempStandDrawing || state.holdingPointDrawing || state.apronLinkDrawing ||
         state.terminalDrawingId || state.taxiwayDrawingId);
       if (!anyLayoutDraw) return;
       ev.preventDefault();
@@ -14577,7 +15129,7 @@
       ev.preventDefault();
       return;
     }
-    if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'holdingPoint' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight') return;
+    if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'tempStand' && type !== 'holdingPoint' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight') return;
     pushUndo();
     removeLayoutObjectFromState(type, id);
     state.selectedObject = null;
@@ -14673,7 +15225,7 @@
       }
     }
     state.selectedVertex = null;
-    if ((mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing)) return;
+    if ((mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'tempStand' && state.tempStandDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing)) return;
     ev.preventDefault();
     state.dragStart = { sx, sy, panX: state.panX, panY: state.panY };
     state.isPanning = false;
@@ -14770,6 +15322,17 @@
           const nextDeg = normalizeAngleDeg(Math.atan2(wy - center[1], wx - center[0]) * 180 / Math.PI);
           st.angleDeg = nextDeg;
           const angleInput = document.getElementById('remoteAngle');
+          if (angleInput) angleInput.value = String(Math.round(nextDeg));
+          scheduleDraw(); drewThisMove = true;
+          if (scene3d) update3DScene();
+        }
+      } else if (state.dragStandRotation.type === 'tempStand') {
+        const st = (state.tempStands || []).find(function(item) { return item.id === state.dragStandRotation.id; });
+        if (st) {
+          const center = getRemoteStandCenterPx(st);
+          const nextDeg = normalizeAngleDeg(Math.atan2(wy - center[1], wx - center[0]) * 180 / Math.PI);
+          st.angleDeg = nextDeg;
+          const angleInput = document.getElementById('tempStandAngle');
           if (angleInput) angleInput.value = String(Math.round(nextDeg));
           scheduleDraw(); drewThisMove = true;
           if (scene3d) update3DScene();
@@ -14872,6 +15435,36 @@
       if (candidate.x < 0 || candidate.y < 0 || candidate.x > maxX || candidate.y > maxY) overlap = true;
       state.previewRemote = { x: candidate.x, y: candidate.y, overlap };
       scheduleDraw(); drewThisMove = true;
+    } else if (!state.isPanning && !state.dragVertex && mode === 'tempStand' && state.tempStandDrawing) {
+      const snap = snapTempStandOnTaxiwayCenterlines(wx, wy);
+      if (!snap) {
+        state.previewTempStand = null;
+        scheduleDraw(); drewThisMove = true;
+      } else {
+        const category = document.getElementById('tempStandCategory') ? document.getElementById('tempStandCategory').value || 'C' : 'C';
+        const angleDeg = normalizeAngleDeg(document.getElementById('tempStandAngle') ? document.getElementById('tempStandAngle').value : 0);
+        const candidate = { x: snap.x, y: snap.y, category, angleDeg };
+        const candCorners = getRemoteStandCorners(candidate);
+        let overlap = false;
+        const temps = state.tempStands || [];
+        for (let i = 0; i < temps.length; i++) {
+          if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(temps[i]))) { overlap = true; break; }
+        }
+        if (!overlap) {
+          for (let i = 0; i < state.remoteStands.length; i++) {
+            if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) { overlap = true; break; }
+          }
+        }
+        if (!overlap) {
+          for (let i = 0; i < state.pbbStands.length; i++) {
+            if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) { overlap = true; break; }
+          }
+        }
+        const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
+        if (candidate.x < 0 || candidate.y < 0 || candidate.x > maxX || candidate.y > maxY) overlap = true;
+        state.previewTempStand = { x: candidate.x, y: candidate.y, overlap };
+        scheduleDraw(); drewThisMove = true;
+      }
     } else if (!state.isPanning && !state.dragVertex && mode === 'pbb' && state.pbbDrawing) {
       let bestEdge = null, bestD2 = Infinity;
       state.terminals.forEach(t => {
@@ -14912,6 +15505,7 @@
     } else {
       let clearedPreview = false;
       if (state.previewRemote) { state.previewRemote = null; clearedPreview = true; }
+      if (state.previewTempStand) { state.previewTempStand = null; clearedPreview = true; }
       if (state.previewPbb) { state.previewPbb = null; clearedPreview = true; }
       if (state.previewHoldingPoint) { state.previewHoldingPoint = null; clearedPreview = true; }
       if (clearedPreview) { scheduleDraw(); drewThisMove = true; }
@@ -14942,7 +15536,7 @@
       if (!tipDone) {
         const hit = hitTest(wx, wy);
         if (hit && hit.obj) {
-          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type);
+          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'tempStand' ? 'Temp Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type);
           flightTooltip.style.display = 'block';
           flightTooltip.textContent = name;
           flightTooltip.style.left = (ev.clientX + 12) + 'px';
@@ -14964,6 +15558,7 @@
     state.hoverCell = null;
     state.previewPbb = null;
     state.previewRemote = null;
+    state.previewTempStand = null;
     state.previewHoldingPoint = null;
     state.apronLinkPointerWorld = null;
     flushDrawNow();
@@ -15081,7 +15676,7 @@
     const [wx, wy] = screenToWorld(sx, sy);
     const placePx = worldPointToPixel(wx, wy, !!ev.shiftKey);
     const mode = settingModeSelect.value;
-    const inStandDrawingMode = (mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing);
+    const inStandDrawingMode = (mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'tempStand' && state.tempStandDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing);
     if (!state.dragStart && !inStandDrawingMode) { state.dragStart = null; return; }
     if (handlePbbOrRemoteMouseUp2D(mode, placePx[0], placePx[1])) {
       state.dragStart = null;
@@ -15255,6 +15850,12 @@
         } else if (mode === 'remote' && state.remoteDrawing) {
           const prev = state.previewRemote;
           if (prev && !prev.overlap && tryPlaceRemoteAt(prev.x, prev.y)) {
+            syncPanelFromState();
+            draw();
+          }
+        } else if (mode === 'tempStand' && state.tempStandDrawing) {
+          const prev = state.previewTempStand;
+          if (prev && !prev.overlap && tryPlaceTempStandAt(prev.x, prev.y)) {
             syncPanelFromState();
             draw();
           }

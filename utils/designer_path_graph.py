@@ -33,6 +33,40 @@ def _vertex_to_px(v: dict, cell_size: float) -> Point:
     return (float(v.get("col", 0) or 0) * cs, float(v.get("row", 0) or 0) * cs)
 
 
+def _queue_taxiway_junction_along_vertices(
+    obj: dict, cell_size: float, spacing_m: float
+) -> List[Tuple[float, Point]]:
+    verts = obj.get("vertices") or []
+    if len(verts) < 2 or spacing_m < 1e-9:
+        return []
+    out: List[Tuple[float, Point]] = []
+    along_m = 0.0
+    next_mark = spacing_m
+    cs = max(float(cell_size), 1e-9)
+    for i in range(len(verts) - 1):
+        v0 = verts[i] if isinstance(verts[i], dict) else {}
+        v1 = verts[i + 1] if isinstance(verts[i + 1], dict) else {}
+        try:
+            dc = float(v1.get("col", 0) or 0) - float(v0.get("col", 0) or 0)
+            dr = float(v1.get("row", 0) or 0) - float(v0.get("row", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        seg_m = math.hypot(dc, dr) * cs
+        if seg_m < 1e-12:
+            continue
+        while along_m + seg_m >= next_mark - 1e-9:
+            into_seg_m = next_mark - along_m
+            u = into_seg_m / seg_m
+            pu = max(0.0, min(1.0, u))
+            col = float(v0.get("col", 0) or 0) + pu * dc
+            row = float(v0.get("row", 0) or 0) + pu * dr
+            p = _vertex_to_px({"col": col, "row": row}, cell_size)
+            out.append((float(i) + pu, p))
+            next_mark += spacing_m
+        along_m += seg_m
+    return out
+
+
 def project_on_segment(a: Point, b: Point, q: Point) -> Tuple[float, Point]:
     ax, ay = a[0], a[1]
     bx, by = b[0], b[1]
@@ -274,6 +308,9 @@ def find_stand_by_id(layout: dict, stand_id: str) -> Optional[dict]:
     for s in layout.get("remoteStands") or []:
         if isinstance(s, dict) and str(s.get("id", "")) == str(stand_id):
             return s
+    for s in layout.get("tempStands") or []:
+        if isinstance(s, dict) and str(s.get("id", "")) == str(stand_id):
+            return s
     return None
 
 
@@ -284,6 +321,15 @@ def get_stand_connection_px(stand: dict, cell_size: float) -> Point:
         return (float(stand["apronSiteX"]), float(stand["apronSiteY"]))
     if stand.get("x2") is not None and stand.get("y2") is not None:
         return (float(stand["x2"]), float(stand["y2"]))
+    jx, jy = stand.get("junctionX"), stand.get("junctionY")
+    if jx is not None and jy is not None:
+        try:
+            fx, fy = float(jx), float(jy)
+        except (TypeError, ValueError):
+            pass
+        else:
+            if math.isfinite(fx) and math.isfinite(fy):
+                return (fx, fy)
     if stand.get("x") is not None and stand.get("y") is not None:
         return (float(stand["x"]), float(stand["y"]))
     cs = max(float(cell_size), 1e-9)
@@ -519,6 +565,11 @@ def build_path_graph(
     opts = path_graph_opts if isinstance(path_graph_opts, dict) else {}
     pure_ground_exclude_runway = bool(opts.get("pureGroundExcludeRunway"))
     omit_other_runway_exits = bool(opts.get("omitOtherRunwayExits"))
+    try:
+        queue_spacing_m = float(opts.get("queueTaxiwayJunctionSpacingM", 40.0))
+    except (TypeError, ValueError):
+        queue_spacing_m = 40.0
+    queue_spacing_m = max(5.0, queue_spacing_m)
 
     nodes: List[Point] = []
     adj: List[List[Tuple[int, float]]] = []
@@ -675,7 +726,13 @@ def build_path_graph(
                                 {"nodeP": p, "standPt": stand_pt, "standId": lk.get("pbbId"), "chain": chain}
                             )
             path_type = str(obj.get("pathType") or "")
-            if path_type in ("runway_exit", "runway_taxiway", "taxiway", "apron_taxiway"):
+            if path_type in (
+                "runway_exit",
+                "runway_taxiway",
+                "taxiway",
+                "apron_taxiway",
+                "general_queue_taxiway",
+            ):
                 cs_hp = max(float(cell_size), 1e-9)
                 hp_tol_d2 = max(float(SPLIT_TOL_D2), (cs_hp * 0.35) ** 2)
                 for hp in layout.get("holdingPoints") or []:
@@ -701,6 +758,27 @@ def build_path_graph(
                         and _dist2(p_h, (hx_f, hy_f)) <= hp_tol_d2
                     ):
                         junctions.append((seg + float(t_h), p_h))
+                for tst in layout.get("tempStands") or []:
+                    if not isinstance(tst, dict):
+                        continue
+                    tx_raw, ty_raw = tst.get("x"), tst.get("y")
+                    if tx_raw is None or ty_raw is None:
+                        continue
+                    try:
+                        sp_ts = (float(tx_raw), float(ty_raw))
+                    except (TypeError, ValueError):
+                        continue
+                    t_ts, p_ts = project_on_segment(a, b, sp_ts)
+                    if (
+                        0.0 <= float(t_ts) <= 1.0
+                        and _dist2(p_ts, sp_ts) <= hp_tol_d2
+                    ):
+                        junctions.append((seg + float(t_ts), p_ts))
+        if str(obj.get("pathType") or "") == "general_queue_taxiway":
+            for t_along_q, p_q in _queue_taxiway_junction_along_vertices(
+                obj, cell_size, queue_spacing_m
+            ):
+                junctions.append((t_along_q, p_q))
         if obj.get("pathType") == "runway":
             ldm = get_effective_runway_lineup_dist_m(obj)
             rpath = get_runway_path_px(layout, cell_size, obj.get("id"))
@@ -745,7 +823,11 @@ def build_path_graph(
                 st.add(get_or_add(p))
         dir_s = get_taxiway_direction(obj, direction_modes)
         is_runway_exit = str(obj.get("pathType") or "") in ("runway_exit", "runway_taxiway")
-        is_taxiway = str(obj.get("pathType") or "") in ("taxiway", "apron_taxiway")
+        is_taxiway = str(obj.get("pathType") or "") in (
+            "taxiway",
+            "apron_taxiway",
+            "general_queue_taxiway",
+        )
         path_type = str(obj.get("pathType", "taxiway") or "taxiway")
         for i in range(len(chain) - 1):
             seg_pts = polyline_points_between_along(pts, chain[i][0], chain[i + 1][0])
@@ -799,6 +881,16 @@ def build_path_graph(
                 j, i, total_dist, total_dist, d_pts, lid, "apron_link", "both"
             )
         )
+
+    for tst in layout.get("tempStands") or []:
+        if not isinstance(tst, dict):
+            continue
+        tid = str(tst.get("id") or "").strip()
+        if not tid:
+            continue
+        sp = get_stand_connection_px(tst, cell_size)
+        j = get_or_add(sp)
+        stand_id_to_node_index[tid] = j
 
     g = PathGraph(
         nodes=nodes,
@@ -954,6 +1046,7 @@ def path_graph_from_layout_sim_export(
         if apply_taxiway_ret_heuristic and str(e.get("pathType") or "") in (
             "taxiway",
             "apron_taxiway",
+            "general_queue_taxiway",
         ):
             base_cost += th
         if base_cost >= rc * 0.999 or base_cost < 1e-6:

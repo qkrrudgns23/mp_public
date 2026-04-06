@@ -68,6 +68,7 @@ Point = Tuple[float, float]
 DestinationStandHistorySnap = Tuple[str, int, int, int, bool, bool]
 PHASE_LANDING = "Landing"
 PHASE_ARR_TAXI = "Arr_taxi"
+PHASE_ARR_TAXI_TEMP = "Arr_taxi_occupied"
 PHASE_DEP_TAXI = "Dep_taxi"
 PHASE_HOLDING_LINEUP = "Holding_lineup"
 PHASE_LINEUP_DEPARTURE = "Lineup_departure"
@@ -116,7 +117,7 @@ LOOKAHEAD_EDGE_COUNT_MAX = max(
     LOOKAHEAD_ARR_TAXI_BUSY,
 )
 RWY_ARRIVAL_SPACING_BUFFER_SEC = 25 #### 홪주로 이탈시간 여유분분
-HEAVY_DECISION_INTERVAL_SEC = 10
+HEAVY_DECISION_INTERVAL_SEC = 15
 # Between heavy ticks, re-run full reservation pass this often so Arr_taxi / Dep_taxi agents
 # re-observe stand + departure-runway resources and regain PROCEED when slots free.
 LIGHT_RESERVATION_RETRY_INTERVAL_SEC = 1.0
@@ -202,7 +203,7 @@ _SAME_DIR_COS_THRESHOLD = 0.5
 def _arr_ret_decel_floor_ms(phase: str, path_type: str, accel_ms2: float) -> float:
     """지정 RET(Arr_taxi·runway_exit·감속): 착륙/고속탈출과 동일 최소 속도 바닥."""
     if (
-        phase == PHASE_ARR_TAXI
+        phase in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP)
         and str(path_type or "") == "runway_exit"
         and float(accel_ms2) < -1e-12
     ):
@@ -402,6 +403,12 @@ def _graph_for_direction(
     direction_modes = layout.get("directionModes") or []
     if not isinstance(direction_modes, list):
         direction_modes = []
+    tw_info = _deep_get(information, "tiers", "layout", "taxiway", default={}) or {}
+    try:
+        q_js = float(tw_info.get("queueJunctionSpacingM", 40.0))
+    except (TypeError, ValueError):
+        q_js = 40.0
+    path_graph_opts = {"queueTaxiwayJunctionSpacingM": max(5.0, q_js)}
     return build_path_graph(
         layout,
         cell_size,
@@ -412,7 +419,7 @@ def _graph_for_direction(
         direction_modes,
         None,
         rw_dir,
-        None,
+        path_graph_opts,
     )
 
 
@@ -560,6 +567,10 @@ class Flight:
     completed_directed_hops: List[Tuple[str, int, int, str]] = field(default_factory=list)
     control_halt: bool = False
     control_speed_cap_ms: Optional[float] = None
+    temp_stand_id: Optional[str] = None
+    awaiting_apron_from_temp: bool = False
+    post_temp_route_tail_prep: Optional[PreparedFlightPath] = None
+    arr_temp_detour_decided: bool = False
 
 
 @dataclass
@@ -644,6 +655,7 @@ class SimulationControlState:
     deadlock_resolve_event_count: int = 0
     stand_arrival_book_snapshot: Dict[str, int] = field(default_factory=dict)
     last_light_reservation_rebook_sim_time: float = -1e30
+    temp_stand_incident_edges: Dict[str, set[str]] = field(default_factory=dict)
 
 
 CLEARANCE_DEADLOCK_GHOST = "DEADLOCK_GHOST"
@@ -1737,7 +1749,7 @@ def _annotate_segment_kinematics(
                 v_cur = max(v_cur, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
             continue
 
-        if phase in (PHASE_ARR_TAXI, PHASE_DEP_TAXI, PHASE_HOLDING_LINEUP):
+        if phase in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP, PHASE_DEP_TAXI, PHASE_HOLDING_LINEUP):
             is_ret = pt == "runway_exit" and str(link_id) == exit_tw_s
             if pt == "runway_taxiway":
                 if i == 0:
@@ -1746,7 +1758,7 @@ def _annotate_segment_kinematics(
                     )
                 prev_lid = str(segment_link_ids[i - 1])
                 v_t = _avg_move_velocity_ms_for_link(layout, prev_lid, flight_id)
-                if phase == PHASE_ARR_TAXI:
+                if phase in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
                     v_t = max(float(v_t), MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
                 v0_out[i] = float(v_t)
                 a_out[i] = 0.0
@@ -2279,7 +2291,14 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
     if guv_done is not None:
         agent.completed_directed_hops.append((str(eid), int(guv_done[0]), int(guv_done[1]), pt_done))
     if sim_time_abs is not None and not agent.edge_ids:
-        agent.path_completed_abs_sec = float(sim_time_abs)
+        if (
+            str(old_ph) == PHASE_ARR_TAXI_TEMP
+            and agent.post_temp_route_tail_prep is not None
+            and str(agent.temp_stand_id or "").strip()
+        ):
+            agent.awaiting_apron_from_temp = True
+        elif not agent.awaiting_apron_from_temp:
+            agent.path_completed_abs_sec = float(sim_time_abs)
     new_ph = str(agent.edge_phases[0]) if agent.edge_phases else ""
     if (
         sim_time_abs is not None
@@ -2408,7 +2427,7 @@ def move_agent(
         if agent.control_speed_cap_ms is not None and math.isfinite(float(agent.control_speed_cap_ms)):
             v_now = min(v_now, float(agent.control_speed_cap_ms))
         if agent.segment_path_types and str(agent.segment_path_types[0] or "") == "runway_taxiway":
-            if ph == PHASE_LANDING or ph == PHASE_ARR_TAXI:
+            if ph == PHASE_LANDING or ph in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
                 v_now = max(v_now, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
         dt_step = min(0.05, rem_t)
         ds = v_now * dt_step
@@ -2442,7 +2461,7 @@ def move_agent(
         _acn = float(agent.segment_accel_ms2[0])
         if (
             _ptn == "runway_taxiway"
-            and (_phn == PHASE_LANDING or _phn == PHASE_ARR_TAXI)
+            and (_phn == PHASE_LANDING or _phn in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP))
         ) or _arr_ret_decel_floor_ms(_phn, _ptn, _acn) > 1e-12:
             agent.velocity_ms = max(
                 agent.velocity_ms, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS
@@ -2452,7 +2471,7 @@ def move_agent(
         _phm = str(agent.edge_phases[0])
         if _ptm == "apron_link" and _phm == PHASE_DEP_TAXI:
             agent.motion_is_forward = False
-        elif _ptm == "apron_link" and _phm == PHASE_ARR_TAXI:
+        elif _ptm == "apron_link" and _phm in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
             agent.motion_is_forward = True
         elif _ptm != "apron_link":
             agent.motion_is_forward = True
@@ -3161,6 +3180,13 @@ def _collect_stand_ids_for_resource_model(layout: Dict[str, Any]) -> List[str]:
         if s and s not in seen:
             seen.add(s)
             out.append(s)
+    for st in layout.get("tempStands") or []:
+        if not isinstance(st, dict) or st.get("id") is None:
+            continue
+        s = str(st["id"]).strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
     for fobj in layout.get("flights") or []:
         if not isinstance(fobj, dict):
             continue
@@ -3169,6 +3195,772 @@ def _collect_stand_ids_for_resource_model(layout: Dict[str, Any]) -> List[str]:
             seen.add(sid)
             out.append(sid)
     return out
+
+
+def _build_temp_stand_incident_edges(
+    layout: Dict[str, Any], g: Optional[PathGraph]
+) -> Dict[str, set[str]]:
+    out: Dict[str, set[str]] = {}
+    if g is None or not g.stand_id_to_node_index:
+        return out
+    raw_edges = layout.get("Edge") or layout.get("edges") or []
+    for tst in layout.get("tempStands") or []:
+        if not isinstance(tst, dict):
+            continue
+        tid = str(tst.get("id") or "").strip()
+        if not tid:
+            continue
+        j = g.stand_id_to_node_index.get(tid)
+        if j is None:
+            continue
+        se: set[str] = set()
+        for ed in raw_edges:
+            if not isinstance(ed, dict):
+                continue
+            eid = str(ed.get("id") or "").strip()
+            if not eid:
+                continue
+            try:
+                fi = int(ed["fromIdx"])
+                ti = int(ed["toIdx"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if fi == j or ti == j:
+                se.add(eid)
+        if se:
+            out[tid] = se
+    return out
+
+
+def _flight_default_icao_category(
+    fobj: Dict[str, Any], information: Dict[str, Any]
+) -> str:
+    raw = fobj.get("icaoCategory") or fobj.get("icao_category")
+    if raw is not None and str(raw).strip():
+        return str(raw).strip().upper()[:1]
+    sim = _deep_get(information, "tiers", "algorithm", "simulation", default={}) or {}
+    if isinstance(sim, dict) and sim.get("defaultIcaoCategory") is not None:
+        try:
+            s = str(sim.get("defaultIcaoCategory")).strip().upper()[:1]
+            if s:
+                return s
+        except (TypeError, ValueError):
+            pass
+    return "C"
+
+
+def _stand_accepts_flight_aircraft(
+    stand: Dict[str, Any],
+    fobj: Dict[str, Any],
+    information: Dict[str, Any],
+) -> bool:
+    mode = str(stand.get("categoryMode") or "icao").strip().lower()
+    if mode == "aircraft":
+        raw = stand.get("allowedAircraftTypes") or stand.get("allowed_aircraft_types")
+        if not isinstance(raw, list) or len(raw) == 0:
+            return True
+        ac = str(fobj.get("aircraftType") or fobj.get("aircraft_type") or "").strip()
+        if not ac:
+            return False
+        allow = {str(x).strip() for x in raw if str(x).strip()}
+        return ac in allow
+    scat = str(stand.get("category") or "C").strip().upper()[:1]
+    fcat = _flight_default_icao_category(fobj, information)
+    order = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6}
+    fi = int(order.get(fcat, 3))
+    si = int(order.get(scat, 3))
+    return fi <= si
+
+
+def _temp_stand_pixel_xy_from_sim_input(stand: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    """
+    Temp stand position in layout pixel space using **only** fields present on the stand
+    object from sim_input layout JSON (no PBB apron site, ``x2``/``y2``, or ``col``/``row``).
+
+    Preference: finite ``junctionX``/``junctionY``; else finite ``x``/``y``.
+    """
+    if not stand or not isinstance(stand, dict):
+        return None
+    jx, jy = stand.get("junctionX"), stand.get("junctionY")
+    try:
+        if jx is not None and jy is not None:
+            fx, fy = float(jx), float(jy)
+            if math.isfinite(fx) and math.isfinite(fy):
+                return (fx, fy)
+    except (TypeError, ValueError):
+        pass
+    x, y = stand.get("x"), stand.get("y")
+    try:
+        if x is not None and y is not None:
+            fx, fy = float(x), float(y)
+            if math.isfinite(fx) and math.isfinite(fy):
+                return (fx, fy)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def _temp_stand_has_other_claimant_or_occupant(
+    tid: str,
+    aid: str,
+    control_state: SimulationControlState,
+    agents: List[Flight],
+) -> bool:
+    """
+    True if temp stand ``tid`` is used by another flight: ``stand_resources`` occupancy
+    lists someone other than ``aid``, or any other agent has ``temp_stand_id == tid``.
+
+    Used so temp targets stay consistent with per-tick ``refresh_resource_occupancy`` and
+    with same-tick splices before the next refresh.
+    """
+    sr = control_state.stand_resources.get(tid)
+    if sr is not None:
+        if any(str(x) != aid for x in sr.occupied_by):
+            return True
+    for ag2 in agents:
+        if str(ag2.id) == aid:
+            continue
+        if str(ag2.temp_stand_id or "").strip() == tid:
+            return True
+    return False
+
+
+def _pick_temp_stand_for_arrival_detour(
+    layout: Dict[str, Any],
+    fobj: Dict[str, Any],
+    dest_stand_id: str,
+    control_state: SimulationControlState,
+    cell_size: float,
+    information: Dict[str, Any],
+    agents: List[Flight],
+) -> Optional[str]:
+    raw_ts = layout.get("tempStands") or []
+    if not raw_ts:
+        return None
+    dest_xy = _apron_token_xy(layout, float(cell_size), str(dest_stand_id))
+    if dest_xy is None:
+        return None
+    aid = str(fobj.get("id") or "")
+    best_id: Optional[str] = None
+    best_d2 = float("inf")
+    for tst in raw_ts:
+        if not isinstance(tst, dict):
+            continue
+        tid = str(tst.get("id") or "").strip()
+        if not tid:
+            continue
+        if not _stand_accepts_flight_aircraft(tst, fobj, information):
+            continue
+        sr = control_state.stand_resources.get(tid)
+        if sr is None:
+            continue
+        if _temp_stand_has_other_claimant_or_occupant(tid, aid, control_state, agents):
+            continue
+        st_dict = find_stand_by_id(layout, tid)
+        if not st_dict:
+            continue
+        txy = _temp_stand_pixel_xy_from_sim_input(st_dict)
+        if txy is None:
+            continue
+        d2 = (txy[0] - dest_xy[0]) ** 2 + (txy[1] - dest_xy[1]) ** 2
+        if d2 < best_d2:
+            best_d2 = d2
+            best_id = tid
+    return best_id
+
+
+def _first_contiguous_phase_block(agent: Flight, phase: str) -> Optional[Tuple[int, int]]:
+    phases = agent.edge_phases
+    if not phases:
+        return None
+    try:
+        first = next(i for i, p in enumerate(phases) if str(p) == phase)
+    except StopIteration:
+        return None
+    last = int(first)
+    while last + 1 < len(phases) and str(phases[last + 1]) == phase:
+        last += 1
+    return (int(first), last)
+
+
+def _prepared_flight_path_tail_from_index(agent: Flight, start_idx: int) -> Optional[PreparedFlightPath]:
+    n = len(agent.edge_ids)
+    if start_idx < 0 or start_idx >= n:
+        return None
+    pty = (
+        list(agent.segment_path_types[start_idx:])
+        if agent.segment_path_types and len(agent.segment_path_types) == n
+        else []
+    )
+    guv = (
+        list(agent.segment_graph_uv[start_idx:])
+        if agent.segment_graph_uv and len(agent.segment_graph_uv) == n
+        else []
+    )
+    return PreparedFlightPath(
+        edge_ids=list(agent.edge_ids[start_idx:]),
+        segment_phases=list(agent.edge_phases[start_idx:]),
+        segment_endpoints=[(tuple(a), tuple(b)) for a, b in agent.segment_endpoints[start_idx:]],
+        segment_start_velocity_ms=list(agent.segment_v0_ms[start_idx:]),
+        segment_accel_ms2=list(agent.segment_accel_ms2[start_idx:]),
+        segment_path_types=pty,
+        segment_graph_uv=guv,
+        ok=True,
+    )
+
+
+def _merge_prepared_flight_paths(
+    a: PreparedFlightPath, b: PreparedFlightPath
+) -> PreparedFlightPath:
+    if not b.edge_ids:
+        return PreparedFlightPath(
+            edge_ids=list(a.edge_ids),
+            segment_phases=list(a.segment_phases),
+            segment_endpoints=list(a.segment_endpoints),
+            segment_link_ids=list(a.segment_link_ids),
+            segment_path_types=list(a.segment_path_types),
+            segment_graph_uv=list(a.segment_graph_uv),
+            segment_start_velocity_ms=list(a.segment_start_velocity_ms),
+            segment_accel_ms2=list(a.segment_accel_ms2),
+            segment_duration_sec=list(a.segment_duration_sec),
+            ok=a.ok,
+        )
+    if not a.edge_ids:
+        return PreparedFlightPath(
+            edge_ids=list(b.edge_ids),
+            segment_phases=list(b.segment_phases),
+            segment_endpoints=list(b.segment_endpoints),
+            segment_link_ids=list(b.segment_link_ids),
+            segment_path_types=list(b.segment_path_types),
+            segment_graph_uv=list(b.segment_graph_uv),
+            segment_start_velocity_ms=list(b.segment_start_velocity_ms),
+            segment_accel_ms2=list(b.segment_accel_ms2),
+            segment_duration_sec=list(b.segment_duration_sec),
+            ok=b.ok,
+        )
+    n_a = len(a.edge_ids)
+    n_b = len(b.edge_ids)
+    merged_ids = list(a.edge_ids) + list(b.edge_ids)
+    merged_ph = list(a.segment_phases) + list(b.segment_phases)
+    merged_se = list(a.segment_endpoints) + list(b.segment_endpoints)
+    merged_v0 = list(a.segment_start_velocity_ms) + list(b.segment_start_velocity_ms)
+    merged_acc = list(a.segment_accel_ms2) + list(b.segment_accel_ms2)
+    merged_dur = list(a.segment_duration_sec) + list(b.segment_duration_sec)
+    merged_lnk = []
+    if a.segment_link_ids and len(a.segment_link_ids) == n_a:
+        merged_lnk.extend(a.segment_link_ids)
+    if b.segment_link_ids and len(b.segment_link_ids) == n_b:
+        merged_lnk.extend(b.segment_link_ids)
+    merged_pt: List[str] = []
+    if a.segment_path_types and len(a.segment_path_types) == n_a:
+        merged_pt.extend(a.segment_path_types)
+    if b.segment_path_types and len(b.segment_path_types) == n_b:
+        merged_pt.extend(b.segment_path_types)
+    merged_guv: List[Tuple[int, int]] = []
+    if a.segment_graph_uv and len(a.segment_graph_uv) == n_a:
+        merged_guv.extend(a.segment_graph_uv)
+    if b.segment_graph_uv and len(b.segment_graph_uv) == n_b:
+        merged_guv.extend(b.segment_graph_uv)
+    return PreparedFlightPath(
+        edge_ids=merged_ids,
+        segment_phases=merged_ph,
+        segment_endpoints=merged_se,
+        segment_link_ids=merged_lnk,
+        segment_path_types=merged_pt,
+        segment_graph_uv=merged_guv,
+        segment_start_velocity_ms=merged_v0,
+        segment_accel_ms2=merged_acc,
+        segment_duration_sec=merged_dur,
+        ok=bool(a.ok and b.ok),
+    )
+
+
+def _snap_segment_endpoints_to_stand_px(
+    segs: List[Tuple[Point, Point]],
+    *,
+    start_xy: Optional[Tuple[float, float]] = None,
+    end_xy: Optional[Tuple[float, float]] = None,
+) -> None:
+    """
+    Mutate expanded micro-segments so playback reaches exact layout stand pixels.
+
+    With ``simPathGraph``, Dijkstra ends at the nearest exported node (often a taxiway
+    junction), not necessarily the graph node. Temp detour and temp→apron legs snap to
+    the sim_input temp anchor from ``_temp_stand_pixel_xy_from_sim_input``.
+    """
+    if not segs:
+        return
+    if end_xy is not None:
+        ex, ey = float(end_xy[0]), float(end_xy[1])
+        p0, _p1 = segs[-1]
+        segs[-1] = ((float(p0[0]), float(p0[1])), (ex, ey))
+    if start_xy is not None:
+        sx, sy = float(start_xy[0]), float(start_xy[1])
+        _p0, p1 = segs[0]
+        segs[0] = ((sx, sy), (float(p1[0]), float(p1[1])))
+
+
+def _build_prep_xy_to_xy_phase(
+    layout: Dict[str, Any],
+    cell_size: float,
+    fobj: Dict[str, Any],
+    agent: Flight,
+    start_xy: Tuple[float, float],
+    end_xy: Tuple[float, float],
+    phase_str: str,
+    information: Dict[str, Any],
+    reverse_cost: float,
+    merge_r: float,
+    taxiway_h: float,
+    *,
+    snap_exact_start_xy: bool = False,
+    snap_exact_end_xy: bool = False,
+) -> Optional[PreparedFlightPath]:
+    pair_index = _pair_index_from_layout_edge(layout)
+    if not pair_index:
+        g0 = _graph_for_direction(
+            layout,
+            float(cell_size),
+            _flight_rw_dir_for_leg(fobj, _leg_index_for_phase(phase_str)),
+            reverse_cost,
+            merge_r,
+            taxiway_h,
+            information,
+            pure_ground_exclude_runway=False,
+        )
+        pair_index = _pair_index_from_path_graph(g0) if g0 else {}
+    if not pair_index:
+        return None
+    leg_i = _leg_index_for_phase(phase_str)
+    rw_dir = _flight_rw_dir_for_leg(fobj, leg_i)
+    edges, dv, path, g = _flight_route_impl(
+        layout,
+        float(cell_size),
+        pair_index,
+        reverse_cost,
+        merge_r,
+        taxiway_h,
+        information,
+        rw_dir,
+        RouteEndpoint(token_pixel_xy=(float(start_xy[0]), float(start_xy[1]))),
+        RouteEndpoint(token_pixel_xy=(float(end_xy[0]), float(end_xy[1]))),
+    )
+    if dv or path is None or g is None or len(path) < 2:
+        return None
+    if _graph_path_has_disallowed_reverse_of_prior_hops(
+        g, path, pair_index, agent.completed_directed_hops
+    ):
+        return None
+    ex_ids, segs, phs, lnks, ptyps, guvs = _expand_geometry_from_graph_path(
+        g, path, pair_index, phase_str
+    )
+    if (
+        not ex_ids
+        or not segs
+        or len(ex_ids) != len(segs)
+        or len(phs) != len(ex_ids)
+        or len(lnks) != len(ex_ids)
+        or len(ptyps) != len(ex_ids)
+        or len(guvs) != len(ex_ids)
+    ):
+        return None
+    if snap_exact_end_xy:
+        _snap_segment_endpoints_to_stand_px(segs, end_xy=end_xy)
+    if snap_exact_start_xy:
+        _snap_segment_endpoints_to_stand_px(segs, start_xy=start_xy)
+    fid = str(fobj.get("id", agent.id))
+    ppm = max(float(_layout_pixels_per_meter(information)), 1e-9)
+    try:
+        v0s, accs, durs = _annotate_segment_kinematics(
+            fobj,
+            layout,
+            phs,
+            segs,
+            lnks,
+            ptyps,
+            ppm,
+            fid,
+            information,
+        )
+    except ValueError:
+        return None
+    if len(v0s) != len(ex_ids) or len(accs) != len(ex_ids) or len(durs) != len(ex_ids):
+        return None
+    return PreparedFlightPath(
+        edge_ids=list(ex_ids),
+        segment_phases=list(phs),
+        logical_edge_list=[{"edge_id": str(e), "phase": str(ph)} for e, ph in zip(ex_ids, phs)],
+        segment_endpoints=segs,
+        segment_link_ids=list(lnks),
+        segment_path_types=list(ptyps),
+        segment_graph_uv=list(guvs),
+        segment_start_velocity_ms=list(v0s),
+        segment_accel_ms2=list(accs),
+        segment_duration_sec=list(durs),
+        ok=True,
+    )
+
+
+def _apply_prep_to_agent(
+    agent: Flight,
+    prep: PreparedFlightPath,
+    control_state: SimulationControlState,
+    sim_time: float,
+) -> None:
+    st = control_state.agent_states.get(agent.id)
+    if st is None:
+        return
+    agent.edge_ids = list(prep.edge_ids)
+    agent.edge_phases = list(prep.segment_phases)
+    agent.segment_endpoints = list(prep.segment_endpoints)
+    agent.segment_v0_ms = list(prep.segment_start_velocity_ms)
+    agent.segment_accel_ms2 = list(prep.segment_accel_ms2)
+    agent.segment_path_types = list(prep.segment_path_types)
+    agent.segment_graph_uv = list(prep.segment_graph_uv) if prep.segment_graph_uv else []
+    if agent.segment_endpoints:
+        p0, p1 = agent.segment_endpoints[0]
+        seg_len = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+        if seg_len > 1e-9:
+            t, proj = project_on_segment(p0, p1, (float(agent.col), float(agent.row)))
+            agent.edge_s_along_px = float(t) * seg_len
+            agent.col = float(proj[0])
+            agent.row = float(proj[1])
+        else:
+            agent.edge_s_along_px = 0.0
+    else:
+        agent.edge_s_along_px = 0.0
+    agent.motion_integrated_until_abs_sec = float(sim_time)
+    st.reroute_attempts = int(st.reroute_attempts)
+    st.clearance = "PROCEED"
+    st.wait_reason = None
+    st.wait_start_sec = None
+    st.stagnation_anchor_sec = None
+    st.progress_snapshot_edge_id = None
+    st.progress_snapshot_along_m = 0.0
+
+
+def _tick_arr_temp_detour_eldt_flag(agent: Flight, current_time_abs: float) -> None:
+    if agent.eldt_anchor_sec is None:
+        return
+    if float(current_time_abs) + 1e-9 >= float(agent.eldt_anchor_sec):
+        agent.arr_temp_detour_decided = True
+
+
+def _try_splice_temp_stand_arrival_detour(
+    ag: Flight,
+    fobj: Dict[str, Any],
+    layout: Dict[str, Any],
+    control_state: SimulationControlState,
+    information: Dict[str, Any],
+    cell_size: float,
+    reverse_cost: float,
+    merge_r: float,
+    taxiway_h: float,
+    current_time_abs: float,
+    agents: List[Flight],
+) -> None:
+    if ag.arr_temp_detour_decided and not ag.temp_stand_id:
+        return
+    if ag.temp_stand_id or ag.awaiting_apron_from_temp:
+        return
+    if not ag.edge_phases or not ag.edge_ids:
+        return
+    ph0 = str(ag.edge_phases[0])
+    if ph0 == PHASE_ARR_TAXI:
+        ag.arr_temp_detour_decided = True
+        return
+    if ag.eldt_anchor_sec is None:
+        ag.arr_temp_detour_decided = True
+        return
+    if float(current_time_abs) + 1e-9 >= float(ag.eldt_anchor_sec):
+        return
+    if ph0 != PHASE_LANDING:
+        ag.arr_temp_detour_decided = True
+        return
+    block = _first_contiguous_phase_block(ag, PHASE_ARR_TAXI)
+    if block is None:
+        return
+    first_arr, last_arr = block
+    dep_idx = last_arr + 1
+    if dep_idx >= len(ag.edge_phases) or str(ag.edge_phases[dep_idx]) != PHASE_DEP_TAXI:
+        ag.arr_temp_detour_decided = True
+        return
+    sid = str(ag.apron_stand_id or "").strip()
+    if not sid:
+        ag.arr_temp_detour_decided = True
+        return
+    t_abs = float(current_time_abs)
+    busy = _target_apron_stand_occupied_by_other(ag, control_state) or (
+        _stand_pushback_clearance_cooldown_active(sid, str(ag.id), agents, t_abs)
+    )
+    if not busy:
+        return
+    temp_id = _pick_temp_stand_for_arrival_detour(
+        layout, fobj, sid, control_state, float(cell_size), information, agents
+    )
+    if not temp_id:
+        return
+    p0_arr = ag.segment_endpoints[first_arr][0]
+    start_xy = (float(p0_arr[0]), float(p0_arr[1]))
+    tst = find_stand_by_id(layout, temp_id)
+    if not tst:
+        return
+    end_xy = _temp_stand_pixel_xy_from_sim_input(tst)
+    if end_xy is None:
+        return
+    temp_prep = _build_prep_xy_to_xy_phase(
+        layout,
+        float(cell_size),
+        fobj,
+        ag,
+        start_xy,
+        end_xy,
+        PHASE_ARR_TAXI_TEMP,
+        information,
+        reverse_cost,
+        merge_r,
+        taxiway_h,
+        snap_exact_end_xy=True,
+    )
+    if not temp_prep or not temp_prep.edge_ids:
+        return
+    tail_prep = _prepared_flight_path_tail_from_index(ag, dep_idx)
+    if tail_prep is None or not tail_prep.edge_ids:
+        return
+    prefix_slice = slice(0, first_arr)
+    ag.edge_ids = list(ag.edge_ids[prefix_slice]) + list(temp_prep.edge_ids)
+    ag.edge_phases = list(ag.edge_phases[prefix_slice]) + list(temp_prep.segment_phases)
+    ag.segment_endpoints = list(ag.segment_endpoints[prefix_slice]) + list(
+        temp_prep.segment_endpoints
+    )
+    ag.segment_v0_ms = list(ag.segment_v0_ms[prefix_slice]) + list(
+        temp_prep.segment_start_velocity_ms
+    )
+    ag.segment_accel_ms2 = list(ag.segment_accel_ms2[prefix_slice]) + list(
+        temp_prep.segment_accel_ms2
+    )
+    ptn = len(ag.edge_ids)
+    ag.segment_path_types = (
+        list(ag.segment_path_types[prefix_slice]) + list(temp_prep.segment_path_types)
+        if temp_prep.segment_path_types and len(temp_prep.segment_path_types) == len(temp_prep.edge_ids)
+        else []
+    )
+    if ag.segment_path_types and len(ag.segment_path_types) != ptn:
+        ag.segment_path_types = []
+    ag.segment_graph_uv = (
+        list(ag.segment_graph_uv[prefix_slice]) + list(temp_prep.segment_graph_uv)
+        if temp_prep.segment_graph_uv and len(temp_prep.segment_graph_uv) == len(temp_prep.edge_ids)
+        else []
+    )
+    if ag.segment_graph_uv and len(ag.segment_graph_uv) != ptn:
+        ag.segment_graph_uv = []
+    ag.temp_stand_id = temp_id
+    ag.post_temp_route_tail_prep = tail_prep
+    ag.arr_temp_detour_decided = True
+    refresh_agent_edge_fsm([ag])
+
+
+def _try_reroute_temp_stand_if_contested(
+    ag: Flight,
+    fobj: Dict[str, Any],
+    layout: Dict[str, Any],
+    control_state: SimulationControlState,
+    information: Dict[str, Any],
+    cell_size: float,
+    reverse_cost: float,
+    merge_r: float,
+    taxiway_h: float,
+    current_time_abs: float,
+    agents: List[Flight],
+) -> None:
+    tid = str(ag.temp_stand_id or "").strip()
+    if not tid or ag.awaiting_apron_from_temp:
+        return
+    if not ag.edge_phases or not ag.edge_ids:
+        return
+    aid = str(ag.id)
+    if not _temp_stand_has_other_claimant_or_occupant(tid, aid, control_state, agents):
+        return
+    sid = str(ag.apron_stand_id or "").strip()
+    if not sid:
+        return
+    t_abs = float(current_time_abs)
+    busy = _target_apron_stand_occupied_by_other(ag, control_state) or (
+        _stand_pushback_clearance_cooldown_active(sid, aid, agents, t_abs)
+    )
+    if not busy:
+        return
+    new_id = _pick_temp_stand_for_arrival_detour(
+        layout, fobj, sid, control_state, float(cell_size), information, agents
+    )
+    if not new_id or new_id == tid:
+        return
+    block = _first_contiguous_phase_block(ag, PHASE_ARR_TAXI_TEMP)
+    if block is None:
+        return
+    temp_first, temp_last = int(block[0]), int(block[1])
+    ph0 = str(ag.edge_phases[0])
+    if ph0 == PHASE_ARR_TAXI_TEMP:
+        start_xy = (float(ag.col), float(ag.row))
+        reset_along = True
+    else:
+        p0 = ag.segment_endpoints[temp_first][0]
+        start_xy = (float(p0[0]), float(p0[1]))
+        reset_along = False
+    tst = find_stand_by_id(layout, new_id)
+    if not tst:
+        return
+    end_xy = _temp_stand_pixel_xy_from_sim_input(tst)
+    if end_xy is None:
+        return
+    temp_prep = _build_prep_xy_to_xy_phase(
+        layout,
+        float(cell_size),
+        fobj,
+        ag,
+        start_xy,
+        end_xy,
+        PHASE_ARR_TAXI_TEMP,
+        information,
+        reverse_cost,
+        merge_r,
+        taxiway_h,
+        snap_exact_end_xy=True,
+    )
+    if not temp_prep or not temp_prep.edge_ids:
+        return
+    tail_i = temp_last + 1
+    ag.edge_ids = (
+        list(ag.edge_ids[:temp_first])
+        + list(temp_prep.edge_ids)
+        + list(ag.edge_ids[tail_i:])
+    )
+    ag.edge_phases = (
+        list(ag.edge_phases[:temp_first])
+        + list(temp_prep.segment_phases)
+        + list(ag.edge_phases[tail_i:])
+    )
+    ag.segment_endpoints = (
+        list(ag.segment_endpoints[:temp_first])
+        + list(temp_prep.segment_endpoints)
+        + list(ag.segment_endpoints[tail_i:])
+    )
+    ag.segment_v0_ms = (
+        list(ag.segment_v0_ms[:temp_first])
+        + list(temp_prep.segment_start_velocity_ms)
+        + list(ag.segment_v0_ms[tail_i:])
+    )
+    ag.segment_accel_ms2 = (
+        list(ag.segment_accel_ms2[:temp_first])
+        + list(temp_prep.segment_accel_ms2)
+        + list(ag.segment_accel_ms2[tail_i:])
+    )
+    ptn = len(ag.edge_ids)
+    ag.segment_path_types = (
+        list(ag.segment_path_types[:temp_first]) + list(temp_prep.segment_path_types)
+        if temp_prep.segment_path_types
+        and len(temp_prep.segment_path_types) == len(temp_prep.edge_ids)
+        else []
+    )
+    if ag.segment_path_types and len(ag.segment_path_types) != ptn:
+        ag.segment_path_types = []
+    ag.segment_graph_uv = (
+        list(ag.segment_graph_uv[:temp_first]) + list(temp_prep.segment_graph_uv)
+        if temp_prep.segment_graph_uv
+        and len(temp_prep.segment_graph_uv) == len(temp_prep.edge_ids)
+        else []
+    )
+    if ag.segment_graph_uv and len(ag.segment_graph_uv) != ptn:
+        ag.segment_graph_uv = []
+    ag.temp_stand_id = new_id
+    if reset_along:
+        ag.edge_s_along_px = 0.0
+    refresh_agent_edge_fsm([ag])
+
+
+def _try_inject_arr_taxi_from_temp_stand(
+    ag: Flight,
+    fobj: Dict[str, Any],
+    layout: Dict[str, Any],
+    control_state: SimulationControlState,
+    information: Dict[str, Any],
+    cell_size: float,
+    reverse_cost: float,
+    merge_r: float,
+    taxiway_h: float,
+    current_time_abs: float,
+    agents: List[Flight],
+) -> None:
+    if not ag.awaiting_apron_from_temp:
+        return
+    if ag.edge_ids:
+        return
+    sid = str(ag.apron_stand_id or "").strip()
+    tid = str(ag.temp_stand_id or "").strip()
+    tail = ag.post_temp_route_tail_prep
+    if not sid or not tid or tail is None or not tail.edge_ids:
+        ag.awaiting_apron_from_temp = False
+        ag.post_temp_route_tail_prep = None
+        ag.temp_stand_id = None
+        return
+    t_abs = float(current_time_abs)
+    if _target_apron_stand_occupied_by_other(ag, control_state):
+        return
+    if _stand_pushback_clearance_cooldown_active(sid, str(ag.id), agents, t_abs):
+        return
+    tst = find_stand_by_id(layout, tid)
+    if not tst:
+        return
+    start_xy = _temp_stand_pixel_xy_from_sim_input(tst)
+    if start_xy is None:
+        return
+    end_xy = _apron_token_xy(layout, float(cell_size), sid)
+    if end_xy is None:
+        return
+    arr_prep = _build_prep_xy_to_xy_phase(
+        layout,
+        float(cell_size),
+        fobj,
+        ag,
+        start_xy,
+        end_xy,
+        PHASE_ARR_TAXI,
+        information,
+        reverse_cost,
+        merge_r,
+        taxiway_h,
+        snap_exact_start_xy=True,
+    )
+    if not arr_prep or not arr_prep.edge_ids:
+        return
+    merged = _merge_prepared_flight_paths(arr_prep, tail)
+    if (
+        not merged.ok
+        or not merged.edge_ids
+        or len(merged.segment_start_velocity_ms) != len(merged.edge_ids)
+        or len(merged.segment_accel_ms2) != len(merged.edge_ids)
+    ):
+        return
+    ag.temp_stand_id = None
+    ag.post_temp_route_tail_prep = None
+    ag.awaiting_apron_from_temp = False
+    _apply_prep_to_agent(ag, merged, control_state, t_abs)
+    refresh_agent_edge_fsm([ag])
+
+
+def _agent_occupies_temp_stand_slot(
+    ag: Flight, t_abs: float, control_state: SimulationControlState
+) -> Optional[str]:
+    tid = str(ag.temp_stand_id or "").strip()
+    if not tid:
+        return None
+    st0 = control_state.agent_states.get(ag.id)
+    if st0 is not None and _agent_deadlock_ghost_at_time(st0, float(t_abs)):
+        return None
+    # Reserve from splice (``temp_stand_id`` set) through temp wait/inject — not only
+    # while ``PHASE_ARR_TAXI_TEMP`` is the active edge, so other flights cannot pick the
+    # same temp during LANDING before the temp leg starts.
+    return tid
 
 
 def build_resource_model(
@@ -3272,6 +4064,7 @@ def build_resource_model(
     for sid in _collect_stand_ids_for_resource_model(layout):
         cap = _layout_stand_capacity_for_id(layout, sid, information)
         stand_resources[str(sid)] = StandResource(stand_id=str(sid), capacity=cap)
+    temp_inc = _build_temp_stand_incident_edges(layout, g)
     return SimulationControlState(
         edge_resources=edge_resources,
         intersection_resources=intersection_resources,
@@ -3280,6 +4073,7 @@ def build_resource_model(
         agent_states={},
         path_graph=g,
         pixels_per_meter=ppm,
+        temp_stand_incident_edges=temp_inc,
     )
 
 
@@ -3428,6 +4222,11 @@ def refresh_resource_occupancy(
         if st_ag is not None and _agent_deadlock_ghost_at_time(st_ag, t_abs):
             continue
         if not ag.edge_ids:
+            temp_wait = _agent_occupies_temp_stand_slot(ag, t_abs, control_state)
+            if temp_wait:
+                sr_w = control_state.stand_resources.get(temp_wait)
+                if sr_w is not None and ag.id not in sr_w.occupied_by:
+                    sr_w.occupied_by.append(ag.id)
             continue
         eid0 = str(ag.edge_ids[0])
         er = control_state.edge_resources.get(eid0)
@@ -3457,6 +4256,11 @@ def refresh_resource_occupancy(
             sr = control_state.stand_resources.get(sid_slot)
             if sr is not None and ag.id not in sr.occupied_by:
                 sr.occupied_by.append(ag.id)
+        temp_slot = _agent_occupies_temp_stand_slot(ag, t_abs, control_state)
+        if temp_slot:
+            sr_t = control_state.stand_resources.get(temp_slot)
+            if sr_t is not None and ag.id not in sr_t.occupied_by:
+                sr_t.occupied_by.append(ag.id)
         if not g or not er or not ag.segment_endpoints:
             continue
         pxy = (float(ag.col), float(ag.row))
@@ -3492,13 +4296,13 @@ def get_agent_priority_rank(agent: Flight) -> int:
         return AGENT_PRIORITY_RUNWAY_ARR_DEP
     if ph in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE):
         return AGENT_PRIORITY_LINEUP_HOLDING
-    if ph in (PHASE_ARR_TAXI, PHASE_DEP_TAXI) and pt_s in rw_pts:
+    if ph in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP, PHASE_DEP_TAXI) and pt_s in rw_pts:
         return AGENT_PRIORITY_RUNWAY_ARR_DEP
     if pt_s in apron_pts:
         return AGENT_PRIORITY_APRON_TRANSIT
     if ph == PHASE_DEP_TAXI:
         return AGENT_PRIORITY_DEP_TAXI
-    if ph == PHASE_ARR_TAXI:
+    if ph in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
         return AGENT_PRIORITY_ARR_TAXI
     return AGENT_PRIORITY_UNKNOWN
 
@@ -3665,7 +4469,7 @@ def _lookahead_and_reservation_depth_for_agent(
     on_runway_seg = pt0 in rw_pts
     if ph0 == PHASE_LANDING:
         return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
-    if ph0 in (PHASE_ARR_TAXI, PHASE_DEP_TAXI) and on_runway_seg:
+    if ph0 in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP, PHASE_DEP_TAXI) and on_runway_seg:
         return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
     if ph0 in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE):
         if on_runway_seg:
@@ -3673,7 +4477,7 @@ def _lookahead_and_reservation_depth_for_agent(
         return (LOOKAHEAD_DEP_TAXI, RESERV_DEPTH_DEP_TAXI)
     if ph0 == PHASE_DEP_TAXI:
         return (LOOKAHEAD_DEP_TAXI, RESERV_DEPTH_DEP_TAXI)
-    if ph0 == PHASE_ARR_TAXI:
+    if ph0 in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
         eldt = agent.eldt_anchor_sec
         t_abs = float(sim_time_abs)
         eldt_reached = eldt is None or t_abs + 1e-9 >= float(eldt)
@@ -3682,7 +4486,7 @@ def _lookahead_and_reservation_depth_for_agent(
             sid
             and _stand_pushback_clearance_cooldown_active(sid, str(agent.id), agents, t_abs)
         )
-        if eldt_reached and stand_busy:
+        if ph0 == PHASE_ARR_TAXI and eldt_reached and stand_busy:
             return (LOOKAHEAD_ARR_TAXI_BUSY, RESERV_DEPTH_ARR_TAXI_BUSY)
         return (LOOKAHEAD_ARR_TAXI, RESERV_DEPTH_ARR_TAXI)
     return (LOOKAHEAD_ARR_TAXI, RESERV_DEPTH_ARR_TAXI)
@@ -3844,7 +4648,7 @@ def _runway_rot_reservation_blocked(
         ph0 = str(o.edge_phases[0])
         if ph0 == PHASE_LANDING:
             return True
-        if ph0 == PHASE_ARR_TAXI:
+        if ph0 in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
             pt0 = (
                 str(o.segment_path_types[0] or "")
                 if o.segment_path_types
@@ -3925,6 +4729,14 @@ def can_reserve_path(
         er = control_state.edge_resources.get(eid)
         if er is None:
             return False, f"unknown_edge:{eid}"
+        for ts_id, e_set in control_state.temp_stand_incident_edges.items():
+            if str(eid) not in e_set:
+                continue
+            sr_t = control_state.stand_resources.get(str(ts_id))
+            if sr_t is None:
+                continue
+            if any(str(x) != str(aid) for x in sr_t.occupied_by):
+                return False, f"temp_stand_busy:{ts_id}"
         if er.forced_open:
             continue
         ph0 = str(agent.edge_phases[0]) if agent.edge_phases else ""
@@ -4325,7 +5137,7 @@ def should_run_heavy_decision(control_state: SimulationControlState, sim_time: f
 def _leg_index_for_phase(phase: str) -> int:
     if phase == PHASE_LANDING:
         return 0
-    if phase == PHASE_ARR_TAXI:
+    if phase in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
         return 1
     if phase == PHASE_DEP_TAXI:
         return 2
@@ -5386,7 +6198,7 @@ def run_simulation(
                 if (
                     path_rem
                     and str(path_rem[0] or "") == "runway_taxiway"
-                    and eph[0] in (PHASE_LANDING, PHASE_ARR_TAXI)
+                    and eph[0] in (PHASE_LANDING, PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP)
                 ):
                     v_init = max(v_init, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
                 if _rf > 1e-12:
@@ -5427,7 +6239,7 @@ def run_simulation(
     truncation_abs_sec: Optional[float] = None
 
     while True:
-        if not any(ag.edge_ids for ag in agents):
+        if not any(bool(ag.edge_ids) or ag.awaiting_apron_from_temp for ag in agents):
             break
         if current_time_abs - float(ref_t0) + dt_sec > SIM_MAX_TIME_SEC + 1e-6:
             break
@@ -5439,6 +6251,49 @@ def run_simulation(
             current_time_abs,
             rw_release_lag,
         )
+        for ag in agents:
+            _tick_arr_temp_detour_eldt_flag(ag, float(current_time_abs))
+            fo = flights_by_id.get(str(ag.id))
+            if isinstance(fo, dict):
+                _try_inject_arr_taxi_from_temp_stand(
+                    ag,
+                    fo,
+                    layout,
+                    control_state,
+                    information,
+                    cell_size,
+                    reverse_cost,
+                    merge_r,
+                    taxiway_h,
+                    float(current_time_abs),
+                    agents,
+                )
+                _try_reroute_temp_stand_if_contested(
+                    ag,
+                    fo,
+                    layout,
+                    control_state,
+                    information,
+                    cell_size,
+                    reverse_cost,
+                    merge_r,
+                    taxiway_h,
+                    float(current_time_abs),
+                    agents,
+                )
+                _try_splice_temp_stand_arrival_detour(
+                    ag,
+                    fo,
+                    layout,
+                    control_state,
+                    information,
+                    cell_size,
+                    reverse_cost,
+                    merge_r,
+                    taxiway_h,
+                    float(current_time_abs),
+                    agents,
+                )
         refresh_agent_edge_fsm(agents)
         _update_deadlock_stagnation_probe(
             control_state,
