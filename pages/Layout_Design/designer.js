@@ -178,6 +178,119 @@
     if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayStroke || 'rgba(220, 38, 38, 0.78)';
     return _canvas2dStyle.holdingPointIntermediateStroke || 'rgba(234, 88, 12, 0.75)';
   }
+  function c2dHoldingPointMarkingYellow() {
+    return _canvas2dStyle.holdingPointMarkingYellow || '#facc15';
+  }
+  function c2dHoldingPointMarkingLineWidthWorld() {
+    const n = Number(_canvas2dStyle.holdingPointMarkingLineWidthWorld);
+    return (isFinite(n) && n > 0) ? n : 0.28;
+  }
+  function holdingPointMarkingDoubleLineGapM(lineW) {
+    const n = Number(_canvas2dStyle.holdingPointMarkingDoubleLineGapM);
+    const lw = Number(lineW);
+    const baseLw = (isFinite(lw) && lw > 0) ? lw : c2dHoldingPointMarkingLineWidthWorld();
+    return (isFinite(n) && n > 0) ? n : Math.max(0.28, baseLw * 1.2);
+  }
+  function taxiwayWorldWidthMForHolding(tw) {
+    if (!tw) return TAXIWAY_DEFAULT_WIDTH;
+    const typ = tw.pathType || 'taxiway';
+    const base = typ === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (typ === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+    return clampTaxiwayWidthM(typ, tw.width, base);
+  }
+  function holdingPointBarHalfLengthMFromPathWidth(pathWidthM) {
+    const w = Number(pathWidthM);
+    return Math.max(3, (isFinite(w) && w > 0) ? w * 0.5 : c2dHoldingPointDiameterM() * 0.5);
+  }
+  function holdingPointPerpFromTangent(ux, uy) {
+    return { px: -uy, py: ux };
+  }
+  function distPointToSegmentSq(x, y, ax, ay, bx, by) {
+    const abx = bx - ax, aby = by - ay;
+    const apx = x - ax, apy = y - ay;
+    const abLenSq = abx * abx + aby * aby;
+    if (abLenSq < 1e-12) return apx * apx + apy * apy;
+    let t = (apx * abx + apy * aby) / abLenSq;
+    t = Math.max(0, Math.min(1, t));
+    const qx = ax + t * abx, qy = ay + t * aby;
+    const dx = x - qx, dy = y - qy;
+    return dx * dx + dy * dy;
+  }
+  function findHoldingPointPathGeometry(hp) {
+    const pt = [hp.x, hp.y];
+    const wantRunway = normalizeHoldingPointKind(hp.hpKind) === 'runway_holding';
+    const maxD2 = Math.pow(Math.max(CELL_SIZE * 6, 55), 2);
+    let bestD2 = Infinity;
+    let ux = 1, uy = 0;
+    let bestTw = null;
+    (state.taxiways || []).forEach(function(tw) {
+      const typ = tw.pathType || 'taxiway';
+      if (wantRunway) {
+        if (typ !== 'runway_exit') return;
+      } else {
+        if (typ !== 'taxiway' && typ !== 'apron_taxiway') return;
+      }
+      if (!tw.vertices || tw.vertices.length < 2) return;
+      for (let i = 0; i < tw.vertices.length - 1; i++) {
+        const p1 = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+        const p2 = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
+        const near = closestPointOnSegment(p1, p2, pt);
+        if (!near) continue;
+        const d2 = dist2(near, pt);
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          bestTw = tw;
+          const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+          const len = Math.hypot(dx, dy);
+          if (len > 1e-6) {
+            ux = dx / len;
+            uy = dy / len;
+          }
+        }
+      }
+    });
+    const pathWidthM = taxiwayWorldWidthMForHolding(bestTw);
+    if (bestD2 > maxD2) return { ux: 1, uy: 0, ok: false, pathWidthM, tw: bestTw };
+    return { ux, uy, ok: true, pathWidthM, tw: bestTw };
+  }
+  function findHoldingPointPathTangent(hp) {
+    const g = findHoldingPointPathGeometry(hp);
+    return { ux: g.ux, uy: g.uy, ok: g.ok };
+  }
+  function drawHoldingPointGridMarking(ctx, cx, cy, hpKind, selected, preview) {
+    const g = findHoldingPointPathGeometry({ x: cx, y: cy, hpKind: hpKind });
+    const { px, py } = holdingPointPerpFromTangent(g.ux, g.uy);
+    const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM);
+    const lineW = c2dHoldingPointMarkingLineWidthWorld();
+    const markYellow = c2dHoldingPointMarkingYellow();
+    const stroke = preview ? 'rgba(250, 204, 21, 0.7)' : (selected ? c2dObjectSelectedStroke() : markYellow);
+    const lw = preview ? Math.max(0.2, lineW * 0.92) : (selected ? lineW + 0.14 : lineW);
+    const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
+    const dashLen = Math.max(1.6, halfLen * 0.11);
+    const gapLen = Math.max(1.2, halfLen * 0.09);
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = lw;
+    ctx.setLineDash([dashLen, gapLen]);
+    if (selected && !preview) {
+      ctx.shadowColor = c2dObjectSelectedGlow();
+      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+    } else {
+      ctx.shadowBlur = 0;
+    }
+    [-pairHalf, pairHalf].forEach(function(ofs) {
+      const sx = cx - px * halfLen + g.ux * ofs;
+      const sy = cy - py * halfLen + g.uy * ofs;
+      const ex = cx + px * halfLen + g.ux * ofs;
+      const ey = cy + py * halfLen + g.uy * ofs;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
+  }
   function c2dSimStandOccupiedFill() { return _canvas2dStyle.simStandOccupiedFill || 'rgba(239, 68, 68, 0.32)'; }
   function c2dSimStandOccupiedStroke() { return _canvas2dStyle.simStandOccupiedStroke || 'rgba(220, 38, 38, 0.95)'; }
   function c2dPathDrawStartMarkerRadiusPx() {
@@ -1215,7 +1328,7 @@
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
     state.simPlaybackEndCapSec = null;
-    if (payload.simulation_truncated_deadlock === true) {
+    if (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true) {
       const rawCap = payload.simulation_playback_end_abs_sec;
       const c = Number(rawCap);
       if (isFinite(c)) state.simPlaybackEndCapSec = c;
@@ -2520,7 +2633,11 @@
       return cellToPixel(Number(v.col), Number(v.row));
     });
     const b = [Number(lk.tx), Number(lk.ty)];
-    return [a].concat(mids).concat([b]);
+    const forward = [a].concat(mids).concat([b]);
+    if (String(lk.apronDrawFirstEndpoint || 'stand') === 'taxiway' && forward.length >= 2) {
+      return forward.slice().reverse();
+    }
+    return forward;
   }
   function hitTestApronLink(wx, wy) {
     const click = [wx, wy];
@@ -2568,15 +2685,23 @@
     return best;
   }
   function hitTestHoldingPoint(wx, wy) {
-    const r = c2dHoldingPointDiameterM() * 0.5;
-    const rHit = r + Math.max(2, CELL_SIZE * 0.15);
-    const r2 = rHit * rHit;
+    const hitPadSq = Math.pow(Math.max(5, CELL_SIZE * 0.22), 2);
+    const lineW = c2dHoldingPointMarkingLineWidthWorld();
+    const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
     const pts = state.holdingPoints || [];
     for (let i = pts.length - 1; i >= 0; i--) {
       const hp = pts[i];
       if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) continue;
-      const dx = wx - hp.x, dy = wy - hp.y;
-      if (dx * dx + dy * dy <= r2) return { type: 'holdingPoint', id: hp.id, obj: hp };
+      const g = findHoldingPointPathGeometry(hp);
+      const perp = holdingPointPerpFromTangent(g.ux, g.uy);
+      const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM) + Math.max(2, CELL_SIZE * 0.12);
+      const cx = hp.x, cy = hp.y;
+      const nearOfs = function(ofs) {
+        const x0 = cx - perp.px * halfLen + g.ux * ofs, y0 = cy - perp.py * halfLen + g.uy * ofs;
+        const x1 = cx + perp.px * halfLen + g.ux * ofs, y1 = cy + perp.py * halfLen + g.uy * ofs;
+        return distPointToSegmentSq(wx, wy, x0, y0, x1, y1) <= hitPadSq;
+      };
+      if (nearOfs(-pairHalf) || nearOfs(pairHalf)) return { type: 'holdingPoint', id: hp.id, obj: hp };
     }
     return null;
   }
@@ -11380,7 +11505,7 @@
           return;
         }
         if (typeof setGlobalUpdateProgressUi === 'function') {
-          setGlobalUpdateProgressUi(true, 'airside_sim 시작…', 3);
+          setGlobalUpdateProgressUi(true, 'Running… · 3%', 3);
         }
         fetch(base + '/api/run-simulation', {
           method: 'POST',
@@ -11405,8 +11530,13 @@
               .then(function(p) {
                 if (p && p.running) {
                   const pct = (p.percent != null && isFinite(Number(p.percent))) ? Number(p.percent) : 0;
+                  const pctClamped = Math.max(0, Math.min(100, Math.round(pct)));
+                  const runBase = (p.runningClockLabel != null && String(p.runningClockLabel).trim() !== '')
+                    ? String(p.runningClockLabel)
+                    : 'Running…';
+                  const runLabel = runBase + ' · ' + pctClamped + '%';
                   if (typeof setGlobalUpdateProgressUi === 'function') {
-                    setGlobalUpdateProgressUi(true, 'Airside DES (utils/airside_sim) 실행 중…', pct);
+                    setGlobalUpdateProgressUi(true, runLabel, pct);
                   }
                   setTimeout(pollProgress, 350);
                   return;
@@ -13978,17 +14108,28 @@
       const selApron = state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id;
       if (selApron) {
         ctx.setLineDash([]);
+        const standPxLoop = getApronLinkStandEndPx(lk);
+        const twEndPx = [Number(lk.tx), Number(lk.ty)];
+        const vtxMatchD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
         for (let pi = 0; pi < poly.length; pi++) {
           const [px, py] = poly[pi];
-          const isStandEnd = (pi === 0);
-          const isTaxiEnd = (pi === poly.length - 1);
-          const midIdx = isStandEnd || isTaxiEnd ? -1 : (pi - 1);
+          let isStandEnd = !!(standPxLoop && dist2([px, py], standPxLoop) <= vtxMatchD2);
+          let isTaxiEnd = isFinite(twEndPx[0]) && isFinite(twEndPx[1]) && dist2([px, py], twEndPx) <= vtxMatchD2;
+          let midIdx = -1;
+          if (!isStandEnd && !isTaxiEnd) {
+            (lk.midVertices || []).forEach(function(v, mi) {
+              const mpx = v && isFinite(Number(v.x)) && isFinite(Number(v.y))
+                ? [Number(v.x), Number(v.y)]
+                : cellToPixel(Number(v.col), Number(v.row));
+              if (dist2([px, py], mpx) <= vtxMatchD2) midIdx = mi;
+            });
+          }
           let vtxSel = false;
           let draggable = false;
           if (isTaxiEnd) {
             draggable = true;
             vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'taxiway');
-          } else if (!isStandEnd) {
+          } else if (midIdx >= 0) {
             draggable = true;
             vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'mid' && svApron.midIndex === midIdx);
           }
@@ -14245,32 +14386,17 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const r = c2dHoldingPointDiameterM() * 0.5;
     const sel = state.selectedObject && state.selectedObject.type === 'holdingPoint';
     (state.holdingPoints || []).forEach(function(hp) {
       if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return;
       const selected = sel && state.selectedObject.id === hp.id;
-      const k = normalizeHoldingPointKind(hp.hpKind);
-      const fill = c2dHoldingPointFillForKind(k);
-      const stroke = c2dHoldingPointStrokeForKind(k);
-      ctx.beginPath();
-      ctx.arc(hp.x, hp.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = selected ? c2dObjectSelectedFill() : fill;
-      ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : stroke;
-      ctx.lineWidth = selected ? 2.5 : 1;
-      if (selected) {
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-      } else {
-        ctx.shadowBlur = 0;
-      }
-      ctx.fill();
-      if (!selected) ctx.stroke();
-      ctx.shadowBlur = 0;
+      drawHoldingPointGridMarking(ctx, hp.x, hp.y, hp.hpKind, selected, false);
       const waitN = countFlightsWaitingAtHoldingPoint2D(hp, state.simTimeSec);
       if (waitN > 0) {
-        const bx = hp.x + r * 1.05 + 6;
-        const by = hp.y - r * 1.05;
+        const tt = findHoldingPointPathGeometry(hp);
+        const bump = Math.max(12, (Number(tt.pathWidthM) || 0) * 0.42);
+        const bx = hp.x + tt.ux * bump;
+        const by = hp.y + tt.uy * bump;
         const label = String(waitN);
         const fs = Math.max(9, Math.min(15, 11 / Math.max(0.22, state.scale)));
         ctx.font = 'bold ' + fs + 'px system-ui, sans-serif';
@@ -14307,13 +14433,7 @@
     if (state.holdingPointDrawing && state.previewHoldingPoint) {
       const px = state.previewHoldingPoint.x, py = state.previewHoldingPoint.y;
       const ptp = state.previewHoldingPoint.pathType || 'taxiway';
-      ctx.beginPath();
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = c2dHoldingPointPreviewFillForPathType(ptp);
-      ctx.strokeStyle = c2dHoldingPointPreviewStrokeForPathType(ptp);
-      ctx.lineWidth = 1;
-      ctx.shadowBlur = 0;
-      ctx.fill();
+      drawHoldingPointGridMarking(ctx, px, py, pathTypeToHpKind(ptp), false, true);
     }
     ctx.restore();
   }
@@ -15027,7 +15147,15 @@
                   alertDuplicateLayoutName();
                 } else {
                   pushUndo();
-                  const linkRec = { id: newId, name: linkName, pbbId: standId, taxiwayId, tx, ty };
+                  const linkRec = {
+                    id: newId,
+                    name: linkName,
+                    pbbId: standId,
+                    taxiwayId,
+                    tx,
+                    ty,
+                    apronDrawFirstEndpoint: first.kind === 'taxiway' ? 'taxiway' : 'stand'
+                  };
                   if (midVertices && midVertices.length) linkRec.midVertices = midVertices;
                   state.apronLinks.push(linkRec);
                   syncPanelFromState();
