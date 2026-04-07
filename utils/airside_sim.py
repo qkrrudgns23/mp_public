@@ -571,6 +571,7 @@ class Flight:
     control_speed_cap_ms: Optional[float] = None
     temp_stand_id: Optional[str] = None
     awaiting_apron_from_temp: bool = False
+    temp_park_arrival_trigger_global_reroute: bool = False
     post_temp_route_tail_prep: Optional[PreparedFlightPath] = None
     arr_temp_detour_decided: bool = False
     # Absolute time when destination apron was first observed unoccupied (inject gated by TEMP_TO_APRON_HOLD_SEC).
@@ -2301,6 +2302,7 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
             and str(agent.temp_stand_id or "").strip()
         ):
             agent.awaiting_apron_from_temp = True
+            agent.temp_park_arrival_trigger_global_reroute = True
         elif not agent.awaiting_apron_from_temp:
             agent.path_completed_abs_sec = float(sim_time_abs)
     new_ph = str(agent.edge_phases[0]) if agent.edge_phases else ""
@@ -3236,6 +3238,33 @@ def _build_temp_stand_incident_edges(
     return out
 
 
+def _yield_temp_occupied_incident_edges_for_pathfinding(
+    control_state: SimulationControlState,
+    exclude_flight_id: str,
+) -> set[str]:
+    """
+    Layout edge ids touching a **temp** stand graph node while that stand is occupied by
+    someone other than ``exclude_flight_id``. Used to penalize Dijkstra so other flights
+    avoid temp-park links only for the duration of temp assignment (``stand_resources``).
+    """
+    out: set[str] = set()
+    inc = control_state.temp_stand_incident_edges
+    if not inc:
+        return out
+    aid = str(exclude_flight_id)
+    for tid, e_set in inc.items():
+        sr = control_state.stand_resources.get(str(tid))
+        if sr is None:
+            continue
+        if not any(str(x) != aid for x in sr.occupied_by):
+            continue
+        for e in e_set:
+            s = str(e).strip()
+            if s:
+                out.add(s)
+    return out
+
+
 def _flight_default_icao_category(
     fobj: Dict[str, Any], information: Dict[str, Any]
 ) -> str:
@@ -3524,6 +3553,7 @@ def _build_prep_xy_to_xy_phase(
     *,
     snap_exact_start_xy: bool = False,
     snap_exact_end_xy: bool = False,
+    control_state: Optional[SimulationControlState] = None,
 ) -> Optional[PreparedFlightPath]:
     pair_index = _pair_index_from_layout_edge(layout)
     if not pair_index:
@@ -3542,6 +3572,13 @@ def _build_prep_xy_to_xy_phase(
         return None
     leg_i = _leg_index_for_phase(phase_str)
     rw_dir = _flight_rw_dir_for_leg(fobj, leg_i)
+    temp_pen: Optional[set[str]] = None
+    if control_state is not None:
+        tb = _yield_temp_occupied_incident_edges_for_pathfinding(
+            control_state, str(agent.id)
+        )
+        if tb:
+            temp_pen = tb
     edges, dv, path, g = _flight_route_impl(
         layout,
         float(cell_size),
@@ -3553,6 +3590,8 @@ def _build_prep_xy_to_xy_phase(
         rw_dir,
         RouteEndpoint(token_pixel_xy=(float(start_xy[0]), float(start_xy[1]))),
         RouteEndpoint(token_pixel_xy=(float(end_xy[0]), float(end_xy[1]))),
+        penalized_layout_edges=temp_pen,
+        penalty_add=float(REVERSE_PENALTY_COST) if temp_pen else 0.0,
     )
     if dv or path is None or g is None or len(path) < 2:
         return None
@@ -3760,6 +3799,7 @@ def _try_splice_temp_stand_arrival_detour(
         merge_r,
         taxiway_h,
         snap_exact_end_xy=True,
+        control_state=control_state,
     )
     if not temp_prep or not temp_prep.edge_ids:
         return
@@ -3865,6 +3905,7 @@ def _try_reroute_temp_stand_if_contested(
         merge_r,
         taxiway_h,
         snap_exact_end_xy=True,
+        control_state=control_state,
     )
     if not temp_prep or not temp_prep.edge_ids:
         return
@@ -3977,6 +4018,7 @@ def _try_inject_arr_taxi_from_temp_stand(
         merge_r,
         taxiway_h,
         snap_exact_start_xy=True,
+        control_state=control_state,
     )
     if not arr_prep or not arr_prep.edge_ids:
         return
@@ -4561,6 +4603,37 @@ def get_lookahead_edges(
         ):
             return [str(agent.edge_ids[i]) for i in range(T)]
     return [str(agent.edge_ids[i]) for i in range(min(T, n_e))]
+
+
+def _temp_apron_hold_reservation_only_current_edge(ag: Flight) -> bool:
+    """True while on temp taxi leg or waiting to inject apron after temp (``temp_stand_id`` set)."""
+    if not str(ag.temp_stand_id or "").strip():
+        return False
+    if ag.awaiting_apron_from_temp:
+        return True
+    return bool(ag.edge_phases) and str(ag.edge_phases[0]) == PHASE_ARR_TAXI_TEMP
+
+
+def _temp_apron_current_edge_lookahead(ag: Flight) -> Optional[List[str]]:
+    """Single edge id: active segment head, else last finished segment while awaiting apron from temp."""
+    if ag.edge_ids:
+        return [str(ag.edge_ids[0])]
+    if ag.awaiting_apron_from_temp and ag.edge_ids_finished:
+        tail = ag.edge_ids_finished[-1]
+        if isinstance(tail, dict):
+            raw = tail.get("edge_id")
+            if raw is not None and str(raw).strip():
+                return [str(raw).strip()]
+    return None
+
+
+def _agent_eligible_for_reservation_pass(ag: Flight) -> bool:
+    """Include temp-apron waiters with empty ``edge_ids`` so they keep a one-edge reservation."""
+    if ag.edge_ids:
+        return True
+    return bool(
+        ag.awaiting_apron_from_temp and str(ag.temp_stand_id or "").strip()
+    )
 
 
 def _layout_edge_path_type(control_state: SimulationControlState, eid: str) -> str:
@@ -5364,6 +5437,9 @@ def build_reroute_path_from_xy(
     leg_i = _leg_index_for_phase(phase)
     rw_dir = _flight_rw_dir_for_leg(flight, leg_i)
     penalized: set[str] = set(_yield_penalized_layout_edges_for_reroute(control_state, agent.id))
+    penalized |= _yield_temp_occupied_incident_edges_for_pathfinding(
+        control_state, str(agent.id)
+    )
     if extra_penalized_layout_edges:
         penalized |= extra_penalized_layout_edges
     penalty_use = float(REROUTE_YIELD_EDGE_PENALTY) if penalized else 0.0
@@ -5649,6 +5725,109 @@ def _try_reroute_agent_off_path_block(
     return True
 
 
+def _reroute_all_moving_flights_after_temp_park_arrival(
+    agents: List[Flight],
+    flights_by_id: Dict[str, Dict[str, Any]],
+    control_state: SimulationControlState,
+    layout: Dict[str, Any],
+    information: Dict[str, Any],
+    sim_time_abs: float,
+    cell_size: float,
+    reverse_cost: float,
+    merge_r: float,
+    taxiway_h: float,
+) -> int:
+    """
+    After a flight finishes temp taxi and parks (``awaiting_apron_from_temp``), other aircraft
+    may still hold pre-temp paths that fail reservation; re-run Dijkstra once for every
+    moving flight (aggressive reroute, same as deadlock path).
+    """
+    n_ok = 0
+    t_abs = float(sim_time_abs)
+    for ag in sorted(agents, key=lambda a: str(a.id)):
+        if not ag.edge_ids or not ag.edge_phases:
+            continue
+        if str(ag.edge_phases[0]) == PHASE_LANDING:
+            continue
+        st = control_state.agent_states.get(ag.id)
+        if st is None or _agent_deadlock_ghost_at_time(st, t_abs):
+            continue
+        fo = flights_by_id.get(str(ag.id))
+        if not isinstance(fo, dict):
+            continue
+        if _try_reroute_agent_off_path_block(
+            ag,
+            fo,
+            control_state,
+            layout,
+            information,
+            t_abs,
+            float(cell_size),
+            reverse_cost,
+            merge_r,
+            taxiway_h,
+            agents,
+            aggressive=True,
+        ):
+            n_ok += 1
+    if n_ok:
+        _LOG.info(
+            "TEMP_PARK_GLOBAL_REROUTE t=%.1f rerouted_flights=%s",
+            t_abs,
+            n_ok,
+        )
+    return n_ok
+
+
+def _run_temp_park_arrival_global_reroute_bundle(
+    control_state: SimulationControlState,
+    agents: List[Flight],
+    flights_by_id: Dict[str, Dict[str, Any]],
+    layout: Dict[str, Any],
+    information: Dict[str, Any],
+    sim_time_abs: float,
+    cell_size: float,
+    reverse_cost: float,
+    merge_r: float,
+    taxiway_h: float,
+    pixels_per_meter: float,
+    runway_release_lag_sec: float,
+) -> None:
+    """Refresh occupancy → reroute all movers → rebook reservations (called immediately when temp park completes)."""
+    rw_lag = float(runway_release_lag_sec)
+    t_abs = float(sim_time_abs)
+    ppm = max(float(pixels_per_meter), 1e-9)
+    refresh_resource_occupancy(
+        control_state, agents, ppm, t_abs, rw_lag
+    )
+    _reroute_all_moving_flights_after_temp_park_arrival(
+        agents,
+        flights_by_id,
+        control_state,
+        layout,
+        information,
+        t_abs,
+        float(cell_size),
+        reverse_cost,
+        merge_r,
+        taxiway_h,
+    )
+    for ag in agents:
+        ag.temp_park_arrival_trigger_global_reroute = False
+    refresh_resource_occupancy(
+        control_state, agents, ppm, t_abs, rw_lag
+    )
+    _book_tp, _ = _single_full_reservation_pass(
+        control_state,
+        agents,
+        t_abs,
+        ppm,
+        rw_lag,
+    )
+    control_state.stand_arrival_book_snapshot = dict(_book_tp)
+    refresh_agent_edge_fsm(agents)
+
+
 def should_reroute_agent(
     agent: Flight,
     control_state: SimulationControlState,
@@ -5857,7 +6036,10 @@ def _single_full_reservation_pass(
             str(ag.id),
         )
 
-    ordered = sorted([ag for ag in agents if ag.edge_ids], key=_decision_sort_key)
+    ordered = sorted(
+        [ag for ag in agents if _agent_eligible_for_reservation_pass(ag)],
+        key=_decision_sort_key,
+    )
     stand_arrival_book: Dict[str, int] = {}
     for ag in ordered:
         st = control_state.agent_states.get(ag.id)
@@ -5874,7 +6056,11 @@ def _single_full_reservation_pass(
         la_n, depth_n = _lookahead_and_reservation_depth_for_agent(
             ag, control_state, t_dec, agents
         )
-        la = get_lookahead_edges(ag, la_n, control_state)
+        if _temp_apron_hold_reservation_only_current_edge(ag):
+            la = _temp_apron_current_edge_lookahead(ag)
+            depth_n = 1
+        else:
+            la = get_lookahead_edges(ag, la_n, control_state)
         ok, reason = can_reserve_path(
             ag,
             la,
@@ -6030,6 +6216,8 @@ def apply_movement_controls(
     pixels_per_meter: float,
     sim_time_abs: float,
     runway_release_lag_sec: float = 0.0,
+    *,
+    on_temp_park_arrival_immediate_reroute: Optional[Callable[[], None]] = None,
 ) -> None:
     ppm = max(float(pixels_per_meter), 1e-9)
     t_end = float(sim_time_abs)
@@ -6071,6 +6259,11 @@ def apply_movement_controls(
             continue
         move_agent(ag, dt_move, ppm, sim_time=t_end - eldt_eff, sim_time_abs=t_end)
         ag.motion_integrated_until_abs_sec = t_end
+        if (
+            on_temp_park_arrival_immediate_reroute is not None
+            and ag.temp_park_arrival_trigger_global_reroute
+        ):
+            on_temp_park_arrival_immediate_reroute()
 
 
 def run_simulation(
@@ -6395,6 +6588,20 @@ def run_simulation(
             pixels_per_meter,
             current_time_abs,
             rw_release_lag,
+            on_temp_park_arrival_immediate_reroute=lambda: _run_temp_park_arrival_global_reroute_bundle(
+                control_state,
+                agents,
+                flights_by_id,
+                layout,
+                information,
+                float(current_time_abs),
+                cell_size,
+                reverse_cost,
+                merge_r,
+                taxiway_h,
+                pixels_per_meter,
+                rw_release_lag,
+            ),
         )
         for ag in agents:
             td_h = _arr_touchdown_motion_abs_sec(ag, agents, rw_release_lag)
