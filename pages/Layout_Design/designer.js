@@ -11907,10 +11907,9 @@
                 if (p && p.running) {
                   const pct = (p.percent != null && isFinite(Number(p.percent))) ? Number(p.percent) : 0;
                   const pctClamped = Math.max(0, Math.min(100, Math.round(pct)));
-                  const runBase = (p.runningClockLabel != null && String(p.runningClockLabel).trim() !== '')
+                  const runLabel = (p.runningClockLabel != null && String(p.runningClockLabel).trim() !== '')
                     ? String(p.runningClockLabel)
-                    : 'Running…';
-                  const runLabel = runBase + ' · ' + pctClamped + '%';
+                    : ('Running… (' + pctClamped + '% / 00:00)');
                   if (typeof setGlobalUpdateProgressUi === 'function') {
                     setGlobalUpdateProgressUi(true, runLabel, pct);
                   }

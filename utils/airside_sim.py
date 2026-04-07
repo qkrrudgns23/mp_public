@@ -84,6 +84,8 @@ _EXTRACT_LEG_PHASES: Tuple[str, ...] = (
     PHASE_LINEUP_DEPARTURE,
 )
 SIM_MAX_TIME_SEC = 200_000.0
+# After max scheduled STOT (Sd / ``stotMin_d``), advance sim time only this much (absolute seconds).
+STOT_POST_BUFFER_SEC = 1_000.0
 
 _LOG = logging.getLogger(__name__)
 
@@ -345,14 +347,8 @@ def _sd_eldt_sec(flight: Dict[str, Any]) -> Optional[int]:
     return _schedule_sd_sec(flight, "sldtMin_d")
 
 
-def _sim_progress_elapsed_total_sec(
-    flights_raw: List[Any], ref_t0: float
-) -> float:
-    """Pro Sim progress denominator (same units as ``current_time_abs - ref_t0``).
-
-    ``max(STOT_sd) + 3600 - ref_t0`` where ``STOT_sd`` comes from ``stotMin_d`` (Sd axis).
-    If no ``stotMin_d`` on any flight, fall back to ``SIM_MAX_TIME_SEC``.
-    """
+def _max_stot_sd_sec(flights_raw: List[Any]) -> Optional[float]:
+    """Largest ``stotMin_d`` (Sd → sim seconds) among flights, or ``None`` if none set."""
     max_stot: Optional[float] = None
     for fobj in flights_raw:
         if not isinstance(fobj, dict):
@@ -362,9 +358,21 @@ def _sim_progress_elapsed_total_sec(
             continue
         v = float(st)
         max_stot = v if max_stot is None else max(max_stot, v)
+    return max_stot
+
+
+def _sim_progress_elapsed_total_sec(
+    flights_raw: List[Any], ref_t0: float
+) -> float:
+    """Pro Sim progress denominator (same units as ``current_time_abs - ref_t0``).
+
+    ``max(STOT_sd) + STOT_POST_BUFFER_SEC - ref_t0`` where ``STOT_sd`` is ``stotMin_d`` (Sd axis).
+    Matches the main-loop time horizon when STOT is present. If no ``stotMin_d``, ``SIM_MAX_TIME_SEC``.
+    """
+    max_stot = _max_stot_sd_sec(flights_raw)
     if max_stot is None:
         return float(SIM_MAX_TIME_SEC)
-    span = max_stot + 3600.0 - float(ref_t0)
+    span = float(max_stot) + float(STOT_POST_BUFFER_SEC) - float(ref_t0)
     if not math.isfinite(span) or span <= 1e-6:
         return float(SIM_MAX_TIME_SEC)
     return float(span)
@@ -6344,7 +6352,7 @@ def apply_movement_controls(
 def run_simulation(
     layout: Dict[str, Any],
     dt: float = 1.0,
-    progress_cb: Optional[Callable[[float, float], None]] = None,
+    progress_cb: Optional[Callable[[float, float, Optional[float]], None]] = None,
 ) -> Dict[str, Any]:
     information = _load_information_json()
     deadlock_resolve_stop_n = max(
@@ -6522,7 +6530,7 @@ def run_simulation(
                 ag_new.velocity_ms = v_init
             agents_by_id[fid] = ag_new
         if progress_cb:
-            progress_cb(float(i + 1), float(total))
+            progress_cb(float(i + 1), float(total), None)
 
     agents = list(agents_by_id.values())
 
@@ -6555,12 +6563,19 @@ def run_simulation(
     progress_elapsed_total_sec = _sim_progress_elapsed_total_sec(
         flights_raw, float(ref_t0)
     )
+    max_stot_abs = _max_stot_sd_sec(flights_raw)
     truncation_abs_sec: Optional[float] = None
 
     while True:
         if not any(bool(ag.edge_ids) or ag.awaiting_apron_from_temp for ag in agents):
             break
-        if current_time_abs - float(ref_t0) + dt_sec > SIM_MAX_TIME_SEC + 1e-6:
+        if max_stot_abs is not None:
+            if (
+                float(current_time_abs) + float(dt_sec)
+                > float(max_stot_abs) + float(STOT_POST_BUFFER_SEC) + 1e-6
+            ):
+                break
+        elif current_time_abs - float(ref_t0) + dt_sec > SIM_MAX_TIME_SEC + 1e-6:
             break
         current_time_abs += dt_sec
         refresh_resource_occupancy(
@@ -6744,7 +6759,9 @@ def run_simulation(
                 st_w.total_wait_sec += float(dt_sec)
         if progress_cb:
             progress_cb(
-                current_time_abs - float(ref_t0), progress_elapsed_total_sec
+                current_time_abs - float(ref_t0),
+                progress_elapsed_total_sec,
+                float(current_time_abs),
             )
         if int(control_state.deadlock_resolve_event_count) >= int(deadlock_resolve_stop_n):
             truncation_abs_sec = float(current_time_abs)

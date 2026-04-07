@@ -13,6 +13,8 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+import time
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 # Standalone receiver: Layout JSON must be data/Layout_storage/ Save only to
@@ -32,6 +34,7 @@ _sim_progress: Dict[str, Any] = {
     "percent": 0,
     "error": None,
     "resultFile": None,
+    "runningClockLabel": "",
 }
 _sim_lock = threading.Lock()
 # Remove only dangerous characters so they can be used as file names (gap·Korean, etc. allowed)
@@ -323,8 +326,15 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                             "ok": False, "error": "simulation already running"
                         }).encode("utf-8"))
                         return
-                    _sim_progress.update(running=True, current=0, total=0,
-                                         percent=0, error=None, resultFile=None)
+                    _sim_progress.update(
+                        running=True,
+                        current=0,
+                        total=0,
+                        percent=0,
+                        error=None,
+                        resultFile=None,
+                        runningClockLabel="",
+                    )
                 t = threading.Thread(
                     target=_run_simulation_thread,
                     args=(layout, result_stem),
@@ -378,17 +388,60 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
         pass
 
 
-def _sim_progress_cb(current_time: float, total_time: float) -> None:
-    pct = int(100 * current_time / total_time) if total_time > 0 else 0
-    pct = max(0, min(100, pct))
-    with _sim_lock:
-        _sim_progress.update(current=current_time, total=total_time, percent=pct)
+def _format_sim_clock_5min(base_date: str, sim_sec_abs: float) -> str:
+    s = (base_date or "").strip() or "2026-03-31"
+    try:
+        d0 = datetime.strptime(s[:10], "%Y-%m-%d")
+    except ValueError:
+        d0 = datetime(2026, 1, 1)
+    snapped = (max(0.0, float(sim_sec_abs)) // 300.0) * 300.0
+    dt = d0 + timedelta(seconds=snapped)
+    return dt.strftime("%Y-%m-%d %H:%M")
+
+
+def _wall_elapsed_mm_ss(wall_t0: float) -> str:
+    elapsed = max(0, int(time.time() - wall_t0))
+    m, sec = divmod(elapsed, 60)
+    return f"{m:02d}:{sec:02d}"
 
 
 def _run_simulation_thread(layout: Dict[str, Any], result_stem: str) -> None:
     try:
-        from utils.airside_sim import run_simulation
-        result = run_simulation(layout, progress_cb=_sim_progress_cb)
+        from utils.airside_sim import _deep_get, _load_information_json, run_simulation
+
+        info = _load_information_json()
+        base_date = str(
+            _deep_get(
+                info,
+                "tiers",
+                "algorithm",
+                "simulation",
+                "baseDate",
+                default="2026-03-31",
+            )
+        )
+        wall_t0 = time.time()
+
+        def _progress_cb(
+            current_time: float, total_time: float, sim_time_abs: Optional[float]
+        ) -> None:
+            pct = int(100 * current_time / total_time) if total_time > 0 else 0
+            pct = max(0, min(100, pct))
+            wall_part = _wall_elapsed_mm_ss(wall_t0)
+            if sim_time_abs is None:
+                sim_part = "준비 중"
+            else:
+                sim_part = _format_sim_clock_5min(base_date, float(sim_time_abs))
+            running_clock = f"{sim_part} ({pct}% / {wall_part})"
+            with _sim_lock:
+                _sim_progress.update(
+                    current=current_time,
+                    total=total_time,
+                    percent=pct,
+                    runningClockLabel=running_clock,
+                )
+
+        result = run_simulation(layout, progress_cb=_progress_cb)
         output = dict(result) if isinstance(result, dict) else {}
         output.pop("flight_edge_paths", None)
         RESULT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
@@ -406,12 +459,13 @@ def _run_simulation_thread(layout: Dict[str, Any], result_stem: str) -> None:
                 percent=100,
                 resultFile=f"{safe_stem}_sim_result.json",
                 error=None,
+                runningClockLabel="",
             )
     except Exception as e:
         import traceback
         traceback.print_exc()
         with _sim_lock:
-            _sim_progress.update(running=False, error=str(e))
+            _sim_progress.update(running=False, error=str(e), runningClockLabel="")
 
 
 _server: Optional[HTTPServer] = None
