@@ -32,6 +32,7 @@ Arr_taxi waits when the reservation lookahead reaches an ``apron_link`` edge and
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import math
 from dataclasses import dataclass, field
@@ -136,6 +137,12 @@ REVERSE_PENALTY_COST = 1_000_000.0
 REROUTE_YIELD_EDGE_PENALTY = REVERSE_PENALTY_COST
 REROUTE_MIN_OLD_PATH_M = 50.0
 NODE_OCCUPANCY_RADIUS_M = 12.0
+
+
+def _stable_tie_seed(*parts: object) -> int:
+    s = "|".join(str(p) for p in parts)
+    d = hashlib.sha1(s.encode("utf-8")).hexdigest()[:8]
+    return int(d, 16) & 0x7FFFFFFF
 
 # --- Global movement priority (lower = higher priority) ---
 # Single source for decision ordering, head-on yield, and AgentControlState.priority_rank.
@@ -2590,17 +2597,25 @@ def _reroute_penalized_edges_from_wait(
     elif wr.startswith("intersection:"):
         iid = wr.split(":", 1)[1].strip()
         out |= _layout_edges_touching_intersection(control_state, iid)
+    elif wr.startswith("temp_stand_busy:"):
+        ts_id = wr.split(":", 1)[1].strip()
+        out |= {
+            str(e).strip()
+            for e in control_state.temp_stand_incident_edges.get(ts_id, set())
+            if str(e).strip()
+        }
     elif wr.startswith("runway_rot_busy:") and lookahead_edges:
         for e in lookahead_edges[:4]:
             s = str(e).strip()
             if s:
                 out.add(s)
-    for e in lookahead_edges[:2]:
-        s = str(e).strip()
-        if s:
-            out.add(s)
-    if agent.edge_ids:
-        out.add(str(agent.edge_ids[0]))
+    if wr:
+        for e in lookahead_edges[:2]:
+            s = str(e).strip()
+            if s:
+                out.add(s)
+        if agent.edge_ids:
+            out.add(str(agent.edge_ids[0]))
     return {e for e in out if e}
 
 
@@ -3217,6 +3232,15 @@ def _build_temp_stand_incident_edges(
         if not tid:
             continue
         j = g.stand_id_to_node_index.get(tid)
+        if j is None:
+            # tempStands may not be registered in stand_id_to_node_index; map by nearest graph node.
+            txy = _temp_stand_pixel_xy_from_sim_input(tst)
+            if txy is not None and g.nodes:
+                bx, by = float(txy[0]), float(txy[1])
+                j = min(
+                    range(len(g.nodes)),
+                    key=lambda idx: (g.nodes[idx][0] - bx) ** 2 + (g.nodes[idx][1] - by) ** 2,
+                )
         if j is None:
             continue
         se: set[str] = set()
@@ -4787,6 +4811,26 @@ def _resource_use_count(
     return len({x for x in (occupied + reserved) if x != agent_id})
 
 
+def _blocking_temp_stand_for_edge(
+    control_state: SimulationControlState,
+    edge_id: str,
+    agent_id: str,
+) -> Optional[str]:
+    eid = str(edge_id).strip()
+    aid = str(agent_id)
+    if not eid:
+        return None
+    for ts_id, e_set in control_state.temp_stand_incident_edges.items():
+        if eid not in e_set:
+            continue
+        sr = control_state.stand_resources.get(str(ts_id))
+        if sr is None:
+            continue
+        if any(str(x) != aid for x in sr.occupied_by):
+            return str(ts_id)
+    return None
+
+
 def _current_edge_separation_ok(
     er: EdgeResource,
     agent: Flight,
@@ -4858,7 +4902,8 @@ def can_reserve_path(
                 continue
             if any(str(x) != str(aid) for x in sr_t.occupied_by):
                 return False, f"temp_stand_busy:{ts_id}"
-        if er.forced_open:
+        # Never bypass runway safety via forced-open.
+        if er.forced_open and not er.runway_id:
             continue
         ph0 = str(agent.edge_phases[0]) if agent.edge_phases else ""
         pt0 = (
@@ -4903,7 +4948,12 @@ def can_reserve_path(
         if er.runway_id:
             rwid = str(er.runway_id)
             rr = control_state.runway_resources.get(rwid)
-            if rr is not None and not rr.forced_open:
+            if rr is not None:
+                # Hard invariant: runway occupancy by another aircraft blocks reservation.
+                if any(str(x) != str(aid) for x in rr.occupied_by):
+                    return False, f"runway_occupied:{rwid}"
+                if rr.forced_open:
+                    continue
                 if _runway_rot_reservation_blocked(t_abs, rwid, aid, agents):
                     return False, f"runway_rot_busy:{rwid}"
                 ou_rw = _resource_use_count(rr.occupied_by, rr.reserved_by, aid)
@@ -5755,6 +5805,15 @@ def _reroute_all_moving_flights_after_temp_park_arrival(
         fo = flights_by_id.get(str(ag.id))
         if not isinstance(fo, dict):
             continue
+        la_n, _depth_n = _lookahead_and_reservation_depth_for_agent(
+            ag, control_state, t_abs, agents
+        )
+        la = get_lookahead_edges(ag, la_n, control_state)
+        temp_pen = _yield_temp_occupied_incident_edges_for_pathfinding(
+            control_state, str(ag.id)
+        )
+        if not temp_pen or not any(str(eid) in temp_pen for eid in la):
+            continue
         if _try_reroute_agent_off_path_block(
             ag,
             fo,
@@ -6026,7 +6085,7 @@ def _single_full_reservation_pass(
             if ag.eldt_anchor_sec is not None
             else 0
         )
-        eldt_tie = int(hash((eldt_i, str(ag.id), int(sim_time) // 10))) & 0x7FFFFFFF
+        eldt_tie = _stable_tie_seed(eldt_i, str(ag.id), int(sim_time) // 10)
         return (
             pr,
             eldt_i,
@@ -6233,8 +6292,24 @@ def apply_movement_controls(
             ag.control_halt = True
         elif _agent_deadlock_ghost_at_time(st, t_end):
             ag.control_halt = True
-        elif st.clearance in ("WAIT", "YIELD"):
+        elif ag.edge_ids:
+            ts_block = _blocking_temp_stand_for_edge(
+                control_state, str(ag.edge_ids[0]), str(ag.id)
+            )
+            if ts_block:
+                ag.control_halt = True
+                st.clearance = "WAIT"
+                st.wait_reason = f"temp_stand_busy:{ts_block}"
+        if st.clearance in ("WAIT", "YIELD"):
             ag.control_halt = True
+        if ag.edge_ids:
+            er0 = control_state.edge_resources.get(str(ag.edge_ids[0]))
+            if er0 is not None and er0.runway_id:
+                rr0 = control_state.runway_resources.get(str(er0.runway_id))
+                if rr0 is not None and any(str(x) != str(ag.id) for x in rr0.occupied_by):
+                    ag.control_halt = True
+                    st.clearance = "WAIT"
+                    st.wait_reason = f"runway_occupied:{er0.runway_id}"
     _apply_same_direction_following_caps(control_state, agents, ppm, t_end)
     for ag in agents:
         td = _arr_touchdown_motion_abs_sec(ag, agents, rw_lag)

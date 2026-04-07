@@ -15,8 +15,6 @@ alwaysApply: true
 - Never auto-agree or try to please. Be honest. If something is wrong or suboptimal, say so.
 - Do not apologize for errors — fix them.
 - If code is incomplete, add `// TODO:` comments instead of leaving silent gaps.
-## information.json
-Layout_design.py를 수정할 경우, 디자인에 대한 값들은 Information.json의 값을 수정하여 반영되도록 해줘
 ## Code Changes
 - Always read and understand existing code before making changes.
 - Make the smallest possible change that solves the problem — do not over-engineer.
