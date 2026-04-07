@@ -127,6 +127,8 @@ DEADLOCK_RESOLVE_STOP_COUNT = 10
 STAGNATION_PROGRESS_EPS_M = 2.0
 # After pushback from a stand, block other arrivals to that stand for this many seconds.
 STAND_POST_PUSHBACK_CLEARANCE_DELAY_SEC = 60.0
+# After destination apron becomes free, temp-stand arrivals wait this long before taxi-in.
+TEMP_TO_APRON_HOLD_SEC = 120.0
 REROUTE_WAIT_THRESHOLD_SEC = 60.0
 REROUTE_IMPROVEMENT_RATIO = 0.2
 REROUTE_MAX_ATTEMPTS = 25
@@ -571,6 +573,8 @@ class Flight:
     awaiting_apron_from_temp: bool = False
     post_temp_route_tail_prep: Optional[PreparedFlightPath] = None
     arr_temp_detour_decided: bool = False
+    # Absolute time when destination apron was first observed unoccupied (inject gated by TEMP_TO_APRON_HOLD_SEC).
+    temp_dest_apron_cleared_abs_sec: Optional[float] = None
 
 
 @dataclass
@@ -3334,6 +3338,11 @@ def _pick_temp_stand_for_arrival_detour(
     information: Dict[str, Any],
     agents: List[Flight],
 ) -> Optional[str]:
+    """
+    Choose a free temp stand **closest to the destination apron** (pixel space, squared
+    Euclidean on ``_temp_stand_pixel_xy_from_sim_input`` vs ``_apron_token_xy``), subject
+    to category and occupancy. Ties break on stand id lexicographic order.
+    """
     raw_ts = layout.get("tempStands") or []
     if not raw_ts:
         return None
@@ -3341,8 +3350,7 @@ def _pick_temp_stand_for_arrival_detour(
     if dest_xy is None:
         return None
     aid = str(fobj.get("id") or "")
-    best_id: Optional[str] = None
-    best_d2 = float("inf")
+    ranked: List[Tuple[float, str]] = []
     for tst in raw_ts:
         if not isinstance(tst, dict):
             continue
@@ -3363,10 +3371,11 @@ def _pick_temp_stand_for_arrival_detour(
         if txy is None:
             continue
         d2 = (txy[0] - dest_xy[0]) ** 2 + (txy[1] - dest_xy[1]) ** 2
-        if d2 < best_d2:
-            best_d2 = d2
-            best_id = tid
-    return best_id
+        ranked.append((float(d2), tid))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda x: (x[0], x[1]))
+    return ranked[0][1]
 
 
 def _first_contiguous_phase_block(agent: Flight, phase: str) -> Optional[Tuple[int, int]]:
@@ -3639,6 +3648,36 @@ def _apply_prep_to_agent(
     st.progress_snapshot_along_m = 0.0
 
 
+def _temp_stand_pipeline_sort_key(
+    ag: Flight,
+    flights_by_id: Dict[str, Dict[str, Any]],
+    flight_input_order: Dict[str, int],
+) -> Tuple[float, float, int, str]:
+    """
+    Order for temp inject / reroute / splice in one tick: **earlier flight picks the
+    nearer temp first** (T001 before T002 when both need a slot the same tick).
+
+    1. Earlier ``eldt_anchor_sec``
+    2. Lower ``sldtMin_d`` from sim flight input
+    3. Lower index in ``layout[\"flights\"]`` (먼저 입력·먼저 온 편)
+    4. ``str(ag.id)`` (last resort)
+    """
+    eldt = (
+        float(ag.eldt_anchor_sec) if ag.eldt_anchor_sec is not None else float("inf")
+    )
+    sldt_d = float("inf")
+    fo = flights_by_id.get(str(ag.id))
+    if isinstance(fo, dict):
+        raw = fo.get("sldtMin_d")
+        if raw is not None:
+            try:
+                sldt_d = float(raw)
+            except (TypeError, ValueError):
+                pass
+    ord_i = int(flight_input_order.get(str(ag.id), 10**9))
+    return (eldt, sldt_d, ord_i, str(ag.id))
+
+
 def _tick_arr_temp_detour_eldt_flag(agent: Flight, current_time_abs: float) -> None:
     if agent.eldt_anchor_sec is None:
         return
@@ -3902,9 +3941,17 @@ def _try_inject_arr_taxi_from_temp_stand(
         ag.awaiting_apron_from_temp = False
         ag.post_temp_route_tail_prep = None
         ag.temp_stand_id = None
+        ag.temp_dest_apron_cleared_abs_sec = None
         return
     t_abs = float(current_time_abs)
     if _target_apron_stand_occupied_by_other(ag, control_state):
+        ag.temp_dest_apron_cleared_abs_sec = None
+        return
+    if ag.temp_dest_apron_cleared_abs_sec is None:
+        ag.temp_dest_apron_cleared_abs_sec = t_abs
+    if t_abs + 1e-9 < float(ag.temp_dest_apron_cleared_abs_sec) + float(
+        TEMP_TO_APRON_HOLD_SEC
+    ):
         return
     if _stand_pushback_clearance_cooldown_active(sid, str(ag.id), agents, t_abs):
         return
@@ -3944,6 +3991,7 @@ def _try_inject_arr_taxi_from_temp_stand(
     ag.temp_stand_id = None
     ag.post_temp_route_tail_prep = None
     ag.awaiting_apron_from_temp = False
+    ag.temp_dest_apron_cleared_abs_sec = None
     _apply_prep_to_agent(ag, merged, control_state, t_abs)
     refresh_agent_edge_fsm([ag])
 
@@ -6222,9 +6270,12 @@ def run_simulation(
     ensure_agent_control_states(control_state, agents)
 
     flights_by_id: Dict[str, Dict[str, Any]] = {}
-    for fobj in flights_raw:
+    flight_input_order: Dict[str, int] = {}
+    for _fi, fobj in enumerate(flights_raw):
         if isinstance(fobj, dict) and fobj.get("id") is not None:
-            flights_by_id[str(fobj["id"])] = fobj
+            _fid = str(fobj["id"])
+            flights_by_id[_fid] = fobj
+            flight_input_order.setdefault(_fid, int(_fi))
 
     eldt_vals = [
         float(ag.eldt_anchor_sec)
@@ -6253,6 +6304,13 @@ def run_simulation(
         )
         for ag in agents:
             _tick_arr_temp_detour_eldt_flag(ag, float(current_time_abs))
+        agents_temp_pipe = sorted(
+            agents,
+            key=lambda a: _temp_stand_pipeline_sort_key(
+                a, flights_by_id, flight_input_order
+            ),
+        )
+        for ag in agents_temp_pipe:
             fo = flights_by_id.get(str(ag.id))
             if isinstance(fo, dict):
                 _try_inject_arr_taxi_from_temp_stand(
