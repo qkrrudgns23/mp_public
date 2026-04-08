@@ -132,6 +132,8 @@ STAGNATION_PROGRESS_EPS_M = 2.0
 STAND_POST_PUSHBACK_CLEARANCE_DELAY_SEC = 60.0
 # After destination apron becomes free, temp-stand arrivals wait this long before taxi-in.
 TEMP_TO_APRON_HOLD_SEC = 120.0
+# Evaluate arrival temp-stand detour only near touchdown (ELDT - lead .. ELDT).
+ARR_TEMP_DETOUR_DECISION_LEAD_SEC = 120.0
 REROUTE_WAIT_THRESHOLD_SEC = 60.0
 REROUTE_IMPROVEMENT_RATIO = 0.2
 REROUTE_MAX_ATTEMPTS = 25
@@ -3832,6 +3834,10 @@ def _try_splice_temp_stand_arrival_detour(
         return
     if ag.eldt_anchor_sec is None:
         ag.arr_temp_detour_decided = True
+        return
+    if float(current_time_abs) + 1e-9 < float(ag.eldt_anchor_sec) - float(
+        ARR_TEMP_DETOUR_DECISION_LEAD_SEC
+    ):
         return
     if float(current_time_abs) + 1e-9 >= float(ag.eldt_anchor_sec):
         return
