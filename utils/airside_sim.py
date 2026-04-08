@@ -568,6 +568,7 @@ class Flight:
     arr_runway_id: Optional[str] = None
     arr_runway_dir: Optional[str] = None
     dep_runway_id: Optional[str] = None
+    runway_entry_abs_sec: Optional[float] = None
     lineup_hold_release_abs_sec: Optional[float] = None
     path_completed_abs_sec: Optional[float] = None
     exit_runway_abs_sec: Optional[float] = None
@@ -2326,6 +2327,8 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
         and old_ph == PHASE_HOLDING_LINEUP
         and new_ph == PHASE_LINEUP_DEPARTURE
     ):
+        if agent.runway_entry_abs_sec is None:
+            agent.runway_entry_abs_sec = float(sim_time_abs)
         agent.lineup_hold_release_abs_sec = float(sim_time_abs) + _lineup_clearance_hold_sec(
             _load_information_json()
         )
@@ -2649,11 +2652,24 @@ def _arr_touchdown_motion_abs_sec(
         return anch_f
     my = anch_f
     lag = max(0.0, float(runway_release_lag_sec))
+    dep_release_buffer_sec = 20.0
     need_exit = 0.0
     any_pred = False
+    pred_missing_exit = False
+    dep_windows: List[Tuple[float, Optional[float]]] = []
     for o in agents:
         if o.id == agent.id:
             continue
+        dep_rw = str(o.dep_runway_id or "").strip()
+        if dep_rw == rw:
+            dep_entry = o.runway_entry_abs_sec
+            if dep_entry is not None:
+                dep_end = (
+                    float(o.path_completed_abs_sec) + float(dep_release_buffer_sec)
+                    if o.path_completed_abs_sec is not None
+                    else None
+                )
+                dep_windows.append((float(dep_entry), dep_end))
         if str(o.arr_runway_id or "").strip() != rw:
             continue
         if o.eldt_anchor_sec is None:
@@ -2663,11 +2679,28 @@ def _arr_touchdown_motion_abs_sec(
         any_pred = True
         ex = o.exit_runway_abs_sec
         if ex is None:
-            return anch_f
+            pred_missing_exit = True
+            continue
         need_exit = max(need_exit, float(ex))
     if not any_pred:
-        return max(raw, anch_f)
-    return max(raw, need_exit + lag)
+        base = max(raw, anch_f)
+    else:
+        base = anch_f if pred_missing_exit else max(raw, need_exit + lag)
+    # DEP runway occupancy windows: [runway_entry_abs_sec, ETOT + 20s).
+    # If touchdown candidate falls inside any window, push it to that window end
+    # and repeat to account for overlapping / chained windows.
+    changed = True
+    while changed:
+        changed = False
+        for dep_entry, dep_end in dep_windows:
+            if dep_entry - 1e-9 > base:
+                continue
+            if dep_end is None:
+                return float("inf")
+            if base + 1e-9 < dep_end:
+                base = float(dep_end)
+                changed = True
+    return base
 
 
 def _path_length_px(segments: List[Tuple[Point, Point]]) -> float:
@@ -3041,6 +3074,12 @@ def _build_schedule_row(
     pixels_per_meter: float,
     base_date: str,
     exit_runway_abs_sec: Optional[float] = None,
+    runway_entry_abs_sec: Optional[float] = None,
+    touchdown_motion_abs_sec: Optional[float] = None,
+    arr_runway_id: Optional[str] = None,
+    dep_runway_id: Optional[str] = None,
+    has_landing_leg: bool = False,
+    has_lineup_departure_leg: bool = False,
     eldt_schedule_sec: Optional[int] = None,
     actual_apron_inblocks_abs_sec: Optional[float] = None,
     actual_apron_offblocks_abs_sec: Optional[float] = None,
@@ -3126,6 +3165,10 @@ def _build_schedule_row(
         "reg": _flight_opt_str(fobj, "reg"),
         "flight_number": _flight_opt_str(fobj, "flightNumber", "flight_number"),
         "aircraft_type": _flight_opt_str(fobj, "aircraftType", "aircraft_type"),
+        "ARR_RUNWAY_ID": str(arr_runway_id).strip() if arr_runway_id is not None else None,
+        "DEP_RUNWAY_ID": str(dep_runway_id).strip() if dep_runway_id is not None else None,
+        "HAS_LANDING": bool(has_landing_leg),
+        "HAS_LINEUP_DEPARTURE": bool(has_lineup_departure_leg),
         "SLDT": sldt_s,
         "SLDT_dt": _sec_to_datetime_str(_sf(sldt_s), base_date),
         "SIBT": sibt_s,
@@ -3144,6 +3187,14 @@ def _build_schedule_row(
         "STOT_sd_dt": _sec_to_datetime_str(_sf(stot_d), base_date),
         "ELDT": eldt_sec,
         "ELDT_dt": _sec_to_datetime_str(_sf(eldt_sec), base_date),
+        "TOUCHDOWN_MOTION": _sim_sec_optional(touchdown_motion_abs_sec)
+        if touchdown_motion_abs_sec is not None
+        else None,
+        "TOUCHDOWN_MOTION_dt": _sec_to_datetime_str(touchdown_motion_abs_sec, base_date),
+        "RUNWAY_ENTRY": _sim_sec_optional(runway_entry_abs_sec)
+        if runway_entry_abs_sec is not None
+        else None,
+        "RUNWAY_ENTRY_dt": _sec_to_datetime_str(runway_entry_abs_sec, base_date),
         "EXIT_RUNWAY": exit_rw_s,
         "EXIT_RUNWAY_dt": _sec_to_datetime_str(exit_runway_abs_sec, base_date),
         "EIBT": _sim_sec_optional(eibt_sec) if eibt_sec is not None else None,
@@ -4768,7 +4819,11 @@ def _agent_current_runway_id(
 
 
 def _runway_rot_reservation_blocked(
-    t_abs: float, rwid: str, agent_id: str, agents: List[Flight]
+    t_abs: float,
+    rwid: str,
+    agent_id: str,
+    agents: List[Flight],
+    runway_release_lag_sec: float = 0.0,
 ) -> bool:
     """동일 도착 활주로: 다른 기체가 아직 이탈 전이면 점유로 본다.
 
@@ -4788,7 +4843,10 @@ def _runway_rot_reservation_blocked(
             continue
         if o.eldt_anchor_sec is None:
             continue
-        t0 = float(o.eldt_anchor_sec)
+        td_o = _arr_touchdown_motion_abs_sec(o, agents, float(runway_release_lag_sec))
+        if td_o is not None and tt + 1e-9 < float(td_o):
+            continue
+        t0 = float(td_o) if td_o is not None else float(o.eldt_anchor_sec)
         if tt + 1e-9 <= t0:
             continue
         ex = o.exit_runway_abs_sec
@@ -4948,7 +5006,9 @@ def can_reserve_path(
         ):
             rr_dep = control_state.runway_resources.get(dep_rwy)
             if rr_dep is not None and not rr_dep.forced_open:
-                if _runway_rot_reservation_blocked(t_abs, dep_rwy, aid, agents):
+                if _runway_rot_reservation_blocked(
+                    t_abs, dep_rwy, aid, agents, float(runway_release_lag_sec)
+                ):
                     return False, f"runway_rot_busy:{dep_rwy}"
                 ou_d = _resource_use_count(rr_dep.occupied_by, rr_dep.reserved_by, aid)
                 if ou_d >= max(1, int(rr_dep.capacity)):
@@ -4962,7 +5022,9 @@ def can_reserve_path(
                     return False, f"runway_occupied:{rwid}"
                 if rr.forced_open:
                     continue
-                if _runway_rot_reservation_blocked(t_abs, rwid, aid, agents):
+                if _runway_rot_reservation_blocked(
+                    t_abs, rwid, aid, agents, float(runway_release_lag_sec)
+                ):
                     return False, f"runway_rot_busy:{rwid}"
                 ou_rw = _resource_use_count(rr.occupied_by, rr.reserved_by, aid)
                 if ou_rw >= max(1, int(rr.capacity)):
@@ -6732,6 +6794,19 @@ def run_simulation(
             _dst_snap = _destination_stand_history_snap(
                 ag, control_state, agents, float(current_time_abs)
             )
+            _st_dbg = control_state.agent_states.get(ag.id)
+            _eid0 = str(ag.edge_ids[0]) if ag.edge_ids else ""
+            _ph0 = str(ag.edge_phases[0]) if ag.edge_phases else ""
+            _pt0 = (
+                str(ag.segment_path_types[0] or "")
+                if ag.segment_path_types and len(ag.segment_path_types) == len(ag.edge_ids)
+                else ""
+            )
+            _rw0: Optional[str] = None
+            if _eid0:
+                _er0 = control_state.edge_resources.get(_eid0)
+                if _er0 is not None and _er0.runway_id:
+                    _rw0 = str(_er0.runway_id)
             ag.history.append(
                 (
                     current_time_abs,
@@ -6741,6 +6816,14 @@ def run_simulation(
                     bool(ag.motion_is_forward),
                     bool(_gh),
                     _dst_snap,
+                    (_st_dbg.clearance if _st_dbg is not None else None),
+                    (_st_dbg.wait_reason if _st_dbg is not None else None),
+                    (_eid0 or None),
+                    (_ph0 or None),
+                    (_pt0 or None),
+                    bool(ag.control_halt),
+                    (float(ag.control_speed_cap_ms) if ag.control_speed_cap_ms is not None else None),
+                    (_rw0 or None),
                 )
             )
             rel_after_td = (
@@ -6811,6 +6894,14 @@ def run_simulation(
             pixels_per_meter,
             base_date,
             eldt_schedule_sec=eldt_adjust_map.get(fid),
+            runway_entry_abs_sec=(ag.runway_entry_abs_sec if ag else None),
+            touchdown_motion_abs_sec=(
+                _arr_touchdown_motion_abs_sec(ag, agents, rw_release_lag) if ag else None
+            ),
+            arr_runway_id=(ag.arr_runway_id if ag else None),
+            dep_runway_id=(ag.dep_runway_id if ag else None),
+            has_landing_leg=any(str(p) == PHASE_LANDING for p in prep_i.segment_phases),
+            has_lineup_departure_leg=_flight_path_has_lineup_departure(prep_i),
             actual_apron_inblocks_abs_sec=(
                 ag.actual_apron_inblocks_abs_sec if ag else None
             ),
@@ -6863,6 +6954,25 @@ def run_simulation(
                     "pushbackCooldownActive": bool(_cd),
                     "standPipelineOpen": bool(_ok),
                 }
+            if len(row) > 7 and row[7] is not None:
+                _pos["clearance"] = str(row[7])
+            if len(row) > 8 and row[8] is not None:
+                _pos["waitReason"] = str(row[8])
+            if len(row) > 9 and row[9] is not None:
+                _pos["edgeId"] = str(row[9])
+            if len(row) > 10 and row[10] is not None:
+                _pos["phase"] = str(row[10])
+            if len(row) > 11 and row[11] is not None:
+                _pos["pathType"] = str(row[11])
+            if len(row) > 12:
+                _pos["controlHalt"] = bool(row[12])
+            if len(row) > 13 and row[13] is not None:
+                try:
+                    _pos["controlSpeedCapMs"] = float(row[13])
+                except (TypeError, ValueError):
+                    pass
+            if len(row) > 14 and row[14] is not None:
+                _pos["runwayId"] = str(row[14])
             _plist.append(_pos)
         positions[ag.id] = _plist
 
@@ -6880,6 +6990,14 @@ def run_simulation(
                 pixels_per_meter,
                 base_date,
                 exit_runway_abs_sec=(ag.exit_runway_abs_sec if ag else None),
+                runway_entry_abs_sec=(ag.runway_entry_abs_sec if ag else None),
+                touchdown_motion_abs_sec=(
+                    _arr_touchdown_motion_abs_sec(ag, agents, rw_release_lag) if ag else None
+                ),
+                arr_runway_id=(ag.arr_runway_id if ag else None),
+                dep_runway_id=(ag.dep_runway_id if ag else None),
+                has_landing_leg=any(str(p) == PHASE_LANDING for p in prep.segment_phases),
+                has_lineup_departure_leg=_flight_path_has_lineup_departure(prep),
                 eldt_schedule_sec=eldt_adjust_map.get(str(fid)),
                 actual_apron_inblocks_abs_sec=(
                     ag.actual_apron_inblocks_abs_sec if ag else None
