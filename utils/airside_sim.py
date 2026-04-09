@@ -142,6 +142,9 @@ REROUTE_YIELD_EDGE_PENALTY = REVERSE_PENALTY_COST
 REROUTE_MIN_OLD_PATH_M = 50.0
 NODE_OCCUPANCY_RADIUS_M = 12.0
 
+# Cleared at the start of each ``run_simulation``; keyed by layout object id + path-search params.
+_PATH_GRAPH_BUILD_CACHE: Dict[Tuple[int, str, float, float, float, float, bool], PathGraph] = {}
+
 
 def _stable_tie_seed(*parts: object) -> int:
     s = "|".join(str(p) for p in parts)
@@ -442,6 +445,47 @@ def _graph_for_direction(
     )
 
 
+def _cached_path_graph_for_direction(
+    layout: Dict[str, Any],
+    cell_size: float,
+    runway_ops_dir: str,
+    reverse_cost: float,
+    merge_r: float,
+    taxiway_h: float,
+    information: Dict[str, Any],
+    *,
+    pure_ground_exclude_runway: bool,
+) -> Optional[PathGraph]:
+    nd = normalize_rw_direction_value(str(runway_ops_dir).strip() if runway_ops_dir else "")
+    if nd not in ("clockwise", "counter_clockwise"):
+        nd = _DEFAULT_RW_DIR
+    key = (
+        id(layout),
+        nd,
+        float(cell_size),
+        float(reverse_cost),
+        float(merge_r),
+        float(taxiway_h),
+        bool(pure_ground_exclude_runway),
+    )
+    hit = _PATH_GRAPH_BUILD_CACHE.get(key)
+    if hit is not None:
+        return hit
+    g = _graph_for_direction(
+        layout,
+        cell_size,
+        nd,
+        reverse_cost,
+        merge_r,
+        taxiway_h,
+        information,
+        pure_ground_exclude_runway=pure_ground_exclude_runway,
+    )
+    if g is not None:
+        _PATH_GRAPH_BUILD_CACHE[key] = g
+    return g
+
+
 def _pair_index_from_layout_edge(layout: Dict[str, Any]) -> Dict[Tuple[int, int], str]:
     raw = layout.get("Edge") or layout.get("edges")
     out: Dict[Tuple[int, int], str] = {}
@@ -719,6 +763,9 @@ def flight_route(
     pair_index: Dict[Tuple[int, int], str],
     start_point: RouteEndpoint,
     end_point: RouteEndpoint,
+    *,
+    penalized_arcs: Optional[set[Tuple[int, int]]] = None,
+    penalty_add: float = 0.0,
 ) -> Tuple[List[str], float, Optional[List[int]]]:
     """
     Shortest path on ``g`` between two endpoints.
@@ -732,7 +779,13 @@ def flight_route(
     end_idx = resolve_route_endpoint_index(g, layout, cell_size, end_point)
     if start_idx is None or end_idx is None:
         return [], float("inf"), None
-    path = path_dijkstra(g, start_idx, end_idx)
+    path = path_dijkstra(
+        g,
+        start_idx,
+        end_idx,
+        penalized_arcs=penalized_arcs,
+        penalty_add=penalty_add,
+    )
     if not path or len(path) < 2:
         return [], float("inf"), None
     edges = _path_to_edge_ids(path, pair_index)
@@ -752,15 +805,12 @@ def _path_uses_reverse_penalty_edges(g: PathGraph, path: List[int]) -> bool:
     return False
 
 
-def _penalize_layout_edges_on_graph(
-    g: PathGraph,
-    layout: Dict[str, Any],
-    penalized_eids: set[str],
-    penalty_add: float,
-) -> None:
-    if not penalized_eids or penalty_add <= 0:
-        return
-    pairs: List[Tuple[int, int]] = []
+def _penalized_directed_arc_keys(
+    layout: Dict[str, Any], penalized_eids: Optional[set[str]]
+) -> Optional[set[Tuple[int, int]]]:
+    if not penalized_eids:
+        return None
+    out: set[Tuple[int, int]] = set()
     raw = layout.get("Edge") or layout.get("edges") or []
     for ed in raw:
         if not isinstance(ed, dict):
@@ -769,23 +819,13 @@ def _penalize_layout_edges_on_graph(
         if eid not in penalized_eids:
             continue
         try:
-            pairs.append((int(ed["fromIdx"]), int(ed["toIdx"])))
+            a = int(ed["fromIdx"])
+            b = int(ed["toIdx"])
         except (KeyError, TypeError, ValueError):
             continue
-    p = float(penalty_add)
-    for a, b in pairs:
-        for u, v in ((a, b), (b, a)):
-            rec = g.edge_map.get(f"{u}:{v}")
-            if rec is None:
-                continue
-            rec.cost = float(rec.cost) + p
-    for ui in range(len(g.adj)):
-        new_row: List[Tuple[int, float]] = []
-        for v, _ in g.adj[ui]:
-            rec = g.edge_map.get(f"{ui}:{v}")
-            w = float(rec.cost) if rec else float(_)
-            new_row.append((v, w))
-        g.adj[ui] = new_row
+        out.add((a, b))
+        out.add((b, a))
+    return out if out else None
 
 
 def _flight_route_impl(
@@ -805,13 +845,10 @@ def _flight_route_impl(
     accept_reverse_penalty_path: bool = False,
 ) -> Tuple[List[str], bool, Optional[List[int]], Optional[PathGraph]]:
     """Same graph build and routing as airside_sim_rev3 ``_flight_route``; returns path for geometry."""
-    nd = normalize_rw_direction_value(str(runway_ops_dir).strip() if runway_ops_dir else "")
-    if nd not in ("clockwise", "counter_clockwise"):
-        nd = _DEFAULT_RW_DIR
-    g = _graph_for_direction(
+    g = _cached_path_graph_for_direction(
         layout,
         cell_size,
-        nd,
+        str(runway_ops_dir).strip() if runway_ops_dir else "",
         reverse_cost,
         merge_r,
         taxiway_h,
@@ -820,9 +857,22 @@ def _flight_route_impl(
     )
     if g is None or not g.nodes:
         return [], False, None, None
-    if penalized_layout_edges and penalty_add > 0:
-        _penalize_layout_edges_on_graph(g, layout, penalized_layout_edges, penalty_add)
-    edges, _dist, path = flight_route(g, layout, cell_size, pair_index, start, end)
+    p_arcs: Optional[set[Tuple[int, int]]] = None
+    p_add = 0.0
+    if penalized_layout_edges and float(penalty_add) > 0:
+        p_arcs = _penalized_directed_arc_keys(layout, penalized_layout_edges)
+        if p_arcs:
+            p_add = float(penalty_add)
+    edges, _dist, path = flight_route(
+        g,
+        layout,
+        cell_size,
+        pair_index,
+        start,
+        end,
+        penalized_arcs=p_arcs,
+        penalty_add=p_add,
+    )
     if path is None or len(path) < 2:
         return [], False, None, g
     if not accept_reverse_penalty_path and _path_uses_reverse_penalty_edges(g, path):
@@ -1532,7 +1582,7 @@ def extract_point_to_paths(
     reverse_cost, merge_r, taxiway_h = _path_search_params(info)
     pair_index = _pair_index_from_layout_edge(layout)
     if not pair_index:
-        g0 = _graph_for_direction(
+        g0 = _cached_path_graph_for_direction(
             layout,
             cell_size,
             _flight_rw_dir_for_leg(flight, 2),
@@ -2113,7 +2163,7 @@ def prepare_flight_path(
         return PreparedFlightPath()
     pair_index = _pair_index_from_layout_edge(layout)
     if not pair_index:
-        g0 = _graph_for_direction(
+        g0 = _cached_path_graph_for_direction(
             layout,
             cell_size,
             _flight_rw_dir_for_leg(flight, 0),
@@ -3642,7 +3692,7 @@ def _build_prep_xy_to_xy_phase(
 ) -> Optional[PreparedFlightPath]:
     pair_index = _pair_index_from_layout_edge(layout)
     if not pair_index:
-        g0 = _graph_for_direction(
+        g0 = _cached_path_graph_for_direction(
             layout,
             float(cell_size),
             _flight_rw_dir_for_leg(fobj, _leg_index_for_phase(phase_str)),
@@ -4168,7 +4218,7 @@ def build_resource_model(
         except (TypeError, ValueError):
             pass
     ppm = max(float(pixels_per_meter), 1e-9)
-    g = _graph_for_direction(
+    g = _cached_path_graph_for_direction(
         layout,
         float(cell_size),
         _DEFAULT_RW_DIR,
@@ -5547,7 +5597,7 @@ def build_reroute_path_from_xy(
     phase = str(agent.edge_phases[0])
     pair_index = _pair_index_from_layout_edge(layout)
     if not pair_index:
-        g0 = _graph_for_direction(
+        g0 = _cached_path_graph_for_direction(
             layout,
             cell_size,
             _flight_rw_dir_for_leg(flight, _leg_index_for_phase(phase)),
@@ -6422,6 +6472,7 @@ def run_simulation(
     dt: float = 1.0,
     progress_cb: Optional[Callable[[float, float, Optional[float]], None]] = None,
 ) -> Dict[str, Any]:
+    _PATH_GRAPH_BUILD_CACHE.clear()
     information = _load_information_json()
     deadlock_resolve_stop_n = max(
         1,

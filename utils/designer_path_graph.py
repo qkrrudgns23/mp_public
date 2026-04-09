@@ -399,29 +399,63 @@ class PathGraph:
         return best
 
 
-def path_dijkstra(g: PathGraph, start_idx: Optional[int], end_idx: Optional[int]) -> Optional[List[int]]:
-    """designer.js pathDijkstra (lazy heap; skip stale)."""
+def path_dijkstra(
+    g: PathGraph,
+    start_idx: Optional[int],
+    end_idx: Optional[int],
+    *,
+    penalized_arcs: Optional[set[Tuple[int, int]]] = None,
+    penalty_add: float = 0.0,
+) -> Optional[List[int]]:
+    """designer.js pathDijkstra (lazy heap; skip stale).
+
+    When ``penalized_arcs`` and ``penalty_add > 0``, add ``penalty_add`` to the weight of each
+    directed arc in ``penalized_arcs`` (matches airside_sim edge-penalty without mutating ``g``).
+    """
     n = len(g.nodes)
     if start_idx is None or end_idx is None or n == 0:
         return None
     if start_idx < 0 or end_idx < 0 or start_idx >= n or end_idx >= n:
         return None
+    use_pen = bool(penalized_arcs) and float(penalty_add) > 0.0
+    p_add = float(penalty_add)
     dist = [math.inf] * n
     prev: List[Optional[int]] = [None] * n
     dist[start_idx] = 0.0
     heap: List[Tuple[float, int]] = [(0.0, start_idx)]
-    while heap:
-        d, u = heapq.heappop(heap)
-        if d > dist[u]:
-            continue
-        if u == end_idx:
-            break
-        for v, w in g.adj[u]:
-            nd = d + w
-            if nd < dist[v]:
-                dist[v] = nd
-                prev[v] = u
-                heapq.heappush(heap, (nd, v))
+    if not use_pen:
+        while heap:
+            d, u = heapq.heappop(heap)
+            if d > dist[u]:
+                continue
+            if u == end_idx:
+                break
+            for v, w in g.adj[u]:
+                nd = d + w
+                if nd < dist[v]:
+                    dist[v] = nd
+                    prev[v] = u
+                    heapq.heappush(heap, (nd, v))
+    else:
+        while heap:
+            d, u = heapq.heappop(heap)
+            if d > dist[u]:
+                continue
+            if u == end_idx:
+                break
+            for v, w_stored in g.adj[u]:
+                rec = g.edge_map.get(f"{u}:{v}")
+                if rec is None:
+                    w = float(w_stored)
+                else:
+                    w = float(rec.cost)
+                    if (u, v) in penalized_arcs:
+                        w += p_add
+                nd = d + w
+                if nd < dist[v]:
+                    dist[v] = nd
+                    prev[v] = u
+                    heapq.heappush(heap, (nd, v))
     if dist[end_idx] == math.inf or dist[end_idx] >= g.reverse_cost:
         return None
     path: List[int] = []

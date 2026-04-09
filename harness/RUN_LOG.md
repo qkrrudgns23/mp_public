@@ -121,3 +121,23 @@
 - **note**:
   - `HEAVY_DECISION_INTERVAL_SEC`는 보조 요인일 수 있으나, 이번 패치는 간격 조정보다 안전 불변식(활주로 단일 점유) 강제를 우선 적용
 
+---
+
+### RUN 20260409T0415Z path-graph-cache-perf
+- **RUN_ID**: 20260409T0415Z
+- **command**:
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/default_layout_sim_input.json --output data/Result_storage/_bench_default.json`
+  - `python -m harness.run --input data/Result_storage/large_flight_sim_input.json --output data/Result_storage/_bench_large.json`
+  - golden equality: parsed JSON `==` against `default_layout_sim_result.json`, `large_flight_sim_result.json`
+- **result**: PASS
+- **builder change**:
+  - Per-`run_simulation` path graph build cache (`_PATH_GRAPH_BUILD_CACHE`, keyed by `id(layout)` + path-search params + runway ops direction).
+  - Reroute/temp penalties applied in Dijkstra via optional penalized directed arcs instead of mutating `PathGraph` costs.
+  - `path_dijkstra`: no-penalty fast path keeps original `adj` weight loop (avoids per-edge `edge_map` overhead).
+  - `build_resource_model` / pair-index bootstraps use `_cached_path_graph_for_direction`.
+- **evidence**:
+  - `PASS run+validate` on both inputs; `default match: True`, `large match: True`.
+  - Same-machine A/B vs stashed baseline (this runner): default ~10.3s → ~5.9–7.2s wall; large ~91.9s → ~80–84s wall (variance observed between runs).
+- **next**: If more speed is needed, profile the time-step loop and hot geometry helpers; keep golden JSON equality as the regression gate.
+
