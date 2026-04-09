@@ -789,6 +789,12 @@
         const smInfo = flightScheduleMinutesForRow(o);
         const sibt = formatFlightScheduleDateTime(o, smInfo.sibt_d);
         const sobt = formatFlightScheduleDateTime(o, smInfo.sobt_d);
+        const arrRunwayId = resolveArrivalRunwayIdForFlight(o);
+        const arrRunwayObj = state.taxiways.find(function(tw) {
+          return tw && tw.pathType === 'runway' && String(tw.id) === String(arrRunwayId || '');
+        });
+        const arrRwDir = normalizeRwDirectionValue(getTaxiwayDirection(arrRunwayObj));
+        const landingDirLabel = arrRwDir === 'clockwise' ? 'CW' : (arrRwDir === 'counter_clockwise' ? 'CCW' : '—');
         const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(o.aircraftType) : null;
         const acName = ac ? (ac.name || ac.id || '') : (o.aircraftType || '—');
         const codeIcao = (ac && ac.icao) ? ac.icao : (o.code || '—');
@@ -800,6 +806,7 @@
           '<br>SIBT: ' + sibt + ' &nbsp; SOBT: ' + sobt +
           '<br>Aircraft: ' + (acName || '—') +
           '<br>Code(ICAO): ' + (codeIcao || '—') + ' &nbsp; ICAO(J/H/M/L): ' + (icaoJhl || '—') + ' &nbsp; RECAT-EU: ' + (recatEu || '—') +
+          '<br>Landing direction: ' + landingDirLabel +
           '<br>Reg: ' + (o.reg || '—') +
           '<br>Airline Code: ' + (o.airlineCode || '—') + ' &nbsp; Flight Number: ' + (o.flightNumber || '—') +
           '<br>Dwell (Arr only): ' + (o.dwellMin || 0) + ' min';

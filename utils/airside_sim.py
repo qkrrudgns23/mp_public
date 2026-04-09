@@ -227,7 +227,23 @@ def _arr_ret_decel_floor_ms(phase: str, path_type: str, accel_ms2: float) -> flo
     return 0.0
 
 
-def _flight_rw_dir_for_leg(flight: Dict[str, Any], leg_index: int) -> str:
+def _runway_ops_dir_from_layout(layout: Dict[str, Any], runway_id: str) -> str:
+    rid = str(runway_id).strip()
+    if not rid:
+        raise ValueError("runway_id is required to resolve runway direction")
+    for rw in layout.get("runwayPaths") or []:
+        if not isinstance(rw, dict) or str(rw.get("id", "")).strip() != rid:
+            continue
+        nd = normalize_rw_direction_value(str(rw.get("direction") or ""))
+        if nd in ("clockwise", "counter_clockwise"):
+            return nd
+        raise ValueError(f"runway direction missing/invalid for runway_id={rid!r}")
+    raise ValueError(f"runway not found for runway_id={rid!r}")
+
+
+def _flight_rw_dir_for_leg(
+    flight: Dict[str, Any], leg_index: int, layout: Dict[str, Any]
+) -> str:
     """
     Operations direction matching Layout_Design path graph export:
     ``simPathGraph.clockwise`` vs ``simPathGraph.counter_clockwise``.
@@ -235,8 +251,20 @@ def _flight_rw_dir_for_leg(flight: Dict[str, Any], leg_index: int) -> str:
     Legs 0–1 use arrival runway direction; legs 2+ use departure when present, else arrival.
     Reads ``arrRunwayDirUsed`` / ``arrRunwayDir``, ``depRunwayDirUsed`` / ``depRunwayDir``, and token.
     """
-    _ = (flight, leg_index)
-    return _DEFAULT_RW_DIR
+    token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
+    if leg_index >= 2:
+        dep_rwy = flight.get("depRunwayId") or token.get("depRunwayId")
+        if dep_rwy is None or str(dep_rwy).strip() == "":
+            raise ValueError(
+                f"depRunwayId missing for flight_id={str(flight.get('id', ''))!r}"
+            )
+        return _runway_ops_dir_from_layout(layout, str(dep_rwy))
+    arr_rwy = flight.get("arrRunwayId") or token.get("arrRunwayId")
+    if arr_rwy is None or str(arr_rwy).strip() == "":
+        raise ValueError(
+            f"arrRunwayId missing for flight_id={str(flight.get('id', ''))!r}"
+        )
+    return _runway_ops_dir_from_layout(layout, str(arr_rwy))
 
 
 def _deep_get(obj: Any, *keys: str, default: Any = None) -> Any:
@@ -423,8 +451,9 @@ def _cached_path_graph_for_direction(
     *,
     pure_ground_exclude_runway: bool,
 ) -> Optional[PathGraph]:
-    _ = runway_ops_dir
-    nd = _DEFAULT_RW_DIR
+    nd = normalize_rw_direction_value(str(runway_ops_dir).strip() if runway_ops_dir else "")
+    if nd not in ("clockwise", "counter_clockwise"):
+        nd = _DEFAULT_RW_DIR
     key = (
         id(layout),
         nd,
@@ -993,6 +1022,40 @@ def _arr_ret_runway_junction_xy(
     return None
 
 
+def _arr_ret_first_edge_far_xy(
+    layout: Dict[str, Any],
+    cell_size: float,
+    ret_tw_id: Optional[str],
+    runway_junction_xy: Optional[Tuple[float, float]],
+) -> Optional[Tuple[float, float]]:
+    if not ret_tw_id or not str(ret_tw_id).strip() or runway_junction_xy is None:
+        return None
+    ret_obj: Optional[Dict[str, Any]] = None
+    for tw in layout.get("runwayTaxiways") or []:
+        if isinstance(tw, dict) and str(tw.get("id", "")) == str(ret_tw_id):
+            ret_obj = tw
+            break
+    if ret_obj is None:
+        for tw in layout.get("taxiways") or []:
+            if (
+                isinstance(tw, dict)
+                and str(tw.get("id", "")) == str(ret_tw_id)
+                and tw.get("pathType") == "runway_exit"
+            ):
+                ret_obj = tw
+                break
+    if not ret_obj:
+        return None
+    ex_pts = _as_xy_pairs(get_ordered_points(ret_obj, layout, cell_size) or [])
+    if len(ex_pts) < 2:
+        return None
+    jx, jy = float(runway_junction_xy[0]), float(runway_junction_xy[1])
+    d0 = (ex_pts[0][0] - jx) ** 2 + (ex_pts[0][1] - jy) ** 2
+    d1 = (ex_pts[-1][0] - jx) ** 2 + (ex_pts[-1][1] - jy) ** 2
+    far = ex_pts[1] if d0 <= d1 else ex_pts[-2]
+    return (float(far[0]), float(far[1]))
+
+
 def _polyline_total_length_px(pts: List[Tuple[float, float]]) -> float:
     if not pts or len(pts) < 2:
         return 0.0
@@ -1524,13 +1587,16 @@ def extract_point_to_paths(
     ret_on_rw = (
         _arr_ret_runway_junction_xy(layout, cell_size, str(arr_rwy), arr_ret_tw) if arr_rwy else None
     )
+    ret_first_edge_far = (
+        _arr_ret_first_edge_far_xy(layout, cell_size, arr_ret_tw, ret_on_rw) if arr_rwy else None
+    )
     apron_point = _apron_token_xy(layout, cell_size, str(stand_id))
     dep_rw_lineup_point = (
         _dep_lineup_token_xy(
             layout,
             cell_size,
             str(dep_rwy),
-            _flight_rw_dir_for_leg(flight, 2),
+            _flight_rw_dir_for_leg(flight, 2, layout),
         )
         if dep_rwy
         else None
@@ -1542,6 +1608,7 @@ def extract_point_to_paths(
         thr_point is None
         or td_point is None
         or ret_on_rw is None
+        or ret_first_edge_far is None
         or apron_point is None
         or dep_rw_lineup_point is None
     ):
@@ -1554,7 +1621,7 @@ def extract_point_to_paths(
         g0 = _cached_path_graph_for_direction(
             layout,
             cell_size,
-            _flight_rw_dir_for_leg(flight, 2),
+            _flight_rw_dir_for_leg(flight, 2, layout),
             reverse_cost,
             merge_r,
             taxiway_h,
@@ -1575,7 +1642,7 @@ def extract_point_to_paths(
         merge_r,
         taxiway_h,
         info,
-        _flight_rw_dir_for_leg(flight, 2),
+        _flight_rw_dir_for_leg(flight, 2, layout),
         RouteEndpoint(token_pixel_xy=(float(px), float(py))),
         RouteEndpoint(token_pixel_xy=(float(lx), float(ly))),
     )
@@ -1598,13 +1665,13 @@ def extract_point_to_paths(
     hx, hy = float(hp_proj[0]), float(hp_proj[1])
 
     rw_end = _dep_runway_far_end_xy(
-        layout, cell_size, str(dep_rwy), _flight_rw_dir_for_leg(flight, 2)
+        layout, cell_size, str(dep_rwy), _flight_rw_dir_for_leg(flight, 2, layout)
     )
     if rw_end is None:
         return []
 
     wx, wy = thr_point
-    ret_x, ret_y = ret_on_rw
+    ret_x, ret_y = ret_first_edge_far
     ex, ey = rw_end
     return [
         [float(wx), float(wy), float(ret_x), float(ret_y)],
@@ -2135,7 +2202,7 @@ def prepare_flight_path(
         g0 = _cached_path_graph_for_direction(
             layout,
             cell_size,
-            _flight_rw_dir_for_leg(flight, 0),
+            _flight_rw_dir_for_leg(flight, 0, layout),
             reverse_cost,
             merge_r,
             taxiway_h,
@@ -2155,7 +2222,7 @@ def prepare_flight_path(
             _EXTRACT_LEG_PHASES[leg_i] if leg_i < len(_EXTRACT_LEG_PHASES) else PHASE_DEP_TAXI
         )
         sx, sy, ex, ey = float(leg[0]), float(leg[1]), float(leg[2]), float(leg[3])
-        rw_leg = _flight_rw_dir_for_leg(flight, leg_i)
+        rw_leg = _flight_rw_dir_for_leg(flight, leg_i, layout)
         edges, dv, path, g = _flight_route_impl(
             layout,
             cell_size,
@@ -3688,7 +3755,7 @@ def _build_prep_xy_to_xy_phase(
         g0 = _cached_path_graph_for_direction(
             layout,
             float(cell_size),
-            _flight_rw_dir_for_leg(fobj, _leg_index_for_phase(phase_str)),
+            _flight_rw_dir_for_leg(fobj, _leg_index_for_phase(phase_str), layout),
             reverse_cost,
             merge_r,
             taxiway_h,
@@ -3699,7 +3766,7 @@ def _build_prep_xy_to_xy_phase(
     if not pair_index:
         return None
     leg_i = _leg_index_for_phase(phase_str)
-    rw_dir = _flight_rw_dir_for_leg(fobj, leg_i)
+    rw_dir = _flight_rw_dir_for_leg(fobj, leg_i, layout)
     temp_pen: Optional[set[str]] = None
     if control_state is not None:
         tb = _yield_temp_occupied_incident_edges_for_pathfinding(
@@ -5619,7 +5686,7 @@ def build_reroute_path_from_xy(
         g0 = _cached_path_graph_for_direction(
             layout,
             cell_size,
-            _flight_rw_dir_for_leg(flight, _leg_index_for_phase(phase)),
+            _flight_rw_dir_for_leg(flight, _leg_index_for_phase(phase), layout),
             reverse_cost,
             merge_r,
             taxiway_h,
@@ -5630,7 +5697,7 @@ def build_reroute_path_from_xy(
     if not pair_index:
         return None
     leg_i = _leg_index_for_phase(phase)
-    rw_dir = _flight_rw_dir_for_leg(flight, leg_i)
+    rw_dir = _flight_rw_dir_for_leg(flight, leg_i, layout)
     penalized: set[str] = set(_yield_penalized_layout_edges_for_reroute(control_state, agent.id))
     penalized |= _yield_temp_occupied_incident_edges_for_pathfinding(
         control_state, str(agent.id)
@@ -6645,7 +6712,9 @@ def run_simulation(
                 dep_taxi_start_sim_time=None,
                 dep_taxi_start_abs_sec=None,
                 arr_runway_id=_arr_rid if _arr_rid else None,
-                arr_runway_dir=_flight_rw_dir_for_leg(fobj if isinstance(fobj, dict) else {}, 0)
+                arr_runway_dir=_flight_rw_dir_for_leg(
+                    fobj if isinstance(fobj, dict) else {}, 0, layout
+                )
                 if _arr_rid
                 else None,
                 dep_runway_id=_dep_rid if _dep_rid else None,
