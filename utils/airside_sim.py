@@ -771,7 +771,8 @@ def flight_route(
 
     Returns ``(edge_ids, path_length, node_path)``. ``node_path`` is ``None`` if unreachable.
 
-    Per leg from ``extract_point_to_paths`` (e.g. leg 0 = threshold → RET on runway). Touchdown spawn is applied later in ``run_simulation`` (``_split_flight_path_at_touchdown``).
+    Per leg from ``extract_point_to_paths`` (e.g. leg 0 = touchdown → first RET exit junction ``A``).
+    Touchdown spawn is applied later in ``run_simulation`` (``_split_flight_path_at_touchdown``).
     Departure (apron → runway): ``start_point`` = apron, ``end_point`` = runway lineup pixel.
     """
     start_idx = resolve_route_endpoint_index(g, layout, cell_size, start_point)
@@ -1054,6 +1055,92 @@ def _arr_ret_first_edge_far_xy(
     d1 = (ex_pts[-1][0] - jx) ** 2 + (ex_pts[-1][1] - jy) ** 2
     far = ex_pts[1] if d0 <= d1 else ex_pts[-2]
     return (float(far[0]), float(far[1]))
+
+
+def _layout_network_junctions_xy(layout: Dict[str, Any]) -> List[Tuple[float, float]]:
+    raw = layout.get("networkJunctions")
+    if not isinstance(raw, list):
+        return []
+    out: List[Tuple[float, float]] = []
+    for j in raw:
+        if not isinstance(j, dict):
+            continue
+        try:
+            x = float(j.get("x"))
+            y = float(j.get("y"))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(x) and math.isfinite(y):
+            out.append((x, y))
+    return out
+
+
+def _arr_ret_exit_first_junction_a_xy(
+    layout: Dict[str, Any],
+    cell_size: float,
+    ret_tw_id: Optional[str],
+    runway_junction_xy: Optional[Tuple[float, float]],
+) -> Optional[Tuple[float, float]]:
+    """
+    Point ``A`` for Landing / Arr_taxi: first ``networkJunction`` on the ExitTaxiway (RET) polyline
+    when walking from the runway–RET junction along the exit (away from the runway-adjacent RET
+    end). The runway–RET touch itself is excluded. If no junction qualifies, uses
+    ``_arr_ret_first_edge_far_xy`` (runway-far RET vertex).
+    """
+    if not ret_tw_id or not str(ret_tw_id).strip() or runway_junction_xy is None:
+        return None
+    ret_obj: Optional[Dict[str, Any]] = None
+    for tw in layout.get("runwayTaxiways") or []:
+        if isinstance(tw, dict) and str(tw.get("id", "")) == str(ret_tw_id):
+            ret_obj = tw
+            break
+    if ret_obj is None:
+        for tw in layout.get("taxiways") or []:
+            if (
+                isinstance(tw, dict)
+                and str(tw.get("id", "")) == str(ret_tw_id)
+                and tw.get("pathType") == "runway_exit"
+            ):
+                ret_obj = tw
+                break
+    if not ret_obj:
+        return None
+    ex_pts = _as_xy_pairs(get_ordered_points(ret_obj, layout, cell_size) or [])
+    if len(ex_pts) < 2:
+        return None
+    jx, jy = float(runway_junction_xy[0]), float(runway_junction_xy[1])
+    d0 = (ex_pts[0][0] - jx) ** 2 + (ex_pts[0][1] - jy) ** 2
+    d1 = (ex_pts[-1][0] - jx) ** 2 + (ex_pts[-1][1] - jy) ** 2
+    i_near = 0 if d0 <= d1 else len(ex_pts) - 1
+    i_far = len(ex_pts) - 1 if i_near == 0 else 0
+    _pjx, _pjy, s_jw = _closest_on_polyline_with_cum_dist(ex_pts, (jx, jy))
+    s_total = _polyline_total_length_px(ex_pts)
+    on_tol = max(25.0, math.sqrt(float(SPLIT_TOL_D2)))
+    exclude_rw_d2 = max(49.0, (float(cell_size) * 0.35) ** 2)
+    margin = max(3.0, float(cell_size) * 0.15)
+    increasing = i_far > i_near
+    best: Optional[Tuple[float, float]] = None
+    best_delta = float("inf")
+    for qx, qy in _layout_network_junctions_xy(layout):
+        if (qx - jx) ** 2 + (qy - jy) ** 2 <= exclude_rw_d2:
+            continue
+        _px, _py, s_q = _closest_on_polyline_with_cum_dist(ex_pts, (qx, qy))
+        if math.hypot(qx - _px, qy - _py) > on_tol:
+            continue
+        if increasing:
+            if s_q < s_jw + margin or s_q > s_total + 1e-6:
+                continue
+            delta = s_q - s_jw
+        else:
+            if s_q > s_jw - margin or s_q < -1e-6:
+                continue
+            delta = s_jw - s_q
+        if delta < best_delta:
+            best_delta = delta
+            best = (qx, qy)
+    if best is not None:
+        return best
+    return _arr_ret_first_edge_far_xy(layout, cell_size, ret_tw_id, runway_junction_xy)
 
 
 def _polyline_total_length_px(pts: List[Tuple[float, float]]) -> float:
@@ -1563,7 +1650,11 @@ def extract_point_to_paths(
     information: Optional[Dict[str, Any]] = None,
 ) -> List[List[float]]:
     """
-    Token pixels as path legs: threshold → RET → apron → runway holding (RTX·lineup) → lineup → rwy end.
+    Token pixels as path legs: touchdown → RET exit junction ``A`` → apron → runway holding
+    (RTX·lineup) → lineup → rwy end.
+
+    ``A`` is the first ``networkJunction`` on ``ExitTaxiwayId`` along the runway-leave direction
+    (excluding the runway–RET touch); if none, the runway-far RET vertex.
 
     Leg phases: ``Landing``, ``Arr_taxi``, ``Dep_taxi``, ``Holding_lineup``, ``Lineup_departure``.
     Requires a ``runway_holding`` on the apron→lineup route near lineup-connected RET; else ``[]``.
@@ -1578,17 +1669,16 @@ def extract_point_to_paths(
     if stand_id is None or str(stand_id).strip() == "":
         return []
 
-    thr_point = (
-        _arr_runway_threshold_point_xy(layout, cell_size, str(arr_rwy)) if arr_rwy else None
-    )
     td_point = (
         _arr_touchdown_point_xy(flight, layout, cell_size, str(arr_rwy)) if arr_rwy else None
     )
     ret_on_rw = (
         _arr_ret_runway_junction_xy(layout, cell_size, str(arr_rwy), arr_ret_tw) if arr_rwy else None
     )
-    ret_first_edge_far = (
-        _arr_ret_first_edge_far_xy(layout, cell_size, arr_ret_tw, ret_on_rw) if arr_rwy else None
+    point_a = (
+        _arr_ret_exit_first_junction_a_xy(layout, cell_size, arr_ret_tw, ret_on_rw)
+        if arr_rwy
+        else None
     )
     apron_point = _apron_token_xy(layout, cell_size, str(stand_id))
     dep_rw_lineup_point = (
@@ -1605,10 +1695,9 @@ def extract_point_to_paths(
     if not arr_rwy or not dep_rwy:
         return []
     if (
-        thr_point is None
-        or td_point is None
+        td_point is None
         or ret_on_rw is None
-        or ret_first_edge_far is None
+        or point_a is None
         or apron_point is None
         or dep_rw_lineup_point is None
     ):
@@ -1670,12 +1759,12 @@ def extract_point_to_paths(
     if rw_end is None:
         return []
 
-    wx, wy = thr_point
-    ret_x, ret_y = ret_first_edge_far
+    wx, wy = td_point
+    ax, ay = point_a
     ex, ey = rw_end
     return [
-        [float(wx), float(wy), float(ret_x), float(ret_y)],
-        [float(ret_x), float(ret_y), float(px), float(py)],
+        [float(wx), float(wy), float(ax), float(ay)],
+        [float(ax), float(ay), float(px), float(py)],
         [float(px), float(py), float(hx), float(hy)],
         [float(hx), float(hy), float(lx), float(ly)],
         [float(lx), float(ly), float(ex), float(ey)],
@@ -2189,7 +2278,7 @@ def prepare_flight_path(
     information: Dict[str, Any],
 ) -> PreparedFlightPath:
     """
-    ``extract_point_to_paths`` 레그마다 airside_sim_rev3와 동일하게: layout ``Edge`` 기반
+    ``extract_point_to_paths`` 레그마다 layout ``Edge`` 기반
     ``pair_index``(없으면 그래프에서 ``layout-edge-*``), 레그마다 그래프 재구성 후
     ``token_pixel_xy`` 끝점만으로 ``flight_route``, 역주행 패널티 구간이면 전체 ``edge_list`` 비움.
     재생용 세그먼트는 각 레그의 노드 경로를 ``_expand_geometry_from_graph_path``로 확장한다.
