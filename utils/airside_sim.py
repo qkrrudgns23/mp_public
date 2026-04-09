@@ -723,6 +723,10 @@ class SimulationControlState:
     stand_arrival_book_snapshot: Dict[str, int] = field(default_factory=dict)
     last_light_reservation_rebook_sim_time: float = -1e30
     temp_stand_incident_edges: Dict[str, set[str]] = field(default_factory=dict)
+    # Per simulation tick: _compute_arr_touchdown_motion_abs_sec per flight (invalidated after movement).
+    touchdown_motion_by_id: Optional[Dict[str, Optional[float]]] = field(
+        default=None, repr=False
+    )
 
 
 CLEARANCE_DEADLOCK_GHOST = "DEADLOCK_GHOST"
@@ -2682,7 +2686,7 @@ def _reroute_penalized_edges_from_wait(
     return {e for e in out if e}
 
 
-def _arr_touchdown_motion_abs_sec(
+def _compute_arr_touchdown_motion_abs_sec(
     agent: Flight,
     agents: List[Flight],
     runway_release_lag_sec: float,
@@ -2753,6 +2757,30 @@ def _arr_touchdown_motion_abs_sec(
                 base = float(dep_end)
                 changed = True
     return base
+
+
+def _refresh_touchdown_motion_cache(
+    control_state: SimulationControlState,
+    agents: List[Flight],
+    runway_release_lag_sec: float,
+) -> None:
+    lag = float(runway_release_lag_sec)
+    control_state.touchdown_motion_by_id = {
+        str(ag.id): _compute_arr_touchdown_motion_abs_sec(ag, agents, lag)
+        for ag in agents
+    }
+
+
+def _arr_touchdown_motion_abs_sec(
+    agent: Flight,
+    agents: List[Flight],
+    runway_release_lag_sec: float,
+    *,
+    control_state: Optional[SimulationControlState] = None,
+) -> Optional[float]:
+    if control_state is not None and control_state.touchdown_motion_by_id is not None:
+        return control_state.touchdown_motion_by_id.get(str(agent.id))
+    return _compute_arr_touchdown_motion_abs_sec(agent, agents, runway_release_lag_sec)
 
 
 def _path_length_px(segments: List[Tuple[Point, Point]]) -> float:
@@ -4444,7 +4472,9 @@ def refresh_resource_occupancy(
     t_abs = float(sim_time_abs)
     rw_lag = float(runway_release_lag_sec)
     for ag in agents:
-        td = _arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
+        td = _arr_touchdown_motion_abs_sec(
+            ag, agents, rw_lag, control_state=control_state
+        )
         if td is not None and t_abs + 1e-9 < float(td):
             continue
         st_ag = control_state.agent_states.get(ag.id)
@@ -4880,6 +4910,8 @@ def _runway_rot_reservation_blocked(
     agent_id: str,
     agents: List[Flight],
     runway_release_lag_sec: float = 0.0,
+    *,
+    control_state: Optional[SimulationControlState] = None,
 ) -> bool:
     """동일 도착 활주로: 다른 기체가 아직 이탈 전이면 점유로 본다.
 
@@ -4899,7 +4931,12 @@ def _runway_rot_reservation_blocked(
             continue
         if o.eldt_anchor_sec is None:
             continue
-        td_o = _arr_touchdown_motion_abs_sec(o, agents, float(runway_release_lag_sec))
+        td_o = _arr_touchdown_motion_abs_sec(
+            o,
+            agents,
+            float(runway_release_lag_sec),
+            control_state=control_state,
+        )
         if td_o is not None and tt + 1e-9 < float(td_o):
             continue
         t0 = float(td_o) if td_o is not None else float(o.eldt_anchor_sec)
@@ -4973,7 +5010,9 @@ def _current_edge_separation_ok(
     for o in _agents_on_edge(er.edge_id, agents):
         if o.id == agent.id or not o.segment_endpoints:
             continue
-        o_td = _arr_touchdown_motion_abs_sec(o, agents, rw_lag)
+        o_td = _arr_touchdown_motion_abs_sec(
+            o, agents, rw_lag, control_state=control_state
+        )
         if o_td is not None and t_eff + 1e-9 < float(o_td):
             continue
         st_o = control_state.agent_states.get(o.id)
@@ -5063,7 +5102,12 @@ def can_reserve_path(
             rr_dep = control_state.runway_resources.get(dep_rwy)
             if rr_dep is not None and not rr_dep.forced_open:
                 if _runway_rot_reservation_blocked(
-                    t_abs, dep_rwy, aid, agents, float(runway_release_lag_sec)
+                    t_abs,
+                    dep_rwy,
+                    aid,
+                    agents,
+                    float(runway_release_lag_sec),
+                    control_state=control_state,
                 ):
                     return False, f"runway_rot_busy:{dep_rwy}"
                 ou_d = _resource_use_count(rr_dep.occupied_by, rr_dep.reserved_by, aid)
@@ -5079,7 +5123,12 @@ def can_reserve_path(
                 if rr.forced_open:
                     continue
                 if _runway_rot_reservation_blocked(
-                    t_abs, rwid, aid, agents, float(runway_release_lag_sec)
+                    t_abs,
+                    rwid,
+                    aid,
+                    agents,
+                    float(runway_release_lag_sec),
+                    control_state=control_state,
                 ):
                     return False, f"runway_rot_busy:{rwid}"
                 ou_rw = _resource_use_count(rr.occupied_by, rr.reserved_by, aid)
@@ -5166,7 +5215,12 @@ def _update_deadlock_stagnation_probe(
             continue
         if _agent_deadlock_ghost_at_time(st, t):
             continue
-        td_ag = _arr_touchdown_motion_abs_sec(ag, agents, float(runway_release_lag_sec))
+        td_ag = _arr_touchdown_motion_abs_sec(
+            ag,
+            agents,
+            float(runway_release_lag_sec),
+            control_state=control_state,
+        )
         if td_ag is not None and t + 1e-9 < float(td_ag):
             st.stagnation_anchor_sec = None
             st.progress_snapshot_edge_id = None
@@ -6233,7 +6287,9 @@ def _single_full_reservation_pass(
         st.priority_rank = get_agent_priority_rank(ag)
         if _agent_deadlock_ghost_at_time(st, t_dec):
             continue
-        motion_td = _arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
+        motion_td = _arr_touchdown_motion_abs_sec(
+            ag, agents, rw_lag, control_state=control_state
+        )
         if motion_td is not None and t_dec + 1e-9 < float(motion_td):
             st.clearance = "WAIT"
             st.wait_reason = "pre_eldt"
@@ -6413,7 +6469,9 @@ def apply_movement_controls(
         st = control_state.agent_states.get(ag.id)
         if st is None:
             continue
-        td0 = _arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
+        td0 = _arr_touchdown_motion_abs_sec(
+            ag, agents, rw_lag, control_state=control_state
+        )
         if td0 is not None and t_end + 1e-12 < float(td0):
             ag.control_halt = True
         elif _agent_deadlock_ghost_at_time(st, t_end):
@@ -6438,7 +6496,8 @@ def apply_movement_controls(
                     st.wait_reason = f"runway_occupied:{er0.runway_id}"
     _apply_same_direction_following_caps(control_state, agents, ppm, t_end)
     for ag in agents:
-        td = _arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
+        # Do not use touchdown cache: prior agents may have moved / exited runway this tick.
+        td = _compute_arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
         if td is not None and t_end + 1e-12 < float(td):
             continue
         eldt_eff = float(td) if td is not None else t_end
@@ -6697,6 +6756,7 @@ def run_simulation(
         elif current_time_abs - float(ref_t0) + dt_sec > SIM_MAX_TIME_SEC + 1e-6:
             break
         current_time_abs += dt_sec
+        _refresh_touchdown_motion_cache(control_state, agents, rw_release_lag)
         refresh_resource_occupancy(
             control_state,
             agents,
@@ -6812,8 +6872,11 @@ def run_simulation(
                 rw_release_lag,
             ),
         )
+        _refresh_touchdown_motion_cache(control_state, agents, rw_release_lag)
         for ag in agents:
-            td_h = _arr_touchdown_motion_abs_sec(ag, agents, rw_release_lag)
+            td_h = _arr_touchdown_motion_abs_sec(
+                ag, agents, rw_release_lag, control_state=control_state
+            )
             if td_h is not None and current_time_abs <= float(td_h) + 1e-9:
                 continue
             _try_stamp_actual_apron_inblocks_from_stand_position(
@@ -6953,7 +7016,11 @@ def run_simulation(
             eldt_schedule_sec=eldt_adjust_map.get(fid),
             runway_entry_abs_sec=(ag.runway_entry_abs_sec if ag else None),
             touchdown_motion_abs_sec=(
-                _arr_touchdown_motion_abs_sec(ag, agents, rw_release_lag) if ag else None
+                _arr_touchdown_motion_abs_sec(
+                    ag, agents, rw_release_lag, control_state=control_state
+                )
+                if ag
+                else None
             ),
             arr_runway_id=(ag.arr_runway_id if ag else None),
             dep_runway_id=(ag.dep_runway_id if ag else None),
@@ -7049,7 +7116,11 @@ def run_simulation(
                 exit_runway_abs_sec=(ag.exit_runway_abs_sec if ag else None),
                 runway_entry_abs_sec=(ag.runway_entry_abs_sec if ag else None),
                 touchdown_motion_abs_sec=(
-                    _arr_touchdown_motion_abs_sec(ag, agents, rw_release_lag) if ag else None
+                    _arr_touchdown_motion_abs_sec(
+                        ag, agents, rw_release_lag, control_state=control_state
+                    )
+                    if ag
+                    else None
                 ),
                 arr_runway_id=(ag.arr_runway_id if ag else None),
                 dep_runway_id=(ag.dep_runway_id if ag else None),

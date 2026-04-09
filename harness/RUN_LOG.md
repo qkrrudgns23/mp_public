@@ -141,3 +141,20 @@
   - Same-machine A/B vs stashed baseline (this runner): default ~10.3s → ~5.9–7.2s wall; large ~91.9s → ~80–84s wall (variance observed between runs).
 - **next**: If more speed is needed, profile the time-step loop and hot geometry helpers; keep golden JSON equality as the regression gate.
 
+---
+
+### RUN 20260409T0455Z touchdown-motion-cache
+- **RUN_ID**: 20260409T0455Z
+- **evidence (cProfile, large input, pre-change)**:
+  - `_arr_touchdown_motion_abs_sec` ~138s tottime, ~2.97M calls (dominant bottleneck).
+  - `update_decisions_every_10s` ~7.3s cumtime — heavy-decision path not the main cost vs touchdown.
+- **builder change**:
+  - `_compute_arr_touchdown_motion_abs_sec` = former body; per-tick `touchdown_motion_by_id` on `SimulationControlState`.
+  - `_refresh_touchdown_motion_cache` after `current_time_abs += dt_sec` and after `apply_movement_controls`.
+  - Callers before movement use cache via `_arr_touchdown_motion_abs_sec(..., control_state=...)`.
+  - **Second loop of `apply_movement_controls`**: always `_compute_...` (sequential moves / reroute can change runway exit state mid-tick).
+- **command**: `harness.smoke` + `harness.run` both golden inputs + JSON `==` vs `*_sim_result.json`.
+- **result**: PASS (`default True`, `large True`).
+- **wall (this runner, no cProfile)**: large ~70.7s vs ~80s prior run on same trajectory of work.
+- **next**: Optional: trim `str.strip` hot paths (~16s in profile); numpy only where float/tie semantics provably match golden.
+
