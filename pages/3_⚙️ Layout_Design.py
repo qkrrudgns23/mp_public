@@ -638,7 +638,6 @@ def _build_layout_mode_tabs_html() -> tuple[str, str]:
             _layout_mode_button_html("remote", "Remote Stand", "layout_mode_remote.svg"),
             _layout_mode_button_html("tempStand", "Temp Stand", "layout_mode_temp_stand.svg"),
             _layout_mode_button_html("apronTaxiway", "Apron Taxiway", "layout_mode_apron_taxiway.svg"),
-            _layout_mode_button_html("groundAccess", "Ground Access", "layout_mode_ground_access.svg"),
         ]
     )
     return primary_html, secondary_html

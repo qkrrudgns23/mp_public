@@ -726,50 +726,83 @@
           unique.map(() => '<td></td>').join('') +
         '</tr>'
       );
-      retStats.forEach((r, idx) => {
-        const rwLabel = r.runway && (r.runway.name || ('Runway ' + (idx + 1)));
-        const counts = unique.map(info => {
-          const typeKey = info.key;
-          return (state.flights || []).filter(f =>
-            f.sampledArrRet === (r.exit && r.exit.id) &&
-            arrivalConfigColumnKeyForFlight(f) === typeKey
-          ).length;
-        });
-        const sortedIdx = counts
-          .map((c, i) => [c, i])
-          .filter(([c]) => c > 0)
-          .sort((a, b) => b[0] - a[0]);
-        const top1 = sortedIdx[0] ? sortedIdx[0][1] : -1;
-        const top2 = sortedIdx[1] ? sortedIdx[1][1] : -1;
-        const top3 = sortedIdx[2] ? sortedIdx[2][1] : -1;
-        rows.push(
-          '<tr>' +
-            '<td class="sticky-col">' +
-              '<span style="display:inline-flex;align-items:center;gap:4px;">' +
-                (rwLabel ? ('<span style="font-size:9px;color:#9ca3af;">' + escapeHtml(rwLabel) + '</span>') : '') +
-                '<span style="padding:2px 6px;border-radius:9999px;background:rgba(124,106,247,0.16);border:1px solid rgba(124,106,247,0.35);font-size:10px;color:#ede9fe;font-weight:600;">' +
-                  escapeHtml(r.name) +
-                '</span>' +
-              '</span>' +
-            '</td>' +
-            '<td>m</td>' +
-            '<td>' + Math.round(r.distM) + '</td>' +
-            unique.map((info, colIdx) => {
-              const cnt = counts[colIdx] || 0;
-              if (!cnt) return '<td></td>';
-              let bg = 'rgba(39,29,61,0.72)';
-              let color = '#ede9fe';
-              if (colIdx === top1) {
-                bg = 'rgba(124,106,247,0.36)';
-                color = '#f5f3ff';
-              } else if (colIdx === top2 || colIdx === top3) {
-                bg = 'rgba(124,106,247,0.22)';
-                color = '#ede9fe';
-              }
-              return '<td style="background:' + bg + ';color:' + color + ';font-weight:600;text-align:center;">' + cnt + '</td>';
-            }).join('') +
-          '</tr>'
-        );
+      const byRunway = new Map();
+      retStats.forEach(r => {
+        const rwId = r && r.runway && r.runway.id ? String(r.runway.id) : '';
+        const key = rwId || '__unknown__';
+        if (!byRunway.has(key)) byRunway.set(key, []);
+        byRunway.get(key).push(r);
+      });
+      function runwayGroupSortKey(rwKey) {
+        if (!rwKey || rwKey === '__unknown__') return 'zzzz__unknown__';
+        const disp = (typeof getRunwayDisplayLabelById === 'function') ? getRunwayDisplayLabelById(rwKey) : rwKey;
+        return String(disp || rwKey);
+      }
+      const runwayKeysSorted = Array.from(byRunway.keys()).sort((a, b) => runwayGroupSortKey(a).localeCompare(runwayGroupSortKey(b)));
+      runwayKeysSorted.forEach((rwKey, rwIdx) => {
+        const list = byRunway.get(rwKey) || [];
+        const rwLabel = (rwKey && rwKey !== '__unknown__')
+          ? escapeHtml(getRunwayDisplayLabelById(rwKey) || rwKey)
+          : '—';
+        list
+          .slice()
+          .sort((a, b) => (a && isFinite(a.distM) ? a.distM : 0) - (b && isFinite(b.distM) ? b.distM : 0))
+          .forEach((r, idxInRw) => {
+            void idxInRw;
+            const counts = unique.map(info => {
+              const typeKey = info.key;
+              return (state.flights || []).filter(f =>
+                f.sampledArrRet === (r.exit && r.exit.id) &&
+                arrivalConfigColumnKeyForFlight(f) === typeKey
+              ).length;
+            });
+            const sortedIdx = counts
+              .map((c, i) => [c, i])
+              .filter(([c]) => c > 0)
+              .sort((a, b) => b[0] - a[0]);
+            const top1 = sortedIdx[0] ? sortedIdx[0][1] : -1;
+            const top2 = sortedIdx[1] ? sortedIdx[1][1] : -1;
+            const top3 = sortedIdx[2] ? sortedIdx[2][1] : -1;
+            rows.push(
+              '<tr>' +
+                '<td class="sticky-col">' +
+                  '<span style="display:inline-flex;align-items:center;gap:4px;">' +
+                    '<span style="font-size:9px;color:#9ca3af;font-weight:700;">' + rwLabel + '</span>' +
+                    '<span style="padding:2px 6px;border-radius:9999px;background:rgba(124,106,247,0.16);border:1px solid rgba(124,106,247,0.35);font-size:10px;color:#ede9fe;font-weight:600;">' +
+                      escapeHtml(r.name) +
+                    '</span>' +
+                  '</span>' +
+                '</td>' +
+                '<td>m</td>' +
+                '<td>' + Math.round(r.distM) + '</td>' +
+                unique.map((info, colIdx) => {
+                  const cnt = counts[colIdx] || 0;
+                  if (!cnt) return '<td></td>';
+                  let bg = 'rgba(39,29,61,0.72)';
+                  let color = '#ede9fe';
+                  if (colIdx === top1) {
+                    bg = 'rgba(124,106,247,0.36)';
+                    color = '#f5f3ff';
+                  } else if (colIdx === top2 || colIdx === top3) {
+                    bg = 'rgba(124,106,247,0.22)';
+                    color = '#ede9fe';
+                  }
+                  return '<td style="background:' + bg + ';color:' + color + ';font-weight:600;text-align:center;">' + cnt + '</td>';
+                }).join('') +
+              '</tr>'
+            );
+          });
+        const isLastGroup = rwIdx === runwayKeysSorted.length - 1;
+        if (!isLastGroup) {
+          rows.push(
+            '<tr>' +
+              '<td class="sticky-col" style="padding:6px 0;border-bottom:1px solid rgba(107,114,128,0.35);"></td>' +
+              '<td style="padding:6px 0;border-bottom:1px solid rgba(107,114,128,0.35);"></td>' +
+              '<td style="padding:6px 0;border-bottom:1px solid rgba(107,114,128,0.35);"></td>' +
+              unique.map(() => '<td style="padding:6px 0;border-bottom:1px solid rgba(107,114,128,0.35);"></td>').join('') +
+            '</tr>'
+          );
+        }
       });
       const failedCounts = unique.map(info => {
         const typeKey = info.key;

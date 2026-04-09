@@ -210,12 +210,6 @@ def get_runway_path_px(layout: dict, cell_size: float, runway_id: Optional[str])
     pts = [_vertex_to_px(v, cell_size) for v in rw["vertices"] if isinstance(v, dict)]
     if len(pts) < 2:
         return None
-    sp = rw.get("start_point")
-    ep = rw.get("end_point")
-    if sp and ep and isinstance(sp, dict) and isinstance(ep, dict):
-        start_px = _vertex_to_px(sp, cell_size)
-        if _dist2(pts[-1], start_px) < _dist2(pts[0], start_px):
-            pts = list(reversed(pts))
     return {"startPx": pts[0], "endPx": pts[-1], "pts": pts, "obj": rw}
 
 
@@ -224,11 +218,6 @@ def get_taxiway_ordered_points(obj: dict, cell_size: float) -> Optional[List[Poi
     if not isinstance(verts, list) or len(verts) < 2:
         return None
     pts = [_vertex_to_px(v, cell_size) for v in verts if isinstance(v, dict)]
-    sp, ep = obj.get("start_point"), obj.get("end_point")
-    if sp and ep and isinstance(sp, dict) and isinstance(ep, dict):
-        start_px = _vertex_to_px(sp, cell_size)
-        if _dist2(pts[-1], start_px) < _dist2(pts[0], start_px):
-            pts = list(reversed(pts))
     return pts
 
 
@@ -339,10 +328,29 @@ def get_stand_connection_px(stand: dict, cell_size: float) -> Point:
 def get_effective_runway_lineup_dist_m(tw: dict) -> float:
     if not tw or tw.get("pathType") != "runway":
         return 0.0
-    v = tw.get("lineupDistM")
-    if isinstance(v, (int, float)) and math.isfinite(v) and v >= 0:
-        return float(v)
+    dir_v = normalize_rw_direction_value(str(get_taxiway_direction(tw, []) or ""))
+    if dir_v == "counter_clockwise":
+        v = tw.get("lineupDistM_CCW")
+        if isinstance(v, (int, float)) and math.isfinite(v) and v >= 0:
+            return float(v)
+    else:
+        v = tw.get("lineupDistM_CW")
+        if isinstance(v, (int, float)) and math.isfinite(v) and v >= 0:
+            return float(v)
+    v_legacy = tw.get("lineupDistM")
+    if isinstance(v_legacy, (int, float)) and math.isfinite(v_legacy) and v_legacy >= 0:
+        return float(v_legacy)
     return 0.0
+
+
+def get_effective_runway_lineup_dist_from_start_m(tw: dict, runway_len_m: float) -> float:
+    if not tw or tw.get("pathType") != "runway":
+        return 0.0
+    ln = float(runway_len_m) if isinstance(runway_len_m, (int, float)) else 0.0
+    if not math.isfinite(ln) or ln < 0:
+        ln = 0.0
+    d = get_effective_runway_lineup_dist_m(tw)
+    return max(0.0, min(ln, d))
 
 
 @dataclass
@@ -659,25 +667,28 @@ def build_path_graph(
             return
         fwd = dedupe_path_points(pts_forward if pts_forward else [p_from, p_to])
         rev = list(reversed(fwd))
-        meta_ij = DirectedEdgeRecord(i, j, cost, raw_dist, fwd, link_id, path_type, dir_s)
+        # Runway direction is governed by vertices order only:
+        # forward (vertices[i] -> vertices[i+1]) is allowed, reverse gets reverse_cost.
+        effective_dir = "clockwise" if str(path_type or "") == "runway" else dir_s
+        meta_ij = DirectedEdgeRecord(i, j, cost, raw_dist, fwd, link_id, path_type, effective_dir)
         register_directed_edge(meta_ij)
-        if dir_s == "both":
+        if effective_dir == "both":
             adj[i].append((j, cost))
             adj[j].append((i, cost))
             register_directed_edge(
-                DirectedEdgeRecord(j, i, cost, raw_dist, rev, link_id, path_type, dir_s)
+                DirectedEdgeRecord(j, i, cost, raw_dist, rev, link_id, path_type, effective_dir)
             )
-        elif dir_s == "counter_clockwise":
+        elif effective_dir == "counter_clockwise":
             adj[j].append((i, cost))
             adj[i].append((j, reverse_cost))
             register_directed_edge(
-                DirectedEdgeRecord(i, j, reverse_cost, raw_dist, fwd, link_id, path_type, dir_s)
+                DirectedEdgeRecord(i, j, reverse_cost, raw_dist, fwd, link_id, path_type, effective_dir)
             )
         else:
             adj[i].append((j, cost))
             adj[j].append((i, reverse_cost))
             register_directed_edge(
-                DirectedEdgeRecord(j, i, reverse_cost, raw_dist, rev, link_id, path_type, dir_s)
+                DirectedEdgeRecord(j, i, reverse_cost, raw_dist, rev, link_id, path_type, effective_dir)
             )
 
     path_list = _layout_path_objects(layout)
@@ -814,8 +825,13 @@ def build_path_graph(
             ):
                 junctions.append((t_along_q, p_q))
         if obj.get("pathType") == "runway":
-            ldm = get_effective_runway_lineup_dist_m(obj)
             rpath = get_runway_path_px(layout, cell_size, obj.get("id"))
+            ldm = get_effective_runway_lineup_dist_from_start_m(
+                obj,
+                sum(path_dist(rpath["pts"][i], rpath["pts"][i + 1]) for i in range(len(rpath["pts"]) - 1))
+                if (rpath and len(rpath["pts"]) >= 2)
+                else 0.0,
+            )
             if rpath and len(rpath["pts"]) >= 2 and ldm > 1e-6:
                 r_pts = rpath["pts"]
                 total = sum(path_dist(r_pts[i], r_pts[i + 1]) for i in range(len(r_pts) - 1))
@@ -1097,6 +1113,9 @@ def path_graph_from_layout_sim_export(
         path_type = str(e.get("pathType") or "taxiway")
         path_dir_raw = e.get("pathDir")
         pd = _norm_sim_edge_path_dir(path_dir_raw)
+        if path_type == "runway":
+            # Sim-exported runway edges follow vertices order only.
+            pd = "clockwise"
         fwd_pts = dedupe_path_points(pts)
         rev_pts = dedupe_path_points(list(reversed(pts))) if len(pts) >= 2 else fwd_pts
 

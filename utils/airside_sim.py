@@ -235,40 +235,7 @@ def _flight_rw_dir_for_leg(flight: Dict[str, Any], leg_index: int) -> str:
     Legs 0–1 use arrival runway direction; legs 2+ use departure when present, else arrival.
     Reads ``arrRunwayDirUsed`` / ``arrRunwayDir``, ``depRunwayDirUsed`` / ``depRunwayDir``, and token.
     """
-    token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
-    if leg_index >= 2:
-        for k in ("depRunwayDirUsed", "depRunwayDir"):
-            v = flight.get(k)
-            if v is None or str(v).strip() == "":
-                continue
-            nd = normalize_rw_direction_value(str(v))
-            if nd == "counter_clockwise":
-                return "counter_clockwise"
-            if nd == "clockwise":
-                return "clockwise"
-        v = token.get("depRunwayDir")
-        if v is not None and str(v).strip():
-            nd = normalize_rw_direction_value(str(v))
-            if nd == "counter_clockwise":
-                return "counter_clockwise"
-            if nd == "clockwise":
-                return "clockwise"
-    for k in ("arrRunwayDirUsed", "arrRunwayDir"):
-        v = flight.get(k)
-        if v is None or str(v).strip() == "":
-            continue
-        nd = normalize_rw_direction_value(str(v))
-        if nd == "counter_clockwise":
-            return "counter_clockwise"
-        if nd == "clockwise":
-            return "clockwise"
-    v = token.get("arrRunwayDir") or token.get("runwayDir")
-    if v is not None and str(v).strip():
-        nd = normalize_rw_direction_value(str(v))
-        if nd == "counter_clockwise":
-            return "counter_clockwise"
-        if nd == "clockwise":
-            return "clockwise"
+    _ = (flight, leg_index)
     return _DEFAULT_RW_DIR
 
 
@@ -456,9 +423,8 @@ def _cached_path_graph_for_direction(
     *,
     pure_ground_exclude_runway: bool,
 ) -> Optional[PathGraph]:
-    nd = normalize_rw_direction_value(str(runway_ops_dir).strip() if runway_ops_dir else "")
-    if nd not in ("clockwise", "counter_clockwise"):
-        nd = _DEFAULT_RW_DIR
+    _ = runway_ops_dir
+    nd = _DEFAULT_RW_DIR
     key = (
         id(layout),
         nd,
@@ -890,10 +856,12 @@ def _dep_lineup_token_xy(
     runway_id: str,
     runway_ops_dir: Optional[str] = None,
 ) -> Optional[Tuple[float, float]]:
-    """Layout px: ``runwayPaths[].lineup_point`` from sim export (Pro Sim serialize)."""
+    """Layout px lineup point from persisted runwayPaths[].lineup_point only."""
+    _ = (cell_size, runway_ops_dir)
     if not runway_id or not str(runway_id).strip():
         return None
     rid = str(runway_id)
+
     for rw in layout.get("runwayPaths") or []:
         if not isinstance(rw, dict) or str(rw.get("id", "")) != rid:
             continue
@@ -910,13 +878,7 @@ def _dep_lineup_token_xy(
         if math.isfinite(fx) and math.isfinite(fy):
             return (fx, fy)
         break
-    r = get_runway_path_px(layout, cell_size, runway_id)
-    if not r:
-        return None
-    rd = normalize_rw_direction_value(str(runway_ops_dir).strip() if runway_ops_dir else _DEFAULT_RW_DIR)
-    if rd not in ("clockwise", "counter_clockwise"):
-        rd = _DEFAULT_RW_DIR
-    return r["endPx"] if rd == "clockwise" else r["startPx"]
+    return None
 
 
 def _apron_token_xy(layout: Dict[str, Any], cell_size: float, stand_id: str) -> Optional[Tuple[float, float]]:
@@ -1105,8 +1067,6 @@ def _oriented_arr_runway_centerline_px(
     coords = _runway_polyline_coords_px(layout, cell_size, runway_id)
     if not coords or len(coords) < 2:
         return None
-    if ops_dir == "counter_clockwise":
-        return list(reversed(coords))
     return coords
 
 
@@ -1334,14 +1294,16 @@ def _list_rtx_touching_lineup_on_runway(
     cell_size: float,
     runway_tw: Dict[str, Any],
     lineup_pt: Tuple[float, float],
+    tol_px: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     rw_pts_raw = get_ordered_points(runway_tw, layout, cell_size)
     rw_pts = _as_xy_pairs(rw_pts_raw or [])
     if len(rw_pts) < 2:
         return out
-    cs = max(float(cell_size), 1e-9)
-    touch_d2 = max(float(SPLIT_TOL_D2), (cs * 0.2) ** 2)
+    _ = cell_size
+    tol = float(tol_px) if isinstance(tol_px, (int, float)) and math.isfinite(float(tol_px)) and float(tol_px) > 0 else 7.0
+    touch_d2 = max(float(SPLIT_TOL_D2), tol * tol)
     lx, ly = float(lineup_pt[0]), float(lineup_pt[1])
     for tx in _iter_layout_rtx_objects(layout):
         rtx_raw = get_ordered_points(tx, layout, cell_size)
@@ -1372,11 +1334,12 @@ def _expand_rtx_candidate_ids_touching_lineup(
     cell_size: float,
     runway_tw: Optional[Dict[str, Any]],
     lineup_pt: Tuple[float, float],
+    tol_px: Optional[float] = None,
 ) -> set[str]:
     ids: set[str] = set()
     if runway_tw is None:
         return ids
-    hop1 = _list_rtx_touching_lineup_on_runway(layout, cell_size, runway_tw, lineup_pt)
+    hop1 = _list_rtx_touching_lineup_on_runway(layout, cell_size, runway_tw, lineup_pt, tol_px)
     for tx in hop1:
         if isinstance(tx, dict) and tx.get("id") is not None:
             ids.add(str(tx["id"]))
@@ -1398,12 +1361,14 @@ def _runway_holding_near_rtx_candidate_set(
     cell_size: float,
     hp: Dict[str, Any],
     cand_ids: set[str],
+    tol_px: Optional[float] = None,
 ) -> bool:
     p = _holding_point_xy_px(hp)
     if p is None or not _holding_point_kind_runway_holding(hp):
         return False
-    cs = max(float(cell_size), 1e-9)
-    tol_d2 = max(float(SPLIT_TOL_D2), (cs * 0.35) ** 2)
+    _ = cell_size
+    tol = float(tol_px) if isinstance(tol_px, (int, float)) and math.isfinite(float(tol_px)) and float(tol_px) > 0 else 7.0
+    tol_d2 = max(float(SPLIT_TOL_D2), (tol * 1.15) ** 2)
     px, py = p[0], p[1]
     for tx in _iter_layout_rtx_objects(layout):
         tid = str(tx.get("id", ""))
@@ -1446,19 +1411,21 @@ def _find_last_runway_holding_on_departure_path(
     cell_size: float,
     to_lineup_pts: List[Tuple[float, float]],
     cand_ids: set[str],
+    tol_px: Optional[float] = None,
 ) -> Optional[Tuple[Dict[str, Any], float, Tuple[float, float]]]:
     if len(to_lineup_pts) < 2 or not cand_ids:
         return None
     hps = layout.get("holdingPoints") or []
     best: Optional[Tuple[Dict[str, Any], float, Tuple[float, float]]] = None
-    cs = max(float(cell_size), 1e-9)
-    tol_line_d2 = max(float(SPLIT_TOL_D2), (cs * 0.45) ** 2)
+    _ = cell_size
+    tol = float(tol_px) if isinstance(tol_px, (int, float)) and math.isfinite(float(tol_px)) and float(tol_px) > 0 else 7.0
+    tol_line_d2 = max(float(SPLIT_TOL_D2), (tol * 1.3) ** 2)
     for hp in hps:
         if not isinstance(hp, dict):
             continue
         if not _holding_point_kind_runway_holding(hp):
             continue
-        if not _runway_holding_near_rtx_candidate_set(layout, cell_size, hp, cand_ids):
+        if not _runway_holding_near_rtx_candidate_set(layout, cell_size, hp, cand_ids, tol):
             continue
         p = _holding_point_xy_px(hp)
         if p is None:
@@ -1517,12 +1484,10 @@ def _dep_runway_far_end_xy(
     dep_rwy_id: str,
     dep_ops_dir: str,
 ) -> Optional[Tuple[float, float]]:
+    _ = dep_ops_dir
     coords = _runway_polyline_coords_px(layout, cell_size, str(dep_rwy_id))
     if not coords or len(coords) < 2:
         return None
-    rd = normalize_rw_direction_value(str(dep_ops_dir).strip() if dep_ops_dir else _DEFAULT_RW_DIR)
-    if rd == "counter_clockwise":
-        coords = list(reversed(coords))
     last = coords[-1]
     return (float(last[0]), float(last[1]))
 
@@ -1622,10 +1587,10 @@ def extract_point_to_paths(
 
     runway_tw = _layout_runway_object_for_lineup_expansion(layout, str(dep_rwy))
     cand_ids = _expand_rtx_candidate_ids_touching_lineup(
-        layout, cell_size, runway_tw, (float(lx), float(ly))
+        layout, cell_size, runway_tw, (float(lx), float(ly)), merge_r
     )
     hold_pick = _find_last_runway_holding_on_departure_path(
-        layout, cell_size, to_lineup_pts, cand_ids
+        layout, cell_size, to_lineup_pts, cand_ids, merge_r
     )
     if hold_pick is None:
         return []

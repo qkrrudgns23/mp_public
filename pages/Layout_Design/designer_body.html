@@ -81,7 +81,6 @@
           <option value="remote">Remote Stand</option>
           <option value="tempStand">Temp Stand</option>
           <option value="apronTaxiway">Apron Taxiway</option>
-          <option value="groundAccess">Ground Access</option>
         </select>
 
         <div id="settings-grid" class="settings-pane compact-form">
@@ -290,8 +289,17 @@
             <input type="number" id="runwayMinArrVelocity" min="1" max="150" value="__UI_RW_MIN_ARR__" step="1" />
           </div>
           <div id="runwayLineupDistWrap" class="inline-field wide" style="display:none;">
-            <label>Line up Point</label>
-            <input type="number" id="runwayLineupDistM" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
+            <label>Line up Point (m)</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div>
+                <label style="font-size:10px;color:#9ca3af;">CW from Start</label>
+                <input type="number" id="runwayLineupDistM_CW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
+              </div>
+              <div>
+                <label style="font-size:10px;color:#9ca3af;">CCW from End</label>
+                <input type="number" id="runwayLineupDistM_CCW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
+              </div>
+            </div>
           </div>
           <div id="runwayStartDisplacedThresholdWrap" class="inline-field wide" style="display:none;">
             <label>Start Displaced Threshold (m)</label>
@@ -322,7 +330,7 @@
             <input type="number" id="taxiwayMinExitVel" min="1" max="150" value="__UI_EX_MIN__" step="1" />
           </div>
           <div class="compact-field">
-            <label>Taxiway Direction Mode</label>
+            <label>Direction Mode</label>
             <select id="taxiwayDirectionMode">
               <option value="clockwise">CW</option>
               <option value="counter_clockwise">CCW</option>
@@ -349,9 +357,6 @@
           </div>
           <button class="small draw-toggle-btn" id="btnApronLinkDraw">Draw</button>
           <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Click a stand or taxiway to start, then place corners freely. Hold Shift to snap to the grid. Turn off Draw and click the line to select. Drag yellow handles to move corners or the taxiway end (snaps to path). Double-click a segment to add a point. Backspace/Delete removes the selected midpoint.</p>
-        </div>
-        <div id="settings-groundAccess" class="settings-pane" style="display:none;">
-          <p style="font-size:11px;color:#9ca3af;line-height:1.45;margin:0;">Ground Access mode is reserved for access transport related layout elements.</p>
         </div>
 
         <div class="section-title">Objects</div>
