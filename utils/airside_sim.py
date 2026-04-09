@@ -2286,6 +2286,16 @@ def prepare_flight_path(
             expanded_graph_uv.extend(guvs)
             leg_lengths_px.append(_path_length_px(segs))
             leg_micro_counts.append(len(ex_ids))
+        # Landing에서 runway 접점 이후 RET는 1개 edge만 포함하고,
+        # 나머지 RET micro-edge는 Arr_taxi로 넘긴다.
+        landing_ret_idxs = [
+            i
+            for i, (ph, pt) in enumerate(zip(segment_phases, segment_path_types))
+            if str(ph) == PHASE_LANDING and str(pt) == "runway_exit"
+        ]
+        if len(landing_ret_idxs) > 1:
+            for i in landing_ret_idxs[1:]:
+                segment_phases[i] = PHASE_ARR_TAXI
 
     playback_ok = (
         bool(expanded_ids)
