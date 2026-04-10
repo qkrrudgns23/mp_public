@@ -1343,10 +1343,6 @@
 
     runways.forEach(rw => {
       let rVerts = rw.vertices.map(v => [v.col, v.row]);
-      if (rw.start_point && rw.end_point && rVerts.length >= 2) {
-        const sp = [rw.start_point.col, rw.start_point.row];
-        if (dist2(rVerts[rVerts.length - 1], sp) < dist2(rVerts[0], sp)) rVerts.reverse();
-      }
       if (rVerts.length < 2) return;
       const prefixDist = [0];
       for (let i = 1; i < rVerts.length; i++) {
@@ -1357,7 +1353,7 @@
         let best = null;
         const exitName = (tw.name && tw.name.trim()) ? tw.name.trim() : ('Exit ' + String(results.length + 1));
         function considerRunwayHit(distCells) {
-          const distM = distCells * CELL_SIZE;
+          const distM = Math.max(0, distCells) * CELL_SIZE;
           const maxExitVelRaw = (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0)
             ? tw.maxExitVelocity
             : 30;

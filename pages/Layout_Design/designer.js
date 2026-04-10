@@ -2356,22 +2356,14 @@
   }
   /** Ordered runway polyline in layout px (matches getRunwayPath / departure graphPath). */
   function _persistRunwayPolylinePtsPx(tw) {
-    if (!tw || tw.pathType !== 'runway') return null;
-    const path = getRunwayPath(tw.id);
-    if (path && Array.isArray(path.pts) && path.pts.length >= 2) {
-      return path.pts.map(function(p) { return [p[0], p[1]]; });
-    }
-    if (!tw.vertices || tw.vertices.length < 2) return null;
+    if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) return null;
     return tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
   }
 
   function serializeTaxiwayWithEndpoints(tw) {
     const copy = Object.assign({}, tw);
-    const dir = getTaxiwayDirection(tw);
     if (Array.isArray(tw.vertices)) {
-      let verts = tw.vertices.slice();
-      if (tw.pathType === 'runway' && dir === 'counter_clockwise' && verts.length >= 2) verts = verts.slice().reverse();
-      copy.vertices = persistVerticesCellsToXY(verts);
+      copy.vertices = persistVerticesCellsToXY(tw.vertices.slice());
     }
     delete copy.start_point;
     delete copy.end_point;
@@ -3559,8 +3551,10 @@
       }
       if (el('taxiwayDirectionMode')) {
         let dirVal = el('taxiwayDirectionMode').value || '';
-        if (tw.pathType === 'runway') tw.direction = (dirVal === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
-        else tw.direction = dirVal || 'both';
+        if (tw.pathType === 'runway') {
+          runwayReverseVerticesIfDirectionChanged(tw, dirVal);
+          tw.direction = (dirVal === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+        } else tw.direction = dirVal || 'both';
       }
       if (el('taxiwayPathTypeKind')) {
         const ptCur = tw.pathType || 'taxiway';
@@ -4370,7 +4364,10 @@
       const tw = state.selectedObject.obj;
       const shouldResampleRet = !!(tw && (tw.pathType === 'runway' || tw.pathType === 'runway_exit'));
       const v = this.value || '';
-      tw.direction = (tw.pathType === 'runway') ? ((v === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise') : (v || 'both');
+      if (tw.pathType === 'runway') {
+        runwayReverseVerticesIfDirectionChanged(tw, v);
+        tw.direction = (v === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+      } else tw.direction = v || 'both';
       updateObjectInfo();
       if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
       draw();
@@ -8244,8 +8241,6 @@
     if (!rw) rw = taxiways.find(t => t.pathType === 'runway' && t.vertices && t.vertices.length >= 2);
     if (!rw || !rw.vertices.length) return null;
     const pts = rw.vertices.map(v => cellToPixel(v.col, v.row));
-    const rwDir = normalizeRwDirectionValue(getTaxiwayDirection(rw));
-    if (rwDir === 'counter_clockwise') pts.reverse();
     return { startPx: pts[0], endPx: pts[pts.length-1], pts };
   }
 
@@ -9612,6 +9607,15 @@
     obj.start_point = { col: first.col, row: first.row };
     obj.end_point = { col: last.col, row: last.row };
   }
+  /** CW↔CCW 전환 시 vertices 반전 → vertices[0]이 현재 direction 기준 시작점, lineup은 해당 모드 거리로 표시. */
+  function runwayReverseVerticesIfDirectionChanged(tw, nextDirRaw) {
+    if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) return;
+    const prevNorm = (tw.direction === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+    const nextNorm = (String(nextDirRaw || '').trim() === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+    if (prevNorm === nextNorm) return;
+    tw.vertices.reverse();
+    syncStartEndFromVertices(tw);
+  }
   function getTaxiwayOrderedPoints(tw) {
     if (!tw.vertices || tw.vertices.length < 2) return null;
     const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
@@ -9988,16 +9992,13 @@
       for (let i = 1; i < rVerts.length; i++) {
         prefixDist[i] = prefixDist[i - 1] + pathDist(rVerts[i - 1], rVerts[i]);
       }
-      const totalRunwayDistCells = prefixDist[prefixDist.length - 1] || 0;
       const rwOpDir = normalizeRwDirectionValue(getTaxiwayDirection(rw));
 
       exits.forEach(tw => {
         let best = null;
         const exitName = (tw.name && tw.name.trim()) ? tw.name.trim() : ('Exit ' + String(results.length + 1));
         function considerRunwayHit(distCells) {
-          const dCells = (rwOpDir === 'counter_clockwise')
-            ? Math.max(0, totalRunwayDistCells - distCells)
-            : Math.max(0, distCells);
+          const dCells = Math.max(0, distCells);
           const distM = dCells * CELL_SIZE;
           const maxExitVelRaw = (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0)
             ? tw.maxExitVelocity
@@ -14547,7 +14548,7 @@
             }
             acc += seg;
           }
-          if (dir === 'counter_clockwise') angle += Math.PI;
+          if (dir === 'counter_clockwise' && !isRunwayPath) angle += Math.PI;
           ctx.beginPath();
           ctx.moveTo(ax + arrLen * Math.cos(angle), ay + arrLen * Math.sin(angle));
           ctx.lineTo(ax - arrLen * 0.7 * Math.cos(angle) + arrLen * 0.4 * Math.sin(angle), ay - arrLen * 0.7 * Math.sin(angle) - arrLen * 0.4 * Math.cos(angle));
@@ -14557,11 +14558,11 @@
         }
       }
       if (isRunwayPath && tw.vertices.length >= 2) {
-        const rp = getRunwayPath(tw.id);
-        if (rp && rp.pts.length >= 2) {
-          const lenPx = runwayPolylineLengthPx(rp.pts);
+        const rwPts = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+        if (rwPts.length >= 2) {
+          const lenPx = runwayPolylineLengthPx(rwPts);
           const d = getEffectiveRunwayLineupDistFromStartM(tw, lenPx);
-          const lp = getRunwayPointAtDistance(tw.id, d);
+          const lp = _pointOnPolylineAtDistPxForLineup(rwPts, d);
           if (lp) {
             const lineupRtxOk = isLineupPointTouchingRunwayTaxiwayOnRunway(tw, lp);
             ctx.save();

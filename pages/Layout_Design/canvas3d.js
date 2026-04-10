@@ -134,7 +134,7 @@
             }
             acc += seg;
           }
-          if (dir === 'counter_clockwise') angle += Math.PI;
+          if (dir === 'counter_clockwise' && !isRunwayPath) angle += Math.PI;
           ctx.beginPath();
           ctx.moveTo(ax + arrLen * Math.cos(angle), ay + arrLen * Math.sin(angle));
           ctx.lineTo(ax - arrLen * 0.7 * Math.cos(angle) + arrLen * 0.4 * Math.sin(angle), ay - arrLen * 0.7 * Math.sin(angle) - arrLen * 0.4 * Math.cos(angle));
@@ -144,11 +144,24 @@
         }
       }
       if (isRunwayPath && tw.vertices.length >= 2) {
-        const rp = getRunwayPath(tw.id);
-        if (rp && rp.pts.length >= 2) {
-          const lenPx = runwayPolylineLengthPx(rp.pts);
+        const rwPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
+        if (rwPts.length >= 2) {
+          const lenPx = runwayPolylineLengthPx(rwPts);
           const d = Math.min(Math.max(0, getEffectiveRunwayLineupDistM(tw)), lenPx);
-          const lp = getRunwayPointAtDistance(tw.id, d);
+          let lp = null;
+          let accLp = 0;
+          for (let ii = 0; ii < rwPts.length - 1; ii++) {
+            const p1 = rwPts[ii], p2 = rwPts[ii + 1];
+            const segLen = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+            if (!(segLen > 1e-6)) continue;
+            if (accLp + segLen >= d - 1e-6) {
+              const t = Math.max(0, Math.min(1, (d - accLp) / segLen));
+              lp = [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
+              break;
+            }
+            accLp += segLen;
+          }
+          if (!lp) lp = rwPts[rwPts.length - 1];
           if (lp) {
             const lineupRtxOk = isLineupPointTouchingRunwayTaxiwayOnRunway(tw, lp);
             ctx.save();
