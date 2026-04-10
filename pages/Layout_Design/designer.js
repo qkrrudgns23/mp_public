@@ -2120,6 +2120,7 @@
   }
   let dpr = window.devicePixelRatio || 1;
   let ctx = (canvas && typeof canvas.getContext === 'function') ? canvas.getContext('2d') : null;
+  let layoutDrawCanvas = canvas;
 
   function screenToWorld(sx, sy) {
     return [(sx - state.panX) / state.scale, (sy - state.panY) / state.scale];
@@ -3107,7 +3108,7 @@
         points: pts.map(function(p) { return { x: p[0], y: p[1] }; })
       };
     }).filter(Boolean);
-    return {
+    const payload = {
       version: 1,
       kind: 'grid3dViewer',
       exportedAt: new Date().toISOString(),
@@ -3121,6 +3122,15 @@
       enrichedFootprints: enrichedFootprints,
       enrichedApronLinkPolylines: enrichedApronLinkPolylines
     };
+    try {
+      if (typeof exportLayoutGroundTextureFor3D === 'function') {
+        const gt = exportLayoutGroundTextureFor3D();
+        if (gt && gt.dataUrl) payload.layoutGroundTexture = gt;
+      }
+    } catch (eTex) {
+      console.warn('exportLayoutGroundTextureFor3D failed', eTex);
+    }
+    return payload;
   }
   function openGrid3DViewerWindow() {
     const tpl = typeof window.__GRID3D_VIEWER_HTML_TEMPLATE__ === 'string' ? window.__GRID3D_VIEWER_HTML_TEMPLATE__ : '';
@@ -15196,7 +15206,7 @@
   }
 
   function drawGrid() {
-    const w = canvas.width / dpr, h = canvas.height / dpr;
+    const w = layoutDrawCanvas.width / dpr, h = layoutDrawCanvas.height / dpr;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = GRID_VIEW_BG;
@@ -17247,7 +17257,7 @@
     ctx.restore();
   }
   function draw(drawOpts) {
-    if (!ctx || !canvas) return;
+    if (!ctx || !layoutDrawCanvas) return;
     if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
     drawGrid();
     drawLayoutIslandMarkers2DEarly();
@@ -17280,6 +17290,85 @@
     syncMarkerTextDraftInputPosition();
     syncMarkerFlightBlazerOverlayButton();
     updatePathArcHud();
+  }
+
+  function exportLayoutGroundTextureFor3D() {
+    if (!canvas || !ctx) return null;
+    const maxWX = GRID_COLS * CELL_SIZE;
+    const maxWY = GRID_ROWS * CELL_SIZE;
+    if (!(maxWX > 0 && maxWY > 0)) return null;
+    const maxSidePx = 8192;
+    const ppm = Math.max(0.35, Math.min(16, maxSidePx / Math.max(maxWX, maxWY)));
+    let exportDpr = Math.min(3, Math.max(2, window.devicePixelRatio || 1));
+    const logicalW = maxWX * ppm;
+    const logicalH = maxWY * ppm;
+    const maxExportCanvasDim = 16384;
+    let wPx = Math.max(1, Math.round(logicalW * exportDpr));
+    let hPx = Math.max(1, Math.round(logicalH * exportDpr));
+    if (wPx > maxExportCanvasDim || hPx > maxExportCanvasDim) {
+      const shrink = Math.min(maxExportCanvasDim / wPx, maxExportCanvasDim / hPx);
+      exportDpr *= shrink;
+      wPx = Math.max(1, Math.round(logicalW * exportDpr));
+      hPx = Math.max(1, Math.round(logicalH * exportDpr));
+    }
+    const oc = document.createElement('canvas');
+    oc.width = wPx;
+    oc.height = hPx;
+    const octx = oc.getContext('2d', { alpha: false });
+    if (!octx) return null;
+    if (typeof octx.imageSmoothingQuality === 'string') octx.imageSmoothingQuality = 'high';
+    const savedLayoutDrawCanvas = layoutDrawCanvas;
+    const savedCtx = ctx;
+    const savedDpr = dpr;
+    const savedPanX = state.panX;
+    const savedPanY = state.panY;
+    const savedScale = state.scale;
+    const savedHoverCell = state.hoverCell;
+    const savedSel = state.selectedObject;
+    const savedVtx = state.selectedVertex;
+    layoutDrawCanvas = oc;
+    ctx = octx;
+    dpr = exportDpr;
+    state.panX = 0;
+    state.panY = 0;
+    state.scale = ppm;
+    state.hoverCell = null;
+    state.selectedObject = null;
+    state.selectedVertex = null;
+    invalidateGridUnderlay();
+    try {
+      draw({ bypassSimScrubGuard: true });
+    } finally {
+      layoutDrawCanvas = savedLayoutDrawCanvas;
+      ctx = savedCtx;
+      dpr = savedDpr;
+      state.panX = savedPanX;
+      state.panY = savedPanY;
+      state.scale = savedScale;
+      state.hoverCell = savedHoverCell;
+      state.selectedObject = savedSel;
+      state.selectedVertex = savedVtx;
+      invalidateGridUnderlay();
+      scheduleDraw();
+    }
+    let dataUrl = '';
+    try {
+      dataUrl = oc.toDataURL('image/jpeg', 0.93);
+    } catch (eJ) {
+      try {
+        dataUrl = oc.toDataURL('image/png');
+      } catch (eP) {
+        return null;
+      }
+    }
+    if (!dataUrl || dataUrl.length < 48) return null;
+    return {
+      dataUrl: dataUrl,
+      format: dataUrl.indexOf('jpeg') >= 0 ? 'image/jpeg' : 'image/png',
+      widthWorldM: maxWX,
+      heightWorldM: maxWY,
+      pixelsPerMeter: ppm
+    };
   }
 
   document.addEventListener('keydown', function(ev) {

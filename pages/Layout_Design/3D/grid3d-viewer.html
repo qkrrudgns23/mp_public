@@ -13,7 +13,7 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
-  <div id="hud">Layout 3D — <strong>Z = elevation</strong> · ground = scene XY (see coord rule in script). Drag orbit · wheel zoom · right-drag pan</div>
+  <div id="hud">Layout 3D — <strong>Z = elevation</strong> · ground = scene XY. Drag orbit · wheel zoom · right-drag pan</div>
   <div id="err" style="display:none;"></div>
   <script>
 (function () {
@@ -71,6 +71,8 @@
 
   var zGround = 0;
   var zLift = 0.08;
+  var gt = payload.layoutGroundTexture;
+  var useGroundTex = !!(gt && gt.dataUrl && String(gt.dataUrl).indexOf('data:') === 0);
 
   /**
    * === Coordinate frame (must match pages/Layout_Design designer 2D world) ===
@@ -117,7 +119,51 @@
     scene.add(line);
   }
 
-  if (showGrid) {
+  if (useGroundTex) {
+    var wTex = Number(gt.widthWorldM) > 0 ? Number(gt.widthWorldM) : maxX;
+    var hTex = Number(gt.heightWorldM) > 0 ? Number(gt.heightWorldM) : maxY;
+    new THREE.TextureLoader().load(
+      gt.dataUrl,
+      function (tex) {
+        tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        tex.wrapS = THREE.ClampToEdgeWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.flipY = false;
+        tex.repeat.set(1, -1);
+        tex.offset.set(0, 1);
+        tex.needsUpdate = true;
+        var worldThickM = 0.5;
+        var maxWH = Math.max(wTex, hTex);
+        var visZMul = Math.max(1, Math.min(24, maxWH / 500));
+        var geom = new THREE.BoxGeometry(wTex, hTex, worldThickM);
+        var sideColor = new THREE.Color(bgHex);
+        sideColor.multiplyScalar(0.72);
+        var sideMat = new THREE.MeshBasicMaterial({ color: sideColor, toneMapped: false });
+        var topMat = new THREE.MeshBasicMaterial({ map: tex, depthWrite: true, toneMapped: false });
+        var slab = new THREE.Mesh(
+          geom,
+          [ sideMat, sideMat, sideMat, sideMat, topMat, sideMat ]
+        );
+        slab.scale.set(1, 1, visZMul);
+        slab.position.set(wTex * 0.5, hTex * 0.5, zGround + worldThickM * visZMul * 0.5);
+        scene.add(slab);
+        var edgeGeo = new THREE.EdgesGeometry(geom, 50 * Math.PI / 180);
+        var edgeLines = new THREE.LineSegments(
+          edgeGeo,
+          new THREE.LineBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.85 })
+        );
+        edgeLines.position.copy(slab.position);
+        edgeLines.scale.copy(slab.scale);
+        scene.add(edgeLines);
+      },
+      undefined,
+      function (err) {
+        console.error('layoutGroundTexture load failed', err);
+      }
+    );
+  }
+
+  if (!useGroundTex && showGrid) {
     var faint = [];
     var major = [];
     var kx = 0;
@@ -137,7 +183,7 @@
   }
 
   var overlay = g.layoutImageOverlay;
-  if (overlay && overlay.dataUrl && String(overlay.dataUrl).indexOf('data:') === 0) {
+  if (!useGroundTex && overlay && overlay.dataUrl && String(overlay.dataUrl).indexOf('data:') === 0) {
     var loader = new THREE.TextureLoader();
     loader.load(
       overlay.dataUrl,
@@ -204,6 +250,7 @@
     addThickPath(obj.vertices, w, color, zLift + 0.12);
   }
 
+  if (!useGroundTex) {
   (L.taxiways || []).forEach(function (tw) {
     drawTaxiwayLike(tw, 0x22c55e, 23);
   });
@@ -218,6 +265,7 @@
     if (!row.points || row.points.length < 2) return;
     addThickPath(row.points, 18, 0x4ade80, zLift + 0.1);
   });
+  }
 
   function terminalHeightM(t) {
     var floors = t.floors != null ? Math.max(1, parseInt(t.floors, 10) || 1) : 1;
@@ -227,6 +275,7 @@
     return Math.max(3, floors * f2f);
   }
 
+  if (!useGroundTex) {
   (L.terminals || []).forEach(function (t) {
     var verts = t.vertices;
     if (!verts || verts.length < 3) return;
@@ -246,6 +295,7 @@
     var mesh = new THREE.Mesh(geo, mat);
     scene.add(mesh);
   });
+  }
 
   var fp = payload.enrichedFootprints || {};
   function addFootprintSlab(corners, z0, z1, color) {
@@ -261,13 +311,16 @@
     mesh.position.z = z0;
     scene.add(mesh);
   }
+  if (!useGroundTex) {
   (fp.remote || []).forEach(function (r) {
     if (r.corners) addFootprintSlab(r.corners, 0.15, 1.2, 0xa78bfa);
   });
   (fp.pbb || []).forEach(function (r) {
     if (r.corners) addFootprintSlab(r.corners, 0.15, 1.4, 0x38bdf8);
   });
+  }
 
+  if (!useGroundTex) {
   (L.tempStands || []).forEach(function (st) {
     var x = st.x != null ? Number(st.x) : NaN;
     var y = st.y != null ? Number(st.y) : NaN;
@@ -279,7 +332,9 @@
     mesh.position.copy(layoutPointToSceneGround(x, y, 1));
     scene.add(mesh);
   });
+  }
 
+  if (!useGroundTex) {
   (L.holdingPoints || []).forEach(function (hp) {
     var x = Number(hp.x), y = Number(hp.y);
     if (!isFinite(x) || !isFinite(y)) return;
@@ -290,10 +345,11 @@
     mesh.position.copy(layoutPointToSceneGround(x, y, 2.5));
     scene.add(mesh);
   });
+  }
 
   var junc = L.networkJunctions || [];
   var edges = L.Edge || [];
-  if (junc.length && edges.length) {
+  if (!useGroundTex && junc.length && edges.length) {
     var segs = [];
     for (var ei = 0; ei < edges.length; ei++) {
       var ed = edges[ei];
@@ -307,7 +363,7 @@
   }
 
   var poses = payload.flightDrawPoses || [];
-  poses.forEach(function (row) {
+  if (!useGroundTex) poses.forEach(function (row) {
     var p = row.pose;
     if (!p || !isFinite(p.x) || !isFinite(p.y)) return;
     var dx = Number(p.dx) || 0;
@@ -323,6 +379,7 @@
     scene.add(mesh);
   });
 
+  if (!useGroundTex) {
   (L.layoutMarkers || []).forEach(function (m) {
     if (!m || m.kind === 'text') return;
     if (m.kind === 'ruler') {
@@ -339,6 +396,7 @@
       if (segsI.length) addSegments(segsI, 0x0f172a, 0.85);
     }
   });
+  }
 
   function tick() {
     requestAnimationFrame(tick);
@@ -355,7 +413,8 @@
 
   var hud = document.getElementById('hud');
   if (hud && payload.exportedAt) {
-    hud.innerHTML += '<br/><span style="opacity:0.75">Coords: sceneX=layoutX, sceneY=' + maxY + '−layoutY (same as designer world meters) · Exported: ' + payload.exportedAt + ' · sim t=' + (payload.simTimeSec != null ? payload.simTimeSec : '?') + 's</span>';
+    hud.innerHTML += '<br/><span style="opacity:0.75">Coords: sceneX=layoutX, sceneY=' + maxY + '−layoutY · Exported: ' + payload.exportedAt + ' · sim t=' + (payload.simTimeSec != null ? payload.simTimeSec : '?') + 's' +
+      (useGroundTex ? ' · <strong>Ground</strong>: 2D snapshot · slab 0.5m×Z (Z scaled for visibility on large grids)' : '') + '</span>';
   }
   }
 
