@@ -718,6 +718,7 @@
     markerDrawing: false,
     markerRulerDraft: null,
     markerRulerHoverWorld: null,
+    markerFlightHoverSnap: null,
     markerTextDraft: null,
     dragLayoutMarkerHandle: null,
   };
@@ -877,6 +878,7 @@
     state.markerDrawing = false;
     state.markerRulerDraft = null;
     state.markerRulerHoverWorld = null;
+    state.markerFlightHoverSnap = null;
     if (state.markerTextDraft && state.markerTextDraft.active) {
       state.markerTextDraft = null;
       hideMarkerTextDraftEditor();
@@ -13455,6 +13457,7 @@
     if (!state.markerDrawing) {
       state.markerRulerDraft = null;
       state.markerRulerHoverWorld = null;
+      state.markerFlightHoverSnap = null;
       cancelMarkerTextDraftWithoutCommit();
     }
     syncDrawToggleButton('btnMarkerDraw', !!state.markerDrawing);
@@ -13479,6 +13482,7 @@
       commitMarkerTextDraft();
       state.markerRulerDraft = null;
       state.markerRulerHoverWorld = null;
+      state.markerFlightHoverSnap = null;
       scheduleDraw();
     });
   });
@@ -15957,6 +15961,48 @@
       layoutMarkerDrawEndpointDot(ctx, d0.x, d0.y, false);
       layoutMarkerDrawEndpointDot(ctx, h[0], h[1], false);
     }
+    if (state.markerDrawing && getMarkerSubKindFromPanel() === 'flight' && state.markerFlightHoverSnap) {
+      const ghost = {
+        kind: 'flight',
+        taxiwayId: state.markerFlightHoverSnap.taxiwayId,
+        segIndex: state.markerFlightHoverSnap.segIndex,
+        t: state.markerFlightHoverSnap.t,
+        aircraftType: getMarkerFlightAircraftTypeFromPanel(),
+      };
+      const pose = resolveMarkerFlightPose(ghost);
+      if (pose) {
+        const ac = getAircraftInfoByType(ghost.aircraftType);
+        const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
+        const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
+        const useDetailSil = _ac2d.useDetailedSilhouette === true;
+        const silhouette2D = getApronAircraftDetailedSilhouettePoints();
+        ctx.save();
+        ctx.translate(pose.x, pose.y);
+        ctx.rotate(pose.ang);
+        if (useDetailSil && silhouette2D.length >= 3) {
+          ctx.beginPath();
+          ctx.moveTo(silhouette2D[0][0] * lenM, silhouette2D[0][1] * spanM);
+          for (let si = 1; si < silhouette2D.length; si++) ctx.lineTo(silhouette2D[si][0] * lenM, silhouette2D[si][1] * spanM);
+          ctx.closePath();
+        } else {
+          const scaleX = planeScale * 0.52, scaleY = planeScale * 0.38;
+          ctx.beginPath();
+          ctx.moveTo(scaleX * nX, 0);
+          ctx.lineTo(scaleX * wRx, scaleY * uY);
+          ctx.lineTo(scaleX * tX, 0);
+          ctx.lineTo(scaleX * wRx, scaleY * lY);
+          ctx.closePath();
+        }
+        ctx.globalAlpha = 0.42;
+        ctx.fillStyle = '#94a3b8';
+        ctx.strokeStyle = 'rgba(30,41,59,0.75)';
+        ctx.lineWidth = Math.max(0.75, 1.1 / Math.max(state.scale, 0.1));
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
     ctx.restore();
   }
   function draw(drawOpts) {
@@ -16211,6 +16257,23 @@
       }
     } else if (state.markerRulerHoverWorld) {
       state.markerRulerHoverWorld = null;
+      if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
+    }
+    if (settingModeSelect.value === 'marker' && state.markerDrawing && getMarkerSubKindFromPanel() === 'flight') {
+      const snap = snapWorldToMarkerFlightTaxiway(wx, wy);
+      const prev = state.markerFlightHoverSnap;
+      if (snap) {
+        const same = prev && prev.taxiwayId === snap.taxiwayId && prev.segIndex === snap.segIndex && Math.abs(prev.t - snap.t) < 1e-6;
+        if (!same) {
+          state.markerFlightHoverSnap = { taxiwayId: snap.taxiwayId, segIndex: snap.segIndex, t: snap.t };
+          scheduleDraw(); drewThisMove = true;
+        }
+      } else if (prev) {
+        state.markerFlightHoverSnap = null;
+        if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
+      }
+    } else if (state.markerFlightHoverSnap) {
+      state.markerFlightHoverSnap = null;
       if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
     }
     const pathLayoutDrawing = !!(state.terminalDrawingId || state.taxiwayDrawingId);
