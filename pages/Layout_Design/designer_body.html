@@ -366,15 +366,19 @@
         </div>
         <div id="settings-marker" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">
-            <label>Tool</label>
-            <div class="marker-subkind-row" role="group" aria-label="Marker tool">
-              <label class="marker-subkind-opt"><input type="radio" name="markerSubKind" value="text" checked /> Text</label>
-              <label class="marker-subkind-opt"><input type="radio" name="markerSubKind" value="ruler" /> Ruler</label>
-              <label class="marker-subkind-opt"><input type="radio" name="markerSubKind" value="flight" /> Flight</label>
+            <span class="compact-label-like" id="markerToolTabsLabel">Tool</span>
+            <div class="marker-tool-tabs" role="tablist" aria-labelledby="markerToolTabsLabel">
+              <button type="button" class="marker-tool-tab active" role="tab" data-marker-sub="text" aria-selected="true">Text</button>
+              <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="ruler" aria-selected="false">Ruler</button>
+              <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="flight" aria-selected="false">Flight</button>
             </div>
           </div>
+          <div id="markerFlightAircraftRow" class="compact-field wide" hidden>
+            <label for="markerFlightAircraftType">Aircraft type</label>
+            <select id="markerFlightAircraftType"></select>
+          </div>
           <button class="small draw-toggle-btn" id="btnMarkerDraw">Draw</button>
-          <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Annotations only — not used by simulation. <strong>Text:</strong> click anchor, type inline on the map (Enter saves, Esc cancels). <strong>Ruler:</strong> two clicks; distance updates while moving. <strong>Flight:</strong> gray dummy on taxiway / runway / runway taxiway centerlines. Turn off Draw to select markers like other objects (list or grid, Delete removes). Use Grid <strong>Marker</strong> to show/hide (default off).</p>
+          <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Annotations only — not used by simulation. <strong>Text:</strong> click anchor, type inline on the map (Enter saves, Esc cancels). <strong>Ruler:</strong> two clicks; distance updates while moving. <strong>Flight:</strong> pick aircraft type and place on taxiway / runway / runway taxiway centerlines using the normalized silhouette from Information.json. Turn off Draw to select markers like other objects (list or grid, Delete removes). Use Grid <strong>Marker</strong> to show/hide (default off).</p>
         </div>
 
         <div class="section-title">Objects</div>

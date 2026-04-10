@@ -334,6 +334,19 @@
   const _ac2d = _apronAc.twoD || {};
   const _acSil = (_ac2d.silhouette && typeof _ac2d.silhouette === 'object') ? _ac2d.silhouette : {};
   function apron2DGlyphFill() { return _ac2d.fillColor || '#ff2f92'; }
+  function getApronAircraftDetailedSilhouettePoints() {
+    const raw = _ac2d.detailedSilhouettePoints;
+    if (!Array.isArray(raw) || raw.length < 3) return [];
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+      const row = raw[i];
+      if (!Array.isArray(row) || row.length < 2) continue;
+      const x = Number(row[0]);
+      const y = Number(row[1]);
+      if (isFinite(x) && isFinite(y)) out.push([x, y]);
+    }
+    return out.length >= 3 ? out : [];
+  }
   const _schedAlgo = _algoTier.scheduledTimes || {};
   const SCHED_DWELL_FLOOR_MIN = (function() {
     const v = Number(_schedAlgo.dwellFloorMin);
@@ -1233,7 +1246,14 @@
       const segIndex = Math.max(0, parseInt(m.segIndex, 10) || 0);
       let t = Number(m.t);
       if (!isFinite(t)) t = 0.5;
-      return { kind: 'flight', id: m.id || id(), taxiwayId: m.taxiwayId, segIndex: segIndex, t: Math.max(0, Math.min(1, t)) };
+      return {
+        kind: 'flight',
+        id: m.id || id(),
+        taxiwayId: m.taxiwayId,
+        segIndex: segIndex,
+        t: Math.max(0, Math.min(1, t)),
+        aircraftType: String(m.aircraftType || '').trim() || ((AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320')
+      };
     }
     return null;
   }
@@ -2904,7 +2924,7 @@
         }
         if (m.kind === 'flight') {
           const si = (typeof m.segIndex === 'number' && isFinite(m.segIndex)) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
-          return { kind: 'flight', id: m.id, taxiwayId: m.taxiwayId, segIndex: si, t: Number(m.t) };
+          return { kind: 'flight', id: m.id, taxiwayId: m.taxiwayId, segIndex: si, t: Number(m.t), aircraftType: String(m.aircraftType || '').trim() };
         }
         return null;
       }).filter(Boolean),
@@ -3144,9 +3164,42 @@
     return !!(state.showLayoutMarkers || (settingModeSelect && settingModeSelect.value === 'marker'));
   }
   function getMarkerSubKindFromPanel() {
-    const r = document.querySelector('input[name="markerSubKind"]:checked');
-    const v = r && r.value;
+    const tab = document.querySelector('.marker-tool-tab[aria-selected="true"]');
+    const v = tab && tab.getAttribute('data-marker-sub');
     return v === 'ruler' || v === 'flight' ? v : 'text';
+  }
+  function getMarkerFlightAircraftTypeFromPanel() {
+    const sel = document.getElementById('markerFlightAircraftType');
+    const v = String(sel && sel.value || '').trim();
+    if (v && AIRCRAFT_BY_ID[v]) return v;
+    return (AIRCRAFT_TYPES[0] && (AIRCRAFT_TYPES[0].id || AIRCRAFT_TYPES[0].name)) || 'A320';
+  }
+  function populateMarkerFlightAircraftSelect() {
+    const sel = document.getElementById('markerFlightAircraftType');
+    if (!sel) return;
+    const html = AIRCRAFT_TYPES.map(function(a) {
+      const id = String(a.id || a.name || '').trim();
+      if (!id) return '';
+      const name = String(a.name || a.id || id).trim();
+      const icao = String(a.icao || 'C').toUpperCase();
+      return '<option value="' + escapeAttr(id) + '">' + escapeHtml(name + ' (ICAO ' + icao + ')') + '</option>';
+    }).filter(Boolean).join('');
+    sel.innerHTML = html || '<option value="A320">Airbus A320 (ICAO C)</option>';
+    if (sel.options.length) sel.value = sel.options[0].value;
+  }
+  function syncMarkerFlightAircraftRowVisibility() {
+    const row = document.getElementById('markerFlightAircraftRow');
+    if (!row) return;
+    row.hidden = getMarkerSubKindFromPanel() !== 'flight';
+  }
+  function setMarkerSubKindTab(sub) {
+    const next = sub === 'ruler' || sub === 'flight' ? sub : 'text';
+    document.querySelectorAll('.marker-tool-tab').forEach(function(btn) {
+      const on = (btn.getAttribute('data-marker-sub') || '') === next;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    syncMarkerFlightAircraftRowVisibility();
   }
   function isMarkerFlightAllowedPathType(pt) {
     return pt === 'runway' || pt === 'runway_exit' || pt === 'taxiway' || pt === 'general_queue_taxiway';
@@ -3374,7 +3427,14 @@
       const snap = snapWorldToMarkerFlightTaxiway(wx, wy);
       if (!snap) return;
       pushUndo();
-      state.layoutMarkers.push({ kind: 'flight', id: id(), taxiwayId: snap.taxiwayId, segIndex: snap.segIndex, t: snap.t });
+      state.layoutMarkers.push({
+        kind: 'flight',
+        id: id(),
+        taxiwayId: snap.taxiwayId,
+        segIndex: snap.segIndex,
+        t: snap.t,
+        aircraftType: getMarkerFlightAircraftTypeFromPanel(),
+      });
       syncPanelFromState();
     }
   }
@@ -4201,6 +4261,7 @@
     const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
     const pane = document.getElementById('settings-' + paneKey);
     if (pane) pane.style.display = 'block';
+    if (mode === 'marker') syncMarkerFlightAircraftRowVisibility();
     if (isPathLayoutMode(mode)) {
       const pt = pathTypeFromLayoutMode(mode);
       syncPathFieldVisibilityForPathType(pt);
@@ -11928,36 +11989,12 @@
       const tX = isFinite(silTN) ? silTN : -0.3;
       const lY = isFinite(silLY) ? silLY : -0.35;
       const useDetailSil = _ac2d.useDetailedSilhouette === true;
-      
-      const silhouette2D = [
-        [0.86, 0],
-        [0.74, 0.038], [0.55, 0.046], [0.35, 0.048], [0.16, 0.05],
-        [-0.16, 0.5],
-        [-0.22, 0.5],
-        [-0.38, 0.09], [-0.52, 0.056], [-0.66, 0.046],
-        [-0.76, 0.15],
-        [-0.82, 0.036], [-0.88, 0],
-        [-0.82, -0.036],
-        [-0.76, -0.15],
-        [-0.66, -0.046], [-0.52, -0.056], [-0.38, -0.09],
-        [-0.22, -0.5],
-        [-0.16, -0.5],
-        [0.16, -0.05], [0.35, -0.048], [0.55, -0.046], [0.74, -0.038],
-      ];
+      const silhouette2D = getApronAircraftDetailedSilhouettePoints();
       let scaleX, scaleY, sizeRef;
-      if (useDetailSil) {
-        let minXn = Infinity, maxXn = -Infinity, maxYy = 0;
-        for (let si = 0; si < silhouette2D.length; si++) {
-          const px = silhouette2D[si][0], py = silhouette2D[si][1];
-          minXn = Math.min(minXn, px);
-          maxXn = Math.max(maxXn, px);
-          maxYy = Math.max(maxYy, Math.abs(py));
-        }
-        const lenNorm = Math.max(1e-9, maxXn - minXn);
-        const wingNorm = Math.max(1e-9, 2 * maxYy);
-        scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
-        scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
-        sizeRef = 0.5 * Math.hypot(AIRCRAFT_FUSELAGE_LENGTH_M, AIRCRAFT_WINGSPAN_M);
+      if (useDetailSil && silhouette2D.length >= 3) {
+        scaleX = 40;
+        scaleY = 40;
+        sizeRef = 0.5 * Math.hypot(40, 40);
       } else {
         const xs = [nX, wRx, tX];
         const minXn = Math.min(xs[0], xs[1], xs[2]);
@@ -13436,14 +13473,17 @@
       commitMarkerTextDraft();
     });
   }
-  document.querySelectorAll('input[name="markerSubKind"]').forEach(function(radio) {
-    radio.addEventListener('change', function() {
+  document.querySelectorAll('.marker-tool-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      setMarkerSubKindTab(this.getAttribute('data-marker-sub') || 'text');
       commitMarkerTextDraft();
       state.markerRulerDraft = null;
       state.markerRulerHoverWorld = null;
       scheduleDraw();
     });
   });
+  populateMarkerFlightAircraftSelect();
+  syncMarkerFlightAircraftRowVisibility();
 
   (function setupRightPanelDragResize() {
     if (!panel || !panelToggle) return;
@@ -15559,34 +15599,11 @@
     const tX = isFinite(silTN) ? silTN : -0.3;
     const lY = isFinite(silLY) ? silLY : -0.35;
     const useDetailSil = _ac2d.useDetailedSilhouette === true;
-    const silhouette2D = [
-      [0.86, 0],
-      [0.74, 0.038], [0.55, 0.046], [0.35, 0.048], [0.16, 0.05],
-      [-0.16, 0.5],
-      [-0.22, 0.5],
-      [-0.38, 0.09], [-0.52, 0.056], [-0.66, 0.046],
-      [-0.76, 0.15],
-      [-0.82, 0.036], [-0.88, 0],
-      [-0.82, -0.036],
-      [-0.76, -0.15],
-      [-0.66, -0.046], [-0.52, -0.056], [-0.38, -0.09],
-      [-0.22, -0.5],
-      [-0.16, -0.5],
-      [0.16, -0.05], [0.35, -0.048], [0.55, -0.046], [0.74, -0.038],
-    ];
+    const silhouette2D = getApronAircraftDetailedSilhouettePoints();
     let scaleX, scaleY;
-    if (useDetailSil) {
-      let minXn = Infinity, maxXn = -Infinity, maxYy = 0;
-      for (let si = 0; si < silhouette2D.length; si++) {
-        const px = silhouette2D[si][0], py = silhouette2D[si][1];
-        minXn = Math.min(minXn, px);
-        maxXn = Math.max(maxXn, px);
-        maxYy = Math.max(maxYy, Math.abs(py));
-      }
-      const lenNorm = Math.max(1e-9, maxXn - minXn);
-      const wingNorm = Math.max(1e-9, 2 * maxYy);
-      scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
-      scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
+    if (useDetailSil && silhouette2D.length >= 3) {
+      scaleX = 40;
+      scaleY = 40;
     } else {
       const xs = [nX, wRx, tX];
       const minXn = Math.min(xs[0], xs[1], xs[2]);
@@ -15882,16 +15899,29 @@
       } else if (m.kind === 'flight') {
         const pose = resolveMarkerFlightPose(m);
         if (!pose) return;
+        const ac = getAircraftInfoByType(m.aircraftType);
+        const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
+        const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
+        const useDetailSil = _ac2d.useDetailedSilhouette === true;
+        const silhouette2D = getApronAircraftDetailedSilhouettePoints();
         ctx.save();
         ctx.translate(pose.x, pose.y);
         ctx.rotate(pose.ang);
-        const scaleX = planeScale * 0.52, scaleY = planeScale * 0.38;
-        ctx.beginPath();
-        ctx.moveTo(scaleX * nX, 0);
-        ctx.lineTo(scaleX * wRx, scaleY * uY);
-        ctx.lineTo(scaleX * tX, 0);
-        ctx.lineTo(scaleX * wRx, scaleY * lY);
-        ctx.closePath();
+        if (useDetailSil && silhouette2D.length >= 3) {
+          const scaleX = lenM, scaleY = spanM;
+          ctx.beginPath();
+          ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
+          for (let si = 1; si < silhouette2D.length; si++) ctx.lineTo(silhouette2D[si][0] * scaleX, silhouette2D[si][1] * scaleY);
+          ctx.closePath();
+        } else {
+          const scaleX = planeScale * 0.52, scaleY = planeScale * 0.38;
+          ctx.beginPath();
+          ctx.moveTo(scaleX * nX, 0);
+          ctx.lineTo(scaleX * wRx, scaleY * uY);
+          ctx.lineTo(scaleX * tX, 0);
+          ctx.lineTo(scaleX * wRx, scaleY * lY);
+          ctx.closePath();
+        }
         ctx.fillStyle = sel ? '#64748b' : '#94a3b8';
         ctx.strokeStyle = 'rgba(30,41,59,0.9)';
         ctx.lineWidth = Math.max(0.75, 1.1 / Math.max(state.scale, 0.1));

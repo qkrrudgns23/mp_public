@@ -677,6 +677,12 @@
     .marker-subkind-row { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; }
     .marker-subkind-opt { font-size:11px; color:#e2e8f0; cursor:pointer; display:inline-flex; align-items:center; gap:5px; user-select:none; }
     .marker-subkind-opt input { cursor:pointer; }
+    .compact-label-like { display:block; font-size:11px; color:#9ca3af; margin-bottom:6px; font-weight:600; letter-spacing:0.02em; }
+    .marker-tool-tabs { display:flex; gap:4px; flex-wrap:wrap; margin-top:2px; }
+    .marker-tool-tab { flex:1 1 0; min-width:0; padding:6px 8px; font-size:11px; font-weight:600; border-radius:6px; border:1px solid var(--ui-border-default); background:var(--ui-bg-control); color:var(--ui-text-secondary); cursor:pointer; transition:var(--ui-transition); }
+    .marker-tool-tab:hover { background:var(--ui-bg-overlay); color:var(--ui-text-primary); border-color:var(--ui-border-strong); }
+    .marker-tool-tab:focus-visible { outline:none; box-shadow:0 0 0 2px var(--ui-accent-muted); }
+    .marker-tool-tab[aria-selected="true"], .marker-tool-tab.active { background:var(--ui-accent-muted); color:var(--ui-accent); border-color:var(--ui-accent-ring); }
     .marker-text-edit-layer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none; z-index: 25; overflow: visible; }
     .marker-text-draft-input {
       position: absolute; pointer-events: auto; min-width: 140px; max-width: min(480px, 70vw);

@@ -2656,36 +2656,12 @@
       const tX = isFinite(silTN) ? silTN : -0.3;
       const lY = isFinite(silLY) ? silLY : -0.35;
       const useDetailSil = _ac2d.useDetailedSilhouette === true;
-      
-      const silhouette2D = [
-        [0.86, 0],
-        [0.74, 0.038], [0.55, 0.046], [0.35, 0.048], [0.16, 0.05],
-        [-0.16, 0.5],
-        [-0.22, 0.5],
-        [-0.38, 0.09], [-0.52, 0.056], [-0.66, 0.046],
-        [-0.76, 0.15],
-        [-0.82, 0.036], [-0.88, 0],
-        [-0.82, -0.036],
-        [-0.76, -0.15],
-        [-0.66, -0.046], [-0.52, -0.056], [-0.38, -0.09],
-        [-0.22, -0.5],
-        [-0.16, -0.5],
-        [0.16, -0.05], [0.35, -0.048], [0.55, -0.046], [0.74, -0.038],
-      ];
+      const silhouette2D = getApronAircraftDetailedSilhouettePoints();
       let scaleX, scaleY, sizeRef;
-      if (useDetailSil) {
-        let minXn = Infinity, maxXn = -Infinity, maxYy = 0;
-        for (let si = 0; si < silhouette2D.length; si++) {
-          const px = silhouette2D[si][0], py = silhouette2D[si][1];
-          minXn = Math.min(minXn, px);
-          maxXn = Math.max(maxXn, px);
-          maxYy = Math.max(maxYy, Math.abs(py));
-        }
-        const lenNorm = Math.max(1e-9, maxXn - minXn);
-        const wingNorm = Math.max(1e-9, 2 * maxYy);
-        scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
-        scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
-        sizeRef = 0.5 * Math.hypot(AIRCRAFT_FUSELAGE_LENGTH_M, AIRCRAFT_WINGSPAN_M);
+      if (useDetailSil && silhouette2D.length >= 3) {
+        scaleX = 40;
+        scaleY = 40;
+        sizeRef = 0.5 * Math.hypot(40, 40);
       } else {
         const xs = [nX, wRx, tX];
         const minXn = Math.min(xs[0], xs[1], xs[2]);
