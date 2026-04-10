@@ -648,38 +648,51 @@
     if (mode === 'remote' && state.previewRemote) {
       const cx = Number(state.previewRemote.x), cy = Number(state.previewRemote.y);
       const category = document.getElementById('remoteCategory').value || 'C';
-      const size = getStandSizeMeters(category);
+      const dep3r = getStandDepthMeters(category);
+      const wid3r = getStandWidthMeters(category);
       const angle = normalizeAngleDeg(document.getElementById('remoteAngle') ? document.getElementById('remoteAngle').value : 0) * Math.PI / 180;
       const overlap = state.previewRemote.overlap;
       ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.25)';
-      ctx.strokeStyle = overlap ? '#ef4444' : '#22c55e';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 4]);
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.rect(-size/2, -size/2, size, size);
-      ctx.fill();
-      ctx.stroke();
+      ctx.setLineDash([]);
+      if (typeof fillStandSafetyFootprintInLocalAxes === 'function')
+        fillStandSafetyFootprintInLocalAxes(ctx, dep3r, wid3r, category);
+      else {
+        ctx.beginPath();
+        ctx.rect(-dep3r / 2, -wid3r / 2, dep3r, wid3r);
+        ctx.fill();
+      }
+      if (typeof drawStandSafetyContourInLocalAxes === 'function')
+        drawStandSafetyContourInLocalAxes(ctx, dep3r, wid3r, category, false);
+      if (typeof drawStandApronMarkingsInLocalAxes === 'function')
+        drawStandApronMarkingsInLocalAxes(ctx, dep3r, wid3r, category);
       ctx.restore();
     }
     if (mode === 'pbb' && state.previewPbb) {
       const ex = state.previewPbb.x2, ey = state.previewPbb.y2;
-      const size = getStandSizeMeters(state.previewPbb.category || 'C');
+      const cat3p = state.previewPbb.category || 'C';
+      const dep3p = getStandDepthMeters(cat3p);
+      const wid3p = getStandWidthMeters(cat3p);
       const overlap = state.previewPbb.overlap;
       const angle = getPBBStandAngle(state.previewPbb);
       ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.25)';
-      ctx.strokeStyle = overlap ? '#ef4444' : '#22c55e';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 4]);
       ctx.save();
       ctx.translate(ex, ey);
       ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.rect(-size/2, -size/2, size, size);
-      ctx.fill();
-      ctx.stroke();
+      ctx.setLineDash([]);
+      if (typeof fillStandSafetyFootprintInLocalAxes === 'function')
+        fillStandSafetyFootprintInLocalAxes(ctx, dep3p, wid3p, cat3p);
+      else {
+        ctx.beginPath();
+        ctx.rect(-dep3p / 2, -wid3p / 2, dep3p, wid3p);
+        ctx.fill();
+      }
+      if (typeof drawStandSafetyContourInLocalAxes === 'function')
+        drawStandSafetyContourInLocalAxes(ctx, dep3p, wid3p, cat3p, false);
+      if (typeof drawStandApronMarkingsInLocalAxes === 'function')
+        drawStandApronMarkingsInLocalAxes(ctx, dep3p, wid3p, cat3p);
       ctx.fillStyle = '#bbf7d0';
       ctx.font = '10px system-ui';
       ctx.textAlign = 'center';
@@ -1062,11 +1075,20 @@
       const candCorners = getRemoteStandCorners(candidate);
       let overlap = false;
       for (let i = 0; i < state.remoteStands.length; i++) {
-        if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) { overlap = true; break; }
+        const o = state.remoteStands[i];
+        if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) { overlap = true; break; }
       }
       if (!overlap) {
         for (let i = 0; i < state.pbbStands.length; i++) {
-          if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) { overlap = true; break; }
+          const o = state.pbbStands[i];
+          if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) { overlap = true; break; }
+        }
+      }
+      if (!overlap) {
+        const t3 = state.tempStands || [];
+        for (let i = 0; i < t3.length; i++) {
+          const o = t3[i];
+          if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) { overlap = true; break; }
         }
       }
       const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
@@ -1098,8 +1120,7 @@
         const toClickX = snappedPx[0] - ex, toClickY = snappedPx[1] - ey;
         if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
         const category = document.getElementById('standCategory').value || 'C';
-        const standSize = getStandSizeMeters(category);
-        const minLen = standSize / 2 + 3;
+        const minLen = getStandDepthMeters(category) / 2 + 3;
         const lenMeters = Number(document.getElementById('pbbLength').value || 15);
         const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
         const px2 = ex + nx * lenPx, py2 = ey + ny * lenPx;

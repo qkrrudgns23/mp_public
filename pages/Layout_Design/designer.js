@@ -2047,6 +2047,165 @@
     return { A: 20, B: 30, C: 40, D: 50, E: 60, F: 80 };
   })();
   function getStandSizeMeters(cat) { return ICAO_STAND_SIZE_M[cat] || 40; }
+  const STAND_CONFIG_ROW_BY_CODE = (function() {
+    const raw = _layoutTier.standConfig;
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    Object.keys(raw).forEach(function(k) {
+      if (k === 'description') return;
+      const row = raw[k];
+      if (!row || typeof row !== 'object') return;
+      const ws = Number(row.wingspan), g = Number(row.gap), rd = Number(row.road);
+      const ln = Number(row.length), nc = Number(row.nose_clear), pb = Number(row.pushback);
+      const dp = Number(row.depth);
+      if (![ws, g, rd, ln, nc, pb, dp].every(isFinite)) return;
+      const rowOut = { wingspan: ws, gap: g, road: rd, length: ln, nose_clear: nc, pushback: pb, depth: dp };
+      const og = Number(row.outer_gear), nsc = Number(row.nose_side_clear), nw = Number(row.nose_width);
+      if (isFinite(og)) rowOut.outer_gear = og;
+      if (isFinite(nsc)) rowOut.nose_side_clear = nsc;
+      if (isFinite(nw)) rowOut.nose_width = nw;
+      out[String(k).toUpperCase().slice(0, 1)] = rowOut;
+    });
+    return out;
+  })();
+  function standConfigRowForIcaoCat(cat) {
+    const s = String(cat == null ? 'C' : cat).toUpperCase();
+    let c = 'C';
+    for (let i = 0; i < s.length; i++) {
+      const ch = s.charAt(i);
+      if (ch >= 'A' && ch <= 'F') {
+        c = ch;
+        break;
+      }
+    }
+    return STAND_CONFIG_ROW_BY_CODE[c] || null;
+  }
+  function getStandWidthMeters(cat) {
+    const r = standConfigRowForIcaoCat(cat);
+    if (r) return r.wingspan + r.gap * 2;
+    return getStandSizeMeters(cat);
+  }
+  function getStandDepthMeters(cat) {
+    const r = standConfigRowForIcaoCat(cat);
+    if (r) return r.depth;
+    return getStandSizeMeters(cat);
+  }
+  function getStandSpacingMeters(catA, catB) {
+    const ra = standConfigRowForIcaoCat(catA);
+    const rb = standConfigRowForIcaoCat(catB);
+    if (ra && rb) return Math.max(ra.road, rb.road);
+    return 0;
+  }
+  function standFootprintLocalToWorld(cx, cy, angleRad, lx, ly) {
+    const cos = Math.cos(angleRad), sin = Math.sin(angleRad);
+    return [cx + lx * cos - ly * sin, cy + lx * sin + ly * cos];
+  }
+  /** Nose (−X) width = nose_width; stop bar at nose_clear from nose edge; 45° flare to full stand width (±halfW), then rectangle to tail (+halfD). */
+  function buildStandSafetyPolygonPath(ctx, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return false;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return false;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const eps = 0.08;
+    if (noseHalf >= halfW - eps) return false;
+    const xNose = -halfD;
+    const xStop = -halfD + nc;
+    if (xStop <= xNose + eps || xStop >= halfD - eps) return false;
+    const latRun = halfW - noseHalf;
+    if (latRun <= eps) return false;
+    const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return false;
+    ctx.beginPath();
+    ctx.moveTo(xNose, -noseHalf);
+    ctx.lineTo(xNose, noseHalf);
+    ctx.lineTo(xStop, noseHalf);
+    ctx.lineTo(Math.min(xBendEnd, halfD), halfW);
+    if (xBendEnd < halfD - eps) {
+      ctx.lineTo(halfD, halfW);
+      ctx.lineTo(halfD, -halfW);
+      ctx.lineTo(xBendEnd, -halfW);
+    } else {
+      ctx.lineTo(halfD, -halfW);
+    }
+    ctx.lineTo(xStop, -noseHalf);
+    ctx.closePath();
+    return true;
+  }
+  /** Stand-local +X = tail/apron-open, −X = nose/terminal-ward. Red dashed: stop bar (nose_clear), pushback (pushback), lateral gap bounds (wingspan ± vs stand width). Clipped to safety footprint when nose geometry applies. */
+  function drawStandApronMarkingsInLocalAxes(ctx, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return;
+    const halfD = depM / 2, halfW = widM / 2;
+    const eps = 0.12;
+    ctx.save();
+    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
+      ctx.clip();
+    }
+    ctx.strokeStyle = 'rgba(220,38,38,0.92)';
+    ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
+    ctx.setLineDash([2, 2.5]);
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    const nc = Number(r.nose_clear), pb = Number(r.pushback);
+    if (isFinite(nc) && isFinite(pb)) {
+      const xStop = -halfD + nc;
+      const xPush = halfD - pb;
+      if (xStop > -halfD + eps && xStop < halfD - eps) {
+        ctx.beginPath();
+        ctx.moveTo(xStop, -halfW);
+        ctx.lineTo(xStop, halfW);
+        ctx.stroke();
+      }
+      if (xPush < halfD - eps && xPush > -halfD + eps) {
+        ctx.beginPath();
+        ctx.moveTo(xPush, -halfW);
+        ctx.lineTo(xPush, halfW);
+        ctx.stroke();
+      }
+    }
+    const g = Number(r.gap), ws = Number(r.wingspan);
+    if (isFinite(g) && g > eps && isFinite(ws) && ws > 0) {
+      const yLim = halfW - g;
+      if (yLim > eps && yLim < halfW - eps) {
+        ctx.beginPath();
+        ctx.moveTo(-halfD, yLim);
+        ctx.lineTo(halfD, yLim);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-halfD, -yLim);
+        ctx.lineTo(halfD, -yLim);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  function fillStandSafetyFootprintInLocalAxes(ctx, depM, widM, category) {
+    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
+      ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.rect(-depM / 2, -widM / 2, depM, widM);
+    ctx.fill();
+  }
+  function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
+    if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(220,38,38,0.92)';
+    const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
+    ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
+    ctx.setLineDash([]);
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'butt';
+    if (selected) {
+      ctx.shadowColor = c2dObjectSelectedGlow();
+      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
   function getStandBoundsRect(cx, cy, sizeM) {
     const h = sizeM / 2;
     return { left: cx - h, right: cx + h, top: cy - h, bottom: cy + h };
@@ -2079,15 +2238,16 @@
   }
   function getRemoteStandCorners(stLike) {
     const [cx, cy] = getRemoteStandCenterPx(stLike);
-    const size = getStandSizeMeters((stLike && stLike.category) || 'C');
-    const h = size / 2;
+    const cat = (stLike && stLike.category) || 'C';
+    const halfD = getStandDepthMeters(cat) / 2;
+    const halfW = getStandWidthMeters(cat) / 2;
     const angle = getRemoteStandAngleRad(stLike);
     const cos = Math.cos(angle), sin = Math.sin(angle);
     return [
-      [cx + (-h)*cos - (-h)*sin, cy + (-h)*sin + (-h)*cos],
-      [cx + ( h)*cos - (-h)*sin, cy + ( h)*sin + (-h)*cos],
-      [cx + ( h)*cos - ( h)*sin, cy + ( h)*sin + ( h)*cos],
-      [cx + (-h)*cos - ( h)*sin, cy + (-h)*sin + ( h)*cos]
+      [cx + (-halfD)*cos - (-halfW)*sin, cy + (-halfD)*sin + (-halfW)*cos],
+      [cx + ( halfD)*cos - (-halfW)*sin, cy + ( halfD)*sin + (-halfW)*cos],
+      [cx + ( halfD)*cos - ( halfW)*sin, cy + ( halfD)*sin + ( halfW)*cos],
+      [cx + (-halfD)*cos - ( halfW)*sin, cy + (-halfD)*sin + ( halfW)*cos]
     ];
   }
   function rectsOverlap(a, b) {
@@ -2123,15 +2283,16 @@
   function getPBBStandCorners(pbb) {
     const center = getStandConnectionPx(pbb);
     const cx = center[0], cy = center[1];
-    const size = getStandSizeMeters(pbb.category || 'C');
+    const cat = pbb.category || 'C';
+    const halfD = getStandDepthMeters(cat) / 2;
+    const halfW = getStandWidthMeters(cat) / 2;
     const angle = getPBBStandAngle(pbb);
-    const h = size / 2;
     const cos = Math.cos(angle), sin = Math.sin(angle);
     return [
-      [cx + (-h)*cos - (-h)*sin, cy + (-h)*sin + (-h)*cos],
-      [cx + ( h)*cos - (-h)*sin, cy + ( h)*sin + (-h)*cos],
-      [cx + ( h)*cos - ( h)*sin, cy + ( h)*sin + ( h)*cos],
-      [cx + (-h)*cos - ( h)*sin, cy + (-h)*sin + ( h)*cos]
+      [cx + (-halfD)*cos - (-halfW)*sin, cy + (-halfD)*sin + (-halfW)*cos],
+      [cx + ( halfD)*cos - (-halfW)*sin, cy + ( halfD)*sin + (-halfW)*cos],
+      [cx + ( halfD)*cos - ( halfW)*sin, cy + ( halfD)*sin + ( halfW)*cos],
+      [cx + (-halfD)*cos - ( halfW)*sin, cy + (-halfD)*sin + ( halfW)*cos]
     ];
   }
   function pointInPolygonXY(p, verts) {
@@ -2163,6 +2324,41 @@
     }
     return false;
   }
+  function distPointToSegment(px, py, ax, ay, bx, by) {
+    const vx = bx - ax, vy = by - ay;
+    const wx = px - ax, wy = py - ay;
+    const c1 = vx * wx + vy * wy;
+    if (c1 <= 0) return Math.hypot(px - ax, py - ay);
+    const c2 = vx * vx + vy * vy;
+    if (c2 <= c1) return Math.hypot(px - bx, py - by);
+    const t = c1 / c2;
+    const projx = ax + t * vx, projy = ay + t * vy;
+    return Math.hypot(px - projx, py - projy);
+  }
+  function minDistanceConvexQuads(quadA, quadB) {
+    if (rotatedRectsOverlap(quadA, quadB)) return 0;
+    let minD = Infinity;
+    for (let i = 0; i < 4; i++) {
+      const p = quadA[i];
+      for (let j = 0; j < 4; j++) {
+        const q1 = quadB[j], q2 = quadB[(j + 1) % 4];
+        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
+      }
+    }
+    for (let i = 0; i < 4; i++) {
+      const p = quadB[i];
+      for (let j = 0; j < 4; j++) {
+        const q1 = quadA[j], q2 = quadA[(j + 1) % 4];
+        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
+      }
+    }
+    return minD;
+  }
+  function standFootprintsTooClose(cornersA, catA, cornersB, catB) {
+    const need = getStandSpacingMeters(catA, catB);
+    if (need <= 0) return rotatedRectsOverlap(cornersA, cornersB);
+    return minDistanceConvexQuads(cornersA, cornersB) < need;
+  }
   function pbbStandOverlapsTerminal(pbb) {
     const corners = getPBBStandCorners(pbb);
     for (let t = 0; t < state.terminals.length; t++) {
@@ -2181,14 +2377,20 @@
   function pbbStandOverlapsExisting(pbb, excludeId) {
     if (pbbStandOverlapsTerminal(pbb)) return true;
     const corners = getPBBStandCorners(pbb);
+    const cat = pbb.category || 'C';
     for (let i = 0; i < state.pbbStands.length; i++) {
       const other = state.pbbStands[i];
       if (excludeId && other.id === excludeId) continue;
-      if (rotatedRectsOverlap(corners, getPBBStandCorners(other))) return true;
+      if (standFootprintsTooClose(corners, cat, getPBBStandCorners(other), other.category || 'C')) return true;
     }
     for (let i = 0; i < state.remoteStands.length; i++) {
       const st = state.remoteStands[i];
-      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
+      if (standFootprintsTooClose(corners, cat, getRemoteStandCorners(st), st.category || 'C')) return true;
+    }
+    const temps = state.tempStands || [];
+    for (let i = 0; i < temps.length; i++) {
+      const st = temps[i];
+      if (standFootprintsTooClose(corners, cat, getRemoteStandCorners(st), st.category || 'C')) return true;
     }
     return false;
   }
@@ -2218,8 +2420,7 @@
     if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
     const categoryMode = normalizeStandCategoryMode(document.getElementById('standCategoryMode') ? document.getElementById('standCategoryMode').value : (_pbbTier.defaultCategoryMode || 'icao'), 'icao');
     const category = document.getElementById('standCategory').value || 'C';
-    const standSize = getStandSizeMeters(category);
-    const minLen = standSize / 2 + 3;
+    const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
     const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
     const newPbb = { x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx, category };
@@ -2255,10 +2456,16 @@
     const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
     const candCorners = getRemoteStandCorners(candidate);
     for (let i = 0; i < state.remoteStands.length; i++) {
-      if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) return false;
+      const o = state.remoteStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
     for (let i = 0; i < state.pbbStands.length; i++) {
-      if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) return false;
+      const o = state.pbbStands[i];
+      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
+    }
+    for (let i = 0; i < (state.tempStands || []).length; i++) {
+      const o = state.tempStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
     const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
     if (findDuplicateLayoutName('remote', null, baseName)) {
@@ -2290,13 +2497,16 @@
     const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };
     const candCorners = getRemoteStandCorners(candidate);
     for (let i = 0; i < (state.tempStands || []).length; i++) {
-      if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.tempStands[i]))) return false;
+      const o = state.tempStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
     for (let i = 0; i < state.remoteStands.length; i++) {
-      if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) return false;
+      const o = state.remoteStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
     for (let i = 0; i < state.pbbStands.length; i++) {
-      if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) return false;
+      const o = state.pbbStands[i];
+      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
     }
     const baseName = (document.getElementById('tempStandName') && document.getElementById('tempStandName').value.trim()) || getDefaultTempStandName();
     if (findDuplicateLayoutName('tempStand', null, baseName)) {
@@ -11908,15 +12118,16 @@
   function getPbbRotationHandlePx(pbb) {
     const origin = getPbbRotationOriginPx(pbb);
     const safeAngle = getPBBStandAngle(pbb);
-    const standSize = getStandSizeMeters((pbb && pbb.category) || 'C');
-    const dist = getPbbLengthMeters(pbb) + Math.max(standSize * 0.55, 10);
+    const cat = (pbb && pbb.category) || 'C';
+    const standReach = Math.max(getStandDepthMeters(cat), getStandWidthMeters(cat)) * 0.55;
+    const dist = getPbbLengthMeters(pbb) + Math.max(standReach, 10);
     return [origin[0] + Math.cos(safeAngle) * dist, origin[1] + Math.sin(safeAngle) * dist];
   }
   function getRemoteRotationHandlePx(st) {
     const center = getRemoteStandCenterPx(st);
     const angle = getRemoteStandAngleRad(st);
-    const standSize = getStandSizeMeters((st && st.category) || 'C');
-    const dist = (standSize * 0.5) + Math.max(standSize * 0.35, 10);
+    const cat = (st && st.category) || 'C';
+    const dist = (getStandDepthMeters(cat) / 2) + Math.max(getStandWidthMeters(cat) * 0.35, 10);
     return [center[0] + Math.cos(angle) * dist, center[1] + Math.sin(angle) * dist];
   }
   function hitTestStandRotationHandle(wx, wy) {
@@ -11968,8 +12179,8 @@
     const angle = getPBBStandAngle(pbb);
     const dirX = Math.cos(angle), dirY = Math.sin(angle);
     const tanX = -dirY, tanY = dirX;
-    const standSize = getStandSizeMeters((pbb && pbb.category) || 'C');
-    const spread = Math.min(Math.max(standSize * 0.18, 4), standSize * 0.4);
+    const lat = getStandWidthMeters((pbb && pbb.category) || 'C');
+    const spread = Math.min(Math.max(lat * 0.18, 4), lat * 0.4);
     const offsetIndex = bridgeIndex - (count - 1) / 2;
     const lateral = spread * offsetIndex;
     const startX = Number(pbb.x1 || 0) + tanX * lateral;
@@ -14140,7 +14351,8 @@
       const x1 = Number(pbb.x1), y1 = Number(pbb.y1), x2 = Number(pbb.x2), y2 = Number(pbb.y2);
       if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) return;
       rebuildPbbBridgeGeometry(pbb);
-      const endSize = getStandSizeMeters(pbb.category || 'C');
+      const depP = getStandDepthMeters(pbb.category || 'C');
+      const widP = getStandWidthMeters(pbb.category || 'C');
       const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
       const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
@@ -14175,29 +14387,20 @@
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === pbb.id);
       const apronLinked = standHasApronTaxiwayLink(pbb.id);
       const idleFill = apronLinked ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
-      const idleStroke = apronLinked ? '#22c55e' : '#9ca3af';
       ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFill);
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStroke);
-      ctx.lineWidth = sel ? 2.5 : 1.5;
       ctx.save();
       ctx.translate(ex, ey);
       ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.rect(-endSize/2, -endSize/2, endSize, endSize);
-      ctx.fill();
-      if (sel) {
-        ctx.save();
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-      }
-      ctx.stroke();
-      if (sel) ctx.restore();
+      ctx.setLineDash([]);
+      fillStandSafetyFootprintInLocalAxes(ctx, depP, widP, pbb.category || 'C');
+      drawStandSafetyContourInLocalAxes(ctx, depP, widP, pbb.category || 'C', sel);
+      drawStandApronMarkingsInLocalAxes(ctx, depP, widP, pbb.category || 'C');
       const nameRaw = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : String(state.pbbStands.indexOf(pbb) + 1);
       const labelPrefix = getStandCategoryMode(pbb) === 'aircraft' ? 'AC' : (pbb.category || 'C');
       const label = labelPrefix + ' / ' + nameRaw;
       const pad = 3;
-      const tx = endSize / 2 - pad;
-      const ty = -endSize / 2 + pad;
+      const tx = depP / 2 - pad;
+      const ty = -widP / 2 + pad;
       ctx.fillStyle = apronLinked ? '#bbf7d0' : '#d1d5db';
       ctx.font = '8px system-ui';
       ctx.textAlign = 'right';
@@ -14225,30 +14428,22 @@
     const mode = settingModeSelect ? settingModeSelect.value : 'grid';
     state.remoteStands.forEach(st => {
       const [cx, cy] = getRemoteStandCenterPx(st);
-      const size = getStandSizeMeters(st.category || 'C');
+      const depR = getStandDepthMeters(st.category || 'C');
+      const widR = getStandWidthMeters(st.category || 'C');
       const angle = getRemoteStandAngleRad(st);
       const sel = state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.id === st.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const apronLinkedR = standHasApronTaxiwayLink(st.id);
       const idleFillR = apronLinkedR ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
-      const idleStrokeR = apronLinkedR ? '#22c55e' : '#9ca3af';
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillR);
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStrokeR);
-      ctx.lineWidth = sel ? 2.5 : 1.5;
-      ctx.beginPath();
-      ctx.rect(-size/2, -size/2, size, size);
-      ctx.fill();
-      if (sel) {
-        ctx.save();
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-      }
-      ctx.stroke();
-      if (sel) ctx.restore();
+      ctx.setLineDash([]);
+      fillStandSafetyFootprintInLocalAxes(ctx, depR, widR, st.category || 'C');
+      drawStandSafetyContourInLocalAxes(ctx, depR, widR, st.category || 'C', sel);
+      drawStandApronMarkingsInLocalAxes(ctx, depR, widR, st.category || 'C');
       ctx.restore();
       if (mode === 'apronTaxiway') {
         ctx.save();
@@ -14266,7 +14461,8 @@
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';
       const labelOffset = 2;
-      ctx.fillText(label, cx + size/2 - labelOffset, cy - size/2 + labelOffset);
+      const lw = standFootprintLocalToWorld(cx, cy, angle, depR / 2 - labelOffset, -widR / 2 + labelOffset);
+      ctx.fillText(label, lw[0], lw[1]);
       if (sel) {
         drawStandRotationHandle([cx, cy], getRemoteRotationHandlePx(st), rotationActive);
       }
@@ -14284,30 +14480,21 @@
     temps.forEach(function(st) {
       const cxcy = getRemoteStandCenterPx(st);
       const cx = cxcy[0], cy = cxcy[1];
-      const size = getStandSizeMeters(st.category || 'C');
+      const depT = getStandDepthMeters(st.category || 'C');
+      const widT = getStandWidthMeters(st.category || 'C');
       const angle = getRemoteStandAngleRad(st);
       const sel = state.selectedObject && state.selectedObject.type === 'tempStand' && state.selectedObject.id === st.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const idleFillT = 'rgba(139,92,246,0.2)';
-      const idleStrokeT = '#a78bfa';
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
-      ctx.setLineDash([5, 4]);
+      ctx.setLineDash([]);
       ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillT);
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStrokeT);
-      ctx.lineWidth = sel ? 2.5 : 1.5;
-      ctx.beginPath();
-      ctx.rect(-size / 2, -size / 2, size, size);
-      ctx.fill();
-      if (sel) {
-        ctx.save();
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-      }
-      ctx.stroke();
-      if (sel) ctx.restore();
+      fillStandSafetyFootprintInLocalAxes(ctx, depT, widT, st.category || 'C');
+      drawStandSafetyContourInLocalAxes(ctx, depT, widT, st.category || 'C', sel);
+      drawStandApronMarkingsInLocalAxes(ctx, depT, widT, st.category || 'C');
       ctx.setLineDash([]);
       ctx.restore();
       if (mode === 'apronTaxiway') {
@@ -14327,7 +14514,8 @@
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';
       const labelOffset = 2;
-      ctx.fillText(label, cx + size / 2 - labelOffset, cy - size / 2 + labelOffset);
+      const lwT = standFootprintLocalToWorld(cx, cy, angle, depT / 2 - labelOffset, -widT / 2 + labelOffset);
+      ctx.fillText(label, lwT[0], lwT[1]);
       const junc = getTempStandTaxiwayJunctionPx(st);
       const jx = junc[0], jy = junc[1];
       const jr = Math.max(3.2, 3.6 / Math.max(state.scale, 0.08));
@@ -15478,39 +15666,35 @@
     if (mode === 'remote' && state.previewRemote) {
       const cx = Number(state.previewRemote.x), cy = Number(state.previewRemote.y);
       const category = document.getElementById('remoteCategory').value || 'C';
-      const size = getStandSizeMeters(category);
+      const depPr = getStandDepthMeters(category);
+      const widPr = getStandWidthMeters(category);
       const angle = normalizeAngleDeg(document.getElementById('remoteAngle') ? document.getElementById('remoteAngle').value : 0) * Math.PI / 180;
       const overlap = state.previewRemote.overlap;
       ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.25)';
-      ctx.strokeStyle = overlap ? '#ef4444' : '#22c55e';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 4]);
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.rect(-size/2, -size/2, size, size);
-      ctx.fill();
-      ctx.stroke();
+      ctx.setLineDash([]);
+      fillStandSafetyFootprintInLocalAxes(ctx, depPr, widPr, category);
+      drawStandSafetyContourInLocalAxes(ctx, depPr, widPr, category, false);
+      drawStandApronMarkingsInLocalAxes(ctx, depPr, widPr, category);
       ctx.restore();
     }
     if (mode === 'tempStand' && state.previewTempStand) {
       const cx = Number(state.previewTempStand.x), cy = Number(state.previewTempStand.y);
       const category = document.getElementById('tempStandCategory') ? document.getElementById('tempStandCategory').value || 'C' : 'C';
-      const size = getStandSizeMeters(category);
+      const depPt = getStandDepthMeters(category);
+      const widPt = getStandWidthMeters(category);
       const angle = normalizeAngleDeg(document.getElementById('tempStandAngle') ? document.getElementById('tempStandAngle').value : 0) * Math.PI / 180;
       const overlap = state.previewTempStand.overlap;
       ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(167,139,250,0.28)';
-      ctx.strokeStyle = overlap ? '#ef4444' : '#a78bfa';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 4]);
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.rect(-size / 2, -size / 2, size, size);
-      ctx.fill();
-      ctx.stroke();
+      ctx.setLineDash([]);
+      fillStandSafetyFootprintInLocalAxes(ctx, depPt, widPt, category);
+      drawStandSafetyContourInLocalAxes(ctx, depPt, widPt, category, false);
+      drawStandApronMarkingsInLocalAxes(ctx, depPt, widPt, category);
       ctx.restore();
       ctx.setLineDash([]);
       const pjr = Math.max(3, 3.5 / Math.max(state.scale, 0.08));
@@ -15526,20 +15710,19 @@
     }
     if (mode === 'pbb' && state.previewPbb) {
       const ex = state.previewPbb.x2, ey = state.previewPbb.y2;
-      const size = getStandSizeMeters(state.previewPbb.category || 'C');
+      const catPv = state.previewPbb.category || 'C';
+      const depPv = getStandDepthMeters(catPv);
+      const widPv = getStandWidthMeters(catPv);
       const overlap = state.previewPbb.overlap;
       const angle = getPBBStandAngle(state.previewPbb);
       ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.25)';
-      ctx.strokeStyle = overlap ? '#ef4444' : '#22c55e';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 4]);
       ctx.save();
       ctx.translate(ex, ey);
       ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.rect(-size/2, -size/2, size, size);
-      ctx.fill();
-      ctx.stroke();
+      ctx.setLineDash([]);
+      fillStandSafetyFootprintInLocalAxes(ctx, depPv, widPv, catPv);
+      drawStandSafetyContourInLocalAxes(ctx, depPv, widPv, catPv, false);
+      drawStandApronMarkingsInLocalAxes(ctx, depPv, widPv, catPv);
       ctx.fillStyle = '#bbf7d0';
       ctx.font = '10px system-ui';
       ctx.textAlign = 'center';
@@ -16116,11 +16299,20 @@
       const candCorners = getRemoteStandCorners(candidate);
       let overlap = false;
       for (let i = 0; i < state.remoteStands.length; i++) {
-        if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) { overlap = true; break; }
+        const o = state.remoteStands[i];
+        if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) { overlap = true; break; }
       }
       if (!overlap) {
         for (let i = 0; i < state.pbbStands.length; i++) {
-          if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) { overlap = true; break; }
+          const o = state.pbbStands[i];
+          if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) { overlap = true; break; }
+        }
+      }
+      if (!overlap) {
+        const tempsPv = state.tempStands || [];
+        for (let i = 0; i < tempsPv.length; i++) {
+          const o = tempsPv[i];
+          if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) { overlap = true; break; }
         }
       }
       const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
@@ -16140,16 +16332,19 @@
         let overlap = false;
         const temps = state.tempStands || [];
         for (let i = 0; i < temps.length; i++) {
-          if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(temps[i]))) { overlap = true; break; }
+          const o = temps[i];
+          if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) { overlap = true; break; }
         }
         if (!overlap) {
           for (let i = 0; i < state.remoteStands.length; i++) {
-            if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) { overlap = true; break; }
+            const o = state.remoteStands[i];
+            if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) { overlap = true; break; }
           }
         }
         if (!overlap) {
           for (let i = 0; i < state.pbbStands.length; i++) {
-            if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) { overlap = true; break; }
+            const o = state.pbbStands[i];
+            if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) { overlap = true; break; }
           }
         }
         const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
@@ -16182,8 +16377,7 @@
         const toClickX = snappedPx[0] - ex, toClickY = snappedPx[1] - ey;
         if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
         const category = document.getElementById('standCategory').value || 'C';
-        const standSize = getStandSizeMeters(category);
-        const minLen = standSize / 2 + 3;
+        const minLen = getStandDepthMeters(category) / 2 + 3;
         const lenMeters = Number(document.getElementById('pbbLength').value || 15);
         const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
         const px2 = ex + nx * lenPx, py2 = ey + ny * lenPx;

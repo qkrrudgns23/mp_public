@@ -1024,6 +1024,81 @@
         "E": 60,
         "F": 80
       },
+      "standConfig": {
+        "description": "ICAO A–F apron stand (m). Footprint: wingspan+2×gap × depth. nose_clear = stop bar from nose edge; nose_width = width before 45° flare; outer_gear / nose_side_clear for reference. Safety contour: narrow nose (−X) at nose_width, flare 45° from stop bar to full width.",
+        "A": {
+          "wingspan": 15,
+          "gap": 4.5,
+          "road": 7.0,
+          "length": 12,
+          "nose_clear": 5,
+          "pushback": 10,
+          "depth": 27,
+          "outer_gear": 4.5,
+          "nose_side_clear": 2.5,
+          "nose_width": 9.5
+        },
+        "B": {
+          "wingspan": 24,
+          "gap": 6.0,
+          "road": 7.5,
+          "length": 28,
+          "nose_clear": 8,
+          "pushback": 15,
+          "depth": 51,
+          "outer_gear": 6.0,
+          "nose_side_clear": 3.0,
+          "nose_width": 12.0
+        },
+        "C": {
+          "wingspan": 36,
+          "gap": 7.5,
+          "road": 7.5,
+          "length": 38,
+          "nose_clear": 10,
+          "pushback": 20,
+          "depth": 68,
+          "outer_gear": 9.0,
+          "nose_side_clear": 3.0,
+          "nose_width": 15.0
+        },
+        "D": {
+          "wingspan": 52,
+          "gap": 7.5,
+          "road": 10.0,
+          "length": 55,
+          "nose_clear": 10,
+          "pushback": 20,
+          "depth": 85,
+          "outer_gear": 14.0,
+          "nose_side_clear": 3.5,
+          "nose_width": 21.0
+        },
+        "E": {
+          "wingspan": 65,
+          "gap": 10.0,
+          "road": 10.0,
+          "length": 74,
+          "nose_clear": 10,
+          "pushback": 25,
+          "depth": 109,
+          "outer_gear": 14.0,
+          "nose_side_clear": 4.0,
+          "nose_width": 22.0
+        },
+        "F": {
+          "wingspan": 80,
+          "gap": 15.0,
+          "road": 15.0,
+          "length": 73,
+          "nose_clear": 15,
+          "pushback": 30,
+          "depth": 118,
+          "outer_gear": 16.0,
+          "nose_side_clear": 4.5,
+          "nose_width": 25.0
+        }
+      },
       "terminal": {
         "floorsDefault": 1,
         "floorsMin": 1,

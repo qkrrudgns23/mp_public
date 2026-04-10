@@ -59,6 +59,161 @@
     return { A: 20, B: 30, C: 40, D: 50, E: 60, F: 80 };
   })();
   function getStandSizeMeters(cat) { return ICAO_STAND_SIZE_M[cat] || 40; }
+  const STAND_CONFIG_ROW_BY_CODE = (function() {
+    const raw = _layoutTier.standConfig;
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    Object.keys(raw).forEach(function(k) {
+      if (k === 'description') return;
+      const row = raw[k];
+      if (!row || typeof row !== 'object') return;
+      const ws = Number(row.wingspan), g = Number(row.gap), rd = Number(row.road);
+      const ln = Number(row.length), nc = Number(row.nose_clear), pb = Number(row.pushback);
+      const dp = Number(row.depth);
+      if (![ws, g, rd, ln, nc, pb, dp].every(isFinite)) return;
+      const rowOut = { wingspan: ws, gap: g, road: rd, length: ln, nose_clear: nc, pushback: pb, depth: dp };
+      const og = Number(row.outer_gear), nsc = Number(row.nose_side_clear), nw = Number(row.nose_width);
+      if (isFinite(og)) rowOut.outer_gear = og;
+      if (isFinite(nsc)) rowOut.nose_side_clear = nsc;
+      if (isFinite(nw)) rowOut.nose_width = nw;
+      out[String(k).toUpperCase().slice(0, 1)] = rowOut;
+    });
+    return out;
+  })();
+  function standConfigRowForIcaoCat(cat) {
+    const s = String(cat == null ? 'C' : cat).toUpperCase();
+    let c = 'C';
+    for (let i = 0; i < s.length; i++) {
+      const ch = s.charAt(i);
+      if (ch >= 'A' && ch <= 'F') {
+        c = ch;
+        break;
+      }
+    }
+    return STAND_CONFIG_ROW_BY_CODE[c] || null;
+  }
+  function getStandWidthMeters(cat) {
+    const r = standConfigRowForIcaoCat(cat);
+    if (r) return r.wingspan + r.gap * 2;
+    return getStandSizeMeters(cat);
+  }
+  function getStandDepthMeters(cat) {
+    const r = standConfigRowForIcaoCat(cat);
+    if (r) return r.depth;
+    return getStandSizeMeters(cat);
+  }
+  function getStandSpacingMeters(catA, catB) {
+    const ra = standConfigRowForIcaoCat(catA);
+    const rb = standConfigRowForIcaoCat(catB);
+    if (ra && rb) return Math.max(ra.road, rb.road);
+    return 0;
+  }
+  /** Nose (−X) width = nose_width; stop bar at nose_clear from nose edge; 45° flare to full stand width (±halfW), then rectangle to tail (+halfD). */
+  function buildStandSafetyPolygonPath(ctx, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return false;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return false;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const eps = 0.08;
+    if (noseHalf >= halfW - eps) return false;
+    const xNose = -halfD;
+    const xStop = -halfD + nc;
+    if (xStop <= xNose + eps || xStop >= halfD - eps) return false;
+    const latRun = halfW - noseHalf;
+    if (latRun <= eps) return false;
+    const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return false;
+    ctx.beginPath();
+    ctx.moveTo(xNose, -noseHalf);
+    ctx.lineTo(xNose, noseHalf);
+    ctx.lineTo(xStop, noseHalf);
+    ctx.lineTo(Math.min(xBendEnd, halfD), halfW);
+    if (xBendEnd < halfD - eps) {
+      ctx.lineTo(halfD, halfW);
+      ctx.lineTo(halfD, -halfW);
+      ctx.lineTo(xBendEnd, -halfW);
+    } else {
+      ctx.lineTo(halfD, -halfW);
+    }
+    ctx.lineTo(xStop, -noseHalf);
+    ctx.closePath();
+    return true;
+  }
+  /** Stand-local +X = tail/apron-open, −X = nose/terminal-ward. Red dashed: stop bar (nose_clear), pushback (pushback), lateral gap bounds (wingspan ± vs stand width). Clipped to safety footprint when nose geometry applies. */
+  function drawStandApronMarkingsInLocalAxes(ctx, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return;
+    const halfD = depM / 2, halfW = widM / 2;
+    const eps = 0.12;
+    ctx.save();
+    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
+      ctx.clip();
+    }
+    ctx.strokeStyle = 'rgba(220,38,38,0.92)';
+    ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
+    ctx.setLineDash([2, 2.5]);
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    const nc = Number(r.nose_clear), pb = Number(r.pushback);
+    if (isFinite(nc) && isFinite(pb)) {
+      const xStop = -halfD + nc;
+      const xPush = halfD - pb;
+      if (xStop > -halfD + eps && xStop < halfD - eps) {
+        ctx.beginPath();
+        ctx.moveTo(xStop, -halfW);
+        ctx.lineTo(xStop, halfW);
+        ctx.stroke();
+      }
+      if (xPush < halfD - eps && xPush > -halfD + eps) {
+        ctx.beginPath();
+        ctx.moveTo(xPush, -halfW);
+        ctx.lineTo(xPush, halfW);
+        ctx.stroke();
+      }
+    }
+    const g = Number(r.gap), ws = Number(r.wingspan);
+    if (isFinite(g) && g > eps && isFinite(ws) && ws > 0) {
+      const yLim = halfW - g;
+      if (yLim > eps && yLim < halfW - eps) {
+        ctx.beginPath();
+        ctx.moveTo(-halfD, yLim);
+        ctx.lineTo(halfD, yLim);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-halfD, -yLim);
+        ctx.lineTo(halfD, -yLim);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  function fillStandSafetyFootprintInLocalAxes(ctx, depM, widM, category) {
+    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
+      ctx.fill();
+      return;
+    }
+    ctx.beginPath();
+    ctx.rect(-depM / 2, -widM / 2, depM, widM);
+    ctx.fill();
+  }
+  function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
+    if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(220,38,38,0.92)';
+    const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
+    ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
+    ctx.setLineDash([]);
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'butt';
+    if (selected) {
+      ctx.shadowColor = c2dObjectSelectedGlow();
+      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
   function getStandBoundsRect(cx, cy, sizeM) {
     const h = sizeM / 2;
     return { left: cx - h, right: cx + h, top: cy - h, bottom: cy + h };
@@ -83,15 +238,16 @@
   }
   function getRemoteStandCorners(stLike) {
     const [cx, cy] = getRemoteStandCenterPx(stLike);
-    const size = getStandSizeMeters((stLike && stLike.category) || 'C');
-    const h = size / 2;
+    const cat = (stLike && stLike.category) || 'C';
+    const halfD = getStandDepthMeters(cat) / 2;
+    const halfW = getStandWidthMeters(cat) / 2;
     const angle = getRemoteStandAngleRad(stLike);
     const cos = Math.cos(angle), sin = Math.sin(angle);
     return [
-      [cx + (-h)*cos - (-h)*sin, cy + (-h)*sin + (-h)*cos],
-      [cx + ( h)*cos - (-h)*sin, cy + ( h)*sin + (-h)*cos],
-      [cx + ( h)*cos - ( h)*sin, cy + ( h)*sin + ( h)*cos],
-      [cx + (-h)*cos - ( h)*sin, cy + (-h)*sin + ( h)*cos]
+      [cx + (-halfD)*cos - (-halfW)*sin, cy + (-halfD)*sin + (-halfW)*cos],
+      [cx + ( halfD)*cos - (-halfW)*sin, cy + ( halfD)*sin + (-halfW)*cos],
+      [cx + ( halfD)*cos - ( halfW)*sin, cy + ( halfD)*sin + ( halfW)*cos],
+      [cx + (-halfD)*cos - ( halfW)*sin, cy + (-halfD)*sin + ( halfW)*cos]
     ];
   }
   function rectsOverlap(a, b) {
@@ -127,15 +283,16 @@
   function getPBBStandCorners(pbb) {
     const center = getStandConnectionPx(pbb);
     const cx = center[0], cy = center[1];
-    const size = getStandSizeMeters(pbb.category || 'C');
+    const cat = pbb.category || 'C';
+    const halfD = getStandDepthMeters(cat) / 2;
+    const halfW = getStandWidthMeters(cat) / 2;
     const angle = getPBBStandAngle(pbb);
-    const h = size / 2;
     const cos = Math.cos(angle), sin = Math.sin(angle);
     return [
-      [cx + (-h)*cos - (-h)*sin, cy + (-h)*sin + (-h)*cos],
-      [cx + ( h)*cos - (-h)*sin, cy + ( h)*sin + (-h)*cos],
-      [cx + ( h)*cos - ( h)*sin, cy + ( h)*sin + ( h)*cos],
-      [cx + (-h)*cos - ( h)*sin, cy + (-h)*sin + ( h)*cos]
+      [cx + (-halfD)*cos - (-halfW)*sin, cy + (-halfD)*sin + (-halfW)*cos],
+      [cx + ( halfD)*cos - (-halfW)*sin, cy + ( halfD)*sin + (-halfW)*cos],
+      [cx + ( halfD)*cos - ( halfW)*sin, cy + ( halfD)*sin + ( halfW)*cos],
+      [cx + (-halfD)*cos - ( halfW)*sin, cy + (-halfD)*sin + ( halfW)*cos]
     ];
   }
   function pointInPolygonXY(p, verts) {
@@ -167,6 +324,41 @@
     }
     return false;
   }
+  function distPointToSegment(px, py, ax, ay, bx, by) {
+    const vx = bx - ax, vy = by - ay;
+    const wx = px - ax, wy = py - ay;
+    const c1 = vx * wx + vy * wy;
+    if (c1 <= 0) return Math.hypot(px - ax, py - ay);
+    const c2 = vx * vx + vy * vy;
+    if (c2 <= c1) return Math.hypot(px - bx, py - by);
+    const t = c1 / c2;
+    const projx = ax + t * vx, projy = ay + t * vy;
+    return Math.hypot(px - projx, py - projy);
+  }
+  function minDistanceConvexQuads(quadA, quadB) {
+    if (rotatedRectsOverlap(quadA, quadB)) return 0;
+    let minD = Infinity;
+    for (let i = 0; i < 4; i++) {
+      const p = quadA[i];
+      for (let j = 0; j < 4; j++) {
+        const q1 = quadB[j], q2 = quadB[(j + 1) % 4];
+        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
+      }
+    }
+    for (let i = 0; i < 4; i++) {
+      const p = quadB[i];
+      for (let j = 0; j < 4; j++) {
+        const q1 = quadA[j], q2 = quadA[(j + 1) % 4];
+        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
+      }
+    }
+    return minD;
+  }
+  function standFootprintsTooClose(cornersA, catA, cornersB, catB) {
+    const need = getStandSpacingMeters(catA, catB);
+    if (need <= 0) return rotatedRectsOverlap(cornersA, cornersB);
+    return minDistanceConvexQuads(cornersA, cornersB) < need;
+  }
   function pbbStandOverlapsTerminal(pbb) {
     const corners = getPBBStandCorners(pbb);
     for (let t = 0; t < state.terminals.length; t++) {
@@ -185,14 +377,20 @@
   function pbbStandOverlapsExisting(pbb, excludeId) {
     if (pbbStandOverlapsTerminal(pbb)) return true;
     const corners = getPBBStandCorners(pbb);
+    const cat = pbb.category || 'C';
     for (let i = 0; i < state.pbbStands.length; i++) {
       const other = state.pbbStands[i];
       if (excludeId && other.id === excludeId) continue;
-      if (rotatedRectsOverlap(corners, getPBBStandCorners(other))) return true;
+      if (standFootprintsTooClose(corners, cat, getPBBStandCorners(other), other.category || 'C')) return true;
     }
     for (let i = 0; i < state.remoteStands.length; i++) {
       const st = state.remoteStands[i];
-      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
+      if (standFootprintsTooClose(corners, cat, getRemoteStandCorners(st), st.category || 'C')) return true;
+    }
+    const temps = state.tempStands || [];
+    for (let i = 0; i < temps.length; i++) {
+      const st = temps[i];
+      if (standFootprintsTooClose(corners, cat, getRemoteStandCorners(st), st.category || 'C')) return true;
     }
     return false;
   }
@@ -222,8 +420,7 @@
     if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
     const categoryMode = normalizeStandCategoryMode(document.getElementById('standCategoryMode') ? document.getElementById('standCategoryMode').value : (_pbbTier.defaultCategoryMode || 'icao'), 'icao');
     const category = document.getElementById('standCategory').value || 'C';
-    const standSize = getStandSizeMeters(category);
-    const minLen = standSize / 2 + 3;
+    const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
     const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
     const newPbb = { x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx, category };
@@ -259,10 +456,16 @@
     const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
     const candCorners = getRemoteStandCorners(candidate);
     for (let i = 0; i < state.remoteStands.length; i++) {
-      if (rotatedRectsOverlap(candCorners, getRemoteStandCorners(state.remoteStands[i]))) return false;
+      const o = state.remoteStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
     for (let i = 0; i < state.pbbStands.length; i++) {
-      if (rotatedRectsOverlap(candCorners, getPBBStandCorners(state.pbbStands[i]))) return false;
+      const o = state.pbbStands[i];
+      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
+    }
+    for (let i = 0; i < (state.tempStands || []).length; i++) {
+      const o = state.tempStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
     const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
     if (findDuplicateLayoutName('remote', null, baseName)) {

@@ -1080,7 +1080,8 @@
       const x1 = Number(pbb.x1), y1 = Number(pbb.y1), x2 = Number(pbb.x2), y2 = Number(pbb.y2);
       if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) return;
       rebuildPbbBridgeGeometry(pbb);
-      const endSize = getStandSizeMeters(pbb.category || 'C');
+      const depPb = getStandDepthMeters(pbb.category || 'C');
+      const widPb = getStandWidthMeters(pbb.category || 'C');
       const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
       const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
@@ -1115,29 +1116,27 @@
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === pbb.id);
       const apronLinked = standHasApronTaxiwayLink(pbb.id);
       const idleFill = apronLinked ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
-      const idleStroke = apronLinked ? '#22c55e' : '#9ca3af';
       ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFill);
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStroke);
-      ctx.lineWidth = sel ? 2.5 : 1.5;
       ctx.save();
       ctx.translate(ex, ey);
       ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.rect(-endSize/2, -endSize/2, endSize, endSize);
-      ctx.fill();
-      if (sel) {
-        ctx.save();
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+      ctx.setLineDash([]);
+      if (typeof fillStandSafetyFootprintInLocalAxes === 'function')
+        fillStandSafetyFootprintInLocalAxes(ctx, depPb, widPb, pbb.category || 'C');
+      else {
+        ctx.beginPath();
+        ctx.rect(-depPb / 2, -widPb / 2, depPb, widPb);
+        ctx.fill();
       }
-      ctx.stroke();
-      if (sel) ctx.restore();
+      if (typeof drawStandSafetyContourInLocalAxes === 'function')
+        drawStandSafetyContourInLocalAxes(ctx, depPb, widPb, pbb.category || 'C', sel);
+      drawStandApronMarkingsInLocalAxes(ctx, depPb, widPb, pbb.category || 'C');
       const nameRaw = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : String(state.pbbStands.indexOf(pbb) + 1);
       const labelPrefix = getStandCategoryMode(pbb) === 'aircraft' ? 'AC' : (pbb.category || 'C');
       const label = labelPrefix + ' / ' + nameRaw;
       const pad = 3;
-      const tx = endSize / 2 - pad;
-      const ty = -endSize / 2 + pad;
+      const tx = depPb / 2 - pad;
+      const ty = -widPb / 2 + pad;
       ctx.fillStyle = apronLinked ? '#bbf7d0' : '#d1d5db';
       ctx.font = '8px system-ui';
       ctx.textAlign = 'right';
@@ -1165,30 +1164,29 @@
     const mode = settingModeSelect ? settingModeSelect.value : 'grid';
     state.remoteStands.forEach(st => {
       const [cx, cy] = getRemoteStandCenterPx(st);
-      const size = getStandSizeMeters(st.category || 'C');
+      const depRs = getStandDepthMeters(st.category || 'C');
+      const widRs = getStandWidthMeters(st.category || 'C');
       const angle = getRemoteStandAngleRad(st);
       const sel = state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.id === st.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const apronLinkedR = standHasApronTaxiwayLink(st.id);
       const idleFillR = apronLinkedR ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
-      const idleStrokeR = apronLinkedR ? '#22c55e' : '#9ca3af';
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillR);
-      ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (simOcc ? c2dSimStandOccupiedStroke() : idleStrokeR);
-      ctx.lineWidth = sel ? 2.5 : 1.5;
-      ctx.beginPath();
-      ctx.rect(-size/2, -size/2, size, size);
-      ctx.fill();
-      if (sel) {
-        ctx.save();
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+      ctx.setLineDash([]);
+      if (typeof fillStandSafetyFootprintInLocalAxes === 'function')
+        fillStandSafetyFootprintInLocalAxes(ctx, depRs, widRs, st.category || 'C');
+      else {
+        ctx.beginPath();
+        ctx.rect(-depRs / 2, -widRs / 2, depRs, widRs);
+        ctx.fill();
       }
-      ctx.stroke();
-      if (sel) ctx.restore();
+      if (typeof drawStandSafetyContourInLocalAxes === 'function')
+        drawStandSafetyContourInLocalAxes(ctx, depRs, widRs, st.category || 'C', sel);
+      drawStandApronMarkingsInLocalAxes(ctx, depRs, widRs, st.category || 'C');
       ctx.restore();
       if (mode === 'apronTaxiway') {
         ctx.save();
@@ -1206,7 +1204,8 @@
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';
       const labelOffset = 2;
-      ctx.fillText(label, cx + size/2 - labelOffset, cy - size/2 + labelOffset);
+      const lwR = standFootprintLocalToWorld(cx, cy, angle, depRs / 2 - labelOffset, -widRs / 2 + labelOffset);
+      ctx.fillText(label, lwR[0], lwR[1]);
       if (sel) {
         drawStandRotationHandle([cx, cy], getRemoteRotationHandlePx(st), rotationActive);
       }
