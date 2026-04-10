@@ -3123,12 +3123,16 @@
       enrichedApronLinkPolylines: enrichedApronLinkPolylines
     };
     try {
-      if (typeof exportLayoutGroundTextureFor3D === 'function') {
+      let tiled = null;
+      if (typeof exportLayoutGroundTilesFor3D === 'function') tiled = exportLayoutGroundTilesFor3D();
+      if (tiled && tiled.tiles && tiled.tiles.length === 4) {
+        payload.layoutGroundTiles = tiled;
+      } else if (typeof exportLayoutGroundTextureFor3D === 'function') {
         const gt = exportLayoutGroundTextureFor3D();
         if (gt && gt.dataUrl) payload.layoutGroundTexture = gt;
       }
     } catch (eTex) {
-      console.warn('exportLayoutGroundTextureFor3D failed', eTex);
+      console.warn('exportLayoutGroundTilesFor3D / exportLayoutGroundTextureFor3D failed', eTex);
     }
     return payload;
   }
@@ -3139,30 +3143,54 @@
       alert('3D viewer template is not loaded. Ensure pages/Layout_Design/3D/grid3d-viewer.html exists and reload the Layout Design page.');
       return;
     }
-    let payload;
-    try {
-      payload = typeof buildLayout3DViewerPayload === 'function' ? buildLayout3DViewerPayload() : null;
-    } catch (e) {
-      console.error('buildLayout3DViewerPayload failed:', e);
-      alert('Could not serialize layout for 3D: ' + (e && e.message ? e.message : e));
-      return;
-    }
-    if (!payload || !payload.layout) {
-      alert('Could not serialize layout for 3D.');
-      return;
-    }
-    const html = tpl;
-    const w = window.open('', '_blank', 'width=1280,height=840');
+    const w = window.open('about:blank', '_blank', 'width=1280,height=840');
     if (!w) {
       alert('Popup was blocked. Allow popups for this site to open the 3D viewer.');
       return;
     }
     try {
       w.document.open();
-      w.document.write(html);
+      w.document.write(
+        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Layout 3D</title></head>' +
+        '<body style="margin:0;background:#0d0d0f;color:#e2e8f0;font:14px system-ui,sans-serif;' +
+        'display:flex;align-items:center;justify-content:center;min-height:100vh;">Preparing layout snapshot…</body></html>'
+      );
+      w.document.close();
+    } catch (eOpen) {
+      console.error(eOpen);
+      try {
+        w.close();
+      } catch (eClose) { /* ignore */ }
+      alert('Could not open the 3D viewer window.');
+      return;
+    }
+    let payload;
+    try {
+      payload = typeof buildLayout3DViewerPayload === 'function' ? buildLayout3DViewerPayload() : null;
+    } catch (e) {
+      console.error('buildLayout3DViewerPayload failed:', e);
+      try {
+        w.close();
+      } catch (eClose2) { /* ignore */ }
+      alert('Could not serialize layout for 3D: ' + (e && e.message ? e.message : e));
+      return;
+    }
+    if (!payload || !payload.layout) {
+      try {
+        w.close();
+      } catch (eClose3) { /* ignore */ }
+      alert('Could not serialize layout for 3D.');
+      return;
+    }
+    try {
+      w.document.open();
+      w.document.write(tpl);
       w.document.close();
     } catch (e3) {
       console.error(e3);
+      try {
+        w.close();
+      } catch (eClose4) { /* ignore */ }
       alert('Could not write the 3D viewer document.');
       return;
     }
@@ -17292,16 +17320,17 @@
     updatePathArcHud();
   }
 
-  function exportLayoutGroundTextureFor3D() {
+  function exportLayoutGroundRectSnapshotFor3D(x0, y0, widthM, heightM, meta) {
     if (!canvas || !ctx) return null;
-    const maxWX = GRID_COLS * CELL_SIZE;
-    const maxWY = GRID_ROWS * CELL_SIZE;
-    if (!(maxWX > 0 && maxWY > 0)) return null;
-    const maxSidePx = 8192;
-    const ppm = Math.max(0.35, Math.min(16, maxSidePx / Math.max(maxWX, maxWY)));
-    let exportDpr = Math.min(3, Math.max(2, window.devicePixelRatio || 1));
-    const logicalW = maxWX * ppm;
-    const logicalH = maxWY * ppm;
+    if (!(widthM > 0 && heightM > 0)) return null;
+    const skipScheduleDraw = !!(meta && meta.skipScheduleDraw);
+    const col = meta && meta.col != null ? meta.col : 0;
+    const row = meta && meta.row != null ? meta.row : 0;
+    const maxSidePx = 16384;
+    const ppm = Math.max(0.35, Math.min(32, maxSidePx / Math.max(widthM, heightM)));
+    let exportDpr = Math.min(5, Math.max(2, window.devicePixelRatio || 1));
+    const logicalW = widthM * ppm;
+    const logicalH = heightM * ppm;
     const maxExportCanvasDim = 16384;
     let wPx = Math.max(1, Math.round(logicalW * exportDpr));
     let hPx = Math.max(1, Math.round(logicalH * exportDpr));
@@ -17329,8 +17358,8 @@
     layoutDrawCanvas = oc;
     ctx = octx;
     dpr = exportDpr;
-    state.panX = 0;
-    state.panY = 0;
+    state.panX = -x0 * ppm;
+    state.panY = -y0 * ppm;
     state.scale = ppm;
     state.hoverCell = null;
     state.selectedObject = null;
@@ -17349,7 +17378,7 @@
       state.selectedObject = savedSel;
       state.selectedVertex = savedVtx;
       invalidateGridUnderlay();
-      scheduleDraw();
+      if (!skipScheduleDraw) scheduleDraw();
     }
     let dataUrl = '';
     try {
@@ -17363,11 +17392,66 @@
     }
     if (!dataUrl || dataUrl.length < 48) return null;
     return {
+      col: col,
+      row: row,
+      x0: x0,
+      y0: y0,
+      widthM: widthM,
+      heightM: heightM,
       dataUrl: dataUrl,
-      format: dataUrl.indexOf('jpeg') >= 0 ? 'image/jpeg' : 'image/png',
+      ppm: ppm,
+      rasterWidthPx: wPx,
+      rasterHeightPx: hPx
+    };
+  }
+
+  function exportLayoutGroundTilesFor3D() {
+    const maxWX = GRID_COLS * CELL_SIZE;
+    const maxWY = GRID_ROWS * CELL_SIZE;
+    if (!(maxWX > 0 && maxWY > 0)) return null;
+    const mx = maxWX * 0.5;
+    const my = maxWY * 0.5;
+    const specs = [
+      { col: 0, row: 0, x0: 0, y0: 0, widthM: mx, heightM: my },
+      { col: 1, row: 0, x0: mx, y0: 0, widthM: maxWX - mx, heightM: my },
+      { col: 0, row: 1, x0: 0, y0: my, widthM: mx, heightM: maxWY - my },
+      { col: 1, row: 1, x0: mx, y0: my, widthM: maxWX - mx, heightM: maxWY - my }
+    ];
+    const tiles = [];
+    for (let si = 0; si < specs.length; si++) {
+      const sp = specs[si];
+      const t = exportLayoutGroundRectSnapshotFor3D(sp.x0, sp.y0, sp.widthM, sp.heightM, { col: sp.col, row: sp.row, skipScheduleDraw: true });
+      if (!t) {
+        scheduleDraw();
+        return null;
+      }
+      tiles.push(t);
+    }
+    scheduleDraw();
+    return {
+      version: 1,
+      tileCols: 2,
+      tileRows: 2,
       widthWorldM: maxWX,
       heightWorldM: maxWY,
-      pixelsPerMeter: ppm
+      tiles: tiles
+    };
+  }
+
+  function exportLayoutGroundTextureFor3D() {
+    const maxWX = GRID_COLS * CELL_SIZE;
+    const maxWY = GRID_ROWS * CELL_SIZE;
+    if (!(maxWX > 0 && maxWY > 0)) return null;
+    const t = exportLayoutGroundRectSnapshotFor3D(0, 0, maxWX, maxWY, { col: 0, row: 0, skipScheduleDraw: false });
+    if (!t) return null;
+    return {
+      dataUrl: t.dataUrl,
+      format: t.dataUrl.indexOf('jpeg') >= 0 ? 'image/jpeg' : 'image/png',
+      widthWorldM: maxWX,
+      heightWorldM: maxWY,
+      pixelsPerMeter: t.ppm,
+      rasterWidthPx: t.rasterWidthPx,
+      rasterHeightPx: t.rasterHeightPx
     };
   }
 

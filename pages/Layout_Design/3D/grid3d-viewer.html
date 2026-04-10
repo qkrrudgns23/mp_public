@@ -7,17 +7,67 @@
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0d0f; color: #e2e8f0; font-family: system-ui, sans-serif; }
     #hud { position: fixed; top: 10px; left: 10px; z-index: 10; font-size: 12px; line-height: 1.45; max-width: 420px; pointer-events: none; opacity: 0.92; }
-    #err { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #f87171; padding: 16px; max-width: 90%; text-align: center; }
+    #err { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 300; color: #f87171; padding: 16px; max-width: 90%; text-align: center; }
+    #loading-overlay {
+      position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+      background: #0d0d0f; flex-direction: column; gap: 20px; transition: opacity 0.35s ease;
+    }
+    #loading-overlay.is-hiding { opacity: 0; pointer-events: none; }
+    #loading-overlay .loading-inner { text-align: center; max-width: 340px; padding: 24px; }
+    #loading-overlay .loading-spinner {
+      width: 44px; height: 44px; margin: 0 auto 8px; border: 3px solid rgba(148, 163, 184, 0.25);
+      border-top-color: #7c6af7; border-radius: 50%; animation: grid3d-spin 0.85s linear infinite;
+    }
+    @keyframes grid3d-spin { to { transform: rotate(360deg); } }
+    #loading-overlay .loading-title { font-size: 17px; font-weight: 600; margin: 0 0 8px; color: #f1f5f9; }
+    #loading-overlay .loading-sub { font-size: 13px; line-height: 1.5; margin: 0; color: #94a3b8; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
+  <div id="loading-overlay" aria-busy="true" aria-live="polite">
+    <div class="loading-inner">
+      <div class="loading-spinner" role="presentation"></div>
+      <p class="loading-title" id="loading-title">레이아웃을 불러오는 중</p>
+      <p class="loading-sub" id="loading-sub">디자이너에서 데이터가 전달되면 3D 장면이 표시됩니다.</p>
+    </div>
+  </div>
   <div id="hud">Layout 3D — <strong>Z = elevation</strong> · ground = scene XY. Drag orbit · wheel zoom · right-drag pan</div>
   <div id="err" style="display:none;"></div>
   <script>
 (function () {
+  function setLoadingText(title, sub) {
+    var t = document.getElementById('loading-title');
+    var s = document.getElementById('loading-sub');
+    if (t && title) t.textContent = title;
+    if (s && sub) s.textContent = sub;
+  }
+  function hideLoadingOverlay() {
+    var el = document.getElementById('loading-overlay');
+    if (!el || el.getAttribute('data-hidden') === '1') return;
+    el.setAttribute('data-hidden', '1');
+    el.classList.add('is-hiding');
+    el.setAttribute('aria-busy', 'false');
+    window.setTimeout(function () {
+      el.style.display = 'none';
+    }, 380);
+  }
+  function scheduleHideLoadingAfterPaint() {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        hideLoadingOverlay();
+      });
+    });
+  }
   function showErr(msg) {
+    var ov = document.getElementById('loading-overlay');
+    if (ov) {
+      ov.style.display = 'none';
+      ov.classList.remove('is-hiding');
+      ov.setAttribute('data-hidden', '1');
+      ov.setAttribute('aria-busy', 'false');
+    }
     var el = document.getElementById('err');
     el.style.display = 'block';
     el.textContent = msg;
@@ -27,6 +77,7 @@
       showErr('Invalid layout payload.');
       return;
     }
+    setLoadingText('3D 장면을 구성하는 중', '모델과 조명을 준비하고 있습니다…');
     window.__GRID3D_STARTED__ = true;
 
   var L = payload.layout;
@@ -62,6 +113,7 @@
   controls.target.set(centerX, centerY, 0);
   controls.enableDamping = true;
   controls.dampingFactor = 0.06;
+  controls.zoomSpeed = 4;
   controls.update();
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.52));
@@ -71,8 +123,14 @@
 
   var zGround = 0;
   var zLift = 0.08;
+  var gTiles = payload.layoutGroundTiles;
+  var useTiles = !!(gTiles && gTiles.tiles && gTiles.tiles.length === 4);
   var gt = payload.layoutGroundTexture;
-  var useGroundTex = !!(gt && gt.dataUrl && String(gt.dataUrl).indexOf('data:') === 0);
+  var groundTexUrl = '';
+  if (!useTiles && gt && gt.dataUrl && String(gt.dataUrl).indexOf('data:') === 0) {
+    groundTexUrl = gt.dataUrl;
+  }
+  var useGroundTex = useTiles || !!groundTexUrl;
 
   /**
    * === Coordinate frame (must match pages/Layout_Design designer 2D world) ===
@@ -120,47 +178,98 @@
   }
 
   if (useGroundTex) {
-    var wTex = Number(gt.widthWorldM) > 0 ? Number(gt.widthWorldM) : maxX;
-    var hTex = Number(gt.heightWorldM) > 0 ? Number(gt.heightWorldM) : maxY;
-    new THREE.TextureLoader().load(
-      gt.dataUrl,
-      function (tex) {
-        tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-        tex.wrapS = THREE.ClampToEdgeWrapping;
-        tex.wrapT = THREE.ClampToEdgeWrapping;
-        tex.flipY = false;
-        tex.repeat.set(1, -1);
-        tex.offset.set(0, 1);
-        tex.needsUpdate = true;
-        var worldThickM = 0.5;
-        var maxWH = Math.max(wTex, hTex);
-        var visZMul = Math.max(1, Math.min(24, maxWH / 500));
-        var geom = new THREE.BoxGeometry(wTex, hTex, worldThickM);
-        var sideColor = new THREE.Color(bgHex);
-        sideColor.multiplyScalar(0.72);
-        var sideMat = new THREE.MeshBasicMaterial({ color: sideColor, toneMapped: false });
-        var topMat = new THREE.MeshBasicMaterial({ map: tex, depthWrite: true, toneMapped: false });
-        var slab = new THREE.Mesh(
-          geom,
-          [ sideMat, sideMat, sideMat, sideMat, topMat, sideMat ]
-        );
-        slab.scale.set(1, 1, visZMul);
-        slab.position.set(wTex * 0.5, hTex * 0.5, zGround + worldThickM * visZMul * 0.5);
-        scene.add(slab);
-        var edgeGeo = new THREE.EdgesGeometry(geom, 50 * Math.PI / 180);
-        var edgeLines = new THREE.LineSegments(
-          edgeGeo,
-          new THREE.LineBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.85 })
-        );
-        edgeLines.position.copy(slab.position);
-        edgeLines.scale.copy(slab.scale);
-        scene.add(edgeLines);
-      },
-      undefined,
-      function (err) {
-        console.error('layoutGroundTexture load failed', err);
+    var loaderGt = new THREE.TextureLoader();
+    function applyLayoutGroundSlab(tex, widthM, heightM, centerSceneX, centerSceneY, zBias) {
+      zBias = zBias != null ? zBias : 0;
+      var wTex = Number(widthM) > 0 ? Number(widthM) : maxX;
+      var hTex = Number(heightM) > 0 ? Number(heightM) : maxY;
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.wrapS = THREE.ClampToEdgeWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.flipY = false;
+      var maxAniso = 1;
+      if (renderer.capabilities && typeof renderer.capabilities.getMaxAnisotropy === 'function') {
+        maxAniso = renderer.capabilities.getMaxAnisotropy();
       }
-    );
+      tex.anisotropy = Math.min(16, Math.max(1, maxAniso));
+      tex.repeat.set(1, -1);
+      tex.offset.set(0, 1);
+      tex.needsUpdate = true;
+      var worldThickM = 0.5;
+      var maxWH = Math.max(maxX, maxY);
+      var visZMul = Math.max(1, Math.min(24, maxWH / 500));
+      var geom = new THREE.BoxGeometry(wTex, hTex, worldThickM);
+      var sideColor = new THREE.Color(bgHex);
+      sideColor.multiplyScalar(0.72);
+      var sideMat = new THREE.MeshBasicMaterial({ color: sideColor, toneMapped: false });
+      var topMat = new THREE.MeshBasicMaterial({ map: tex, depthWrite: true, toneMapped: false });
+      var slab = new THREE.Mesh(
+        geom,
+        [ sideMat, sideMat, sideMat, sideMat, topMat, sideMat ]
+      );
+      slab.scale.set(1, 1, visZMul);
+      slab.position.set(centerSceneX, centerSceneY, zGround + worldThickM * visZMul * 0.5 + zBias);
+      scene.add(slab);
+    }
+    if (useTiles) {
+      setLoadingText('바닥 텍스처 로드 중', '고화질 타일 4장을 GPU에 올리는 중입니다. 잠시만 기다려 주세요…');
+      function tilePrimaryUrl(ti) {
+        return ti.dataUrl && String(ti.dataUrl).indexOf('data:') === 0 ? ti.dataUrl : '';
+      }
+      function tileCenterScene(ti) {
+        var cx = Number(ti.x0) + Number(ti.widthM) * 0.5;
+        var cy = Number(ti.y0) + Number(ti.heightM) * 0.5;
+        return { x: cx, y: maxY - cy };
+      }
+      var pendingTex = 0;
+      gTiles.tiles.forEach(function (ti, idx) {
+        var url = tilePrimaryUrl(ti);
+        if (!url) return;
+        pendingTex++;
+        var c = tileCenterScene(ti);
+        var zB = idx * 0.0005;
+        loaderGt.load(
+          url,
+          function (tex) {
+            applyLayoutGroundSlab(tex, ti.widthM, ti.heightM, c.x, c.y, zB);
+            pendingTex--;
+            if (pendingTex <= 0) scheduleHideLoadingAfterPaint();
+          },
+          undefined,
+          function (err) {
+            console.error('layoutGroundTiles[' + idx + '] load failed', err);
+            pendingTex--;
+            if (pendingTex <= 0) scheduleHideLoadingAfterPaint();
+          }
+        );
+      });
+      if (pendingTex <= 0) scheduleHideLoadingAfterPaint();
+    } else {
+      setLoadingText('바닥 텍스처 로드 중', '레이아웃 이미지를 GPU에 올리는 중입니다…');
+      var wTex = Number(gt.widthWorldM) > 0 ? Number(gt.widthWorldM) : maxX;
+      var hTex = Number(gt.heightWorldM) > 0 ? Number(gt.heightWorldM) : maxY;
+      function loadGroundFromUrl(url) {
+        loaderGt.load(
+          url,
+          function (tex) {
+            applyLayoutGroundSlab(tex, wTex, hTex, wTex * 0.5, hTex * 0.5, 0);
+            scheduleHideLoadingAfterPaint();
+          },
+          undefined,
+          function (err) {
+            if (url !== gt.dataUrl && gt.dataUrl && String(gt.dataUrl).indexOf('data:') === 0) {
+              loadGroundFromUrl(gt.dataUrl);
+            } else {
+              console.error('layoutGroundTexture load failed', err);
+              scheduleHideLoadingAfterPaint();
+            }
+          }
+        );
+      }
+      loadGroundFromUrl(groundTexUrl);
+    }
   }
 
   if (!useGroundTex && showGrid) {
@@ -404,6 +513,9 @@
     renderer.render(scene, camera);
   }
   tick();
+  if (!useGroundTex) {
+    scheduleHideLoadingAfterPaint();
+  }
 
   window.addEventListener('resize', function () {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -414,7 +526,7 @@
   var hud = document.getElementById('hud');
   if (hud && payload.exportedAt) {
     hud.innerHTML += '<br/><span style="opacity:0.75">Coords: sceneX=layoutX, sceneY=' + maxY + '−layoutY · Exported: ' + payload.exportedAt + ' · sim t=' + (payload.simTimeSec != null ? payload.simTimeSec : '?') + 's' +
-      (useGroundTex ? ' · <strong>Ground</strong>: 2D snapshot · slab 0.5m×Z (Z scaled for visibility on large grids)' : '') + '</span>';
+      (useGroundTex ? (' · <strong>Ground</strong>: JPEG tiles · slab 0.5m×Z' + (useTiles ? ' (4)' : '')) : '') + '</span>';
   }
   }
 
@@ -422,6 +534,7 @@
     if (!ev.data || ev.data.kind !== 'grid3dViewerInit') return;
     if (window.opener && ev.source !== window.opener) return;
     window.removeEventListener('message', onGrid3dViewerInit);
+    setLoadingText('3D 데이터 수신 완료', '장면을 초기화하는 중입니다…');
     try {
       runViewer(ev.data.payload);
     } catch (ex) {
@@ -430,7 +543,7 @@
     }
   });
   var hudWait = document.getElementById('hud');
-  if (hudWait) hudWait.innerHTML = 'Waiting for serialized layout from designer…';
+  if (hudWait) hudWait.innerHTML = 'Layout 3D — 준비 중 (아래 안내 참고)';
   setTimeout(function () {
     if (!window.__GRID3D_STARTED__) {
       showErr('Missing layout payload. Open this window from the designer 3D button.');
