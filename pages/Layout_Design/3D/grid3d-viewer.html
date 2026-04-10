@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Layout Grid — 3D viewer</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0d0f; color: #e2e8f0; font-family: system-ui, sans-serif; }
+    #hud { position: fixed; top: 10px; left: 10px; z-index: 10; font-size: 12px; line-height: 1.45; max-width: 420px; pointer-events: none; opacity: 0.92; }
+    #err { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #f87171; padding: 16px; max-width: 90%; text-align: center; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <div id="hud">Layout 3D — <strong>Z = elevation</strong> · ground = scene XY (see coord rule in script). Drag orbit · wheel zoom · right-drag pan</div>
+  <div id="err" style="display:none;"></div>
+  <script>
+(function () {
+  function showErr(msg) {
+    var el = document.getElementById('err');
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+  function runViewer(payload) {
+    if (!payload || !payload.layout) {
+      showErr('Invalid layout payload.');
+      return;
+    }
+    window.__GRID3D_STARTED__ = true;
+
+  var L = payload.layout;
+  var g = L.grid || {};
+  var cs = Number(g.cellSize) > 0 ? Number(g.cellSize) : 25;
+  var cols = Number(g.cols) > 0 ? Math.floor(g.cols) : 80;
+  var rows = Number(g.rows) > 0 ? Math.floor(g.rows) : 80;
+  var maxX = cols * cs;
+  var maxY = rows * cs;
+  var cfg = payload.viewerConfig || {};
+  var majorEvery = Number(cfg.gridMajorInterval) > 0 ? Math.floor(cfg.gridMajorInterval) : 5;
+  var bgHex = (cfg.gridViewBg && String(cfg.gridViewBg)) || '#0d0d0f';
+  var showGrid = g.showGrid !== false;
+  var showImage = g.showImage !== false;
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(bgHex);
+
+  var camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 1e6);
+  camera.up.set(0, 0, 1);
+  var centerX = maxX * 0.5;
+  var centerY = maxY * 0.5;
+  var maxDim = Math.max(maxX, maxY);
+  camera.position.set(centerX + maxDim * 0.9, centerY + maxDim * 0.9, maxDim * 0.75);
+  camera.lookAt(centerX, centerY, 0);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.target.set(centerX, centerY, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.update();
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.52));
+  var sun = new THREE.DirectionalLight(0xffffff, 0.55);
+  sun.position.set(maxDim, maxDim * 0.2, maxDim * 1.2);
+  scene.add(sun);
+
+  var zGround = 0;
+  var zLift = 0.08;
+
+  /**
+   * === Coordinate frame (must match pages/Layout_Design designer 2D world) ===
+   * Designer: cellToPixel(col,row) -> [ col*CELL_SIZE, row*CELL_SIZE ].
+   * Layout "x" = east along columns, "y" = south along rows (same as canvas +Y downward on screen).
+   * Scene: Z-up; ground lies on plane z = zGround. Horizontal position is (sceneX, sceneY, z).
+   * Mapping (orthographic top-down view aligned with 2D):
+   *   sceneX = layoutX
+   *   sceneY = maxLayoutY - layoutY
+   * Vertical extrusion / aircraft altitude uses +Z only.
+   * Heading: layout velocity (dx,dy) -> atan2(-dy, dx) for rotation about +Z in scene (Y is mirrored).
+   */
+  function layoutYToSceneGroundY(layoutY) {
+    return maxY - (Number(layoutY) || 0);
+  }
+
+  function layoutPointToSceneGround(layoutX, layoutY, zElev) {
+    var ze = zElev != null ? zElev : zGround;
+    return new THREE.Vector3(Number(layoutX) || 0, layoutYToSceneGroundY(layoutY), ze);
+  }
+
+  function layoutHeadingRadFromVelocity(dx, dy) {
+    return Math.atan2(-(Number(dy) || 0), Number(dx) || 0);
+  }
+
+  function vecXY(x, y, z) {
+    return layoutPointToSceneGround(x, y, z);
+  }
+
+  function layoutShapeY(layoutY) {
+    return layoutYToSceneGroundY(layoutY);
+  }
+
+  function addSegments(points, color, opacity, lineWidthHint) {
+    if (!points || points.length < 2) return;
+    var geo = new THREE.BufferGeometry().setFromPoints(points);
+    var mat = new THREE.LineBasicMaterial({
+      color: color,
+      transparent: opacity < 1,
+      opacity: opacity,
+      depthTest: true
+    });
+    var line = new THREE.LineSegments(geo, mat);
+    scene.add(line);
+  }
+
+  if (showGrid) {
+    var faint = [];
+    var major = [];
+    var kx = 0;
+    for (var x = 0; x <= maxX; x += cs, kx++) {
+      var a = vecXY(x, 0, zLift);
+      var b = vecXY(x, maxY, zLift);
+      if (kx % majorEvery === 0) { major.push(a, b); } else { faint.push(a, b); }
+    }
+    var ky = 0;
+    for (var y = 0; y <= maxY; y += cs, ky++) {
+      var c = vecXY(0, y, zLift);
+      var d = vecXY(maxX, y, zLift);
+      if (ky % majorEvery === 0) { major.push(c, d); } else { faint.push(c, d); }
+    }
+    addSegments(faint, 0x9ca3af, 0.18);
+    addSegments(major, 0xe2e8f0, 0.38);
+  }
+
+  var overlay = g.layoutImageOverlay;
+  if (overlay && overlay.dataUrl && String(overlay.dataUrl).indexOf('data:') === 0) {
+    var loader = new THREE.TextureLoader();
+    loader.load(
+      overlay.dataUrl,
+      function (tex) {
+        tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        tex.flipY = false;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.repeat.set(-1, 1);
+        tex.offset.set(1, 0);
+        var wM = Number(overlay.widthM) > 0 ? Number(overlay.widthM) : 400;
+        var hM = Number(overlay.heightM) > 0 ? Number(overlay.heightM) : 400;
+        var tlc = Number(overlay.topLeftCol) || 0;
+        var tlr = Number(overlay.topLeftRow) || 0;
+        var gx = tlc * cs;
+        var gy = tlr * cs;
+        var op = overlay.opacity != null ? Math.max(0, Math.min(1, Number(overlay.opacity))) : 0.85;
+        var plane = new THREE.Mesh(
+          new THREE.PlaneGeometry(wM, hM),
+          new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: showImage ? op : 0.35, side: THREE.DoubleSide, depthWrite: false })
+        );
+        var cy = gy + hM * 0.5;
+        var c = layoutPointToSceneGround(gx + wM * 0.5, cy, zLift + 0.02);
+        plane.position.copy(c);
+        scene.add(plane);
+      },
+      undefined,
+      function () { /* ignore texture errors */ }
+    );
+  }
+
+  function polylineFromVertices(verts, z) {
+    var pts = [];
+    if (!verts || !verts.length) return pts;
+    for (var i = 0; i < verts.length; i++) {
+      var v = verts[i];
+      if (!v) continue;
+      var px = typeof v.x === 'number' ? v.x : v[0];
+      var py = typeof v.y === 'number' ? v.y : v[1];
+      if (!isFinite(px) || !isFinite(py)) continue;
+      pts.push(vecXY(px, py, z));
+    }
+    return pts;
+  }
+
+  function addThickPath(verts, widthM, color, z) {
+    var pts = polylineFromVertices(verts, z);
+    if (pts.length < 2) return;
+    var w = Math.max(2, Number(widthM) || 18);
+    for (var i = 0; i < pts.length - 1; i++) {
+      var a = pts[i], b = pts[i + 1];
+      var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var geom = new THREE.BoxGeometry(len, w, 0.6);
+      var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.05, roughness: 0.85 });
+      var mesh = new THREE.Mesh(geom, mat);
+      mesh.position.set((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, z + 0.35);
+      mesh.rotation.z = Math.atan2(dy, dx);
+      scene.add(mesh);
+    }
+  }
+
+  function drawTaxiwayLike(obj, color, defaultWidth) {
+    if (!obj || !obj.vertices || obj.vertices.length < 2) return;
+    var w = obj.width != null ? Number(obj.width) : defaultWidth;
+    addThickPath(obj.vertices, w, color, zLift + 0.12);
+  }
+
+  (L.taxiways || []).forEach(function (tw) {
+    drawTaxiwayLike(tw, 0x22c55e, 23);
+  });
+  (L.runwayTaxiways || []).forEach(function (tw) {
+    drawTaxiwayLike(tw, 0x38bdf8, 23);
+  });
+  (L.runwayPaths || []).forEach(function (rw) {
+    drawTaxiwayLike(rw, 0xf97316, 45);
+  });
+  var apronPolys = payload.enrichedApronLinkPolylines || [];
+  apronPolys.forEach(function (row) {
+    if (!row.points || row.points.length < 2) return;
+    addThickPath(row.points, 18, 0x4ade80, zLift + 0.1);
+  });
+
+  function terminalHeightM(t) {
+    var floors = t.floors != null ? Math.max(1, parseInt(t.floors, 10) || 1) : 1;
+    var f2f = t.floorToFloor != null ? Number(t.floorToFloor) : 4;
+    if (!isFinite(f2f) || f2f < 0.5) f2f = 4;
+    if (t.floorHeight != null && isFinite(Number(t.floorHeight))) return Math.max(2, Number(t.floorHeight));
+    return Math.max(3, floors * f2f);
+  }
+
+  (L.terminals || []).forEach(function (t) {
+    var verts = t.vertices;
+    if (!verts || verts.length < 3) return;
+    var shape = new THREE.Shape();
+    var first = verts[0];
+    var x0 = Number(first.x != null ? first.x : first[0]);
+    var y0 = layoutShapeY(first.y != null ? first.y : first[1]);
+    shape.moveTo(x0, y0);
+    for (var i = 1; i < verts.length; i++) {
+      var vx = verts[i];
+      shape.lineTo(Number(vx.x != null ? vx.x : vx[0]), layoutShapeY(vx.y != null ? vx.y : vx[1]));
+    }
+    shape.closePath();
+    var h = terminalHeightM(t);
+    var geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+    var mat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.08, roughness: 0.82 });
+    var mesh = new THREE.Mesh(geo, mat);
+    scene.add(mesh);
+  });
+
+  var fp = payload.enrichedFootprints || {};
+  function addFootprintSlab(corners, z0, z1, color) {
+    if (!corners || corners.length < 3) return;
+    var shape = new THREE.Shape();
+    shape.moveTo(corners[0][0], layoutShapeY(corners[0][1]));
+    for (var i = 1; i < corners.length; i++) shape.lineTo(corners[i][0], layoutShapeY(corners[i][1]));
+    shape.closePath();
+    var depth = Math.max(0.4, z1 - z0);
+    var geo = new THREE.ExtrudeGeometry(shape, { depth: depth, bevelEnabled: false });
+    var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.05, roughness: 0.9 });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.position.z = z0;
+    scene.add(mesh);
+  }
+  (fp.remote || []).forEach(function (r) {
+    if (r.corners) addFootprintSlab(r.corners, 0.15, 1.2, 0xa78bfa);
+  });
+  (fp.pbb || []).forEach(function (r) {
+    if (r.corners) addFootprintSlab(r.corners, 0.15, 1.4, 0x38bdf8);
+  });
+
+  (L.tempStands || []).forEach(function (st) {
+    var x = st.x != null ? Number(st.x) : NaN;
+    var y = st.y != null ? Number(st.y) : NaN;
+    if (!isFinite(x) || !isFinite(y)) return;
+    var mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(6, 6, 2, 16),
+      new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.1, roughness: 0.75 })
+    );
+    mesh.position.copy(layoutPointToSceneGround(x, y, 1));
+    scene.add(mesh);
+  });
+
+  (L.holdingPoints || []).forEach(function (hp) {
+    var x = Number(hp.x), y = Number(hp.y);
+    if (!isFinite(x) || !isFinite(y)) return;
+    var mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(3.5, 12, 12),
+      new THREE.MeshStandardMaterial({ color: 0xf43f5e, metalness: 0.1, roughness: 0.6 })
+    );
+    mesh.position.copy(layoutPointToSceneGround(x, y, 2.5));
+    scene.add(mesh);
+  });
+
+  var junc = L.networkJunctions || [];
+  var edges = L.Edge || [];
+  if (junc.length && edges.length) {
+    var segs = [];
+    for (var ei = 0; ei < edges.length; ei++) {
+      var ed = edges[ei];
+      var fi = ed.fromIdx, ti = ed.toIdx;
+      if (fi == null || ti == null) continue;
+      var a = junc[fi], b = junc[ti];
+      if (!a || !b) continue;
+      segs.push(vecXY(a.x, a.y, zLift + 0.25), vecXY(b.x, b.y, zLift + 0.25));
+    }
+    addSegments(segs, 0x94a3b8, 0.55);
+  }
+
+  var poses = payload.flightDrawPoses || [];
+  poses.forEach(function (row) {
+    var p = row.pose;
+    if (!p || !isFinite(p.x) || !isFinite(p.y)) return;
+    var dx = Number(p.dx) || 0;
+    var dy = Number(p.dy) || 0;
+    var heading = layoutHeadingRadFromVelocity(dx, dy);
+    var len = 38, span = 36, ht = 10;
+    var mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(span, len, ht),
+      new THREE.MeshStandardMaterial({ color: 0xf472b6, metalness: 0.12, roughness: 0.65 })
+    );
+    mesh.position.copy(layoutPointToSceneGround(p.x, p.y, ht * 0.5 + zLift + 0.5));
+    mesh.rotation.z = heading;
+    scene.add(mesh);
+  });
+
+  (L.layoutMarkers || []).forEach(function (m) {
+    if (!m || m.kind === 'text') return;
+    if (m.kind === 'ruler') {
+      var a = vecXY(m.x1, m.y1, zLift + 0.4), b = vecXY(m.x2, m.y2, zLift + 0.4);
+      addSegments([a, b], 0x94a3b8, 0.9);
+    }
+    if (m.kind === 'island' && m.points && m.points.length > 2) {
+      var segsI = [];
+      for (var pi = 0; pi < m.points.length; pi++) {
+        var p0 = m.points[pi], p1 = m.points[(pi + 1) % m.points.length];
+        if (!p0 || !p1) continue;
+        segsI.push(vecXY(p0.x, p0.y, zLift + 0.35), vecXY(p1.x, p1.y, zLift + 0.35));
+      }
+      if (segsI.length) addSegments(segsI, 0x0f172a, 0.85);
+    }
+  });
+
+  function tick() {
+    requestAnimationFrame(tick);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  tick();
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  var hud = document.getElementById('hud');
+  if (hud && payload.exportedAt) {
+    hud.innerHTML += '<br/><span style="opacity:0.75">Coords: sceneX=layoutX, sceneY=' + maxY + '−layoutY (same as designer world meters) · Exported: ' + payload.exportedAt + ' · sim t=' + (payload.simTimeSec != null ? payload.simTimeSec : '?') + 's</span>';
+  }
+  }
+
+  window.addEventListener('message', function onGrid3dViewerInit(ev) {
+    if (!ev.data || ev.data.kind !== 'grid3dViewerInit') return;
+    if (window.opener && ev.source !== window.opener) return;
+    window.removeEventListener('message', onGrid3dViewerInit);
+    try {
+      runViewer(ev.data.payload);
+    } catch (ex) {
+      console.error(ex);
+      showErr('Failed to build 3D view: ' + (ex && ex.message ? ex.message : ex));
+    }
+  });
+  var hudWait = document.getElementById('hud');
+  if (hudWait) hudWait.innerHTML = 'Waiting for serialized layout from designer…';
+  setTimeout(function () {
+    if (!window.__GRID3D_STARTED__) {
+      showErr('Missing layout payload. Open this window from the designer 3D button.');
+    }
+  }, 15000);
+})();
+  </script>
+</body>
+</html>

@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import math
@@ -859,6 +860,25 @@ def _build_designer_html() -> str:
 
     js_combined = _load_designer_asset(_DESIGNER_JS_MONOLITH)
     cfg_json = json.dumps(_designer_js_config_dict(), ensure_ascii=False)
+    _grid3d_path = _DESIGNER_ASSET_DIR / "3D" / "grid3d-viewer.html"
+    _grid3d_template = _grid3d_path.read_text(encoding="utf-8") if _grid3d_path.is_file() else ""
+    if not _grid3d_template:
+        _logger.warning("Grid 3D viewer template missing: %s", _grid3d_path)
+    # Raw JSON inside <script> breaks when the template contains the literal "</script>" (HTML parser).
+    _grid3d_b64 = base64.b64encode(_grid3d_template.encode("utf-8")).decode("ascii") if _grid3d_template else ""
+    _grid3d_b64_lit = json.dumps(_grid3d_b64, ensure_ascii=False)
+    _grid3d_boot = (
+        "\n  <script>\n"
+        "try {\n"
+        "  window.__GRID3D_VIEWER_HTML_TEMPLATE__ = decodeURIComponent(escape(atob("
+        + _grid3d_b64_lit
+        + ")));\n"
+        "} catch (_grid3dErr) {\n"
+        "  window.__GRID3D_VIEWER_HTML_TEMPLATE__ = '';\n"
+        "  console.error('Grid 3D template decode failed', _grid3dErr);\n"
+        "}\n"
+        "  </script>\n"
+    )
     out = (
         "<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\" />\n  <style>\n"
         + style_root
@@ -868,7 +888,9 @@ def _build_designer_html() -> str:
         + body
         + "\n\n  <script>\n  window.__DESIGNER_CONFIG__ = "
         + cfg_json
-        + ";\n  </script>\n  <script>\n"
+        + ";\n  </script>"
+        + _grid3d_boot
+        + "  <script>\n"
         + js_combined
         + "\n  </script>\n</body>\n</html>\n"
     )

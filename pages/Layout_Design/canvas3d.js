@@ -1469,12 +1469,13 @@
     });
   });
   document.getElementById('btnView3D').addEventListener('click', function() {
-    document.getElementById('btnView3D').classList.add('active');
-    document.getElementById('btnView2D').classList.remove('active');
-    document.getElementById('canvas-container').style.display = 'none';
-    view3dContainer.classList.add('active');
-    init3D();
-    animate3D();
+    try {
+      if (typeof openGrid3DViewerWindow === 'function') openGrid3DViewerWindow();
+      else console.error('openGrid3DViewerWindow is not defined');
+    } catch (e) {
+      console.error('openGrid3DViewerWindow:', e);
+      alert('3D viewer failed: ' + (e && e.message ? e.message : e));
+    }
   });
 
   function reset3DView() {

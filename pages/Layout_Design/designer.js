@@ -787,9 +787,13 @@
     markerDrawing: false,
     markerRulerDraft: null,
     markerRulerHoverWorld: null,
+    markerIslandDraft: null,
+    markerIslandHoverWorld: null,
     markerFlightHoverSnap: null,
     markerTextDraft: null,
     dragLayoutMarkerHandle: null,
+    pathArcModeOn: false,
+    pathArcDrag: null,
   };
   let hookSyncFlightPanelFromSelection = null;
   function bumpRwySepSnapshotStaleGen() {
@@ -947,6 +951,8 @@
     state.markerDrawing = false;
     state.markerRulerDraft = null;
     state.markerRulerHoverWorld = null;
+    state.markerIslandDraft = null;
+    state.markerIslandHoverWorld = null;
     state.markerFlightHoverSnap = null;
     if (state.markerTextDraft && state.markerTextDraft.active) {
       state.markerTextDraft = null;
@@ -1311,6 +1317,14 @@
       const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
       if (![x1, y1, x2, y2].every(isFinite)) return null;
       return { kind: 'ruler', id: m.id || id(), x1: x1, y1: y1, x2: x2, y2: y2 };
+    }
+    if (k === 'island') {
+      const rawPts = Array.isArray(m.points) ? m.points : [];
+      const points = rawPts.map(function(p) {
+        return { x: Number(p && p.x), y: Number(p && p.y) };
+      }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
+      if (points.length < 3) return null;
+      return { kind: 'island', id: m.id || id(), points: points };
     }
     if (k === 'flight') {
       if (m.taxiwayId == null || m.taxiwayId === '') return null;
@@ -2999,6 +3013,13 @@
         if (m.kind === 'ruler') {
           return { kind: 'ruler', id: m.id, x1: Number(m.x1), y1: Number(m.y1), x2: Number(m.x2), y2: Number(m.y2) };
         }
+        if (m.kind === 'island') {
+          const pts = Array.isArray(m.points) ? m.points.map(function(p) {
+            return { x: Number(p && p.x), y: Number(p && p.y) };
+          }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : [];
+          if (pts.length < 3) return null;
+          return { kind: 'island', id: m.id, points: pts };
+        }
         if (m.kind === 'flight') {
           const si = (typeof m.segIndex === 'number' && isFinite(m.segIndex)) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
           return {
@@ -3018,6 +3039,109 @@
       }).filter(Boolean),
       simPathGraph: buildSimPathGraphExport()
     };
+  }
+  function buildLayout3DViewerPayload() {
+    let tSec = Number(state.simTimeSec);
+    if (!isFinite(tSec)) tSec = 0;
+    const layout = serializeCurrentLayout();
+    const flightDrawPoses = [];
+    (state.flights || []).forEach(function(f) {
+      if (!f) return;
+      let pose = null;
+      if (typeof getFlightPoseAtTimeForDraw === 'function') {
+        pose = getFlightPoseAtTimeForDraw(f, tSec);
+      }
+      flightDrawPoses.push({
+        id: f.id,
+        reg: f.reg,
+        aircraftType: f.aircraftType,
+        code: f.code,
+        arrDep: f.arrDep,
+        pose: pose && isFinite(pose.x) && isFinite(pose.y) ? { x: pose.x, y: pose.y, dx: pose.dx, dy: pose.dy } : null
+      });
+    });
+    const enrichedFootprints = {
+      remote: (state.remoteStands || []).map(function(st) {
+        return {
+          id: st && st.id,
+          name: st && st.name,
+          corners: typeof getRemoteStandCorners === 'function' ? getRemoteStandCorners(st) : null
+        };
+      }).filter(function(r) { return r.corners && r.corners.length >= 3; }),
+      pbb: (state.pbbStands || []).map(function(pbb) {
+        return {
+          id: pbb && pbb.id,
+          name: pbb && pbb.name,
+          corners: typeof getPBBStandCorners === 'function' ? getPBBStandCorners(pbb) : null
+        };
+      }).filter(function(r) { return r.corners && r.corners.length >= 3; })
+    };
+    const enrichedApronLinkPolylines = (state.apronLinks || []).map(function(lk) {
+      if (!lk || typeof getApronLinkPolylineWorldPts !== 'function') return null;
+      const pts = getApronLinkPolylineWorldPts(lk);
+      if (!pts || pts.length < 2) return null;
+      return {
+        id: lk.id,
+        points: pts.map(function(p) { return { x: p[0], y: p[1] }; })
+      };
+    }).filter(Boolean);
+    return {
+      version: 1,
+      kind: 'grid3dViewer',
+      exportedAt: new Date().toISOString(),
+      simTimeSec: tSec,
+      viewerConfig: {
+        gridMajorInterval: GRID_MAJOR_INTERVAL,
+        gridViewBg: GRID_VIEW_BG
+      },
+      layout: layout,
+      flightDrawPoses: flightDrawPoses,
+      enrichedFootprints: enrichedFootprints,
+      enrichedApronLinkPolylines: enrichedApronLinkPolylines
+    };
+  }
+  function openGrid3DViewerWindow() {
+    const tpl = typeof window.__GRID3D_VIEWER_HTML_TEMPLATE__ === 'string' ? window.__GRID3D_VIEWER_HTML_TEMPLATE__ : '';
+    if (!tpl || tpl.length < 80) {
+      console.error('Grid 3D viewer template missing');
+      alert('3D viewer template is not loaded. Ensure pages/Layout_Design/3D/grid3d-viewer.html exists and reload the Layout Design page.');
+      return;
+    }
+    let payload;
+    try {
+      payload = typeof buildLayout3DViewerPayload === 'function' ? buildLayout3DViewerPayload() : null;
+    } catch (e) {
+      console.error('buildLayout3DViewerPayload failed:', e);
+      alert('Could not serialize layout for 3D: ' + (e && e.message ? e.message : e));
+      return;
+    }
+    if (!payload || !payload.layout) {
+      alert('Could not serialize layout for 3D.');
+      return;
+    }
+    const html = tpl;
+    const w = window.open('', '_blank', 'width=1280,height=840');
+    if (!w) {
+      alert('Popup was blocked. Allow popups for this site to open the 3D viewer.');
+      return;
+    }
+    try {
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    } catch (e3) {
+      console.error(e3);
+      alert('Could not write the 3D viewer document.');
+      return;
+    }
+    setTimeout(function () {
+      try {
+        w.postMessage({ kind: 'grid3dViewerInit', payload: payload }, '*');
+      } catch (e4) {
+        console.error('postMessage to 3D viewer failed:', e4);
+        alert('Could not send layout data to the 3D window. Try again or check the browser console.');
+      }
+    }, 0);
   }
   function getExistingStandBounds() {
     const list = [];
@@ -3254,7 +3378,7 @@
   function getMarkerSubKindFromPanel() {
     const tab = document.querySelector('.marker-tool-tab[aria-selected="true"]');
     const v = tab && tab.getAttribute('data-marker-sub');
-    return v === 'ruler' || v === 'flight' ? v : 'text';
+    return v === 'ruler' || v === 'flight' || v === 'island' ? v : 'text';
   }
   function getMarkerFlightAircraftTypeFromPanel() {
     const sel = document.getElementById('markerFlightAircraftType');
@@ -3283,7 +3407,7 @@
     row.style.display = show ? '' : 'none';
   }
   function setMarkerSubKindTab(sub) {
-    const next = sub === 'ruler' || sub === 'flight' ? sub : 'text';
+    const next = sub === 'ruler' || sub === 'flight' || sub === 'island' ? sub : 'text';
     document.querySelectorAll('.marker-tool-tab').forEach(function(btn) {
       const on = (btn.getAttribute('data-marker-sub') || '') === next;
       btn.classList.toggle('active', on);
@@ -3494,6 +3618,21 @@
       const pose = resolveMarkerFlightPose(mk);
       if (!pose) return null;
       if (dist2(click, [pose.x, pose.y]) <= r2) return { markerId: mk.id, handle: 'flightCenter' };
+    } else if (mk.kind === 'island') {
+      const pts = mk.points;
+      if (!pts || !pts.length) return null;
+      let best = null;
+      let bestD2 = r2;
+      for (let vi = 0; vi < pts.length; vi++) {
+        const x = Number(pts[vi].x), y = Number(pts[vi].y);
+        if (!isFinite(x) || !isFinite(y)) continue;
+        const d2 = dist2(click, [x, y]);
+        if (d2 <= bestD2) {
+          bestD2 = d2;
+          best = { markerId: mk.id, handle: 'islandVertex', vertexIndex: vi };
+        }
+      }
+      return best;
     }
     return null;
   }
@@ -3506,6 +3645,54 @@
     ctx.strokeStyle = selected ? '#fffbeb' : 'rgba(15,23,42,0.95)';
     ctx.lineWidth = Math.max(1, 1.35 / Math.max(state.scale, 0.08));
     ctx.stroke();
+  }
+  function layoutPathDraftStrokeStyle() {
+    return 'rgba(148,163,184,0.95)';
+  }
+  function layoutPathDraftLineWidthPx() {
+    return Math.max(1, 1.3 / Math.max(state.scale, 0.1));
+  }
+  function layoutPathDraftDashPattern() {
+    return [5, 5];
+  }
+  /** @param {number[][]} pts Each [x,y] in layout px. Optional hoverXY draws one more segment from last pt. */
+  function strokeLayoutPathDraftPolyline(ctx, pts, hoverXY) {
+    if (!pts || pts.length < 1) return;
+    const hasHover = hoverXY && hoverXY.length >= 2 && isFinite(hoverXY[0]) && isFinite(hoverXY[1]);
+    if (pts.length < 2 && !hasHover) return;
+    ctx.save();
+    ctx.strokeStyle = layoutPathDraftStrokeStyle();
+    ctx.lineWidth = layoutPathDraftLineWidthPx();
+    ctx.setLineDash(layoutPathDraftDashPattern());
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    if (hasHover) ctx.lineTo(hoverXY[0], hoverXY[1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+  function drawLayoutPathDraftVertexDots(ctx, pts, hoverXY) {
+    if (!pts) return;
+    for (let i = 0; i < pts.length; i++) {
+      layoutMarkerDrawEndpointDot(ctx, pts[i][0], pts[i][1], false);
+    }
+    if (hoverXY && hoverXY.length >= 2 && isFinite(hoverXY[0]) && isFinite(hoverXY[1])) {
+      layoutMarkerDrawEndpointDot(ctx, hoverXY[0], hoverXY[1], false);
+    }
+  }
+  function strokeLayoutPathDraftCloseHintArc(ctx, cx, cy, r) {
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(56,189,248,0.9)';
+    ctx.lineWidth = Math.max(1, 1.2 / Math.max(state.scale, 0.1));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
   }
   function layoutMarkerTextHitRect(m) {
     const hx = Number(m.x), hy = Number(m.y);
@@ -3561,6 +3748,31 @@
         const tol = Math.max(CELL_SIZE * 1.1, 22 / Math.max(state.scale, 0.12));
         if (dist2(click, [pose.x, pose.y]) <= tol * tol)
           return { type: 'layoutMarker', id: m.id, obj: m };
+      } else if (m.kind === 'island') {
+        const pts = m.points;
+        if (!pts || pts.length < 3) continue;
+        const poly = pts.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
+        if (poly.length < 3) continue;
+        const er = layoutMarkerHandleHitRadiusWorld() * 1.1;
+        const er2 = er * er;
+        let nearVertex = false;
+        for (let ii = 0; ii < poly.length; ii++) {
+          if (dist2(click, poly[ii]) <= er2) {
+            nearVertex = true;
+            break;
+          }
+        }
+        if (nearVertex) return { type: 'layoutMarker', id: m.id, obj: m };
+        if (pointInPolygonXY(click, poly)) return { type: 'layoutMarker', id: m.id, obj: m };
+        const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
+        const tol2 = tol * tol;
+        const nn = poly.length;
+        for (let ei = 0; ei < nn; ei++) {
+          const p0 = poly[ei], p1 = poly[(ei + 1) % nn];
+          const pr = projectOnSegment(p0, p1, click);
+          if (pr.t < 0 || pr.t > 1) continue;
+          if (dist2(pr.p, click) <= tol2) return { type: 'layoutMarker', id: m.id, obj: m };
+        }
       }
     }
     return null;
@@ -3645,6 +3857,32 @@
         state.layoutMarkers.push({ kind: 'ruler', id: id(), x1: x1, y1: y1, x2: px, y2: py });
         syncPanelFromState();
       }
+      return;
+    }
+    if (sub === 'island') {
+      if (!state.markerIslandDraft) state.markerIslandDraft = { points: [] };
+      const draft = state.markerIslandDraft;
+      const list = draft.points;
+      const closeR = CELL_SIZE * TERM_CLOSE_POLY_CF;
+      const closeR2 = closeR * closeR;
+      if (list.length >= 3) {
+        const c0 = list[0];
+        const dx = px - c0.x, dy = py - c0.y;
+        if (dx * dx + dy * dy <= closeR2) {
+          pushUndo();
+          state.layoutMarkers.push({
+            kind: 'island',
+            id: id(),
+            points: list.map(function(p) { return { x: Number(p.x), y: Number(p.y) }; })
+          });
+          state.markerIslandDraft = null;
+          state.markerIslandHoverWorld = null;
+          syncPanelFromState();
+          return;
+        }
+      }
+      list.push({ x: px, y: py });
+      state.markerIslandHoverWorld = [px, py];
       return;
     }
     if (sub === 'flight') {
@@ -3828,6 +4066,204 @@
     }
     return best;
   }
+  const PATH_ARC_MIN_BULGE_PX = 2;
+  const PATH_ARC_MAX_BULGE_FRAC = 0.45;
+  function pathArcAngleDiffCCW(t0, t1) {
+    let d = t1 - t0;
+    while (d < 0) d += 2 * Math.PI;
+    while (d >= 2 * Math.PI) d -= 2 * Math.PI;
+    return d;
+  }
+  function pathArcPointBetweenAnglesCCW(tStart, tProbe, spanCCW) {
+    return pathArcAngleDiffCCW(tStart, tProbe) <= spanCCW + 1e-10;
+  }
+  function pathArcCircumcircle(ax, ay, bx, by, cx, cy) {
+    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    if (Math.abs(d) < 1e-12) return null;
+    const a2 = ax * ax + ay * ay;
+    const b2 = bx * bx + by * by;
+    const c2 = cx * cx + cy * cy;
+    const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
+    const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
+    const r = Math.hypot(ax - ux, ay - uy);
+    if (!(r > 1e-9)) return null;
+    return { ox: ux, oy: uy, r: r };
+  }
+  /** Endpoints A,B and point C on arc; returns world px polyline A→B along the circle through C. */
+  function pathArcSampleThreePointWorldPx(ax, ay, bx, by, cx, cy, maxChordStepPx) {
+    const cc = pathArcCircumcircle(ax, ay, bx, by, cx, cy);
+    if (!cc) return [[ax, ay], [bx, by]];
+    const ta = Math.atan2(ay - cc.oy, ax - cc.ox);
+    const tb = Math.atan2(by - cc.oy, bx - cc.ox);
+    const tc = Math.atan2(cy - cc.oy, cx - cc.ox);
+    const spanAB = pathArcAngleDiffCCW(ta, tb);
+    let tStart, span, reverseOrder;
+    if (pathArcPointBetweenAnglesCCW(ta, tc, spanAB)) {
+      tStart = ta;
+      span = spanAB;
+      reverseOrder = false;
+    } else {
+      tStart = tb;
+      span = pathArcAngleDiffCCW(tb, ta);
+      reverseOrder = true;
+    }
+    const arcLen = cc.r * span;
+    const mcs = Math.max(3, typeof maxChordStepPx === 'number' && maxChordStepPx > 0 ? maxChordStepPx : CELL_SIZE * 0.28);
+    const n = Math.max(8, Math.min(96, Math.ceil(arcLen / mcs)));
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const ang = tStart + (span * i) / n;
+      pts.push([cc.ox + cc.r * Math.cos(ang), cc.oy + cc.r * Math.sin(ang)]);
+    }
+    if (reverseOrder) pts.reverse();
+    pts[0] = [ax, ay];
+    pts[pts.length - 1] = [bx, by];
+    return pts;
+  }
+  /** Subdivide polyline so each segment length ≤ maxStepPx (smoother grid snap for arcs). */
+  function pathArcDensifyPolylinePx(pts, maxStepPx) {
+    if (!pts || pts.length < 2) return pts ? pts.slice() : [];
+    const m = Math.max(1e-6, maxStepPx);
+    const out = [[pts[0][0], pts[0][1]]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const x0 = pts[i][0], y0 = pts[i][1], x1 = pts[i + 1][0], y1 = pts[i + 1][1];
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      const steps = Math.max(1, Math.ceil(len / m));
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps;
+        out.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
+      }
+    }
+    return out;
+  }
+  function pathArcComputePreviewWorldPxFromAB(Ax, Ay, Bx, By, wx, wy) {
+    const dx = Bx - Ax, dy = By - Ay;
+    const chordLen = Math.hypot(dx, dy) || 1;
+    const ex = dx / chordLen, ey = dy / chordLen;
+    const nx = -ey, ny = ex;
+    const M = [(Ax + Bx) * 0.5, (Ay + By) * 0.5];
+    let h = (wx - M[0]) * nx + (wy - M[1]) * ny;
+    const maxH = chordLen * PATH_ARC_MAX_BULGE_FRAC;
+    h = Math.max(-maxH, Math.min(maxH, h));
+    if (Math.abs(h) < PATH_ARC_MIN_BULGE_PX) return [[Ax, Ay], [Bx, By]];
+    const Cx = M[0] + nx * h, Cy = M[1] + ny * h;
+    return pathArcSampleThreePointWorldPx(Ax, Ay, Bx, By, Cx, Cy, Math.max(CELL_SIZE * 0.28, chordLen / 28));
+  }
+  function pathArcComputePreviewWorldPx(tw, vertexIndex, wx, wy) {
+    if (!tw || tw.pathType === 'runway') return null;
+    const verts = tw.vertices;
+    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return null;
+    const A = cellToPixel(verts[vertexIndex - 1].col, verts[vertexIndex - 1].row);
+    const B = cellToPixel(verts[vertexIndex + 1].col, verts[vertexIndex + 1].row);
+    return pathArcComputePreviewWorldPxFromAB(A[0], A[1], B[0], B[1], wx, wy);
+  }
+  function pathArcCommitIslandVertexFromPreview(mk, vertexIndex, previewPx, snapToGrid) {
+    if (!mk || mk.kind !== 'island' || !previewPx || previewPx.length < 2) return;
+    const verts = mk.points;
+    const n = verts ? verts.length : 0;
+    if (!verts || n < 3 || vertexIndex < 0 || vertexIndex >= n) return;
+    const prev = verts[(vertexIndex - 1 + n) % n];
+    const next = verts[(vertexIndex + 1) % n];
+    const Apx = [Number(prev.x), Number(prev.y)];
+    const Bpx = [Number(next.x), Number(next.y)];
+    const workPx = previewPx.map(function(p, j) {
+      if (j === 0) return [Apx[0], Apx[1]];
+      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
+      return [p[0], p[1]];
+    });
+    const cells = [];
+    if (previewPx.length > 2) {
+      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
+      for (let k = 0; k < densePx.length; k++) {
+        const snap = worldPointToPixel(densePx[k][0], densePx[k][1], snapToGrid);
+        const c = { x: snap[0], y: snap[1] };
+        if (cells.length && cells[cells.length - 1].x === c.x && cells[cells.length - 1].y === c.y) continue;
+        if (c.x === prev.x && c.y === prev.y) continue;
+        cells.push(c);
+      }
+      while (cells.length && cells[cells.length - 1].x === next.x && cells[cells.length - 1].y === next.y) cells.pop();
+    }
+    if (!cells.length) {
+      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
+      const snap = worldPointToPixel(M[0], M[1], snapToGrid);
+      cells.push({ x: snap[0], y: snap[1] });
+    }
+    const newArr = verts.slice();
+    newArr.splice(vertexIndex, 1, ...cells);
+    mk.points = newArr;
+    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
+    state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: midSel };
+  }
+  function pathArcCommitFromPreview(tw, vertexIndex, previewPx, snapToGrid) {
+    if (!tw || tw.pathType === 'runway') return;
+    if (!previewPx || previewPx.length < 2) return;
+    const verts = tw.vertices;
+    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return;
+    const prev = verts[vertexIndex - 1], next = verts[vertexIndex + 1];
+    const Apx = cellToPixel(prev.col, prev.row);
+    const Bpx = cellToPixel(next.col, next.row);
+    const workPx = previewPx.map(function(p, j) {
+      if (j === 0) return [Apx[0], Apx[1]];
+      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
+      return [p[0], p[1]];
+    });
+    const cells = [];
+    if (previewPx.length > 2) {
+      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
+      for (let k = 0; k < densePx.length; k++) {
+        const c = worldPointToCellPoint(densePx[k][0], densePx[k][1], snapToGrid);
+        if (cells.length && cells[cells.length - 1].col === c.col && cells[cells.length - 1].row === c.row) continue;
+        if (c.col === prev.col && c.row === prev.row) continue;
+        cells.push(c);
+      }
+      while (cells.length && cells[cells.length - 1].col === next.col && cells[cells.length - 1].row === next.row) cells.pop();
+    }
+    if (!cells.length) {
+      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
+      cells.push(worldPointToCellPoint(M[0], M[1], snapToGrid));
+    }
+    tw.vertices.splice(vertexIndex, 1, ...cells);
+    if (typeof syncStartEndFromVertices === 'function') syncStartEndFromVertices(tw);
+    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
+    state.selectedVertex = { type: 'taxiway', id: tw.id, index: midSel };
+    bumpPathPolylineCacheRev();
+  }
+  function isPathArcHudVertexSelection() {
+    const so = state.selectedObject;
+    const sv = state.selectedVertex;
+    if (!so || !so.obj) return null;
+    if (so.type === 'taxiway') {
+      if (!sv || sv.type !== 'taxiway' || sv.id !== so.id) return null;
+      const tw = so.obj;
+      if (!tw || tw.pathType === 'runway') return null;
+      const idx = sv.index;
+      const verts = tw.vertices;
+      if (!verts || idx <= 0 || idx >= verts.length - 1) return null;
+      return { kind: 'taxiway', tw: tw, idx: idx };
+    }
+    if (so.type === 'layoutMarker' && so.obj.kind === 'island') {
+      if (!sv || sv.type !== 'layoutMarkerHandle' || sv.handle !== 'islandVertex' || String(sv.id) !== String(so.id)) return null;
+      const mk = so.obj;
+      const pts = mk.points;
+      const n = (pts && pts.length) || 0;
+      const idx = sv.vertexIndex;
+      if (n < 3 || typeof idx !== 'number' || idx < 0 || idx >= n) return null;
+      return { kind: 'island', mk: mk, idx: idx };
+    }
+    return null;
+  }
+  function clearPathArcIfStale() {
+    if (!state.pathArcDrag) return;
+    const d = state.pathArcDrag;
+    if (d.islandMarkerId != null) {
+      const mk = (state.layoutMarkers || []).find(function(m) { return m && String(m.id) === String(d.islandMarkerId); });
+      const n = (mk && mk.kind === 'island' && mk.points && mk.points.length) || 0;
+      if (!mk || mk.kind !== 'island' || d.vertexIndex < 0 || d.vertexIndex >= n) state.pathArcDrag = null;
+      return;
+    }
+    const tw = state.taxiways.find(function(t) { return t.id === d.taxiwayId; });
+    if (!tw || tw.pathType === 'runway' || d.vertexIndex <= 0 || d.vertexIndex >= (tw.vertices || []).length - 1) state.pathArcDrag = null;
+  }
   function insertSelectedVertexAt(wx, wy, snapToGrid) {
     if (!state.selectedObject || !state.selectedObject.obj) return false;
     const sel = state.selectedObject;
@@ -3869,6 +4305,19 @@
       state.selectedVertex = { type: 'apronLink', id: lk.id, kind: 'mid', midIndex: Math.max(0, hit.insertIndex - 1) };
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    if (sel.type === 'layoutMarker') {
+      const mk = sel.obj;
+      if (!mk || mk.kind !== 'island' || !Array.isArray(mk.points) || mk.points.length < 2) return false;
+      const hit = findInsertSegment(mk.points, true, wx, wy);
+      if (!hit) return false;
+      const pt = worldPointToPixel(hit.near[0], hit.near[1], snapToGrid);
+      pushUndo();
+      mk.points.splice(hit.insertIndex, 0, { x: pt[0], y: pt[1] });
+      state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: hit.insertIndex };
+      if (typeof updateObjectInfo === 'function') updateObjectInfo();
+      draw();
       return true;
     }
     return false;
@@ -3960,6 +4409,18 @@
       else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
       return true;
     }
+    if (sv.type === 'layoutMarkerHandle' && sv.handle === 'islandVertex') {
+      const mk = (state.layoutMarkers || []).find(function(m) { return m && String(m.id) === String(sv.id); });
+      if (!mk || mk.kind !== 'island' || !Array.isArray(mk.points)) return false;
+      const idx = sv.vertexIndex;
+      if (typeof idx !== 'number' || idx < 0 || idx >= mk.points.length || mk.points.length <= 3) return false;
+      pushUndo();
+      mk.points.splice(idx, 1);
+      state.selectedVertex = null;
+      if (typeof updateObjectInfo === 'function') updateObjectInfo();
+      draw();
+      return true;
+    }
     return false;
   }
 
@@ -4003,6 +4464,13 @@
       state.apronLinkTemp = null;
       state.apronLinkMidpoints = [];
       state.apronLinkPointerWorld = null;
+      draw();
+      return true;
+    }
+    if (settingModeSelect.value === 'marker' && state.markerDrawing && getMarkerSubKindFromPanel() === 'island' && state.markerIslandDraft && state.markerIslandDraft.points && state.markerIslandDraft.points.length) {
+      state.markerIslandDraft.points.pop();
+      if (!state.markerIslandDraft.points.length) state.markerIslandDraft = null;
+      state.markerIslandHoverWorld = null;
       draw();
       return true;
     }
@@ -10380,29 +10848,6 @@
       drawRectAtBothEnds(thresholdInset, offset, thresholdStripeLen, thresholdStripeWidth, thresholdColor);
     });
 
-    (function drawRunwayCenterlineDashed() {
-      const paveStart = isCcw ? (endDisp + endBlast) : (startDisp + startBlast);
-      const paveEnd = isCcw ? (totalLen - startDisp - startBlast) : (totalLen - endDisp - endBlast);
-      if (!(paveEnd > paveStart + 1)) return;
-      const clPts = polylineSliceBetweenDistances(pts, paveStart, paveEnd);
-      if (!clPts || clPts.length < 2) return;
-      ctx.save();
-      ctx.strokeStyle = c2dRunwayCenterlineColor();
-      ctx.lineWidth = Math.max(1, runwayWidth * 0.02);
-      const dashPx = Math.max(10, runwayWidth * 0.2);
-      const gapPx = Math.max(8, runwayWidth * 0.16);
-      ctx.setLineDash([dashPx, gapPx]);
-      ctx.lineDashOffset = 0;
-      ctx.lineCap = 'butt';
-      ctx.lineJoin = 'miter';
-      ctx.beginPath();
-      ctx.moveTo(clPts[0][0], clPts[0][1]);
-      for (let ci = 1; ci < clPts.length; ci++) ctx.lineTo(clPts[ci][0], clPts[ci][1]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-    })();
-
     const aimingDist = Math.min(Math.max(300, runwayWidth * 3.5), totalLen * 0.28);
     if (aimingDist < (totalLen * 0.5) - (runwayWidth * 0.6)) {
       drawSymmetricPairAtBothEnds(
@@ -10429,7 +10874,43 @@
     ctx.restore();
   }
 
-  
+  /** Paved-segment runway centerline; drawn after all taxiway width strokes so RTX width cannot cover it. */
+  function drawRunwayPavedCenterlineDashed(tw, pts, widthPx) {
+    if (!tw || tw.pathType !== 'runway') return;
+    if (!pts || pts.length < 2) return;
+    const totalLen = runwayPolylineLengthPx(pts);
+    const runwayWidth = Math.max(24, Number(widthPx) || RUNWAY_PATH_DEFAULT_WIDTH);
+    if (totalLen < Math.max(220, runwayWidth * 3)) return;
+    const startDisp = getEffectiveRunwayStartDisplacedThresholdM(tw);
+    const startBlast = getEffectiveRunwayStartBlastPadM(tw);
+    const endDisp = getEffectiveRunwayEndDisplacedThresholdM(tw);
+    const endBlast = getEffectiveRunwayEndBlastPadM(tw);
+    const lowFrame = getPolylinePointAndFrameAtDistance(pts, 0);
+    const highFrame = getPolylinePointAndFrameAtDistance(pts, totalLen);
+    if (!lowFrame || !highFrame) return;
+    const isCcw = normalizeRwDirectionValue(getTaxiwayDirection(tw)) === 'counter_clockwise';
+    const paveStart = isCcw ? (endDisp + endBlast) : (startDisp + startBlast);
+    const paveEnd = isCcw ? (totalLen - startDisp - startBlast) : (totalLen - endDisp - endBlast);
+    if (!(paveEnd > paveStart + 1)) return;
+    const clPts = polylineSliceBetweenDistances(pts, paveStart, paveEnd);
+    if (!clPts || clPts.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = c2dRunwayCenterlineColor();
+    ctx.lineWidth = Math.max(1, runwayWidth * 0.02);
+    const dashPx = Math.max(10, runwayWidth * 0.2);
+    const gapPx = Math.max(8, runwayWidth * 0.16);
+    ctx.setLineDash([dashPx, gapPx]);
+    ctx.lineDashOffset = 0;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    ctx.beginPath();
+    ctx.moveTo(clPts[0][0], clPts[0][1]);
+    for (let ci = 1; ci < clPts.length; ci++) ctx.lineTo(clPts[ci][0], clPts[ci][1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   function polylineTailFromDistancePx(pts, distPx) {
     if (!pts || pts.length < 2) return [];
     const total = runwayPolylineLengthPx(pts);
@@ -13683,11 +14164,34 @@
     if (!state.markerDrawing) {
       state.markerRulerDraft = null;
       state.markerRulerHoverWorld = null;
+      state.markerIslandDraft = null;
+      state.markerIslandHoverWorld = null;
       state.markerFlightHoverSnap = null;
       cancelMarkerTextDraftWithoutCommit();
     }
     syncDrawToggleButton('btnMarkerDraw', !!state.markerDrawing);
     draw();
+  });
+  const pathArcHudRootEl = document.getElementById('path-arc-hud');
+  if (pathArcHudRootEl) {
+    pathArcHudRootEl.addEventListener('mousedown', function(ev) {
+      ev.stopPropagation();
+    });
+    pathArcHudRootEl.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+    });
+  }
+  const btnPathArcToggleEl = document.getElementById('btnPathArcToggle');
+  if (btnPathArcToggleEl) btnPathArcToggleEl.addEventListener('click', function(ev) {
+    ev.stopPropagation();
+    ev.preventDefault();
+    state.pathArcModeOn = !state.pathArcModeOn;
+    if (!state.pathArcModeOn && state.pathArcDrag) {
+      undo();
+      state.pathArcDrag = null;
+    }
+    updatePathArcHud();
+    scheduleDraw();
   });
   const markerTextDraftInputEl = document.getElementById('markerTextDraftInput');
   if (markerTextDraftInputEl) {
@@ -13708,6 +14212,8 @@
       commitMarkerTextDraft();
       state.markerRulerDraft = null;
       state.markerRulerHoverWorld = null;
+      state.markerIslandDraft = null;
+      state.markerIslandHoverWorld = null;
       state.markerFlightHoverSnap = null;
       scheduleDraw();
     });
@@ -14121,6 +14627,15 @@
             tag: Math.hypot(dx, dy).toFixed(1) + ' m',
             details: 'Length: ' + Math.hypot(dx, dy).toFixed(1) + ' m'
           });
+        } else if (mk.kind === 'island') {
+          const nv = (mk.points && mk.points.length) || 0;
+          items.push({
+            type: 'layoutMarker',
+            id: mk.id,
+            title: 'Marker | Island',
+            tag: nv + ' vtx',
+            details: 'Closed polygon · ' + nv + ' vertices (layout m = px)'
+          });
         } else if (mk.kind === 'flight') {
           const tw = state.taxiways.find(function(t) { return t && t.id === mk.taxiwayId; });
           items.push({
@@ -14222,6 +14737,101 @@
     } else {
       el.setAttribute('hidden', '');
       el.innerHTML = '';
+    }
+  }
+
+  function updatePathArcHud() {
+    const root = document.getElementById('path-arc-hud');
+    const btn = document.getElementById('btnPathArcToggle');
+    const hint = document.getElementById('pathArcHudHint');
+    if (!root || !btn) return;
+    clearPathArcIfStale();
+    btn.textContent = state.pathArcModeOn ? '호: ON' : '호: OFF';
+    btn.setAttribute('aria-pressed', state.pathArcModeOn ? 'true' : 'false');
+    btn.classList.toggle('path-arc-hud-toggle-on', !!state.pathArcModeOn);
+    btn.title = state.pathArcModeOn
+      ? 'OFF는 이 버튼만 누르세요. 호는 격자(캔버스)를 누른 채 드래그할 때만 그려집니다.'
+      : 'ON 후 격자(캔버스)에서 누른 채 드래그하면 호가 만들어집니다.';
+    const elig = isPathArcHudVertexSelection();
+    const dragging = !!state.pathArcDrag;
+    const show = !!(elig || dragging);
+    if (!show) {
+      root.setAttribute('hidden', '');
+      root.style.display = 'none';
+      if (hint) hint.setAttribute('hidden', '');
+      return;
+    }
+    let vx, vy, pathSel;
+    if (dragging) {
+      const d = state.pathArcDrag;
+      if (d.islandMarkerId != null) {
+        const mkD = (state.layoutMarkers || []).find(function(m) { return m && String(m.id) === String(d.islandMarkerId); });
+        const idxD = d.vertexIndex;
+        if (!mkD || mkD.kind !== 'island' || !mkD.points || idxD < 0 || idxD >= mkD.points.length) {
+          root.setAttribute('hidden', '');
+          root.style.display = 'none';
+          if (hint) hint.setAttribute('hidden', '');
+          return;
+        }
+        const pv = mkD.points[idxD];
+        vx = Number(pv.x);
+        vy = Number(pv.y);
+        pathSel = !!(state.selectedObject && state.selectedObject.type === 'layoutMarker' && String(state.selectedObject.id) === String(mkD.id));
+      } else {
+        const twPos = state.taxiways.find(function(t) { return t.id === d.taxiwayId; });
+        const idxPos = d.vertexIndex;
+        if (!twPos || !twPos.vertices || idxPos < 0 || idxPos >= twPos.vertices.length) {
+          root.setAttribute('hidden', '');
+          root.style.display = 'none';
+          if (hint) hint.setAttribute('hidden', '');
+          return;
+        }
+        const v = twPos.vertices[idxPos];
+        vx = cellToPixel(Number(v.col), Number(v.row))[0];
+        vy = cellToPixel(Number(v.col), Number(v.row))[1];
+        pathSel = !!(state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === twPos.id);
+      }
+    } else {
+      if (!elig) {
+        root.setAttribute('hidden', '');
+        root.style.display = 'none';
+        if (hint) hint.setAttribute('hidden', '');
+        return;
+      }
+      if (elig.kind === 'island') {
+        const pv = elig.mk.points[elig.idx];
+        vx = Number(pv.x);
+        vy = Number(pv.y);
+        pathSel = !!(state.selectedObject && state.selectedObject.type === 'layoutMarker' && String(state.selectedObject.id) === String(elig.mk.id));
+      } else {
+        const twPos = elig.tw;
+        const idxPos = elig.idx;
+        if (!twPos || !twPos.vertices || idxPos < 0 || idxPos >= twPos.vertices.length) {
+          root.setAttribute('hidden', '');
+          root.style.display = 'none';
+          if (hint) hint.setAttribute('hidden', '');
+          return;
+        }
+        const v = twPos.vertices[idxPos];
+        vx = cellToPixel(Number(v.col), Number(v.row))[0];
+        vy = cellToPixel(Number(v.col), Number(v.row))[1];
+        pathSel = !!(state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === twPos.id);
+      }
+    }
+    const rWorld = layoutPathVertexRadiusPx(true, pathSel);
+    const sc = worldToScreenCanvas(vx - rWorld, vy - rWorld);
+    const left = Math.max(6, sc[0] - 8);
+    const top = Math.max(6, sc[1] - 44);
+    root.style.position = 'absolute';
+    root.style.left = left.toFixed(1) + 'px';
+    root.style.top = top.toFixed(1) + 'px';
+    root.style.zIndex = '35';
+    root.removeAttribute('hidden');
+    root.style.display = 'flex';
+    if (dragging) {
+      if (hint) hint.removeAttribute('hidden');
+    } else {
+      if (hint) hint.setAttribute('hidden', '');
     }
   }
 
@@ -14362,6 +14972,11 @@
           const dx = Number(mk.x2) - Number(mk.x1), dy = Number(mk.y2) - Number(mk.y1);
           objectInfoEl.innerHTML = '<strong>Marker · Ruler</strong><br>Length: ' + Math.hypot(dx, dy).toFixed(1) + ' m' +
             '<br>From: (' + Number(mk.x1).toFixed(1) + ', ' + Number(mk.y1).toFixed(1) + ') → (' + Number(mk.x2).toFixed(1) + ', ' + Number(mk.y2).toFixed(1) + ')';
+        } else if (mk.kind === 'island') {
+          const nv = (mk.points && mk.points.length) || 0;
+          objectInfoEl.innerHTML = '<strong>Marker · Island</strong><br>Vertices: ' + nv +
+            '<br>호: 패널과 동일 토글 — 꼭짓점 선택 후 캔버스에서 드래그해 곡선 적용. Shift로 격자 스냅.' +
+            '<br>닫기: 첫 점 근처 클릭(≥3점). 더블클릭으로 변 중간에 점 추가.';
         } else if (mk.kind === 'flight') {
           const tw = state.taxiways.find(function(t) { return t && t.id === mk.taxiwayId; });
           const bid = 'layoutMarkerFlightBlazerToggle';
@@ -14428,6 +15043,7 @@
     } else
       objectInfoEl.textContent = 'Select an object on the grid or from the list.';
     updateFlightGridHud();
+    updatePathArcHud();
     renderObjectList();
   }
 
@@ -14618,69 +15234,61 @@
       const selected = state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.id === term.id;
       const buildingTheme = getBuildingTheme(term);
       const termPts = term.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
-      ctx.lineWidth = selected ? 3 : 2;
-      ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : buildingTheme.stroke;
-      ctx.fillStyle = selected ? c2dObjectSelectedFill() : buildingTheme.fill;
-      ctx.beginPath();
-      for (let i = 0; i < termPts.length; i++) {
-        const [x,y] = termPts[i];
-        if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-      }
-      if (term.closed) {
-        ctx.closePath();
-        if (buildingTheme.fillEnabled) ctx.fill();
-      }
-      if (selected) {
-        ctx.save();
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-      }
-      ctx.stroke();
-      if (selected) ctx.restore();
-      if (term.closed && buildingTheme.hatch === 'diagonal' && buildingTheme.fillEnabled) {
-        drawPolygonHatch(termPts, selected ? c2dObjectSelectedDashStroke() : buildingTheme.stroke, Math.max(10, CELL_SIZE * 0.6));
-      }
-      if (term.closed && term.vertices.length > 0) {
-        let cx = 0, cy = 0;
-        term.vertices.forEach(v => {
-          const [px, py] = cellToPixel(v.col, v.row);
-          cx += px; cy += py;
-        });
-        cx /= term.vertices.length;
-        cy /= term.vertices.length;
-        const label = term.name || term.id || 'Building';
-        ctx.fillStyle = buildingTheme.labelFill;
-        ctx.font = '12px system-ui';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(label, cx, cy);
-      }
-      term.vertices.forEach((v, i) => {
-        const [x,y] = cellToPixel(v.col, v.row);
-        const vertexSelected = isSelectedVertex('terminal', term.id, i);
+      const ptrTerm = isDrawingTerm ? state.layoutPathDrawPointer : null;
+      const hoverTerm = (ptrTerm && ptrTerm.length >= 2) ? ptrTerm : null;
+      if (isDrawingTerm && !term.closed && term.vertices.length >= 1) {
+        strokeLayoutPathDraftPolyline(ctx, termPts, hoverTerm);
+        drawLayoutPathDraftVertexDots(ctx, termPts, hoverTerm);
+      } else {
+        ctx.lineWidth = selected ? 3 : 2;
+        ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : buildingTheme.stroke;
+        ctx.fillStyle = selected ? c2dObjectSelectedFill() : buildingTheme.fill;
         ctx.beginPath();
-        ctx.fillStyle = vertexSelected ? '#f43f5e' : (i === 0 ? '#f97316' : '#e5e7eb');
-        ctx.arc(x, y, layoutTerminalVertexRadiusPx(vertexSelected), 0, Math.PI*2);
-        ctx.fill();
-      });
-      if (isDrawingTerm && state.layoutPathDrawPointer && term.vertices.length >= 1) {
-        const ptr = state.layoutPathDrawPointer;
-        const lastV = term.vertices[term.vertices.length - 1];
-        const [lx, ly] = cellToPixel(lastV.col, lastV.row);
-        if (ptr && ptr.length >= 2 && dist2([lx, ly], ptr) > 1e-6) {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
-          ctx.setLineDash([4, 6]);
-          ctx.lineWidth = 2;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(lx, ly);
-          ctx.lineTo(ptr[0], ptr[1]);
-          ctx.stroke();
-          ctx.restore();
+        for (let i = 0; i < termPts.length; i++) {
+          const [x,y] = termPts[i];
+          if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
         }
+        if (term.closed) {
+          ctx.closePath();
+          if (buildingTheme.fillEnabled) ctx.fill();
+        }
+        if (selected) {
+          ctx.save();
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }
+        ctx.stroke();
+        if (selected) ctx.restore();
+        if (term.closed && buildingTheme.hatch === 'diagonal' && buildingTheme.fillEnabled) {
+          drawPolygonHatch(termPts, selected ? c2dObjectSelectedDashStroke() : buildingTheme.stroke, Math.max(10, CELL_SIZE * 0.6));
+        }
+        if (term.closed && term.vertices.length > 0) {
+          let cx = 0, cy = 0;
+          term.vertices.forEach(v => {
+            const [px, py] = cellToPixel(v.col, v.row);
+            cx += px; cy += py;
+          });
+          cx /= term.vertices.length;
+          cy /= term.vertices.length;
+          const label = term.name || term.id || 'Building';
+          ctx.fillStyle = buildingTheme.labelFill;
+          ctx.font = '12px system-ui';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, cx, cy);
+        }
+      }
+      if (selected && !(isDrawingTerm && !term.closed && term.vertices.length >= 1)) {
+        term.vertices.forEach((v, i) => {
+          const [x,y] = cellToPixel(v.col, v.row);
+          const vertexSelected = isSelectedVertex('terminal', term.id, i);
+          ctx.beginPath();
+          ctx.fillStyle = vertexSelected ? '#f43f5e' : (i === 0 ? '#f97316' : '#e5e7eb');
+          ctx.arc(x, y, layoutTerminalVertexRadiusPx(vertexSelected), 0, Math.PI*2);
+          ctx.fill();
+        });
       }
     });
     ctx.restore();
@@ -15447,22 +16055,36 @@
     state.taxiways.forEach(tw => {
       const g = taxiwayDrawContext(tw);
       if (!g || tw.vertices.length < 2) return;
-      const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, showRoadWidth = g.showRoadWidth, pathLineCap = g.pathLineCap;
+      const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, showRoadWidth = g.showRoadWidth, pathLineCap = g.pathLineCap, width = g.width;
       if (showRoadWidth) {
         ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke())));
+        let skipRunwayCenterlineStroke = false;
+        if (isRunwayPath) {
+          const rwPtsCk = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+          const tLen = runwayPolylineLengthPx(rwPtsCk);
+          const rwW = Math.max(24, Number(width) || RUNWAY_PATH_DEFAULT_WIDTH);
+          skipRunwayCenterlineStroke = tLen >= Math.max(220, rwW * 3);
+          ctx.strokeStyle = c2dRunwayCenterlineColor();
+          ctx.setLineDash([10, 12]);
+        } else {
+          ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
+          ctx.setLineDash([]);
+        }
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        if (sel) {
-          ctx.save();
-          ctx.shadowColor = c2dObjectSelectedGlow();
-          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-          ctx.stroke();
-          ctx.restore();
-        } else ctx.stroke();
+        if (!skipRunwayCenterlineStroke) {
+          if (sel) {
+            ctx.save();
+            ctx.shadowColor = c2dObjectSelectedGlow();
+            ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+            ctx.stroke();
+            ctx.restore();
+          } else ctx.stroke();
+        }
+        ctx.setLineDash([]);
       } else if (!isRunwayPath) {
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
@@ -15474,7 +16096,8 @@
         ctx.stroke();
       } else {
         ctx.lineWidth = 1.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#f5930b';
+        ctx.strokeStyle = c2dRunwayCenterlineColor();
+        ctx.setLineDash([10, 12]);
         ctx.lineCap = pathLineCap;
         ctx.lineJoin = 'round';
         ctx.beginPath();
@@ -15489,7 +16112,14 @@
           ctx.stroke();
           ctx.restore();
         } else ctx.stroke();
+        ctx.setLineDash([]);
       }
+    });
+    state.taxiways.forEach(tw => {
+      const g = taxiwayDrawContext(tw);
+      if (!g || !g.isRunwayPath || tw.vertices.length < 2 || !g.showRoadWidth) return;
+      const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
+      drawRunwayPavedCenterlineDashed(tw, runwayPts, g.width);
     });
     state.taxiways.forEach(tw => {
       const g = taxiwayDrawContext(tw);
@@ -15499,10 +16129,15 @@
       if (dir !== 'both' && tw.vertices.length >= 2) {
         const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
         const totalLen = pts.reduce((acc, p, i) => acc + (i > 0 ? Math.hypot(p[0]-pts[i-1][0], p[1]-pts[i-1][1]) : 0), 0);
-        const arrowSpacing = Math.max(22, Math.min(42, totalLen / 10));
-        const numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
-        const arrLen = CELL_SIZE * 0.54;
-        ctx.fillStyle = isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
+        let numArrows;
+        if (isRunwayPath) {
+          numArrows = Math.max(2, Math.min(5, 1 + Math.floor(totalLen / Math.max(CELL_SIZE * 16, totalLen / 6))));
+        } else {
+          const arrowSpacing = Math.max(22, Math.min(42, totalLen / 10));
+          numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
+        }
+        const arrLen = isRunwayPath ? CELL_SIZE * 0.63 : CELL_SIZE * 0.54;
+        ctx.fillStyle = isRunwayPath ? c2dRunwayCenterlineColor() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
         for (let k = 1; k <= numArrows; k++) {
           const targetDist = totalLen * (k / (numArrows + 1));
           let acc = 0;
@@ -15603,47 +16238,40 @@
           }
         }
       }
-      if ((drawing || sel) && tw.vertices.length >= 1) {
+      if (drawing && tw.vertices.length >= 1) {
+        const ptsPx = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+        const ptrTw = state.layoutPathDrawPointer;
+        const hoverTw = (ptrTw && ptrTw.length >= 2) ? ptrTw : null;
+        strokeLayoutPathDraftPolyline(ctx, ptsPx, hoverTw);
+      }
+      if (tw.vertices.length >= 1) {
         tw.vertices.forEach((v, i) => {
           const [x, y] = cellToPixel(v.col, v.row);
           const vertexSelected = isSelectedVertex('taxiway', tw.id, i);
-          if (i === 0 && drawing) {
-            ctx.fillStyle = '#f97316';
-            ctx.beginPath();
-            ctx.arc(x, y, c2dPathDrawStartMarkerRadiusPx(), 0, Math.PI*2);
-            ctx.fill();
-            ctx.strokeStyle = '#ea580c';
-            ctx.lineWidth = c2dPathDrawStartMarkerStrokePx();
-            ctx.stroke();
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold ' + c2dPathDrawStartLabelFontPx() + 'px system-ui';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('Start', x, y + c2dPathDrawStartLabelOffsetY());
-          } else {
+          if (drawing) {
+            if (i === 0) {
+              ctx.fillStyle = '#f97316';
+              ctx.beginPath();
+              ctx.arc(x, y, c2dPathDrawStartMarkerRadiusPx(), 0, Math.PI*2);
+              ctx.fill();
+              ctx.strokeStyle = '#ea580c';
+              ctx.lineWidth = c2dPathDrawStartMarkerStrokePx();
+              ctx.stroke();
+              ctx.fillStyle = '#fff';
+              ctx.font = 'bold ' + c2dPathDrawStartLabelFontPx() + 'px system-ui';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('Start', x, y + c2dPathDrawStartLabelOffsetY());
+            } else {
+              layoutMarkerDrawEndpointDot(ctx, x, y, vertexSelected);
+            }
+          } else if (sel) {
             ctx.fillStyle = vertexSelected ? '#f43f5e' : ((i === 0 && sel) ? '#f97316' : '#e5e7eb');
             ctx.beginPath();
             ctx.arc(x, y, layoutPathVertexRadiusPx(vertexSelected, sel), 0, Math.PI*2);
             ctx.fill();
           }
         });
-      }
-      if (drawing && state.layoutPathDrawPointer && tw.vertices.length >= 1) {
-        const ptr = state.layoutPathDrawPointer;
-        const lastV = tw.vertices[tw.vertices.length - 1];
-        const [lx, ly] = cellToPixel(lastV.col, lastV.row);
-        if (ptr && ptr.length >= 2 && dist2([lx, ly], ptr) > 1e-6) {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
-          ctx.setLineDash([4, 6]);
-          ctx.lineWidth = Math.max(2, width * 0.25);
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(lx, ly);
-          ctx.lineTo(ptr[0], ptr[1]);
-          ctx.stroke();
-          ctx.restore();
-        }
       }
     });
     ctx.restore();
@@ -15707,7 +16335,6 @@
     });
     ctx.setLineDash([]);
     if (state.apronLinkTemp) {
-      ctx.fillStyle = '#facc15';
       const t = state.apronLinkTemp;
       const draft = [];
       if (t.kind === 'pbb' || t.kind === 'remote') {
@@ -15723,20 +16350,8 @@
       });
       if (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2) draft.push(state.apronLinkPointerWorld);
       if (draft.length >= 1) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
-        ctx.setLineDash([4, 6]);
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(draft[0][0], draft[0][1]);
-        for (let di = 1; di < draft.length; di++) ctx.lineTo(draft[di][0], draft[di][1]);
-        if (draft.length >= 2) ctx.stroke();
-        ctx.restore();
-        draft.forEach(function(pt) {
-          ctx.beginPath();
-          ctx.arc(pt[0], pt[1], CELL_SIZE * 0.2 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI*2);
-          ctx.fill();
-        });
+        strokeLayoutPathDraftPolyline(ctx, draft, null);
+        drawLayoutPathDraftVertexDots(ctx, draft, null);
       }
     }
     ctx.restore();
@@ -16071,6 +16686,103 @@
       safeDraw();
     });
   }
+  const LAYOUT_ISLAND_INSET_M = 5;
+  const LAYOUT_ISLAND_NORMAL_STEP_M = 10;
+  const LAYOUT_ISLAND_NORMAL_LEN_M = 5;
+  const LAYOUT_ISLAND_INTERIOR_GREEN = '#2e8b3e';
+  function layoutIslandWorldPointsForDraw(m) {
+    if (!m || m.kind !== 'island' || !Array.isArray(m.points)) return [];
+    return m.points.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
+  }
+  function islandInwardUnitNormalForDraw(p0, p1, centroidX, centroidY) {
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+    const len = Math.hypot(dx, dy) || 1;
+    let nx = -dy / len, ny = dx / len;
+    const mx = (p0[0] + p1[0]) * 0.5, my = (p0[1] + p1[1]) * 0.5;
+    if ((centroidX - mx) * nx + (centroidY - my) * ny < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    return [nx, ny];
+  }
+  function drawLayoutIslandMarkerWorld(ctx, pts, sel) {
+    const n = pts.length;
+    if (n < 3) return;
+    let cx = 0, cy = 0;
+    for (let i = 0; i < n; i++) {
+      cx += pts[i][0];
+      cy += pts[i][1];
+    }
+    cx /= n;
+    cy /= n;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < n; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = LAYOUT_ISLAND_INTERIOR_GREEN;
+    ctx.fill();
+    ctx.restore();
+    const inset = LAYOUT_ISLAND_INSET_M;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < n; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.clip();
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[i], p1 = pts[(i + 1) % n];
+      const nn = islandInwardUnitNormalForDraw(p0, p1, cx, cy);
+      const ox = nn[0] * inset, oy = nn[1] * inset;
+      ctx.beginPath();
+      ctx.moveTo(p0[0], p0[1]);
+      ctx.lineTo(p1[0], p1[1]);
+      ctx.lineTo(p1[0] + ox, p1[1] + oy);
+      ctx.lineTo(p0[0] + ox, p0[1] + oy);
+      ctx.closePath();
+      ctx.fillStyle = c2dRunwayStroke();
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < n; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = Math.max(1.4, 1.8 / Math.max(state.scale, 0.1));
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    if (sel) {
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = Math.max(1.2, 1.4 / Math.max(state.scale, 0.1));
+      ctx.stroke();
+    }
+    let distAlong = 0;
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[i], p1 = pts[(i + 1) % n];
+      const edgex = p1[0] - p0[0], edgey = p1[1] - p0[1];
+      const edgeLen = Math.hypot(edgex, edgey);
+      if (edgeLen < 1e-6) continue;
+      const nn = islandInwardUnitNormalForDraw(p0, p1, cx, cy);
+      const ux = edgex / edgeLen, uy = edgey / edgeLen;
+      const step = LAYOUT_ISLAND_NORMAL_STEP_M;
+      const firstS = Math.ceil(distAlong / step) * step;
+      for (let sp = firstS; sp < distAlong + edgeLen - 1e-6; sp += step) {
+        const tLoc = sp - distAlong;
+        if (tLoc < -1e-6) continue;
+        const px = p0[0] + ux * tLoc, py = p0[1] + uy * tLoc;
+        const nl = LAYOUT_ISLAND_NORMAL_LEN_M;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + nn[0] * nl, py + nn[1] * nl);
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = Math.max(0.85, 1.1 / Math.max(state.scale, 0.1));
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+      distAlong += edgeLen;
+    }
+  }
   function drawLayoutMarkers2D() {
     if (!ctx || !layoutMarkersVisible()) return;
     ctx.save();
@@ -16114,7 +16826,7 @@
         ctx.fillStyle = '#e2e8f0';
         ctx.strokeText(txt, x + 2, y + 2);
         ctx.fillText(txt, x + 2, y + 2);
-        layoutMarkerDrawEndpointDot(ctx, x, y, sel);
+        if (sel) layoutMarkerDrawEndpointDot(ctx, x, y, true);
         if (sel) {
           ctx.strokeStyle = '#38bdf8';
           ctx.lineWidth = 2 / Math.max(state.scale, 0.1);
@@ -16145,8 +16857,10 @@
         ctx.fillStyle = '#f1f5f9';
         ctx.strokeText(label, mx, my - fs * 0.9);
         ctx.fillText(label, mx, my - fs * 0.9);
-        layoutMarkerDrawEndpointDot(ctx, x1, y1, sel);
-        layoutMarkerDrawEndpointDot(ctx, x2, y2, sel);
+        if (sel) {
+          layoutMarkerDrawEndpointDot(ctx, x1, y1, true);
+          layoutMarkerDrawEndpointDot(ctx, x2, y2, true);
+        }
       } else if (m.kind === 'flight') {
         const pose = resolveMarkerFlightPose(m);
         if (!pose) return;
@@ -16223,21 +16937,26 @@
         }
         ctx.fill();
         ctx.stroke();
-        layoutMarkerDrawEndpointDot(ctx, 0, 0, sel);
+        if (sel) layoutMarkerDrawEndpointDot(ctx, 0, 0, true);
         ctx.restore();
+      } else if (m.kind === 'island') {
+        const pts = layoutIslandWorldPointsForDraw(m);
+        if (pts.length < 3) return;
+        drawLayoutIslandMarkerWorld(ctx, pts, sel);
+        if (sel) {
+          const sv = state.selectedVertex;
+          for (let vi = 0; vi < pts.length; vi++) {
+            const vSel = !!(sv && sv.type === 'layoutMarkerHandle' && sv.handle === 'islandVertex' && String(sv.id) === String(m.id) && sv.vertexIndex === vi);
+            layoutMarkerDrawEndpointDot(ctx, pts[vi][0], pts[vi][1], vSel);
+          }
+        }
       }
     });
     if (state.markerDrawing && state.markerRulerDraft && getMarkerSubKindFromPanel() === 'ruler' && state.markerRulerHoverWorld) {
       const d0 = state.markerRulerDraft;
       const h = state.markerRulerHoverWorld;
-      ctx.beginPath();
-      ctx.moveTo(d0.x, d0.y);
-      ctx.lineTo(h[0], h[1]);
-      ctx.strokeStyle = 'rgba(148,163,184,0.9)';
-      ctx.lineWidth = Math.max(1, 1.3 / Math.max(state.scale, 0.1));
-      ctx.setLineDash([5, 5]);
-      ctx.stroke();
-      ctx.setLineDash([]);
+      strokeLayoutPathDraftPolyline(ctx, [[d0.x, d0.y]], h);
+      drawLayoutPathDraftVertexDots(ctx, [[d0.x, d0.y]], h);
       const dx = h[0] - d0.x, dy = h[1] - d0.y;
       const lenM = Math.hypot(dx, dy);
       const mx = (d0.x + h[0]) / 2, my = (d0.y + h[1]) / 2;
@@ -16251,8 +16970,6 @@
       ctx.fillStyle = '#f1f5f9';
       ctx.strokeText(label, mx, my - fs * 0.9);
       ctx.fillText(label, mx, my - fs * 0.9);
-      layoutMarkerDrawEndpointDot(ctx, d0.x, d0.y, false);
-      layoutMarkerDrawEndpointDot(ctx, h[0], h[1], false);
     }
     if (state.markerDrawing && getMarkerSubKindFromPanel() === 'flight' && state.markerFlightHoverSnap) {
       const ghost = {
@@ -16296,6 +17013,37 @@
         ctx.restore();
       }
     }
+    if (state.markerDrawing && getMarkerSubKindFromPanel() === 'island' && state.markerIslandDraft && state.markerIslandDraft.points && state.markerIslandDraft.points.length) {
+      const list = state.markerIslandDraft.points;
+      const hw = state.markerIslandHoverWorld;
+      const ptsArr = list.map(function(p) { return [p.x, p.y]; });
+      const hoverArr = (hw && hw.length >= 2) ? hw : null;
+      strokeLayoutPathDraftPolyline(ctx, ptsArr, hoverArr);
+      drawLayoutPathDraftVertexDots(ctx, ptsArr, hoverArr);
+      if (list.length >= 3 && hw && hw.length >= 2) {
+        const c0 = list[0];
+        const closeR = CELL_SIZE * TERM_CLOSE_POLY_CF;
+        const dx = hw[0] - c0.x, dy = hw[1] - c0.y;
+        if (dx * dx + dy * dy <= closeR * closeR) strokeLayoutPathDraftCloseHintArc(ctx, c0.x, c0.y, closeR);
+      }
+    }
+    ctx.restore();
+  }
+  function drawPathArcPreview() {
+    const d = state.pathArcDrag;
+    if (!d || !d.previewPx || d.previewPx.length < 2) return;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    ctx.beginPath();
+    ctx.moveTo(d.previewPx[0][0], d.previewPx[0][1]);
+    for (let i = 1; i < d.previewPx.length; i++) ctx.lineTo(d.previewPx[i][0], d.previewPx[i][1]);
+    ctx.strokeStyle = 'rgba(244, 63, 94, 0.92)';
+    ctx.lineWidth = Math.max(2, 2.2 / Math.max(state.scale, 0.08));
+    ctx.setLineDash([6, 5]);
+    ctx.lineCap = 'round';
+    ctx.stroke();
     ctx.restore();
   }
   function draw(drawOpts) {
@@ -16304,6 +17052,7 @@
     drawGrid();
     drawTerminals();
     drawTaxiways();
+    drawPathArcPreview();
     drawHoldingPoints2D();
     drawPBBs();
     drawRemoteStands();
@@ -16328,6 +17077,7 @@
     drawLayoutMarkers2D();
     syncMarkerTextDraftInputPosition();
     syncMarkerFlightBlazerOverlayButton();
+    updatePathArcHud();
   }
 
   document.addEventListener('keydown', function(ev) {
@@ -16338,6 +17088,14 @@
       return;
     }
     if (ev.key === 'Escape') {
+      if (!inInput && state.pathArcDrag) {
+        ev.preventDefault();
+        undo();
+        state.pathArcDrag = null;
+        updatePathArcHud();
+        draw();
+        return;
+      }
       if (state.markerTextDraft && state.markerTextDraft.active) {
         const inp = document.getElementById('markerTextDraftInput');
         if (document.activeElement === inp || !inInput) {
@@ -16349,15 +17107,39 @@
       if (inInput) return;
       const anyLayoutDraw = !!(state.pbbDrawing || state.remoteDrawing || state.tempStandDrawing || state.holdingPointDrawing || state.apronLinkDrawing ||
         state.terminalDrawingId || state.taxiwayDrawingId || state.markerDrawing);
-      if (!anyLayoutDraw) return;
-      ev.preventDefault();
-      cancelActiveLayoutDrawingState();
-      state.terminalDrawingId = null;
-      state.taxiwayDrawingId = null;
-      syncPanelFromState();
-      updateObjectInfo();
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      if (anyLayoutDraw) {
+        ev.preventDefault();
+        cancelActiveLayoutDrawingState();
+        state.terminalDrawingId = null;
+        state.taxiwayDrawingId = null;
+        syncPanelFromState();
+        updateObjectInfo();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+        if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
+        return;
+      }
+      if (state.selectedObject || state.selectedVertex || state.pathArcModeOn) {
+        ev.preventDefault();
+        if (state.pathArcDrag) {
+          undo();
+          state.pathArcDrag = null;
+        }
+        const soEsc = state.selectedObject;
+        if (soEsc && soEsc.type === 'terminal' && state.currentTerminalId === soEsc.id) {
+          state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
+        }
+        state.pathArcModeOn = false;
+        state.selectedObject = null;
+        state.selectedVertex = null;
+        state.flightPathRevealFlightId = null;
+        syncPanelFromState();
+        updateObjectInfo();
+        updatePathArcHud();
+        draw();
+        if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
+        return;
+      }
       return;
     }
     if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
@@ -16412,6 +17194,44 @@
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
     const [wx, wy] = screenToWorld(sx, sy);
     const mode = settingModeSelect.value;
+    const pathArcStartOnCanvas = canvas && ev.target === canvas;
+    if (state.pathArcModeOn && !state.pathArcDrag && pathArcStartOnCanvas) {
+      const eligArc = isPathArcHudVertexSelection();
+      if (eligArc && eligArc.kind === 'taxiway' && eligArc.tw.pathType !== 'runway') {
+        const twPa = eligArc.tw, idxPa = eligArc.idx;
+        if (idxPa > 0 && idxPa < (twPa.vertices || []).length - 1) {
+          pushUndo();
+          state.pathArcDrag = {
+            taxiwayId: twPa.id,
+            vertexIndex: idxPa,
+            lastShift: !!ev.shiftKey,
+            previewPx: pathArcComputePreviewWorldPx(twPa, idxPa, wx, wy)
+          };
+          updatePathArcHud();
+          ev.preventDefault();
+          draw();
+          return;
+        }
+      } else if (eligArc && eligArc.kind === 'island') {
+        const mkPa = eligArc.mk, idxPa = eligArc.idx;
+        const ptsI = mkPa.points;
+        const nI = (ptsI && ptsI.length) || 0;
+        if (nI >= 3 && idxPa >= 0 && idxPa < nI) {
+          const prev = ptsI[(idxPa - 1 + nI) % nI], next = ptsI[(idxPa + 1) % nI];
+          pushUndo();
+          state.pathArcDrag = {
+            islandMarkerId: mkPa.id,
+            vertexIndex: idxPa,
+            lastShift: !!ev.shiftKey,
+            previewPx: pathArcComputePreviewWorldPxFromAB(Number(prev.x), Number(prev.y), Number(next.x), Number(next.y), wx, wy)
+          };
+          updatePathArcHud();
+          ev.preventDefault();
+          draw();
+          return;
+        }
+      }
+    }
     if (mode === 'terminal' && !state.terminalDrawingId) {
       const vhit = hitTestTerminalVertex(wx, wy);
       if (vhit) {
@@ -16492,7 +17312,9 @@
       if (mh) {
         pushUndo();
         state.dragLayoutMarkerHandle = mh;
-        state.selectedVertex = { type: 'layoutMarkerHandle', id: mh.markerId, handle: mh.handle };
+        state.selectedVertex = mh.handle === 'islandVertex'
+          ? { type: 'layoutMarkerHandle', id: mh.markerId, handle: mh.handle, vertexIndex: mh.vertexIndex }
+          : { type: 'layoutMarkerHandle', id: mh.markerId, handle: mh.handle };
         draw();
         return;
       }
@@ -16553,6 +17375,17 @@
       state.markerRulerHoverWorld = null;
       if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
     }
+    if (settingModeSelect.value === 'marker' && state.markerDrawing && getMarkerSubKindFromPanel() === 'island' && state.markerIslandDraft) {
+      const hpxI = worldPointToPixel(wx, wy, !!ev.shiftKey);
+      const pwI = state.markerIslandHoverWorld;
+      if (!pwI || pwI[0] !== hpxI[0] || pwI[1] !== hpxI[1]) {
+        state.markerIslandHoverWorld = [hpxI[0], hpxI[1]];
+        scheduleDraw(); drewThisMove = true;
+      }
+    } else if (state.markerIslandHoverWorld) {
+      state.markerIslandHoverWorld = null;
+      if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
+    }
     if (settingModeSelect.value === 'marker' && state.markerDrawing && getMarkerSubKindFromPanel() === 'flight') {
       const snap = snapWorldToMarkerFlightTaxiway(wx, wy);
       const prev = state.markerFlightHoverSnap;
@@ -16571,7 +17404,7 @@
       if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
     }
     const pathLayoutDrawing = !!(state.terminalDrawingId || state.taxiwayDrawingId);
-    const blockLayoutPathPtr = !!(state.isPanning || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragRemoteStandPosition || state.dragApronLinkVertex || state.dragStandRotation || state.dragLayoutMarkerHandle);
+    const blockLayoutPathPtr = !!(state.isPanning || state.pathArcDrag || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragRemoteStandPosition || state.dragApronLinkVertex || state.dragStandRotation || state.dragLayoutMarkerHandle);
     if (pathLayoutDrawing && !blockLayoutPathPtr) {
       const nx = snappedPx[0], ny = snappedPx[1];
       const lp = state.layoutPathDrawPointer;
@@ -16582,6 +17415,39 @@
     } else if (state.layoutPathDrawPointer && (!pathLayoutDrawing || blockLayoutPathPtr)) {
       state.layoutPathDrawPointer = null;
       if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
+    }
+    if (state.pathArcDrag) {
+      const d = state.pathArcDrag;
+      if (d.islandMarkerId != null) {
+        const mkArc = (state.layoutMarkers || []).find(function(m) { return m && String(m.id) === String(d.islandMarkerId); });
+        const ptsA = mkArc && mkArc.points;
+        const nA = (ptsA && ptsA.length) || 0;
+        const vi = d.vertexIndex;
+        if (!mkArc || mkArc.kind !== 'island' || nA < 3 || vi < 0 || vi >= nA) {
+          state.pathArcDrag = null;
+          updatePathArcHud();
+          if (!drewThisMove) scheduleDraw();
+        } else {
+          const prev = ptsA[(vi - 1 + nA) % nA], next = ptsA[(vi + 1) % nA];
+          d.lastShift = !!ev.shiftKey;
+          d.previewPx = pathArcComputePreviewWorldPxFromAB(Number(prev.x), Number(prev.y), Number(next.x), Number(next.y), wx, wy);
+          scheduleDraw();
+          drewThisMove = true;
+        }
+      } else {
+        const twArc = state.taxiways.find(function(t) { return t.id === d.taxiwayId; });
+        if (!twArc || twArc.pathType === 'runway' || d.vertexIndex <= 0 || d.vertexIndex >= (twArc.vertices || []).length - 1) {
+          state.pathArcDrag = null;
+          updatePathArcHud();
+          if (!drewThisMove) scheduleDraw();
+        } else {
+          d.lastShift = !!ev.shiftKey;
+          d.previewPx = pathArcComputePreviewWorldPx(twArc, d.vertexIndex, wx, wy);
+          scheduleDraw();
+          drewThisMove = true;
+        }
+      }
+      return;
     }
     if (state.dragVertex) {
       const term = state.terminals.find(t => t.id === state.dragVertex.terminalId);
@@ -16722,6 +17588,12 @@
         } else if (h.handle === 'rulerB') {
           mk.x2 = px[0];
           mk.y2 = px[1];
+        } else if (h.handle === 'islandVertex') {
+          const vi = h.vertexIndex;
+          if (typeof vi === 'number' && mk.points && vi >= 0 && vi < mk.points.length) {
+            mk.points[vi].x = px[0];
+            mk.points[vi].y = px[1];
+          }
         } else if (h.handle === 'flightCenter') {
           const prevPose = resolveMarkerFlightPose(mk);
           const snap = snapWorldToMarkerFlightTaxiway(wx, wy, { allowFar: true });
@@ -16926,6 +17798,7 @@
     state.previewHoldingPoint = null;
     state.apronLinkPointerWorld = null;
     state.markerRulerHoverWorld = null;
+    state.markerIslandHoverWorld = null;
     state.dragLayoutMarkerHandle = null;
     flushDrawNow();
   });
@@ -16982,6 +17855,32 @@
     state.isPanning = false;
     if (state.dragVertex) {
       state.dragVertex = null;
+      return;
+    }
+    if (state.pathArcDrag) {
+      const d = state.pathArcDrag;
+      state.pathArcDrag = null;
+      if (d.islandMarkerId != null) {
+        const mkArc = (state.layoutMarkers || []).find(function(m) { return m && String(m.id) === String(d.islandMarkerId); });
+        const nA = (mkArc && mkArc.points && mkArc.points.length) || 0;
+        if (mkArc && mkArc.kind === 'island' && d.previewPx && d.vertexIndex >= 0 && d.vertexIndex < nA) {
+          pathArcCommitIslandVertexFromPreview(mkArc, d.vertexIndex, d.previewPx, !!d.lastShift);
+        }
+      } else {
+        const twArc = state.taxiways.find(function(t) { return t.id === d.taxiwayId; });
+        if (twArc && twArc.pathType !== 'runway' && d.previewPx && d.vertexIndex > 0 && d.vertexIndex < (twArc.vertices || []).length - 1) {
+          pathArcCommitFromPreview(twArc, d.vertexIndex, d.previewPx, !!d.lastShift);
+        }
+      }
+      updatePathArcHud();
+      if (typeof syncPanelFromState === 'function') syncPanelFromState();
+      if (typeof updateObjectInfo === 'function') updateObjectInfo();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else {
+        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+        if (scene3d) update3DScene();
+        draw();
+      }
       return;
     }
     if (state.dragTaxiwayVertex) {
@@ -17048,8 +17947,13 @@
       return;
     }
     if (state.dragLayoutMarkerHandle) {
+      const hUp = state.dragLayoutMarkerHandle;
       state.dragLayoutMarkerHandle = null;
-      state.selectedVertex = null;
+      if (hUp.handle === 'islandVertex' && typeof hUp.vertexIndex === 'number') {
+        state.selectedVertex = { type: 'layoutMarkerHandle', id: hUp.markerId, handle: 'islandVertex', vertexIndex: hUp.vertexIndex };
+      } else {
+        state.selectedVertex = null;
+      }
       if (typeof updateObjectInfo === 'function') updateObjectInfo();
       draw();
       return;
@@ -17272,12 +18176,12 @@
     });
   });
   document.getElementById('btnView3D').addEventListener('click', function() {
-    document.getElementById('btnView3D').classList.add('active');
-    document.getElementById('btnView2D').classList.remove('active');
-    document.getElementById('canvas-container').style.display = 'none';
-    view3dContainer.classList.add('active');
-    init3D();
-    animate3D();
+    try {
+      openGrid3DViewerWindow();
+    } catch (e) {
+      console.error('openGrid3DViewerWindow:', e);
+      alert('3D viewer failed: ' + (e && e.message ? e.message : e));
+    }
   });
 
   function reset3DView() {

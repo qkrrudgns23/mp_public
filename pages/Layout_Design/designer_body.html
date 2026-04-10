@@ -10,7 +10,7 @@
           <div id="layout-name-bar"></div>
           <div id="view-toggle">
             <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
-            <button class="tool-btn" id="btnView3D" title="3D orbit view">3D</button>
+            <button class="tool-btn" id="btnView3D" title="Open 3D viewer (new window)">3D</button>
             <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
             <button class="tool-btn active" id="btnGridToggle" title="Toggle grid visibility">Grid</button>
             <button class="tool-btn active" id="btnImageToggle" title="Toggle background image visibility">Image</button>
@@ -45,6 +45,10 @@
         <input type="text" id="markerTextDraftInput" class="marker-text-draft-input" maxlength="500" placeholder="Text…" autocomplete="off" aria-label="Marker text" />
       </div>
       <div id="flight-grid-hud" class="flight-grid-hud" hidden aria-live="polite"></div>
+      <div id="path-arc-hud" class="path-arc-hud" hidden aria-live="polite">
+        <button type="button" class="path-arc-hud-toggle" id="btnPathArcToggle" aria-pressed="false">호: OFF</button>
+        <div id="pathArcHudHint" class="path-arc-hud-hint" hidden>드래그해 곡률 조절 · 놓으면 적용</div>
+      </div>
       <div id="cursor-pixel-readout" class="cursor-pixel-readout" aria-live="polite" title="Layout coordinates (px) under cursor">—</div>
     </div>
     <div id="info-bar">
@@ -366,6 +370,7 @@
             <div class="marker-tool-tabs" role="tablist" aria-labelledby="markerToolTabsLabel">
               <button type="button" class="marker-tool-tab active" role="tab" data-marker-sub="text" aria-selected="true">Text</button>
               <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="ruler" aria-selected="false">Ruler</button>
+              <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="island" aria-selected="false">Island</button>
               <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="flight" aria-selected="false">Flight</button>
             </div>
           </div>
