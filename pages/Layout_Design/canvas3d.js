@@ -64,7 +64,7 @@
       if (!g || tw.vertices.length < 2) return;
       const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, showRoadWidth = g.showRoadWidth, pathLineCap = g.pathLineCap;
       if (showRoadWidth) {
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = isRunwayPath ? 1.5 : 0.5;
         ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke())));
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {
@@ -79,7 +79,7 @@
           ctx.restore();
         } else ctx.stroke();
       } else if (!isRunwayPath) {
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 0.5;
         ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {

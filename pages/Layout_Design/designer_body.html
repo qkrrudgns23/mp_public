@@ -378,6 +378,12 @@
             <label for="markerFlightAircraftType">Aircraft type</label>
             <select id="markerFlightAircraftType"></select>
           </div>
+          <div id="markerIslandWidthRow" class="compact-field wide" hidden>
+            <label for="markerIslandOuterWidthM">Island outer width (m)</label>
+            <input type="number" id="markerIslandOuterWidthM" min="0" max="500" step="0.5" value="20" inputmode="decimal" aria-label="Island outer paved width in meters" />
+            <label for="markerIslandInnerWidthM" style="margin-top:6px;display:block;">Island inner width (m)</label>
+            <input type="number" id="markerIslandInnerWidthM" min="0" max="200" step="0.5" value="5" inputmode="decimal" aria-label="Island inner paved width in meters" />
+          </div>
           <button class="small draw-toggle-btn" id="btnMarkerDraw">Draw</button>
         </div>
 
