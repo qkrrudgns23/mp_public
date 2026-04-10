@@ -16,6 +16,7 @@
             <button class="tool-btn active" id="btnImageToggle" title="Toggle background image visibility">Image</button>
             <button class="tool-btn active" id="btnRoadWidthToggle" title="Toggle road width vs schematic (centerlines on top)">Width</button>
             <button type="button" class="tool-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle layout AI assistant (placeholder UI)">AI mode</button>
+            <button type="button" class="tool-btn" id="btnLayoutMarkersToggle" aria-pressed="false" title="Show layout markers (text, ruler, dummy flight)">Marker</button>
             <span class="global-update-wrap">
               <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Pro Sim loads the latest sim JSON into the designer when it finishes" role="status" aria-label="Pro Sim sync status"></span>
               <button class="tool-btn" id="btnGlobalUpdate" title="Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage">Pro Sim</button>
@@ -40,6 +41,9 @@
     </div>
     <div id="canvas-container">
       <canvas id="grid-canvas"></canvas>
+      <div id="marker-text-edit-layer" class="marker-text-edit-layer" hidden aria-hidden="true">
+        <input type="text" id="markerTextDraftInput" class="marker-text-draft-input" maxlength="500" placeholder="Text…" autocomplete="off" aria-label="Marker text" />
+      </div>
       <div id="flight-grid-hud" class="flight-grid-hud" hidden aria-live="polite"></div>
       <div id="cursor-pixel-readout" class="cursor-pixel-readout" aria-live="polite" title="Layout coordinates (px) under cursor">—</div>
     </div>
@@ -81,6 +85,7 @@
           <option value="remote">Remote Stand</option>
           <option value="tempStand">Temp Stand</option>
           <option value="apronTaxiway">Apron Taxiway</option>
+          <option value="marker">Marker</option>
         </select>
 
         <div id="settings-grid" class="settings-pane compact-form">
@@ -109,6 +114,7 @@
             <label for="gridLayoutImageWidthM">Width (m)</label>
             <div class="compact-field-width-ai-controls">
               <button type="button" class="ai-mode-toggle-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle layout AI assistant (placeholder UI)">AI mode</button>
+              <button type="button" class="ai-mode-toggle-btn" id="btnGridMarkerOverlayToggle" aria-pressed="false" title="Show text / ruler / flight markers on the canvas">Marker</button>
               <input type="number" id="gridLayoutImageWidthM" min="1" step="__UI_G_IMG_SIZE_STEP__" value="__UI_G_IMG_WIDTH_M__" />
             </div>
           </div>
@@ -357,6 +363,18 @@
           </div>
           <button class="small draw-toggle-btn" id="btnApronLinkDraw">Draw</button>
           <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Click a stand or taxiway to start, then place corners freely. Hold Shift to snap to the grid. Turn off Draw and click the line to select. Drag yellow handles to move corners or the taxiway end (snaps to path). Double-click a segment to add a point. Backspace/Delete removes the selected midpoint.</p>
+        </div>
+        <div id="settings-marker" class="settings-pane compact-form" style="display:none;">
+          <div class="compact-field wide">
+            <label>Tool</label>
+            <div class="marker-subkind-row" role="group" aria-label="Marker tool">
+              <label class="marker-subkind-opt"><input type="radio" name="markerSubKind" value="text" checked /> Text</label>
+              <label class="marker-subkind-opt"><input type="radio" name="markerSubKind" value="ruler" /> Ruler</label>
+              <label class="marker-subkind-opt"><input type="radio" name="markerSubKind" value="flight" /> Flight</label>
+            </div>
+          </div>
+          <button class="small draw-toggle-btn" id="btnMarkerDraw">Draw</button>
+          <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Annotations only — not used by simulation. <strong>Text:</strong> click anchor, type inline on the map (Enter saves, Esc cancels). <strong>Ruler:</strong> two clicks; distance updates while moving. <strong>Flight:</strong> gray dummy on taxiway / runway / runway taxiway centerlines. Turn off Draw to select markers like other objects (list or grid, Delete removes). Use Grid <strong>Marker</strong> to show/hide (default off).</p>
         </div>
 
         <div class="section-title">Objects</div>

@@ -699,6 +699,13 @@
     kpiRollingDetailExpanded: false,
     flightPathRevealFlightId: null,
     allocGanttWindowStartMin: null,
+    layoutMarkers: [],
+    showLayoutMarkers: false,
+    markerDrawing: false,
+    markerRulerDraft: null,
+    markerRulerHoverWorld: null,
+    markerTextDraft: null,
+    dragLayoutMarkerHandle: null,
   };
   let hookSyncFlightPanelFromSelection = null;
   function bumpRwySepSnapshotStaleGen() {
@@ -836,6 +843,7 @@
     if (hit.type === 'holdingPoint') return 'holdingPoint';
     if (hit.type === 'taxiway') return layoutModeFromPathType((hit.obj && hit.obj.pathType) || 'taxiway');
     if (hit.type === 'apronLink') return 'apronTaxiway';
+    if (hit.type === 'layoutMarker') return 'marker';
     return null;
   }
   function cancelActiveLayoutDrawingState() {
@@ -852,6 +860,15 @@
     state.previewPbb = null;
     state.previewRemote = null;
     state.previewTempStand = null;
+    state.markerDrawing = false;
+    state.markerRulerDraft = null;
+    state.markerRulerHoverWorld = null;
+    if (state.markerTextDraft && state.markerTextDraft.active) {
+      state.markerTextDraft = null;
+      hideMarkerTextDraftEditor();
+    }
+    state.dragLayoutMarkerHandle = null;
+    syncDrawToggleButton('btnMarkerDraw', false);
   }
   function syncDrawToggleButton(elementId, isDrawing) {
     const btn = document.getElementById(elementId);
@@ -878,6 +895,16 @@
     roadWidthToggleBtn.title = on
       ? 'Road width visible (click for centerline-only schematic)'
       : 'Schematic mode: centerlines only (click to show road width)';
+  }
+  function syncLayoutMarkersToggleButtons() {
+    const on = !!state.showLayoutMarkers;
+    const t1 = document.getElementById('btnLayoutMarkersToggle');
+    const t2 = document.getElementById('btnGridMarkerOverlayToggle');
+    [t1, t2].forEach(function(el) {
+      if (!el) return;
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -1030,6 +1057,7 @@
     if (typ === 'apronLink') return state.apronLinks.find(lk => lk.id === idr);
     if (typ === 'layoutEdge') return (state.derivedGraphEdges || []).find(function(e) { return e.id === idr; });
     if (typ === 'flight') return state.flights.find(f => f.id === idr);
+    if (typ === 'layoutMarker') return (state.layoutMarkers || []).find(function(m) { return m && m.id === idr; });
     return null;
   }
   function removeLayoutObjectFromState(type, id) {
@@ -1048,6 +1076,7 @@
       bumpRwySepSnapshotStaleGen();
       state.rwySepPanelDirty = true;
     }
+    else if (type === 'layoutMarker') state.layoutMarkers = (state.layoutMarkers || []).filter(function(m) { return m && m.id !== id; });
     else if (type === 'layoutEdge') {}
     if (removedTaxiway) {
       const shouldResampleRet = (removedTaxiway.pathType === 'runway' || removedTaxiway.pathType === 'runway_exit');
@@ -1184,6 +1213,29 @@
     }
     return [];
   }
+  function normalizeLayoutMarkerFromLoad(m) {
+    if (!m || typeof m !== 'object') return null;
+    const k = m.kind || m.type;
+    if (k === 'text') {
+      const x = Number(m.x), y = Number(m.y);
+      if (!isFinite(x) || !isFinite(y)) return null;
+      const text = m.text != null ? String(m.text).slice(0, 500) : '';
+      return { kind: 'text', id: m.id || id(), x: x, y: y, text: text || 'Text' };
+    }
+    if (k === 'ruler') {
+      const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
+      if (![x1, y1, x2, y2].every(isFinite)) return null;
+      return { kind: 'ruler', id: m.id || id(), x1: x1, y1: y1, x2: x2, y2: y2 };
+    }
+    if (k === 'flight') {
+      if (m.taxiwayId == null || m.taxiwayId === '') return null;
+      const segIndex = Math.max(0, parseInt(m.segIndex, 10) || 0);
+      let t = Number(m.t);
+      if (!isFinite(t)) t = 0.5;
+      return { kind: 'flight', id: m.id || id(), taxiwayId: m.taxiwayId, segIndex: segIndex, t: Math.max(0, Math.min(1, t)) };
+    }
+    return null;
+  }
   function applyLayoutObject(obj) {
     if (!obj || typeof obj !== 'object') return;
     if (obj.grid) {
@@ -1197,6 +1249,7 @@
     if (typeof obj.showGrid === 'boolean') state.showGrid = obj.showGrid;
     if (typeof obj.showImage === 'boolean') state.showImage = obj.showImage;
     if (typeof obj.showRoadWidth === 'boolean') state.showRoadWidth = obj.showRoadWidth;
+    if (obj.grid && typeof obj.grid.showLayoutMarkers === 'boolean') state.showLayoutMarkers = obj.grid.showLayoutMarkers;
     state.layoutImageOverlay = normalizeLayoutImageOverlay(
       (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
     );
@@ -1205,6 +1258,7 @@
     syncGridToggleButton();
     syncImageToggleButton();
     syncRoadWidthToggleButton();
+    syncLayoutMarkersToggleButtons();
     if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
     if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
     if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
@@ -1247,6 +1301,11 @@
     }
     if (Array.isArray(obj.directionModes) && obj.directionModes.length) {
       state.directionModes = obj.directionModes.slice();
+    }
+    if (Array.isArray(obj.layoutMarkers)) {
+      state.layoutMarkers = obj.layoutMarkers.map(normalizeLayoutMarkerFromLoad).filter(Boolean);
+    } else if (!Array.isArray(state.layoutMarkers)) {
+      state.layoutMarkers = [];
     }
     if (Array.isArray(obj.flights)) {
       state.flights = obj.flights.slice();
@@ -1937,6 +1996,9 @@
   function screenToWorld(sx, sy) {
     return [(sx - state.panX) / state.scale, (sy - state.panY) / state.scale];
   }
+  function worldToScreenCanvas(wx, wy) {
+    return [wx * state.scale + state.panX, wy * state.scale + state.panY];
+  }
   function cellToPixel(col, row) { return [col * CELL_SIZE, row * CELL_SIZE]; }
   function getTaxiwayAvgMoveVelocityForPath(path) {
     if (path && typeof path.avgMoveVelocity === 'number' && isFinite(path.avgMoveVelocity) && path.avgMoveVelocity > 0)
@@ -2460,6 +2522,7 @@
         showGrid: !!state.showGrid,
         showImage: !!state.showImage,
         showRoadWidth: !!state.showRoadWidth,
+        showLayoutMarkers: !!state.showLayoutMarkers,
         layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
       },
       networkJunctions: networkJunctions,
@@ -2578,6 +2641,20 @@
         copy.stotDateTime_d = formatFlightScheduleDateTime(f, schedExport.stot_d);
         return copy;
       }),
+      layoutMarkers: (state.layoutMarkers || []).map(function(m) {
+        if (!m || !m.kind) return null;
+        if (m.kind === 'text') {
+          return { kind: 'text', id: m.id, x: Number(m.x), y: Number(m.y), text: String(m.text || '') };
+        }
+        if (m.kind === 'ruler') {
+          return { kind: 'ruler', id: m.id, x1: Number(m.x1), y1: Number(m.y1), x2: Number(m.x2), y2: Number(m.y2) };
+        }
+        if (m.kind === 'flight') {
+          const si = (typeof m.segIndex === 'number' && isFinite(m.segIndex)) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
+          return { kind: 'flight', id: m.id, taxiwayId: m.taxiwayId, segIndex: si, t: Number(m.t) };
+        }
+        return null;
+      }).filter(Boolean),
       simPathGraph: buildSimPathGraphExport()
     };
   }
@@ -2810,6 +2887,245 @@
     return true;
   }
 
+  function layoutMarkersVisible() {
+    return !!(state.showLayoutMarkers || (settingModeSelect && settingModeSelect.value === 'marker'));
+  }
+  function getMarkerSubKindFromPanel() {
+    const r = document.querySelector('input[name="markerSubKind"]:checked');
+    const v = r && r.value;
+    return v === 'ruler' || v === 'flight' ? v : 'text';
+  }
+  function isMarkerFlightAllowedPathType(pt) {
+    return pt === 'runway' || pt === 'runway_exit' || pt === 'taxiway' || pt === 'general_queue_taxiway';
+  }
+  function snapWorldToMarkerFlightTaxiway(wx, wy) {
+    const click = [wx, wy];
+    let best = null;
+    let bestD2 = Infinity;
+    const maxD2 = Math.pow(CELL_SIZE * HIT_TW_SEG_CF, 2);
+    (state.taxiways || []).forEach(function(tw) {
+      if (!tw || !isMarkerFlightAllowedPathType(tw.pathType || 'taxiway')) return;
+      const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
+      if (!pts || pts.length < 2) return;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const near = closestPointOnSegment(pts[i], pts[i + 1], click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2 && d2 <= maxD2) {
+          bestD2 = d2;
+          const ax = pts[i][0], ay = pts[i][1], bx = pts[i + 1][0], by = pts[i + 1][1];
+          const dx = bx - ax, dy = by - ay;
+          const segLen2 = dx * dx + dy * dy;
+          const t = segLen2 < 1e-12 ? 0.5 : Math.max(0, Math.min(1, ((near[0] - ax) * dx + (near[1] - ay) * dy) / segLen2));
+          best = { taxiwayId: tw.id, segIndex: i, t: t };
+        }
+      }
+    });
+    return best;
+  }
+  function resolveMarkerFlightPose(m) {
+    if (!m || m.kind !== 'flight') return null;
+    const tw = (state.taxiways || []).find(function(x) { return x && x.id === m.taxiwayId; });
+    if (!tw) return null;
+    const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
+    if (!pts || pts.length < 2) return null;
+    let si = typeof m.segIndex === 'number' && isFinite(m.segIndex) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
+    si = Math.max(0, Math.min(si, pts.length - 2));
+    let t = Number(m.t);
+    if (!isFinite(t)) t = 0.5;
+    t = Math.max(0, Math.min(1, t));
+    const a = pts[si], b = pts[si + 1];
+    const x = a[0] + t * (b[0] - a[0]);
+    const y = a[1] + t * (b[1] - a[1]);
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    return { x: x, y: y, ang: ang };
+  }
+  function layoutMarkerHandleHitRadiusWorld() {
+    return Math.max(CELL_SIZE * 0.28, 8 / Math.max(state.scale, 0.1));
+  }
+  function hitTestLayoutMarkerHandle(wx, wy) {
+    if (!layoutMarkersVisible() || state.markerDrawing) return null;
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return null;
+    const mk = sel.obj;
+    if (!mk || String(mk.id) !== String(sel.id)) return null;
+    const click = [wx, wy];
+    const r = layoutMarkerHandleHitRadiusWorld();
+    const r2 = r * r;
+    if (mk.kind === 'text') {
+      const x = Number(mk.x), y = Number(mk.y);
+      if (isFinite(x) && isFinite(y) && dist2(click, [x, y]) <= r2)
+        return { markerId: mk.id, handle: 'textAnchor' };
+    } else if (mk.kind === 'ruler') {
+      const x1 = Number(mk.x1), y1 = Number(mk.y1), x2 = Number(mk.x2), y2 = Number(mk.y2);
+      if (![x1, y1, x2, y2].every(isFinite)) return null;
+      const dA = dist2(click, [x1, y1]);
+      const dB = dist2(click, [x2, y2]);
+      if (dA <= r2 && dB <= r2) return { markerId: mk.id, handle: dA <= dB ? 'rulerA' : 'rulerB' };
+      if (dA <= r2) return { markerId: mk.id, handle: 'rulerA' };
+      if (dB <= r2) return { markerId: mk.id, handle: 'rulerB' };
+    }
+    return null;
+  }
+  function layoutMarkerDrawEndpointDot(ctx, wx, wy, selected) {
+    const rad = Math.max(3.5 / Math.max(state.scale, 0.08), CELL_SIZE * 0.11);
+    ctx.beginPath();
+    ctx.arc(wx, wy, rad, 0, Math.PI * 2);
+    ctx.fillStyle = selected ? '#fbbf24' : '#94a3b8';
+    ctx.fill();
+    ctx.strokeStyle = selected ? '#fffbeb' : 'rgba(15,23,42,0.95)';
+    ctx.lineWidth = Math.max(1, 1.35 / Math.max(state.scale, 0.08));
+    ctx.stroke();
+  }
+  function layoutMarkerTextHitRect(m) {
+    const hx = Number(m.x), hy = Number(m.y);
+    if (!isFinite(hx) || !isFinite(hy)) return null;
+    const fs = Math.max(10, 12 / Math.max(state.scale, 0.12));
+    const txt = String(m.text || '');
+    let tw = Math.max(CELL_SIZE * 0.35, txt.length * fs * 0.45) + 8;
+    if (ctx) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
+      tw = Math.max(tw, ctx.measureText(txt).width + 8);
+      ctx.restore();
+    }
+    const th = fs + 8;
+    return { left: hx + 2, top: hy + 2, w: tw, h: th };
+  }
+  function hitTestLayoutMarker(wx, wy) {
+    if (!layoutMarkersVisible()) return null;
+    const click = [wx, wy];
+    const padW = 6 / Math.max(state.scale, 0.1);
+    const list = state.layoutMarkers || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const m = list[i];
+      if (!m) continue;
+      if (m.kind === 'text') {
+        const ax = Number(m.x), ay = Number(m.y);
+        if (isFinite(ax) && isFinite(ay)) {
+          const ar = layoutMarkerHandleHitRadiusWorld() * 1.15;
+          if (dist2(click, [ax, ay]) <= ar * ar)
+            return { type: 'layoutMarker', id: m.id, obj: m };
+        }
+        const r = layoutMarkerTextHitRect(m);
+        if (!r) continue;
+        if (click[0] >= r.left - padW && click[0] <= r.left + r.w + padW &&
+            click[1] >= r.top - padW && click[1] <= r.top + r.h + padW)
+          return { type: 'layoutMarker', id: m.id, obj: m };
+      } else if (m.kind === 'ruler') {
+        const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
+        if (![x1, y1, x2, y2].every(isFinite)) continue;
+        const er = layoutMarkerHandleHitRadiusWorld() * 1.1;
+        const er2 = er * er;
+        if (dist2(click, [x1, y1]) <= er2 || dist2(click, [x2, y2]) <= er2)
+          return { type: 'layoutMarker', id: m.id, obj: m };
+        const pr = projectOnSegment([x1, y1], [x2, y2], click);
+        if (pr.t < 0 || pr.t > 1) continue;
+        const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
+        if (dist2(pr.p, click) <= tol * tol)
+          return { type: 'layoutMarker', id: m.id, obj: m };
+      } else if (m.kind === 'flight') {
+        const pose = resolveMarkerFlightPose(m);
+        if (!pose) continue;
+        const tol = Math.max(CELL_SIZE * 1.1, 22 / Math.max(state.scale, 0.12));
+        if (dist2(click, [pose.x, pose.y]) <= tol * tol)
+          return { type: 'layoutMarker', id: m.id, obj: m };
+      }
+    }
+    return null;
+  }
+  function hideMarkerTextDraftEditor() {
+    const layer = document.getElementById('marker-text-edit-layer');
+    const input = document.getElementById('markerTextDraftInput');
+    if (layer) {
+      layer.setAttribute('hidden', '');
+      layer.setAttribute('aria-hidden', 'true');
+    }
+    if (input) input.value = '';
+  }
+  function syncMarkerTextDraftInputPosition() {
+    const draft = state.markerTextDraft;
+    const input = document.getElementById('markerTextDraftInput');
+    if (!draft || !draft.active || !input) return;
+    const sc = worldToScreenCanvas(draft.x, draft.y);
+    input.style.left = Math.round(sc[0] + 4) + 'px';
+    input.style.top = Math.round(sc[1] + 4) + 'px';
+  }
+  function showMarkerTextDraftEditor() {
+    const layer = document.getElementById('marker-text-edit-layer');
+    const input = document.getElementById('markerTextDraftInput');
+    if (!layer || !input) return;
+    layer.removeAttribute('hidden');
+    layer.setAttribute('aria-hidden', 'false');
+    input.value = '';
+    syncMarkerTextDraftInputPosition();
+    setTimeout(function() {
+      try {
+        input.focus();
+      } catch (e) {}
+    }, 0);
+  }
+  function commitMarkerTextDraft() {
+    const d = state.markerTextDraft;
+    if (!d || !d.active) return;
+    const input = document.getElementById('markerTextDraftInput');
+    const text = input ? String(input.value || '').trim().slice(0, 500) : '';
+    const sx = d.x, sy = d.y;
+    state.markerTextDraft = null;
+    hideMarkerTextDraftEditor();
+    if (text) {
+      pushUndo();
+      state.layoutMarkers.push({ kind: 'text', id: id(), x: sx, y: sy, text: text });
+      syncPanelFromState();
+    }
+    scheduleDraw();
+  }
+  function cancelMarkerTextDraftWithoutCommit() {
+    if (!state.markerTextDraft || !state.markerTextDraft.active) return;
+    state.markerTextDraft = null;
+    hideMarkerTextDraftEditor();
+    scheduleDraw();
+  }
+  function handleMarkerPlacement(wx, wy, shiftKey) {
+    const placePx = worldPointToPixel(wx, wy, shiftKey);
+    const px = placePx[0], py = placePx[1];
+    const sub = getMarkerSubKindFromPanel();
+    if (sub !== 'text' && state.markerTextDraft && state.markerTextDraft.active) {
+      commitMarkerTextDraft();
+    }
+    if (sub === 'text') {
+      commitMarkerTextDraft();
+      state.markerTextDraft = { x: px, y: py, active: true };
+      showMarkerTextDraftEditor();
+      scheduleDraw();
+      return;
+    }
+    if (sub === 'ruler') {
+      if (!state.markerRulerDraft) {
+        state.markerRulerDraft = { x: px, y: py };
+        state.markerRulerHoverWorld = [px, py];
+      } else {
+        const x1 = state.markerRulerDraft.x, y1 = state.markerRulerDraft.y;
+        state.markerRulerDraft = null;
+        state.markerRulerHoverWorld = null;
+        const dx = px - x1, dy = py - y1;
+        if (dx * dx + dy * dy < 2.25) return;
+        pushUndo();
+        state.layoutMarkers.push({ kind: 'ruler', id: id(), x1: x1, y1: y1, x2: px, y2: py });
+        syncPanelFromState();
+      }
+      return;
+    }
+    if (sub === 'flight') {
+      const snap = snapWorldToMarkerFlightTaxiway(wx, wy);
+      if (!snap) return;
+      pushUndo();
+      state.layoutMarkers.push({ kind: 'flight', id: id(), taxiwayId: snap.taxiwayId, segIndex: snap.segIndex, t: snap.t });
+      syncPanelFromState();
+    }
+  }
+
   function hitTest(wx, wy) {
     const click = [wx, wy];
     const temps = state.tempStands || [];
@@ -2838,6 +3154,10 @@
     if (hpHit) return hpHit;
     const apronLkHit = hitTestApronLink(wx, wy);
     if (apronLkHit) return apronLkHit;
+    if (layoutMarkersVisible()) {
+      const mkHit = hitTestLayoutMarker(wx, wy);
+      if (mkHit) return mkHit;
+    }
     if (!state.taxiwayDrawingId) {
       for (let i = state.taxiways.length - 1; i >= 0; i--) {
         const tw = state.taxiways[i];
@@ -3404,6 +3724,7 @@
     syncDrawToggleButton('btnRemoteDraw', !!state.remoteDrawing);
     syncDrawToggleButton('btnTempStandDraw', !!state.tempStandDrawing);
     syncDrawToggleButton('btnHoldingPointDraw', !!state.holdingPointDrawing);
+    syncDrawToggleButton('btnMarkerDraw', !!state.markerDrawing);
     renderObjectList();
   }
 
@@ -11938,13 +12259,20 @@
           failProSim(e1 && e1.message);
           return;
         }
+        let layoutForSim = layoutPayload;
+        try {
+          layoutForSim = JSON.parse(JSON.stringify(layoutPayload));
+          delete layoutForSim.layoutMarkers;
+        } catch (eStrip) {
+          layoutForSim = layoutPayload;
+        }
         if (typeof setGlobalUpdateProgressUi === 'function') {
           setGlobalUpdateProgressUi(true, 'Running… · 3%', 3);
         }
         fetch(base + '/api/run-simulation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ layout: layoutPayload, layoutName: layoutName, name: layoutName }),
+          body: JSON.stringify({ layout: layoutForSim, layoutName: layoutName, name: layoutName }),
         }).then(function(r) {
           if (r.status === 409) {
             return r.json().then(function(d) {
@@ -12820,6 +13148,38 @@
   if (btnApronDrawEl) btnApronDrawEl.addEventListener('click', function() {
     toggleLayoutDrawMode('apronLinkDrawing', null, 'apronLinkTemp');
   });
+  const btnMarkerDrawEl = document.getElementById('btnMarkerDraw');
+  if (btnMarkerDrawEl) btnMarkerDrawEl.addEventListener('click', function() {
+    state.markerDrawing = !state.markerDrawing;
+    if (!state.markerDrawing) {
+      state.markerRulerDraft = null;
+      state.markerRulerHoverWorld = null;
+      cancelMarkerTextDraftWithoutCommit();
+    }
+    syncDrawToggleButton('btnMarkerDraw', !!state.markerDrawing);
+    draw();
+  });
+  const markerTextDraftInputEl = document.getElementById('markerTextDraftInput');
+  if (markerTextDraftInputEl) {
+    markerTextDraftInputEl.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        commitMarkerTextDraft();
+      }
+    });
+    markerTextDraftInputEl.addEventListener('blur', function() {
+      if (!state.markerTextDraft || !state.markerTextDraft.active) return;
+      commitMarkerTextDraft();
+    });
+  }
+  document.querySelectorAll('input[name="markerSubKind"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      commitMarkerTextDraft();
+      state.markerRulerDraft = null;
+      state.markerRulerHoverWorld = null;
+      scheduleDraw();
+    });
+  });
 
   (function setupRightPanelDragResize() {
     if (!panel || !panelToggle) return;
@@ -13205,6 +13565,38 @@
           noDelete: true
         });
       });
+    } else if (mode === 'marker') {
+      (state.layoutMarkers || []).forEach(function(mk, idx) {
+        if (!mk || seen['mk_' + mk.id]) return;
+        seen['mk_' + mk.id] = true;
+        if (mk.kind === 'text') {
+          items.push({
+            type: 'layoutMarker',
+            id: mk.id,
+            title: 'Marker | Text',
+            tag: 'Text',
+            details: escapeHtml(String(mk.text || '').slice(0, 200))
+          });
+        } else if (mk.kind === 'ruler') {
+          const dx = Number(mk.x2) - Number(mk.x1), dy = Number(mk.y2) - Number(mk.y1);
+          items.push({
+            type: 'layoutMarker',
+            id: mk.id,
+            title: 'Marker | Ruler',
+            tag: Math.hypot(dx, dy).toFixed(1) + ' m',
+            details: 'Length: ' + Math.hypot(dx, dy).toFixed(1) + ' m'
+          });
+        } else if (mk.kind === 'flight') {
+          const tw = state.taxiways.find(function(t) { return t && t.id === mk.taxiwayId; });
+          items.push({
+            type: 'layoutMarker',
+            id: mk.id,
+            title: 'Marker | Flight',
+            tag: 'Dummy',
+            details: 'On: ' + (tw && tw.name ? tw.name : String(mk.taxiwayId))
+          });
+        }
+      });
     }
     if (!items.length) {
       objectListEl.innerHTML = '<div class="obj-item">No objects yet.</div>';
@@ -13409,6 +13801,39 @@
           '<br>Stand: ' + (stand && stand.name ? stand.name : lk.pbbId) +
           '<br>Taxiway: ' + (tw && tw.name ? tw.name : lk.taxiwayId) +
           '<br>Link point: (' + Number(lk.tx).toFixed(0) + ', ' + Number(lk.ty).toFixed(0) + ')';
+      } else if (state.selectedObject.type === 'layoutMarker') {
+        const mk = o;
+        if (mk.kind === 'text') {
+          const tid = 'layoutMarkerSelectedTextInput';
+          objectInfoEl.innerHTML =
+            '<strong>Marker · Text</strong><br>' +
+            '<label for="' + tid + '">Text</label><br>' +
+            '<input type="text" id="' + tid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:6px 0;" value="' +
+            escapeAttr(String(mk.text || '')) + '" spellcheck="false" />' +
+            '<br>Position: (' + Number(mk.x).toFixed(1) + ', ' + Number(mk.y).toFixed(1) + ')';
+          const tInp = document.getElementById(tid);
+          if (tInp) {
+            const markerId = mk.id;
+            tInp.oninput = function() {
+              const so = state.selectedObject;
+              if (!so || so.type !== 'layoutMarker' || String(so.id) !== String(markerId)) return;
+              const mo = so.obj;
+              if (!mo || mo.kind !== 'text') return;
+              mo.text = this.value;
+              scheduleDraw();
+            };
+          }
+        } else if (mk.kind === 'ruler') {
+          const dx = Number(mk.x2) - Number(mk.x1), dy = Number(mk.y2) - Number(mk.y1);
+          objectInfoEl.innerHTML = '<strong>Marker · Ruler</strong><br>Length: ' + Math.hypot(dx, dy).toFixed(1) + ' m' +
+            '<br>From: (' + Number(mk.x1).toFixed(1) + ', ' + Number(mk.y1).toFixed(1) + ') → (' + Number(mk.x2).toFixed(1) + ', ' + Number(mk.y2).toFixed(1) + ')';
+        } else if (mk.kind === 'flight') {
+          const tw = state.taxiways.find(function(t) { return t && t.id === mk.taxiwayId; });
+          objectInfoEl.innerHTML = '<strong>Marker · Flight (dummy)</strong><br>Taxiway: ' + (tw && tw.name ? tw.name : String(mk.taxiwayId)) +
+            '<br>Segment: ' + (mk.segIndex | 0) + ' · t: ' + Number(mk.t).toFixed(3);
+        } else {
+          objectInfoEl.innerHTML = '<strong>Marker</strong>';
+        }
       } else if (state.selectedObject.type === 'layoutEdge') {
         const ed = state.selectedObject.obj;
         objectInfoEl.innerHTML =
@@ -13490,6 +13915,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     invalidateGridUnderlay();
     safeDraw({ bypassSimScrubGuard: true });
+    syncMarkerTextDraftInputPosition();
   }
 
   let _gridUnderlayCanvas = null;
@@ -15141,6 +15567,132 @@
       safeDraw();
     });
   }
+  function drawLayoutMarkers2D() {
+    if (!ctx || !layoutMarkersVisible()) return;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    const silN = Number(_acSil.noseX), silWR = Number(_acSil.wingRearX), silUY = Number(_acSil.wingUpperY);
+    const silTN = Number(_acSil.tailNeckX), silLY = Number(_acSil.wingLowerY);
+    const nX = isFinite(silN) ? silN : 0.6;
+    const wRx = isFinite(silWR) ? silWR : -0.5;
+    const uY = isFinite(silUY) ? silUY : 0.35;
+    const tX = isFinite(silTN) ? silTN : -0.3;
+    const lY = isFinite(silLY) ? silLY : -0.35;
+    const planeScale = CELL_SIZE * 2.2;
+    if (state.markerTextDraft && state.markerTextDraft.active) {
+      const ax = state.markerTextDraft.x, ay = state.markerTextDraft.y;
+      if (isFinite(ax) && isFinite(ay)) {
+        ctx.beginPath();
+        const rad = 5 / Math.max(state.scale, 0.08);
+        ctx.arc(ax, ay, rad, 0, Math.PI * 2);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+        ctx.lineWidth = 1.25 / Math.max(state.scale, 0.08);
+        ctx.stroke();
+      }
+    }
+    (state.layoutMarkers || []).forEach(function(m) {
+      if (!m) return;
+      const sel = state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id;
+      if (m.kind === 'text') {
+        const x = Number(m.x), y = Number(m.y);
+        if (!isFinite(x) || !isFinite(y)) return;
+        const fs = Math.max(10, 12 / Math.max(state.scale, 0.12));
+        ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const txt = String(m.text || '');
+        ctx.lineWidth = Math.max(2, 3 / Math.max(state.scale, 0.1));
+        ctx.strokeStyle = 'rgba(15,23,42,0.92)';
+        ctx.fillStyle = '#e2e8f0';
+        ctx.strokeText(txt, x + 2, y + 2);
+        ctx.fillText(txt, x + 2, y + 2);
+        layoutMarkerDrawEndpointDot(ctx, x, y, sel);
+        if (sel) {
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2 / Math.max(state.scale, 0.1);
+          const tw = ctx.measureText(txt).width;
+          ctx.strokeRect(x + 1, y + 1, tw + 4, fs + 4);
+        }
+      } else if (m.kind === 'ruler') {
+        const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
+        if (![x1, y1, x2, y2].every(isFinite)) return;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = sel ? '#38bdf8' : '#94a3b8';
+        ctx.lineWidth = Math.max(1.2, 1.6 / Math.max(state.scale, 0.1));
+        ctx.setLineDash([6, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const dx = x2 - x1, dy = y2 - y1;
+        const lenM = Math.hypot(dx, dy);
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
+        ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const label = lenM.toFixed(1) + ' m';
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+        ctx.fillStyle = '#f1f5f9';
+        ctx.strokeText(label, mx, my - fs * 0.9);
+        ctx.fillText(label, mx, my - fs * 0.9);
+        layoutMarkerDrawEndpointDot(ctx, x1, y1, sel);
+        layoutMarkerDrawEndpointDot(ctx, x2, y2, sel);
+      } else if (m.kind === 'flight') {
+        const pose = resolveMarkerFlightPose(m);
+        if (!pose) return;
+        ctx.save();
+        ctx.translate(pose.x, pose.y);
+        ctx.rotate(pose.ang);
+        const scaleX = planeScale * 0.52, scaleY = planeScale * 0.38;
+        ctx.beginPath();
+        ctx.moveTo(scaleX * nX, 0);
+        ctx.lineTo(scaleX * wRx, scaleY * uY);
+        ctx.lineTo(scaleX * tX, 0);
+        ctx.lineTo(scaleX * wRx, scaleY * lY);
+        ctx.closePath();
+        ctx.fillStyle = sel ? '#64748b' : '#94a3b8';
+        ctx.strokeStyle = 'rgba(30,41,59,0.9)';
+        ctx.lineWidth = Math.max(0.75, 1.1 / Math.max(state.scale, 0.1));
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+    if (state.markerDrawing && state.markerRulerDraft && getMarkerSubKindFromPanel() === 'ruler' && state.markerRulerHoverWorld) {
+      const d0 = state.markerRulerDraft;
+      const h = state.markerRulerHoverWorld;
+      ctx.beginPath();
+      ctx.moveTo(d0.x, d0.y);
+      ctx.lineTo(h[0], h[1]);
+      ctx.strokeStyle = 'rgba(148,163,184,0.9)';
+      ctx.lineWidth = Math.max(1, 1.3 / Math.max(state.scale, 0.1));
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const dx = h[0] - d0.x, dy = h[1] - d0.y;
+      const lenM = Math.hypot(dx, dy);
+      const mx = (d0.x + h[0]) / 2, my = (d0.y + h[1]) / 2;
+      const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
+      ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const label = lenM.toFixed(1) + ' m';
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+      ctx.fillStyle = '#f1f5f9';
+      ctx.strokeText(label, mx, my - fs * 0.9);
+      ctx.fillText(label, mx, my - fs * 0.9);
+      layoutMarkerDrawEndpointDot(ctx, d0.x, d0.y, false);
+      layoutMarkerDrawEndpointDot(ctx, h[0], h[1], false);
+    }
+    ctx.restore();
+  }
   function draw(drawOpts) {
     if (!ctx || !canvas) return;
     if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
@@ -15168,6 +15720,8 @@
     drawFlights2D();
     drawPathJunctions();
     drawQueueTaxiwayLaneMarkers();
+    drawLayoutMarkers2D();
+    syncMarkerTextDraftInputPosition();
   }
 
   document.addEventListener('keydown', function(ev) {
@@ -15178,9 +15732,17 @@
       return;
     }
     if (ev.key === 'Escape') {
+      if (state.markerTextDraft && state.markerTextDraft.active) {
+        const inp = document.getElementById('markerTextDraftInput');
+        if (document.activeElement === inp || !inInput) {
+          ev.preventDefault();
+          cancelMarkerTextDraftWithoutCommit();
+          return;
+        }
+      }
       if (inInput) return;
       const anyLayoutDraw = !!(state.pbbDrawing || state.remoteDrawing || state.tempStandDrawing || state.holdingPointDrawing || state.apronLinkDrawing ||
-        state.terminalDrawingId || state.taxiwayDrawingId);
+        state.terminalDrawingId || state.taxiwayDrawingId || state.markerDrawing);
       if (!anyLayoutDraw) return;
       ev.preventDefault();
       cancelActiveLayoutDrawingState();
@@ -15214,7 +15776,7 @@
       ev.preventDefault();
       return;
     }
-    if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'tempStand' && type !== 'holdingPoint' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight') return;
+    if (type !== 'terminal' && type !== 'pbb' && type !== 'remote' && type !== 'tempStand' && type !== 'holdingPoint' && type !== 'taxiway' && type !== 'apronLink' && type !== 'flight' && type !== 'layoutMarker') return;
     pushUndo();
     removeLayoutObjectFromState(type, id);
     state.selectedObject = null;
@@ -15309,6 +15871,16 @@
         return;
       }
     }
+    if (layoutMarkersVisible() && state.selectedObject && state.selectedObject.type === 'layoutMarker' && !state.markerDrawing) {
+      const mh = hitTestLayoutMarkerHandle(wx, wy);
+      if (mh) {
+        pushUndo();
+        state.dragLayoutMarkerHandle = mh;
+        state.selectedVertex = { type: 'layoutMarkerHandle', id: mh.markerId, handle: mh.handle };
+        draw();
+        return;
+      }
+    }
     state.selectedVertex = null;
     if ((mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'tempStand' && state.tempStandDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing)) return;
     ev.preventDefault();
@@ -15354,8 +15926,19 @@
       state.apronLinkPointerWorld = null;
       scheduleDraw(); drewThisMove = true;
     }
+    if (settingModeSelect.value === 'marker' && state.markerDrawing && getMarkerSubKindFromPanel() === 'ruler' && state.markerRulerDraft) {
+      const hpx = worldPointToPixel(wx, wy, !!ev.shiftKey);
+      const pw = state.markerRulerHoverWorld;
+      if (!pw || pw[0] !== hpx[0] || pw[1] !== hpx[1]) {
+        state.markerRulerHoverWorld = [hpx[0], hpx[1]];
+        scheduleDraw(); drewThisMove = true;
+      }
+    } else if (state.markerRulerHoverWorld) {
+      state.markerRulerHoverWorld = null;
+      if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
+    }
     const pathLayoutDrawing = !!(state.terminalDrawingId || state.taxiwayDrawingId);
-    const blockLayoutPathPtr = !!(state.isPanning || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragApronLinkVertex || state.dragStandRotation);
+    const blockLayoutPathPtr = !!(state.isPanning || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragApronLinkVertex || state.dragStandRotation || state.dragLayoutMarkerHandle);
     if (pathLayoutDrawing && !blockLayoutPathPtr) {
       const nx = snappedPx[0], ny = snappedPx[1];
       const lp = state.layoutPathDrawPointer;
@@ -15475,6 +16058,30 @@
           scheduleDraw(); drewThisMove = true;
           if (scene3d) update3DScene();
         }
+      }
+      return;
+    }
+    if (state.dragLayoutMarkerHandle) {
+      const h = state.dragLayoutMarkerHandle;
+      const mk = (state.layoutMarkers || []).find(function(m) { return m && String(m.id) === String(h.markerId); });
+      if (!mk) {
+        state.dragLayoutMarkerHandle = null;
+      } else {
+        const px = worldPointToPixel(wx, wy, !!ev.shiftKey);
+        if (h.handle === 'textAnchor') {
+          mk.x = px[0];
+          mk.y = px[1];
+        } else if (h.handle === 'rulerA') {
+          mk.x1 = px[0];
+          mk.y1 = px[1];
+        } else if (h.handle === 'rulerB') {
+          mk.x2 = px[0];
+          mk.y2 = px[1];
+        }
+        if (state.selectedObject && state.selectedObject.type === 'layoutMarker' && String(state.selectedObject.id) === String(h.markerId))
+          state.selectedObject.obj = mk;
+        syncMarkerTextDraftInputPosition();
+        scheduleDraw(); drewThisMove = true;
       }
       return;
     }
@@ -15621,7 +16228,7 @@
       if (!tipDone) {
         const hit = hitTest(wx, wy);
         if (hit && hit.obj) {
-          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'tempStand' ? 'Temp Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type);
+          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'tempStand' ? 'Temp Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type === 'layoutMarker' ? 'Marker' : hit.type);
           flightTooltip.style.display = 'block';
           flightTooltip.textContent = name;
           flightTooltip.style.left = (ev.clientX + 12) + 'px';
@@ -15646,6 +16253,8 @@
     state.previewTempStand = null;
     state.previewHoldingPoint = null;
     state.apronLinkPointerWorld = null;
+    state.markerRulerHoverWorld = null;
+    state.dragLayoutMarkerHandle = null;
     flushDrawNow();
   });
   container.addEventListener('dblclick', function(ev) {
@@ -15756,12 +16365,19 @@
       }
       return;
     }
+    if (state.dragLayoutMarkerHandle) {
+      state.dragLayoutMarkerHandle = null;
+      state.selectedVertex = null;
+      if (typeof updateObjectInfo === 'function') updateObjectInfo();
+      draw();
+      return;
+    }
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
     const [wx, wy] = screenToWorld(sx, sy);
     const placePx = worldPointToPixel(wx, wy, !!ev.shiftKey);
     const mode = settingModeSelect.value;
-    const inStandDrawingMode = (mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'tempStand' && state.tempStandDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing);
+    const inStandDrawingMode = (mode === 'pbb' && state.pbbDrawing) || (mode === 'remote' && state.remoteDrawing) || (mode === 'tempStand' && state.tempStandDrawing) || (mode === 'holdingPoint' && state.holdingPointDrawing) || (mode === 'marker' && state.markerDrawing);
     if (!state.dragStart && !inStandDrawingMode) { state.dragStart = null; return; }
     if (handlePbbOrRemoteMouseUp2D(mode, placePx[0], placePx[1])) {
       state.dragStart = null;
@@ -15770,6 +16386,13 @@
     if (!state.dragStart) return;
     if (!wasPanning) {
       const mode = settingModeSelect.value;
+      if (mode === 'marker' && state.markerDrawing) {
+        handleMarkerPlacement(wx, wy, !!ev.shiftKey);
+        state.dragStart = null;
+        draw();
+        if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
+        return;
+      }
       if (mode === 'edge') {
         rebuildDerivedGraphEdges();
         const eh = hitTestLayoutGraphEdge(wx, wy);
@@ -16024,6 +16647,16 @@
       draw();
     });
   }
+  syncLayoutMarkersToggleButtons();
+  const btnLayoutMarkersToggle = document.getElementById('btnLayoutMarkersToggle');
+  const btnGridMarkerOverlayToggle = document.getElementById('btnGridMarkerOverlayToggle');
+  function toggleShowLayoutMarkersFromUi() {
+    state.showLayoutMarkers = !state.showLayoutMarkers;
+    syncLayoutMarkersToggleButtons();
+    draw();
+  }
+  if (btnLayoutMarkersToggle) btnLayoutMarkersToggle.addEventListener('click', toggleShowLayoutMarkersFromUi);
+  if (btnGridMarkerOverlayToggle) btnGridMarkerOverlayToggle.addEventListener('click', toggleShowLayoutMarkersFromUi);
   const aiAssistantDock = document.getElementById('aiAssistantDock');
   const btnAiAssistantDockClose = document.getElementById('btnAiAssistantDockClose');
   const aiModeToggleEls = document.querySelectorAll('[data-ai-mode-toggle]');
