@@ -478,10 +478,79 @@
   const layoutModeTabs = document.getElementById('layoutModeTabs');
   const panel = document.getElementById('right-panel');
   const panelToggle = document.getElementById('panel-toggle');
+  const MARKER_BLAZER_COLOR_OPTIONS = ['#a78bfa', '#22d3ee', '#4ade80', '#f59e0b', '#f43f5e'];
+  const markerFlightBlazerOverlayBtn = document.createElement('button');
+  const markerFlightBlazerPaletteWrap = document.createElement('div');
+  markerFlightBlazerOverlayBtn.type = 'button';
+  markerFlightBlazerOverlayBtn.textContent = 'Blazer: OFF';
+  markerFlightBlazerOverlayBtn.setAttribute('aria-label', 'Toggle flight marker blazer');
+  markerFlightBlazerOverlayBtn.style.position = 'absolute';
+  markerFlightBlazerOverlayBtn.style.zIndex = '35';
+  markerFlightBlazerOverlayBtn.style.display = 'none';
+  markerFlightBlazerOverlayBtn.style.padding = '6px 10px';
+  markerFlightBlazerOverlayBtn.style.border = '1px solid var(--ui-border-default)';
+  markerFlightBlazerOverlayBtn.style.borderRadius = '6px';
+  markerFlightBlazerOverlayBtn.style.background = 'var(--ui-bg-control)';
+  markerFlightBlazerOverlayBtn.style.color = 'var(--ui-text-primary)';
+  markerFlightBlazerOverlayBtn.style.cursor = 'pointer';
+  markerFlightBlazerOverlayBtn.style.boxShadow = '0 2px 10px rgba(0,0,0,0.28)';
+  markerFlightBlazerPaletteWrap.style.position = 'absolute';
+  markerFlightBlazerPaletteWrap.style.zIndex = '35';
+  markerFlightBlazerPaletteWrap.style.display = 'none';
+  markerFlightBlazerPaletteWrap.style.gap = '6px';
+  markerFlightBlazerPaletteWrap.style.alignItems = 'center';
+  markerFlightBlazerPaletteWrap.style.padding = '4px 6px';
+  markerFlightBlazerPaletteWrap.style.border = '1px solid var(--ui-border-default)';
+  markerFlightBlazerPaletteWrap.style.borderRadius = '6px';
+  markerFlightBlazerPaletteWrap.style.background = 'var(--ui-bg-control)';
+  markerFlightBlazerPaletteWrap.style.boxShadow = '0 2px 10px rgba(0,0,0,0.28)';
+  markerFlightBlazerPaletteWrap.style.pointerEvents = 'auto';
+  markerFlightBlazerPaletteWrap.style.display = 'none';
+  markerFlightBlazerPaletteWrap.style.flexDirection = 'row';
+  MARKER_BLAZER_COLOR_OPTIONS.forEach(function(c) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('data-blazer-color', c);
+    b.style.width = '14px';
+    b.style.height = '14px';
+    b.style.minWidth = '14px';
+    b.style.borderRadius = '2px';
+    b.style.border = '1px solid rgba(255,255,255,0.45)';
+    b.style.background = c;
+    b.style.cursor = 'pointer';
+    b.style.padding = '0';
+    b.style.margin = '0';
+    markerFlightBlazerPaletteWrap.appendChild(b);
+  });
+  if (container) {
+    container.appendChild(markerFlightBlazerOverlayBtn);
+    container.appendChild(markerFlightBlazerPaletteWrap);
+  }
   const resetViewBtn = document.getElementById('btnResetView');
   const gridToggleBtn = document.getElementById('btnGridToggle');
   const imageToggleBtn = document.getElementById('btnImageToggle');
   const roadWidthToggleBtn = document.getElementById('btnRoadWidthToggle');
+  markerFlightBlazerOverlayBtn.addEventListener('click', function() {
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'layoutMarker' || !sel.obj || sel.obj.kind !== 'flight') return;
+    ensureMarkerFlightBlazerState(sel.obj);
+    sel.obj.blazerEnabled = !sel.obj.blazerEnabled;
+    if (sel.obj.blazerEnabled) appendMarkerFlightBlazerTrail(sel.obj);
+    scheduleDraw();
+    updateObjectInfo();
+  });
+  markerFlightBlazerPaletteWrap.addEventListener('click', function(ev) {
+    const target = ev.target;
+    if (!target || !target.getAttribute) return;
+    const next = String(target.getAttribute('data-blazer-color') || '').trim();
+    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(next) < 0) return;
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'layoutMarker' || !sel.obj || sel.obj.kind !== 'flight') return;
+    ensureMarkerFlightBlazerState(sel.obj);
+    sel.obj.blazerColor = next;
+    scheduleDraw();
+    updateObjectInfo();
+  });
   const GRID_LAYOUT_IMAGE_DEFAULTS = {
     opacity: _dc.gridLayoutImage.opacity,
     opacityMin: _dc.gridLayoutImage.opacityMin,
@@ -1248,13 +1317,19 @@
       const segIndex = Math.max(0, parseInt(m.segIndex, 10) || 0);
       let t = Number(m.t);
       if (!isFinite(t)) t = 0.5;
+      const leftTrail = Array.isArray(m.blazerLeftTrail) ? m.blazerLeftTrail : [];
+      const rightTrail = Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail : [];
       return {
         kind: 'flight',
         id: m.id || id(),
         taxiwayId: m.taxiwayId,
         segIndex: segIndex,
         t: Math.max(0, Math.min(1, t)),
-        aircraftType: String(m.aircraftType || '').trim() || ((AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320')
+        aircraftType: String(m.aircraftType || '').trim() || ((AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320'),
+        blazerEnabled: !!m.blazerEnabled,
+        blazerColor: MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) >= 0 ? String(m.blazerColor).trim() : MARKER_BLAZER_COLOR_OPTIONS[0],
+        blazerLeftTrail: leftTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }),
+        blazerRightTrail: rightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); })
       };
     }
     return null;
@@ -2926,7 +3001,18 @@
         }
         if (m.kind === 'flight') {
           const si = (typeof m.segIndex === 'number' && isFinite(m.segIndex)) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
-          return { kind: 'flight', id: m.id, taxiwayId: m.taxiwayId, segIndex: si, t: Number(m.t), aircraftType: String(m.aircraftType || '').trim() };
+          return {
+            kind: 'flight',
+            id: m.id,
+            taxiwayId: m.taxiwayId,
+            segIndex: si,
+            t: Number(m.t),
+            aircraftType: String(m.aircraftType || '').trim(),
+            blazerEnabled: !!m.blazerEnabled,
+            blazerColor: MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) >= 0 ? String(m.blazerColor).trim() : MARKER_BLAZER_COLOR_OPTIONS[0],
+            blazerLeftTrail: Array.isArray(m.blazerLeftTrail) ? m.blazerLeftTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : [],
+            blazerRightTrail: Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : []
+          };
         }
         return null;
       }).filter(Boolean),
@@ -3192,7 +3278,9 @@
   function syncMarkerFlightAircraftRowVisibility() {
     const row = document.getElementById('markerFlightAircraftRow');
     if (!row) return;
-    row.hidden = getMarkerSubKindFromPanel() !== 'flight';
+    const show = getMarkerSubKindFromPanel() === 'flight';
+    row.hidden = !show;
+    row.style.display = show ? '' : 'none';
   }
   function setMarkerSubKindTab(sub) {
     const next = sub === 'ruler' || sub === 'flight' ? sub : 'text';
@@ -3206,13 +3294,17 @@
   function isMarkerFlightAllowedPathType(pt) {
     return pt === 'runway' || pt === 'runway_exit' || pt === 'taxiway' || pt === 'general_queue_taxiway';
   }
-  function snapWorldToMarkerFlightTaxiway(wx, wy) {
+  function snapWorldToMarkerFlightTaxiway(wx, wy, opts) {
     const click = [wx, wy];
+    const o = opts || {};
+    const lockTaxiwayId = o.taxiwayId != null ? String(o.taxiwayId) : null;
+    const allowFar = o.allowFar === true;
     let best = null;
     let bestD2 = Infinity;
-    const maxD2 = Math.pow(CELL_SIZE * HIT_TW_SEG_CF, 2);
+    const maxD2 = allowFar ? Infinity : Math.pow(CELL_SIZE * HIT_TW_SEG_CF, 2);
     (state.taxiways || []).forEach(function(tw) {
       if (!tw || !isMarkerFlightAllowedPathType(tw.pathType || 'taxiway')) return;
+      if (lockTaxiwayId && String(tw.id) !== lockTaxiwayId) return;
       const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
       if (!pts || pts.length < 2) return;
       for (let i = 0; i < pts.length - 1; i++) {
@@ -3248,6 +3340,132 @@
     const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
     return { x: x, y: y, ang: ang };
   }
+  function getMarkerFlightWingtipWorldPoints(m) {
+    if (!m || m.kind !== 'flight') return null;
+    const pose = resolveMarkerFlightPose(m);
+    if (!pose) return null;
+    const ac = getAircraftInfoByType(m.aircraftType);
+    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
+    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
+    const silhouette2D = getApronAircraftDetailedSilhouettePoints();
+    let leftLocal = [0, -spanM];
+    let rightLocal = [0, spanM];
+    if (_ac2d.useDetailedSilhouette === true && silhouette2D.length >= 3) {
+      let minY = Infinity, maxY = -Infinity;
+      let minPt = null, maxPt = null;
+      for (let i = 0; i < silhouette2D.length; i++) {
+        const p = silhouette2D[i];
+        if (!p || p.length < 2) continue;
+        const lx = Number(p[0]) * lenM;
+        const ly = Number(p[1]) * spanM;
+        if (!isFinite(lx) || !isFinite(ly)) continue;
+        if (ly < minY) { minY = ly; minPt = [lx, ly]; }
+        if (ly > maxY) { maxY = ly; maxPt = [lx, ly]; }
+      }
+      if (minPt && maxPt) {
+        leftLocal = minPt;
+        rightLocal = maxPt;
+      }
+    }
+    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
+    function localToWorld(pt) {
+      return {
+        x: pose.x + pt[0] * cs - pt[1] * sn,
+        y: pose.y + pt[0] * sn + pt[1] * cs,
+      };
+    }
+    return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
+  }
+  function ensureMarkerFlightBlazerState(m) {
+    if (!m || m.kind !== 'flight') return;
+    if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
+    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) < 0) m.blazerColor = MARKER_BLAZER_COLOR_OPTIONS[0];
+    if (!Array.isArray(m.blazerLeftTrail)) m.blazerLeftTrail = [];
+    if (!Array.isArray(m.blazerRightTrail)) m.blazerRightTrail = [];
+  }
+  function appendMarkerFlightBlazerTrail(m) {
+    if (!m || m.kind !== 'flight') return;
+    ensureMarkerFlightBlazerState(m);
+    if (!m.blazerEnabled) return;
+    const tips = getMarkerFlightWingtipWorldPoints(m);
+    if (!tips || !tips.left || !tips.right) return;
+    const minStep = Math.max(0.25, CELL_SIZE * 0.03);
+    const minStep2 = minStep * minStep;
+    function append(trail, pt) {
+      const last = trail.length ? trail[trail.length - 1] : null;
+      if (!last || dist2([last.x, last.y], [pt.x, pt.y]) >= minStep2) trail.push({ x: pt.x, y: pt.y });
+      if (trail.length > 4000) trail.splice(0, trail.length - 4000);
+    }
+    append(m.blazerLeftTrail, tips.left);
+    append(m.blazerRightTrail, tips.right);
+  }
+  function markerFlightBoundsWorld(m) {
+    if (!m || m.kind !== 'flight') return null;
+    const pose = resolveMarkerFlightPose(m);
+    if (!pose) return null;
+    const ac = getAircraftInfoByType(m.aircraftType);
+    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
+    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
+    const sil = getApronAircraftDetailedSilhouettePoints();
+    const localPts = [];
+    if (_ac2d.useDetailedSilhouette === true && sil.length >= 3) {
+      for (let i = 0; i < sil.length; i++) {
+        const p = sil[i];
+        if (!p || p.length < 2) continue;
+        const lx = Number(p[0]) * lenM;
+        const ly = Number(p[1]) * spanM;
+        if (isFinite(lx) && isFinite(ly)) localPts.push([lx, ly]);
+      }
+    }
+    if (!localPts.length) {
+      localPts.push([lenM * 0.5, 0], [-lenM * 0.5, -spanM], [-lenM * 0.5, spanM], [0, -spanM], [0, spanM]);
+    }
+    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < localPts.length; i++) {
+      const pt = localPts[i];
+      const wx = pose.x + pt[0] * cs - pt[1] * sn;
+      const wy = pose.y + pt[0] * sn + pt[1] * cs;
+      if (wx < minX) minX = wx;
+      if (wy < minY) minY = wy;
+      if (wx > maxX) maxX = wx;
+      if (wy > maxY) maxY = wy;
+    }
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+  }
+  function syncMarkerFlightBlazerOverlayButton() {
+    if (!markerFlightBlazerOverlayBtn || !container) return;
+    const sel = state.selectedObject;
+    const show = !!(layoutMarkersVisible() && sel && sel.type === 'layoutMarker' && sel.obj && sel.obj.kind === 'flight');
+    if (!show) {
+      markerFlightBlazerOverlayBtn.style.display = 'none';
+      markerFlightBlazerPaletteWrap.style.display = 'none';
+      return;
+    }
+    const mk = sel.obj;
+    ensureMarkerFlightBlazerState(mk);
+    const b = markerFlightBoundsWorld(mk);
+    if (!b) {
+      markerFlightBlazerOverlayBtn.style.display = 'none';
+      markerFlightBlazerPaletteWrap.style.display = 'none';
+      return;
+    }
+    const sc = worldToScreenCanvas(b.minX, b.minY);
+    const left = Math.max(6, sc[0] - 8);
+    const top = Math.max(6, sc[1] - 32);
+    markerFlightBlazerOverlayBtn.textContent = 'Blazer: ' + (mk.blazerEnabled ? 'ON' : 'OFF');
+    markerFlightBlazerOverlayBtn.style.left = left.toFixed(1) + 'px';
+    markerFlightBlazerOverlayBtn.style.top = top.toFixed(1) + 'px';
+    markerFlightBlazerOverlayBtn.style.display = 'inline-block';
+    markerFlightBlazerPaletteWrap.style.left = left.toFixed(1) + 'px';
+    markerFlightBlazerPaletteWrap.style.top = (top + 34).toFixed(1) + 'px';
+    markerFlightBlazerPaletteWrap.style.display = 'flex';
+    markerFlightBlazerPaletteWrap.querySelectorAll('button[data-blazer-color]').forEach(function(btn) {
+      const on = String(btn.getAttribute('data-blazer-color') || '') === String(mk.blazerColor || '');
+      btn.style.outline = on ? '2px solid #ffffff' : 'none';
+    });
+  }
   function layoutMarkerHandleHitRadiusWorld() {
     return Math.max(CELL_SIZE * 0.28, 8 / Math.max(state.scale, 0.1));
   }
@@ -3272,6 +3490,10 @@
       if (dA <= r2 && dB <= r2) return { markerId: mk.id, handle: dA <= dB ? 'rulerA' : 'rulerB' };
       if (dA <= r2) return { markerId: mk.id, handle: 'rulerA' };
       if (dB <= r2) return { markerId: mk.id, handle: 'rulerB' };
+    } else if (mk.kind === 'flight') {
+      const pose = resolveMarkerFlightPose(mk);
+      if (!pose) return null;
+      if (dist2(click, [pose.x, pose.y]) <= r2) return { markerId: mk.id, handle: 'flightCenter' };
     }
     return null;
   }
@@ -3436,6 +3658,10 @@
         segIndex: snap.segIndex,
         t: snap.t,
         aircraftType: getMarkerFlightAircraftTypeFromPanel(),
+        blazerEnabled: false,
+        blazerColor: MARKER_BLAZER_COLOR_OPTIONS[0],
+        blazerLeftTrail: [],
+        blazerRightTrail: [],
       });
       syncPanelFromState();
     }
@@ -13487,6 +13713,7 @@
     });
   });
   populateMarkerFlightAircraftSelect();
+  setMarkerSubKindTab('text');
   syncMarkerFlightAircraftRowVisibility();
 
   (function setupRightPanelDragResize() {
@@ -14137,8 +14364,28 @@
             '<br>From: (' + Number(mk.x1).toFixed(1) + ', ' + Number(mk.y1).toFixed(1) + ') → (' + Number(mk.x2).toFixed(1) + ', ' + Number(mk.y2).toFixed(1) + ')';
         } else if (mk.kind === 'flight') {
           const tw = state.taxiways.find(function(t) { return t && t.id === mk.taxiwayId; });
+          const bid = 'layoutMarkerFlightBlazerToggle';
+          ensureMarkerFlightBlazerState(mk);
           objectInfoEl.innerHTML = '<strong>Marker · Flight (dummy)</strong><br>Taxiway: ' + (tw && tw.name ? tw.name : String(mk.taxiwayId)) +
-            '<br>Segment: ' + (mk.segIndex | 0) + ' · t: ' + Number(mk.t).toFixed(3);
+            '<br>Segment: ' + (mk.segIndex | 0) + ' · t: ' + Number(mk.t).toFixed(3) +
+            '<br><button type="button" id="' + bid + '" class="small" style="margin-top:8px;display:inline-block;padding:6px 10px;border:1px solid var(--ui-border-default);border-radius:6px;background:var(--ui-bg-control);color:var(--ui-text-primary);cursor:pointer;">Blazer: ' + (mk.blazerEnabled ? 'ON' : 'OFF') + '</button>' +
+            '<br>Trail points: L ' + mk.blazerLeftTrail.length + ' · R ' + mk.blazerRightTrail.length;
+          const markerId = mk.id;
+          function bindBlazerToggle() {
+            const bEl = document.getElementById(bid);
+            if (!bEl) return false;
+            bEl.onclick = function() {
+              const so = state.selectedObject;
+              if (!so || so.type !== 'layoutMarker' || String(so.id) !== String(markerId) || !so.obj || so.obj.kind !== 'flight') return;
+              ensureMarkerFlightBlazerState(so.obj);
+              so.obj.blazerEnabled = !so.obj.blazerEnabled;
+              if (so.obj.blazerEnabled) appendMarkerFlightBlazerTrail(so.obj);
+              scheduleDraw();
+              updateObjectInfo();
+            };
+            return true;
+          }
+          if (!bindBlazerToggle()) setTimeout(bindBlazerToggle, 0);
         } else {
           objectInfoEl.innerHTML = '<strong>Marker</strong>';
         }
@@ -15903,6 +16150,27 @@
       } else if (m.kind === 'flight') {
         const pose = resolveMarkerFlightPose(m);
         if (!pose) return;
+        ensureMarkerFlightBlazerState(m);
+        if (m.blazerEnabled) {
+          const lt = m.blazerLeftTrail || [];
+          const rt = m.blazerRightTrail || [];
+          function drawTrail(trail, stroke) {
+            if (!Array.isArray(trail) || trail.length < 2) return;
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(Number(trail[0].x), Number(trail[0].y));
+            for (let ti = 1; ti < trail.length; ti++) ctx.lineTo(Number(trail[ti].x), Number(trail[ti].y));
+            ctx.strokeStyle = stroke;
+            ctx.lineWidth = Math.max(0.7, 1.05 / Math.max(state.scale, 0.1));
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+            ctx.restore();
+          }
+          const trailColor = m.blazerColor || MARKER_BLAZER_COLOR_OPTIONS[0];
+          drawTrail(lt, trailColor);
+          drawTrail(rt, trailColor);
+        }
         const ac = getAircraftInfoByType(m.aircraftType);
         const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
         const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
@@ -15926,11 +16194,17 @@
           ctx.lineTo(scaleX * wRx, scaleY * lY);
           ctx.closePath();
         }
-        ctx.fillStyle = sel ? '#64748b' : '#94a3b8';
-        ctx.strokeStyle = 'rgba(30,41,59,0.9)';
+        ctx.fillStyle = sel ? c2dObjectSelectedFill() : '#94a3b8';
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : 'rgba(30,41,59,0.9)';
         ctx.lineWidth = Math.max(0.75, 1.1 / Math.max(state.scale, 0.1));
+        if (!sel) ctx.globalAlpha = 0.4;
+        if (sel) {
+          ctx.shadowColor = c2dObjectSelectedGlow();
+          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+        }
         ctx.fill();
         ctx.stroke();
+        layoutMarkerDrawEndpointDot(ctx, 0, 0, sel);
         ctx.restore();
       }
     });
@@ -16034,6 +16308,7 @@
     drawQueueTaxiwayLaneMarkers();
     drawLayoutMarkers2D();
     syncMarkerTextDraftInputPosition();
+    syncMarkerFlightBlazerOverlayButton();
   }
 
   document.addEventListener('keydown', function(ev) {
@@ -16428,6 +16703,15 @@
         } else if (h.handle === 'rulerB') {
           mk.x2 = px[0];
           mk.y2 = px[1];
+        } else if (h.handle === 'flightCenter') {
+          let snap = snapWorldToMarkerFlightTaxiway(wx, wy, { taxiwayId: mk.taxiwayId, allowFar: true });
+          if (!snap) snap = snapWorldToMarkerFlightTaxiway(wx, wy, { allowFar: true });
+          if (snap) {
+            mk.taxiwayId = snap.taxiwayId;
+            mk.segIndex = snap.segIndex;
+            mk.t = snap.t;
+            appendMarkerFlightBlazerTrail(mk);
+          }
         }
         if (state.selectedObject && state.selectedObject.type === 'layoutMarker' && String(state.selectedObject.id) === String(h.markerId))
           state.selectedObject.obj = mk;
