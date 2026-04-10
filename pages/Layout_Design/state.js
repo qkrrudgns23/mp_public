@@ -214,6 +214,7 @@
     dragTaxiwayVertex: null,
     dragPbbBridgeVertex: null,
     dragStandConnection: null,
+    dragRemoteStandPosition: null,
     dragStandRotation: null,
     dragApronLinkVertex: null,
     selectedVertex: null,

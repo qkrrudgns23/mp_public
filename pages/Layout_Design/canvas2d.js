@@ -1146,7 +1146,9 @@
       ctx.save();
       ctx.beginPath();
       ctx.fillStyle = sel ? '#22c55e' : (apronLinked ? 'rgba(34,197,94,0.9)' : 'rgba(156,163,175,0.95)');
-      ctx.arc(apronPt[0], apronPt[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
+      const acMk2 = typeof getStandAircraftMarkerWorldPxForPbb === 'function'
+        ? getStandAircraftMarkerWorldPxForPbb(pbb) : apronPt;
+      ctx.arc(acMk2[0], acMk2[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       if (sel) {
@@ -1161,7 +1163,6 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
     state.remoteStands.forEach(st => {
       const [cx, cy] = getRemoteStandCenterPx(st);
       const depRs = getStandDepthMeters(st.category || 'C');
@@ -1188,14 +1189,14 @@
         drawStandSafetyContourInLocalAxes(ctx, depRs, widRs, st.category || 'C', sel);
       drawStandApronMarkingsInLocalAxes(ctx, depRs, widRs, st.category || 'C');
       ctx.restore();
-      if (mode === 'apronTaxiway') {
-        ctx.save();
-        ctx.fillStyle = sel ? '#f97316' : (apronLinkedR ? '#e5e7eb' : '#9ca3af');
-        ctx.beginPath();
-        ctx.arc(cx, cy, 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.fillStyle = sel ? '#22c55e' : (apronLinkedR ? 'rgba(34,197,94,0.9)' : 'rgba(156,163,175,0.95)');
+      const rmC2 = typeof getStandAircraftMarkerWorldPxForRemoteLike === 'function'
+        ? getStandAircraftMarkerWorldPxForRemoteLike(st) : [cx, cy];
+      ctx.arc(rmC2[0], rmC2[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
       const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
       const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
       const label = labelPrefix + ' / ' + nameRaw;

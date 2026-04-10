@@ -664,6 +664,7 @@
     dragTaxiwayVertex: null,
     dragPbbBridgeVertex: null,
     dragStandConnection: null,
+    dragRemoteStandPosition: null,
     dragStandRotation: null,
     dragApronLinkVertex: null,
     selectedVertex: null,
@@ -2206,6 +2207,48 @@
     ctx.stroke();
     ctx.restore();
   }
+  /** Local +X from stand box center to end of 45° flare (full-width main body); 0 if nose geometry unused. */
+  function standSafetyAircraftCenterLocalXM(depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return 0;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return 0;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const eps = 0.08;
+    if (noseHalf >= halfW - eps) return 0;
+    const xNose = -halfD;
+    const xStop = -halfD + nc;
+    if (xStop <= xNose + eps || xStop >= halfD - eps) return 0;
+    const latRun = halfW - noseHalf;
+    if (latRun <= eps) return 0;
+    const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return 0;
+    return xBendEnd;
+  }
+  function getStandAircraftMarkerWorldPxForPbb(pbb) {
+    const cat = (pbb && pbb.category) || 'C';
+    const dep = getStandDepthMeters(cat);
+    const wid = getStandWidthMeters(cat);
+    const lx = standSafetyAircraftCenterLocalXM(dep, wid, cat);
+    const cxy = getStandConnectionPx(pbb);
+    return standFootprintLocalToWorld(cxy[0], cxy[1], getPBBStandAngle(pbb), lx, 0);
+  }
+  function getStandAircraftMarkerWorldPxForRemoteLike(st) {
+    const cat = (st && st.category) || 'C';
+    const dep = getStandDepthMeters(cat);
+    const wid = getStandWidthMeters(cat);
+    const lx = standSafetyAircraftCenterLocalXM(dep, wid, cat);
+    const cxy = getRemoteStandCenterPx(st);
+    return standFootprintLocalToWorld(cxy[0], cxy[1], getRemoteStandAngleRad(st), lx, 0);
+  }
+  /** Apron–taxiway UI attach point: PBB = aircraft marker; remote/temp = same local xBendEnd offset as Contact (getStandAircraftMarkerWorldPxFor*). */
+  function getStandApronTaxiwayAttachWorldPx(stand) {
+    if (!stand) return [0, 0];
+    const isPbb = (state.pbbStands || []).some(function(s) { return s && s.id === stand.id; });
+    if (isPbb) return getStandAircraftMarkerWorldPxForPbb(stand);
+    return getStandAircraftMarkerWorldPxForRemoteLike(stand);
+  }
   function getStandBoundsRect(cx, cy, sizeM) {
     const h = sizeM / 2;
     return { left: cx - h, right: cx + h, top: cy - h, bottom: cy + h };
@@ -2982,7 +3025,7 @@
     if (!lk || !lk.pbbId) return null;
     const stand = findStandById(lk.pbbId);
     if (!stand) return null;
-    return getStandConnectionPx(stand);
+    return getStandApronTaxiwayAttachWorldPx(stand);
   }
   function getApronLinkPolylineWorldPts(lk) {
     if (!lk || lk.tx == null || lk.ty == null) return [];
@@ -3455,10 +3498,20 @@
         }
       });
     });
-    const apronPt = getStandConnectionPx(pbb);
+    const apronPt = getStandAircraftMarkerWorldPxForPbb(pbb);
     const apronD2 = dist2(apronPt, click);
     if (apronD2 < bestD2) best = { type: 'apronSite' };
     return best;
+  }
+  function hitTestRemoteStandDragPoint(wx, wy) {
+    if (!state.selectedObject || state.selectedObject.type !== 'remote') return null;
+    const st = state.selectedObject.obj;
+    if (!st || st.id !== state.selectedObject.id) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
+    const mk = getStandAircraftMarkerWorldPxForRemoteLike(st);
+    if (dist2(mk, click) <= maxD2) return { type: 'remoteCenter' };
+    return null;
   }
   function findInsertSegment(vertices, closed, wx, wy) {
     if (!Array.isArray(vertices) || vertices.length < 2) return null;
@@ -10864,7 +10917,7 @@
               junctions.push({ tAlong: seg + t, p });
               const pbb = findStandById(lk.pbbId);
               if (pbb) {
-                const standPt = getStandConnectionPx(pbb);
+                const standPt = getStandApronTaxiwayAttachWorldPx(pbb);
                 const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) { return cellToPixel(Number(v.col), Number(v.row)); });
                 const chain = [standPt].concat(mids).concat([p]);
                 apronNodeStand.push({ nodeP: p, standPt, standId: lk.pbbId, chain, linkId: lk.id || 'apron_link' });
@@ -14410,7 +14463,8 @@
       ctx.save();
       ctx.beginPath();
       ctx.fillStyle = sel ? '#22c55e' : (apronLinked ? 'rgba(34,197,94,0.9)' : 'rgba(156,163,175,0.95)');
-      ctx.arc(apronPt[0], apronPt[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
+      const acMk = getStandAircraftMarkerWorldPxForPbb(pbb);
+      ctx.arc(acMk[0], acMk[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       if (sel) {
@@ -14425,7 +14479,6 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
     state.remoteStands.forEach(st => {
       const [cx, cy] = getRemoteStandCenterPx(st);
       const depR = getStandDepthMeters(st.category || 'C');
@@ -14445,14 +14498,13 @@
       drawStandSafetyContourInLocalAxes(ctx, depR, widR, st.category || 'C', sel);
       drawStandApronMarkingsInLocalAxes(ctx, depR, widR, st.category || 'C');
       ctx.restore();
-      if (mode === 'apronTaxiway') {
-        ctx.save();
-        ctx.fillStyle = sel ? '#f97316' : (apronLinkedR ? '#e5e7eb' : '#9ca3af');
-        ctx.beginPath();
-        ctx.arc(cx, cy, 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.fillStyle = sel ? '#22c55e' : (apronLinkedR ? 'rgba(34,197,94,0.9)' : 'rgba(156,163,175,0.95)');
+      const rm = getStandAircraftMarkerWorldPxForRemoteLike(st);
+      ctx.arc(rm[0], rm[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
       const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
       const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
       const label = labelPrefix + ' / ' + nameRaw;
@@ -14501,7 +14553,8 @@
         ctx.save();
         ctx.fillStyle = sel ? '#c4b5fd' : '#7c3aed';
         ctx.beginPath();
-        ctx.arc(cx, cy, 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
+        const tm = getStandAircraftMarkerWorldPxForRemoteLike(st);
+        ctx.arc(tm[0], tm[1], 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -15310,7 +15363,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 1.5;
     ctx.setLineDash([3, 3]);
     state.apronLinks.forEach(lk => {
       const stand = findStandById(lk.pbbId);
@@ -15369,7 +15422,7 @@
       if (t.kind === 'pbb' || t.kind === 'remote') {
         const st = findStandById(t.standId);
         if (st) {
-          draft.push(getStandConnectionPx(st));
+          draft.push(getStandApronTaxiwayAttachWorldPx(st));
         }
       } else if (t.kind === 'taxiway') {
         draft.push([t.x, t.y]);
@@ -15382,7 +15435,7 @@
         ctx.save();
         ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
         ctx.setLineDash([4, 6]);
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(draft[0][0], draft[0][1]);
         for (let di = 1; di < draft.length; di++) ctx.lineTo(draft[di][0], draft[di][1]);
@@ -16042,6 +16095,16 @@
         return;
       }
     }
+    if (state.selectedObject && state.selectedObject.type === 'remote' && !state.remoteDrawing) {
+      const rh = hitTestRemoteStandDragPoint(wx, wy);
+      if (rh) {
+        pushUndo();
+        state.dragRemoteStandPosition = { standId: state.selectedObject.id };
+        state.selectedVertex = { type: 'remoteStandCenter', id: state.selectedObject.id };
+        draw();
+        return;
+      }
+    }
     if (state.selectedObject && state.selectedObject.type === 'apronLink' && !state.apronLinkDrawing) {
       const ah = hitTestApronLinkVertex(wx, wy);
       if (ah && ah.linkId === state.selectedObject.id) {
@@ -16121,7 +16184,7 @@
       if (!drewThisMove) { scheduleDraw(); drewThisMove = true; }
     }
     const pathLayoutDrawing = !!(state.terminalDrawingId || state.taxiwayDrawingId);
-    const blockLayoutPathPtr = !!(state.isPanning || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragApronLinkVertex || state.dragStandRotation || state.dragLayoutMarkerHandle);
+    const blockLayoutPathPtr = !!(state.isPanning || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragRemoteStandPosition || state.dragApronLinkVertex || state.dragStandRotation || state.dragLayoutMarkerHandle);
     if (pathLayoutDrawing && !blockLayoutPathPtr) {
       const nx = snappedPx[0], ny = snappedPx[1];
       const lp = state.layoutPathDrawPointer;
@@ -16215,6 +16278,18 @@
       if (pbb) {
         pbb.apronSiteX = snappedPx[0];
         pbb.apronSiteY = snappedPx[1];
+        scheduleDraw(); drewThisMove = true;
+        if (scene3d) update3DScene();
+      }
+      return;
+    }
+    if (state.dragRemoteStandPosition) {
+      const st = state.remoteStands.find(function(item) { return item.id === state.dragRemoteStandPosition.standId; });
+      if (st) {
+        st.x = snappedPx[0];
+        st.y = snappedPx[1];
+        st.col = snappedPt.col;
+        st.row = snappedPt.row;
         scheduleDraw(); drewThisMove = true;
         if (scene3d) update3DScene();
       }
@@ -16441,6 +16516,7 @@
     state.dragStandRotation = null;
     state.dragPbbBridgeVertex = null;
     state.dragStandConnection = null;
+    state.dragRemoteStandPosition = null;
     state.hoverCell = null;
     state.previewPbb = null;
     state.previewRemote = null;
@@ -16464,12 +16540,12 @@
     const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
     const cands = [];
     state.pbbStands.forEach(pbb => {
-      const pt = getStandConnectionPx(pbb);
+      const pt = getStandAircraftMarkerWorldPxForPbb(pbb);
       cands.push({ id: pbb.id, kind: 'pbb', x: pt[0], y: pt[1] });
     });
     state.remoteStands.forEach(st => {
-      const [cx, cy] = getRemoteStandCenterPx(st);
-      cands.push({ id: st.id, kind: 'remote', x: cx, y: cy });
+      const pt = getStandAircraftMarkerWorldPxForRemoteLike(st);
+      cands.push({ id: st.id, kind: 'remote', x: pt[0], y: pt[1] });
     });
     const best = findNearestItem(cands, c => [c.x, c.y], wx, wy, maxD2);
     return best || null;
@@ -16541,6 +16617,16 @@
     if (state.dragStandConnection) {
       state.dragStandConnection = null;
       updateObjectInfo();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else {
+        if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+        if (scene3d) update3DScene();
+      }
+      return;
+    }
+    if (state.dragRemoteStandPosition) {
+      state.dragRemoteStandPosition = null;
+      if (typeof updateObjectInfo === 'function') updateObjectInfo();
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else {
         if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
