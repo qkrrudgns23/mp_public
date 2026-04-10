@@ -158,6 +158,10 @@
     .layout-mode-tab.active { background:var(--ui-accent-muted); color:var(--ui-accent); border-color:var(--ui-accent-ring); }
     .layout-mode-icon { width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
     .layout-mode-icon svg { width:18px; height:18px; display:block; }
+    .layout-mode-tab[data-mode="remote"] .layout-mode-icon,
+    .layout-mode-tab[data-mode="remote"] .layout-mode-icon svg,
+    .layout-mode-tab[data-mode="tempStand"] .layout-mode-icon,
+    .layout-mode-tab[data-mode="tempStand"] .layout-mode-icon svg { width:23px; height:23px; }
     .layout-mode-label { display:block; line-height:1.15; }
     __PANEL_FORM_SCOPE_SELECTORS__ {
       --form-label-width: 136px;
