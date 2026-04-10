@@ -16154,22 +16154,41 @@
         if (m.blazerEnabled) {
           const lt = m.blazerLeftTrail || [];
           const rt = m.blazerRightTrail || [];
-          function drawTrail(trail, stroke) {
+          function drawTrailBand(trail, colorHex, sideSign) {
             if (!Array.isArray(trail) || trail.length < 2) return;
+            const outer = [];
+            const expandM = 5;
+            for (let ti = 0; ti < trail.length; ti++) {
+              const p = trail[ti];
+              const prev = trail[Math.max(0, ti - 1)];
+              const next = trail[Math.min(trail.length - 1, ti + 1)];
+              let tx = Number(next.x) - Number(prev.x);
+              let ty = Number(next.y) - Number(prev.y);
+              const tl = Math.hypot(tx, ty) || 1;
+              tx /= tl; ty /= tl;
+              const nx = -ty * sideSign;
+              const ny = tx * sideSign;
+              outer.push({ x: Number(p.x) + nx * expandM, y: Number(p.y) + ny * expandM });
+            }
             ctx.save();
+            ctx.globalAlpha = 0.4;
             ctx.beginPath();
             ctx.moveTo(Number(trail[0].x), Number(trail[0].y));
             for (let ti = 1; ti < trail.length; ti++) ctx.lineTo(Number(trail[ti].x), Number(trail[ti].y));
-            ctx.strokeStyle = stroke;
-            ctx.lineWidth = Math.max(0.7, 1.05 / Math.max(state.scale, 0.1));
+            for (let ti = outer.length - 1; ti >= 0; ti--) ctx.lineTo(Number(outer[ti].x), Number(outer[ti].y));
+            ctx.closePath();
+            ctx.fillStyle = colorHex;
+            ctx.strokeStyle = colorHex;
+            ctx.lineWidth = Math.max(0.45, 0.7 / Math.max(state.scale, 0.1));
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
+            ctx.fill();
             ctx.stroke();
             ctx.restore();
           }
           const trailColor = m.blazerColor || MARKER_BLAZER_COLOR_OPTIONS[0];
-          drawTrail(lt, trailColor);
-          drawTrail(rt, trailColor);
+          drawTrailBand(lt, trailColor, -1);
+          drawTrailBand(rt, trailColor, 1);
         }
         const ac = getAircraftInfoByType(m.aircraftType);
         const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
@@ -16704,13 +16723,19 @@
           mk.x2 = px[0];
           mk.y2 = px[1];
         } else if (h.handle === 'flightCenter') {
-          let snap = snapWorldToMarkerFlightTaxiway(wx, wy, { taxiwayId: mk.taxiwayId, allowFar: true });
-          if (!snap) snap = snapWorldToMarkerFlightTaxiway(wx, wy, { allowFar: true });
+          const prevPose = resolveMarkerFlightPose(mk);
+          const snap = snapWorldToMarkerFlightTaxiway(wx, wy, { allowFar: true });
           if (snap) {
-            mk.taxiwayId = snap.taxiwayId;
-            mk.segIndex = snap.segIndex;
-            mk.t = snap.t;
-            appendMarkerFlightBlazerTrail(mk);
+            const cand = { kind: 'flight', taxiwayId: snap.taxiwayId, segIndex: snap.segIndex, t: snap.t };
+            const nextPose = resolveMarkerFlightPose(cand);
+            const maxStep = Math.max(CELL_SIZE * 2.2, 22 / Math.max(state.scale, 0.1));
+            const canMove = !prevPose || !nextPose || dist2([prevPose.x, prevPose.y], [nextPose.x, nextPose.y]) <= (maxStep * maxStep);
+            if (canMove) {
+              mk.taxiwayId = snap.taxiwayId;
+              mk.segIndex = snap.segIndex;
+              mk.t = snap.t;
+              appendMarkerFlightBlazerTrail(mk);
+            }
           }
         }
         if (state.selectedObject && state.selectedObject.type === 'layoutMarker' && String(state.selectedObject.id) === String(h.markerId))
