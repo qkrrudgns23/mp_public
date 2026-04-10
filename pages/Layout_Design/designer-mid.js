@@ -666,12 +666,16 @@
     const totalLen = runwayPolylineLengthPx(path.pts);
     const tw = (state.taxiways || []).find(function(t) { return t && t.id === runwayId && t.pathType === 'runway'; });
     if (!tw) return 0;
-    const dStart = Math.min(Math.max(0, getEffectiveRunwayStartDisplacedThresholdM(tw) + getEffectiveRunwayStartBlastPadM(tw)), totalLen);
+    const startInset = getEffectiveRunwayStartDisplacedThresholdM(tw) + getEffectiveRunwayStartBlastPadM(tw);
     const endInset = getEffectiveRunwayEndDisplacedThresholdM(tw) + getEffectiveRunwayEndBlastPadM(tw);
-    const dEnd = Math.max(0, Math.min(totalLen, totalLen - endInset));
-    if (!(totalLen > 1e-6)) return dStart;
-    if (tdDistAlong <= totalLen * 0.5) return dStart;
-    return dEnd;
+    const isCcw = normalizeRwDirectionValue(getTaxiwayDirection(tw)) === 'counter_clockwise';
+    const lowInset = isCcw ? endInset : startInset;
+    const highInset = isCcw ? startInset : endInset;
+    const dLow = Math.min(Math.max(0, lowInset), totalLen);
+    const dHigh = Math.max(0, Math.min(totalLen, totalLen - highInset));
+    if (!(totalLen > 1e-6)) return dLow;
+    if (tdDistAlong <= totalLen * 0.5) return dLow;
+    return dHigh;
   }
 
   function getPolylinePointAndFrameAtDistance(pts, distPx) {
@@ -713,9 +717,18 @@
     const startBlast = getEffectiveRunwayStartBlastPadM(tw);
     const endDisp = getEffectiveRunwayEndDisplacedThresholdM(tw);
     const endBlast = getEffectiveRunwayEndBlastPadM(tw);
-    const startFrame = getPolylinePointAndFrameAtDistance(pts, 0);
-    const endFrame = getPolylinePointAndFrameAtDistance(pts, totalLen);
-    if (!startFrame || !endFrame) return;
+    const lowFrame = getPolylinePointAndFrameAtDistance(pts, 0);
+    const highFrame = getPolylinePointAndFrameAtDistance(pts, totalLen);
+    if (!lowFrame || !highFrame) return;
+    const isCcw = normalizeRwDirectionValue(getTaxiwayDirection(tw)) === 'counter_clockwise';
+    const startFrame = isCcw ? highFrame : lowFrame;
+    const endFrame = isCcw ? lowFrame : highFrame;
+    const startSegSign = isCcw ? 1 : -1;
+    const endSegSign = isCcw ? -1 : 1;
+    const startArrowPos = isCcw ? 1 : -1;
+    const startArrowDir = isCcw ? -1 : 1;
+    const endArrowPos = isCcw ? -1 : 1;
+    const endArrowDir = isCcw ? 1 : -1;
 
     function drawRectWithFrame(frame, alongOffsetPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle, strokeStyle, lineWidth) {
       if (!frame) return;
@@ -843,14 +856,14 @@
       ctx.restore();
     }
 
-    drawExtensionSegment(startFrame, -1, 0, startDisp);
-    drawExtensionSegment(startFrame, -1, startDisp, startBlast);
-    drawExtensionSegment(endFrame, 1, 0, endDisp);
-    drawExtensionSegment(endFrame, 1, endDisp, endBlast);
-    drawDisplacedThresholdArrows(startFrame, -1, 1, 0, startDisp);
-    drawDisplacedThresholdArrows(endFrame, 1, -1, 0, endDisp);
-    drawBlastPadChevrons(startFrame, -1, startDisp, startBlast);
-    drawBlastPadChevrons(endFrame, 1, endDisp, endBlast);
+    drawExtensionSegment(startFrame, startSegSign, 0, startDisp);
+    drawExtensionSegment(startFrame, startSegSign, startDisp, startBlast);
+    drawExtensionSegment(endFrame, endSegSign, 0, endDisp);
+    drawExtensionSegment(endFrame, endSegSign, endDisp, endBlast);
+    drawDisplacedThresholdArrows(startFrame, startArrowPos, startArrowDir, 0, startDisp);
+    drawDisplacedThresholdArrows(endFrame, endArrowPos, endArrowDir, 0, endDisp);
+    drawBlastPadChevrons(startFrame, startSegSign, startDisp, startBlast);
+    drawBlastPadChevrons(endFrame, endSegSign, endDisp, endBlast);
 
     const thresholdInset = Math.min(Math.max(runwayWidth * 0.58, 26), totalLen * 0.12);
     const thresholdStripeLen = Math.min(Math.max(runwayWidth * 0.54, 20), 34);
@@ -860,8 +873,8 @@
     });
 
     (function drawRunwayCenterlineDashed() {
-      const paveStart = startDisp + startBlast;
-      const paveEnd = totalLen - endDisp - endBlast;
+      const paveStart = isCcw ? (endDisp + endBlast) : (startDisp + startBlast);
+      const paveEnd = isCcw ? (totalLen - startDisp - startBlast) : (totalLen - endDisp - endBlast);
       if (!(paveEnd > paveStart + 1)) return;
       const clPts = polylineSliceBetweenDistances(pts, paveStart, paveEnd);
       if (!clPts || clPts.length < 2) return;
