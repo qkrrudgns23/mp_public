@@ -21,9 +21,36 @@
     @keyframes grid3d-spin { to { transform: rotate(360deg); } }
     #loading-overlay .loading-title { font-size: 17px; font-weight: 600; margin: 0 0 8px; color: #f1f5f9; }
     #loading-overlay .loading-sub { font-size: 13px; line-height: 1.5; margin: 0; color: #94a3b8; }
+    #vehicle-rail { position: fixed; left: 0; top: 0; bottom: 0; z-index: 60; display: flex; flex-direction: row; align-items: stretch; pointer-events: none; }
+    #vehicle-rail > * { pointer-events: auto; }
+    #vehicle-rail-toggle {
+      width: 42px; border: none; border-right: 1px solid rgba(148, 163, 184, 0.25); background: rgba(15, 23, 42, 0.92);
+      color: #e2e8f0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; writing-mode: vertical-rl;
+      text-orientation: mixed; padding: 16px 0; transition: background 0.15s ease, color 0.15s ease;
+    }
+    #vehicle-rail-toggle:hover { background: rgba(30, 41, 59, 0.96); color: #fff; }
+    #vehicle-panel {
+      display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: rgba(15, 23, 42, 0.94);
+      border-right: 1px solid rgba(148, 163, 184, 0.2); min-width: 132px; box-shadow: 4px 0 24px rgba(0,0,0,0.35);
+    }
+    #vehicle-panel[hidden] { display: none !important; }
+    #vehicle-panel button {
+      border: 1px solid rgba(124, 106, 247, 0.45); border-radius: 8px; background: rgba(30, 27, 46, 0.9); color: #e2e8f0;
+      padding: 10px 12px; font-size: 13px; cursor: pointer; text-align: left; transition: border-color 0.15s, background 0.15s;
+    }
+    #vehicle-panel button:hover { border-color: #7c6af7; background: rgba(124, 106, 247, 0.15); }
+    #vehicle-hint {
+      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 55; max-width: min(520px, 92vw);
+      padding: 10px 16px; border-radius: 10px; background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(148, 163, 184, 0.25);
+      color: #cbd5e1; font-size: 12px; line-height: 1.45; text-align: center; pointer-events: none;
+    }
+    #vehicle-hint[hidden] { display: none !important; }
+    #vehicle-hint.vehicle-hint-err { color: #fecaca; border-color: rgba(248, 113, 113, 0.45); }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
 </head>
 <body>
   <div id="loading-overlay" aria-busy="true" aria-live="polite">
@@ -35,6 +62,15 @@
   </div>
   <div id="hud">Layout 3D — <strong>Z = elevation</strong> · ground = scene XY. Drag orbit · wheel zoom · right-drag pan</div>
   <div id="err" style="display:none;"></div>
+  <div id="vehicle-rail" aria-label="Vehicle">
+    <button type="button" id="vehicle-rail-toggle">Vehicle</button>
+    <div id="vehicle-panel" hidden>
+      <button type="button" id="veh-btn-car">자동차</button>
+      <button type="button" id="veh-btn-air">항공기</button>
+      <button type="button" id="veh-btn-orbit">궤도 카메라</button>
+    </div>
+  </div>
+  <div id="vehicle-hint" hidden>마우스: 시점 · 휠: 거리 · W/S·↑↓ 전진·후진 · A/D·←→ 조향 · Esc 궤도</div>
   <script>
 (function () {
   function setLoadingText(title, sub) {
@@ -108,6 +144,8 @@
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMappingExposure = 1;
 
   var controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.target.set(centerX, centerY, 0);
@@ -116,6 +154,230 @@
   controls.zoomSpeed = 4;
   controls.update();
 
+  var rawGrid3dAsset = typeof payload.grid3dAssetApiUrl === 'string' ? payload.grid3dAssetApiUrl.trim() : '';
+  var rawLayoutApi = typeof payload.layoutApiUrl === 'string' ? payload.layoutApiUrl.trim() : '';
+  var layoutApiBase = (rawGrid3dAsset || rawLayoutApi).replace(/\/$/, '');
+  function assetUrl(rel) {
+    if (!layoutApiBase || !rel) return '';
+    return layoutApiBase + '/api/grid3d-asset/' + String(rel).replace(/^\/+/, '');
+  }
+  var clock = new THREE.Clock();
+  var vehicleMode = 'orbit';
+  var vehicleRoot = null;
+  var vehicleYaw = 0;
+  var keysDown = Object.create(null);
+  var orbitViewFov = 50;
+  var chaseViewFov = 58;
+  var chaseCamDistance = 36;
+  var chaseCamPitch = 0.34;
+  var chaseCamOrbitYaw = 0;
+  var chasePitchMin = 0.14;
+  var chasePitchMax = 1.12;
+  var chaseDistMin = 14;
+  var chaseDistMax = 72;
+  var moveSpeed = 52;
+  var steerSpeed = 2.35;
+  var vehicleVelFwd = 0;
+  var vehicleYawRate = 0;
+  var driveResponse = 9;
+  var steerResponse = 11;
+  var vehHint = document.getElementById('vehicle-hint');
+  function showVehicleHint() {
+    if (vehHint) {
+      vehHint.hidden = false;
+      vehHint.classList.remove('vehicle-hint-err');
+    }
+  }
+  function hideVehicleHint() {
+    if (vehHint) vehHint.hidden = true;
+  }
+  function showVehicleLoadErr(msg) {
+    if (!vehHint) return;
+    vehHint.textContent = msg;
+    vehHint.classList.add('vehicle-hint-err');
+    vehHint.hidden = false;
+    window.clearTimeout(showVehicleLoadErr._t);
+    showVehicleLoadErr._t = window.setTimeout(function () {
+      vehHint.classList.remove('vehicle-hint-err');
+      vehHint.textContent = '마우스: 시점 · 휠: 거리 · W/S·↑↓ 전진·후진 · A/D·←→ 조향 · Esc 궤도';
+      if (vehicleMode === 'orbit') vehHint.hidden = true;
+    }, 8000);
+  }
+  function disposeMaterial(m) {
+    if (!m) return;
+    if (m.map) m.map.dispose();
+    if (m.lightMap) m.lightMap.dispose();
+    if (m.bumpMap) m.bumpMap.dispose();
+    if (m.normalMap) m.normalMap.dispose();
+    if (m.specularMap) m.specularMap.dispose();
+    if (m.envMap) m.envMap.dispose();
+    if (m.aoMap) m.aoMap.dispose();
+    if (m.emissiveMap) m.emissiveMap.dispose();
+    if (m.metalnessMap) m.metalnessMap.dispose();
+    if (m.roughnessMap) m.roughnessMap.dispose();
+    m.dispose();
+  }
+  function clearVehicleMesh() {
+    if (!vehicleRoot) return;
+    scene.remove(vehicleRoot);
+    vehicleRoot.traverse(function (obj) {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach(disposeMaterial);
+        else disposeMaterial(obj.material);
+      }
+    });
+    vehicleRoot = null;
+  }
+  function setOrbitCameraMode() {
+    vehicleMode = 'orbit';
+    vehicleVelFwd = 0;
+    vehicleYawRate = 0;
+    controls.enabled = true;
+    camera.fov = orbitViewFov;
+    camera.updateProjectionMatrix();
+    hideVehicleHint();
+    try {
+      document.exitPointerLock();
+    } catch (eL) { /* ignore */ }
+    if (vehicleRoot) {
+      controls.target.copy(vehicleRoot.position);
+    } else {
+      controls.target.set(centerX, centerY, 0);
+    }
+    controls.update();
+  }
+  var loaderGltf = new THREE.GLTFLoader();
+  var dracoLoader = new THREE.DRACOLoader();
+  dracoLoader.setDecoderPath(
+    'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/gltf/'
+  );
+  loaderGltf.setDRACOLoader(dracoLoader);
+  function placeVehicleOnGround(root) {
+    root.updateMatrixWorld(true);
+    var box = new THREE.Box3().setFromObject(root);
+    var size = box.getSize(new THREE.Vector3());
+    var maxD = Math.max(size.x, size.y, size.z);
+    var targetLen = 8;
+    if (maxD > 1e-6) root.scale.multiplyScalar(targetLen / maxD);
+    root.updateMatrixWorld(true);
+    box.setFromObject(root);
+    var groundZ = groundSurfaceZ + zLift - box.min.z;
+    root.position.set(centerX, centerY, groundZ);
+  }
+  function spawnVehicleFromGltfUrl(url, modeLabel) {
+    if (!url) {
+      showVehicleLoadErr('차량 자산 서버 주소가 없습니다. Layout 페이지를 새로고침한 뒤 layout receiver(포트 8765)가 떠 있는지 확인하세요.');
+      return;
+    }
+    loaderGltf.load(
+      url,
+      function (gltf) {
+        clearVehicleMesh();
+        var root = gltf.scene;
+        root.rotation.x = -Math.PI / 2;
+        placeVehicleOnGround(root);
+        scene.add(root);
+        vehicleRoot = root;
+        vehicleYaw = 0;
+        vehicleVelFwd = 0;
+        vehicleYawRate = 0;
+        chaseCamDistance = 36;
+        chaseCamPitch = 0.34;
+        chaseCamOrbitYaw = 0;
+        vehicleMode = modeLabel;
+        controls.enabled = false;
+        camera.fov = chaseViewFov;
+        camera.updateProjectionMatrix();
+        updateChaseCamera();
+        showVehicleHint();
+        try {
+          renderer.domElement.requestPointerLock();
+        } catch (ePl) { /* ignore */ }
+      },
+      undefined,
+      function (err) {
+        console.error('GLTF load failed', err);
+        showVehicleLoadErr(
+          (modeLabel === 'car' ? '자동차' : '항공기') +
+            ' 모델을 불러오지 못했습니다. ' +
+            layoutApiBase +
+            ' 의 /api/grid3d-asset/ 가 열리는지, assets 폴더에 파일이 있는지 확인하세요.'
+        );
+      }
+    );
+  }
+  function onSpawnCar() {
+    spawnVehicleFromGltfUrl(assetUrl('vehicle_car.glb'), 'car');
+  }
+  function onSpawnAir() {
+    spawnVehicleFromGltfUrl(assetUrl('vehicle_aircraft.glb'), 'air');
+  }
+  function updateChaseCamera() {
+    if (!vehicleRoot) return;
+    var px = vehicleRoot.position.x;
+    var py = vehicleRoot.position.y;
+    var pz = vehicleRoot.position.z;
+    var lookZ = pz + 1.55;
+    var horiz = Math.cos(chaseCamPitch) * chaseCamDistance;
+    var dz = Math.sin(chaseCamPitch) * chaseCamDistance;
+    var ang = vehicleYaw + Math.PI + chaseCamOrbitYaw;
+    camera.position.set(
+      px + Math.cos(ang) * horiz,
+      py + Math.sin(ang) * horiz,
+      lookZ + dz
+    );
+    camera.up.set(0, 0, 1);
+    camera.lookAt(px, py, lookZ);
+  }
+  document.addEventListener('keydown', function (ev) {
+    keysDown[ev.code] = true;
+    if (ev.code === 'Escape' && vehicleMode !== 'orbit') {
+      setOrbitCameraMode();
+    }
+  });
+  document.addEventListener('keyup', function (ev) {
+    keysDown[ev.code] = false;
+  });
+  document.addEventListener('mousemove', function (ev) {
+    if (!vehicleRoot || vehicleMode === 'orbit') return;
+    if (document.pointerLockElement !== renderer.domElement) return;
+    if (typeof ev.movementX !== 'number') return;
+    chaseCamOrbitYaw -= ev.movementX * 0.0046;
+    chaseCamPitch += ev.movementY * 0.0034;
+    chaseCamPitch = Math.max(chasePitchMin, Math.min(chasePitchMax, chaseCamPitch));
+  });
+  renderer.domElement.addEventListener(
+    'wheel',
+    function (ev) {
+      if (vehicleMode === 'orbit' || !vehicleRoot) return;
+      ev.preventDefault();
+      chaseCamDistance += ev.deltaY * 0.055;
+      chaseCamDistance = Math.max(chaseDistMin, Math.min(chaseDistMax, chaseCamDistance));
+    },
+    { passive: false }
+  );
+  var railToggle = document.getElementById('vehicle-rail-toggle');
+  var railPanel = document.getElementById('vehicle-panel');
+  if (railToggle && railPanel) {
+    railToggle.addEventListener('click', function () {
+      railPanel.hidden = !railPanel.hidden;
+    });
+  }
+  var btnCar = document.getElementById('veh-btn-car');
+  var btnAir = document.getElementById('veh-btn-air');
+  var btnOrbit = document.getElementById('veh-btn-orbit');
+  if (btnCar) btnCar.addEventListener('click', onSpawnCar);
+  if (btnAir) btnAir.addEventListener('click', onSpawnAir);
+  if (btnOrbit) btnOrbit.addEventListener('click', setOrbitCameraMode);
+  renderer.domElement.addEventListener('click', function () {
+    if (vehicleMode !== 'orbit' && document.pointerLockElement !== renderer.domElement) {
+      try {
+        renderer.domElement.requestPointerLock();
+      } catch (eClk) { /* ignore */ }
+    }
+  });
+
   scene.add(new THREE.AmbientLight(0xffffff, 0.52));
   var sun = new THREE.DirectionalLight(0xffffff, 0.55);
   sun.position.set(maxDim, maxDim * 0.2, maxDim * 1.2);
@@ -123,6 +385,7 @@
 
   var zGround = 0;
   var zLift = 0.08;
+  var groundSurfaceZ = zGround;
   var gTiles = payload.layoutGroundTiles;
   var useTiles = !!(gTiles && gTiles.tiles && gTiles.tiles.length === 4);
   var gt = payload.layoutGroundTexture;
@@ -131,6 +394,12 @@
     groundTexUrl = gt.dataUrl;
   }
   var useGroundTex = useTiles || !!groundTexUrl;
+  if (useGroundTex) {
+    var maxWHForSlab = Math.max(maxX, maxY);
+    var visZMulSlab = Math.max(1, Math.min(24, maxWHForSlab / 500));
+    var worldThickMForSlab = 0.5;
+    groundSurfaceZ = zGround + worldThickMForSlab * visZMulSlab;
+  }
 
   /**
    * === Coordinate frame (must match pages/Layout_Design designer 2D world) ===
@@ -509,9 +778,50 @@
 
   function tick() {
     requestAnimationFrame(tick);
-    controls.update();
+    var dt = Math.min(clock.getDelta(), 0.08);
+    if (vehicleMode === 'orbit') {
+      controls.update();
+    } else if (vehicleRoot) {
+      var fwd = keysDown.ArrowUp || keysDown.KeyW ? 1 : 0;
+      if (keysDown.ArrowDown || keysDown.KeyS) fwd -= 1;
+      var steer = 0;
+      if (keysDown.ArrowRight || keysDown.KeyD) steer -= 1;
+      if (keysDown.ArrowLeft || keysDown.KeyA) steer += 1;
+      var targetFwdSpeed = fwd * moveSpeed;
+      vehicleVelFwd += (targetFwdSpeed - vehicleVelFwd) * Math.min(1, driveResponse * dt);
+      var targetYawRate = steer * steerSpeed;
+      vehicleYawRate += (targetYawRate - vehicleYawRate) * Math.min(1, steerResponse * dt);
+      vehicleYaw += vehicleYawRate * dt;
+      var fx = Math.cos(vehicleYaw);
+      var fy = Math.sin(vehicleYaw);
+      vehicleRoot.position.x += fx * vehicleVelFwd * dt;
+      vehicleRoot.position.y += fy * vehicleVelFwd * dt;
+      if (fwd > 0 && Math.abs(chaseCamOrbitYaw) > 0.012) {
+        chaseCamOrbitYaw += (0 - chaseCamOrbitYaw) * Math.min(1, dt * 2.0);
+      }
+      var margin = 3;
+      vehicleRoot.position.x = Math.max(margin, Math.min(maxX - margin, vehicleRoot.position.x));
+      vehicleRoot.position.y = Math.max(margin, Math.min(maxY - margin, vehicleRoot.position.y));
+      vehicleRoot.rotation.set(-Math.PI / 2, 0, vehicleYaw);
+      updateChaseCamera();
+    }
     renderer.render(scene, camera);
   }
+  vehicleMode = 'orbit';
+  controls.enabled = true;
+  controls.target.set(centerX, centerY, 0);
+  camera.position.set(centerX + maxDim * 0.9, centerY + maxDim * 0.9, maxDim * 0.75);
+  camera.up.set(0, 0, 1);
+  camera.lookAt(centerX, centerY, 0);
+  camera.fov = orbitViewFov;
+  camera.updateProjectionMatrix();
+  controls.update();
+  hideVehicleHint();
+  try {
+    document.exitPointerLock();
+  } catch (eOrbit0) { /* ignore */ }
+  var panelOrbit0 = document.getElementById('vehicle-panel');
+  if (panelOrbit0) panelOrbit0.hidden = true;
   tick();
   if (!useGroundTex) {
     scheduleHideLoadingAfterPaint();

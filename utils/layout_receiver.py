@@ -12,7 +12,7 @@ import re
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
@@ -24,7 +24,11 @@ RESULT_STORAGE_DIR = (_ROOT / "data" / "Result_storage").resolve()
 LAYOUT_FILE = LAYOUT_STORAGE_DIR / "current_layout.json"
 DEFAULT_LAYOUT_PATH = LAYOUT_STORAGE_DIR / "default_layout.json"
 
-_PORT = 8765
+_GRID3D_ASSETS_ROOT = (_ROOT / "pages" / "Layout_Design" / "3D" / "assets").resolve()
+_GRID3D_VIEWER_HTML = (_ROOT / "pages" / "Layout_Design" / "3D" / "grid3d-viewer.html").resolve()
+
+LAYOUT_RECEIVER_PORT = 8765
+_PORT = LAYOUT_RECEIVER_PORT
 _RESERVED_NAMES = frozenset({"current_layout", "default_layout"})
 
 _sim_progress: Dict[str, Any] = {
@@ -140,6 +144,39 @@ def _try_resolve_sim_result_path(layout_name_safe: str) -> Optional[Path]:
         except Exception:
             continue
     return None
+
+
+def _grid3d_asset_mime(path: Path) -> str:
+    suf = path.suffix.lower()
+    if suf == ".gltf":
+        return "model/gltf+json; charset=utf-8"
+    if suf == ".glb":
+        return "model/gltf-binary"
+    if suf in (".jpg", ".jpeg"):
+        return "image/jpeg"
+    if suf == ".png":
+        return "image/png"
+    if suf == ".hdr":
+        return "image/vnd.radiance"
+    if suf == ".bin":
+        return "application/octet-stream"
+    return "application/octet-stream"
+
+
+def _safe_grid3d_asset_file(rel: str) -> Optional[Path]:
+    if not rel or not rel.strip():
+        return None
+    norm = rel.replace("\\", "/").strip("/")
+    if not norm or ".." in norm.split("/"):
+        return None
+    candidate = (_GRID3D_ASSETS_ROOT / norm).resolve()
+    try:
+        candidate.relative_to(_GRID3D_ASSETS_ROOT)
+    except ValueError:
+        return None
+    if not candidate.is_file():
+        return None
+    return candidate
 
 
 def delete_layout(name: str) -> None:
@@ -271,6 +308,55 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
             self._send_cors()
             self.end_headers()
             self.wfile.write(body)
+            return
+        _req_path = (urlparse(self.path).path or "").rstrip("/") or "/"
+        if _req_path == "/api/grid3d-viewer-app":
+            if not _GRID3D_VIEWER_HTML.is_file():
+                self.send_response(404)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(b"grid3d-viewer.html not found on server")
+                return
+            try:
+                html_body = _GRID3D_VIEWER_HTML.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(html_body)
+            except OSError as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(str(e).encode("utf-8"))
+            return
+        if self.path.startswith("/api/grid3d-asset/"):
+            parsed = urlparse(self.path)
+            rel = unquote((parsed.path or "").strip())
+            prefix = "/api/grid3d-asset/"
+            if rel.startswith(prefix):
+                rel = rel[len(prefix) :].lstrip("/")
+            asset_path = _safe_grid3d_asset_file(rel)
+            if asset_path is None:
+                self.send_response(404)
+                self._send_cors()
+                self.end_headers()
+                return
+            try:
+                data = asset_path.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", _grid3d_asset_mime(asset_path))
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(data)
+            except OSError as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(str(e).encode("utf-8"))
             return
         self.send_response(404)
         self._send_cors()
@@ -472,7 +558,7 @@ _server: Optional[HTTPServer] = None
 _thread: Optional[threading.Thread] = None
 
 
-def start_layout_receiver(port: int = _PORT) -> str:
+def start_layout_receiver(port: int = LAYOUT_RECEIVER_PORT) -> str:
     """Launch the layout receiving server in the background and connect to it URLreturns."""
     global _server, _thread
     if _server is not None:

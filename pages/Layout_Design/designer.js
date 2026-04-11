@@ -2,6 +2,7 @@
   var _dc = window.__DESIGNER_CONFIG__;
   if (!_dc || typeof _dc !== 'object') { throw new Error('__DESIGNER_CONFIG__ missing'); }
   const LAYOUT_API_URL = _dc.layoutApiUrl;
+  const GRID3D_ASSET_API_URL = _dc.grid3dAssetApiUrl != null ? String(_dc.grid3dAssetApiUrl) : '';
   const LAYOUT_NAMES = _dc.layoutNames;
   const INITIAL_LAYOUT = _dc.initialLayout;
   const INITIAL_LAYOUT_DISPLAY_NAME = _dc.initialLayoutDisplayName;
@@ -3111,6 +3112,8 @@
     const payload = {
       version: 1,
       kind: 'grid3dViewer',
+      layoutApiUrl: (typeof LAYOUT_API_URL === 'string' && LAYOUT_API_URL) ? LAYOUT_API_URL : '',
+      grid3dAssetApiUrl: (typeof GRID3D_ASSET_API_URL === 'string' && GRID3D_ASSET_API_URL) ? GRID3D_ASSET_API_URL : '',
       exportedAt: new Date().toISOString(),
       simTimeSec: tSec,
       viewerConfig: {
@@ -3143,26 +3146,66 @@
       alert('3D viewer template is not loaded. Ensure pages/Layout_Design/3D/grid3d-viewer.html exists and reload the Layout Design page.');
       return;
     }
-    const w = window.open('about:blank', '_blank', 'width=1280,height=840');
+    const bootHtml = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Layout 3D</title>' +
+      '<style>html,body{margin:0;height:100%;background:#0d0d0f;color:#e2e8f0;font-family:system-ui,sans-serif;overflow:hidden}' +
+      '.wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;box-sizing:border-box}' +
+      '.sp{width:44px;height:44px;border:3px solid rgba(148,163,184,.25);border-top-color:#7c6af7;border-radius:50%;animation:g .85s linear infinite}' +
+      '@keyframes g{to{transform:rotate(360deg)}}' +
+      '.bar{width:min(360px,86vw);height:4px;border-radius:2px;background:rgba(148,163,184,.2);overflow:hidden}' +
+      '.bar>i{display:block;height:100%;width:38%;background:linear-gradient(90deg,#5b52d6,#7c6af7);border-radius:2px;animation:p 1.15s ease-in-out infinite}' +
+      '@keyframes p{0%,100%{transform:translateX(-40%)}50%{transform:translateX(200%)}}' +
+      '.t{font-size:15px;font-weight:600;color:#f1f5f9;text-align:center}.s{font-size:13px;color:#94a3b8;text-align:center;max-width:360px;line-height:1.45}' +
+      '</style></head><body><div class="wrap"><div class="sp"></div><div class="bar"><i></i></div><p class="t">3D 뷰 준비 중</p>' +
+      '<p class="s">레이아웃 스냅샷을 만들고 있습니다. 잠시만 기다려 주세요.</p></div></body></html>';
+    const g3Base = (typeof GRID3D_ASSET_API_URL === 'string' && GRID3D_ASSET_API_URL.trim()) ? GRID3D_ASSET_API_URL.trim() : '';
+    const viewerShellUrl = /^https?:\/\//i.test(g3Base) ? g3Base.replace(/\/$/, '') + '/api/grid3d-viewer-app' : '';
+    let w = null;
+    let openedViaReceiverShell = false;
+    if (viewerShellUrl) {
+      try {
+        w = window.open(viewerShellUrl, '_blank', 'width=1280,height=840');
+        openedViaReceiverShell = !!w;
+      } catch (eHttp) {
+        console.warn('Grid 3D receiver shell open failed', eHttp);
+        w = null;
+        openedViaReceiverShell = false;
+      }
+    }
+    if (!w) {
+      try {
+        w = window.open('data:text/html;charset=utf-8,' + encodeURIComponent(bootHtml), '_blank', 'width=1280,height=840');
+      } catch (eData) {
+        console.warn('Grid 3D popup data URL failed, using about:blank', eData);
+      }
+    }
+    if (!w) {
+      w = window.open('about:blank', '_blank', 'width=1280,height=840');
+    }
     if (!w) {
       alert('Popup was blocked. Allow popups for this site to open the 3D viewer.');
       return;
     }
-    try {
-      w.document.open();
-      w.document.write(
-        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Layout 3D</title></head>' +
-        '<body style="margin:0;background:#0d0d0f;color:#e2e8f0;font:14px system-ui,sans-serif;' +
-        'display:flex;align-items:center;justify-content:center;min-height:100vh;">Preparing layout snapshot…</body></html>'
-      );
-      w.document.close();
-    } catch (eOpen) {
-      console.error(eOpen);
+    if (!openedViaReceiverShell) {
+      var bootHref = '';
       try {
-        w.close();
-      } catch (eClose) { /* ignore */ }
-      alert('Could not open the 3D viewer window.');
-      return;
+        bootHref = w.location && w.location.href ? String(w.location.href) : '';
+      } catch (eLoc) {
+        bootHref = '';
+      }
+      if (bootHref.indexOf('data:') !== 0) {
+        try {
+          w.document.open();
+          w.document.write(bootHtml);
+          w.document.close();
+        } catch (eOpen) {
+          console.error(eOpen);
+          try {
+            w.close();
+          } catch (eClose) { /* ignore */ }
+          alert('Could not open the 3D viewer window.');
+          return;
+        }
+      }
     }
     let payload;
     try {
@@ -3182,26 +3225,45 @@
       alert('Could not serialize layout for 3D.');
       return;
     }
-    try {
-      w.document.open();
-      w.document.write(tpl);
-      w.document.close();
-    } catch (e3) {
-      console.error(e3);
-      try {
-        w.close();
-      } catch (eClose4) { /* ignore */ }
-      alert('Could not write the 3D viewer document.');
-      return;
-    }
-    setTimeout(function () {
+    function sendGrid3dInit() {
       try {
         w.postMessage({ kind: 'grid3dViewerInit', payload: payload }, '*');
       } catch (e4) {
         console.error('postMessage to 3D viewer failed:', e4);
         alert('Could not send layout data to the 3D window. Try again or check the browser console.');
       }
-    }, 0);
+    }
+    if (!openedViaReceiverShell) {
+      try {
+        w.document.open();
+        w.document.write(tpl);
+        w.document.close();
+      } catch (e3) {
+        console.error(e3);
+        try {
+          w.close();
+        } catch (eClose4) { /* ignore */ }
+        alert('Could not write the 3D viewer document.');
+        return;
+      }
+      setTimeout(sendGrid3dInit, 0);
+    } else {
+      function onShellReady() {
+        setTimeout(sendGrid3dInit, 0);
+      }
+      try {
+        if (w.document && w.document.readyState === 'complete') {
+          onShellReady();
+        } else {
+          w.addEventListener('load', function grid3dShellLoad() {
+            w.removeEventListener('load', grid3dShellLoad);
+            onShellReady();
+          });
+        }
+      } catch (eReady) {
+        setTimeout(sendGrid3dInit, 150);
+      }
+    }
   }
   function getExistingStandBounds() {
     const list = [];

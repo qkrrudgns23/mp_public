@@ -27,6 +27,9 @@ if os.environ.get("LAYOUT_SAME_PORT") == "1":
 else:
     LAYOUT_API_URL = start_layout_receiver()
 
+# Grid 3D vehicle GLBs / Poly Haven bundles: always from layout receiver /api/grid3d-asset/
+_GRID3D_ASSET_API_URL = (os.environ.get("GRID3D_ASSET_API_URL") or "").strip() or start_layout_receiver()
+
 st.set_page_config(
     page_title="Terminal & Airside Designer",
     layout="wide",
@@ -738,6 +741,7 @@ def _load_designer_asset(name: str) -> str:
 def _designer_js_config_dict() -> dict[str, object]:
     return {
         "layoutApiUrl": LAYOUT_API_URL,
+        "grid3dAssetApiUrl": _GRID3D_ASSET_API_URL,
         "layoutNames": layout_names,
         "initialLayout": layout_for_html,
         "initialLayoutDisplayName": layout_display_name,
