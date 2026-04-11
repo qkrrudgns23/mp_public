@@ -161,6 +161,19 @@
     const b = Math.max(0, Math.min(255, Math.round(t[2] * f)));
     return 'rgb(' + r + ',' + g + ',' + b + ')';
   }
+  /** Multiply RGB channels (e.g. 0.99 ≈ 1% darker). Expects opaque-ish CSS; alpha stripped first. */
+  function c2dCssColorRgbChannelScale(css, mul) {
+    const opaque = c2dCssColorToOpaque(css);
+    const t = c2dParseCssRgbTriplet(opaque);
+    const f = Number(mul);
+    if (!t || !isFinite(f)) return opaque;
+    const r = Math.max(0, Math.min(255, Math.round(t[0] * f)));
+    const g = Math.max(0, Math.min(255, Math.round(t[1] * f)));
+    const b = Math.max(0, Math.min(255, Math.round(t[2] * f)));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+  /** Road-width band fill/stroke only (not marker area). ~1% darker than theme. */
+  const ROAD_WIDTH_SURFACE_RGB_MUL = 0.99;
   function c2dObjectSelectedGlowBlur() {
     const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
     return (isFinite(n) && n >= 0) ? n : 22;
@@ -16354,8 +16367,8 @@
         fillC = drawing ? 'rgba(74, 74, 74, 0.16)' : c2dRunwayFill();
       }
       if (showRoadWidth) {
-        strokeC = c2dCssColorToOpaque(strokeC);
-        fillC = c2dCssColorToOpaque(fillC);
+        strokeC = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(strokeC), ROAD_WIDTH_SURFACE_RGB_MUL);
+        fillC = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(fillC), ROAD_WIDTH_SURFACE_RGB_MUL);
       }
       ctx.strokeStyle = strokeC;
       ctx.fillStyle = fillC;
@@ -17185,7 +17198,7 @@
     cy /= n;
     const outerW = islandOuterWidthMResolved(marker);
     const innerW = islandInnerWidthMResolved(marker);
-    const pavedFill = c2dCssColorToOpaque(c2dRunwayStroke());
+    const pavedFill = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(c2dRunwayStroke()), ROAD_WIDTH_SURFACE_RGB_MUL);
     const islandInnerBandFill = '#2e2e2e';
     const islandGrassFill = '#454d36';
     ctx.fillStyle = pavedFill;

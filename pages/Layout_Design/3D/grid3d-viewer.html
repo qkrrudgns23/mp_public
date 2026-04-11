@@ -503,6 +503,17 @@
     b = Math.max(0, Math.min(255, Math.round(b * f)));
     return (r << 16) | (g << 8) | b;
   }
+  function paletteRgbChannelScale(hex24, mul) {
+    var f = Number(mul);
+    if (!isFinite(f)) return hex24;
+    var r = (hex24 >> 16) & 255, g = (hex24 >> 8) & 255, b = hex24 & 255;
+    r = Math.max(0, Math.min(255, Math.round(r * f)));
+    g = Math.max(0, Math.min(255, Math.round(g * f)));
+    b = Math.max(0, Math.min(255, Math.round(b * f)));
+    return (r << 16) | (g << 8) | b;
+  }
+  /** Thick taxiway/runway path fill: ~1% darker than paletteRunwayPaved (area marker excluded). */
+  var paletteRunwayPavedWidth = paletteRgbChannelScale(paletteRunwayPaved, 0.99);
   /** Marker area fill: one lighten step vs runway stroke (designer.js c2dCssColorLightenSteps(..., 1)). */
   var paletteMarkerAreaFill = paletteRgbLightenSteps(paletteRunwayStroke, 1);
   var markerIslandInnerRingColor = 0x2e2e2e;
@@ -801,10 +812,10 @@
   });
   }
   (L.taxiways || []).forEach(function (tw) {
-    drawTaxiwayLike(tw, paletteRunwayPaved, 23);
+    drawTaxiwayLike(tw, paletteRunwayPavedWidth, 23);
   });
   (L.runwayTaxiways || []).forEach(function (tw) {
-    drawTaxiwayLike(tw, paletteRunwayPaved, 23);
+    drawTaxiwayLike(tw, paletteRunwayPavedWidth, 23);
   });
   var zTaxiCenterline = zLift + 1.08;
   (L.taxiways || []).forEach(function (tw) {
@@ -816,7 +827,7 @@
     addTaxiwayCenterlineRibbon(tw.vertices, zTaxiCenterline);
   });
   (L.runwayPaths || []).forEach(function (rw) {
-    drawTaxiwayLike(rw, paletteRunwayPaved, 45);
+    drawTaxiwayLike(rw, paletteRunwayPavedWidth, 45);
   });
   var apronPolys = payload.enrichedApronLinkPolylines || [];
   apronPolys.forEach(function (row) {

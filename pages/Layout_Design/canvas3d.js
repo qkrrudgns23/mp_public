@@ -5,6 +5,37 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
+    const ROAD_WIDTH_SURFACE_RGB_MUL = 0.99;
+    function roadWidthSurfaceRgbMulCss(css, mul) {
+      let s = String(css || '').trim();
+      const ra = s.match(/^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/i);
+      if (ra) s = 'rgb(' + ra[1] + ',' + ra[2] + ',' + ra[3] + ')';
+      let m = s.match(/^#([0-9a-f]{3})$/i);
+      let r, g, b;
+      if (m) {
+        const h = m[1];
+        r = parseInt(h[0] + h[0], 16);
+        g = parseInt(h[1] + h[1], 16);
+        b = parseInt(h[2] + h[2], 16);
+      } else if ((m = s.match(/^#([0-9a-f]{6})$/i))) {
+        const h = m[1];
+        r = parseInt(h.slice(0, 2), 16);
+        g = parseInt(h.slice(2, 4), 16);
+        b = parseInt(h.slice(4, 6), 16);
+      } else if ((m = s.match(/^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i))) {
+        r = Number(m[1]);
+        g = Number(m[2]);
+        b = Number(m[3]);
+      } else {
+        return s;
+      }
+      const f = Number(mul);
+      if (!isFinite(f)) return s;
+      const r2 = Math.max(0, Math.min(255, Math.round(r * f)));
+      const g2 = Math.max(0, Math.min(255, Math.round(g * f)));
+      const b2 = Math.max(0, Math.min(255, Math.round(b * f)));
+      return 'rgb(' + r2 + ',' + g2 + ',' + b2 + ')';
+    }
     function taxiwayDrawContext(tw) {
       const drawing = state.taxiwayDrawingId === tw.id;
       if (tw.vertices.length < 2 && !drawing) return null;
@@ -22,19 +53,26 @@
       const g = taxiwayDrawContext(tw);
       if (!g) return;
       const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel, pathLineCap = g.pathLineCap, showRoadWidth = g.showRoadWidth;
+      let strokeC, fillC;
       if (sel) {
-        ctx.strokeStyle = c2dObjectSelectedStroke();
-        ctx.fillStyle = c2dObjectSelectedFill();
+        strokeC = c2dObjectSelectedStroke();
+        fillC = c2dObjectSelectedFill();
       } else if (isRunwayPath || isRunwayExit) {
-        ctx.strokeStyle = c2dRunwayStroke();
-        ctx.fillStyle = c2dRunwayFill();
+        strokeC = c2dRunwayStroke();
+        fillC = c2dRunwayFill();
       } else if (isApronTaxiwayPath) {
-        ctx.strokeStyle = drawing ? 'rgba(34, 197, 94, 0.85)' : '#15803d';
-        ctx.fillStyle = drawing ? 'rgba(34, 197, 94, 0.12)' : 'rgba(22, 163, 74, 0.18)';
+        strokeC = drawing ? 'rgba(34, 197, 94, 0.85)' : '#15803d';
+        fillC = drawing ? 'rgba(34, 197, 94, 0.12)' : 'rgba(22, 163, 74, 0.18)';
       } else {
-        ctx.strokeStyle = drawing ? 'rgba(56, 189, 248, 0.72)' : c2dRunwayStroke();
-        ctx.fillStyle = drawing ? 'rgba(56, 189, 248, 0.14)' : c2dRunwayFill();
+        strokeC = drawing ? 'rgba(56, 189, 248, 0.72)' : c2dRunwayStroke();
+        fillC = drawing ? 'rgba(56, 189, 248, 0.14)' : c2dRunwayFill();
       }
+      if (showRoadWidth) {
+        strokeC = roadWidthSurfaceRgbMulCss(strokeC, ROAD_WIDTH_SURFACE_RGB_MUL);
+        fillC = roadWidthSurfaceRgbMulCss(fillC, ROAD_WIDTH_SURFACE_RGB_MUL);
+      }
+      ctx.strokeStyle = strokeC;
+      ctx.fillStyle = fillC;
       if (showRoadWidth) {
         ctx.lineWidth = width;
         ctx.lineCap = pathLineCap;
