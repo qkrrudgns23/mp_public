@@ -282,7 +282,6 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    ctx.lineWidth = 3;
     ctx.setLineDash([3, 3]);
     state.apronLinks.forEach(lk => {
       const stand = findStandById(lk.pbbId);
@@ -290,10 +289,17 @@
       if (!stand || !tw || lk.tx == null || lk.ty == null) return;
       const poly = getApronLinkPolylineWorldPts(lk);
       if (poly.length < 2) return;
-      ctx.strokeStyle = '#facc15';
+      const hair = Math.max(1, 1 / Math.max(state.scale, 0.08));
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(poly[0][0], poly[0][1]);
       for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
+      ctx.lineWidth = hair;
+      ctx.strokeStyle = '#3a3a3a';
+      ctx.stroke();
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = '#facc15';
       ctx.stroke();
       const svApron = state.selectedVertex;
       const selApron = state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id;
@@ -314,7 +320,7 @@
             vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'mid' && svApron.midIndex === midIdx);
           }
           const r = layoutPathVertexRadiusPx(vtxSel, draggable);
-          ctx.fillStyle = vtxSel ? '#f43f5e' : (draggable ? '#fde68a' : '#facc15');
+          ctx.fillStyle = vtxSel ? '#f43f5e' : (draggable ? '#86efac' : '#22c55e');
           ctx.beginPath();
           ctx.arc(px, py, r, 0, Math.PI*2);
           ctx.fill();
@@ -324,7 +330,7 @@
     });
     ctx.setLineDash([]);
     if (state.apronLinkTemp) {
-      ctx.fillStyle = '#facc15';
+      ctx.fillStyle = '#22c55e';
       const t = state.apronLinkTemp;
       const draft = [];
       if (t.kind === 'pbb' || t.kind === 'remote') {
@@ -341,7 +347,7 @@
       if (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2) draft.push(state.apronLinkPointerWorld);
       if (draft.length >= 1) {
         ctx.save();
-        ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+        ctx.strokeStyle = 'rgba(34, 197, 94, 0.78)';
         ctx.setLineDash([4, 6]);
         ctx.lineWidth = 2;
         ctx.beginPath();

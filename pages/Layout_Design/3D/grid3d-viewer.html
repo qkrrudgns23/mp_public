@@ -124,6 +124,7 @@
   var bgHex = (cfg.gridViewBg && String(cfg.gridViewBg)) || '#0d0d0f';
   var showGrid = g.showGrid !== false;
   var showImage = g.showImage !== false;
+  var showRoadWidth3d = g.showRoadWidth !== false;
 
   var scene = new THREE.Scene();
   scene.background = new THREE.Color(bgHex);
@@ -478,11 +479,25 @@
     }
   }
 
-  var paletteTaxiwayConcrete = 0xbdb7ab;
-  var paletteRunwayPaved = 0x4a4a4a;
+  function addSegmentsYellowBlackOutline(points, opacity, ribbonWidthM) {
+    if (!points || points.length < 2) return;
+    var rw = ribbonWidthM != null && isFinite(Number(ribbonWidthM)) ? Math.max(0.12, Number(ribbonWidthM)) : Math.max(0.45, cs * 0.04);
+    var kOutline = Math.max(0.12, cs * 0.006);
+    addSegments(points, paletteCenterlineUnderlayGray, Math.min(0.99, opacity + 0.04), rw + kOutline);
+    addSegments(points, paletteApronTaxiwayYellow, opacity, rw);
+  }
+
+  var paletteTaxiwayConcrete = 0xa59f93;
+  var paletteApronTaxiwayYellow = 0xffc800;
+  var paletteCenterlineUnderlayGray = 0x3a3a3a;
+  var paletteRunwayPaved = 0x7c796c;
+  /** Matches designer 2D taxiway width stroke (Information.json canvas2d.runwayStroke). */
+  var paletteRunwayStroke = 0x6e6a60;
+  var markerIslandInnerRingColor = 0x2e2e2e;
   var markerIslandGrassColor = 0x454d36;
-  var markerIslandInnerRingColor = paletteTaxiwayConcrete;
-  var markerIslandInnerDefaultM = 5;
+  var islandNormalStepM = 20;
+  var islandNormalLenM = 4;
+  var markerIslandInnerDefaultM = 7;
   function islandInnerWidthM3d(m) {
     var v = Number(m && m.innerWidthM);
     if (isFinite(v) && v >= 0) return Math.min(200, v);
@@ -694,10 +709,30 @@
     return pts;
   }
 
-  function addThickPath(verts, widthM, color, z) {
+  function polylinePairsForRibbon(verts, z) {
+    var pts = polylineFromVertices(verts, z);
+    var pairs = [];
+    for (var pi = 0; pi < pts.length - 1; pi++) {
+      pairs.push(pts[pi], pts[pi + 1]);
+    }
+    return pairs;
+  }
+
+  function addTaxiwayCenterlineRibbon(verts, zElev) {
+    var pairs = polylinePairsForRibbon(verts, zElev);
+    if (pairs.length < 2) return;
+    var yRibbon = Math.max(0.34, cs * 0.028);
+    var kOutline = Math.max(0.12, cs * 0.006);
+    addSegments(pairs, paletteCenterlineUnderlayGray, 0.99, yRibbon + kOutline);
+    addSegments(pairs, paletteApronTaxiwayYellow, 0.96, yRibbon);
+  }
+
+  function addThickPath(verts, widthM, color, z, allowThinPath) {
     var pts = polylineFromVertices(verts, z);
     if (pts.length < 2) return;
-    var w = Math.max(3.2, Number(widthM) || 18);
+    var rawW = Number(widthM);
+    if (!isFinite(rawW)) rawW = 18;
+    var w = allowThinPath ? Math.max(0.12, rawW) : Math.max(3.2, rawW || 18);
     for (var i = 0; i < pts.length - 1; i++) {
       var a = pts[i], b = pts[i + 1];
       var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -719,11 +754,54 @@
   }
 
   if (!useGroundTex) {
+  if (showRoadWidth3d) {
+  (L.layoutMarkers || []).forEach(function (m) {
+    if (!m || m.kind !== 'area' || !m.points || m.points.length < 3) return;
+    var ptsW = [];
+    for (var aj = 0; aj < m.points.length; aj++) {
+      var q = m.points[aj];
+      if (!q) continue;
+      var qx = typeof q.x === 'number' ? q.x : q[0];
+      var qy = typeof q.y === 'number' ? q.y : q[1];
+      if (!isFinite(qx) || !isFinite(qy)) continue;
+      ptsW.push([qx, qy]);
+    }
+    if (ptsW.length < 3) return;
+    var shA = new THREE.Shape();
+    shA.moveTo(ptsW[0][0], layoutShapeY(ptsW[0][1]));
+    for (var ak = 1; ak < ptsW.length; ak++) shA.lineTo(ptsW[ak][0], layoutShapeY(ptsW[ak][1]));
+    shA.closePath();
+    var depA = 0.22;
+    var geoA = new THREE.ExtrudeGeometry(shA, { depth: depA, bevelEnabled: false });
+    var matA = new THREE.MeshBasicMaterial({
+      color: paletteRunwayStroke,
+      toneMapped: false,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+      side: THREE.DoubleSide
+    });
+    var meshA = new THREE.Mesh(geoA, matA);
+    meshA.position.z = zLift + 0.04;
+    meshA.renderOrder = -6;
+    scene.add(meshA);
+  });
+  }
   (L.taxiways || []).forEach(function (tw) {
     drawTaxiwayLike(tw, paletteRunwayPaved, 23);
   });
   (L.runwayTaxiways || []).forEach(function (tw) {
     drawTaxiwayLike(tw, paletteRunwayPaved, 23);
+  });
+  var zTaxiCenterline = zLift + 1.08;
+  (L.taxiways || []).forEach(function (tw) {
+    if (!tw || !tw.vertices || tw.vertices.length < 2) return;
+    addTaxiwayCenterlineRibbon(tw.vertices, zTaxiCenterline);
+  });
+  (L.runwayTaxiways || []).forEach(function (tw) {
+    if (!tw || !tw.vertices || tw.vertices.length < 2) return;
+    addTaxiwayCenterlineRibbon(tw.vertices, zTaxiCenterline);
   });
   (L.runwayPaths || []).forEach(function (rw) {
     drawTaxiwayLike(rw, paletteRunwayPaved, 45);
@@ -731,7 +809,8 @@
   var apronPolys = payload.enrichedApronLinkPolylines || [];
   apronPolys.forEach(function (row) {
     if (!row.points || row.points.length < 2) return;
-    addThickPath(row.points, 18, paletteTaxiwayConcrete, zLift + 0.1);
+    addThickPath(row.points, 0.5, paletteTaxiwayConcrete, zLift + 0.1, true);
+    addTaxiwayCenterlineRibbon(row.points, zTaxiCenterline + 0.02);
   });
   }
 
@@ -751,7 +830,7 @@
     shape.closePath();
     var h = building3dHeightM;
     var geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-    var mat = new THREE.MeshStandardMaterial({ color: 0x5c6f8a, metalness: 0.16, roughness: 0.64, envMapIntensity: 1.05 });
+    var mat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.14, roughness: 0.55, envMapIntensity: 1.0 });
     var mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -791,7 +870,7 @@
     if (!isFinite(x) || !isFinite(y)) return;
     var mesh = new THREE.Mesh(
       new THREE.CylinderGeometry(6, 6, 2, 16),
-      new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.14, roughness: 0.68, envMapIntensity: 0.95 })
+      new THREE.MeshStandardMaterial({ color: paletteApronTaxiwayYellow, metalness: 0.14, roughness: 0.68, envMapIntensity: 0.95 })
     );
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -867,14 +946,16 @@
         ptsW.push([qx, qy]);
       }
       var iw3 = islandInnerWidthM3d(m);
-      if (ptsW.length >= 3 && iw3 > 1e-6) {
-        var cix = 0, ciy = 0, cj;
+      var cix = 0, ciy = 0, cj;
+      if (ptsW.length >= 3) {
         for (cj = 0; cj < ptsW.length; cj++) {
           cix += ptsW[cj][0];
           ciy += ptsW[cj][1];
         }
         cix /= ptsW.length;
         ciy /= ptsW.length;
+      }
+      if (ptsW.length >= 3 && iw3 > 1e-6) {
         var innerL = islandOffsetPoly3d(ptsW, cix, ciy, iw3, false);
         if (innerL.length >= 3) {
           var shG = new THREE.Shape();
@@ -929,7 +1010,29 @@
         if (!p0 || !p1) continue;
         segsI.push(vecXY(p0.x, p0.y, zLift + 0.35), vecXY(p1.x, p1.y, zLift + 0.35));
       }
-      if (segsI.length) addSegments(segsI, 0xc28e46, 0.95, Math.max(0.48, cs * 0.042));
+      if (segsI.length) addSegmentsYellowBlackOutline(segsI, 0.95, Math.max(0.48, cs * 0.042));
+      if (ptsW.length >= 3) {
+        var zIslN = zLift + 0.42;
+        var distAlongN = 0;
+        for (var eidx = 0; eidx < ptsW.length; eidx++) {
+          var e0 = ptsW[eidx], e1 = ptsW[(eidx + 1) % ptsW.length];
+          var edx = e1[0] - e0[0], edy = e1[1] - e0[1];
+          var edgeLen = Math.sqrt(edx * edx + edy * edy);
+          if (edgeLen < 1e-6) continue;
+          var nn = islandInwardNormal3d(e0, e1, cix, ciy);
+          var ux = edx / edgeLen, uy = edy / edgeLen;
+          var firstS = Math.ceil(distAlongN / islandNormalStepM) * islandNormalStepM;
+          for (var sp = firstS; sp < distAlongN + edgeLen - 1e-6; sp += islandNormalStepM) {
+            var tLoc = sp - distAlongN;
+            if (tLoc < -1e-6) continue;
+            var px = e0[0] + ux * tLoc, py = e0[1] + uy * tLoc;
+            var q0 = vecXY(px, py, zIslN);
+            var q1 = vecXY(px + nn[0] * islandNormalLenM, py + nn[1] * islandNormalLenM, zIslN);
+            addSegmentsYellowBlackOutline([q0, q1], 0.96, Math.max(0.22, cs * 0.018));
+          }
+          distAlongN += edgeLen;
+        }
+      }
     }
   });
   }
