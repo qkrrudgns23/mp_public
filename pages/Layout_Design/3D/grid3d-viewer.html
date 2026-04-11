@@ -21,24 +21,18 @@
     @keyframes grid3d-spin { to { transform: rotate(360deg); } }
     #loading-overlay .loading-title { font-size: 17px; font-weight: 600; margin: 0 0 8px; color: #f1f5f9; }
     #loading-overlay .loading-sub { font-size: 13px; line-height: 1.5; margin: 0; color: #94a3b8; }
-    #vehicle-rail { position: fixed; left: 0; top: 0; bottom: 0; z-index: 60; display: flex; flex-direction: row; align-items: stretch; pointer-events: none; }
-    #vehicle-rail > * { pointer-events: auto; }
-    #vehicle-rail-toggle {
-      width: 42px; border: none; border-right: 1px solid rgba(148, 163, 184, 0.25); background: rgba(15, 23, 42, 0.92);
-      color: #e2e8f0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; writing-mode: vertical-rl;
-      text-orientation: mixed; padding: 16px 0; transition: background 0.15s ease, color 0.15s ease;
+    #veh-spawn-fab {
+      position: fixed; right: 12px; top: 50%; transform: translateY(-50%); z-index: 60;
+      width: 44px; height: 44px; border-radius: 12px; padding: 0; margin: 0;
+      border: 1px solid rgba(124, 106, 247, 0.5); background: rgba(15, 23, 42, 0.94); color: #e2e8f0;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35); transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
     }
-    #vehicle-rail-toggle:hover { background: rgba(30, 41, 59, 0.96); color: #fff; }
-    #vehicle-panel {
-      display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: rgba(15, 23, 42, 0.94);
-      border-right: 1px solid rgba(148, 163, 184, 0.2); min-width: 132px; box-shadow: 4px 0 24px rgba(0,0,0,0.35);
-    }
-    #vehicle-panel[hidden] { display: none !important; }
-    #vehicle-panel button {
-      border: 1px solid rgba(124, 106, 247, 0.45); border-radius: 8px; background: rgba(30, 27, 46, 0.9); color: #e2e8f0;
-      padding: 10px 12px; font-size: 13px; cursor: pointer; text-align: left; transition: border-color 0.15s, background 0.15s;
-    }
-    #vehicle-panel button:hover { border-color: #7c6af7; background: rgba(124, 106, 247, 0.15); }
+    #veh-spawn-fab:hover { border-color: #7c6af7; background: rgba(30, 41, 59, 0.96); transform: translateY(-50%) scale(1.04); }
+    #veh-spawn-fab:active { transform: translateY(-50%) scale(0.98); }
+    #veh-spawn-fab.veh-fab-driving { border-color: rgba(52, 211, 153, 0.65); }
+    #veh-spawn-fab svg { width: 22px; height: 22px; display: block; }
+    #veh-spawn-fab .veh-ico-stroke { fill: none; stroke: #e2e8f0; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
     #vehicle-hint {
       position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 55; max-width: min(520px, 92vw);
       padding: 10px 16px; border-radius: 10px; background: rgba(15, 23, 42, 0.92); border: 1px solid rgba(148, 163, 184, 0.25);
@@ -62,14 +56,15 @@
   </div>
   <div id="hud">Layout 3D — <strong>Z = elevation</strong> · ground = scene XY. Drag orbit · wheel zoom · right-drag pan</div>
   <div id="err" style="display:none;"></div>
-  <div id="vehicle-rail" aria-label="Vehicle">
-    <button type="button" id="vehicle-rail-toggle">Vehicle</button>
-    <div id="vehicle-panel" hidden>
-      <button type="button" id="veh-btn-car">자동차</button>
-      <button type="button" id="veh-btn-air">항공기</button>
-      <button type="button" id="veh-btn-orbit">궤도 카메라</button>
-    </div>
-  </div>
+  <button type="button" id="veh-spawn-fab" aria-label="자동차 시점" title="자동차 시점 (다시 누르면 궤도)">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path class="veh-ico-stroke" d="M3 12h2l1-3h12l1 3h2" />
+      <path class="veh-ico-stroke" d="M5 12v3h3v-3M16 12v3h3v-3" />
+      <path class="veh-ico-stroke" d="M7 9h10" />
+      <circle class="veh-ico-stroke" cx="7.5" cy="15" r="1.2" />
+      <circle class="veh-ico-stroke" cx="16.5" cy="15" r="1.2" />
+    </svg>
+  </button>
   <div id="vehicle-hint" hidden>마우스: 시점 · 휠: 거리 · W/S·↑↓ 전진·후진 · A/D·←→ 조향 · Esc 궤도</div>
   <script>
 (function () {
@@ -165,6 +160,8 @@
   var vehicleMode = 'orbit';
   var vehicleRoot = null;
   var vehicleYaw = 0;
+  var vehicleMeshYaw = 0;
+  var meshYawSmooth = 10;
   var keysDown = Object.create(null);
   var orbitViewFov = 50;
   var chaseViewFov = 58;
@@ -229,10 +226,17 @@
     });
     vehicleRoot = null;
   }
+  function syncVehicleFabUi() {
+    var fab = document.getElementById('veh-spawn-fab');
+    if (!fab) return;
+    if (vehicleMode !== 'orbit' && vehicleRoot) fab.classList.add('veh-fab-driving');
+    else fab.classList.remove('veh-fab-driving');
+  }
   function setOrbitCameraMode() {
     vehicleMode = 'orbit';
     vehicleVelFwd = 0;
     vehicleYawRate = 0;
+    vehicleMeshYaw = vehicleYaw;
     controls.enabled = true;
     camera.fov = orbitViewFov;
     camera.updateProjectionMatrix();
@@ -246,6 +250,7 @@
       controls.target.set(centerX, centerY, 0);
     }
     controls.update();
+    syncVehicleFabUi();
   }
   var loaderGltf = new THREE.GLTFLoader();
   var dracoLoader = new THREE.DRACOLoader();
@@ -265,7 +270,7 @@
     var groundZ = groundSurfaceZ + zLift - box.min.z;
     root.position.set(centerX, centerY, groundZ);
   }
-  function spawnVehicleFromGltfUrl(url, modeLabel) {
+  function spawnVehicleFromGltfUrl(url) {
     if (!url) {
       showVehicleLoadErr('차량 자산 서버 주소가 없습니다. Layout 페이지를 새로고침한 뒤 layout receiver(포트 8765)가 떠 있는지 확인하세요.');
       return;
@@ -274,23 +279,30 @@
       url,
       function (gltf) {
         clearVehicleMesh();
-        var root = gltf.scene;
-        root.rotation.x = -Math.PI / 2;
-        placeVehicleOnGround(root);
-        scene.add(root);
-        vehicleRoot = root;
+        var model = gltf.scene;
+        var tiltFix = new THREE.Group();
+        tiltFix.rotation.x = -Math.PI / 2;
+        tiltFix.add(model);
+        var pivot = new THREE.Group();
+        pivot.add(tiltFix);
+        placeVehicleOnGround(pivot);
+        scene.add(pivot);
+        vehicleRoot = pivot;
         vehicleYaw = 0;
+        vehicleMeshYaw = 0;
         vehicleVelFwd = 0;
         vehicleYawRate = 0;
         chaseCamDistance = 36;
         chaseCamPitch = 0.34;
         chaseCamOrbitYaw = 0;
-        vehicleMode = modeLabel;
+        vehicleMode = 'car';
         controls.enabled = false;
         camera.fov = chaseViewFov;
         camera.updateProjectionMatrix();
+        pivot.rotation.set(0, 0, vehicleMeshYaw);
         updateChaseCamera();
         showVehicleHint();
+        syncVehicleFabUi();
         try {
           renderer.domElement.requestPointerLock();
         } catch (ePl) { /* ignore */ }
@@ -299,19 +311,15 @@
       function (err) {
         console.error('GLTF load failed', err);
         showVehicleLoadErr(
-          (modeLabel === 'car' ? '자동차' : '항공기') +
-            ' 모델을 불러오지 못했습니다. ' +
+          '자동차(vehicle_cybertruck.glb)를 불러오지 못했습니다. ' +
             layoutApiBase +
-            ' 의 /api/grid3d-asset/ 가 열리는지, assets 폴더에 파일이 있는지 확인하세요.'
+            ' 의 /api/grid3d-asset/ 가 열리는지, Blender로 cybertruck을 export 했는지 확인하세요.'
         );
       }
     );
   }
   function onSpawnCar() {
-    spawnVehicleFromGltfUrl(assetUrl('vehicle_car.glb'), 'car');
-  }
-  function onSpawnAir() {
-    spawnVehicleFromGltfUrl(assetUrl('vehicle_aircraft.glb'), 'air');
+    spawnVehicleFromGltfUrl(assetUrl('vehicle_cybertruck.glb'));
   }
   function updateChaseCamera() {
     if (!vehicleRoot) return;
@@ -357,19 +365,13 @@
     },
     { passive: false }
   );
-  var railToggle = document.getElementById('vehicle-rail-toggle');
-  var railPanel = document.getElementById('vehicle-panel');
-  if (railToggle && railPanel) {
-    railToggle.addEventListener('click', function () {
-      railPanel.hidden = !railPanel.hidden;
+  var vehFab = document.getElementById('veh-spawn-fab');
+  if (vehFab) {
+    vehFab.addEventListener('click', function () {
+      if (vehicleMode === 'orbit' || !vehicleRoot) onSpawnCar();
+      else setOrbitCameraMode();
     });
   }
-  var btnCar = document.getElementById('veh-btn-car');
-  var btnAir = document.getElementById('veh-btn-air');
-  var btnOrbit = document.getElementById('veh-btn-orbit');
-  if (btnCar) btnCar.addEventListener('click', onSpawnCar);
-  if (btnAir) btnAir.addEventListener('click', onSpawnAir);
-  if (btnOrbit) btnOrbit.addEventListener('click', setOrbitCameraMode);
   renderer.domElement.addEventListener('click', function () {
     if (vehicleMode !== 'orbit' && document.pointerLockElement !== renderer.domElement) {
       try {
@@ -802,7 +804,8 @@
       var margin = 3;
       vehicleRoot.position.x = Math.max(margin, Math.min(maxX - margin, vehicleRoot.position.x));
       vehicleRoot.position.y = Math.max(margin, Math.min(maxY - margin, vehicleRoot.position.y));
-      vehicleRoot.rotation.set(-Math.PI / 2, 0, vehicleYaw);
+      vehicleMeshYaw += (vehicleYaw - vehicleMeshYaw) * Math.min(1, meshYawSmooth * dt);
+      vehicleRoot.rotation.set(0, 0, vehicleMeshYaw);
       updateChaseCamera();
     }
     renderer.render(scene, camera);
@@ -820,8 +823,7 @@
   try {
     document.exitPointerLock();
   } catch (eOrbit0) { /* ignore */ }
-  var panelOrbit0 = document.getElementById('vehicle-panel');
-  if (panelOrbit0) panelOrbit0.hidden = true;
+  syncVehicleFabUi();
   tick();
   if (!useGroundTex) {
     scheduleHideLoadingAfterPaint();

@@ -2,13 +2,13 @@
 
 | File / folder | Source | License |
 |---------------|--------|---------|
-| `vehicle_car.glb` | [Khronos glTF-Sample-Models — ToyCar](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/ToyCar) (single GLB) | [Khronos sample model terms](https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/README.md#license) |
+| `vehicle_cybertruck.glb` | Authored in `cybertruck (final).blend` (export via `export_cybertruck_glb.py`) | Your project |
+| `cybertruck (final).blend` | Local Blender source for the driveable car | Your project |
 | `polyhaven_covered_car/` | [Poly Haven — covered_car](https://polyhaven.com/a/covered_car) (1k glTF bundle; optional, not used by default viewer) | CC0 |
 | `polyhaven_kloppenheim_06_1k.hdr` | [Poly Haven — kloppenheim_06](https://polyhaven.com/a/kloppenheim_06) (1k HDR) | CC0 |
-| `vehicle_aircraft.glb` | [three.js r128 examples — PrimaryIonDrive.glb](https://github.com/mrdoob/three.js/tree/r128/examples/models/gltf) | MIT (three.js project) |
 
-**Grid 3D viewer:** **자동차** 버튼 → `vehicle_car.glb` · **항공기** 버튼 → `vehicle_aircraft.glb` (우주선 형태 스탠드인).
+**Grid 3D viewer:** 오른쪽 자동차 아이콘 → `vehicle_cybertruck.glb` (Blender에서 blend를 export).
 
-Poly Haven `covered_car` glTF uses extensions that often render invisible or black in three.js **r128**; the viewer loads `vehicle_car.glb` instead for reliable display.
+Poly Haven `covered_car` glTF uses extensions that often render invisible or black in three.js **r128**; the viewer does not load it by default.
 
-Re-download: `python pages/Layout_Design/3D/assets/download_assets.py`
+Re-download Poly Haven / HDR only: `python pages/Layout_Design/3D/assets/download_assets.py`
