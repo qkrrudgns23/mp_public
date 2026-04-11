@@ -146,7 +146,7 @@
   renderer.physicallyCorrectLights = true;
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.02;
+  renderer.toneMappingExposure = 1.045;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -359,8 +359,8 @@
   var hemiLight = new THREE.HemisphereLight(0xd0d6dd, 0x7a828c, 0.22);
   hemiLight.rotation.x = -Math.PI * 0.5;
   scene.add(hemiLight);
-  var sun = new THREE.DirectionalLight(0xfff4e6, 0.42);
-  sun.position.set(maxDim * 0.55, maxDim * 0.35, maxDim * 1.45);
+  var sun = new THREE.DirectionalLight(0xfff4e6, 0.48);
+  sun.position.set(maxDim * 0.52, maxDim * 0.32, maxDim * 1.52);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.bias = -0.00015;
@@ -760,7 +760,7 @@
       var a = pts[i], b = pts[i + 1];
       var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
       var geom = new THREE.BoxGeometry(len, w, 0.95);
-      var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.1, roughness: 0.76, envMapIntensity: 0.9, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+      var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.11, roughness: 0.74, envMapIntensity: 0.94, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
       var mesh = new THREE.Mesh(geom, mat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -1077,6 +1077,8 @@
           var m = o.material;
           if (m.isMeshStandardMaterial) {
             m.envMap = pmremRt.texture;
+            var ei0 = m.envMapIntensity != null ? m.envMapIntensity : 0.92;
+            m.envMapIntensity = Math.min(1.18, ei0 * 1.06);
             m.needsUpdate = true;
           }
         });
