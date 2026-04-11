@@ -112,11 +112,11 @@
   function c2dRunwayFill() { return _canvas2dStyle.runwayFill || 'rgba(75, 85, 99, 0.78)'; }
   function c2dTaxiwayPavementStroke() {
     const s = _canvas2dStyle.taxiwayPavementStroke;
-    return (typeof s === 'string' && s.trim()) ? s.trim() : '#6e6a60';
+    return (typeof s === 'string' && s.trim()) ? s.trim() : '#6d6a61';
   }
   function c2dTaxiwayPavementFill() {
     const s = _canvas2dStyle.taxiwayPavementFill;
-    return (typeof s === 'string' && s.trim()) ? s.trim() : '#7c796c';
+    return (typeof s === 'string' && s.trim()) ? s.trim() : '#7b796d';
   }
   function c2dRunwayOutline() { return _canvas2dStyle.runwayOutline || '#cbd5e1'; }
   function c2dRunwayMarkingColor() { return _canvas2dStyle.runwayMarkingColor || '#f8fafc'; }
@@ -632,7 +632,7 @@
       key: key,
       label: getBuildingTypeLabel(key),
       stroke: theme.stroke || _canvas2dStyle.terminalStrokeDefault || '#0284c7',
-      fill: theme.fill || _canvas2dStyle.terminalFillDefault || 'rgba(2,132,199,0.14)',
+      fill: theme.fill || _canvas2dStyle.terminalFillDefault || 'rgba(10,34,50,0.38)',
       labelFill: theme.labelFill || _canvas2dStyle.terminalLabelFill || 'rgba(186,230,253,0.96)',
       fillEnabled: theme.fillEnabled !== false,
       hatch: String(theme.hatch || '').trim().toLowerCase(),
@@ -12517,6 +12517,7 @@
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     const r = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
+    const rGreen = r * 0.7;
     ctx.fillStyle = '#ef4444';
     redJunctions.forEach(p => {
       ctx.beginPath();
@@ -12526,7 +12527,7 @@
     ctx.fillStyle = '#22c55e';
     connectedJunctions.forEach(p => {
       ctx.beginPath();
-      ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
+      ctx.arc(p[0], p[1], rGreen, 0, Math.PI * 2);
       ctx.fill();
     });
     // Edge distance numeric labels are intentionally hidden in layout view.
@@ -15618,7 +15619,7 @@
       const angle = getPBBStandAngle(pbb);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === pbb.id);
       const apronLinked = standHasApronTaxiwayLink(pbb.id);
-      const idleFill = apronLinked ? 'rgba(192,188,177,0.22)' : 'rgba(107,114,128,0.22)';
+      const idleFill = apronLinked ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)';
       ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFill);
       ctx.save();
       ctx.translate(ex, ey);
@@ -15667,7 +15668,7 @@
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const apronLinkedR = standHasApronTaxiwayLink(st.id);
-      const idleFillR = apronLinkedR ? 'rgba(192,188,177,0.22)' : 'rgba(107,114,128,0.22)';
+      const idleFillR = apronLinkedR ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)';
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
@@ -15718,6 +15719,10 @@
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const idleFillT = 'rgba(139,92,246,0.2)';
+      const idx = temps.indexOf(st);
+      const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('T' + String(idx + 1).padStart(3, '0'));
+      const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
+      const label = labelPrefix + ' / ' + nameRaw;
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
@@ -15727,6 +15732,14 @@
       drawStandSafetyContourInLocalAxes(ctx, depT, widT, st.category || 'C', sel);
       drawStandApronMarkingsInLocalAxes(ctx, depT, widT, st.category || 'C');
       ctx.setLineDash([]);
+      const pad = 3;
+      const tx = depT / 2 - pad;
+      const ty = -widT / 2 + pad;
+      ctx.fillStyle = '#e9d5ff';
+      ctx.font = '8px system-ui';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'top';
+      ctx.fillText(String(label), tx, ty);
       ctx.restore();
       if (mode === 'apronTaxiway') {
         ctx.save();
@@ -15737,17 +15750,6 @@
         ctx.fill();
         ctx.restore();
       }
-      const idx = temps.indexOf(st);
-      const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('T' + String(idx + 1).padStart(3, '0'));
-      const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
-      const label = labelPrefix + ' / ' + nameRaw;
-      ctx.fillStyle = '#e9d5ff';
-      ctx.font = '8px system-ui';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
-      const labelOffset = 2;
-      const lwT = standFootprintLocalToWorld(cx, cy, angle, depT / 2 - labelOffset, -widT / 2 + labelOffset);
-      ctx.fillText(label, lwT[0], lwT[1]);
       const junc = getTempStandTaxiwayJunctionPx(st);
       const jx = junc[0], jy = junc[1];
       const jr = Math.max(3.2, 3.6 / Math.max(state.scale, 0.08));
@@ -16317,8 +16319,8 @@
         strokeC = c2dRunwayStroke();
         fillC = c2dRunwayFill();
       } else if (isApronTaxiwayPath) {
-        strokeC = drawing ? 'rgba(124, 121, 108, 0.88)' : c2dTaxiwayPavementStroke();
-        fillC = drawing ? 'rgba(124, 121, 108, 0.16)' : c2dTaxiwayPavementFill();
+        strokeC = drawing ? 'rgba(123, 121, 109, 0.88)' : c2dTaxiwayPavementStroke();
+        fillC = drawing ? 'rgba(123, 121, 109, 0.16)' : c2dTaxiwayPavementFill();
       } else {
         strokeC = drawing ? 'rgba(74, 74, 74, 0.82)' : c2dRunwayStroke();
         fillC = drawing ? 'rgba(74, 74, 74, 0.16)' : c2dRunwayFill();

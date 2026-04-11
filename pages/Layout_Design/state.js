@@ -90,7 +90,7 @@
       key: key,
       label: getBuildingTypeLabel(key),
       stroke: theme.stroke || _canvas2dStyle.terminalStrokeDefault || '#0284c7',
-      fill: theme.fill || _canvas2dStyle.terminalFillDefault || 'rgba(2,132,199,0.14)',
+      fill: theme.fill || _canvas2dStyle.terminalFillDefault || 'rgba(10,34,50,0.38)',
       labelFill: theme.labelFill || _canvas2dStyle.terminalLabelFill || 'rgba(186,230,253,0.96)',
       fillEnabled: theme.fillEnabled !== false,
       hatch: String(theme.hatch || '').trim().toLowerCase(),

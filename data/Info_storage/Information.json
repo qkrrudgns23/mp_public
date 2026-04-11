@@ -1367,21 +1367,21 @@
       },
       "canvas2d": {
         "pathDepartureStroke": "#000000",
-        "runwayStroke": "#6e6a60",
-        "runwayFill": "#7c796c",
+        "runwayStroke": "#6d6a61",
+        "runwayFill": "#7b796d",
         "runwayOutline": "#d1d5db",
         "runwayMarkingColor": "#f8fafc",
         "runwayThresholdColor": "#f8fafc",
         "runwayCenterlineColor": "#f8fafc",
         "runwayTouchdownColor": "#f8fafc",
         "runwayAimingPointColor": "#f8fafc",
-        "runwayExtensionFill": "#6e6a60",
+        "runwayExtensionFill": "#6d6a61",
         "runwayBlastChevronColor": "#facc15",
         "runwayPathWidthOffAlpha": 0.3,
         "runwayBandStrokeOpaque": "#222222",
         "runwayBandStrokeDim": "#141414",
-        "taxiwayPavementStroke": "#6e6a60",
-        "taxiwayPavementFill": "#7c796c",
+        "taxiwayPavementStroke": "#6d6a61",
+        "taxiwayPavementFill": "#7b796d",
         "runwayTaxiwayCenterlineStroke": "#ffc800",
         "taxiwayCenterlineStroke": "#ffc800",
         "pathArrivalArrowStroke": "rgba(252, 165, 165, 0.9)",
@@ -1401,37 +1401,37 @@
         "buildingTypes": {
           "passenger_terminal": {
             "stroke": "#0284c7",
-            "fill": "rgba(2,132,199,0.14)",
+            "fill": "rgba(10,34,50,0.38)",
             "labelFill": "rgba(186,230,253,0.96)",
             "fillEnabled": true
           },
           "concourse": {
             "stroke": "#0284c7",
-            "fill": "rgba(2,132,199,0.14)",
+            "fill": "rgba(10,34,50,0.38)",
             "labelFill": "rgba(186,230,253,0.96)",
             "fillEnabled": true
           },
           "control_tower": {
             "stroke": "#0284c7",
-            "fill": "rgba(2,132,199,0.14)",
+            "fill": "rgba(10,34,50,0.38)",
             "labelFill": "rgba(186,230,253,0.96)",
             "fillEnabled": true
           },
           "cargo_terminal": {
             "stroke": "#0284c7",
-            "fill": "rgba(2,132,199,0.14)",
+            "fill": "rgba(10,34,50,0.38)",
             "labelFill": "rgba(186,230,253,0.96)",
             "fillEnabled": true
           },
           "hanger": {
             "stroke": "#0284c7",
-            "fill": "rgba(2,132,199,0.14)",
+            "fill": "rgba(10,34,50,0.38)",
             "labelFill": "rgba(186,230,253,0.96)",
             "fillEnabled": true
           },
           "utility": {
             "stroke": "#0284c7",
-            "fill": "rgba(2,132,199,0.14)",
+            "fill": "rgba(10,34,50,0.38)",
             "labelFill": "rgba(186,230,253,0.96)",
             "fillEnabled": true,
             "hatch": "diagonal"
@@ -1449,7 +1449,7 @@
         "terminalStrokeSelected": "rgba(233, 213, 255, 0.62)",
         "terminalStrokeDefault": "#0284c7",
         "terminalFillSelected": "rgba(196,181,253,0.38)",
-        "terminalFillDefault": "rgba(2,132,199,0.14)",
+        "terminalFillDefault": "rgba(10,34,50,0.38)",
         "terminalLabelFill": "rgba(186,230,253,0.96)",
         "terminalSelectedDash": "rgba(255,252,255,0.95)",
         "objectSelectedStroke": "rgba(233, 213, 255, 0.62)",

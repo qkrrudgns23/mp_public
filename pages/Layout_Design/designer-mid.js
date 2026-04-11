@@ -2264,6 +2264,7 @@
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     const r = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
+    const rGreen = r * 0.7;
     ctx.fillStyle = '#ef4444';
     redJunctions.forEach(p => {
       ctx.beginPath();
@@ -2273,7 +2274,7 @@
     ctx.fillStyle = '#22c55e';
     connectedJunctions.forEach(p => {
       ctx.beginPath();
-      ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
+      ctx.arc(p[0], p[1], rGreen, 0, Math.PI * 2);
       ctx.fill();
     });
     ctx.fillStyle = '#0f172a';
