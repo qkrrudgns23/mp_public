@@ -110,6 +110,14 @@
   function c2dObjectSelectedGlow() { return _canvas2dStyle.objectSelectedGlow || 'rgba(167, 139, 250, 0.45)'; }
   function c2dRunwayStroke() { return _canvas2dStyle.runwayStroke || 'rgba(156, 163, 175, 0.78)'; }
   function c2dRunwayFill() { return _canvas2dStyle.runwayFill || 'rgba(75, 85, 99, 0.78)'; }
+  function c2dTaxiwayPavementStroke() {
+    const s = _canvas2dStyle.taxiwayPavementStroke;
+    return (typeof s === 'string' && s.trim()) ? s.trim() : '#bdb7ab';
+  }
+  function c2dTaxiwayPavementFill() {
+    const s = _canvas2dStyle.taxiwayPavementFill;
+    return (typeof s === 'string' && s.trim()) ? s.trim() : '#c0bcb1';
+  }
   function c2dRunwayOutline() { return _canvas2dStyle.runwayOutline || '#cbd5e1'; }
   function c2dRunwayMarkingColor() { return _canvas2dStyle.runwayMarkingColor || '#f8fafc'; }
   function c2dRunwayThresholdColor() { return _canvas2dStyle.runwayThresholdColor || c2dRunwayMarkingColor(); }
@@ -15514,7 +15522,7 @@
       const angle = getPBBStandAngle(pbb);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === pbb.id);
       const apronLinked = standHasApronTaxiwayLink(pbb.id);
-      const idleFill = apronLinked ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
+      const idleFill = apronLinked ? 'rgba(192,188,177,0.22)' : 'rgba(107,114,128,0.22)';
       ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFill);
       ctx.save();
       ctx.translate(ex, ey);
@@ -15529,7 +15537,7 @@
       const pad = 3;
       const tx = depP / 2 - pad;
       const ty = -widP / 2 + pad;
-      ctx.fillStyle = apronLinked ? '#bbf7d0' : '#d1d5db';
+      ctx.fillStyle = apronLinked ? '#dcd8cf' : '#d1d5db';
       ctx.font = '8px system-ui';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';
@@ -15537,7 +15545,7 @@
       ctx.restore();
       ctx.save();
       ctx.beginPath();
-      ctx.fillStyle = sel ? '#22c55e' : (apronLinked ? 'rgba(34,197,94,0.9)' : 'rgba(156,163,175,0.95)');
+      ctx.fillStyle = sel ? c2dObjectSelectedStroke() : (apronLinked ? 'rgba(194,142,70,0.92)' : 'rgba(156,163,175,0.95)');
       const acMk = getStandAircraftMarkerWorldPxForPbb(pbb);
       ctx.arc(acMk[0], acMk[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
       ctx.fill();
@@ -15563,7 +15571,7 @@
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const apronLinkedR = standHasApronTaxiwayLink(st.id);
-      const idleFillR = apronLinkedR ? 'rgba(22,163,74,0.18)' : 'rgba(107,114,128,0.22)';
+      const idleFillR = apronLinkedR ? 'rgba(192,188,177,0.22)' : 'rgba(107,114,128,0.22)';
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(angle);
@@ -15575,7 +15583,7 @@
       ctx.restore();
       ctx.save();
       ctx.beginPath();
-      ctx.fillStyle = sel ? '#22c55e' : (apronLinkedR ? 'rgba(34,197,94,0.9)' : 'rgba(156,163,175,0.95)');
+      ctx.fillStyle = sel ? c2dObjectSelectedStroke() : (apronLinkedR ? 'rgba(194,142,70,0.92)' : 'rgba(156,163,175,0.95)');
       const rm = getStandAircraftMarkerWorldPxForRemoteLike(st);
       ctx.arc(rm[0], rm[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
       ctx.fill();
@@ -15583,7 +15591,7 @@
       const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
       const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
       const label = labelPrefix + ' / ' + nameRaw;
-      ctx.fillStyle = apronLinkedR ? '#bbf7d0' : '#d1d5db';
+      ctx.fillStyle = apronLinkedR ? '#dcd8cf' : '#d1d5db';
       ctx.font = '8px system-ui';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'top';
@@ -16199,11 +16207,11 @@
         strokeC = c2dRunwayStroke();
         fillC = c2dRunwayFill();
       } else if (isApronTaxiwayPath) {
-        strokeC = drawing ? 'rgba(34, 197, 94, 0.85)' : '#15803d';
-        fillC = drawing ? 'rgba(34, 197, 94, 0.12)' : 'rgba(22, 163, 74, 0.18)';
+        strokeC = drawing ? 'rgba(189, 183, 171, 0.88)' : c2dTaxiwayPavementStroke();
+        fillC = drawing ? 'rgba(189, 183, 171, 0.16)' : c2dTaxiwayPavementFill();
       } else {
-        strokeC = drawing ? 'rgba(56, 189, 248, 0.72)' : c2dRunwayStroke();
-        fillC = drawing ? 'rgba(56, 189, 248, 0.14)' : c2dRunwayFill();
+        strokeC = drawing ? 'rgba(74, 74, 74, 0.82)' : c2dRunwayStroke();
+        fillC = drawing ? 'rgba(74, 74, 74, 0.16)' : c2dRunwayFill();
       }
       if (showRoadWidth) {
         strokeC = c2dCssColorToOpaque(strokeC);
@@ -16251,7 +16259,7 @@
           ctx.setLineDash([10, 12]);
         } else {
           ctx.lineWidth = 0.5;
-          ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
+          ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
           ctx.setLineDash([]);
         }
         ctx.beginPath();
@@ -16271,7 +16279,7 @@
         ctx.setLineDash([]);
       } else if (!isRunwayPath) {
         ctx.lineWidth = 0.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
@@ -16321,7 +16329,7 @@
           numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
         }
         const arrLen = isRunwayPath ? CELL_SIZE * 0.63 : CELL_SIZE * 0.54;
-        ctx.fillStyle = isRunwayPath ? c2dRunwayCenterlineColor() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
+        ctx.fillStyle = isRunwayPath ? c2dRunwayCenterlineColor() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
         for (let k = 1; k <= numArrows; k++) {
           const targetDist = totalLen * (k / (numArrows + 1));
           let acc = 0;
@@ -16995,8 +17003,9 @@
     cy /= n;
     const outerW = islandOuterWidthMResolved(marker);
     const innerW = islandInnerWidthMResolved(marker);
-    const roadFill = c2dCssColorToOpaque(c2dRunwayStroke());
-    ctx.fillStyle = roadFill;
+    const pavedFill = c2dCssColorToOpaque(c2dRunwayStroke());
+    const innerRingFill = c2dCssColorToOpaque(c2dTaxiwayPavementStroke());
+    ctx.fillStyle = pavedFill;
     if (outerW > 1e-6) {
       const O = islandOffsetPolygonCorners(pts, cx, cy, outerW, true);
       if (O.length >= 3) islandFillRingEvenOdd(ctx, O, pts);
@@ -17004,8 +17013,14 @@
     if (innerW > 1e-6) {
       const I = islandOffsetPolygonCorners(pts, cx, cy, innerW, false);
       if (I.length >= 3) {
-        ctx.fillStyle = '#4a5566';
+        ctx.fillStyle = innerRingFill;
         islandFillRingEvenOdd(ctx, pts, I);
+        ctx.fillStyle = '#454d36';
+        ctx.beginPath();
+        ctx.moveTo(I[0][0], I[0][1]);
+        for (let ri = 1; ri < I.length; ri++) ctx.lineTo(I[ri][0], I[ri][1]);
+        ctx.closePath();
+        ctx.fill();
       }
     }
   }
@@ -17023,7 +17038,7 @@
     ctx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < n; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.closePath();
-    ctx.strokeStyle = '#facc15';
+    ctx.strokeStyle = '#c28e46';
     ctx.lineWidth = 0.25;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -17051,7 +17066,7 @@
         ctx.beginPath();
         ctx.moveTo(px, py);
         ctx.lineTo(px + nn[0] * nl, py + nn[1] * nl);
-        ctx.strokeStyle = '#facc15';
+        ctx.strokeStyle = '#c28e46';
         ctx.lineWidth = 0.25;
         ctx.lineCap = 'round';
         ctx.stroke();

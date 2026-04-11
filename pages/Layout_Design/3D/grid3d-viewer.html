@@ -478,6 +478,54 @@
     }
   }
 
+  var paletteTaxiwayConcrete = 0xbdb7ab;
+  var paletteRunwayPaved = 0x4a4a4a;
+  var markerIslandGrassColor = 0x454d36;
+  var markerIslandInnerRingColor = paletteTaxiwayConcrete;
+  var markerIslandInnerDefaultM = 5;
+  function islandInnerWidthM3d(m) {
+    var v = Number(m && m.innerWidthM);
+    if (isFinite(v) && v >= 0) return Math.min(200, v);
+    return markerIslandInnerDefaultM;
+  }
+  function islandInwardNormal3d(p0, p1, cx, cy) {
+    var dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var nx = -dy / len, ny = dx / len;
+    var mx = (p0[0] + p1[0]) * 0.5, my = (p0[1] + p1[1]) * 0.5;
+    if ((cx - mx) * nx + (cy - my) * ny < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    return [nx, ny];
+  }
+  function islandLineIntersect3d(a1, a2, b1, b2) {
+    var x1 = a1[0], y1 = a1[1], x2 = a2[0], y2 = a2[1];
+    var x3 = b1[0], y3 = b1[1], x4 = b2[0], y4 = b2[1];
+    var den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (Math.abs(den) < 1e-14) return null;
+    var t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+    return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+  }
+  function islandOffsetPoly3d(pts, cx, cy, dist, outward) {
+    var n = pts.length, out = [], i;
+    for (i = 0; i < n; i++) {
+      var pPrev = pts[(i - 1 + n) % n], p0 = pts[i], pNext = pts[(i + 1) % n];
+      var in1 = islandInwardNormal3d(pPrev, p0, cx, cy);
+      var in2 = islandInwardNormal3d(p0, pNext, cx, cy);
+      var o1 = outward ? [-in1[0], -in1[1]] : [in1[0], in1[1]];
+      var o2 = outward ? [-in2[0], -in2[1]] : [in2[0], in2[1]];
+      var A1 = [pPrev[0] + o1[0] * dist, pPrev[1] + o1[1] * dist];
+      var B1 = [p0[0] + o1[0] * dist, p0[1] + o1[1] * dist];
+      var A2 = [p0[0] + o2[0] * dist, p0[1] + o2[1] * dist];
+      var B2 = [pNext[0] + o2[0] * dist, pNext[1] + o2[1] * dist];
+      var ip = islandLineIntersect3d(A1, B1, A2, B2);
+      if (ip && isFinite(ip[0]) && isFinite(ip[1])) out.push(ip);
+      else out.push([p0[0] + (o1[0] + o2[0]) * 0.5 * dist, p0[1] + (o1[1] + o2[1]) * 0.5 * dist]);
+    }
+    return out;
+  }
+
   if (useGroundTex) {
     var loaderGt = new THREE.TextureLoader();
     function applyLayoutGroundSlab(tex, widthM, heightM, centerSceneX, centerSceneY, zBias) {
@@ -672,18 +720,18 @@
 
   if (!useGroundTex) {
   (L.taxiways || []).forEach(function (tw) {
-    drawTaxiwayLike(tw, 0x22c55e, 23);
+    drawTaxiwayLike(tw, paletteRunwayPaved, 23);
   });
   (L.runwayTaxiways || []).forEach(function (tw) {
-    drawTaxiwayLike(tw, 0x38bdf8, 23);
+    drawTaxiwayLike(tw, paletteRunwayPaved, 23);
   });
   (L.runwayPaths || []).forEach(function (rw) {
-    drawTaxiwayLike(rw, 0xf97316, 45);
+    drawTaxiwayLike(rw, paletteRunwayPaved, 45);
   });
   var apronPolys = payload.enrichedApronLinkPolylines || [];
   apronPolys.forEach(function (row) {
     if (!row.points || row.points.length < 2) return;
-    addThickPath(row.points, 18, 0x4ade80, zLift + 0.1);
+    addThickPath(row.points, 18, paletteTaxiwayConcrete, zLift + 0.1);
   });
   }
 
@@ -732,7 +780,7 @@
     if (r.corners) addFootprintSlab(r.corners, 0.15, 1.2, 0xa78bfa);
   });
   (fp.pbb || []).forEach(function (r) {
-    if (r.corners) addFootprintSlab(r.corners, 0.15, 1.4, 0x38bdf8);
+    if (r.corners) addFootprintSlab(r.corners, 0.15, 1.4, paletteTaxiwayConcrete);
   });
   }
 
@@ -809,13 +857,79 @@
       addSegments([a, b], 0x94a3b8, 0.92, Math.max(0.52, cs * 0.046));
     }
     if (m.kind === 'island' && m.points && m.points.length > 2) {
+      var ptsW = [];
+      for (var pj = 0; pj < m.points.length; pj++) {
+        var q = m.points[pj];
+        if (!q) continue;
+        var qx = typeof q.x === 'number' ? q.x : q[0];
+        var qy = typeof q.y === 'number' ? q.y : q[1];
+        if (!isFinite(qx) || !isFinite(qy)) continue;
+        ptsW.push([qx, qy]);
+      }
+      var iw3 = islandInnerWidthM3d(m);
+      if (ptsW.length >= 3 && iw3 > 1e-6) {
+        var cix = 0, ciy = 0, cj;
+        for (cj = 0; cj < ptsW.length; cj++) {
+          cix += ptsW[cj][0];
+          ciy += ptsW[cj][1];
+        }
+        cix /= ptsW.length;
+        ciy /= ptsW.length;
+        var innerL = islandOffsetPoly3d(ptsW, cix, ciy, iw3, false);
+        if (innerL.length >= 3) {
+          var shG = new THREE.Shape();
+          shG.moveTo(ptsW[0][0], layoutShapeY(ptsW[0][1]));
+          for (var qk = 1; qk < ptsW.length; qk++) shG.lineTo(ptsW[qk][0], layoutShapeY(ptsW[qk][1]));
+          shG.closePath();
+          var holeG = new THREE.Path();
+          var nIn = innerL.length;
+          holeG.moveTo(innerL[nIn - 1][0], layoutShapeY(innerL[nIn - 1][1]));
+          for (var hk = nIn - 2; hk >= 0; hk--) holeG.lineTo(innerL[hk][0], layoutShapeY(innerL[hk][1]));
+          holeG.closePath();
+          shG.holes.push(holeG);
+          var depRing = 0.12;
+          var geoRing = new THREE.ExtrudeGeometry(shG, { depth: depRing, bevelEnabled: false });
+          var matRing = new THREE.MeshBasicMaterial({
+            color: markerIslandInnerRingColor,
+            toneMapped: false,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1,
+            side: THREE.DoubleSide
+          });
+          var meshRing = new THREE.Mesh(geoRing, matRing);
+          meshRing.position.z = zLift + 0.18;
+          meshRing.renderOrder = 2;
+          scene.add(meshRing);
+          var shIn = new THREE.Shape();
+          shIn.moveTo(innerL[0][0], layoutShapeY(innerL[0][1]));
+          for (var ik = 1; ik < innerL.length; ik++) shIn.lineTo(innerL[ik][0], layoutShapeY(innerL[ik][1]));
+          shIn.closePath();
+          var depIn = 0.14;
+          var geoIn = new THREE.ExtrudeGeometry(shIn, { depth: depIn, bevelEnabled: false });
+          var matIn = new THREE.MeshBasicMaterial({
+            color: markerIslandGrassColor,
+            toneMapped: false,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1,
+            side: THREE.DoubleSide
+          });
+          var meshIn = new THREE.Mesh(geoIn, matIn);
+          meshIn.position.z = zLift + 0.24;
+          meshIn.renderOrder = 3;
+          scene.add(meshIn);
+        }
+      }
       var segsI = [];
       for (var pi = 0; pi < m.points.length; pi++) {
         var p0 = m.points[pi], p1 = m.points[(pi + 1) % m.points.length];
         if (!p0 || !p1) continue;
         segsI.push(vecXY(p0.x, p0.y, zLift + 0.35), vecXY(p1.x, p1.y, zLift + 0.35));
       }
-      if (segsI.length) addSegments(segsI, 0x4a5566, 0.9, Math.max(0.48, cs * 0.042));
+      if (segsI.length) addSegments(segsI, 0xc28e46, 0.95, Math.max(0.48, cs * 0.042));
     }
   });
   }
