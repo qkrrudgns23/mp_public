@@ -354,17 +354,18 @@
     }
   });
 
-  var ambientLight = new THREE.AmbientLight(0xf0f2f5, 0.36);
+  var ambientLight = new THREE.AmbientLight(0xf4ebe3, 0.34);
   scene.add(ambientLight);
-  var hemiLight = new THREE.HemisphereLight(0xd0d6dd, 0x7a828c, 0.22);
+  var hemiLight = new THREE.HemisphereLight(0xf0dcc8, 0x8a7a72, 0.24);
   hemiLight.rotation.x = -Math.PI * 0.5;
   scene.add(hemiLight);
-  var sun = new THREE.DirectionalLight(0xfff4e6, 0.48);
-  sun.position.set(maxDim * 0.52, maxDim * 0.32, maxDim * 1.52);
+  var sun = new THREE.DirectionalLight(0xffecd8, 0.52);
+  sun.position.set(maxDim * 0.5, maxDim * 0.28, maxDim * 1.55);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.bias = -0.00015;
-  sun.shadow.normalBias = 0.02;
+  sun.shadow.bias = -0.00012;
+  sun.shadow.normalBias = 0.018;
+  sun.shadow.radius = 3;
   var sh = maxDim * 0.65;
   sun.shadow.camera.left = -sh;
   sun.shadow.camera.right = sh;
@@ -426,6 +427,20 @@
 
   function layoutShapeY(layoutY) {
     return layoutYToSceneGroundY(layoutY);
+  }
+
+  if (!useGroundTex) {
+    var recvCol = new THREE.Color(bgHex);
+    recvCol.multiplyScalar(0.9);
+    var groundShadowRecv = new THREE.Mesh(
+      new THREE.PlaneGeometry(maxX * 1.08, maxY * 1.08),
+      new THREE.MeshLambertMaterial({ color: recvCol, side: THREE.DoubleSide })
+    );
+    groundShadowRecv.position.set(centerX, centerY, zGround - 0.12);
+    groundShadowRecv.receiveShadow = true;
+    groundShadowRecv.castShadow = false;
+    groundShadowRecv.renderOrder = -12;
+    scene.add(groundShadowRecv);
   }
 
   function addSegmentsLinesOnly(points, color, opacity) {
@@ -760,8 +775,9 @@
       var a = pts[i], b = pts[i + 1];
       var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
       var geom = new THREE.BoxGeometry(len, w, 0.95);
-      var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.11, roughness: 0.74, envMapIntensity: 0.94, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+      var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.11, roughness: 0.74, envMapIntensity: 0.88, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
       var mesh = new THREE.Mesh(geom, mat);
+      mesh.userData.roadWidthPavement3d = true;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.position.set((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, z + 0.48);
@@ -1077,13 +1093,18 @@
           var m = o.material;
           if (m.isMeshStandardMaterial) {
             m.envMap = pmremRt.texture;
-            var ei0 = m.envMapIntensity != null ? m.envMapIntensity : 0.92;
-            m.envMapIntensity = Math.min(1.18, ei0 * 1.06);
+            if (o.userData && o.userData.roadWidthPavement3d) {
+              var eiW = m.envMapIntensity != null ? m.envMapIntensity : 0.88;
+              m.envMapIntensity = Math.min(1.22, eiW * 1.1);
+            }
             m.needsUpdate = true;
           }
         });
-        ambientLight.intensity = 0.28;
-        hemiLight.intensity = 0.2;
+        ambientLight.color.setHex(0xf3e8dc);
+        ambientLight.intensity = 0.26;
+        hemiLight.color.setHex(0xffe8d4);
+        hemiLight.groundColor.setHex(0x7d726e);
+        hemiLight.intensity = 0.22;
       },
       undefined,
       function (err) {
