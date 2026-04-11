@@ -17003,7 +17003,10 @@
     }
     if (innerW > 1e-6) {
       const I = islandOffsetPolygonCorners(pts, cx, cy, innerW, false);
-      if (I.length >= 3) islandFillRingEvenOdd(ctx, pts, I);
+      if (I.length >= 3) {
+        ctx.fillStyle = '#4a5566';
+        islandFillRingEvenOdd(ctx, pts, I);
+      }
     }
   }
   function drawLayoutIslandMarkerLinesWorld(ctx, pts, sel) {

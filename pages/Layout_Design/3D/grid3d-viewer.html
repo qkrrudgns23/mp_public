@@ -43,6 +43,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
 </head>
 <body>
   <div id="loading-overlay" aria-busy="true" aria-live="polite">
@@ -127,20 +128,26 @@
   var scene = new THREE.Scene();
   scene.background = new THREE.Color(bgHex);
 
-  var camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 1e6);
-  camera.up.set(0, 0, 1);
   var centerX = maxX * 0.5;
   var centerY = maxY * 0.5;
   var maxDim = Math.max(maxX, maxY);
+  var camNear = Math.max(0.5, Math.min(80, maxDim / 12000));
+  var camFar = Math.min(1e7, maxDim * 80);
+  var camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, camNear, camFar);
+  camera.up.set(0, 0, 1);
   camera.position.set(centerX + maxDim * 0.9, centerY + maxDim * 0.9, maxDim * 0.75);
   camera.lookAt(centerX, centerY, 0);
 
-  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
-  renderer.toneMapping = THREE.NoToneMapping;
-  renderer.toneMappingExposure = 1;
+  renderer.physicallyCorrectLights = true;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.02;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   var controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.target.set(centerX, centerY, 0);
@@ -240,7 +247,7 @@
     var box = new THREE.Box3().setFromObject(root);
     var size = box.getSize(new THREE.Vector3());
     var maxD = Math.max(size.x, size.y, size.z);
-    var targetLen = 8;
+    var targetLen = 4;
     if (maxD > 1e-6) root.scale.multiplyScalar(targetLen / maxD);
     root.updateMatrixWorld(true);
     box.setFromObject(root);
@@ -251,12 +258,18 @@
     clearVehicleMesh();
     var geo = new THREE.SphereGeometry(1, 28, 22);
     var mat = new THREE.MeshStandardMaterial({
-      color: 0x7c6af7,
-      metalness: 0.38,
-      roughness: 0.4,
+      color: 0x8b7aff,
+      metalness: 0.48,
+      roughness: 0.28,
+      envMapIntensity: 1.25,
     });
+    if (scene.environment) {
+      mat.envMap = scene.environment;
+    }
     var mesh = new THREE.Mesh(geo, mat);
     mesh.name = 'vehicleOrb';
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     var pivot = new THREE.Group();
     pivot.add(mesh);
     placeVehicleOnGround(pivot);
@@ -340,9 +353,27 @@
     }
   });
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.52));
-  var sun = new THREE.DirectionalLight(0xffffff, 0.55);
-  sun.position.set(maxDim, maxDim * 0.2, maxDim * 1.2);
+  var ambientLight = new THREE.AmbientLight(0xf0f2f5, 0.36);
+  scene.add(ambientLight);
+  var hemiLight = new THREE.HemisphereLight(0xd0d6dd, 0x7a828c, 0.22);
+  hemiLight.rotation.x = -Math.PI * 0.5;
+  scene.add(hemiLight);
+  var sun = new THREE.DirectionalLight(0xfff4e6, 0.42);
+  sun.position.set(maxDim * 0.55, maxDim * 0.35, maxDim * 1.45);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.00015;
+  sun.shadow.normalBias = 0.02;
+  var sh = maxDim * 0.65;
+  sun.shadow.camera.left = -sh;
+  sun.shadow.camera.right = sh;
+  sun.shadow.camera.top = sh;
+  sun.shadow.camera.bottom = -sh;
+  sun.shadow.camera.near = 10;
+  sun.shadow.camera.far = maxDim * 8;
+  sun.shadow.camera.updateProjectionMatrix();
+  sun.target.position.set(centerX, centerY, 0);
+  scene.add(sun.target);
   scene.add(sun);
 
   var zGround = 0;
@@ -396,17 +427,55 @@
     return layoutYToSceneGroundY(layoutY);
   }
 
-  function addSegments(points, color, opacity, lineWidthHint) {
+  function addSegmentsLinesOnly(points, color, opacity) {
     if (!points || points.length < 2) return;
     var geo = new THREE.BufferGeometry().setFromPoints(points);
     var mat = new THREE.LineBasicMaterial({
       color: color,
       transparent: opacity < 1,
       opacity: opacity,
-      depthTest: true
+      depthTest: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
     });
     var line = new THREE.LineSegments(geo, mat);
+    line.renderOrder = 3;
     scene.add(line);
+  }
+
+  function addSegments(points, color, opacity, ribbonWidthM) {
+    if (!points || points.length < 2) return;
+    if (points.length > 1200) {
+      addSegmentsLinesOnly(points, color, opacity);
+      return;
+    }
+    var rw = ribbonWidthM != null && isFinite(Number(ribbonWidthM)) ? Math.max(0.12, Number(ribbonWidthM)) : Math.max(0.45, cs * 0.04);
+    var mat = new THREE.MeshBasicMaterial({
+      color: color,
+      transparent: opacity < 1,
+      opacity: opacity,
+      depthTest: true,
+      depthWrite: false,
+      toneMapped: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+      side: THREE.DoubleSide
+    });
+    var zBias = 0.14;
+    for (var si = 0; si < points.length - 1; si += 2) {
+      var pa = points[si], pb = points[si + 1];
+      if (!pa || !pb) continue;
+      var dx = pb.x - pa.x, dy = pb.y - pa.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var geom = new THREE.BoxGeometry(len, rw, 0.55);
+      var mesh = new THREE.Mesh(geom, mat);
+      mesh.renderOrder = 4;
+      mesh.position.set((pa.x + pb.x) * 0.5, (pa.y + pb.y) * 0.5, (pa.z + pb.z) * 0.5 + zBias);
+      mesh.rotation.z = Math.atan2(dy, dx);
+      scene.add(mesh);
+    }
   }
 
   if (useGroundTex) {
@@ -415,8 +484,9 @@
       zBias = zBias != null ? zBias : 0;
       var wTex = Number(widthM) > 0 ? Number(widthM) : maxX;
       var hTex = Number(heightM) > 0 ? Number(heightM) : maxY;
-      tex.generateMipmaps = true;
-      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.encoding = THREE.sRGBEncoding;
+      tex.generateMipmaps = false;
+      tex.minFilter = THREE.LinearFilter;
       tex.magFilter = THREE.LinearFilter;
       tex.wrapS = THREE.ClampToEdgeWrapping;
       tex.wrapT = THREE.ClampToEdgeWrapping;
@@ -425,7 +495,7 @@
       if (renderer.capabilities && typeof renderer.capabilities.getMaxAnisotropy === 'function') {
         maxAniso = renderer.capabilities.getMaxAnisotropy();
       }
-      tex.anisotropy = Math.min(16, Math.max(1, maxAniso));
+      tex.anisotropy = Math.max(1, maxAniso);
       tex.repeat.set(1, -1);
       tex.offset.set(0, 1);
       tex.needsUpdate = true;
@@ -436,7 +506,7 @@
       var sideColor = new THREE.Color(bgHex);
       sideColor.multiplyScalar(0.72);
       var sideMat = new THREE.MeshBasicMaterial({ color: sideColor, toneMapped: false });
-      var topMat = new THREE.MeshBasicMaterial({ map: tex, depthWrite: true, toneMapped: false });
+      var topMat = new THREE.MeshBasicMaterial({ map: tex, color: 0xffffff, depthWrite: true, toneMapped: false });
       var slab = new THREE.Mesh(
         geom,
         [ sideMat, sideMat, sideMat, sideMat, topMat, sideMat ]
@@ -505,22 +575,23 @@
   }
 
   if (!useGroundTex && showGrid) {
+    var zGrid = zLift + 0.16;
     var faint = [];
     var major = [];
     var kx = 0;
     for (var x = 0; x <= maxX; x += cs, kx++) {
-      var a = vecXY(x, 0, zLift);
-      var b = vecXY(x, maxY, zLift);
+      var a = vecXY(x, 0, zGrid);
+      var b = vecXY(x, maxY, zGrid);
       if (kx % majorEvery === 0) { major.push(a, b); } else { faint.push(a, b); }
     }
     var ky = 0;
     for (var y = 0; y <= maxY; y += cs, ky++) {
-      var c = vecXY(0, y, zLift);
-      var d = vecXY(maxX, y, zLift);
+      var c = vecXY(0, y, zGrid);
+      var d = vecXY(maxX, y, zGrid);
       if (ky % majorEvery === 0) { major.push(c, d); } else { faint.push(c, d); }
     }
-    addSegments(faint, 0x9ca3af, 0.18);
-    addSegments(major, 0xe2e8f0, 0.38);
+    addSegmentsLinesOnly(faint, 0x9ca3af, 0.26);
+    addSegments(major, 0xe2e8f0, 0.44, Math.max(0.62, cs * 0.058));
   }
 
   var overlay = g.layoutImageOverlay;
@@ -529,7 +600,13 @@
     loader.load(
       overlay.dataUrl,
       function (tex) {
-        tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+        tex.encoding = THREE.sRGBEncoding;
+        tex.generateMipmaps = false;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.anisotropy = renderer.capabilities && renderer.capabilities.getMaxAnisotropy
+          ? renderer.capabilities.getMaxAnisotropy()
+          : 1;
         tex.flipY = false;
         tex.wrapS = THREE.RepeatWrapping;
         tex.repeat.set(-1, 1);
@@ -543,7 +620,7 @@
         var op = overlay.opacity != null ? Math.max(0, Math.min(1, Number(overlay.opacity))) : 0.85;
         var plane = new THREE.Mesh(
           new THREE.PlaneGeometry(wM, hM),
-          new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: showImage ? op : 0.35, side: THREE.DoubleSide, depthWrite: false })
+          new THREE.MeshBasicMaterial({ map: tex, color: 0xffffff, transparent: true, opacity: showImage ? op : 0.35, side: THREE.DoubleSide, depthWrite: false, toneMapped: false })
         );
         var cy = gy + hM * 0.5;
         var c = layoutPointToSceneGround(gx + wM * 0.5, cy, zLift + 0.02);
@@ -572,14 +649,16 @@
   function addThickPath(verts, widthM, color, z) {
     var pts = polylineFromVertices(verts, z);
     if (pts.length < 2) return;
-    var w = Math.max(2, Number(widthM) || 18);
+    var w = Math.max(3.2, Number(widthM) || 18);
     for (var i = 0; i < pts.length - 1; i++) {
       var a = pts[i], b = pts[i + 1];
       var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
-      var geom = new THREE.BoxGeometry(len, w, 0.6);
-      var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.05, roughness: 0.85 });
+      var geom = new THREE.BoxGeometry(len, w, 0.95);
+      var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.1, roughness: 0.76, envMapIntensity: 0.9, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
       var mesh = new THREE.Mesh(geom, mat);
-      mesh.position.set((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, z + 0.35);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.position.set((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, z + 0.48);
       mesh.rotation.z = Math.atan2(dy, dx);
       scene.add(mesh);
     }
@@ -624,8 +703,10 @@
     shape.closePath();
     var h = building3dHeightM;
     var geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-    var mat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.08, roughness: 0.82 });
+    var mat = new THREE.MeshStandardMaterial({ color: 0x5c6f8a, metalness: 0.16, roughness: 0.64, envMapIntensity: 1.05 });
     var mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.position.z = terminalFootZ;
     scene.add(mesh);
   });
@@ -639,8 +720,10 @@
     shape.closePath();
     var depth = Math.max(0.4, z1 - z0);
     var geo = new THREE.ExtrudeGeometry(shape, { depth: depth, bevelEnabled: false });
-    var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.05, roughness: 0.9 });
+    var mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.1, roughness: 0.8, envMapIntensity: 0.88 });
     var mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.position.z = z0;
     scene.add(mesh);
   }
@@ -660,8 +743,10 @@
     if (!isFinite(x) || !isFinite(y)) return;
     var mesh = new THREE.Mesh(
       new THREE.CylinderGeometry(6, 6, 2, 16),
-      new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.1, roughness: 0.75 })
+      new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.14, roughness: 0.68, envMapIntensity: 0.95 })
     );
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.position.copy(layoutPointToSceneGround(x, y, 1));
     scene.add(mesh);
   });
@@ -673,8 +758,10 @@
     if (!isFinite(x) || !isFinite(y)) return;
     var mesh = new THREE.Mesh(
       new THREE.SphereGeometry(3.5, 12, 12),
-      new THREE.MeshStandardMaterial({ color: 0xf43f5e, metalness: 0.1, roughness: 0.6 })
+      new THREE.MeshStandardMaterial({ color: 0xf43f5e, metalness: 0.14, roughness: 0.55, envMapIntensity: 0.95 })
     );
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.position.copy(layoutPointToSceneGround(x, y, 2.5));
     scene.add(mesh);
   });
@@ -692,7 +779,7 @@
       if (!a || !b) continue;
       segs.push(vecXY(a.x, a.y, zLift + 0.25), vecXY(b.x, b.y, zLift + 0.25));
     }
-    addSegments(segs, 0x94a3b8, 0.55);
+    addSegments(segs, 0x94a3b8, 0.58, Math.max(0.48, cs * 0.042));
   }
 
   var poses = payload.flightDrawPoses || [];
@@ -705,8 +792,10 @@
     var len = 38, span = 36, ht = 10;
     var mesh = new THREE.Mesh(
       new THREE.BoxGeometry(span, len, ht),
-      new THREE.MeshStandardMaterial({ color: 0xf472b6, metalness: 0.12, roughness: 0.65 })
+      new THREE.MeshStandardMaterial({ color: 0xf472b6, metalness: 0.18, roughness: 0.58, envMapIntensity: 1.0 })
     );
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     mesh.position.copy(layoutPointToSceneGround(p.x, p.y, ht * 0.5 + zLift + 0.5));
     mesh.rotation.z = heading;
     scene.add(mesh);
@@ -717,7 +806,7 @@
     if (!m || m.kind === 'text') return;
     if (m.kind === 'ruler') {
       var a = vecXY(m.x1, m.y1, zLift + 0.4), b = vecXY(m.x2, m.y2, zLift + 0.4);
-      addSegments([a, b], 0x94a3b8, 0.9);
+      addSegments([a, b], 0x94a3b8, 0.92, Math.max(0.52, cs * 0.046));
     }
     if (m.kind === 'island' && m.points && m.points.length > 2) {
       var segsI = [];
@@ -726,9 +815,39 @@
         if (!p0 || !p1) continue;
         segsI.push(vecXY(p0.x, p0.y, zLift + 0.35), vecXY(p1.x, p1.y, zLift + 0.35));
       }
-      if (segsI.length) addSegments(segsI, 0x0f172a, 0.85);
+      if (segsI.length) addSegments(segsI, 0x4a5566, 0.9, Math.max(0.48, cs * 0.042));
     }
   });
+  }
+
+  if (typeof THREE.RGBELoader !== 'undefined' && typeof THREE.PMREMGenerator !== 'undefined') {
+    var pmremHdr = new THREE.PMREMGenerator(renderer);
+    pmremHdr.compileEquirectangularShader();
+    var hdrUrl = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/qwantani_puresky_1k.hdr';
+    new THREE.RGBELoader().setDataType(THREE.FloatType).load(
+      hdrUrl,
+      function (hdrTexture) {
+        hdrTexture.mapping = THREE.EquirectangularReflectionMapping;
+        hdrTexture.encoding = THREE.LinearEncoding;
+        var pmremRt = pmremHdr.fromEquirectangular(hdrTexture);
+        scene.environment = pmremRt.texture;
+        scene.background = new THREE.Color(bgHex);
+        scene.traverse(function (o) {
+          if (!o.isMesh || !o.material) return;
+          var m = o.material;
+          if (m.isMeshStandardMaterial) {
+            m.envMap = pmremRt.texture;
+            m.needsUpdate = true;
+          }
+        });
+        ambientLight.intensity = 0.28;
+        hemiLight.intensity = 0.2;
+      },
+      undefined,
+      function (err) {
+        console.error('grid3d HDRI load failed', err);
+      }
+    );
   }
 
   function tick() {
