@@ -489,6 +489,8 @@
 
   var paletteTaxiwayConcrete = 0xa59f93;
   var paletteApronTaxiwayYellow = 0xffc800;
+  /** Taxiway centerline ribbon only; under yellow band (island outline keeps paletteCenterlineUnderlayGray). */
+  var paletteTaxiwayCenterlineUnderlayGray = 0x0a0a0a;
   var paletteCenterlineUnderlayGray = 0x3a3a3a;
   var paletteRunwayPaved = 0x7c796c;
   /** Matches designer 2D taxiway width stroke (Information.json canvas2d.runwayStroke). */
@@ -723,7 +725,7 @@
     if (pairs.length < 2) return;
     var yRibbon = Math.max(0.34, cs * 0.028);
     var kOutline = Math.max(0.12, cs * 0.006);
-    addSegments(pairs, paletteCenterlineUnderlayGray, 0.99, yRibbon + kOutline);
+    addSegments(pairs, paletteTaxiwayCenterlineUnderlayGray, 0.99, yRibbon + kOutline);
     addSegments(pairs, paletteApronTaxiwayYellow, 0.96, yRibbon);
   }
 
@@ -830,7 +832,7 @@
     shape.closePath();
     var h = building3dHeightM;
     var geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-    var mat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.14, roughness: 0.55, envMapIntensity: 1.0 });
+    var mat = new THREE.MeshStandardMaterial({ color: 0xf2f2f0, metalness: 0.06, roughness: 0.62, envMapIntensity: 0.88 });
     var mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true;
     mesh.receiveShadow = true;

@@ -16286,7 +16286,7 @@
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
       ctx.lineWidth = hair;
-      ctx.strokeStyle = '#3a3a3a';
+      ctx.strokeStyle = '#0a0a0a';
       ctx.stroke();
       ctx.lineWidth = 0.5;
       ctx.strokeStyle = yellowStroke;
