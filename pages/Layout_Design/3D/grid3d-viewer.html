@@ -59,7 +59,7 @@
       <circle class="veh-ico-stroke" cx="12" cy="12" r="7.5" />
     </svg>
   </button>
-  <div id="vehicle-hint" hidden>마우스: 시점 · 휠: 거리 · W+전진 시 Z축 회전 · S+후진 시 Z하강 · A/D·←→ 조향 · Esc 궤도</div>
+  <div id="vehicle-hint" hidden>마우스: 시점 · 휠: 거리 · ↑↓: 전후진 · ←→: 조향 · W: 고도 상승 · S: 고도 하강 · Esc 궤도</div>
   <script>
 (function () {
   var grid3dPayloadWatchdog = null;
@@ -167,7 +167,7 @@
   var chaseDistMax = 72;
   var moveSpeed = 52;
   var steerSpeed = 2.35;
-  var wKeySpinZ = 0.95;
+  var wKeyClimbZ = 22;
   var sKeyDescendZ = 22;
   var vehicleVelFwd = 0;
   var vehicleYawRate = 0;
@@ -347,6 +347,7 @@
 
   var zGround = 0;
   var zLift = 0.08;
+  var building3dHeightM = 25;
   var groundSurfaceZ = zGround;
   var gTiles = payload.layoutGroundTiles;
   var useTiles = !!(gTiles && gTiles.tiles && gTiles.tiles.length === 4);
@@ -607,15 +608,7 @@
   });
   }
 
-  function terminalHeightM(t) {
-    var floors = t.floors != null ? Math.max(1, parseInt(t.floors, 10) || 1) : 1;
-    var f2f = t.floorToFloor != null ? Number(t.floorToFloor) : 4;
-    if (!isFinite(f2f) || f2f < 0.5) f2f = 4;
-    if (t.floorHeight != null && isFinite(Number(t.floorHeight))) return Math.max(2, Number(t.floorHeight));
-    return Math.max(3, floors * f2f);
-  }
-
-  if (!useGroundTex) {
+  var terminalFootZ = useGroundTex ? (groundSurfaceZ + zLift) : zGround;
   (L.terminals || []).forEach(function (t) {
     var verts = t.vertices;
     if (!verts || verts.length < 3) return;
@@ -629,13 +622,13 @@
       shape.lineTo(Number(vx.x != null ? vx.x : vx[0]), layoutShapeY(vx.y != null ? vx.y : vx[1]));
     }
     shape.closePath();
-    var h = terminalHeightM(t);
+    var h = building3dHeightM;
     var geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
     var mat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.08, roughness: 0.82 });
     var mesh = new THREE.Mesh(geo, mat);
+    mesh.position.z = terminalFootZ;
     scene.add(mesh);
   });
-  }
 
   var fp = payload.enrichedFootprints || {};
   function addFootprintSlab(corners, z0, z1, color) {
@@ -744,24 +737,24 @@
     if (vehicleMode === 'orbit') {
       controls.update();
     } else if (vehicleRoot) {
-      var fwd = keysDown.ArrowUp || keysDown.KeyW ? 1 : 0;
-      if (keysDown.ArrowDown || keysDown.KeyS) fwd -= 1;
+      var fwd = keysDown.ArrowUp ? 1 : 0;
+      if (keysDown.ArrowDown) fwd -= 1;
       var steer = 0;
-      if (keysDown.ArrowRight || keysDown.KeyD) steer -= 1;
-      if (keysDown.ArrowLeft || keysDown.KeyA) steer += 1;
+      if (keysDown.ArrowRight) steer -= 1;
+      if (keysDown.ArrowLeft) steer += 1;
       var targetFwdSpeed = fwd * moveSpeed;
       vehicleVelFwd += (targetFwdSpeed - vehicleVelFwd) * Math.min(1, driveResponse * dt);
       var targetYawRate = steer * steerSpeed;
       vehicleYawRate += (targetYawRate - vehicleYawRate) * Math.min(1, steerResponse * dt);
       vehicleYaw += vehicleYawRate * dt;
-      if (keysDown.KeyW && vehicleVelFwd > 0.2) {
-        vehicleYaw += wKeySpinZ * dt;
-      }
       var fx = Math.cos(vehicleYaw);
       var fy = Math.sin(vehicleYaw);
       vehicleRoot.position.x += fx * vehicleVelFwd * dt;
       vehicleRoot.position.y += fy * vehicleVelFwd * dt;
-      if (keysDown.KeyS && vehicleVelFwd < -0.2) {
+      if (keysDown.KeyW) {
+        vehicleRoot.position.z += wKeyClimbZ * dt;
+      }
+      if (keysDown.KeyS) {
         vehicleRoot.position.z -= sKeyDescendZ * dt;
       }
       if (fwd > 0 && Math.abs(chaseCamOrbitYaw) > 0.012) {
