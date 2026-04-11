@@ -133,6 +133,34 @@
     if (ra) return 'rgb(' + ra[1] + ',' + ra[2] + ',' + ra[3] + ')';
     return s;
   }
+  const C2D_COLOR_SHADE_STEP_MUL = 0.88;
+  function c2dParseCssRgbTriplet(css) {
+    const s = String(css || '').trim();
+    let m = s.match(/^#([0-9a-f]{3})$/i);
+    if (m) {
+      const h = m[1];
+      return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)];
+    }
+    m = s.match(/^#([0-9a-f]{6})$/i);
+    if (m) {
+      const h = m[1];
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+    m = s.match(/^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+    return null;
+  }
+  function c2dCssColorLightenSteps(css, steps) {
+    const opaque = c2dCssColorToOpaque(css);
+    const t = c2dParseCssRgbTriplet(opaque);
+    const n = Number(steps);
+    if (!t || !(n > 0)) return opaque;
+    const f = Math.pow(1 / C2D_COLOR_SHADE_STEP_MUL, n);
+    const r = Math.max(0, Math.min(255, Math.round(t[0] * f)));
+    const g = Math.max(0, Math.min(255, Math.round(t[1] * f)));
+    const b = Math.max(0, Math.min(255, Math.round(t[2] * f)));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
   function c2dObjectSelectedGlowBlur() {
     const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
     return (isFinite(n) && n >= 0) ? n : 22;
@@ -17245,7 +17273,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const fillArea = c2dCssColorToOpaque(c2dRunwayStroke());
+    const fillArea = c2dCssColorLightenSteps(c2dRunwayStroke(), 1);
     (state.layoutMarkers || []).forEach(function(m) {
       if (!m || m.kind !== 'area') return;
       const pts = m.points;

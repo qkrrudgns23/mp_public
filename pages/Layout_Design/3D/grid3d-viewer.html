@@ -495,6 +495,16 @@
   var paletteRunwayPaved = 0x7b796d;
   /** Matches designer 2D taxiway width stroke (Information.json canvas2d.runwayStroke). */
   var paletteRunwayStroke = 0x6d6a61;
+  function paletteRgbLightenSteps(hex24, steps) {
+    var f = Math.pow(1 / 0.88, steps);
+    var r = (hex24 >> 16) & 255, g = (hex24 >> 8) & 255, b = hex24 & 255;
+    r = Math.max(0, Math.min(255, Math.round(r * f)));
+    g = Math.max(0, Math.min(255, Math.round(g * f)));
+    b = Math.max(0, Math.min(255, Math.round(b * f)));
+    return (r << 16) | (g << 8) | b;
+  }
+  /** Marker area fill: one lighten step vs runway stroke (designer.js c2dCssColorLightenSteps(..., 1)). */
+  var paletteMarkerAreaFill = paletteRgbLightenSteps(paletteRunwayStroke, 1);
   var markerIslandInnerRingColor = 0x2e2e2e;
   var markerIslandGrassColor = 0x454d36;
   var islandNormalStepM = 20;
@@ -776,7 +786,7 @@
     var depA = 0.22;
     var geoA = new THREE.ExtrudeGeometry(shA, { depth: depA, bevelEnabled: false });
     var matA = new THREE.MeshBasicMaterial({
-      color: paletteRunwayStroke,
+      color: paletteMarkerAreaFill,
       toneMapped: false,
       depthWrite: false,
       polygonOffset: true,
