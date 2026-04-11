@@ -43,8 +43,6 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
 </head>
 <body>
   <div id="loading-overlay" aria-busy="true" aria-live="polite">
@@ -56,18 +54,15 @@
   </div>
   <div id="hud">Layout 3D — <strong>Z = elevation</strong> · ground = scene XY. Drag orbit · wheel zoom · right-drag pan</div>
   <div id="err" style="display:none;"></div>
-  <button type="button" id="veh-spawn-fab" aria-label="자동차 시점" title="자동차 시점 (다시 누르면 궤도)">
+  <button type="button" id="veh-spawn-fab" aria-label="구체 추적 시점" title="구체 추적 (다시 누르면 궤도)">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path class="veh-ico-stroke" d="M3 12h2l1-3h12l1 3h2" />
-      <path class="veh-ico-stroke" d="M5 12v3h3v-3M16 12v3h3v-3" />
-      <path class="veh-ico-stroke" d="M7 9h10" />
-      <circle class="veh-ico-stroke" cx="7.5" cy="15" r="1.2" />
-      <circle class="veh-ico-stroke" cx="16.5" cy="15" r="1.2" />
+      <circle class="veh-ico-stroke" cx="12" cy="12" r="7.5" />
     </svg>
   </button>
-  <div id="vehicle-hint" hidden>마우스: 시점 · 휠: 거리 · W/S·↑↓ 전진·후진 · A/D·←→ 조향 · Esc 궤도</div>
+  <div id="vehicle-hint" hidden>마우스: 시점 · 휠: 거리 · W+전진 시 Z축 회전 · S+후진 시 Z하강 · A/D·←→ 조향 · Esc 궤도</div>
   <script>
 (function () {
+  var grid3dPayloadWatchdog = null;
   function setLoadingText(title, sub) {
     var t = document.getElementById('loading-title');
     var s = document.getElementById('loading-sub');
@@ -109,6 +104,11 @@
       return;
     }
     setLoadingText('3D 장면을 구성하는 중', '모델과 조명을 준비하고 있습니다…');
+    var errBanner = document.getElementById('err');
+    if (errBanner) {
+      errBanner.style.display = 'none';
+      errBanner.textContent = '';
+    }
     window.__GRID3D_STARTED__ = true;
 
   var L = payload.layout;
@@ -149,13 +149,6 @@
   controls.zoomSpeed = 4;
   controls.update();
 
-  var rawGrid3dAsset = typeof payload.grid3dAssetApiUrl === 'string' ? payload.grid3dAssetApiUrl.trim() : '';
-  var rawLayoutApi = typeof payload.layoutApiUrl === 'string' ? payload.layoutApiUrl.trim() : '';
-  var layoutApiBase = (rawGrid3dAsset || rawLayoutApi).replace(/\/$/, '');
-  function assetUrl(rel) {
-    if (!layoutApiBase || !rel) return '';
-    return layoutApiBase + '/api/grid3d-asset/' + String(rel).replace(/^\/+/, '');
-  }
   var clock = new THREE.Clock();
   var vehicleMode = 'orbit';
   var vehicleRoot = null;
@@ -174,6 +167,8 @@
   var chaseDistMax = 72;
   var moveSpeed = 52;
   var steerSpeed = 2.35;
+  var wKeySpinZ = 0.95;
+  var sKeyDescendZ = 22;
   var vehicleVelFwd = 0;
   var vehicleYawRate = 0;
   var driveResponse = 9;
@@ -187,18 +182,6 @@
   }
   function hideVehicleHint() {
     if (vehHint) vehHint.hidden = true;
-  }
-  function showVehicleLoadErr(msg) {
-    if (!vehHint) return;
-    vehHint.textContent = msg;
-    vehHint.classList.add('vehicle-hint-err');
-    vehHint.hidden = false;
-    window.clearTimeout(showVehicleLoadErr._t);
-    showVehicleLoadErr._t = window.setTimeout(function () {
-      vehHint.classList.remove('vehicle-hint-err');
-      vehHint.textContent = '마우스: 시점 · 휠: 거리 · W/S·↑↓ 전진·후진 · A/D·←→ 조향 · Esc 궤도';
-      if (vehicleMode === 'orbit') vehHint.hidden = true;
-    }, 8000);
   }
   function disposeMaterial(m) {
     if (!m) return;
@@ -252,12 +235,6 @@
     controls.update();
     syncVehicleFabUi();
   }
-  var loaderGltf = new THREE.GLTFLoader();
-  var dracoLoader = new THREE.DRACOLoader();
-  dracoLoader.setDecoderPath(
-    'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/gltf/'
-  );
-  loaderGltf.setDRACOLoader(dracoLoader);
   function placeVehicleOnGround(root) {
     root.updateMatrixWorld(true);
     var box = new THREE.Box3().setFromObject(root);
@@ -270,56 +247,39 @@
     var groundZ = groundSurfaceZ + zLift - box.min.z;
     root.position.set(centerX, centerY, groundZ);
   }
-  function spawnVehicleFromGltfUrl(url) {
-    if (!url) {
-      showVehicleLoadErr('차량 자산 서버 주소가 없습니다. Layout 페이지를 새로고침한 뒤 layout receiver(포트 8765)가 떠 있는지 확인하세요.');
-      return;
-    }
-    loaderGltf.load(
-      url,
-      function (gltf) {
-        clearVehicleMesh();
-        var model = gltf.scene;
-        var tiltFix = new THREE.Group();
-        tiltFix.rotation.x = -Math.PI / 2;
-        tiltFix.add(model);
-        var pivot = new THREE.Group();
-        pivot.add(tiltFix);
-        placeVehicleOnGround(pivot);
-        scene.add(pivot);
-        vehicleRoot = pivot;
-        vehicleYaw = 0;
-        vehicleMeshYaw = 0;
-        vehicleVelFwd = 0;
-        vehicleYawRate = 0;
-        chaseCamDistance = 36;
-        chaseCamPitch = 0.34;
-        chaseCamOrbitYaw = 0;
-        vehicleMode = 'car';
-        controls.enabled = false;
-        camera.fov = chaseViewFov;
-        camera.updateProjectionMatrix();
-        pivot.rotation.set(0, 0, vehicleMeshYaw);
-        updateChaseCamera();
-        showVehicleHint();
-        syncVehicleFabUi();
-        try {
-          renderer.domElement.requestPointerLock();
-        } catch (ePl) { /* ignore */ }
-      },
-      undefined,
-      function (err) {
-        console.error('GLTF load failed', err);
-        showVehicleLoadErr(
-          '자동차(vehicle_cybertruck.glb)를 불러오지 못했습니다. ' +
-            layoutApiBase +
-            ' 의 /api/grid3d-asset/ 가 열리는지, Blender로 cybertruck을 export 했는지 확인하세요.'
-        );
-      }
-    );
-  }
-  function onSpawnCar() {
-    spawnVehicleFromGltfUrl(assetUrl('vehicle_cybertruck.glb'));
+  function spawnVehicleOrb() {
+    clearVehicleMesh();
+    var geo = new THREE.SphereGeometry(1, 28, 22);
+    var mat = new THREE.MeshStandardMaterial({
+      color: 0x7c6af7,
+      metalness: 0.38,
+      roughness: 0.4,
+    });
+    var mesh = new THREE.Mesh(geo, mat);
+    mesh.name = 'vehicleOrb';
+    var pivot = new THREE.Group();
+    pivot.add(mesh);
+    placeVehicleOnGround(pivot);
+    scene.add(pivot);
+    vehicleRoot = pivot;
+    vehicleYaw = 0;
+    vehicleMeshYaw = 0;
+    vehicleVelFwd = 0;
+    vehicleYawRate = 0;
+    chaseCamDistance = 36;
+    chaseCamPitch = 0.34;
+    chaseCamOrbitYaw = 0;
+    vehicleMode = 'car';
+    controls.enabled = false;
+    camera.fov = chaseViewFov;
+    camera.updateProjectionMatrix();
+    pivot.rotation.set(0, 0, vehicleMeshYaw);
+    updateChaseCamera();
+    showVehicleHint();
+    syncVehicleFabUi();
+    try {
+      renderer.domElement.requestPointerLock();
+    } catch (ePl) { /* ignore */ }
   }
   function updateChaseCamera() {
     if (!vehicleRoot) return;
@@ -368,7 +328,7 @@
   var vehFab = document.getElementById('veh-spawn-fab');
   if (vehFab) {
     vehFab.addEventListener('click', function () {
-      if (vehicleMode === 'orbit' || !vehicleRoot) onSpawnCar();
+      if (vehicleMode === 'orbit' || !vehicleRoot) spawnVehicleOrb();
       else setOrbitCameraMode();
     });
   }
@@ -794,16 +754,28 @@
       var targetYawRate = steer * steerSpeed;
       vehicleYawRate += (targetYawRate - vehicleYawRate) * Math.min(1, steerResponse * dt);
       vehicleYaw += vehicleYawRate * dt;
+      if (keysDown.KeyW && vehicleVelFwd > 0.2) {
+        vehicleYaw += wKeySpinZ * dt;
+      }
       var fx = Math.cos(vehicleYaw);
       var fy = Math.sin(vehicleYaw);
       vehicleRoot.position.x += fx * vehicleVelFwd * dt;
       vehicleRoot.position.y += fy * vehicleVelFwd * dt;
+      if (keysDown.KeyS && vehicleVelFwd < -0.2) {
+        vehicleRoot.position.z -= sKeyDescendZ * dt;
+      }
       if (fwd > 0 && Math.abs(chaseCamOrbitYaw) > 0.012) {
         chaseCamOrbitYaw += (0 - chaseCamOrbitYaw) * Math.min(1, dt * 2.0);
       }
       var margin = 3;
       vehicleRoot.position.x = Math.max(margin, Math.min(maxX - margin, vehicleRoot.position.x));
       vehicleRoot.position.y = Math.max(margin, Math.min(maxY - margin, vehicleRoot.position.y));
+      vehicleRoot.updateMatrixWorld(true);
+      var vBox = new THREE.Box3().setFromObject(vehicleRoot);
+      var floorZ = groundSurfaceZ + zLift;
+      if (vBox.min.z < floorZ) {
+        vehicleRoot.position.z += floorZ - vBox.min.z;
+      }
       vehicleMeshYaw += (vehicleYaw - vehicleMeshYaw) * Math.min(1, meshYawSmooth * dt);
       vehicleRoot.rotation.set(0, 0, vehicleMeshYaw);
       updateChaseCamera();
@@ -845,6 +817,10 @@
   window.addEventListener('message', function onGrid3dViewerInit(ev) {
     if (!ev.data || ev.data.kind !== 'grid3dViewerInit') return;
     if (window.opener && ev.source !== window.opener) return;
+    if (grid3dPayloadWatchdog) {
+      clearTimeout(grid3dPayloadWatchdog);
+      grid3dPayloadWatchdog = null;
+    }
     window.removeEventListener('message', onGrid3dViewerInit);
     setLoadingText('3D 데이터 수신 완료', '장면을 초기화하는 중입니다…');
     try {
@@ -856,11 +832,12 @@
   });
   var hudWait = document.getElementById('hud');
   if (hudWait) hudWait.innerHTML = 'Layout 3D — 준비 중 (아래 안내 참고)';
-  setTimeout(function () {
+  grid3dPayloadWatchdog = setTimeout(function () {
+    grid3dPayloadWatchdog = null;
     if (!window.__GRID3D_STARTED__) {
       showErr('Missing layout payload. Open this window from the designer 3D button.');
     }
-  }, 15000);
+  }, 120000);
 })();
   </script>
 </body>
