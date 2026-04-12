@@ -1693,6 +1693,51 @@
             });
           }
         }
+        {
+          const ptTs = obj.pathType;
+          if (
+            ptTs === 'runway_exit' ||
+            ptTs === 'taxiway' ||
+            ptTs === 'apron_taxiway' ||
+            ptTs === 'runway_taxiway' ||
+            ptTs === 'general_queue_taxiway'
+          ) {
+            (state.tempStands || []).forEach(function(st) {
+              if (!st) return;
+              const corners = getRemoteStandCorners(st);
+              if (!corners || corners.length < 4) return;
+              for (let ei = 0; ei < 4; ei++) {
+                const c = corners[ei], d = corners[(ei + 1) % 4];
+                const isec = segmentSegmentIntersection(a, b, c, d);
+                if (isec) {
+                  const pr = projectOnSegment(a, b, isec.p);
+                  if (pr.t >= 0 && pr.t <= 1) junctions.push({ tAlong: seg + pr.t, p: pr.p });
+                } else {
+                  const ov = collinearSegmentOverlapOnAB(a, b, c, d);
+                  if (ov) {
+                    const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+                    const dx = bx - ax, dy = by - ay;
+                    const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
+                    const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
+                    const pr0 = projectOnSegment(a, b, p0);
+                    junctions.push({ tAlong: seg + pr0.t, p: pr0.p });
+                    if (dist2(p0, p1ov) > SPLIT_TOL_D2) {
+                      const pr1 = projectOnSegment(a, b, p1ov);
+                      junctions.push({ tAlong: seg + pr1.t, p: pr1.p });
+                    }
+                  } else {
+                    [c, d].forEach(function(q) {
+                      if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                        const prq = projectOnSegment(a, b, q);
+                        if (prq.t >= 0 && prq.t <= 1) junctions.push({ tAlong: seg + prq.t, p: prq.p });
+                      }
+                    });
+                  }
+                }
+              }
+            });
+          }
+        }
       }
       if (obj.pathType === 'runway') {
         const ldm = getEffectiveRunwayLineupDistM(obj);
@@ -2326,9 +2371,19 @@
     ctx.restore();
   }
 
-  const PRO_SIM_PHASE_Z = { Landing: 0, Arr_taxi: 1, Dep_taxi: 2, Holding_lineup: 3, Lineup_departure: 4 };
+  const PRO_SIM_PHASE_Z = {
+    Landing: 0,
+    Arr_taxi: 1,
+    Arr_taxi_occupied: 1,
+    Dep_taxi: 2,
+    Holding_lineup: 3,
+    Lineup_departure: 4,
+  };
   function proSimPhaseStrokeStyle(phaseRaw) {
     const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : 'Landing';
+    if (p === 'Arr_taxi_occupied') {
+      return { wMul: 1.72, stroke: '#a855f7' };
+    }
     if (p === 'Arr_taxi') {
       return { wMul: 1.72, stroke: '#3b82f6' };
     }
