@@ -531,6 +531,10 @@
   const objectInfoEl = document.getElementById('object-info');
   const objectListEl = document.getElementById('object-list');
   const flightTooltip = document.getElementById('flight-tooltip');
+  let _layoutReadoutLastCellKey = '';
+  let _layoutReadoutLastPixelStr = '';
+  let _layoutTooltipRafId = 0;
+  let _layoutTooltipPending = null;
   const settingModeSelect = document.getElementById('settingMode');
   const layoutModeTabs = document.getElementById('layoutModeTabs');
   const panel = document.getElementById('right-panel');
@@ -902,7 +906,7 @@
   function redrawLayoutAfterEdit() {
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     if (typeof draw === 'function') draw();
-    if (typeof scene3d !== 'undefined' && scene3d && typeof update3DScene === 'function') update3DScene();
+    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
   }
   function setGlobalUpdateProgressUi(visible, label, pct) {
     const ov = document.getElementById('globalUpdateOverlay');
@@ -1717,7 +1721,7 @@
     if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
     if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
     if (typeof draw === 'function') draw();
-    if (typeof scene3d !== 'undefined' && scene3d && typeof update3DScene === 'function') update3DScene();
+    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
     const playDockBtn = document.getElementById('btnShowPlayDock');
     if (playDockBtn) playDockBtn.disabled = !state.hasSimulationResult;
   }
@@ -5474,7 +5478,7 @@
       updateObjectInfo();
       renderObjectList();
       draw();
-      if (typeof update3DScene === 'function') update3DScene();
+      update3DSceneWhenVisible();
       if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     });
   }
@@ -5497,7 +5501,7 @@
     if (totalInput) totalInput.value = totalH;
     draw();
     updateObjectInfo();
-    if (typeof update3DScene === 'function') update3DScene();
+    update3DSceneWhenVisible();
   }
   document.getElementById('terminalFloors').addEventListener('change', recomputeTerminalFloorHeight);
   document.getElementById('terminalFloorToFloor').addEventListener('change', recomputeTerminalFloorHeight);
@@ -5533,7 +5537,7 @@
       updateObjectInfo();
       renderObjectList();
       draw();
-      if (typeof update3DScene === 'function') update3DScene();
+      update3DSceneWhenVisible();
     }
   });
   const standCategoryModeEl = document.getElementById('standCategoryMode');
@@ -5560,7 +5564,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5575,7 +5579,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5592,7 +5596,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5625,7 +5629,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5656,7 +5660,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5682,7 +5686,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5738,7 +5742,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5751,7 +5755,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5777,7 +5781,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5885,7 +5889,7 @@
       this.value = tw.width;
       updateObjectInfo();
       draw();
-      if (scene3d) update3DScene();
+      update3DSceneWhenVisible();
     }
   });
   const avgVelInputEl = document.getElementById('taxiwayAvgMoveVelocity');
@@ -5902,7 +5906,7 @@
       updateObjectInfo();
       renderObjectList();
       draw();
-      if (typeof update3DScene === 'function') update3DScene();
+      update3DSceneWhenVisible();
     }
   });
   document.getElementById('taxiwayMaxExitVel').addEventListener('change', function() {
@@ -5921,7 +5925,7 @@
       updateObjectInfo();
       renderObjectList();
       draw();
-      if (scene3d) update3DScene();
+      update3DSceneWhenVisible();
     }
   });
   const minExitEl = document.getElementById('taxiwayMinExitVel');
@@ -5941,7 +5945,7 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -5979,7 +5983,7 @@
       updateObjectInfo();
       if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
       draw();
-      if (typeof update3DScene === 'function') update3DScene();
+      update3DSceneWhenVisible();
       if (shouldResampleRet) triggerArrivalConfigResampleFromLayoutEdit();
     }
   });
@@ -5996,7 +6000,7 @@
         updateObjectInfo();
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         draw();
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
     });
   }
@@ -13154,7 +13158,7 @@
         if (slider) slider.value = String(state.simTimeSec);
         updateFlightSimPlaybackLabelsDom();
         try { draw(); } catch(e) {}
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       }
       window.requestAnimationFrame(tick);
     }
@@ -14013,7 +14017,7 @@
         ensureSimLoop._playKick = true;
         ensureSimLoop();
         try { draw(); } catch(e) {}
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       });
     }
     if (pauseBtn) {
@@ -14030,7 +14034,7 @@
         if (simSlider) simSlider.value = state.simTimeSec;
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
         try { draw(); } catch(e) {}
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       });
     }
     let simSliderPointerActive = false;
@@ -14041,7 +14045,7 @@
       if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
       if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
       try { draw(); } catch(e) {}
-      if (typeof update3DScene === 'function') update3DScene();
+      update3DSceneWhenVisible();
     }
     if (simSlider) {
       simSlider.addEventListener('pointerdown', function(e) {
@@ -14072,7 +14076,7 @@
           if (state.simSliderScrubbing) return;
           if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
           try { draw(); } catch(e) {}
-          if (typeof update3DScene === 'function') update3DScene();
+          update3DSceneWhenVisible();
         }
       });
     }
@@ -14258,7 +14262,7 @@
               reset2DView();
               syncPanelFromState();
               if (typeof draw === 'function') draw();
-              if (typeof update3DScene === 'function') update3DScene();
+              update3DSceneWhenVisible();
               if (typeof updateLayoutNameBar === 'function') updateLayoutNameBar(name);
               if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
               if (layoutMsgEl) { layoutMsgEl.textContent = 'Loaded \"' + name + '\"'; layoutMsgEl.style.color = '#9ca3af'; }
@@ -18080,6 +18084,63 @@
     if (ev.button !== 0) return;
     clearCanvasPanGesture();
   }, true);
+  function flushLayoutTooltipRaf() {
+    if (_layoutTooltipRafId) {
+      cancelAnimationFrame(_layoutTooltipRafId);
+      _layoutTooltipRafId = 0;
+    }
+    _layoutTooltipPending = null;
+  }
+  function scheduleLayoutTooltipRaf(ev, wx, wy) {
+    if (!flightTooltip || state.isPanning) return;
+    _layoutTooltipPending = { ev: ev, wx: wx, wy: wy };
+    if (_layoutTooltipRafId) return;
+    _layoutTooltipRafId = requestAnimationFrame(function() {
+      _layoutTooltipRafId = 0;
+      const pack = _layoutTooltipPending;
+      _layoutTooltipPending = null;
+      if (!flightTooltip || !pack || !pack.ev) return;
+      if (state.isPanning) {
+        flightTooltip.style.display = 'none';
+        return;
+      }
+      const ev2 = pack.ev, wxx = pack.wx, wyy = pack.wy;
+      let tipDone = false;
+      if (state.hasSimulationResult && state.globalUpdateFresh) {
+        let bestFlight = null;
+        let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
+        const tSec = state.simTimeSec;
+        if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
+        state.flights.forEach(f => {
+          const pose = getFlightPoseAtTimeForDraw(f, tSec);
+          if (!pose || f.reg == null || !String(f.reg).trim()) return;
+          const dx = pose.x - wxx;
+          const dy = pose.y - wyy;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) { bestD2 = d2; bestFlight = f; }
+        });
+        if (bestFlight && bestFlight.reg) {
+          flightTooltip.style.display = 'block';
+          flightTooltip.textContent = String(bestFlight.reg).trim();
+          flightTooltip.style.left = (ev2.clientX + 12) + 'px';
+          flightTooltip.style.top = (ev2.clientY + 12) + 'px';
+          tipDone = true;
+        }
+      }
+      if (!tipDone) {
+        const hit = hitTest(wxx, wyy);
+        if (hit && hit.obj) {
+          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'tempStand' ? 'Temp Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type === 'layoutMarker' ? 'Marker' : hit.type);
+          flightTooltip.style.display = 'block';
+          flightTooltip.textContent = name;
+          flightTooltip.style.left = (ev2.clientX + 12) + 'px';
+          flightTooltip.style.top = (ev2.clientY + 12) + 'px';
+        } else {
+          flightTooltip.style.display = 'none';
+        }
+      }
+    });
+  }
   container.addEventListener('mousemove', function(ev) {
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
@@ -18087,9 +18148,15 @@
     const snappedPt = worldPointToCellPoint(wx, wy, !!ev.shiftKey);
     const snappedPx = cellToPixel(snappedPt.col, snappedPt.row);
     const [col, row] = pixelToCell(wx, wy);
-    if (coordEl) coordEl.textContent = 'cell: (' + col + ', ' + row + ')';
-    if (cursorPixelReadoutEl) {
-      cursorPixelReadoutEl.textContent = 'x: ' + wx.toFixed(1) + '  y: ' + wy.toFixed(1);
+    const cellKey = String(col) + ',' + String(row);
+    if (cellKey !== _layoutReadoutLastCellKey) {
+      _layoutReadoutLastCellKey = cellKey;
+      if (coordEl) coordEl.textContent = 'cell: (' + col + ', ' + row + ')';
+    }
+    const pixelStr = 'x: ' + wx.toFixed(1) + '  y: ' + wy.toFixed(1);
+    if (pixelStr !== _layoutReadoutLastPixelStr) {
+      _layoutReadoutLastPixelStr = pixelStr;
+      if (cursorPixelReadoutEl) cursorPixelReadoutEl.textContent = pixelStr;
     }
     const prev = state.hoverCell;
     state.hoverCell = { col, row };
@@ -18218,7 +18285,7 @@
         v.col = snappedPt.col;
         v.row = snappedPt.row;
         scheduleDraw(); drewThisMove = true;
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
       }
       return;
     }
@@ -18232,7 +18299,7 @@
           const angleInput = document.getElementById('standAngle');
           if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
           scheduleDraw(); drewThisMove = true;
-          if (scene3d) update3DScene();
+          update3DSceneWhenVisible();
         }
       } else if (state.dragStandRotation.type === 'remote') {
         const st = state.remoteStands.find(function(item) { return item.id === state.dragStandRotation.id; });
@@ -18243,7 +18310,7 @@
           const angleInput = document.getElementById('remoteAngle');
           if (angleInput) angleInput.value = String(Math.round(nextDeg));
           scheduleDraw(); drewThisMove = true;
-          if (scene3d) update3DScene();
+          update3DSceneWhenVisible();
         }
       } else if (state.dragStandRotation.type === 'tempStand') {
         const st = (state.tempStands || []).find(function(item) { return item.id === state.dragStandRotation.id; });
@@ -18254,7 +18321,7 @@
           const angleInput = document.getElementById('tempStandAngle');
           if (angleInput) angleInput.value = String(Math.round(nextDeg));
           scheduleDraw(); drewThisMove = true;
-          if (scene3d) update3DScene();
+          update3DSceneWhenVisible();
         }
       }
       return;
@@ -18274,7 +18341,7 @@
           pt.y = snappedPx[1];
         }
         scheduleDraw(); drewThisMove = true;
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
       }
       return;
     }
@@ -18284,7 +18351,7 @@
         pbb.apronSiteX = snappedPx[0];
         pbb.apronSiteY = snappedPx[1];
         scheduleDraw(); drewThisMove = true;
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
       }
       return;
     }
@@ -18296,7 +18363,7 @@
         st.col = snappedPt.col;
         st.row = snappedPt.row;
         scheduleDraw(); drewThisMove = true;
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
       }
       return;
     }
@@ -18311,7 +18378,7 @@
           lk.midVertices[mi].col = snappedPt.col;
           lk.midVertices[mi].row = snappedPt.row;
           scheduleDraw(); drewThisMove = true;
-          if (scene3d) update3DScene();
+          update3DSceneWhenVisible();
         }
       } else if (state.dragApronLinkVertex.kind === 'taxiway') {
         const snap = snapWorldPointToTaxiwayPolyline(wx, wy, lk.taxiwayId);
@@ -18319,7 +18386,7 @@
           lk.tx = snap[0];
           lk.ty = snap[1];
           scheduleDraw(); drewThisMove = true;
-          if (scene3d) update3DScene();
+          update3DSceneWhenVisible();
         }
       }
       return;
@@ -18387,12 +18454,13 @@
     const mode = settingModeSelect.value;
     if (!state.isPanning && !state.dragVertex && mode === 'holdingPoint' && state.holdingPointDrawing) {
       const snap = snapHoldingPointOnAllowedTaxiways(wx, wy);
-      if (snap) {
-        state.previewHoldingPoint = { x: snap.x, y: snap.y, pathType: snap.pathType };
-      } else {
-        state.previewHoldingPoint = null;
+      const nextHp = snap ? { x: snap.x, y: snap.y, pathType: snap.pathType } : null;
+      const prevHp = state.previewHoldingPoint;
+      const hpSame = (nextHp == null && prevHp == null) || (nextHp && prevHp && nextHp.x === prevHp.x && nextHp.y === prevHp.y && nextHp.pathType === prevHp.pathType);
+      if (!hpSame) {
+        state.previewHoldingPoint = nextHp;
+        scheduleDraw(); drewThisMove = true;
       }
-      scheduleDraw(); drewThisMove = true;
     } else if (!state.isPanning && !state.dragVertex && mode === 'remote' && state.remoteDrawing) {
       const category = document.getElementById('remoteCategory').value || 'C';
       const angleDeg = normalizeAngleDeg(document.getElementById('remoteAngle') ? document.getElementById('remoteAngle').value : 0);
@@ -18418,13 +18486,20 @@
       }
       const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
       if (candidate.x < 0 || candidate.y < 0 || candidate.x > maxX || candidate.y > maxY) overlap = true;
-      state.previewRemote = { x: candidate.x, y: candidate.y, overlap };
-      scheduleDraw(); drewThisMove = true;
+      const nextRem = { x: candidate.x, y: candidate.y, overlap };
+      const prevRem = state.previewRemote;
+      const remSame = prevRem && prevRem.x === nextRem.x && prevRem.y === nextRem.y && !!prevRem.overlap === !!nextRem.overlap;
+      if (!remSame) {
+        state.previewRemote = nextRem;
+        scheduleDraw(); drewThisMove = true;
+      }
     } else if (!state.isPanning && !state.dragVertex && mode === 'tempStand' && state.tempStandDrawing) {
       const snap = snapTempStandOnTaxiwayCenterlines(wx, wy);
       if (!snap) {
-        state.previewTempStand = null;
-        scheduleDraw(); drewThisMove = true;
+        if (state.previewTempStand != null) {
+          state.previewTempStand = null;
+          scheduleDraw(); drewThisMove = true;
+        }
       } else {
         const category = document.getElementById('tempStandCategory') ? document.getElementById('tempStandCategory').value || 'C' : 'C';
         const angleDeg = normalizeAngleDeg(document.getElementById('tempStandAngle') ? document.getElementById('tempStandAngle').value : 0);
@@ -18450,8 +18525,13 @@
         }
         const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
         if (candidate.x < 0 || candidate.y < 0 || candidate.x > maxX || candidate.y > maxY) overlap = true;
-        state.previewTempStand = { x: candidate.x, y: candidate.y, overlap };
-        scheduleDraw(); drewThisMove = true;
+        const nextTs = { x: candidate.x, y: candidate.y, overlap };
+        const prevTs = state.previewTempStand;
+        const tsSame = prevTs && prevTs.x === nextTs.x && prevTs.y === nextTs.y && !!prevTs.overlap === !!nextTs.overlap;
+        if (!tsSame) {
+          state.previewTempStand = nextTs;
+          scheduleDraw(); drewThisMove = true;
+        }
       }
     } else if (!state.isPanning && !state.dragVertex && mode === 'pbb' && state.pbbDrawing) {
       let bestEdge = null, bestD2 = Infinity;
@@ -18484,8 +18564,13 @@
         const px2 = ex + nx * lenPx, py2 = ey + ny * lenPx;
         const preview = { x1: ex, y1: ey, x2: px2, y2: py2, category };
         const overlap = pbbStandOverlapsExisting(preview);
-        state.previewPbb = { x1: ex, y1: ey, x2: px2, y2: py2, category: preview.category, overlap };
-        scheduleDraw(); drewThisMove = true;
+        const nextPbb = { x1: ex, y1: ey, x2: px2, y2: py2, category: preview.category, overlap };
+        const prevPbb = state.previewPbb;
+        const pbbSame = prevPbb && prevPbb.x1 === nextPbb.x1 && prevPbb.y1 === nextPbb.y1 && prevPbb.x2 === nextPbb.x2 && prevPbb.y2 === nextPbb.y2 && String(prevPbb.category || '') === String(nextPbb.category || '') && !!prevPbb.overlap === !!nextPbb.overlap;
+        if (!pbbSame) {
+          state.previewPbb = nextPbb;
+          scheduleDraw(); drewThisMove = true;
+        }
       } else {
         if (state.previewPbb) { state.previewPbb = null; scheduleDraw(); drewThisMove = true; }
       }
@@ -18497,45 +18582,14 @@
       if (state.previewHoldingPoint) { state.previewHoldingPoint = null; clearedPreview = true; }
       if (clearedPreview) { scheduleDraw(); drewThisMove = true; }
     }
-    if (flightTooltip && !state.isPanning) {
-      let tipDone = false;
-      if (state.hasSimulationResult && state.globalUpdateFresh) {
-        let bestFlight = null;
-        let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
-        const tSec = state.simTimeSec;
-        if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
-        state.flights.forEach(f => {
-          const pose = getFlightPoseAtTimeForDraw(f, tSec);
-          if (!pose || f.reg == null || !String(f.reg).trim()) return;
-          const dx = pose.x - wx;
-          const dy = pose.y - wy;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < bestD2) { bestD2 = d2; bestFlight = f; }
-        });
-        if (bestFlight && bestFlight.reg) {
-          flightTooltip.style.display = 'block';
-          flightTooltip.textContent = String(bestFlight.reg).trim();
-          flightTooltip.style.left = (ev.clientX + 12) + 'px';
-          flightTooltip.style.top = (ev.clientY + 12) + 'px';
-          tipDone = true;
-        }
-      }
-      if (!tipDone) {
-        const hit = hitTest(wx, wy);
-        if (hit && hit.obj) {
-          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'tempStand' ? 'Temp Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type === 'layoutMarker' ? 'Marker' : hit.type);
-          flightTooltip.style.display = 'block';
-          flightTooltip.textContent = name;
-          flightTooltip.style.left = (ev.clientX + 12) + 'px';
-          flightTooltip.style.top = (ev.clientY + 12) + 'px';
-        } else {
-          flightTooltip.style.display = 'none';
-        }
-      }
-    }
+    scheduleLayoutTooltipRaf(ev, wx, wy);
     if (hoverChanged && !drewThisMove) { scheduleDraw(); drewThisMove = true; }
   });
   container.addEventListener('mouseleave', function() {
+    flushLayoutTooltipRaf();
+    if (flightTooltip) flightTooltip.style.display = 'none';
+    _layoutReadoutLastCellKey = '';
+    _layoutReadoutLastPixelStr = '';
     if (cursorPixelReadoutEl) cursorPixelReadoutEl.textContent = '—';
     state.dragStart = null;
     state.isPanning = false;
@@ -18632,7 +18686,7 @@
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else {
         if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
         draw();
       }
       return;
@@ -18646,7 +18700,7 @@
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else {
         if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
         draw();
       }
       return;
@@ -18658,7 +18712,7 @@
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else {
         if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
         draw();
       }
       return;
@@ -18675,7 +18729,7 @@
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else {
         if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
       }
       return;
     }
@@ -18685,7 +18739,7 @@
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else {
         if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
       }
       return;
     }
@@ -18695,7 +18749,7 @@
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else {
         if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-        if (scene3d) update3DScene();
+        update3DSceneWhenVisible();
         draw();
       }
       return;
@@ -18805,7 +18859,7 @@
                   if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
                   else {
                     if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-                    if (scene3d) update3DScene();
+                    update3DSceneWhenVisible();
                   }
                 }
               }
@@ -18959,7 +19013,7 @@
         if (view3dContainer.classList.contains('active')) reset3DView();
         else reset2DView();
         try { draw(); } catch(e) {}
-        if (typeof update3DScene === 'function') update3DScene();
+        update3DSceneWhenVisible();
       } catch (e) { console.error('Fit button error:', e); }
     });
   }
@@ -19196,6 +19250,12 @@
     if (!grid3DMapper) grid3DMapper = new Grid3DMapper(GRID_COLS, GRID_ROWS, CELL_SIZE);
   }
 
+  function update3DSceneWhenVisible() {
+    if (typeof update3DScene !== 'function') return;
+    if (!view3dContainer || !view3dContainer.classList.contains('active')) return;
+    update3DScene();
+  }
+
   function animate3D() {
     if (!renderer3d || !view3dContainer.classList.contains('active')) return;
     requestAnimationFrame(animate3D);
@@ -19213,7 +19273,7 @@
     state.scale = Math.max(CANVAS_MIN_ZOOM, Math.min(CANVAS_MAX_ZOOM, state.scale));
     state.panX = mx - wx * state.scale;
     state.panY = my - wy * state.scale;
-    try { draw(); } catch(e) {}
+    scheduleDraw();
   }, { passive: false });
 
   window.addEventListener('resize', function() {
@@ -19231,6 +19291,6 @@
   reset2DView();
   syncPanelFromState();
   if (typeof draw === 'function') draw();
-  if (typeof update3DScene === 'function') update3DScene();
+  update3DSceneWhenVisible();
   if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Initial load');
 })();
