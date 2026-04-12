@@ -529,8 +529,8 @@
   }
   /** Thick taxiway/runway path fill: ~1% darker than paletteRunwayPaved (area marker excluded). */
   var paletteRunwayPavedWidth = paletteRgbChannelScale(paletteRunwayPaved, 0.99);
-  /** Marker area fill: one lighten step vs runway stroke (designer.js c2dCssColorLightenSteps(..., 1)). */
-  var paletteMarkerAreaFill = paletteRgbLightenSteps(paletteRunwayStroke, 1);
+  /** Marker area fill: two lighten steps vs runway stroke (designer.js c2dCssColorLightenSteps(..., 2)). */
+  var paletteMarkerAreaFill = paletteRgbLightenSteps(paletteRunwayStroke, 2);
   var markerIslandInnerRingColor = 0x2e2e2e;
   var markerIslandGrassColor = 0x454d36;
   var islandNormalStepM = 20;

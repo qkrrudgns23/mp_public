@@ -100,31 +100,55 @@
     state.taxiways.forEach(tw => {
       const g = taxiwayDrawContext(tw);
       if (!g || tw.vertices.length < 2) return;
-      const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, showRoadWidth = g.showRoadWidth, pathLineCap = g.pathLineCap;
+      const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, sel = g.sel, showRoadWidth = g.showRoadWidth, pathLineCap = g.pathLineCap;
       if (showRoadWidth) {
-        ctx.lineWidth = isRunwayPath ? 1.5 : 0.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke())));
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         if (sel) {
+          ctx.lineWidth = isRunwayPath ? 1.5 : 0.5;
+          ctx.strokeStyle = c2dObjectSelectedStroke();
           ctx.save();
           ctx.shadowColor = c2dObjectSelectedGlow();
           ctx.shadowBlur = c2dObjectSelectedGlowBlur();
           ctx.stroke();
           ctx.restore();
-        } else ctx.stroke();
+        } else if (isRunwayPath) {
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = '#f5930b';
+          ctx.stroke();
+        } else {
+          ctx.lineJoin = 'round';
+          ctx.lineCap = 'round';
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = '#0a0a0a';
+          ctx.stroke();
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke();
+          ctx.stroke();
+        }
       } else if (!isRunwayPath) {
-        ctx.lineWidth = 0.5;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
         ctx.beginPath();
         for (let i = 0; i < tw.vertices.length; i++) {
           const [x, y] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
           if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
-        ctx.stroke();
+        if (sel) {
+          ctx.lineWidth = 0.5;
+          ctx.strokeStyle = c2dObjectSelectedStroke();
+          ctx.stroke();
+        } else {
+          ctx.lineJoin = 'round';
+          ctx.lineCap = 'round';
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = '#0a0a0a';
+          ctx.stroke();
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke();
+          ctx.stroke();
+        }
       } else {
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#f5930b';
@@ -147,7 +171,7 @@
     state.taxiways.forEach(tw => {
       const g = taxiwayDrawContext(tw);
       if (!g) return;
-      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel;
+      const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, width = g.width, sel = g.sel;
       const dir = getTaxiwayDirection(tw);
       if (dir !== 'both' && tw.vertices.length >= 2) {
         const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
@@ -155,7 +179,7 @@
         const arrowSpacing = Math.max(22, Math.min(42, totalLen / 10));
         const numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
         const arrLen = CELL_SIZE * 0.54;
-        ctx.fillStyle = isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : (isApronTaxiwayPath ? '#4ade80' : c2dTaxiwayCenterlineStroke()));
+        ctx.fillStyle = isRunwayPath ? '#f5930b' : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
         for (let k = 1; k <= numArrows; k++) {
           const targetDist = totalLen * (k / (numArrows + 1));
           let acc = 0;
@@ -368,36 +392,22 @@
     });
     ctx.setLineDash([]);
     if (state.apronLinkTemp) {
-      ctx.fillStyle = '#22c55e';
       const t = state.apronLinkTemp;
-      const draft = [];
+      const ptsPx = [];
       if (t.kind === 'pbb' || t.kind === 'remote') {
         const st = findStandById(t.standId);
-        if (st) {
-          draft.push(getStandConnectionPx(st));
-        }
+        if (st) ptsPx.push(getStandApronTaxiwayAttachWorldPx(st));
       } else if (t.kind === 'taxiway') {
-        draft.push([t.x, t.y]);
+        ptsPx.push([t.x, t.y]);
       }
       (state.apronLinkMidpoints || []).forEach(function(c) {
-        draft.push(cellToPixel(c.col, c.row));
+        if (c && isFinite(Number(c.x)) && isFinite(Number(c.y))) ptsPx.push([Number(c.x), Number(c.y)]);
+        else ptsPx.push(cellToPixel(Number(c.col), Number(c.row)));
       });
-      if (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2) draft.push(state.apronLinkPointerWorld);
-      if (draft.length >= 1) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(34, 197, 94, 0.78)';
-        ctx.setLineDash([4, 6]);
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(draft[0][0], draft[0][1]);
-        for (let di = 1; di < draft.length; di++) ctx.lineTo(draft[di][0], draft[di][1]);
-        if (draft.length >= 2) ctx.stroke();
-        ctx.restore();
-        draft.forEach(function(pt) {
-          ctx.beginPath();
-          ctx.arc(pt[0], pt[1], CELL_SIZE * 0.2 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI*2);
-          ctx.fill();
-        });
+      const hoverApron = (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2) ? state.apronLinkPointerWorld : null;
+      if (ptsPx.length >= 1) {
+        strokeLayoutPathDraftPolyline(ctx, ptsPx, hoverApron);
+        drawLayoutPathDraftVertexDots(ctx, ptsPx, hoverApron);
       }
     }
     ctx.restore();
@@ -1408,7 +1418,8 @@
           }
           draw();
         } else if (state.apronLinkTemp) {
-          const [col, row] = pixelToCell(wx, wy);
+          const ptCell = worldPointToCellPoint(wx, wy, !!ev.shiftKey);
+          const col = ptCell.col, row = ptCell.row;
           if (col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {
             const last = state.apronLinkMidpoints[state.apronLinkMidpoints.length - 1];
             if (!last || last.col !== col || last.row !== row) {

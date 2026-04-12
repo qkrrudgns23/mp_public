@@ -4547,7 +4547,11 @@
     if (sel.type === 'apronLink') {
       const lk = sel.obj;
       const mids = (Array.isArray(lk.midVertices) ? lk.midVertices.slice() : []);
-      const poly = [getApronLinkStandEndPx(lk)].concat(mids.map(function(v) { return cellToPixel(v.col, v.row); })).concat([[Number(lk.tx), Number(lk.ty)]]);
+      const midsPx = mids.map(function(v) {
+        if (v && isFinite(Number(v.x)) && isFinite(Number(v.y))) return [Number(v.x), Number(v.y)];
+        return cellToPixel(Number(v.col), Number(v.row));
+      });
+      const poly = [getApronLinkStandEndPx(lk)].concat(midsPx).concat([[Number(lk.tx), Number(lk.ty)]]);
       const hit = findInsertSegment(poly, false, wx, wy);
       if (!hit) return false;
       const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
@@ -16321,17 +16325,13 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    function layoutCenterlineHairlineLineWidth() {
-      return Math.max(1, 1 / Math.max(state.scale, 0.08));
-    }
     function strokeTwCenterlineBlackThenYellow(yellowStroke) {
-      const hair = layoutCenterlineHairlineLineWidth();
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.lineWidth = hair;
+      ctx.lineWidth = 1.5;
       ctx.strokeStyle = '#0a0a0a';
       ctx.stroke();
-      ctx.lineWidth = 0.5;
+      ctx.lineWidth = 1;
       ctx.strokeStyle = yellowStroke;
       ctx.stroke();
     }
@@ -16703,42 +16703,21 @@
     ctx.setLineDash([]);
     if (state.apronLinkTemp) {
       const t = state.apronLinkTemp;
-      const draft = [];
+      const ptsPx = [];
       if (t.kind === 'pbb' || t.kind === 'remote') {
         const st = findStandById(t.standId);
-        if (st) {
-          draft.push(getStandApronTaxiwayAttachWorldPx(st));
-        }
+        if (st) ptsPx.push(getStandApronTaxiwayAttachWorldPx(st));
       } else if (t.kind === 'taxiway') {
-        draft.push([t.x, t.y]);
+        ptsPx.push([t.x, t.y]);
       }
       (state.apronLinkMidpoints || []).forEach(function(c) {
-        draft.push(cellToPixel(c.col, c.row));
+        if (c && isFinite(Number(c.x)) && isFinite(Number(c.y))) ptsPx.push([Number(c.x), Number(c.y)]);
+        else ptsPx.push(cellToPixel(Number(c.col), Number(c.row)));
       });
-      if (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2) draft.push(state.apronLinkPointerWorld);
-      if (draft.length >= 1) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(34, 197, 94, 0.78)';
-        ctx.lineWidth = Math.max(1, 1.3 / Math.max(state.scale, 0.1));
-        ctx.setLineDash([4, 6]);
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(draft[0][0], draft[0][1]);
-        for (let di = 1; di < draft.length; di++) ctx.lineTo(draft[di][0], draft[di][1]);
-        if (draft.length >= 2) ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-        const dotR = Math.max(3.5 / Math.max(state.scale, 0.08), CELL_SIZE * 0.11);
-        ctx.fillStyle = '#22c55e';
-        ctx.strokeStyle = 'rgba(15,23,42,0.95)';
-        ctx.lineWidth = Math.max(1, 1.35 / Math.max(state.scale, 0.08));
-        draft.forEach(function(pt) {
-          ctx.beginPath();
-          ctx.arc(pt[0], pt[1], dotR, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        });
+      const hoverApron = (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2) ? state.apronLinkPointerWorld : null;
+      if (ptsPx.length >= 1) {
+        strokeLayoutPathDraftPolyline(ctx, ptsPx, hoverApron);
+        drawLayoutPathDraftVertexDots(ctx, ptsPx, hoverApron);
       }
     }
     ctx.restore();
@@ -17286,7 +17265,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const fillArea = c2dCssColorLightenSteps(c2dRunwayStroke(), 1);
+    const fillArea = c2dCssColorLightenSteps(c2dRunwayStroke(), 2);
     (state.layoutMarkers || []).forEach(function(m) {
       if (!m || m.kind !== 'area') return;
       const pts = m.points;
@@ -18782,7 +18761,8 @@
           }
           draw();
         } else if (state.apronLinkTemp) {
-          const [col, row] = pixelToCell(wx, wy);
+          const ptCell = worldPointToCellPoint(wx, wy, !!ev.shiftKey);
+          const col = ptCell.col, row = ptCell.row;
           if (col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {
             const last = state.apronLinkMidpoints[state.apronLinkMidpoints.length - 1];
             if (!last || last.col !== col || last.row !== row) {
