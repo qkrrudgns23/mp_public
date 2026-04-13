@@ -178,6 +178,7 @@
     return Math.max(1, Math.hypot(center[0] - anchor[0], center[1] - anchor[1]));
   }
   function getPbbAngleDeg(pbb) {
+    if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg);
     return normalizeAngleDeg(getPBBStandAngle(pbb) * 180 / Math.PI);
   }
   function getStandConnectionPx(stand) {
@@ -243,25 +244,62 @@
     ctx.fill();
     ctx.restore();
   }
+  function pbbBoardingWidthM_panelDom(pbb) {
+    const w = Number(pbb && pbb.boardingWidthM);
+    return isFinite(w) && w > 0 ? w : 5;
+  }
+  function pbbBoardingHeightM_panelDom(pbb) {
+    const h = Number(pbb && pbb.boardingHeightM);
+    return isFinite(h) && h > 0 ? h : 15;
+  }
   function buildDefaultPbbBridgePoints(pbb, bridgeIndex, bridgeCount) {
     const count = Math.max(1, parseInt(bridgeCount, 10) || 1);
-    const length = getPbbLengthMeters(pbb);
-    const angle = getPBBStandAngle(pbb);
-    const dirX = Math.cos(angle), dirY = Math.sin(angle);
-    const tanX = -dirY, tanY = dirX;
-    const standSize = getStandSizeMeters((pbb && pbb.category) || 'C');
-    const spread = Math.min(Math.max(standSize * 0.18, 4), standSize * 0.4);
+    const cat = (pbb && pbb.category) || 'C';
+    const dep = getStandSizeMeters(cat);
+    let Tx = Number(pbb.x1) || 0, Ty = Number(pbb.y1) || 0;
+    let nx = null, ny = null, tx = null, ty = null;
+    if (typeof getClosestTerminalEdgePoint === 'function' && typeof getPbbTerminalFrameFromEdge === 'function') {
+      const proj = getClosestTerminalEdgePoint(Tx, Ty);
+      if (proj && proj.term) {
+        const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
+        Tx = proj.point[0];
+        Ty = proj.point[1];
+        nx = fr.nx;
+        ny = fr.ny;
+        tx = fr.tx;
+        ty = fr.ty;
+      }
+    }
+    if (nx == null || ny == null) {
+      const x2 = Number(pbb.x2) || 0, y2 = Number(pbb.y2) || 0;
+      let nnx = x2 - Tx, nny = y2 - Ty;
+      const nl = Math.hypot(nnx, nny) || 1;
+      nnx /= nl;
+      nny /= nl;
+      nx = nnx;
+      ny = nny;
+      tx = -ny;
+      ty = nx;
+    }
+    const depthM = pbbBoardingHeightM_panelDom(pbb);
+    const Bx = Tx + nx * depthM, By = Ty + ny * depthM;
+    const armlen = (pbb.pbbArmLenM != null && isFinite(Number(pbb.pbbArmLenM)) && Number(pbb.pbbArmLenM) > 0)
+      ? Number(pbb.pbbArmLenM)
+      : Math.max(dep * 0.55, 8);
+    const bw = pbbBoardingWidthM_panelDom(pbb);
+    const spread = Math.min(Math.max(bw * 0.38, 2.8), bw * 0.48);
     const offsetIndex = bridgeIndex - (count - 1) / 2;
     const lateral = spread * offsetIndex;
-    const startX = Number(pbb.x1 || 0) + tanX * lateral;
-    const startY = Number(pbb.y1 || 0) + tanY * lateral;
-    const endX = Number(pbb.x2 || 0) + tanX * (lateral * 0.55);
-    const endY = Number(pbb.y2 || 0) + tanY * (lateral * 0.55);
-    const midX = startX + dirX * (length * 0.45);
-    const midY = startY + dirY * (length * 0.45);
+    let dirx = nx * 0.55 + tx * 0.45, diry = ny * 0.55 + ty * 0.45;
+    const dl = Math.hypot(dirx, diry) || 1;
+    dirx /= dl;
+    diry /= dl;
+    const centerApron = getStandConnectionPx(pbb);
+    const endX = Bx + dirx * armlen + tx * lateral * 0.85 + (centerApron[0] - Bx) * 0.08;
+    const endY = By + diry * armlen + ty * lateral * 0.85 + (centerApron[1] - By) * 0.08;
     return [
-      { x: startX, y: startY },
-      { x: midX, y: midY },
+      { x: Tx, y: Ty },
+      { x: Bx, y: By },
       { x: endX, y: endY },
     ];
   }
@@ -276,25 +314,31 @@
         : buildDefaultPbbBridgePoints(pbb, idx, count);
       return { id: (current && current.id) || id(), points: points };
     });
+    if (typeof ensurePbbBoardingWallGeometry === 'function') ensurePbbBoardingWallGeometry(pbb);
     if (pbb.apronSiteX == null || pbb.apronSiteY == null) {
-      pbb.apronSiteX = Number(pbb.x2 || 0);
-      pbb.apronSiteY = Number(pbb.y2 || 0);
+      const br0 = pbb.pbbBridges && pbb.pbbBridges[0];
+      const p2 = br0 && br0.points && br0.points[2];
+      if (p2 && isFinite(Number(p2.x)) && isFinite(Number(p2.y))) {
+        pbb.apronSiteX = Number(p2.x);
+        pbb.apronSiteY = Number(p2.y);
+      } else {
+        const ac = getStandConnectionPx(pbb);
+        pbb.apronSiteX = ac[0];
+        pbb.apronSiteY = ac[1];
+      }
     }
   }
   function setPbbGeometryFromAngleLength(pbb, angleDeg, lengthMeters, resetBridgeGeometry) {
-    const ang = normalizeAngleDeg(angleDeg);
-    const len = Math.max(1, Number(lengthMeters) || 1);
-    const rad = ang * Math.PI / 180;
-    const anchor = getPbbAnchorPx(pbb);
-    pbb.x1 = anchor[0];
-    pbb.y1 = anchor[1];
-    pbb.x2 = anchor[0] + Math.cos(rad) * len;
-    pbb.y2 = anchor[1] + Math.sin(rad) * len;
-    pbb.angleDeg = ang;
-    if (resetBridgeGeometry !== false) {
-      delete pbb.pbbBridges;
+    pbb.angleDeg = normalizeAngleDeg(angleDeg);
+    if (lengthMeters != null && lengthMeters !== undefined && Number.isFinite(Number(lengthMeters))) {
+      const len = Math.max(1, Number(lengthMeters) || 1);
+      pbb.pbbArmLenM = len;
+      if (typeof applyPbbArmLengthToBridgeEnds === 'function') applyPbbArmLengthToBridgeEnds(pbb, len);
     }
-    rebuildPbbBridgeGeometry(pbb);
+    if (resetBridgeGeometry === true) {
+      delete pbb.pbbBridges;
+      rebuildPbbBridgeGeometry(pbb);
+    }
   }
   function normalizeBuildingObject(termLike) {
     const term = Object.assign({}, termLike || {});
@@ -315,10 +359,21 @@
     pbb.categoryMode = getStandCategoryMode(pbb);
     pbb.allowedAircraftTypes = getStandAllowedAircraftTypes(pbb);
     pbb.pbbCount = Math.max(1, Math.min(8, parseInt(pbb.pbbCount != null ? pbb.pbbCount : (_pbbTier.defaultBridgeCount || 1), 10) || 1));
+    pbb.boardingWidthM = (pbb.boardingWidthM != null && isFinite(Number(pbb.boardingWidthM)) && Number(pbb.boardingWidthM) > 0)
+      ? Number(pbb.boardingWidthM) : 5;
+    pbb.boardingHeightM = (pbb.boardingHeightM != null && isFinite(Number(pbb.boardingHeightM)) && Number(pbb.boardingHeightM) > 0)
+      ? Number(pbb.boardingHeightM) : 15;
     if (pbb.x1 != null && pbb.y1 != null && pbb.x2 != null && pbb.y2 != null) {
-      pbb.angleDeg = pbb.angleDeg != null
-        ? normalizeAngleDeg(pbb.angleDeg)
-        : normalizeAngleDeg(Math.atan2((Number(pbb.y2) || 0) - (Number(pbb.y1) || 0), (Number(pbb.x2) || 0) - (Number(pbb.x1) || 0)) * 180 / Math.PI);
+      if (pbb.angleDeg != null) {
+        pbb.angleDeg = normalizeAngleDeg(pbb.angleDeg);
+      } else if (pbb.apronSiteX != null && pbb.apronSiteY != null) {
+        pbb.angleDeg = normalizeAngleDeg(Math.atan2(
+          (Number(pbb.apronSiteY) || 0) - (Number(pbb.y1) || 0),
+          (Number(pbb.apronSiteX) || 0) - (Number(pbb.x1) || 0)
+        ) * 180 / Math.PI);
+      } else {
+        pbb.angleDeg = 0;
+      }
       rebuildPbbBridgeGeometry(pbb);
     }
     return pbb;

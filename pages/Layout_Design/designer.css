@@ -45,6 +45,8 @@
     #view-toggle .tool-btn:not(.active) { background: transparent; color: var(--ui-text-secondary); }
     #view-toggle .tool-btn:hover { background: var(--ui-bg-overlay); color: var(--ui-text-primary); }
     #view-toggle .tool-btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; color: var(--ui-text-muted); }
+    #view-toggle #btnRoadWidthToggle:not(.active) { color: color-mix(in srgb, var(--ui-text-secondary) 35%, var(--ui-text-primary) 65%); }
+    #view-toggle #btnRoadWidthToggle.active { color: color-mix(in srgb, var(--ui-accent) 68%, #ffffff 32%); }
     .global-update-wrap { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; vertical-align: middle; }
     .global-update-sync-dot {
       align-self: center;
@@ -686,6 +688,9 @@
     .compact-label-like { display:block; font-size:11px; color:#9ca3af; margin-bottom:6px; font-weight:600; letter-spacing:0.02em; }
     .marker-tool-tabs { display:flex; gap:4px; flex-wrap:wrap; margin-top:2px; }
     .marker-tool-tab { flex:1 1 0; min-width:0; padding:6px 8px; font-size:11px; font-weight:600; border-radius:6px; border:1px solid var(--ui-border-default); background:var(--ui-bg-control); color:var(--ui-text-secondary); cursor:pointer; transition:var(--ui-transition); }
+    .marker-island-pavement-choice-gr { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:4px; }
+    .marker-island-pavement-choice { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--ui-text-secondary); cursor:pointer; user-select:none; }
+    .marker-island-pavement-choice input { margin:0; accent-color:var(--ui-accent); cursor:pointer; }
     .marker-tool-tab:hover { background:var(--ui-bg-overlay); color:var(--ui-text-primary); border-color:var(--ui-border-strong); }
     .marker-tool-tab:focus-visible { outline:none; box-shadow:0 0 0 2px var(--ui-accent-muted); }
     .marker-tool-tab[aria-selected="true"], .marker-tool-tab.active { background:var(--ui-accent-muted); color:var(--ui-accent); border-color:var(--ui-accent-ring); }

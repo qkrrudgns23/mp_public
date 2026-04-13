@@ -205,6 +205,7 @@
     let bestD2 = maxD2;
     (Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : []).forEach(function(bridge, bridgeIdx) {
       (Array.isArray(bridge.points) ? bridge.points : []).forEach(function(pt, ptIdx) {
+        if (ptIdx === 1) return;
         const d2 = dist2([Number(pt.x) || 0, Number(pt.y) || 0], click);
         if (d2 < bestD2) {
           bestD2 = d2;
@@ -506,15 +507,25 @@
       const lenInput = document.getElementById('pbbLength');
       const angleInput = document.getElementById('standAngle');
       const pbbCountInput = document.getElementById('pbbBridgeCount');
+      const boardingWInput = document.getElementById('pbbBoardingWidth');
+      const boardingHInput = document.getElementById('pbbBoardingHeight');
       if (nameInput) nameInput.value = pbb.name || '';
       if (modeSel) modeSel.value = getStandCategoryMode(pbb);
       if (catSel) catSel.value = pbb.category || 'C';
       if (lenInput) {
-        const lenM = Math.hypot((pbb.x2 || 0) - (pbb.x1 || 0), (pbb.y2 || 0) - (pbb.y1 || 0));
-        lenInput.value = String(Math.max(1, Math.round(lenM)));
+        let arm = Number(pbb.pbbArmLenM);
+        if (!isFinite(arm) || arm <= 0) {
+          const br0 = pbb.pbbBridges && pbb.pbbBridges[0];
+          const p1 = br0 && br0.points && br0.points[1], p2 = br0 && br0.points && br0.points[2];
+          if (p1 && p2) arm = Math.hypot(Number(p2.x) - Number(p1.x), Number(p2.y) - Number(p1.y));
+          else arm = 15;
+        }
+        lenInput.value = String(Math.max(1, Math.round(arm)));
       }
       if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
       if (pbbCountInput) pbbCountInput.value = String(Math.max(1, parseInt(pbb.pbbCount, 10) || 1));
+      if (boardingWInput) boardingWInput.value = String(typeof getPbbBoardingWidthM === 'function' ? getPbbBoardingWidthM(pbb) : (Number(pbb.boardingWidthM) > 0 ? Number(pbb.boardingWidthM) : 5));
+      if (boardingHInput) boardingHInput.value = String(typeof getPbbBoardingHeightM === 'function' ? getPbbBoardingHeightM(pbb) : (Number(pbb.boardingHeightM) > 0 ? Number(pbb.boardingHeightM) : 15));
       syncStandConstraintVisibility('stand', getStandCategoryMode(pbb));
       renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb));
     }

@@ -190,11 +190,20 @@
             <label>Angle (deg)</label>
             <input type="number" id="standAngle" min="-180" max="180" step="1" value="0" />
           </div>
+          <div class="compact-field wide">
+            <label>Boarding Area</label>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+              <span style="font-size:11px; color:#9ca3af;">W (m)</span>
+              <input type="number" id="pbbBoardingWidth" min="0.5" max="500" step="0.5" value="5" style="width:5rem;" aria-label="Boarding area width meters" />
+              <span style="font-size:11px; color:#9ca3af;">H (m)</span>
+              <input type="number" id="pbbBoardingHeight" min="0.5" max="500" step="0.5" value="15" style="width:5rem;" aria-label="Boarding area height meters" />
+            </div>
+          </div>
           <div class="compact-field">
             <label>PBB Count</label>
             <input type="number" id="pbbBridgeCount" min="1" max="8" step="1" value="1" />
           </div>
-          <p class="choice-help">Selected contact stand: drag orange PBB points and the green apron point to fine-tune.</p>
+          <p class="choice-help">Contact stand: boarding zone size = Boarding Area W×H (m), along the terminal outward normal. White strokes = boarding outline and PBB arms. Drag terminal and PBB tip nodes; stand angle does not tilt the boarding zone.</p>
           <button class="small draw-toggle-btn" id="btnPbbDraw">Draw</button>
         </div>
         <div id="settings-remote" class="settings-pane compact-form" style="display:none;">
@@ -354,6 +363,11 @@
             <label>Available RW Direction</label>
             <div id="runwayExitAllowedDirection"></div>
           </div>
+          <span class="compact-label-like" id="pathPavementLabel" style="margin-top:8px;">Pavement</span>
+          <div class="marker-island-pavement-choice-gr" role="radiogroup" aria-labelledby="pathPavementLabel">
+            <label class="marker-island-pavement-choice"><input type="radio" name="pathPavement" value="asphalt" checked /> Asphalt</label>
+            <label class="marker-island-pavement-choice"><input type="radio" name="pathPavement" value="cement" /> Cement</label>
+          </div>
           <button class="small draw-toggle-btn" id="btnTaxiwayDraw">Draw</button>
         </div>
         <div id="settings-apronTaxiway" class="settings-pane compact-form" style="display:none;">
@@ -384,6 +398,11 @@
             <input type="number" id="markerIslandOuterWidthM" min="0" max="500" step="0.5" value="20" inputmode="decimal" aria-label="Island outer paved width in meters" />
             <label for="markerIslandInnerWidthM" style="margin-top:6px;display:block;">Island inner width (m)</label>
             <input type="number" id="markerIslandInnerWidthM" min="0" max="200" step="0.5" value="7" inputmode="decimal" aria-label="Island inner paved width in meters" />
+            <span class="compact-label-like" id="markerIslandPavementLabel" style="margin-top:8px;">Pavement</span>
+            <div class="marker-island-pavement-choice-gr" role="radiogroup" aria-labelledby="markerIslandPavementLabel">
+              <label class="marker-island-pavement-choice"><input type="radio" name="markerIslandPavement" value="asphalt" checked /> Asphalt</label>
+              <label class="marker-island-pavement-choice"><input type="radio" name="markerIslandPavement" value="cement" /> Cement</label>
+            </div>
           </div>
           <button class="small draw-toggle-btn" id="btnMarkerDraw">Draw</button>
         </div>

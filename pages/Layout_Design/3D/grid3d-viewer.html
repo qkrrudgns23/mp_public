@@ -527,15 +527,36 @@
     b = Math.max(0, Math.min(255, Math.round(b * f)));
     return (r << 16) | (g << 8) | b;
   }
-  /** Thick taxiway/runway path fill: ~1% darker than paletteRunwayPaved (area marker excluded). */
-  var paletteRunwayPavedWidth = paletteRgbChannelScale(paletteRunwayPaved, 0.99);
-  /** Marker area fill: two lighten steps vs runway stroke (designer.js c2dCssColorLightenSteps(..., 2)). */
-  var paletteMarkerAreaFill = paletteRgbLightenSteps(paletteRunwayStroke, 2);
-  var markerIslandInnerRingColor = 0x2e2e2e;
+  /** Marker area fill: three lighten steps vs runway stroke (designer 2D). */
+  var paletteMarkerAreaFill = paletteRgbLightenSteps(paletteRunwayStroke, 3);
+  /** Taxiway width band: one step darker than marker area (two lighten steps). */
+  var paletteTaxiwayPavedWidth = paletteRgbLightenSteps(paletteRunwayStroke, 2);
+  /** Runway path & runway taxiway width band: dark asphalt gray (designer 2D #363636). */
+  var paletteRunwayAsphaltPavedWidth = 0x363636;
+  /** Island inner paved band (matches designer 2D #8c8287). */
+  var markerIslandInnerRingColor = 0x8c8287;
   var markerIslandGrassColor = 0x454d36;
   var islandNormalStepM = 20;
   var islandNormalLenM = 4;
   var markerIslandInnerDefaultM = 7;
+  function pathPavementKindResolvedForTw3d(tw) {
+    var pt = (tw && tw.pathType) || 'taxiway';
+    var pv = tw && tw.pavement;
+    if (pv !== 'asphalt' && pv !== 'cement') {
+      pv = (pt === 'runway' || pt === 'runway_exit') ? 'asphalt' : 'cement';
+    }
+    return pv;
+  }
+  function pathPavementPaletteHexForTw(tw) {
+    return pathPavementKindResolvedForTw3d(tw) === 'cement' ? paletteTaxiwayPavedWidth : paletteRunwayAsphaltPavedWidth;
+  }
+  function sortTwListPavementCementFirst3d(list) {
+    return (list || []).slice().sort(function (a, b) {
+      var ra = pathPavementKindResolvedForTw3d(a) === 'cement' ? 0 : 1;
+      var rb = pathPavementKindResolvedForTw3d(b) === 'cement' ? 0 : 1;
+      return ra - rb;
+    });
+  }
   function islandInnerWidthM3d(m) {
     var v = Number(m && m.innerWidthM);
     if (isFinite(v) && v >= 0) return Math.min(200, v);
@@ -827,11 +848,11 @@
     scene.add(meshA);
   });
   }
-  (L.taxiways || []).forEach(function (tw) {
-    drawTaxiwayLike(tw, paletteRunwayPavedWidth, 23);
+  sortTwListPavementCementFirst3d(L.taxiways || []).forEach(function (tw) {
+    drawTaxiwayLike(tw, pathPavementPaletteHexForTw(tw), 23);
   });
-  (L.runwayTaxiways || []).forEach(function (tw) {
-    drawTaxiwayLike(tw, paletteRunwayPavedWidth, 23);
+  sortTwListPavementCementFirst3d(L.runwayTaxiways || []).forEach(function (tw) {
+    drawTaxiwayLike(tw, pathPavementPaletteHexForTw(tw), 23);
   });
   var zTaxiCenterline = zLift + 1.08;
   (L.taxiways || []).forEach(function (tw) {
@@ -842,8 +863,8 @@
     if (!tw || !tw.vertices || tw.vertices.length < 2) return;
     addTaxiwayCenterlineRibbon(tw.vertices, zTaxiCenterline);
   });
-  (L.runwayPaths || []).forEach(function (rw) {
-    drawTaxiwayLike(rw, paletteRunwayPavedWidth, 45);
+  sortTwListPavementCementFirst3d(L.runwayPaths || []).forEach(function (rw) {
+    drawTaxiwayLike(rw, pathPavementPaletteHexForTw(rw), 45);
   });
   var apronPolys = payload.enrichedApronLinkPolylines || [];
   apronPolys.forEach(function (row) {

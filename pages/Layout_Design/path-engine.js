@@ -416,14 +416,19 @@
     const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
     let nx = -(y2 - y1), ny = x2 - x1;
     const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
-    const toClickX = wx - ex, toClickY = wy - ey;
-    if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
+    const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
+    if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
     const categoryMode = normalizeStandCategoryMode(document.getElementById('standCategoryMode') ? document.getElementById('standCategoryMode').value : (_pbbTier.defaultCategoryMode || 'icao'), 'icao');
     const category = document.getElementById('standCategory').value || 'C';
     const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
-    const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-    const newPbb = { x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx, category };
+    const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
+    const standAngleDeg = normalizeAngleDeg(document.getElementById('standAngle') ? document.getElementById('standAngle').value : 0);
+    const bwEl = document.getElementById('pbbBoardingWidth');
+    const bhEl = document.getElementById('pbbBoardingHeight');
+    const boardingW = Math.max(0.5, Number(bwEl && bwEl.value) || 5);
+    const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
+    const newPbb = { x1: ex, y1: ey, x2: ex + nx * boardingH, y2: ey + ny * boardingH, category };
     if (pbbStandOverlapsExisting(newPbb)) return false;
     const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
     if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
@@ -434,12 +439,15 @@
     state.pbbStands.push(normalizePbbStandObject({
       id: id(),
       name: pbbNameCandidate,
-      x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx,
+      x1: ex, y1: ey, x2: ex + nx * boardingH, y2: ey + ny * boardingH,
       category: newPbb.category,
       categoryMode: categoryMode,
       allowedAircraftTypes: readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check'),
       pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
-      angleDeg: normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI),
+      angleDeg: standAngleDeg,
+      boardingWidthM: boardingW,
+      boardingHeightM: boardingH,
+      pbbArmLenM: armLen,
       edgeCol: bestEdge.col,
       edgeRow: bestEdge.row
     }));

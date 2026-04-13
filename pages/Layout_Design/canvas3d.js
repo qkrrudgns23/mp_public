@@ -6,6 +6,18 @@
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     const ROAD_WIDTH_SURFACE_RGB_MUL = 0.99;
+    const RW_BAND_LIGHTEN_PER_STEP = 1 / 0.88;
+    function roadWidthBandTaxiwaySurfaceCss() {
+      const base = c2dRunwayStroke();
+      const opaque = roadWidthSurfaceRgbMulCss(base, 1);
+      const m = opaque.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+      if (!m) return opaque;
+      const f = RW_BAND_LIGHTEN_PER_STEP * RW_BAND_LIGHTEN_PER_STEP;
+      const r = Math.max(0, Math.min(255, Math.round(Number(m[1]) * f)));
+      const g = Math.max(0, Math.min(255, Math.round(Number(m[2]) * f)));
+      const b = Math.max(0, Math.min(255, Math.round(Number(m[3]) * f)));
+      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    }
     function roadWidthSurfaceRgbMulCss(css, mul) {
       let s = String(css || '').trim();
       const ra = s.match(/^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/i);
@@ -49,7 +61,27 @@
       const showRoadWidth = !!state.showRoadWidth;
       return { drawing, isRunwayPath, isRunwayExit, isApronTaxiwayPath, width, widthDefault, sel, pathLineCap, showRoadWidth };
     }
-    state.taxiways.forEach(tw => {
+    function pathPavementResolvedForTwCanvas3d(tw) {
+      const pt = tw.pathType || 'taxiway';
+      let pv = tw.pavement;
+      if (pv !== 'asphalt' && pv !== 'cement') {
+        pv = (pt === 'runway' || pt === 'runway_exit') ? 'asphalt' : 'cement';
+      }
+      return pv;
+    }
+    function forEachTaxiwayInPavementUnderlayOrderCanvas3d(callback) {
+      if (!state.showRoadWidth) {
+        state.taxiways.forEach(callback);
+        return;
+      }
+      state.taxiways.forEach(function(tw) {
+        if (pathPavementResolvedForTwCanvas3d(tw) === 'cement') callback(tw);
+      });
+      state.taxiways.forEach(function(tw) {
+        if (pathPavementResolvedForTwCanvas3d(tw) === 'asphalt') callback(tw);
+      });
+    }
+    forEachTaxiwayInPavementUnderlayOrderCanvas3d(tw => {
       const g = taxiwayDrawContext(tw);
       if (!g) return;
       const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel, pathLineCap = g.pathLineCap, showRoadWidth = g.showRoadWidth;
@@ -68,8 +100,14 @@
         fillC = drawing ? 'rgba(56, 189, 248, 0.14)' : c2dRunwayFill();
       }
       if (showRoadWidth) {
-        strokeC = roadWidthSurfaceRgbMulCss(strokeC, ROAD_WIDTH_SURFACE_RGB_MUL);
-        fillC = roadWidthSurfaceRgbMulCss(fillC, ROAD_WIDTH_SURFACE_RGB_MUL);
+        if (!sel) {
+          const bandCss = pathPavementResolvedForTwCanvas3d(tw) === 'cement' ? roadWidthBandTaxiwaySurfaceCss() : '#363636';
+          strokeC = bandCss;
+          fillC = bandCss;
+        } else {
+          strokeC = roadWidthSurfaceRgbMulCss(strokeC, ROAD_WIDTH_SURFACE_RGB_MUL);
+          fillC = roadWidthSurfaceRgbMulCss(fillC, ROAD_WIDTH_SURFACE_RGB_MUL);
+        }
       }
       ctx.strokeStyle = strokeC;
       ctx.fillStyle = fillC;
@@ -344,24 +382,28 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    ctx.setLineDash([3, 3]);
     state.apronLinks.forEach(lk => {
       const stand = findStandById(lk.pbbId);
       const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
       if (!stand || !tw || lk.tx == null || lk.ty == null) return;
       const poly = getApronLinkPolylineWorldPts(lk);
       if (poly.length < 2) return;
-      const hair = Math.max(1, 1 / Math.max(state.scale, 0.08));
+      ctx.setLineDash([]);
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
+      function traceApronLinkPoly3d() {
+        ctx.moveTo(poly[0][0], poly[0][1]);
+        for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
+      }
       ctx.beginPath();
-      ctx.moveTo(poly[0][0], poly[0][1]);
-      for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
-      ctx.lineWidth = hair;
-      ctx.strokeStyle = '#3a3a3a';
+      traceApronLinkPoly3d();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#0a0a0a';
       ctx.stroke();
-      ctx.lineWidth = 0.5;
-      ctx.strokeStyle = '#facc15';
+      ctx.beginPath();
+      traceApronLinkPoly3d();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = c2dTaxiwayCenterlineStroke();
       ctx.stroke();
       const svApron = state.selectedVertex;
       const selApron = state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id;
@@ -387,7 +429,6 @@
           ctx.arc(px, py, r, 0, Math.PI*2);
           ctx.fill();
         }
-        ctx.setLineDash([3, 3]);
       }
     });
     ctx.setLineDash([]);
@@ -896,8 +937,6 @@
           state.dragPbbBridgeVertex = { pbbId: state.selectedObject.id, bridgeIndex: ph.bridgeIndex, pointIndex: ph.pointIndex };
           state.selectedVertex = { type: 'pbbBridge', id: state.selectedObject.id, bridgeIndex: ph.bridgeIndex, pointIndex: ph.pointIndex };
         } else {
-
-
           state.dragStandConnection = { pbbId: state.selectedObject.id };
           state.selectedVertex = { type: 'pbbApronSite', id: state.selectedObject.id };
         }
@@ -1002,7 +1041,7 @@
         if (pbb) {
           const origin = getPbbRotationOriginPx(pbb);
           const nextDeg = normalizeAngleDeg(Math.atan2(wy - origin[1], wx - origin[0]) * 180 / Math.PI);
-          setPbbGeometryFromAngleLength(pbb, nextDeg, getPbbLengthMeters(pbb), true);
+          pbb.angleDeg = nextDeg;
           const angleInput = document.getElementById('standAngle');
           if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
           scheduleDraw(); drewThisMove = true;
@@ -1027,10 +1066,24 @@
       if (pbb && Array.isArray(pbb.pbbBridges) && pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex] && Array.isArray(pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points) && pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points[state.dragPbbBridgeVertex.pointIndex]) {
         const pt = pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points[state.dragPbbBridgeVertex.pointIndex];
         if (state.dragPbbBridgeVertex.pointIndex === 0) {
-          const projected = getClosestTerminalEdgePoint(wx, wy);
-          if (projected && projected.point) {
-            pt.x = projected.point[0];
-            pt.y = projected.point[1];
+          const proj = getClosestTerminalEdgePoint(wx, wy);
+          if (proj && proj.point && proj.term) {
+            const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
+            const Tx = proj.point[0], Ty = proj.point[1];
+            const bh = getPbbBoardingHeightM(pbb);
+            const Bx = Tx + fr.nx * bh, By = Ty + fr.ny * bh;
+            pbb.x1 = Tx;
+            pbb.y1 = Ty;
+            pbb.x2 = Bx;
+            pbb.y2 = By;
+            pbb.pbbBridges.forEach(function(bridge) {
+              if (!bridge.points || bridge.points.length < 3) return;
+              bridge.points[0].x = Tx;
+              bridge.points[0].y = Ty;
+              bridge.points[1].x = Bx;
+              bridge.points[1].y = By;
+            });
+            bumpPathPolylineCacheRev();
           }
         } else {
           pt.x = snappedPx[0];

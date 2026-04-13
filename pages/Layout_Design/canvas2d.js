@@ -964,6 +964,62 @@
     ctx.restore();
   }
 
+  function layoutHairlineStrokeWidthWorld() {
+    return 1 / Math.max(state.scale || 1, 0.02);
+  }
+  const LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M = 10;
+  const LAYOUT_PBB_BRIDGE_HALF_WIDTH_M = 1;
+  function hatchIntersectionsLineXMinusYEqualsC(c, rx0, rx1, ry0, ry1) {
+    const pts = [];
+    function add(x, y) {
+      if (x < rx0 - 1e-9 || x > rx1 + 1e-9 || y < ry0 - 1e-9 || y > ry1 + 1e-9) return;
+      for (let i = 0; i < pts.length; i++) {
+        if (Math.hypot(pts[i][0] - x, pts[i][1] - y) < 1e-6) return;
+      }
+      pts.push([x, y]);
+    }
+    add(rx0, rx0 - c);
+    add(rx1, rx1 - c);
+    add(ry0 + c, ry0);
+    add(ry1 + c, ry1);
+    if (pts.length < 2) return null;
+    pts.sort(function(a, b) { return a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]; });
+    return [pts[0][0], pts[0][1], pts[pts.length - 1][0], pts[pts.length - 1][1]];
+  }
+  function drawPolygonDiagonalHatch45M(hatchCtx, points, spacingM, strokeStyle, lineWidthWorld) {
+    if (!hatchCtx || !Array.isArray(points) || points.length < 3 || !isFinite(spacingM) || spacingM <= 0) return;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    points.forEach(function(p) {
+      minX = Math.min(minX, p[0]);
+      maxX = Math.max(maxX, p[0]);
+      minY = Math.min(minY, p[1]);
+      maxY = Math.max(maxY, p[1]);
+    });
+    const span = Math.max(maxX - minX, maxY - minY, spacingM);
+    const pad = span * 2 + spacingM * 4;
+    const rx0 = minX - pad, rx1 = maxX + pad, ry0 = minY - pad, ry1 = maxY + pad;
+    const cCornerMin = Math.min(rx0 - ry0, rx1 - ry0, rx0 - ry1, rx1 - ry1);
+    const cCornerMax = Math.max(rx0 - ry0, rx1 - ry0, rx0 - ry1, rx1 - ry1);
+    const step = spacingM * Math.SQRT2;
+    hatchCtx.save();
+    hatchCtx.beginPath();
+    hatchCtx.moveTo(points[0][0], points[0][1]);
+    for (let i = 1; i < points.length; i++) hatchCtx.lineTo(points[i][0], points[i][1]);
+    hatchCtx.closePath();
+    hatchCtx.clip();
+    hatchCtx.strokeStyle = strokeStyle;
+    hatchCtx.lineWidth = lineWidthWorld;
+    hatchCtx.setLineDash([]);
+    for (let k = Math.floor(cCornerMin / step) * step; k <= cCornerMax + step * 0.5; k += step) {
+      const seg = hatchIntersectionsLineXMinusYEqualsC(k, rx0, rx1, ry0, ry1);
+      if (!seg) continue;
+      hatchCtx.beginPath();
+      hatchCtx.moveTo(seg[0], seg[1]);
+      hatchCtx.lineTo(seg[2], seg[3]);
+      hatchCtx.stroke();
+    }
+    hatchCtx.restore();
+  }
   function drawPolygonHatch(points, strokeStyle, spacingPx) {
     if (!Array.isArray(points) || points.length < 3) return;
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -982,7 +1038,7 @@
     ctx.closePath();
     ctx.clip();
     ctx.strokeStyle = strokeStyle;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = layoutHairlineStrokeWidthWorld();
     ctx.setLineDash([]);
     for (let offset = minX - pad; offset <= maxX + pad; offset += spacingPx) {
       ctx.beginPath();
@@ -1003,9 +1059,10 @@
       const selected = state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.id === term.id;
       const buildingTheme = getBuildingTheme(term);
       const termPts = term.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
-      ctx.lineWidth = selected ? 3 : 2;
-      ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : buildingTheme.stroke;
-      ctx.fillStyle = selected ? c2dObjectSelectedFill() : buildingTheme.fill;
+      const hairW = layoutHairlineStrokeWidthWorld();
+      ctx.lineWidth = hairW;
+      ctx.strokeStyle = selected ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.88)';
+      ctx.fillStyle = selected ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)';
       ctx.beginPath();
       for (let i = 0; i < termPts.length; i++) {
         const [x,y] = termPts[i];
@@ -1015,18 +1072,17 @@
         ctx.closePath();
         if (buildingTheme.fillEnabled) ctx.fill();
       }
-      if (selected) {
-        ctx.save();
-        ctx.shadowColor = c2dObjectSelectedGlow();
-        ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
+      ctx.shadowBlur = 0;
+      if (term.closed && buildingTheme.fillEnabled) {
+        drawPolygonDiagonalHatch45M(ctx, termPts, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, selected ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.38)', hairW);
       }
+      ctx.beginPath();
+      for (let i = 0; i < termPts.length; i++) {
+        const [x,y] = termPts[i];
+        if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      if (term.closed) ctx.closePath();
       ctx.stroke();
-      if (selected) ctx.restore();
-      if (term.closed && buildingTheme.hatch === 'diagonal' && buildingTheme.fillEnabled) {
-        drawPolygonHatch(termPts, selected ? c2dObjectSelectedDashStroke() : buildingTheme.stroke, Math.max(10, CELL_SIZE * 0.6));
-      }
       if (term.closed && term.vertices.length > 0) {
         let cx = 0, cy = 0;
         term.vertices.forEach(v => {
@@ -1084,27 +1140,47 @@
       const widPb = getStandWidthMeters(pbb.category || 'C');
       const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
+      if (typeof drawPbbBoardingRectangle === 'function') drawPbbBoardingRectangle(ctx, pbb, sel);
       const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
       bridges.forEach(function(bridge, bridgeIdx) {
         const pts = Array.isArray(bridge.points) ? bridge.points : [];
-        if (pts.length < 2) return;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#f97316';
-        ctx.lineWidth = sel ? 3.5 : 2.5;
-        if (sel) {
-          ctx.save();
-          ctx.shadowColor = c2dObjectSelectedGlow();
-          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-        }
+        if (pts.length < 3) return;
+        const hairW = layoutHairlineStrokeWidthWorld();
+        const bx = Number(pts[1].x) || 0, by = Number(pts[1].y) || 0;
+        const px = Number(pts[2].x) || 0, py = Number(pts[2].y) || 0;
+        const dx = px - bx, dy = py - by;
+        const L = Math.hypot(dx, dy) || 1e-6;
+        const tx = dx / L, ty = dy / L;
+        const nx = -ty, ny = tx;
+        const hw = LAYOUT_PBB_BRIDGE_HALF_WIDTH_M;
+        const quad = [
+          [bx + nx * hw, by + ny * hw],
+          [bx - nx * hw, by - ny * hw],
+          [px - nx * hw, py - ny * hw],
+          [px + nx * hw, py + ny * hw],
+        ];
+        ctx.shadowBlur = 0;
         ctx.beginPath();
-        ctx.moveTo(Number(pts[0].x) || 0, Number(pts[0].y) || 0);
-        for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(Number(pts[pi].x) || 0, Number(pts[pi].y) || 0);
+        ctx.moveTo(quad[0][0], quad[0][1]);
+        for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
+        ctx.closePath();
+        ctx.fillStyle = sel ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.1)';
+        ctx.fill();
+        drawPolygonDiagonalHatch45M(ctx, quad, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.38)', hairW);
+        ctx.beginPath();
+        ctx.moveTo(quad[0][0], quad[0][1]);
+        for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
+        ctx.closePath();
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = hairW;
         ctx.stroke();
-        if (sel) ctx.restore();
         if (sel) {
-          pts.forEach(function(pt, ptIdx) {
+          [0, 2].forEach(function(ptIdx) {
+            const pt = pts[ptIdx];
+            if (!pt) return;
             const isBridgeVertexSelected = !!(state.selectedVertex && state.selectedVertex.type === 'pbbBridge' && state.selectedVertex.id === pbb.id && state.selectedVertex.bridgeIndex === bridgeIdx && state.selectedVertex.pointIndex === ptIdx);
             ctx.beginPath();
-            ctx.fillStyle = isBridgeVertexSelected ? '#f43f5e' : '#fdba74';
+            ctx.fillStyle = isBridgeVertexSelected ? '#f43f5e' : '#e5e7eb';
             ctx.arc(Number(pt.x) || 0, Number(pt.y) || 0, isBridgeVertexSelected ? 4 : 3, 0, Math.PI * 2);
             ctx.fill();
           });

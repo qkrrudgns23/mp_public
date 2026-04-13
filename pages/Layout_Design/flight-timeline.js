@@ -79,7 +79,8 @@
       this.value = String(Math.max(1, Math.round(nextLen)));
       if (state.selectedObject && state.selectedObject.type === 'pbb') {
         const pbb = state.selectedObject.obj;
-        setPbbGeometryFromAngleLength(pbb, getPbbAngleDeg(pbb), nextLen, true);
+        pbb.pbbArmLenM = nextLen;
+        if (typeof applyPbbArmLengthToBridgeEnds === 'function') applyPbbArmLengthToBridgeEnds(pbb, nextLen);
         updateObjectInfo();
         renderObjectList();
         draw();
@@ -94,7 +95,7 @@
       this.value = String(Math.round(nextDeg));
       if (state.selectedObject && state.selectedObject.type === 'pbb') {
         const pbb = state.selectedObject.obj;
-        setPbbGeometryFromAngleLength(pbb, nextDeg, getPbbLengthMeters(pbb), true);
+        pbb.angleDeg = nextDeg;
         updateObjectInfo();
         renderObjectList();
         draw();
@@ -112,6 +113,46 @@
         pbb.pbbCount = nextCount;
         delete pbb.pbbBridges;
         rebuildPbbBridgeGeometry(pbb);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        if (typeof update3DScene === 'function') update3DScene();
+      }
+    });
+  }
+  function applyPbbBoardingDimsFromPanelFlightTimeline(pbb) {
+    const wEl = document.getElementById('pbbBoardingWidth');
+    const hEl = document.getElementById('pbbBoardingHeight');
+    const nw = Math.max(0.5, Number(wEl && wEl.value) || 5);
+    const nh = Math.max(0.5, Number(hEl && hEl.value) || 15);
+    pbb.boardingWidthM = nw;
+    pbb.boardingHeightM = nh;
+    if (wEl) wEl.value = String(nw);
+    if (hEl) hEl.value = String(nh);
+    if (typeof ensurePbbBoardingWallGeometry === 'function') ensurePbbBoardingWallGeometry(pbb);
+    const arm = Number(pbb.pbbArmLenM);
+    if (typeof applyPbbArmLengthToBridgeEnds === 'function' && isFinite(arm) && arm > 0) {
+      applyPbbArmLengthToBridgeEnds(pbb, arm);
+    }
+    if (typeof bumpPathPolylineCacheRev === 'function') bumpPathPolylineCacheRev();
+  }
+  const pbbBoardingWidthFlightEl = document.getElementById('pbbBoardingWidth');
+  if (pbbBoardingWidthFlightEl) {
+    pbbBoardingWidthFlightEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        applyPbbBoardingDimsFromPanelFlightTimeline(state.selectedObject.obj);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        if (typeof update3DScene === 'function') update3DScene();
+      }
+    });
+  }
+  const pbbBoardingHeightFlightEl = document.getElementById('pbbBoardingHeight');
+  if (pbbBoardingHeightFlightEl) {
+    pbbBoardingHeightFlightEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        applyPbbBoardingDimsFromPanelFlightTimeline(state.selectedObject.obj);
         updateObjectInfo();
         renderObjectList();
         draw();

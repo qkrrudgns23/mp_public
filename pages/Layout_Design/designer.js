@@ -172,7 +172,51 @@
     const b = Math.max(0, Math.min(255, Math.round(t[2] * f)));
     return 'rgb(' + r + ',' + g + ',' + b + ')';
   }
-  /** Road-width band fill/stroke only (not marker area). ~1% darker than theme. */
+  /** Same rgb as layout marker kind=area fill (`drawLayoutAreaMarkers2DFloor`, 3 lighten steps). */
+  function c2dRoadWidthBandSurfaceColor() {
+    return c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
+  }
+  /** Taxiway / apron taxiway width band: one step darker than marker area (2 lighten steps vs runway stroke). */
+  function c2dRoadWidthBandTaxiwaySurfaceColor() {
+    return c2dCssColorLightenSteps(c2dRunwayStroke(), 2);
+  }
+  /** Runway path & runway taxiway (runway_exit) width band: dark asphalt gray. */
+  function c2dRoadWidthBandRunwayAsphaltColor() {
+    return '#363636';
+  }
+  function pathPavementDefaultForPathType(pathType) {
+    const pt = pathType || 'taxiway';
+    if (pt === 'runway' || pt === 'runway_exit') return 'asphalt';
+    return 'cement';
+  }
+  function pathPavementResolvedForTaxiway(tw) {
+    if (!tw || typeof tw !== 'object') return 'cement';
+    const v = tw.pavement;
+    if (v === 'asphalt' || v === 'cement') return v;
+    return pathPavementDefaultForPathType(tw.pathType);
+  }
+  function c2dRoadWidthBandForPavement(pavement) {
+    return pavement === 'cement' ? c2dRoadWidthBandTaxiwaySurfaceColor() : c2dRoadWidthBandRunwayAsphaltColor();
+  }
+  function normalizePathPavementInPlace(tw) {
+    if (!tw || typeof tw !== 'object') return;
+    const v = tw.pavement;
+    if (v === 'asphalt' || v === 'cement') return;
+    tw.pavement = pathPavementDefaultForPathType(tw.pathType);
+  }
+  function islandMarkerPavementResolved(m) {
+    if (!m || typeof m !== 'object') return 'asphalt';
+    const pv = m.pavement;
+    if (pv === 'asphalt' || pv === 'cement') return pv;
+    const op = m.outerPavement;
+    if (op === 'taxiway') return 'cement';
+    if (op === 'runway') return 'asphalt';
+    return 'asphalt';
+  }
+  function islandMarkerPavementFillCss(m) {
+    return c2dRoadWidthBandForPavement(islandMarkerPavementResolved(m));
+  }
+  /** Selected road-width band only: ~1% darker than theme stroke/fill. */
   const ROAD_WIDTH_SURFACE_RGB_MUL = 0.99;
   function c2dObjectSelectedGlowBlur() {
     const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
@@ -257,7 +301,8 @@
   }
   function holdingPointBarHalfLengthMFromPathWidth(pathWidthM) {
     const w = Number(pathWidthM);
-    return Math.max(3, (isFinite(w) && w > 0) ? w * 0.5 : c2dHoldingPointDiameterM() * 0.5);
+    if (isFinite(w) && w > 0) return w * 0.5;
+    return Math.max(3, c2dHoldingPointDiameterM() * 0.5);
   }
   function holdingPointPerpFromTangent(ux, uy) {
     return { px: -uy, py: ux };
@@ -310,33 +355,52 @@
     if (bestD2 > maxD2) return { ux: 1, uy: 0, ok: false, pathWidthM, tw: bestTw };
     return { ux, uy, ok: true, pathWidthM, tw: bestTw };
   }
+  function closestPointOnAnyRunwayCenterlineWorld(wx, wy) {
+    const pt = [wx, wy];
+    let best = null;
+    let bestD2 = Infinity;
+    (state.taxiways || []).forEach(function(tw) {
+      if ((tw.pathType || 'taxiway') !== 'runway') return;
+      if (!tw.vertices || tw.vertices.length < 2) return;
+      for (let i = 0; i < tw.vertices.length - 1; i++) {
+        const p1 = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+        const p2 = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
+        const near = closestPointOnSegment(p1, p2, pt);
+        if (!near) continue;
+        const d2 = dist2(near, pt);
+        if (d2 < bestD2) { bestD2 = d2; best = near; }
+      }
+    });
+    return best;
+  }
   function findHoldingPointPathTangent(hp) {
     const g = findHoldingPointPathGeometry(hp);
     return { ux: g.ux, uy: g.uy, ok: g.ok };
   }
   function drawHoldingPointGridMarking(ctx, cx, cy, hpKind, selected, preview) {
+    const k = normalizeHoldingPointKind(hpKind);
     const g = findHoldingPointPathGeometry({ x: cx, y: cy, hpKind: hpKind });
     const { px, py } = holdingPointPerpFromTangent(g.ux, g.uy);
     const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM);
+    const pathSpanM = halfLen * 2;
     const lineW = c2dHoldingPointMarkingLineWidthWorld();
     const markYellow = c2dHoldingPointMarkingYellow();
     const stroke = preview ? 'rgba(250, 204, 21, 0.7)' : (selected ? c2dObjectSelectedStroke() : markYellow);
     const lw = preview ? Math.max(0.2, lineW * 0.92) : (selected ? lineW + 0.14 : lineW);
     const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
-    const dashLen = Math.max(1.6, halfLen * 0.11);
-    const gapLen = Math.max(1.2, halfLen * 0.09);
+    const dashLen = Math.max(lineW * 2.2, pathSpanM * 0.13);
+    const gapLen = Math.max(lineW * 1.6, pathSpanM * 0.09);
     ctx.lineCap = 'butt';
     ctx.lineJoin = 'miter';
     ctx.strokeStyle = stroke;
     ctx.lineWidth = lw;
-    ctx.setLineDash([dashLen, gapLen]);
     if (selected && !preview) {
       ctx.shadowColor = c2dObjectSelectedGlow();
       ctx.shadowBlur = c2dObjectSelectedGlowBlur();
     } else {
       ctx.shadowBlur = 0;
     }
-    [-pairHalf, pairHalf].forEach(function(ofs) {
+    function strokeBarAtOffset(ofs) {
       const sx = cx - px * halfLen + g.ux * ofs;
       const sy = cy - py * halfLen + g.uy * ofs;
       const ex = cx + px * halfLen + g.ux * ofs;
@@ -345,8 +409,42 @@
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
       ctx.stroke();
-    });
-    ctx.setLineDash([]);
+    }
+    if (k === 'intermediate') {
+      ctx.setLineDash([dashLen, gapLen]);
+      strokeBarAtOffset(0);
+      ctx.setLineDash([]);
+    } else {
+      ctx.setLineDash([]);
+      strokeBarAtOffset(-pairHalf);
+      strokeBarAtOffset(pairHalf);
+      const R = closestPointOnAnyRunwayCenterlineWorld(cx, cy);
+      const rx = R ? R[0] : cx + g.ux * (CELL_SIZE * 40);
+      const ry = R ? R[1] : cy + g.uy * (CELL_SIZE * 40);
+      const midM = [cx - g.ux * pairHalf, cy - g.uy * pairHalf];
+      const midP = [cx + g.ux * pairHalf, cy + g.uy * pairHalf];
+      const ofsR = dist2(midM, [rx, ry]) <= dist2(midP, [rx, ry]) ? -pairHalf : pairHalf;
+      const pathW = Number(g.pathWidthM);
+      const toothLen = Math.max(0.75, (isFinite(pathW) && pathW > 0 ? pathW : 12) * 0.24) * 0.25;
+      const toothSpacing = Math.max(0.55, pathSpanM * 0.065);
+      const toothLw = Math.max(lw, lw * 1.12);
+      ctx.save();
+      ctx.lineWidth = toothLw;
+      for (let s = -halfLen + toothSpacing * 0.5; s <= halfLen - toothSpacing * 0.25; s += toothSpacing) {
+        const bx = cx + px * s + g.ux * ofsR;
+        const by = cy + py * s + g.uy * ofsR;
+        const mx = cx + px * s;
+        const my = cy + py * s;
+        const vx = rx - mx;
+        const vy = ry - my;
+        const signT = (g.ux * vx + g.uy * vy) >= 0 ? 1 : -1;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + g.ux * signT * toothLen, by + g.uy * signT * toothLen);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     ctx.shadowBlur = 0;
   }
   function c2dSimStandOccupiedFill() { return _canvas2dStyle.simStandOccupiedFill || 'rgba(239, 68, 68, 0.32)'; }
@@ -1357,6 +1455,7 @@
         out.push(o);
       });
       out.forEach(normalizeTaxiwayWidthInPlace);
+      out.forEach(normalizePathPavementInPlace);
       return out;
     }
     if (Array.isArray(obj.taxiways)) {
@@ -1364,6 +1463,7 @@
       sliced.forEach(function(tw) {
         normalizeTaxiwayVerticesFromPersistLoad(tw);
         normalizeTaxiwayWidthInPlace(tw);
+        normalizePathPavementInPlace(tw);
       });
       return sliced;
     }
@@ -1395,7 +1495,7 @@
       else ow = Math.min(500, ow);
       if (!isFinite(iw) || iw < 0) iw = LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
       else iw = Math.min(200, iw);
-      return { kind: 'island', id: m.id || id(), points: points, outerWidthM: ow, innerWidthM: iw };
+      return { kind: 'island', id: m.id || id(), points: points, outerWidthM: ow, innerWidthM: iw, pavement: islandMarkerPavementResolved(m) };
     }
     if (k === 'area') {
       const rawPts = Array.isArray(m.points) ? m.points : [];
@@ -2524,11 +2624,6 @@
   }
   function getPBBStandAngle(pbb) {
     if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg) * Math.PI / 180;
-    const x1 = Number(pbb && pbb.x1), y1 = Number(pbb && pbb.y1);
-    const x2 = Number(pbb && pbb.x2), y2 = Number(pbb && pbb.y2);
-    if (Number.isFinite(x1) && Number.isFinite(y1) && Number.isFinite(x2) && Number.isFinite(y2) && (x1 !== x2 || y1 !== y2)) {
-      return Math.atan2(y2 - y1, x2 - x1);
-    }
     const anchor = getPbbAnchorPx(pbb);
     const center = getStandConnectionPx(pbb);
     return Math.atan2(center[1] - anchor[1], center[0] - anchor[0]);
@@ -2669,14 +2764,19 @@
     const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
     let nx = -(y2 - y1), ny = x2 - x1;
     const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
-    const toClickX = wx - ex, toClickY = wy - ey;
-    if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
+    const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
+    if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
     const categoryMode = normalizeStandCategoryMode(document.getElementById('standCategoryMode') ? document.getElementById('standCategoryMode').value : (_pbbTier.defaultCategoryMode || 'icao'), 'icao');
     const category = document.getElementById('standCategory').value || 'C';
     const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
-    const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-    const newPbb = { x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx, category };
+    const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
+    const standAngleDeg = normalizeAngleDeg(document.getElementById('standAngle') ? document.getElementById('standAngle').value : 0);
+    const bwEl = document.getElementById('pbbBoardingWidth');
+    const bhEl = document.getElementById('pbbBoardingHeight');
+    const boardingW = Math.max(0.5, Number(bwEl && bwEl.value) || 5);
+    const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
+    const newPbb = { x1: ex, y1: ey, x2: ex + nx * boardingH, y2: ey + ny * boardingH, category };
     if (pbbStandOverlapsExisting(newPbb)) return false;
     const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
     if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
@@ -2687,12 +2787,15 @@
     state.pbbStands.push(normalizePbbStandObject({
       id: id(),
       name: pbbNameCandidate,
-      x1: ex, y1: ey, x2: ex + nx * lenPx, y2: ey + ny * lenPx,
+      x1: ex, y1: ey, x2: ex + nx * boardingH, y2: ey + ny * boardingH,
       category: newPbb.category,
       categoryMode: categoryMode,
       allowedAircraftTypes: readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check'),
       pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
-      angleDeg: normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI),
+      angleDeg: standAngleDeg,
+      boardingWidthM: boardingW,
+      boardingHeightM: boardingH,
+      pbbArmLenM: armLen,
       edgeCol: bestEdge.col,
       edgeRow: bestEdge.row
     }));
@@ -3122,7 +3225,8 @@
             id: m.id,
             points: pts,
             outerWidthM: islandOuterWidthMResolved(m),
-            innerWidthM: islandInnerWidthMResolved(m)
+            innerWidthM: islandInnerWidthMResolved(m),
+            pavement: islandMarkerPavementResolved(m)
           };
         }
         if (m.kind === 'area') {
@@ -3451,6 +3555,119 @@
     });
     return best;
   }
+  function getPbbBoardingWidthM(pbb) {
+    const w = Number(pbb && pbb.boardingWidthM);
+    if (isFinite(w) && w > 0) return w;
+    return 5;
+  }
+  function getPbbBoardingHeightM(pbb) {
+    const h = Number(pbb && pbb.boardingHeightM);
+    if (isFinite(h) && h > 0) return h;
+    return 15;
+  }
+  function getPbbTerminalFrameFromEdge(term, edgeIndex, wallX, wallY) {
+    const v1 = term.vertices[edgeIndex], v2 = term.vertices[(edgeIndex + 1) % term.vertices.length];
+    const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
+    const edx = p2[0] - p1[0], edy = p2[1] - p1[1];
+    const el = Math.hypot(edx, edy) || 1;
+    const tx = edx / el, ty = edy / el;
+    let nx = -ty, ny = tx;
+    let tcx = 0, tcy = 0;
+    term.vertices.forEach(function(v) {
+      const q = cellToPixel(v.col, v.row);
+      tcx += q[0];
+      tcy += q[1];
+    });
+    tcx /= term.vertices.length;
+    tcy /= term.vertices.length;
+    const inX = tcx - wallX, inY = tcy - wallY;
+    if (nx * inX + ny * inY > 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    return { tx: tx, ty: ty, nx: nx, ny: ny };
+  }
+  function getPbbTerminalFrameAtWorld(wx, wy) {
+    const proj = getClosestTerminalEdgePoint(wx, wy);
+    if (!proj || !proj.term) return null;
+    const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
+    return { mpx: proj.point[0], mpy: proj.point[1], term: proj.term, edgeIndex: proj.edgeIndex, tx: fr.tx, ty: fr.ty, nx: fr.nx, ny: fr.ny };
+  }
+  function ensurePbbBoardingWallGeometry(pbb) {
+    if (!pbb || !Array.isArray(pbb.pbbBridges) || !pbb.pbbBridges.length) return;
+    const Tsrcx = Number.isFinite(Number(pbb.x1)) ? Number(pbb.x1) : Number(pbb.pbbBridges[0].points[0].x) || 0;
+    const Tsrcy = Number.isFinite(Number(pbb.y1)) ? Number(pbb.y1) : Number(pbb.pbbBridges[0].points[0].y) || 0;
+    const proj = getClosestTerminalEdgePoint(Tsrcx, Tsrcy);
+    if (!proj || !proj.term) return;
+    const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
+    const Tx = proj.point[0], Ty = proj.point[1];
+    const depthM = getPbbBoardingHeightM(pbb);
+    const Bx = Tx + fr.nx * depthM, By = Ty + fr.ny * depthM;
+    pbb.pbbBridges.forEach(function(bridge) {
+      if (!bridge.points || bridge.points.length < 3) return;
+      bridge.points[0].x = Tx;
+      bridge.points[0].y = Ty;
+      bridge.points[1].x = Bx;
+      bridge.points[1].y = By;
+    });
+    pbb.x1 = Tx;
+    pbb.y1 = Ty;
+    pbb.x2 = Bx;
+    pbb.y2 = By;
+  }
+  function applyPbbArmLengthToBridgeEnds(pbb, armLenM) {
+    if (!pbb || !Array.isArray(pbb.pbbBridges)) return;
+    ensurePbbBoardingWallGeometry(pbb);
+    const len = Math.max(3, Number(armLenM) || 15);
+    pbb.pbbBridges.forEach(function(bridge) {
+      const pts = bridge.points;
+      if (!pts || pts.length < 3) return;
+      const bx = Number(pts[1].x), by = Number(pts[1].y);
+      const px = Number(pts[2].x), py = Number(pts[2].y);
+      let vx = px - bx, vy = py - by;
+      const hl = Math.hypot(vx, vy) || 1;
+      vx /= hl;
+      vy /= hl;
+      pts[2].x = bx + vx * len;
+      pts[2].y = by + vy * len;
+    });
+    bumpPathPolylineCacheRev();
+  }
+  function getPbbBoardingRectangleCornersWorldPx(pbb) {
+    ensurePbbBoardingWallGeometry(pbb);
+    const proj = getClosestTerminalEdgePoint(Number(pbb.x1) || 0, Number(pbb.y1) || 0);
+    if (!proj || !proj.term) return null;
+    const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
+    const Tx = proj.point[0], Ty = proj.point[1];
+    const halfW = getPbbBoardingWidthM(pbb) * 0.5;
+    const depthM = getPbbBoardingHeightM(pbb);
+    const c0 = [Tx - fr.tx * halfW, Ty - fr.ty * halfW];
+    const c1 = [Tx + fr.tx * halfW, Ty + fr.ty * halfW];
+    const c2 = [c1[0] + fr.nx * depthM, c1[1] + fr.ny * depthM];
+    const c3 = [c0[0] + fr.nx * depthM, c0[1] + fr.ny * depthM];
+    return [c0, c1, c2, c3];
+  }
+  function drawPbbBoardingRectangle(ctx, pbb, sel) {
+    const poly = getPbbBoardingRectangleCornersWorldPx(pbb);
+    if (!poly || poly.length < 4) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+    ctx.closePath();
+    const hairW = layoutHairlineStrokeWidthWorld();
+    ctx.fillStyle = sel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.14)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.88)';
+    ctx.lineWidth = hairW;
+    ctx.fill();
+    drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.4)', hairW);
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
 
   function pointInPolygon(p, verts) {
     let inside = false;
@@ -3560,7 +3777,7 @@
       if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) continue;
       const g = findHoldingPointPathGeometry(hp);
       const perp = holdingPointPerpFromTangent(g.ux, g.uy);
-      const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM) + Math.max(2, CELL_SIZE * 0.12);
+      const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM);
       const cx = hp.x, cy = hp.y;
       const nearOfs = function(ofs) {
         const x0 = cx - perp.px * halfLen + g.ux * ofs, y0 = cy - perp.py * halfLen + g.uy * ofs;
@@ -4099,7 +4316,8 @@
             id: id(),
             points: list.map(function(p) { return { x: Number(p.x), y: Number(p.y) }; }),
             outerWidthM: getMarkerIslandOuterWidthMFromPanel(),
-            innerWidthM: getMarkerIslandInnerWidthMFromPanel()
+            innerWidthM: getMarkerIslandInnerWidthMFromPanel(),
+            pavement: getMarkerIslandPavementFromPanel()
           });
           state.markerIslandDraft = null;
           state.markerIslandHoverWorld = null;
@@ -4273,6 +4491,7 @@
     let bestD2 = maxD2;
     (Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : []).forEach(function(bridge, bridgeIdx) {
       (Array.isArray(bridge.points) ? bridge.points : []).forEach(function(pt, ptIdx) {
+        if (ptIdx === 1) return;
         const d2 = dist2([Number(pt.x) || 0, Number(pt.y) || 0], click);
         if (d2 < bestD2) {
           bestD2 = d2;
@@ -4484,6 +4703,53 @@
     state.selectedVertex = { type: 'taxiway', id: tw.id, index: midSel };
     bumpPathPolylineCacheRev();
   }
+  function apronLinkPolyVertexIndexForMid(lk, midIndex) {
+    const mids = Array.isArray(lk.midVertices) ? lk.midVertices : [];
+    const n = mids.length + 2;
+    if (n < 3 || midIndex < 0 || midIndex >= mids.length) return -1;
+    const standFirst = String(lk.apronDrawFirstEndpoint || 'stand') === 'stand';
+    return standFirst ? (midIndex + 1) : (n - 2 - midIndex);
+  }
+  function pathArcCommitApronLinkFromPreview(lk, polyVertexIndex, previewPx, snapToGrid) {
+    if (!lk || !previewPx || previewPx.length < 2) return;
+    const poly = getApronLinkPolylineWorldPts(lk);
+    const n = poly.length;
+    if (n < 3) return;
+    const vi = polyVertexIndex;
+    if (vi <= 0 || vi >= n - 1) return;
+    const Apx = poly[vi - 1], Bpx = poly[vi + 1];
+    const workPx = previewPx.map(function(p, j) {
+      if (j === 0) return [Apx[0], Apx[1]];
+      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
+      return [p[0], p[1]];
+    });
+    const cells = [];
+    const prevCell = worldPointToCellPoint(Apx[0], Apx[1], snapToGrid);
+    const nextCell = worldPointToCellPoint(Bpx[0], Bpx[1], snapToGrid);
+    if (previewPx.length > 2) {
+      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
+      for (let k = 0; k < densePx.length; k++) {
+        const c = worldPointToCellPoint(densePx[k][0], densePx[k][1], snapToGrid);
+        if (cells.length && cells[cells.length - 1].col === c.col && cells[cells.length - 1].row === c.row) continue;
+        if (c.col === prevCell.col && c.row === prevCell.row) continue;
+        cells.push(c);
+      }
+      while (cells.length && cells[cells.length - 1].col === nextCell.col && cells[cells.length - 1].row === nextCell.row) cells.pop();
+    }
+    if (!cells.length) {
+      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
+      cells.push(worldPointToCellPoint(M[0], M[1], snapToGrid));
+    }
+    const standFirst = String(lk.apronDrawFirstEndpoint || 'stand') === 'stand';
+    const mids = Array.isArray(lk.midVertices) ? lk.midVertices : [];
+    let midIndex = standFirst ? (vi - 1) : (mids.length - vi);
+    if (midIndex < 0 || midIndex >= mids.length) return;
+    if (!Array.isArray(lk.midVertices)) lk.midVertices = [];
+    lk.midVertices.splice(midIndex, 1, ...cells);
+    const midSel = midIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
+    state.selectedVertex = { type: 'apronLink', id: lk.id, kind: 'mid', midIndex: midSel };
+    bumpPathPolylineCacheRev();
+  }
   function isPathArcHudVertexSelection() {
     const so = state.selectedObject;
     const sv = state.selectedVertex;
@@ -4506,6 +4772,14 @@
       if (n < 3 || typeof idx !== 'number' || idx < 0 || idx >= n) return null;
       return { kind: 'island', mk: mk, idx: idx };
     }
+    if (so.type === 'apronLink') {
+      const lk = so.obj;
+      if (!lk || !sv || sv.type !== 'apronLink' || sv.id !== so.id || sv.kind !== 'mid' || typeof sv.midIndex !== 'number') return null;
+      const vi = apronLinkPolyVertexIndexForMid(lk, sv.midIndex);
+      const poly = getApronLinkPolylineWorldPts(lk);
+      if (vi <= 0 || vi >= poly.length - 1) return null;
+      return { kind: 'apronLink', lk: lk, polyVertexIndex: vi };
+    }
     return null;
   }
   function clearPathArcIfStale() {
@@ -4515,6 +4789,12 @@
       const mk = (state.layoutMarkers || []).find(function(m) { return m && String(m.id) === String(d.islandMarkerId); });
       const n = (mk && isLayoutPolygonMarkerKind(mk.kind) && mk.points && mk.points.length) || 0;
       if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || d.vertexIndex < 0 || d.vertexIndex >= n) state.pathArcDrag = null;
+      return;
+    }
+    if (d.apronLinkId != null) {
+      const lk = (state.apronLinks || []).find(function(l) { return l && l.id === d.apronLinkId; });
+      const poly = lk ? getApronLinkPolylineWorldPts(lk) : [];
+      if (!lk || poly.length < 3 || d.polyVertexIndex <= 0 || d.polyVertexIndex >= poly.length - 1) state.pathArcDrag = null;
       return;
     }
     const tw = state.taxiways.find(function(t) { return t.id === d.taxiwayId; });
@@ -4614,8 +4894,10 @@
       if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'taxiway' }; }
     }
     (lk.midVertices || []).forEach((v, idx) => {
-      const [vx, vy] = cellToPixel(Number(v.col), Number(v.row));
-      const d2 = dist2([vx, vy], click);
+      const px = v && isFinite(Number(v.x)) && isFinite(Number(v.y))
+        ? [Number(v.x), Number(v.y)]
+        : cellToPixel(Number(v.col), Number(v.row));
+      const d2 = dist2(px, click);
       if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'mid', midIndex: idx }; }
     });
     return best;
@@ -4829,11 +5111,21 @@
       if (modeSel) modeSel.value = getStandCategoryMode(pbb);
       if (catSel) catSel.value = pbb.category || 'C';
       if (lenInput) {
-        const lenM = Math.hypot((pbb.x2 || 0) - (pbb.x1 || 0), (pbb.y2 || 0) - (pbb.y1 || 0));
-        lenInput.value = String(Math.max(1, Math.round(lenM)));
+        let arm = Number(pbb.pbbArmLenM);
+        if (!isFinite(arm) || arm <= 0) {
+          const br0 = pbb.pbbBridges && pbb.pbbBridges[0];
+          const p1 = br0 && br0.points && br0.points[1], p2 = br0 && br0.points && br0.points[2];
+          if (p1 && p2) arm = Math.hypot(Number(p2.x) - Number(p1.x), Number(p2.y) - Number(p1.y));
+          else arm = 15;
+        }
+        lenInput.value = String(Math.max(1, Math.round(arm)));
       }
       if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
       if (pbbCountInput) pbbCountInput.value = String(Math.max(1, parseInt(pbb.pbbCount, 10) || 1));
+      const boardingWInput = document.getElementById('pbbBoardingWidth');
+      const boardingHInput = document.getElementById('pbbBoardingHeight');
+      if (boardingWInput) boardingWInput.value = String(getPbbBoardingWidthM(pbb));
+      if (boardingHInput) boardingHInput.value = String(getPbbBoardingHeightM(pbb));
       syncStandConstraintVisibility('stand', getStandCategoryMode(pbb));
       renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb));
     }
@@ -4927,6 +5219,7 @@
         const ptk = tw.pathType || 'taxiway';
         kindSel.value = (ptk === 'general_queue_taxiway') ? 'queue' : 'normal';
       }
+      syncPathPavementRadiosToValue(pathPavementResolvedForTaxiway(tw));
     } else if (state.selectedObject && state.selectedObject.type === 'apronLink') {
       const lk = state.selectedObject.obj;
       const nameInput = document.getElementById('apronLinkName');
@@ -4946,6 +5239,7 @@
         }
         const twKindIdle = document.getElementById('taxiwayPathTypeKind');
         if (twKindIdle && ptx === 'taxiway') twKindIdle.value = 'normal';
+        syncPathPavementRadiosToValue(pathPavementDefaultForPathType(ptx));
       }
       else {
         const maxExitWrap = document.getElementById('runwayMaxExitVelWrap');
@@ -5141,6 +5435,9 @@
         const fb = pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
         tw.width = clampTaxiwayWidthM(pathType, el('taxiwayWidth').value, fb);
       }
+      if (document.querySelector('input[name="pathPavement"]')) {
+        tw.pavement = getPathPavementFromPanelForPathType(tw.pathType || 'taxiway');
+      }
       if (el('taxiwayMaxExitVel')) {
         const mv = Number(el('taxiwayMaxExitVel').value);
         if (tw.pathType === 'runway_exit') tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
@@ -5240,6 +5537,7 @@
             ? RUNWAY_PATH_DEFAULT_WIDTH
             : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
         }
+        syncPathPavementRadiosToValue(pathPavementDefaultForPathType(pt));
         if (pt === 'runway') {
           const startDispInput = document.getElementById('runwayStartDisplacedThresholdM');
           if (startDispInput) startDispInput.value = String(RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
@@ -5560,7 +5858,8 @@
       this.value = String(Math.max(1, Math.round(nextLen)));
       if (state.selectedObject && state.selectedObject.type === 'pbb') {
         const pbb = state.selectedObject.obj;
-        setPbbGeometryFromAngleLength(pbb, getPbbAngleDeg(pbb), nextLen, true);
+        pbb.pbbArmLenM = nextLen;
+        applyPbbArmLengthToBridgeEnds(pbb, nextLen);
         updateObjectInfo();
         renderObjectList();
         draw();
@@ -5575,7 +5874,7 @@
       this.value = String(Math.round(nextDeg));
       if (state.selectedObject && state.selectedObject.type === 'pbb') {
         const pbb = state.selectedObject.obj;
-        setPbbGeometryFromAngleLength(pbb, nextDeg, getPbbLengthMeters(pbb), true);
+        pbb.angleDeg = nextDeg;
         updateObjectInfo();
         renderObjectList();
         draw();
@@ -5593,6 +5892,44 @@
         pbb.pbbCount = nextCount;
         delete pbb.pbbBridges;
         rebuildPbbBridgeGeometry(pbb);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  function applyPbbBoardingAreaDimsFromInputs(pbb) {
+    const wEl = document.getElementById('pbbBoardingWidth');
+    const hEl = document.getElementById('pbbBoardingHeight');
+    const nw = Math.max(0.5, Number(wEl && wEl.value) || 5);
+    const nh = Math.max(0.5, Number(hEl && hEl.value) || 15);
+    pbb.boardingWidthM = nw;
+    pbb.boardingHeightM = nh;
+    if (wEl) wEl.value = String(nw);
+    if (hEl) hEl.value = String(nh);
+    ensurePbbBoardingWallGeometry(pbb);
+    const arm = Number(pbb.pbbArmLenM);
+    if (isFinite(arm) && arm > 0) applyPbbArmLengthToBridgeEnds(pbb, arm);
+    bumpPathPolylineCacheRev();
+  }
+  const pbbBoardingWidthEl = document.getElementById('pbbBoardingWidth');
+  if (pbbBoardingWidthEl) {
+    pbbBoardingWidthEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        applyPbbBoardingAreaDimsFromInputs(state.selectedObject.obj);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const pbbBoardingHeightEl = document.getElementById('pbbBoardingHeight');
+  if (pbbBoardingHeightEl) {
+    pbbBoardingHeightEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        applyPbbBoardingAreaDimsFromInputs(state.selectedObject.obj);
         updateObjectInfo();
         renderObjectList();
         draw();
@@ -5891,6 +6228,17 @@
       draw();
       update3DSceneWhenVisible();
     }
+  });
+  document.querySelectorAll('input[name="pathPavement"]').forEach(function(inp) {
+    inp.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        tw.pavement = getPathPavementFromPanelForPathType(tw.pathType || 'taxiway');
+        updateObjectInfo();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
   });
   const avgVelInputEl = document.getElementById('taxiwayAvgMoveVelocity');
   if (avgVelInputEl) avgVelInputEl.addEventListener('change', function() {
@@ -11023,13 +11371,15 @@
 
     ctx.save();
     const rwDecoOpaque = !!state.showRoadWidth;
+    const rwPaveAsphalt = c2dRoadWidthBandRunwayAsphaltColor();
     function rwO(c) { return rwDecoOpaque ? c2dCssColorToOpaque(c) : c; }
     const thresholdColor = rwO(c2dRunwayThresholdColor());
+    const displacedArrowFill = rwDecoOpaque ? c2dCssColorToOpaque(c2dRunwayMarkingColor()) : thresholdColor;
     const touchdownColor = rwO(c2dRunwayTouchdownColor());
     const aimingPointColor = rwO(c2dRunwayAimingPointColor());
-    const extensionFill = rwO(c2dRunwayExtensionFill());
+    const extensionFill = rwDecoOpaque ? rwPaveAsphalt : rwO(c2dRunwayExtensionFill());
     const extensionOutline = c2dRunwayOutline();
-    const blastChevronColor = rwO(c2dRunwayBlastChevronColor());
+    const blastChevronColor = rwDecoOpaque ? c2dCssColorToOpaque(c2dRunwayBlastChevronColor()) : rwO(c2dRunwayBlastChevronColor());
 
     function drawExtensionSegment(frame, directionSign, innerOffsetPx, segLenPx) {
       if (!(segLenPx > 0)) return;
@@ -11052,7 +11402,7 @@
       const usableLen = Math.max(0, segLenPx - arrowSpan);
       const shaftHalf = Math.max(3, runwayWidth * 0.055);
       const headLen = Math.min(Math.max(16, arrowSpan * 0.32), arrowSpan * 0.48);
-      ctx.fillStyle = thresholdColor;
+      ctx.fillStyle = displacedArrowFill;
       for (let i = 0; i < count; i++) {
         const along = innerOffsetPx + (arrowSpan * 0.5) + (usableLen * (i + 0.5) / count);
         const framePoint = [frame.point[0] + frame.tangent[0] * positionSign * along, frame.point[1] + frame.tangent[1] * positionSign * along];
@@ -13228,6 +13578,7 @@
     return Math.max(1, Math.hypot(center[0] - anchor[0], center[1] - anchor[1]));
   }
   function getPbbAngleDeg(pbb) {
+    if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg);
     return normalizeAngleDeg(getPBBStandAngle(pbb) * 180 / Math.PI);
   }
   function getStandConnectionPx(stand) {
@@ -13303,23 +13654,49 @@
   }
   function buildDefaultPbbBridgePoints(pbb, bridgeIndex, bridgeCount) {
     const count = Math.max(1, parseInt(bridgeCount, 10) || 1);
-    const length = getPbbLengthMeters(pbb);
-    const angle = getPBBStandAngle(pbb);
-    const dirX = Math.cos(angle), dirY = Math.sin(angle);
-    const tanX = -dirY, tanY = dirX;
-    const lat = getStandWidthMeters((pbb && pbb.category) || 'C');
-    const spread = Math.min(Math.max(lat * 0.18, 4), lat * 0.4);
+    const cat = (pbb && pbb.category) || 'C';
+    const dep = getStandDepthMeters(cat);
+    const T0x = Number(pbb.x1) || 0, T0y = Number(pbb.y1) || 0;
+    const proj = getClosestTerminalEdgePoint(T0x, T0y);
+    let Tx = T0x, Ty = T0y, nx = 0, ny = 1, tx = 1, ty = 0;
+    if (proj && proj.term) {
+      const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
+      Tx = proj.point[0];
+      Ty = proj.point[1];
+      nx = fr.nx;
+      ny = fr.ny;
+      tx = fr.tx;
+      ty = fr.ty;
+    } else {
+      const x2 = Number(pbb.x2) || 0, y2 = Number(pbb.y2) || 0;
+      let nnx = x2 - Tx, nny = y2 - Ty;
+      const nl = Math.hypot(nnx, nny) || 1;
+      nnx /= nl;
+      nny /= nl;
+      nx = nnx;
+      ny = nny;
+      tx = -ny;
+      ty = nx;
+    }
+    const depthM = getPbbBoardingHeightM(pbb);
+    const Bx = Tx + nx * depthM, By = Ty + ny * depthM;
+    const armlen = (pbb.pbbArmLenM != null && isFinite(Number(pbb.pbbArmLenM)) && Number(pbb.pbbArmLenM) > 0)
+      ? Number(pbb.pbbArmLenM)
+      : Math.max(dep * 0.55, 8);
+    const bw = getPbbBoardingWidthM(pbb);
+    const spread = Math.min(Math.max(bw * 0.38, 2.8), bw * 0.48);
     const offsetIndex = bridgeIndex - (count - 1) / 2;
     const lateral = spread * offsetIndex;
-    const startX = Number(pbb.x1 || 0) + tanX * lateral;
-    const startY = Number(pbb.y1 || 0) + tanY * lateral;
-    const endX = Number(pbb.x2 || 0) + tanX * (lateral * 0.55);
-    const endY = Number(pbb.y2 || 0) + tanY * (lateral * 0.55);
-    const midX = startX + dirX * (length * 0.45);
-    const midY = startY + dirY * (length * 0.45);
+    let dirx = nx * 0.55 + tx * 0.45, diry = ny * 0.55 + ty * 0.45;
+    const dl = Math.hypot(dirx, diry) || 1;
+    dirx /= dl;
+    diry /= dl;
+    const centerApron = getStandConnectionPx(pbb);
+    const endX = Bx + dirx * armlen + tx * lateral * 0.85 + (centerApron[0] - Bx) * 0.08;
+    const endY = By + diry * armlen + ty * lateral * 0.85 + (centerApron[1] - By) * 0.08;
     return [
-      { x: startX, y: startY },
-      { x: midX, y: midY },
+      { x: Tx, y: Ty },
+      { x: Bx, y: By },
       { x: endX, y: endY },
     ];
   }
@@ -13334,25 +13711,31 @@
         : buildDefaultPbbBridgePoints(pbb, idx, count);
       return { id: (current && current.id) || id(), points: points };
     });
+    ensurePbbBoardingWallGeometry(pbb);
     if (pbb.apronSiteX == null || pbb.apronSiteY == null) {
-      pbb.apronSiteX = Number(pbb.x2 || 0);
-      pbb.apronSiteY = Number(pbb.y2 || 0);
+      const br0 = pbb.pbbBridges && pbb.pbbBridges[0];
+      const p2 = br0 && br0.points && br0.points[2];
+      if (p2 && isFinite(Number(p2.x)) && isFinite(Number(p2.y))) {
+        pbb.apronSiteX = Number(p2.x);
+        pbb.apronSiteY = Number(p2.y);
+      } else {
+        const ac = getStandConnectionPx(pbb);
+        pbb.apronSiteX = ac[0];
+        pbb.apronSiteY = ac[1];
+      }
     }
   }
   function setPbbGeometryFromAngleLength(pbb, angleDeg, lengthMeters, resetBridgeGeometry) {
-    const ang = normalizeAngleDeg(angleDeg);
-    const len = Math.max(1, Number(lengthMeters) || 1);
-    const rad = ang * Math.PI / 180;
-    const anchor = getPbbAnchorPx(pbb);
-    pbb.x1 = anchor[0];
-    pbb.y1 = anchor[1];
-    pbb.x2 = anchor[0] + Math.cos(rad) * len;
-    pbb.y2 = anchor[1] + Math.sin(rad) * len;
-    pbb.angleDeg = ang;
-    if (resetBridgeGeometry !== false) {
-      delete pbb.pbbBridges;
+    pbb.angleDeg = normalizeAngleDeg(angleDeg);
+    if (lengthMeters != null && lengthMeters !== undefined && Number.isFinite(Number(lengthMeters))) {
+      const len = Math.max(1, Number(lengthMeters) || 1);
+      pbb.pbbArmLenM = len;
+      applyPbbArmLengthToBridgeEnds(pbb, len);
     }
-    rebuildPbbBridgeGeometry(pbb);
+    if (resetBridgeGeometry === true) {
+      delete pbb.pbbBridges;
+      rebuildPbbBridgeGeometry(pbb);
+    }
   }
   function normalizeBuildingObject(termLike) {
     const term = Object.assign({}, termLike || {});
@@ -13373,10 +13756,21 @@
     pbb.categoryMode = getStandCategoryMode(pbb);
     pbb.allowedAircraftTypes = getStandAllowedAircraftTypes(pbb);
     pbb.pbbCount = Math.max(1, Math.min(8, parseInt(pbb.pbbCount != null ? pbb.pbbCount : (_pbbTier.defaultBridgeCount || 1), 10) || 1));
+    pbb.boardingWidthM = (pbb.boardingWidthM != null && isFinite(Number(pbb.boardingWidthM)) && Number(pbb.boardingWidthM) > 0)
+      ? Number(pbb.boardingWidthM) : 5;
+    pbb.boardingHeightM = (pbb.boardingHeightM != null && isFinite(Number(pbb.boardingHeightM)) && Number(pbb.boardingHeightM) > 0)
+      ? Number(pbb.boardingHeightM) : 15;
     if (pbb.x1 != null && pbb.y1 != null && pbb.x2 != null && pbb.y2 != null) {
-      pbb.angleDeg = pbb.angleDeg != null
-        ? normalizeAngleDeg(pbb.angleDeg)
-        : normalizeAngleDeg(Math.atan2((Number(pbb.y2) || 0) - (Number(pbb.y1) || 0), (Number(pbb.x2) || 0) - (Number(pbb.x1) || 0)) * 180 / Math.PI);
+      if (pbb.angleDeg != null) {
+        pbb.angleDeg = normalizeAngleDeg(pbb.angleDeg);
+      } else if (pbb.apronSiteX != null && pbb.apronSiteY != null) {
+        pbb.angleDeg = normalizeAngleDeg(Math.atan2(
+          (Number(pbb.apronSiteY) || 0) - (Number(pbb.y1) || 0),
+          (Number(pbb.apronSiteX) || 0) - (Number(pbb.x1) || 0)
+        ) * 180 / Math.PI);
+      } else {
+        pbb.angleDeg = 0;
+      }
       rebuildPbbBridgeGeometry(pbb);
     }
     return pbb;
@@ -14441,7 +14835,7 @@
     const endBlastPadM = (pathType === 'runway' && runwayEndBlastEl)
       ? (function() { const x = Number(runwayEndBlastEl.value); return (isFinite(x) && x >= 0) ? x : RUNWAY_END_BLAST_PAD_DEFAULT_M; })()
       : undefined;
-    const taxiway = { id: id(), name: nameBase, vertices: [], width: widthVal, direction: modeVal, pathType, maxExitVelocity, minExitVelocity, allowedRwDirections, minArrVelocity, lineupDistM, lineupDistM_CW, lineupDistM_CCW, avgMoveVelocity: (function() {
+    const taxiway = { id: id(), name: nameBase, vertices: [], width: widthVal, direction: modeVal, pathType, pavement: getPathPavementFromPanelForPathType(pathType), maxExitVelocity, minExitVelocity, allowedRwDirections, minArrVelocity, lineupDistM, lineupDistM_CW, lineupDistM_CCW, avgMoveVelocity: (function() {
       const el = document.getElementById('taxiwayAvgMoveVelocity');
       const v = el ? Number(el.value) : 10;
       return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
@@ -15120,6 +15514,20 @@
         vx = Number(pv.x);
         vy = Number(pv.y);
         pathSel = !!(state.selectedObject && state.selectedObject.type === 'layoutMarker' && String(state.selectedObject.id) === String(mkD.id));
+      } else if (d.apronLinkId != null) {
+        const lkD = (state.apronLinks || []).find(function(l) { return l && l.id === d.apronLinkId; });
+        const polyD = lkD ? getApronLinkPolylineWorldPts(lkD) : [];
+        const idxD = d.polyVertexIndex;
+        if (!lkD || !polyD.length || idxD < 0 || idxD >= polyD.length) {
+          root.setAttribute('hidden', '');
+          root.style.display = 'none';
+          if (hint) hint.setAttribute('hidden', '');
+          return;
+        }
+        const pxy = polyD[idxD];
+        vx = pxy[0];
+        vy = pxy[1];
+        pathSel = !!(state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lkD.id);
       } else {
         const twPos = state.taxiways.find(function(t) { return t.id === d.taxiwayId; });
         const idxPos = d.vertexIndex;
@@ -15146,6 +15554,18 @@
         vx = Number(pv.x);
         vy = Number(pv.y);
         pathSel = !!(state.selectedObject && state.selectedObject.type === 'layoutMarker' && String(state.selectedObject.id) === String(elig.mk.id));
+      } else if (elig.kind === 'apronLink') {
+        const polyE = getApronLinkPolylineWorldPts(elig.lk);
+        const idxE = elig.polyVertexIndex;
+        if (!polyE.length || idxE < 0 || idxE >= polyE.length) {
+          root.setAttribute('hidden', '');
+          root.style.display = 'none';
+          if (hint) hint.setAttribute('hidden', '');
+          return;
+        }
+        vx = polyE[idxE][0];
+        vy = polyE[idxE][1];
+        pathSel = !!(state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === elig.lk.id);
       } else {
         const twPos = elig.tw;
         const idxPos = elig.idx;
@@ -15269,9 +15689,11 @@
           : '';
         const maxEx = (o.pathType === 'runway_exit' && typeof o.maxExitVelocity === 'number' && isFinite(o.maxExitVelocity) && o.maxExitVelocity > 0) ? o.maxExitVelocity : null;
         const minEx = (o.pathType === 'runway_exit' && typeof o.minExitVelocity === 'number' && isFinite(o.minExitVelocity) && o.minExitVelocity > 0) ? o.minExitVelocity : null;
+        const pavLabel = pathPavementResolvedForTaxiway(o) === 'cement' ? 'Cement' : 'Asphalt';
         objectInfoEl.innerHTML = '<strong>' + heading + '</strong><br>Name: ' + (o.name || '—') +
           '<br>Direction: ' + dirLabel +
           '<br>Width: ' + (o.width != null ? o.width : 23) + ' m' +
+          '<br>Pavement: ' + pavLabel +
           ((o.pathType === 'taxiway' || o.pathType === 'apron_taxiway' || o.pathType === 'general_queue_taxiway') ? '<br>Avg move velocity: ' + avgVel + ' m/s' : '') +
           (minArr != null ? '<br>Min arr velocity: ' + minArr + ' m/s' : '') +
           (o.pathType === 'runway' ? '<br>Line up: ' + lineupStr : '') +
@@ -15321,11 +15743,17 @@
           const iid = 'layoutMarkerIslandInnerM';
           const ow = islandOuterWidthMResolved(mk);
           const iw = islandInnerWidthMResolved(mk);
+          const pav = islandMarkerPavementResolved(mk);
           objectInfoEl.innerHTML = '<strong>Marker · Island</strong><br>Vertices: ' + nv +
             '<br><label for="' + oid + '">Outer width (m)</label><br>' +
             '<input type="number" id="' + oid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:4px 0 8px;" min="0" max="500" step="0.5" value="' + ow + '" inputmode="decimal" />' +
             '<br><label for="' + iid + '">Inner width (m)</label><br>' +
             '<input type="number" id="' + iid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:4px 0 8px;" min="0" max="200" step="0.5" value="' + iw + '" inputmode="decimal" />' +
+            '<br><span style="font-size:11px;color:#9ca3af;">Pavement</span><br>' +
+            '<div class="marker-island-obj-pav">' +
+            '<label style="display:inline-flex;align-items:center;gap:6px;margin:6px 14px 0 0;font-size:11px;color:#9ca3af;cursor:pointer;"><input type="radio" name="layoutMarkerIslandPavObj" value="asphalt"' + (pav === 'asphalt' ? ' checked' : '') + ' /> Asphalt</label>' +
+            '<label style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#9ca3af;cursor:pointer;"><input type="radio" name="layoutMarkerIslandPavObj" value="cement"' + (pav === 'cement' ? ' checked' : '') + ' /> Cement</label>' +
+            '</div>' +
             '<br>호: 패널과 동일 토글 — 꼭짓점 선택 후 캔버스에서 드래그해 곡선 적용. Shift로 격자 스냅.' +
             '<br>닫기: 첫 점 근처 클릭(≥3점). 더블클릭으로 변 중간에 점 추가.';
           const markerId = mk.id;
@@ -15353,6 +15781,21 @@
               scheduleDraw();
               syncMarkerIslandSidebarWidthsFromSelection();
             };
+            const pWrap = objectInfoEl.querySelector('.marker-island-obj-pav');
+            if (pWrap) {
+              pWrap.querySelectorAll('input[type="radio"]').forEach(function(pInp) {
+                pInp.onchange = function() {
+                  const so = state.selectedObject;
+                  if (!so || so.type !== 'layoutMarker' || String(so.id) !== String(markerId)) return;
+                  const mo = so.obj;
+                  if (!mo || mo.kind !== 'island') return;
+                  const pv = this.value;
+                  mo.pavement = (pv === 'asphalt' || pv === 'cement') ? pv : islandMarkerPavementResolved(mo);
+                  scheduleDraw();
+                  syncMarkerIslandPavementFromSelection();
+                };
+              });
+            }
             return true;
           }
           if (!bindIslandWidths()) setTimeout(bindIslandWidths, 0);
@@ -15580,6 +16023,62 @@
     ctx.restore();
   }
 
+  function layoutHairlineStrokeWidthWorld() {
+    return 1 / Math.max(state.scale || 1, 0.02);
+  }
+  const LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M = 10;
+  const LAYOUT_PBB_BRIDGE_HALF_WIDTH_M = 1;
+  function hatchIntersectionsLineXMinusYEqualsC(c, rx0, rx1, ry0, ry1) {
+    const pts = [];
+    function add(x, y) {
+      if (x < rx0 - 1e-9 || x > rx1 + 1e-9 || y < ry0 - 1e-9 || y > ry1 + 1e-9) return;
+      for (let i = 0; i < pts.length; i++) {
+        if (Math.hypot(pts[i][0] - x, pts[i][1] - y) < 1e-6) return;
+      }
+      pts.push([x, y]);
+    }
+    add(rx0, rx0 - c);
+    add(rx1, rx1 - c);
+    add(ry0 + c, ry0);
+    add(ry1 + c, ry1);
+    if (pts.length < 2) return null;
+    pts.sort(function(a, b) { return a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]; });
+    return [pts[0][0], pts[0][1], pts[pts.length - 1][0], pts[pts.length - 1][1]];
+  }
+  function drawPolygonDiagonalHatch45M(hatchCtx, points, spacingM, strokeStyle, lineWidthWorld) {
+    if (!hatchCtx || !Array.isArray(points) || points.length < 3 || !isFinite(spacingM) || spacingM <= 0) return;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    points.forEach(function(p) {
+      minX = Math.min(minX, p[0]);
+      maxX = Math.max(maxX, p[0]);
+      minY = Math.min(minY, p[1]);
+      maxY = Math.max(maxY, p[1]);
+    });
+    const span = Math.max(maxX - minX, maxY - minY, spacingM);
+    const pad = span * 2 + spacingM * 4;
+    const rx0 = minX - pad, rx1 = maxX + pad, ry0 = minY - pad, ry1 = maxY + pad;
+    const cCornerMin = Math.min(rx0 - ry0, rx1 - ry0, rx0 - ry1, rx1 - ry1);
+    const cCornerMax = Math.max(rx0 - ry0, rx1 - ry0, rx0 - ry1, rx1 - ry1);
+    const step = spacingM * Math.SQRT2;
+    hatchCtx.save();
+    hatchCtx.beginPath();
+    hatchCtx.moveTo(points[0][0], points[0][1]);
+    for (let i = 1; i < points.length; i++) hatchCtx.lineTo(points[i][0], points[i][1]);
+    hatchCtx.closePath();
+    hatchCtx.clip();
+    hatchCtx.strokeStyle = strokeStyle;
+    hatchCtx.lineWidth = lineWidthWorld;
+    hatchCtx.setLineDash([]);
+    for (let k = Math.floor(cCornerMin / step) * step; k <= cCornerMax + step * 0.5; k += step) {
+      const seg = hatchIntersectionsLineXMinusYEqualsC(k, rx0, rx1, ry0, ry1);
+      if (!seg) continue;
+      hatchCtx.beginPath();
+      hatchCtx.moveTo(seg[0], seg[1]);
+      hatchCtx.lineTo(seg[2], seg[3]);
+      hatchCtx.stroke();
+    }
+    hatchCtx.restore();
+  }
   function drawPolygonHatch(points, strokeStyle, spacingPx) {
     if (!Array.isArray(points) || points.length < 3) return;
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -15598,7 +16097,7 @@
     ctx.closePath();
     ctx.clip();
     ctx.strokeStyle = strokeStyle;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = layoutHairlineStrokeWidthWorld();
     ctx.setLineDash([]);
     for (let offset = minX - pad; offset <= maxX + pad; offset += spacingPx) {
       ctx.beginPath();
@@ -15625,9 +16124,10 @@
         strokeLayoutPathDraftPolyline(ctx, termPts, hoverTerm);
         drawLayoutPathDraftVertexDots(ctx, termPts, hoverTerm);
       } else {
-        ctx.lineWidth = selected ? 3 : 2;
-        ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : buildingTheme.stroke;
-        ctx.fillStyle = selected ? c2dObjectSelectedFill() : buildingTheme.fill;
+        const hairW = layoutHairlineStrokeWidthWorld();
+        ctx.lineWidth = hairW;
+        ctx.strokeStyle = selected ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.88)';
+        ctx.fillStyle = selected ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)';
         ctx.beginPath();
         for (let i = 0; i < termPts.length; i++) {
           const [x,y] = termPts[i];
@@ -15637,18 +16137,17 @@
           ctx.closePath();
           if (buildingTheme.fillEnabled) ctx.fill();
         }
-        if (selected) {
-          ctx.save();
-          ctx.shadowColor = c2dObjectSelectedGlow();
-          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 0;
+        ctx.shadowBlur = 0;
+        if (term.closed && buildingTheme.fillEnabled) {
+          drawPolygonDiagonalHatch45M(ctx, termPts, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, selected ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.38)', hairW);
         }
+        ctx.beginPath();
+        for (let i = 0; i < termPts.length; i++) {
+          const [x,y] = termPts[i];
+          if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        if (term.closed) ctx.closePath();
         ctx.stroke();
-        if (selected) ctx.restore();
-        if (term.closed && buildingTheme.hatch === 'diagonal' && buildingTheme.fillEnabled) {
-          drawPolygonHatch(termPts, selected ? c2dObjectSelectedDashStroke() : buildingTheme.stroke, Math.max(10, CELL_SIZE * 0.6));
-        }
         if (term.closed && term.vertices.length > 0) {
           let cx = 0, cy = 0;
           term.vertices.forEach(v => {
@@ -15692,27 +16191,47 @@
       const widP = getStandWidthMeters(pbb.category || 'C');
       const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
+      drawPbbBoardingRectangle(ctx, pbb, sel);
       const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
       bridges.forEach(function(bridge, bridgeIdx) {
         const pts = Array.isArray(bridge.points) ? bridge.points : [];
-        if (pts.length < 2) return;
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : '#f97316';
-        ctx.lineWidth = sel ? 3.5 : 2.5;
-        if (sel) {
-          ctx.save();
-          ctx.shadowColor = c2dObjectSelectedGlow();
-          ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-        }
+        if (pts.length < 3) return;
+        const hairW = layoutHairlineStrokeWidthWorld();
+        const bx = Number(pts[1].x) || 0, by = Number(pts[1].y) || 0;
+        const px = Number(pts[2].x) || 0, py = Number(pts[2].y) || 0;
+        const dx = px - bx, dy = py - by;
+        const L = Math.hypot(dx, dy) || 1e-6;
+        const tx = dx / L, ty = dy / L;
+        const nx = -ty, ny = tx;
+        const hw = LAYOUT_PBB_BRIDGE_HALF_WIDTH_M;
+        const quad = [
+          [bx + nx * hw, by + ny * hw],
+          [bx - nx * hw, by - ny * hw],
+          [px - nx * hw, py - ny * hw],
+          [px + nx * hw, py + ny * hw],
+        ];
+        ctx.shadowBlur = 0;
         ctx.beginPath();
-        ctx.moveTo(Number(pts[0].x) || 0, Number(pts[0].y) || 0);
-        for (let pi = 1; pi < pts.length; pi++) ctx.lineTo(Number(pts[pi].x) || 0, Number(pts[pi].y) || 0);
+        ctx.moveTo(quad[0][0], quad[0][1]);
+        for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
+        ctx.closePath();
+        ctx.fillStyle = sel ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.1)';
+        ctx.fill();
+        drawPolygonDiagonalHatch45M(ctx, quad, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.38)', hairW);
+        ctx.beginPath();
+        ctx.moveTo(quad[0][0], quad[0][1]);
+        for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
+        ctx.closePath();
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = hairW;
         ctx.stroke();
-        if (sel) ctx.restore();
         if (sel) {
-          pts.forEach(function(pt, ptIdx) {
+          [0, 2].forEach(function(ptIdx) {
+            const pt = pts[ptIdx];
+            if (!pt) return;
             const isBridgeVertexSelected = !!(state.selectedVertex && state.selectedVertex.type === 'pbbBridge' && state.selectedVertex.id === pbb.id && state.selectedVertex.bridgeIndex === bridgeIdx && state.selectedVertex.pointIndex === ptIdx);
             ctx.beginPath();
-            ctx.fillStyle = isBridgeVertexSelected ? '#f43f5e' : '#fdba74';
+            ctx.fillStyle = isBridgeVertexSelected ? '#f43f5e' : '#e5e7eb';
             ctx.arc(Number(pt.x) || 0, Number(pt.y) || 0, isBridgeVertexSelected ? 4 : 3, 0, Math.PI * 2);
             ctx.fill();
           });
@@ -16407,7 +16926,19 @@
       const showRoadWidth = !!state.showRoadWidth;
       return { drawing, isRunwayPath, isRunwayExit, isApronTaxiwayPath, width, widthDefault, sel, pathLineCap, showRoadWidth };
     }
-    state.taxiways.forEach(tw => {
+    function forEachTaxiwayInPavementUnderlayOrder(callback) {
+      if (!state.showRoadWidth) {
+        state.taxiways.forEach(callback);
+        return;
+      }
+      state.taxiways.forEach(function(tw) {
+        if (pathPavementResolvedForTaxiway(tw) === 'cement') callback(tw);
+      });
+      state.taxiways.forEach(function(tw) {
+        if (pathPavementResolvedForTaxiway(tw) === 'asphalt') callback(tw);
+      });
+    }
+    forEachTaxiwayInPavementUnderlayOrder(tw => {
       const g = taxiwayDrawContext(tw);
       if (!g) return;
       const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel, pathLineCap = g.pathLineCap, showRoadWidth = g.showRoadWidth;
@@ -16426,8 +16957,14 @@
         fillC = drawing ? 'rgba(74, 74, 74, 0.16)' : c2dRunwayFill();
       }
       if (showRoadWidth) {
-        strokeC = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(strokeC), ROAD_WIDTH_SURFACE_RGB_MUL);
-        fillC = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(fillC), ROAD_WIDTH_SURFACE_RGB_MUL);
+        if (!sel) {
+          const bandCss = c2dRoadWidthBandForPavement(pathPavementResolvedForTaxiway(tw));
+          strokeC = bandCss;
+          fillC = bandCss;
+        } else {
+          strokeC = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(strokeC), ROAD_WIDTH_SURFACE_RGB_MUL);
+          fillC = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(fillC), ROAD_WIDTH_SURFACE_RGB_MUL);
+        }
       }
       ctx.strokeStyle = strokeC;
       ctx.fillStyle = fillC;
@@ -16702,24 +17239,28 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    ctx.setLineDash([3, 3]);
     state.apronLinks.forEach(lk => {
       const stand = findStandById(lk.pbbId);
       const tw = state.taxiways.find(t => t.id === lk.taxiwayId);
       if (!stand || !tw || lk.tx == null || lk.ty == null) return;
       const poly = getApronLinkPolylineWorldPts(lk);
       if (poly.length < 2) return;
-      const hair = Math.max(1, 1 / Math.max(state.scale, 0.08));
+      ctx.setLineDash([]);
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
+      function traceApronLinkPoly() {
+        ctx.moveTo(poly[0][0], poly[0][1]);
+        for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
+      }
       ctx.beginPath();
-      ctx.moveTo(poly[0][0], poly[0][1]);
-      for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
-      ctx.lineWidth = hair;
-      ctx.strokeStyle = '#3a3a3a';
+      traceApronLinkPoly();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#0a0a0a';
       ctx.stroke();
-      ctx.lineWidth = 0.5;
-      ctx.strokeStyle = '#facc15';
+      ctx.beginPath();
+      traceApronLinkPoly();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = c2dTaxiwayCenterlineStroke();
       ctx.stroke();
       const svApron = state.selectedVertex;
       const selApron = state.selectedObject && state.selectedObject.type === 'apronLink' && state.selectedObject.id === lk.id;
@@ -16756,7 +17297,6 @@
           ctx.arc(px, py, r, 0, Math.PI*2);
           ctx.fill();
         }
-        ctx.setLineDash([3, 3]);
       }
     });
     ctx.setLineDash([]);
@@ -17137,6 +17677,36 @@
     if (isFinite(v) && v >= 0) return Math.min(200, v);
     return LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
   }
+  function getMarkerIslandPavementFromPanel() {
+    const el = document.querySelector('input[name="markerIslandPavement"]:checked');
+    const v = el && el.value;
+    if (v === 'asphalt' || v === 'cement') return v;
+    return 'asphalt';
+  }
+  function syncPathPavementRadiosToValue(pavement) {
+    const p = (pavement === 'cement') ? 'cement' : 'asphalt';
+    document.querySelectorAll('input[name="pathPavement"]').forEach(function(inp) {
+      if (document.activeElement === inp) return;
+      inp.checked = inp.value === p;
+    });
+  }
+  function getPathPavementFromPanelForPathType(pathType) {
+    const el = document.querySelector('input[name="pathPavement"]:checked');
+    const v = el && el.value;
+    if (v === 'asphalt' || v === 'cement') return v;
+    return pathPavementDefaultForPathType(pathType);
+  }
+  function syncMarkerIslandPavementFromSelection() {
+    const nodes = document.querySelectorAll('input[name="markerIslandPavement"]');
+    if (!nodes || !nodes.length) return;
+    const so = state.selectedObject;
+    if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
+    const mode = islandMarkerPavementResolved(so.obj);
+    nodes.forEach(function(inp) {
+      if (document.activeElement === inp) return;
+      inp.checked = inp.value === mode;
+    });
+  }
   function syncMarkerIslandSidebarWidthsFromSelection() {
     const oEl = document.getElementById('markerIslandOuterWidthM');
     const iEl = document.getElementById('markerIslandInnerWidthM');
@@ -17147,6 +17717,7 @@
     const iw = islandInnerWidthMResolved(so.obj);
     if (document.activeElement !== oEl) oEl.value = String(ow);
     if (document.activeElement !== iEl) iEl.value = String(iw);
+    syncMarkerIslandPavementFromSelection();
   }
   (function setupMarkerIslandPanelWidthApplyToSelection() {
     const oEl = document.getElementById('markerIslandOuterWidthM');
@@ -17167,6 +17738,14 @@
     }
     if (oEl) oEl.addEventListener('input', applyOuterToSelectedIsland);
     if (iEl) iEl.addEventListener('input', applyInnerToSelectedIsland);
+    document.querySelectorAll('input[name="markerIslandPavement"]').forEach(function(radio) {
+      radio.addEventListener('change', function() {
+        const so = state.selectedObject;
+        if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
+        so.obj.pavement = getMarkerIslandPavementFromPanel();
+        scheduleDraw();
+      });
+    });
   })();
   function layoutIslandWorldPointsForDraw(m) {
     if (!m || m.kind !== 'island' || !Array.isArray(m.points)) return [];
@@ -17236,8 +17815,8 @@
     cy /= n;
     const outerW = islandOuterWidthMResolved(marker);
     const innerW = islandInnerWidthMResolved(marker);
-    const pavedFill = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(c2dRunwayStroke()), ROAD_WIDTH_SURFACE_RGB_MUL);
-    const islandInnerBandFill = '#2e2e2e';
+    const pavedFill = islandMarkerPavementFillCss(marker);
+    const islandInnerBandFill = '#8c8287';
     const islandGrassFill = '#454d36';
     ctx.fillStyle = pavedFill;
     if (outerW > 1e-6) {
@@ -17324,7 +17903,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const fillArea = c2dCssColorLightenSteps(c2dRunwayStroke(), 2);
+    const fillArea = c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
     (state.layoutMarkers || []).forEach(function(m) {
       if (!m || m.kind !== 'area') return;
       const pts = m.points;
@@ -17361,7 +17940,13 @@
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     (state.layoutMarkers || []).forEach(function(m) {
-      if (!m || m.kind !== 'island') return;
+      if (!m || m.kind !== 'island' || islandMarkerPavementResolved(m) !== 'cement') return;
+      const pts = layoutIslandWorldPointsForDraw(m);
+      if (pts.length < 3) return;
+      drawLayoutIslandMarkerPavementWorld(ctx, pts, m);
+    });
+    (state.layoutMarkers || []).forEach(function(m) {
+      if (!m || m.kind !== 'island' || islandMarkerPavementResolved(m) !== 'asphalt') return;
       const pts = layoutIslandWorldPointsForDraw(m);
       if (pts.length < 3) return;
       drawLayoutIslandMarkerPavementWorld(ctx, pts, m);
@@ -17975,6 +18560,22 @@
           draw();
           return;
         }
+      } else if (eligArc && eligArc.kind === 'apronLink') {
+        const lkA = eligArc.lk, viA = eligArc.polyVertexIndex;
+        const polyA = getApronLinkPolylineWorldPts(lkA);
+        if (polyA.length >= 3 && viA > 0 && viA < polyA.length - 1) {
+          const Apx = polyA[viA - 1], Bpx = polyA[viA + 1];
+          state.pathArcDrag = {
+            apronLinkId: lkA.id,
+            polyVertexIndex: viA,
+            lastShift: !!ev.shiftKey,
+            previewPx: pathArcComputePreviewWorldPxFromAB(Apx[0], Apx[1], Bpx[0], Bpx[1], wx, wy)
+          };
+          updatePathArcHud();
+          ev.preventDefault();
+          draw();
+          return;
+        }
       }
     }
     if (mode === 'terminal' && !state.terminalDrawingId) {
@@ -18021,8 +18622,6 @@
           state.dragPbbBridgeVertex = { pbbId: state.selectedObject.id, bridgeIndex: ph.bridgeIndex, pointIndex: ph.pointIndex };
           state.selectedVertex = { type: 'pbbBridge', id: state.selectedObject.id, bridgeIndex: ph.bridgeIndex, pointIndex: ph.pointIndex };
         } else {
-
-
           state.dragStandConnection = { pbbId: state.selectedObject.id };
           state.selectedVertex = { type: 'pbbApronSite', id: state.selectedObject.id };
         }
@@ -18253,6 +18852,21 @@
           scheduleDraw();
           drewThisMove = true;
         }
+      } else if (d.apronLinkId != null) {
+        const lkArc = (state.apronLinks || []).find(function(l) { return l && l.id === d.apronLinkId; });
+        const vi = d.polyVertexIndex;
+        const polyA = lkArc ? getApronLinkPolylineWorldPts(lkArc) : [];
+        if (!lkArc || vi <= 0 || vi >= polyA.length - 1) {
+          state.pathArcDrag = null;
+          updatePathArcHud();
+          if (!drewThisMove) scheduleDraw();
+        } else {
+          const Apx = polyA[vi - 1], Bpx = polyA[vi + 1];
+          d.lastShift = !!ev.shiftKey;
+          d.previewPx = pathArcComputePreviewWorldPxFromAB(Apx[0], Apx[1], Bpx[0], Bpx[1], wx, wy);
+          scheduleDraw();
+          drewThisMove = true;
+        }
       } else {
         const twArc = state.taxiways.find(function(t) { return t.id === d.taxiwayId; });
         if (!twArc || twArc.pathType === 'runway' || d.vertexIndex <= 0 || d.vertexIndex >= (twArc.vertices || []).length - 1) {
@@ -18295,7 +18909,7 @@
         if (pbb) {
           const origin = getPbbRotationOriginPx(pbb);
           const nextDeg = normalizeAngleDeg(Math.atan2(wy - origin[1], wx - origin[0]) * 180 / Math.PI);
-          setPbbGeometryFromAngleLength(pbb, nextDeg, getPbbLengthMeters(pbb), true);
+          pbb.angleDeg = nextDeg;
           const angleInput = document.getElementById('standAngle');
           if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
           scheduleDraw(); drewThisMove = true;
@@ -18331,10 +18945,24 @@
       if (pbb && Array.isArray(pbb.pbbBridges) && pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex] && Array.isArray(pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points) && pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points[state.dragPbbBridgeVertex.pointIndex]) {
         const pt = pbb.pbbBridges[state.dragPbbBridgeVertex.bridgeIndex].points[state.dragPbbBridgeVertex.pointIndex];
         if (state.dragPbbBridgeVertex.pointIndex === 0) {
-          const projected = getClosestTerminalEdgePoint(wx, wy);
-          if (projected && projected.point) {
-            pt.x = projected.point[0];
-            pt.y = projected.point[1];
+          const proj = getClosestTerminalEdgePoint(wx, wy);
+          if (proj && proj.point && proj.term) {
+            const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
+            const Tx = proj.point[0], Ty = proj.point[1];
+            const bh = getPbbBoardingHeightM(pbb);
+            const Bx = Tx + fr.nx * bh, By = Ty + fr.ny * bh;
+            pbb.x1 = Tx;
+            pbb.y1 = Ty;
+            pbb.x2 = Bx;
+            pbb.y2 = By;
+            pbb.pbbBridges.forEach(function(bridge) {
+              if (!bridge.points || bridge.points.length < 3) return;
+              bridge.points[0].x = Tx;
+              bridge.points[0].y = Ty;
+              bridge.points[1].x = Bx;
+              bridge.points[1].y = By;
+            });
+            bumpPathPolylineCacheRev();
           }
         } else {
           pt.x = snappedPx[0];
@@ -18537,13 +19165,17 @@
       let bestEdge = null, bestD2 = Infinity;
       state.terminals.forEach(t => {
         if (!t.closed || t.vertices.length < 2) return;
+        let tcx = 0, tcy = 0;
+        t.vertices.forEach(v => { const q = cellToPixel(v.col, v.row); tcx += q[0]; tcy += q[1]; });
+        tcx /= t.vertices.length || 1;
+        tcy /= t.vertices.length || 1;
         for (let i = 0; i < t.vertices.length; i++) {
           const v1 = t.vertices[i], v2 = t.vertices[(i+1) % t.vertices.length];
           const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
           const near = closestPointOnSegment(p1, p2, snappedPx);
           if (near) {
             const d2 = dist2(near, snappedPx);
-            if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2 }; }
+            if (d2 < bestD2) { bestD2 = d2; bestEdge = { near: near, p1: p1, p2: p2, cx: tcx, cy: tcy }; }
           }
         }
       });
@@ -18555,13 +19187,12 @@
         const [x1,y1]=bestEdge.p1, [x2,y2]=bestEdge.p2;
         let nx = -(y2-y1), ny = x2-x1;
         const len = Math.hypot(nx,ny) || 1; nx /= len; ny /= len;
-        const toClickX = snappedPx[0] - ex, toClickY = snappedPx[1] - ey;
-        if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
+        const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
+        if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
         const category = document.getElementById('standCategory').value || 'C';
-        const minLen = getStandDepthMeters(category) / 2 + 3;
-        const lenMeters = Number(document.getElementById('pbbLength').value || 15);
-        const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-        const px2 = ex + nx * lenPx, py2 = ey + ny * lenPx;
+        const bhEl = document.getElementById('pbbBoardingHeight');
+        const previewBh = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
+        const px2 = ex + nx * previewBh, py2 = ey + ny * previewBh;
         const preview = { x1: ex, y1: ey, x2: px2, y2: py2, category };
         const overlap = pbbStandOverlapsExisting(preview);
         const nextPbb = { x1: ex, y1: ey, x2: px2, y2: py2, category: preview.category, overlap };
@@ -18673,6 +19304,11 @@
         const nA = (mkArc && mkArc.points && mkArc.points.length) || 0;
         if (mkArc && isLayoutPolygonMarkerKind(mkArc.kind) && d.previewPx && d.vertexIndex >= 0 && d.vertexIndex < nA) {
           pathArcCommitIslandVertexFromPreview(mkArc, d.vertexIndex, d.previewPx, !!d.lastShift);
+        }
+      } else if (d.apronLinkId != null) {
+        const lkArc = (state.apronLinks || []).find(function(l) { return l && l.id === d.apronLinkId; });
+        if (lkArc && d.previewPx && typeof d.polyVertexIndex === 'number' && d.polyVertexIndex > 0) {
+          pathArcCommitApronLinkFromPreview(lkArc, d.polyVertexIndex, d.previewPx, !!d.lastShift);
         }
       } else {
         const twArc = state.taxiways.find(function(t) { return t.id === d.taxiwayId; });
