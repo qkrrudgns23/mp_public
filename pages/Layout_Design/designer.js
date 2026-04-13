@@ -604,6 +604,7 @@
   const HIT_TW_SEG_CF = _interactionConfigNum('hitTaxiwayAlongCellFactor', 0.8);
   const HIT_PBB_END_CF = _interactionConfigNum('hitPbbEndCellFactor', 0.8);
   const TRY_PBB_MAX_EDGE_CF = _interactionConfigNum('tryPlacePbbMaxEdgeCellFactor', 1.0);
+  const PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M = 50;
   const FLIGHT_TOOLTIP_CF = _interactionConfigNum('flightTooltipCellFactor', 1.2);
   const FLIGHT_TOOLTIP_SCAN_MIN_MS = _interactionConfigNum('flightTooltipScanMinIntervalMs', 50);
   const TERM_CLOSE_POLY_CF = _interactionConfigNum('terminalClosePolygonCellFactor', 0.6);
@@ -2771,12 +2772,23 @@
     const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
     const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-    const standAngleDeg = normalizeAngleDeg(document.getElementById('standAngle') ? document.getElementById('standAngle').value : 0);
+    const standAngleDeg = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
     const bwEl = document.getElementById('pbbBoardingWidth');
     const bhEl = document.getElementById('pbbBoardingHeight');
     const boardingW = Math.max(0.5, Number(bwEl && bwEl.value) || 5);
     const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
-    const newPbb = { x1: ex, y1: ey, x2: ex + nx * boardingH, y2: ey + ny * boardingH, category };
+    const wallX = ex, wallY = ey;
+    const bxOut = wallX + nx * boardingH, byOut = wallY + ny * boardingH;
+    const offM = PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
+    const newPbb = {
+      x1: wallX, y1: wallY, x2: bxOut, y2: byOut, category,
+      angleDeg: standAngleDeg,
+      apronSiteX: wallX + nx * offM,
+      apronSiteY: wallY + ny * offM,
+      terminalContactSetbackM: offM,
+      boardingWidthM: boardingW,
+      boardingHeightM: boardingH
+    };
     if (pbbStandOverlapsExisting(newPbb)) return false;
     const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
     if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
@@ -2787,12 +2799,15 @@
     state.pbbStands.push(normalizePbbStandObject({
       id: id(),
       name: pbbNameCandidate,
-      x1: ex, y1: ey, x2: ex + nx * boardingH, y2: ey + ny * boardingH,
+      x1: wallX, y1: wallY, x2: bxOut, y2: byOut,
       category: newPbb.category,
+      terminalContactSetbackM: offM,
       categoryMode: categoryMode,
       allowedAircraftTypes: readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check'),
       pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
       angleDeg: standAngleDeg,
+      apronSiteX: newPbb.apronSiteX,
+      apronSiteY: newPbb.apronSiteY,
       boardingWidthM: boardingW,
       boardingHeightM: boardingH,
       pbbArmLenM: armLen,
@@ -3565,6 +3580,11 @@
     if (isFinite(h) && h > 0) return h;
     return 15;
   }
+  function getPbbTerminalContactSetbackM(pbb) {
+    const v = Number(pbb && pbb.terminalContactSetbackM);
+    if (isFinite(v) && v >= 0) return v;
+    return 0;
+  }
   function getPbbTerminalFrameFromEdge(term, edgeIndex, wallX, wallY) {
     const v1 = term.vertices[edgeIndex], v2 = term.vertices[(edgeIndex + 1) % term.vertices.length];
     const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
@@ -3600,7 +3620,8 @@
     const proj = getClosestTerminalEdgePoint(Tsrcx, Tsrcy);
     if (!proj || !proj.term) return;
     const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-    const Tx = proj.point[0], Ty = proj.point[1];
+    const wx = proj.point[0], wy = proj.point[1];
+    const Tx = wx, Ty = wy;
     const depthM = getPbbBoardingHeightM(pbb);
     const Bx = Tx + fr.nx * depthM, By = Ty + fr.ny * depthM;
     pbb.pbbBridges.forEach(function(bridge) {
@@ -3638,7 +3659,8 @@
     const proj = getClosestTerminalEdgePoint(Number(pbb.x1) || 0, Number(pbb.y1) || 0);
     if (!proj || !proj.term) return null;
     const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-    const Tx = proj.point[0], Ty = proj.point[1];
+    const wx = proj.point[0], wy = proj.point[1];
+    const Tx = wx, Ty = wy;
     const halfW = getPbbBoardingWidthM(pbb) * 0.5;
     const depthM = getPbbBoardingHeightM(pbb);
     const c0 = [Tx - fr.tx * halfW, Ty - fr.ty * halfW];
@@ -5290,7 +5312,11 @@
       renderAircraftConstraintChoices('tempStandAircraftAccess', []);
       renderTempStandTerminalAccessChoices([]);
       const tempStandNameInput = document.getElementById('tempStandName');
-      if (tempStandNameInput && rm === 'tempStand') tempStandNameInput.value = getDefaultTempStandName();
+      if (tempStandNameInput && rm === 'tempStand' && !(state.selectedObject && state.selectedObject.type === 'tempStand')) tempStandNameInput.value = '';
+      const standNameInputIdle = document.getElementById('standName');
+      if (standNameInputIdle && rm === 'pbb' && !(state.selectedObject && state.selectedObject.type === 'pbb')) standNameInputIdle.value = '';
+      const remoteNameInputIdle = document.getElementById('remoteName');
+      if (remoteNameInputIdle && rm === 'remote' && !(state.selectedObject && state.selectedObject.type === 'remote')) remoteNameInputIdle.value = '';
       const apronLinkNameInput = document.getElementById('apronLinkName');
       if (apronLinkNameInput && rm === 'apronTaxiway') apronLinkNameInput.value = '';
       const edgeNameInput = document.getElementById('edgeName');
@@ -13661,8 +13687,9 @@
     let Tx = T0x, Ty = T0y, nx = 0, ny = 1, tx = 1, ty = 0;
     if (proj && proj.term) {
       const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-      Tx = proj.point[0];
-      Ty = proj.point[1];
+      const wx = proj.point[0], wy = proj.point[1];
+      Tx = wx;
+      Ty = wy;
       nx = fr.nx;
       ny = fr.ny;
       tx = fr.tx;
@@ -13760,6 +13787,11 @@
       ? Number(pbb.boardingWidthM) : 5;
     pbb.boardingHeightM = (pbb.boardingHeightM != null && isFinite(Number(pbb.boardingHeightM)) && Number(pbb.boardingHeightM) > 0)
       ? Number(pbb.boardingHeightM) : 15;
+    if (pbb.terminalContactSetbackM != null && isFinite(Number(pbb.terminalContactSetbackM)) && Number(pbb.terminalContactSetbackM) >= 0) {
+      pbb.terminalContactSetbackM = Number(pbb.terminalContactSetbackM);
+    } else {
+      delete pbb.terminalContactSetbackM;
+    }
     if (pbb.x1 != null && pbb.y1 != null && pbb.x2 != null && pbb.y2 != null) {
       if (pbb.angleDeg != null) {
         pbb.angleDeg = normalizeAngleDeg(pbb.angleDeg);
@@ -17610,7 +17642,12 @@
       ctx.fill();
     }
     if (mode === 'pbb' && state.previewPbb) {
-      const ex = state.previewPbb.x2, ey = state.previewPbb.y2;
+      const pv = state.previewPbb;
+      let ex = Number(pv.x2), ey = Number(pv.y2);
+      if (pv.apronSiteX != null && pv.apronSiteY != null) {
+        const ax = Number(pv.apronSiteX), ay = Number(pv.apronSiteY);
+        if (Number.isFinite(ax) && Number.isFinite(ay)) { ex = ax; ey = ay; }
+      }
       const catPv = state.previewPbb.category || 'C';
       const depPv = getStandDepthMeters(catPv);
       const widPv = getStandWidthMeters(catPv);
@@ -18948,13 +18985,19 @@
           const proj = getClosestTerminalEdgePoint(wx, wy);
           if (proj && proj.point && proj.term) {
             const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-            const Tx = proj.point[0], Ty = proj.point[1];
+            const wx = proj.point[0], wy = proj.point[1];
+            const Tx = wx, Ty = wy;
             const bh = getPbbBoardingHeightM(pbb);
             const Bx = Tx + fr.nx * bh, By = Ty + fr.ny * bh;
             pbb.x1 = Tx;
             pbb.y1 = Ty;
             pbb.x2 = Bx;
             pbb.y2 = By;
+            const sb = getPbbTerminalContactSetbackM(pbb);
+            if (sb > 0) {
+              pbb.apronSiteX = wx + fr.nx * sb;
+              pbb.apronSiteY = wy + fr.ny * sb;
+            }
             pbb.pbbBridges.forEach(function(bridge) {
               if (!bridge.points || bridge.points.length < 3) return;
               bridge.points[0].x = Tx;
@@ -19179,7 +19222,7 @@
           }
         }
       });
-      const maxD2 = (CELL_SIZE*1.0)**2;
+      const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
       if (bestEdge && bestD2 < maxD2) {
         const nearPt = bestEdge.near;
         const ex = (nearPt && nearPt[0] != null) ? nearPt[0] : 0;
@@ -19192,12 +19235,25 @@
         const category = document.getElementById('standCategory').value || 'C';
         const bhEl = document.getElementById('pbbBoardingHeight');
         const previewBh = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
-        const px2 = ex + nx * previewBh, py2 = ey + ny * previewBh;
-        const preview = { x1: ex, y1: ey, x2: px2, y2: py2, category };
+        const wallX = ex, wallY = ey;
+        const px2 = wallX + nx * previewBh, py2 = wallY + ny * previewBh;
+        const offM = PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
+        const previewAng = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
+        const preview = {
+          x1: wallX, y1: wallY, x2: px2, y2: py2, category,
+          angleDeg: previewAng,
+          apronSiteX: wallX + nx * offM,
+          apronSiteY: wallY + ny * offM,
+          terminalContactSetbackM: offM
+        };
         const overlap = pbbStandOverlapsExisting(preview);
-        const nextPbb = { x1: ex, y1: ey, x2: px2, y2: py2, category: preview.category, overlap };
+        const nextPbb = {
+          x1: wallX, y1: wallY, x2: px2, y2: py2, category: preview.category,
+          overlap, angleDeg: previewAng, apronSiteX: preview.apronSiteX, apronSiteY: preview.apronSiteY
+        };
         const prevPbb = state.previewPbb;
-        const pbbSame = prevPbb && prevPbb.x1 === nextPbb.x1 && prevPbb.y1 === nextPbb.y1 && prevPbb.x2 === nextPbb.x2 && prevPbb.y2 === nextPbb.y2 && String(prevPbb.category || '') === String(nextPbb.category || '') && !!prevPbb.overlap === !!nextPbb.overlap;
+        const pbbSame = prevPbb && prevPbb.x1 === nextPbb.x1 && prevPbb.y1 === nextPbb.y1 && prevPbb.x2 === nextPbb.x2 && prevPbb.y2 === nextPbb.y2 && String(prevPbb.category || '') === String(nextPbb.category || '') && !!prevPbb.overlap === !!nextPbb.overlap
+          && Number(prevPbb.apronSiteX) === Number(nextPbb.apronSiteX) && Number(prevPbb.apronSiteY) === Number(nextPbb.apronSiteY);
         if (!pbbSame) {
           state.previewPbb = nextPbb;
           scheduleDraw(); drewThisMove = true;

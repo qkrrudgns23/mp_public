@@ -262,8 +262,9 @@
       const proj = getClosestTerminalEdgePoint(Tx, Ty);
       if (proj && proj.term) {
         const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-        Tx = proj.point[0];
-        Ty = proj.point[1];
+        const wx = proj.point[0], wy = proj.point[1];
+        Tx = wx;
+        Ty = wy;
         nx = fr.nx;
         ny = fr.ny;
         tx = fr.tx;

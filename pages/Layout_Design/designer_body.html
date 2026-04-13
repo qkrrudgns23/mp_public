@@ -162,7 +162,7 @@
         <div id="settings-pbb" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">
             <label>Name</label>
-            <input type="text" id="standName" placeholder="e.g. Gate 1" />
+            <input type="text" id="standName" placeholder="Optional — auto C### if empty" />
           </div>
           <div class="compact-field">
             <label>Category Basis</label>
@@ -203,13 +203,13 @@
             <label>PBB Count</label>
             <input type="number" id="pbbBridgeCount" min="1" max="8" step="1" value="1" />
           </div>
-          <p class="choice-help">Contact stand: boarding zone size = Boarding Area W×H (m), along the terminal outward normal. White strokes = boarding outline and PBB arms. Drag terminal and PBB tip nodes; stand angle does not tilt the boarding zone.</p>
+          <p class="choice-help">Contact stand: boarding zone (W×H) sits flush on the terminal face and extends outward along the building normal; stand / apron reference is 50 m out on that same normal. New stands get angle aligned to the normal. White strokes = boarding outline and PBB arms.</p>
           <button class="small draw-toggle-btn" id="btnPbbDraw">Draw</button>
         </div>
         <div id="settings-remote" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">
             <label>Name</label>
-            <input type="text" id="remoteName" placeholder="e.g. R001" />
+            <input type="text" id="remoteName" placeholder="Optional — auto R### if empty" />
           </div>
           <div class="compact-field">
             <label>Angle (deg)</label>
@@ -244,7 +244,7 @@
         <div id="settings-tempStand" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">
             <label>Name</label>
-            <input type="text" id="tempStandName" placeholder="e.g. T001" />
+            <input type="text" id="tempStandName" placeholder="Optional — auto T### if empty" />
           </div>
           <div class="compact-field">
             <label>Angle (deg)</label>
@@ -293,7 +293,7 @@
         <div id="settings-taxiway" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">
             <label>Name</label>
-            <input type="text" id="taxiwayName" placeholder="e.g. Taxiway A" />
+            <input type="text" id="taxiwayName" placeholder="Optional — auto TX#/RW# if empty" />
           </div>
           <div class="compact-field">
             <label>Width (m)</label>
@@ -373,7 +373,7 @@
         <div id="settings-apronTaxiway" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">
             <label>Name</label>
-            <input type="text" id="apronLinkName" placeholder="e.g. Apron Taxiway 1" />
+            <input type="text" id="apronLinkName" placeholder="Optional — auto Apron Taxiway # if empty" />
           </div>
           <button class="small draw-toggle-btn" id="btnApronLinkDraw">Draw</button>
           <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Click a stand or taxiway to start, then place corners freely. Hold Shift to snap to the grid. Turn off Draw and click the line to select. Drag yellow handles to move corners or the taxiway end (snaps to path). Double-click a segment to add a point. Backspace/Delete removes the selected midpoint.</p>

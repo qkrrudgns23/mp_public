@@ -743,7 +743,12 @@
       ctx.restore();
     }
     if (mode === 'pbb' && state.previewPbb) {
-      const ex = state.previewPbb.x2, ey = state.previewPbb.y2;
+      const pv = state.previewPbb;
+      let ex = Number(pv.x2), ey = Number(pv.y2);
+      if (pv.apronSiteX != null && pv.apronSiteY != null) {
+        const ax = Number(pv.apronSiteX), ay = Number(pv.apronSiteY);
+        if (Number.isFinite(ax) && Number.isFinite(ay)) { ex = ax; ey = ay; }
+      }
       const cat3p = state.previewPbb.category || 'C';
       const dep3p = getStandDepthMeters(cat3p);
       const wid3p = getStandWidthMeters(cat3p);
@@ -1076,6 +1081,11 @@
             pbb.y1 = Ty;
             pbb.x2 = Bx;
             pbb.y2 = By;
+            const sb = (typeof getPbbTerminalContactSetbackM === 'function') ? getPbbTerminalContactSetbackM(pbb) : 0;
+            if (sb > 0) {
+              pbb.apronSiteX = proj.point[0] + fr.nx * sb;
+              pbb.apronSiteY = proj.point[1] + fr.ny * sb;
+            }
             pbb.pbbBridges.forEach(function(bridge) {
               if (!bridge.points || bridge.points.length < 3) return;
               bridge.points[0].x = Tx;
@@ -1181,15 +1191,20 @@
       scheduleDraw(); drewThisMove = true;
     } else if (!state.isPanning && !state.dragVertex && mode === 'pbb' && state.pbbDrawing) {
       let bestEdge = null, bestD2 = Infinity;
+      const pbbStandOffM = 50;
       state.terminals.forEach(t => {
         if (!t.closed || t.vertices.length < 2) return;
+        let tcx = 0, tcy = 0;
+        t.vertices.forEach(v => { const q = cellToPixel(v.col, v.row); tcx += q[0]; tcy += q[1]; });
+        tcx /= t.vertices.length || 1;
+        tcy /= t.vertices.length || 1;
         for (let i = 0; i < t.vertices.length; i++) {
           const v1 = t.vertices[i], v2 = t.vertices[(i+1) % t.vertices.length];
           const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
           const near = closestPointOnSegment(p1, p2, snappedPx);
           if (near) {
             const d2 = dist2(near, snappedPx);
-            if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2 }; }
+            if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2, cx: tcx, cy: tcy }; }
           }
         }
       });
@@ -1201,16 +1216,26 @@
         const [x1,y1]=bestEdge.p1, [x2,y2]=bestEdge.p2;
         let nx = -(y2-y1), ny = x2-x1;
         const len = Math.hypot(nx,ny) || 1; nx /= len; ny /= len;
-        const toClickX = snappedPx[0] - ex, toClickY = snappedPx[1] - ey;
-        if (nx * toClickX + ny * toClickY < 0) { nx *= -1; ny *= -1; }
+        const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
+        if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
         const category = document.getElementById('standCategory').value || 'C';
-        const minLen = getStandDepthMeters(category) / 2 + 3;
-        const lenMeters = Number(document.getElementById('pbbLength').value || 15);
-        const lenPx = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-        const px2 = ex + nx * lenPx, py2 = ey + ny * lenPx;
-        const preview = { x1: ex, y1: ey, x2: px2, y2: py2, category };
+        const bhEl = document.getElementById('pbbBoardingHeight');
+        const previewBh = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
+        const wallX = ex, wallY = ey;
+        const px2 = wallX + nx * previewBh, py2 = wallY + ny * previewBh;
+        const previewAng = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
+        const preview = {
+          x1: wallX, y1: wallY, x2: px2, y2: py2, category,
+          angleDeg: previewAng,
+          apronSiteX: wallX + nx * pbbStandOffM,
+          apronSiteY: wallY + ny * pbbStandOffM,
+          terminalContactSetbackM: pbbStandOffM
+        };
         const overlap = pbbStandOverlapsExisting(preview);
-        state.previewPbb = { x1: ex, y1: ey, x2: px2, y2: py2, category: preview.category, overlap };
+        state.previewPbb = {
+          x1: wallX, y1: wallY, x2: px2, y2: py2, category: preview.category, overlap,
+          angleDeg: previewAng, apronSiteX: preview.apronSiteX, apronSiteY: preview.apronSiteY
+        };
         scheduleDraw(); drewThisMove = true;
       } else {
         if (state.previewPbb) { state.previewPbb = null; scheduleDraw(); drewThisMove = true; }

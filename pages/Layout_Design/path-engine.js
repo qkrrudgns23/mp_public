@@ -423,12 +423,23 @@
     const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
     const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-    const standAngleDeg = normalizeAngleDeg(document.getElementById('standAngle') ? document.getElementById('standAngle').value : 0);
+    const standAngleDeg = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
     const bwEl = document.getElementById('pbbBoardingWidth');
     const bhEl = document.getElementById('pbbBoardingHeight');
     const boardingW = Math.max(0.5, Number(bwEl && bwEl.value) || 5);
     const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
-    const newPbb = { x1: ex, y1: ey, x2: ex + nx * boardingH, y2: ey + ny * boardingH, category };
+    const wallX = ex, wallY = ey;
+    const bxOut = wallX + nx * boardingH, byOut = wallY + ny * boardingH;
+    const offM = 50;
+    const newPbb = {
+      x1: wallX, y1: wallY, x2: bxOut, y2: byOut, category,
+      angleDeg: standAngleDeg,
+      apronSiteX: wallX + nx * offM,
+      apronSiteY: wallY + ny * offM,
+      terminalContactSetbackM: offM,
+      boardingWidthM: boardingW,
+      boardingHeightM: boardingH
+    };
     if (pbbStandOverlapsExisting(newPbb)) return false;
     const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
     if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
@@ -439,12 +450,15 @@
     state.pbbStands.push(normalizePbbStandObject({
       id: id(),
       name: pbbNameCandidate,
-      x1: ex, y1: ey, x2: ex + nx * boardingH, y2: ey + ny * boardingH,
+      x1: wallX, y1: wallY, x2: bxOut, y2: byOut,
       category: newPbb.category,
+      terminalContactSetbackM: offM,
       categoryMode: categoryMode,
       allowedAircraftTypes: readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check'),
       pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
       angleDeg: standAngleDeg,
+      apronSiteX: newPbb.apronSiteX,
+      apronSiteY: newPbb.apronSiteY,
       boardingWidthM: boardingW,
       boardingHeightM: boardingH,
       pbbArmLenM: armLen,
