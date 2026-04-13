@@ -18312,7 +18312,7 @@
     ctx.strokeStyle = '#3a3a3a';
     ctx.stroke();
     ctx.lineWidth = 0.25;
-    ctx.strokeStyle = '#ffc800';
+    ctx.strokeStyle = '#fcd410';
     ctx.stroke();
     if (sel) {
       ctx.strokeStyle = '#38bdf8';
@@ -18344,7 +18344,7 @@
         ctx.strokeStyle = '#3a3a3a';
         ctx.stroke();
         ctx.lineWidth = 0.25;
-        ctx.strokeStyle = '#ffc800';
+        ctx.strokeStyle = '#fcd410';
         ctx.stroke();
       }
       distAlong += edgeLen;
@@ -18474,7 +18474,7 @@
       }
       if (layerIslandContourLinesEffective() || isSel) {
         ctx.lineWidth = lwYellow;
-        ctx.strokeStyle = '#ffc800';
+        ctx.strokeStyle = '#fcd410';
         ctx.stroke();
       }
     });

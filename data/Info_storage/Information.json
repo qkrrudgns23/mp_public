@@ -1308,7 +1308,7 @@
       },
       "gridView": {
         "description": "2D/3D workspace: grid/canvas fill color",
-        "background": "#2b2b2b",
+        "background": "#1a1a1a",
         "majorLineOpacity": 0.45,
         "minorLineOpacity": 0.3
       },
@@ -1382,8 +1382,8 @@
         "runwayBandStrokeDim": "#141414",
         "taxiwayPavementStroke": "#6d6a61",
         "taxiwayPavementFill": "#7b796d",
-        "runwayTaxiwayCenterlineStroke": "#ffc800",
-        "taxiwayCenterlineStroke": "#ffc800",
+        "runwayTaxiwayCenterlineStroke": "#fcd410",
+        "taxiwayCenterlineStroke": "#fcd410",
         "pathArrivalArrowStroke": "rgba(252, 165, 165, 0.9)",
         "approachPreviewWidthM": 30,
         "approachPreviewStroke": "rgba(255, 255, 255, 0.01)",
