@@ -37,40 +37,40 @@
   },
   "networkJunctions": [
     {
-      "x": 4159.685852090032,
-      "y": 2254.3524115755627
+      "x": 1165,
+      "y": 3960
     },
     {
-      "x": 3866.6456965161556,
-      "y": 2421.255806239571
+      "x": 1474.307500566508,
+      "y": 3783.8314072059825
     },
     {
-      "x": 3424.15836577843,
-      "y": 2673.2780502604032
+      "x": 2091.5819999155674,
+      "y": 3432.2577152690387
     },
     {
-      "x": 2845.228994937248,
-      "y": 3003.0119636036625
+      "x": 2364.6113168577735,
+      "y": 3276.751655864967
     },
     {
       "x": 2556.4704222642686,
       "y": 3167.4767480393366
     },
     {
-      "x": 2364.611316857773,
-      "y": 3276.751655864967
+      "x": 2845.228994937248,
+      "y": 3003.0119636036625
     },
     {
-      "x": 2091.5819999155674,
-      "y": 3432.2577152690383
+      "x": 3424.1583657784295,
+      "y": 2673.2780502604037
     },
     {
-      "x": 1474.3075005665082,
-      "y": 3783.831407205982
+      "x": 3866.645696516155,
+      "y": 2421.255806239571
     },
     {
-      "x": 1165,
-      "y": 3960
+      "x": 4159.4820518784445,
+      "y": 2254.4684876371543
     },
     {
       "x": 3063.370582079842,
@@ -657,7 +657,7 @@
       "label": "003",
       "name": "Edge 003",
       "fromIdx": 1,
-      "toIdx": 34
+      "toIdx": 22
     },
     {
       "id": "layout-edge-004",
@@ -671,7 +671,7 @@
       "label": "005",
       "name": "Edge 005",
       "fromIdx": 2,
-      "toIdx": 26
+      "toIdx": 49
     },
     {
       "id": "layout-edge-006",
@@ -685,7 +685,7 @@
       "label": "007",
       "name": "Edge 007",
       "fromIdx": 3,
-      "toIdx": 44
+      "toIdx": 52
     },
     {
       "id": "layout-edge-008",
@@ -713,7 +713,7 @@
       "label": "011",
       "name": "Edge 011",
       "fromIdx": 6,
-      "toIdx": 52
+      "toIdx": 44
     },
     {
       "id": "layout-edge-012",
@@ -727,7 +727,7 @@
       "label": "013",
       "name": "Edge 013",
       "fromIdx": 7,
-      "toIdx": 49
+      "toIdx": 26
     },
     {
       "id": "layout-edge-014",
@@ -741,7 +741,7 @@
       "label": "015",
       "name": "Edge 015",
       "fromIdx": 8,
-      "toIdx": 22
+      "toIdx": 34
     },
     {
       "id": "layout-edge-016",
@@ -909,7 +909,7 @@
       "label": "039",
       "name": "Edge 039",
       "fromIdx": 25,
-      "toIdx": 9
+      "toIdx": 0
     },
     {
       "id": "layout-edge-040",
@@ -1133,7 +1133,7 @@
       "label": "071",
       "name": "Edge 071",
       "fromIdx": 52,
-      "toIdx": 5
+      "toIdx": 4
     },
     {
       "id": "layout-edge-072",
@@ -1196,7 +1196,7 @@
       "label": "080",
       "name": "Edge 080",
       "fromIdx": 58,
-      "toIdx": 4
+      "toIdx": 5
     },
     {
       "id": "layout-edge-081",
@@ -3758,6 +3758,286 @@
           ]
         }
       ]
+    },
+    {
+      "id": "id_u7zil76j9",
+      "name": "C029",
+      "x1": 1935.455217420057,
+      "y1": 3086.8143588017097,
+      "x2": 1942.774186345495,
+      "y2": 3099.907589643197,
+      "category": "C",
+      "terminalContactSetbackM": 50,
+      "categoryMode": "icao",
+      "allowedAircraftTypes": [],
+      "pbbCount": 1,
+      "angleDeg": 60.79530013219044,
+      "apronSiteX": 1959.8517805048505,
+      "apronSiteY": 3130.458461606667,
+      "boardingWidthM": 5,
+      "boardingHeightM": 15,
+      "pbbArmLenM": 37,
+      "edgeCol": 208.45,
+      "edgeRow": 300.35,
+      "pbbBridges": [
+        {
+          "id": "id_8oxna4my3",
+          "points": [
+            {
+              "x": 1935.455217420057,
+              "y": 3086.8143588017097
+            },
+            {
+              "x": 1942.774186345495,
+              "y": 3099.907589643197
+            },
+            {
+              "x": 1937.6615479924073,
+              "y": 3138.7800076470394
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "id_c42jfdcid",
+      "name": "C030",
+      "x1": 1975.7574165979045,
+      "y1": 3064.2858822949916,
+      "x2": 1983.0763855233427,
+      "y2": 3077.3791131364787,
+      "category": "C",
+      "terminalContactSetbackM": 50,
+      "categoryMode": "icao",
+      "allowedAircraftTypes": [],
+      "pbbCount": 1,
+      "angleDeg": 60.79530013219044,
+      "apronSiteX": 2000.153979682698,
+      "apronSiteY": 3107.9299850999487,
+      "boardingWidthM": 5,
+      "boardingHeightM": 15,
+      "pbbArmLenM": 37,
+      "edgeCol": 208.45,
+      "edgeRow": 300.35,
+      "pbbBridges": [
+        {
+          "id": "id_mdkdf7xz0",
+          "points": [
+            {
+              "x": 1975.7574165979045,
+              "y": 3064.2858822949916
+            },
+            {
+              "x": 1983.0763855233427,
+              "y": 3077.3791131364787
+            },
+            {
+              "x": 1990.6408851212482,
+              "y": 3109.1651534654684
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "id_jc7kpxjne",
+      "name": "C031",
+      "x1": 2016.4754847086806,
+      "y1": 3041.524939727451,
+      "x2": 2023.7944536341188,
+      "y2": 3054.6181705689382,
+      "category": "C",
+      "terminalContactSetbackM": 50,
+      "categoryMode": "icao",
+      "allowedAircraftTypes": [],
+      "pbbCount": 1,
+      "angleDeg": 60.79530013219044,
+      "apronSiteX": 2040.8720477934742,
+      "apronSiteY": 3085.1690425324086,
+      "boardingWidthM": 5,
+      "boardingHeightM": 15,
+      "pbbArmLenM": 37,
+      "edgeCol": 208.45,
+      "edgeRow": 300.35,
+      "pbbBridges": [
+        {
+          "id": "id_p0d1x36gx",
+          "points": [
+            {
+              "x": 2016.4754847086806,
+              "y": 3041.524939727451
+            },
+            {
+              "x": 2023.7944536341188,
+              "y": 3054.6181705689382
+            },
+            {
+              "x": 2048.551319961362,
+              "y": 3076.7938710688877
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "id_8d66n5q2w",
+      "name": "C032",
+      "x1": 2056.3246506595237,
+      "y1": 3019.249703704367,
+      "x2": 2063.643619584962,
+      "y2": 3032.3429345458544,
+      "category": "C",
+      "terminalContactSetbackM": 50,
+      "categoryMode": "icao",
+      "allowedAircraftTypes": [],
+      "pbbCount": 1,
+      "angleDeg": 60.79530013219044,
+      "apronSiteX": 2080.7212137443175,
+      "apronSiteY": 3062.8938065093253,
+      "boardingWidthM": 5,
+      "boardingHeightM": 15,
+      "pbbArmLenM": 37,
+      "edgeCol": 208.45,
+      "edgeRow": 300.35,
+      "pbbBridges": [
+        {
+          "id": "id_qwltwe914",
+          "points": [
+            {
+              "x": 2056.3246506595237,
+              "y": 3019.249703704367
+            },
+            {
+              "x": 2063.643619584962,
+              "y": 3032.3429345458544
+            },
+            {
+              "x": 2072.8782826936463,
+              "y": 3063.195372238201
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "id_8j5au6kg4",
+      "name": "C033",
+      "x1": 2347.9006433221275,
+      "y1": 2839.973840758834,
+      "x2": 2355.1131324902303,
+      "y2": 2853.1260268889037,
+      "category": "C",
+      "terminalContactSetbackM": 50,
+      "categoryMode": "icao",
+      "allowedAircraftTypes": [],
+      "pbbCount": 1,
+      "angleDeg": 61.260204708311974,
+      "apronSiteX": 2387.952397779695,
+      "apronSiteY": 2875.0347158294057,
+      "boardingWidthM": 5,
+      "boardingHeightM": 15,
+      "pbbArmLenM": 37,
+      "edgeCol": 256.85,
+      "edgeRow": 271.90000000000003,
+      "pbbBridges": [
+        {
+          "id": "id_j3735zzpv",
+          "points": [
+            {
+              "x": 2347.9006433221275,
+              "y": 2839.973840758834
+            },
+            {
+              "x": 2355.1131324902303,
+              "y": 2853.1260268889037
+            },
+            {
+              "x": 2371.5,
+              "y": 2868
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "id_ekru5e0ld",
+      "name": "C034",
+      "x1": 2387.2061570122746,
+      "y1": 2818.4192042190757,
+      "x2": 2394.4186461803774,
+      "y2": 2831.5713903491455,
+      "category": "C",
+      "terminalContactSetbackM": 50,
+      "categoryMode": "icao",
+      "allowedAircraftTypes": [],
+      "pbbCount": 1,
+      "angleDeg": 61.260204708311974,
+      "apronSiteX": 2422.5,
+      "apronSiteY": 2857.5,
+      "boardingWidthM": 5,
+      "boardingHeightM": 15,
+      "pbbArmLenM": 37,
+      "edgeCol": 256.85,
+      "edgeRow": 271.90000000000003,
+      "pbbBridges": [
+        {
+          "id": "id_zssdomhet",
+          "points": [
+            {
+              "x": 2387.2061570122746,
+              "y": 2818.4192042190757
+            },
+            {
+              "x": 2394.4186461803774,
+              "y": 2831.5713903491455
+            },
+            {
+              "x": 2408,
+              "y": 2853
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "id_c8uhnfhwo",
+      "name": "C035",
+      "x1": 2421.361801872581,
+      "y1": 2799.688689295682,
+      "x2": 2428.574291040684,
+      "y2": 2812.8408754257516,
+      "category": "C",
+      "terminalContactSetbackM": 50,
+      "categoryMode": "icao",
+      "allowedAircraftTypes": [],
+      "pbbCount": 1,
+      "angleDeg": 61.260204708311974,
+      "apronSiteX": 2458,
+      "apronSiteY": 2838,
+      "boardingWidthM": 5,
+      "boardingHeightM": 15,
+      "pbbArmLenM": 37,
+      "edgeCol": 256.85,
+      "edgeRow": 271.90000000000003,
+      "pbbBridges": [
+        {
+          "id": "id_caztktg8q",
+          "points": [
+            {
+              "x": 2421.361801872581,
+              "y": 2799.688689295682
+            },
+            {
+              "x": 2428.574291040684,
+              "y": 2812.8408754257516
+            },
+            {
+              "x": 2442.5,
+              "y": 2833
+            }
+          ]
+        }
+      ]
     }
   ],
   "remoteStands": [
@@ -3822,6 +4102,19 @@
       "allowedAircraftTypes": [],
       "col": 127,
       "row": 357.05
+    },
+    {
+      "id": "id_doudcpufu",
+      "x": 2122,
+      "y": 3040,
+      "category": "C",
+      "name": "R006",
+      "angleDeg": 61.553079951283905,
+      "categoryMode": "icao",
+      "allowedAircraftTypes": [],
+      "allowedTerminals": [],
+      "col": 212.20000000000002,
+      "row": 304
     }
   ],
   "tempStands": [
@@ -4014,18 +4307,18 @@
       "name": "RW1",
       "vertices": [
         {
-          "x": 4220,
-          "y": 2220
-        },
-        {
           "x": 1165,
           "y": 3960
+        },
+        {
+          "x": 4220,
+          "y": 2220
         }
       ],
       "width": 60,
-      "direction": "counter_clockwise",
+      "direction": "clockwise",
       "minArrVelocity": 15,
-      "lineupDistM": 70,
+      "lineupDistM": 0,
       "avgMoveVelocity": 10,
       "startDisplacedThresholdM": 185,
       "startBlastPadM": 100,
@@ -4109,8 +4402,8 @@
         }
       },
       "lineup_point": {
-        "x": 4159.174030596499,
-        "y": 2254.643923653713
+        "x": 1165,
+        "y": 3960
       },
       "lineupDistM_CW": 0,
       "lineupDistM_CCW": 70,
@@ -4398,12 +4691,20 @@
           "y": 2254.5
         },
         {
-          "x": 4193.5,
-          "y": 2227.5
+          "x": 4185.5,
+          "y": 2239
         },
         {
-          "x": 4203,
-          "y": 2212
+          "x": 4196.5,
+          "y": 2231
+        },
+        {
+          "x": 4201.5,
+          "y": 2220.5
+        },
+        {
+          "x": 4203.5,
+          "y": 2203
         },
         {
           "x": 4204.5,
@@ -8255,19 +8556,19 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 416.74563405341667,
-      "arrVTdMs": 76.17260870555766,
-      "arrDecelMs2": 1.572360412503751,
+      "arrTdDistM": 377.4286188206978,
+      "arrVTdMs": 78.19999999999999,
+      "arrDecelMs2": 1.7713994201336933,
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_q4j5c3yud",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_vz4tyump2",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX2",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C011",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8301,20 +8602,20 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 379.7142660613053,
-      "arrVTdMs": 78.19999999999999,
-      "arrDecelMs2": 1.707750126815571,
+      "arrTdDistM": 403.9433187035948,
+      "arrVTdMs": 71.49508388904337,
+      "arrDecelMs2": 1.5691410587080155,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_dt2n7wpnl",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C014",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8348,20 +8649,20 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 459.99999999999994,
-      "arrVTdMs": 63.55624193308135,
-      "arrDecelMs2": 1.6243722988452634,
+      "arrTdDistM": 366.0440864479143,
+      "arrVTdMs": 78.19999999999999,
+      "arrDecelMs2": 1.36,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_6jclwcmft",
         "apronId": "id_wcwzkq5ty",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX200",
         "apronId": "C015",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8395,20 +8696,20 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 385.5494782229329,
-      "arrVTdMs": 68.8076427426384,
-      "arrDecelMs2": 1.3863574240354202,
+      "arrTdDistM": 365.4801878452552,
+      "arrVTdMs": 62.89858096118345,
+      "arrDecelMs2": 1.4777339353806513,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_arkq0wlw2",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C009",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8442,20 +8743,20 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 385.4245489707356,
-      "arrVTdMs": 78.19999999999999,
-      "arrDecelMs2": 1.7450210659653127,
+      "arrTdDistM": 450.44059157006967,
+      "arrVTdMs": 72.21932643633254,
+      "arrDecelMs2": 1.5072991927536,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_zcx0xbgmu",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C016",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8489,20 +8790,20 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 418.55300890799236,
-      "arrVTdMs": 63.58475951058662,
-      "arrDecelMs2": 1.5032800800217596,
+      "arrTdDistM": 413.6865695160593,
+      "arrVTdMs": 69.9813522401514,
+      "arrDecelMs2": 1.36,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_k9jkud2gs",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C012",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8536,20 +8837,20 @@
       "sibtMin_d": 70.16666666666667,
       "sobtMin_d": 90.16666666666667,
       "stotMin_d": 93.16666666666667,
-      "arrTdDistM": 395.6139124654091,
-      "arrVTdMs": 57.8,
-      "arrDecelMs2": 1.36,
+      "arrTdDistM": 396.5194642008708,
+      "arrVTdMs": 70.69492799617841,
+      "arrDecelMs2": 1.401225922565046,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_k9jkud2gs",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C012",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8583,20 +8884,20 @@
       "sibtMin_d": 70.16666666666667,
       "sobtMin_d": 130.16666666666669,
       "stotMin_d": 133.16666666666669,
-      "arrTdDistM": 388.58924159320463,
-      "arrVTdMs": 67.28627632441099,
-      "arrDecelMs2": 1.36,
+      "arrTdDistM": 459.99999999999994,
+      "arrVTdMs": 74.4598793677528,
+      "arrDecelMs2": 1.6972180363415472,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_kzql4nscf",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C010",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8631,20 +8932,20 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 353.40419925910703,
-      "arrVTdMs": 62.30803285567701,
-      "arrDecelMs2": 1.6264192186880546,
+      "arrTdDistM": 390.3171035632528,
+      "arrVTdMs": 76.5019807075854,
+      "arrDecelMs2": 1.3944280099872548,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_6jclwcmft",
         "apronId": "id_yvp2u2h3e",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX200",
         "apronId": "C015 (2)",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8679,20 +8980,20 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 348.6574347654663,
-      "arrVTdMs": 75.44142910221741,
-      "arrDecelMs2": 1.8399999999999999,
+      "arrTdDistM": 403.545304519914,
+      "arrVTdMs": 58.48151761720955,
+      "arrDecelMs2": 1.621851045033103,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_kb8hcopit",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C026",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8727,20 +9028,20 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 399.22085863271997,
-      "arrVTdMs": 65.86666553183471,
-      "arrDecelMs2": 1.6270257575339333,
+      "arrTdDistM": 459.99999999999994,
+      "arrVTdMs": 71.87092307202998,
+      "arrDecelMs2": 1.631281050996723,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_364blrjh4",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C023",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8775,20 +9076,20 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 340,
-      "arrVTdMs": 68.62091607909126,
-      "arrDecelMs2": 1.7738056185968487,
+      "arrTdDistM": 399.62799637111976,
+      "arrVTdMs": 75.59590203240082,
+      "arrDecelMs2": 1.6993800848242042,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_7av9w9hnl",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_bessqqndx",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "R023",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -8809,44 +9110,44 @@
       "standard": {
         "nodes": [
           [
-            4220,
-            2220
+            1165,
+            3960
           ],
           [
-            4159.685852090032,
-            2254.3524115755627
+            1474.307500566508,
+            3783.8314072059825
           ],
           [
-            3866.6456965161556,
-            2421.255806239571
+            2090.778023191604,
+            3432.7156267255677
           ],
           [
-            3424.15836577843,
-            2673.2780502604032
-          ],
-          [
-            2846.2043366409416,
-            3002.456449834619
-          ],
-          [
-            2556.86028619103,
-            3167.2546978813775
-          ],
-          [
-            2364.611316857773,
+            2364.6113168577735,
             3276.751655864967
           ],
           [
-            2092.385976639531,
-            3431.7998038125097
+            2556.080558337507,
+            3167.6987981972957
           ],
           [
-            1474.3075005665082,
-            3783.831407205982
+            2844.253653233554,
+            3003.567477372706
           ],
           [
-            1165,
-            3960
+            3424.1583657784295,
+            2673.2780502604037
+          ],
+          [
+            3866.645696516155,
+            2421.255806239571
+          ],
+          [
+            4159.4820518784445,
+            2254.4684876371543
+          ],
+          [
+            4220,
+            2220
           ],
           [
             3105,
@@ -9549,344 +9850,344 @@
           {
             "from": 0,
             "to": 1,
-            "dist": 69.41098341878114,
-            "rawDist": 69.41098341878114,
+            "dist": 355.95856920957067,
+            "rawDist": 355.95856920957067,
             "pts": [
               [
-                4220,
-                2220
+                1165,
+                3960
               ],
               [
-                4159.685852090032,
-                2254.3524115755627
+                1474.307500566508,
+                3783.8314072059825
               ]
             ],
             "linkId": "id_jnrp39cxa",
             "pathType": "runway",
-            "pathDir": "counter_clockwise"
+            "pathDir": "clockwise"
           },
           {
-            "from": 0,
+            "from": 1,
+            "to": 0,
+            "dist": 1000000,
+            "rawDist": 355.95856920957067,
+            "pts": [
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ],
+              [
+                1165,
+                3960
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 1,
+            "to": 2,
+            "dist": 709.4492205704577,
+            "rawDist": 709.4492205704577,
+            "pts": [
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ],
+              [
+                2090.778023191604,
+                3432.7156267255677
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 2,
             "to": 1,
             "dist": 1000000,
-            "rawDist": 69.41098341878114,
+            "rawDist": 709.4492205704577,
+            "pts": [
+              [
+                2090.778023191604,
+                3432.7156267255677
+              ],
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "dist": 313.283520215956,
+            "rawDist": 313.283520215956,
+            "pts": [
+              [
+                2092.385976639531,
+                3431.7998038125097
+              ],
+              [
+                2364.611316857774,
+                3276.751655864967
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "dist": 1000000,
+            "rawDist": 313.283520215956,
+            "pts": [
+              [
+                2364.611316857774,
+                3276.751655864967
+              ],
+              [
+                2092.385976639531,
+                3431.7998038125097
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "dist": 220.3474442745134,
+            "rawDist": 220.3474442745134,
+            "pts": [
+              [
+                2364.611316857774,
+                3276.751655864967
+              ],
+              [
+                2556.080558337507,
+                3167.6987981972957
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 4,
+            "to": 3,
+            "dist": 1000000,
+            "rawDist": 220.3474442745134,
+            "pts": [
+              [
+                2556.080558337507,
+                3167.6987981972957
+              ],
+              [
+                2364.611316857774,
+                3276.751655864967
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 4,
+            "to": 5,
+            "dist": 330.73925315555334,
+            "rawDist": 330.73925315555334,
+            "pts": [
+              [
+                2556.8602861910304,
+                3167.254697881377
+              ],
+              [
+                2844.253653233554,
+                3003.567477372706
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 5,
+            "to": 4,
+            "dist": 1000000,
+            "rawDist": 330.73925315555334,
+            "pts": [
+              [
+                2844.253653233554,
+                3003.567477372706
+              ],
+              [
+                2556.8602861910304,
+                3167.254697881377
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 5,
+            "to": 6,
+            "dist": 665.1235062321108,
+            "rawDist": 665.1235062321108,
+            "pts": [
+              [
+                2846.2043366409425,
+                3002.4564498346185
+              ],
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 6,
+            "to": 5,
+            "dist": 1000000,
+            "rawDist": 665.1235062321108,
+            "pts": [
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ],
+              [
+                2846.2043366409425,
+                3002.4564498346185
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 6,
+            "to": 7,
+            "dist": 509.22514602550143,
+            "rawDist": 509.22514602550143,
+            "pts": [
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ],
+              [
+                3866.645696516155,
+                2421.255806239571
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 7,
+            "to": 6,
+            "dist": 1000000,
+            "rawDist": 509.22514602550143,
+            "pts": [
+              [
+                3866.645696516155,
+                2421.255806239571
+              ],
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 7,
+            "to": 8,
+            "dist": 337.00317605098803,
+            "rawDist": 337.00317605098803,
+            "pts": [
+              [
+                3866.645696516155,
+                2421.255806239571
+              ],
+              [
+                4159.4820518784445,
+                2254.4684876371543
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 8,
+            "to": 7,
+            "dist": 1000000,
+            "rawDist": 337.00317605098803,
+            "pts": [
+              [
+                4159.4820518784445,
+                2254.4684876371543
+              ],
+              [
+                3866.645696516155,
+                2421.255806239571
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 8,
+            "to": 9,
+            "dist": 67.81895770191176,
+            "rawDist": 67.81895770191176,
+            "pts": [
+              [
+                4161.069230769231,
+                2253.5644970414205
+              ],
+              [
+                4220,
+                2220
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 9,
+            "to": 8,
+            "dist": 1000000,
+            "rawDist": 67.81895770191176,
             "pts": [
               [
                 4220,
                 2220
               ],
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.5644970414205
               ]
             ],
             "linkId": "id_jnrp39cxa",
             "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 1,
-            "to": 2,
-            "dist": 336.648697693344,
-            "rawDist": 336.648697693344,
-            "pts": [
-              [
-                4159.174030596499,
-                2254.643923653713
-              ],
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 1,
-            "to": 2,
-            "dist": 1000000,
-            "rawDist": 336.648697693344,
-            "pts": [
-              [
-                4159.174030596499,
-                2254.643923653713
-              ],
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 2,
-            "to": 3,
-            "dist": 509.2251460255015,
-            "rawDist": 509.2251460255015,
-            "pts": [
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ],
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 2,
-            "to": 3,
-            "dist": 1000000,
-            "rawDist": 509.2251460255015,
-            "pts": [
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ],
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 3,
-            "to": 4,
-            "dist": 665.1235062321122,
-            "rawDist": 665.1235062321122,
-            "pts": [
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ],
-              [
-                2846.2043366409416,
-                3002.456449834619
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 3,
-            "to": 4,
-            "dist": 1000000,
-            "rawDist": 665.1235062321122,
-            "pts": [
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ],
-              [
-                2846.2043366409416,
-                3002.456449834619
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 4,
-            "to": 5,
-            "dist": 330.73925315555357,
-            "rawDist": 330.73925315555357,
-            "pts": [
-              [
-                2844.253653233554,
-                3003.567477372706
-              ],
-              [
-                2556.86028619103,
-                3167.2546978813775
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 4,
-            "to": 5,
-            "dist": 1000000,
-            "rawDist": 330.73925315555357,
-            "pts": [
-              [
-                2844.253653233554,
-                3003.567477372706
-              ],
-              [
-                2556.86028619103,
-                3167.2546978813775
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 5,
-            "to": 6,
-            "dist": 220.3474442745136,
-            "rawDist": 220.3474442745136,
-            "pts": [
-              [
-                2556.080558337507,
-                3167.6987981972957
-              ],
-              [
-                2364.611316857773,
-                3276.751655864967
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 5,
-            "to": 6,
-            "dist": 1000000,
-            "rawDist": 220.3474442745136,
-            "pts": [
-              [
-                2556.080558337507,
-                3167.6987981972957
-              ],
-              [
-                2364.611316857773,
-                3276.751655864967
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 6,
-            "to": 7,
-            "dist": 313.2835202159556,
-            "rawDist": 313.2835202159556,
-            "pts": [
-              [
-                2364.611316857773,
-                3276.751655864967
-              ],
-              [
-                2092.385976639531,
-                3431.7998038125097
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 6,
-            "to": 7,
-            "dist": 1000000,
-            "rawDist": 313.2835202159556,
-            "pts": [
-              [
-                2364.611316857773,
-                3276.751655864967
-              ],
-              [
-                2092.385976639531,
-                3431.7998038125097
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 7,
-            "to": 8,
-            "dist": 709.4492205704578,
-            "rawDist": 709.4492205704578,
-            "pts": [
-              [
-                2090.778023191605,
-                3432.715626725567
-              ],
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 7,
-            "to": 8,
-            "dist": 1000000,
-            "rawDist": 709.4492205704578,
-            "pts": [
-              [
-                2090.778023191605,
-                3432.715626725567
-              ],
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 8,
-            "to": 9,
-            "dist": 355.9585692095715,
-            "rawDist": 355.9585692095715,
-            "pts": [
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ],
-              [
-                1165,
-                3960
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 8,
-            "to": 9,
-            "dist": 1000000,
-            "rawDist": 355.9585692095715,
-            "pts": [
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ],
-              [
-                1165,
-                3960
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
+            "pathDir": "clockwise"
           },
           {
             "from": 10,
@@ -10307,7 +10608,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 8,
+            "from": 1,
             "to": 22,
             "dist": 69.08599873359583,
             "rawDist": 69.08599873359583,
@@ -10327,7 +10628,7 @@
           },
           {
             "from": 22,
-            "to": 8,
+            "to": 1,
             "dist": 1000000,
             "rawDist": 69.08599873359583,
             "pts": [
@@ -10454,7 +10755,7 @@
           },
           {
             "from": 25,
-            "to": 9,
+            "to": 0,
             "dist": 241.60945786889292,
             "rawDist": 241.60945786889292,
             "pts": [
@@ -10492,7 +10793,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 9,
+            "from": 0,
             "to": 25,
             "dist": 1000000,
             "rawDist": 241.60945786889292,
@@ -10531,7 +10832,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 2,
+            "from": 7,
             "to": 26,
             "dist": 63.1383756556,
             "rawDist": 63.1383756556,
@@ -10551,7 +10852,7 @@
           },
           {
             "from": 26,
-            "to": 2,
+            "to": 7,
             "dist": 1000000,
             "rawDist": 63.1383756556,
             "pts": [
@@ -10859,22 +11160,30 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 1,
+            "from": 8,
             "to": 34,
-            "dist": 123.71550096524514,
-            "rawDist": 123.71550096524514,
+            "dist": 124.63051514077829,
+            "rawDist": 124.63051514077829,
             "pts": [
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.56449704142
               ],
               [
-                4193.5,
-                2227.5
+                4185.5,
+                2239
               ],
               [
-                4203,
-                2212
+                4196.5,
+                2231
+              ],
+              [
+                4201.5,
+                2220.5
+              ],
+              [
+                4203.5,
+                2203
               ],
               [
                 4204.5,
@@ -10894,22 +11203,30 @@
             "pathDir": "counter_clockwise"
           },
           {
-            "from": 1,
+            "from": 8,
             "to": 34,
             "dist": 1000000,
-            "rawDist": 123.71550096524514,
+            "rawDist": 124.63051514077829,
             "pts": [
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.56449704142
               ],
               [
-                4193.5,
-                2227.5
+                4185.5,
+                2239
               ],
               [
-                4203,
-                2212
+                4196.5,
+                2231
+              ],
+              [
+                4201.5,
+                2220.5
+              ],
+              [
+                4203.5,
+                2203
               ],
               [
                 4204.5,
@@ -11539,7 +11856,7 @@
             "pathDir": "both"
           },
           {
-            "from": 3,
+            "from": 6,
             "to": 44,
             "dist": 169.65996258789886,
             "rawDist": 169.65996258789886,
@@ -11571,7 +11888,7 @@
           },
           {
             "from": 44,
-            "to": 3,
+            "to": 6,
             "dist": 1000000,
             "rawDist": 169.65996258789886,
             "pts": [
@@ -11901,7 +12218,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 7,
+            "from": 2,
             "to": 49,
             "dist": 1000000,
             "rawDist": 254.60576501048246,
@@ -11933,7 +12250,7 @@
           },
           {
             "from": 49,
-            "to": 7,
+            "to": 2,
             "dist": 1000000,
             "rawDist": 254.60576501048246,
             "pts": [
@@ -12039,7 +12356,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 6,
+            "from": 3,
             "to": 52,
             "dist": 85.8282680796658,
             "rawDist": 85.8282680796658,
@@ -12059,7 +12376,7 @@
           },
           {
             "from": 52,
-            "to": 6,
+            "to": 3,
             "dist": 1000000,
             "rawDist": 85.8282680796658,
             "pts": [
@@ -12230,7 +12547,7 @@
           },
           {
             "from": 52,
-            "to": 5,
+            "to": 4,
             "dist": 1000000,
             "rawDist": 239.46075985084389,
             "pts": [
@@ -12257,7 +12574,7 @@
           },
           {
             "from": 52,
-            "to": 5,
+            "to": 4,
             "dist": 1000000,
             "rawDist": 239.46075985084389,
             "pts": [
@@ -12400,7 +12717,7 @@
           },
           {
             "from": 58,
-            "to": 4,
+            "to": 5,
             "dist": 198.0988127242865,
             "rawDist": 198.0988127242865,
             "pts": [
@@ -12435,7 +12752,7 @@
           },
           {
             "from": 58,
-            "to": 4,
+            "to": 5,
             "dist": 1000000,
             "rawDist": 198.0988127242865,
             "pts": [
@@ -23679,44 +23996,44 @@
       "pureGroundExcludeRunway": {
         "nodes": [
           [
-            4220,
-            2220
+            1165,
+            3960
           ],
           [
-            4159.685852090032,
-            2254.3524115755627
+            1474.307500566508,
+            3783.8314072059825
           ],
           [
-            3866.6456965161556,
-            2421.255806239571
+            2090.778023191604,
+            3432.7156267255677
           ],
           [
-            3424.15836577843,
-            2673.2780502604032
-          ],
-          [
-            2846.2043366409416,
-            3002.456449834619
-          ],
-          [
-            2556.86028619103,
-            3167.2546978813775
-          ],
-          [
-            2364.611316857773,
+            2364.6113168577735,
             3276.751655864967
           ],
           [
-            2092.385976639531,
-            3431.7998038125097
+            2556.080558337507,
+            3167.6987981972957
           ],
           [
-            1474.3075005665082,
-            3783.831407205982
+            2844.253653233554,
+            3003.567477372706
           ],
           [
-            1165,
-            3960
+            3424.1583657784295,
+            2673.2780502604037
+          ],
+          [
+            3866.645696516155,
+            2421.255806239571
+          ],
+          [
+            4159.4820518784445,
+            2254.4684876371543
+          ],
+          [
+            4220,
+            2220
           ],
           [
             3105,
@@ -24420,343 +24737,343 @@
             "from": 0,
             "to": 1,
             "dist": 1000000,
-            "rawDist": 69.41098341878114,
+            "rawDist": 355.95856920957067,
             "pts": [
               [
-                4220,
-                2220
+                1165,
+                3960
               ],
               [
-                4159.685852090032,
-                2254.3524115755627
+                1474.307500566508,
+                3783.8314072059825
               ]
             ],
             "linkId": "id_jnrp39cxa",
             "pathType": "runway",
-            "pathDir": "counter_clockwise"
+            "pathDir": "clockwise"
           },
           {
-            "from": 0,
+            "from": 1,
+            "to": 0,
+            "dist": 1000000,
+            "rawDist": 355.95856920957067,
+            "pts": [
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ],
+              [
+                1165,
+                3960
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 1,
+            "to": 2,
+            "dist": 1000000,
+            "rawDist": 709.4492205704577,
+            "pts": [
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ],
+              [
+                2090.778023191604,
+                3432.7156267255677
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 2,
             "to": 1,
             "dist": 1000000,
-            "rawDist": 69.41098341878114,
+            "rawDist": 709.4492205704577,
+            "pts": [
+              [
+                2090.778023191604,
+                3432.7156267255677
+              ],
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "dist": 1000000,
+            "rawDist": 313.283520215956,
+            "pts": [
+              [
+                2092.385976639531,
+                3431.7998038125097
+              ],
+              [
+                2364.611316857774,
+                3276.751655864967
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "dist": 1000000,
+            "rawDist": 313.283520215956,
+            "pts": [
+              [
+                2364.611316857774,
+                3276.751655864967
+              ],
+              [
+                2092.385976639531,
+                3431.7998038125097
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "dist": 1000000,
+            "rawDist": 220.3474442745134,
+            "pts": [
+              [
+                2364.611316857774,
+                3276.751655864967
+              ],
+              [
+                2556.080558337507,
+                3167.6987981972957
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 4,
+            "to": 3,
+            "dist": 1000000,
+            "rawDist": 220.3474442745134,
+            "pts": [
+              [
+                2556.080558337507,
+                3167.6987981972957
+              ],
+              [
+                2364.611316857774,
+                3276.751655864967
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 4,
+            "to": 5,
+            "dist": 1000000,
+            "rawDist": 330.73925315555334,
+            "pts": [
+              [
+                2556.8602861910304,
+                3167.254697881377
+              ],
+              [
+                2844.253653233554,
+                3003.567477372706
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 5,
+            "to": 4,
+            "dist": 1000000,
+            "rawDist": 330.73925315555334,
+            "pts": [
+              [
+                2844.253653233554,
+                3003.567477372706
+              ],
+              [
+                2556.8602861910304,
+                3167.254697881377
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 5,
+            "to": 6,
+            "dist": 1000000,
+            "rawDist": 665.1235062321108,
+            "pts": [
+              [
+                2846.2043366409425,
+                3002.4564498346185
+              ],
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 6,
+            "to": 5,
+            "dist": 1000000,
+            "rawDist": 665.1235062321108,
+            "pts": [
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ],
+              [
+                2846.2043366409425,
+                3002.4564498346185
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 6,
+            "to": 7,
+            "dist": 1000000,
+            "rawDist": 509.22514602550143,
+            "pts": [
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ],
+              [
+                3866.645696516155,
+                2421.255806239571
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 7,
+            "to": 6,
+            "dist": 1000000,
+            "rawDist": 509.22514602550143,
+            "pts": [
+              [
+                3866.645696516155,
+                2421.255806239571
+              ],
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 7,
+            "to": 8,
+            "dist": 1000000,
+            "rawDist": 337.00317605098803,
+            "pts": [
+              [
+                3866.645696516155,
+                2421.255806239571
+              ],
+              [
+                4159.4820518784445,
+                2254.4684876371543
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 8,
+            "to": 7,
+            "dist": 1000000,
+            "rawDist": 337.00317605098803,
+            "pts": [
+              [
+                4159.4820518784445,
+                2254.4684876371543
+              ],
+              [
+                3866.645696516155,
+                2421.255806239571
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 8,
+            "to": 9,
+            "dist": 1000000,
+            "rawDist": 67.81895770191176,
+            "pts": [
+              [
+                4161.069230769231,
+                2253.5644970414205
+              ],
+              [
+                4220,
+                2220
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 9,
+            "to": 8,
+            "dist": 1000000,
+            "rawDist": 67.81895770191176,
             "pts": [
               [
                 4220,
                 2220
               ],
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.5644970414205
               ]
             ],
             "linkId": "id_jnrp39cxa",
             "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 1,
-            "to": 2,
-            "dist": 1000000,
-            "rawDist": 336.648697693344,
-            "pts": [
-              [
-                4159.174030596499,
-                2254.643923653713
-              ],
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 1,
-            "to": 2,
-            "dist": 1000000,
-            "rawDist": 336.648697693344,
-            "pts": [
-              [
-                4159.174030596499,
-                2254.643923653713
-              ],
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 2,
-            "to": 3,
-            "dist": 1000000,
-            "rawDist": 509.2251460255015,
-            "pts": [
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ],
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 2,
-            "to": 3,
-            "dist": 1000000,
-            "rawDist": 509.2251460255015,
-            "pts": [
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ],
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 3,
-            "to": 4,
-            "dist": 1000000,
-            "rawDist": 665.1235062321122,
-            "pts": [
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ],
-              [
-                2846.2043366409416,
-                3002.456449834619
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 3,
-            "to": 4,
-            "dist": 1000000,
-            "rawDist": 665.1235062321122,
-            "pts": [
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ],
-              [
-                2846.2043366409416,
-                3002.456449834619
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 4,
-            "to": 5,
-            "dist": 1000000,
-            "rawDist": 330.73925315555357,
-            "pts": [
-              [
-                2844.253653233554,
-                3003.567477372706
-              ],
-              [
-                2556.86028619103,
-                3167.2546978813775
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 4,
-            "to": 5,
-            "dist": 1000000,
-            "rawDist": 330.73925315555357,
-            "pts": [
-              [
-                2844.253653233554,
-                3003.567477372706
-              ],
-              [
-                2556.86028619103,
-                3167.2546978813775
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 5,
-            "to": 6,
-            "dist": 1000000,
-            "rawDist": 220.3474442745136,
-            "pts": [
-              [
-                2556.080558337507,
-                3167.6987981972957
-              ],
-              [
-                2364.611316857773,
-                3276.751655864967
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 5,
-            "to": 6,
-            "dist": 1000000,
-            "rawDist": 220.3474442745136,
-            "pts": [
-              [
-                2556.080558337507,
-                3167.6987981972957
-              ],
-              [
-                2364.611316857773,
-                3276.751655864967
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 6,
-            "to": 7,
-            "dist": 1000000,
-            "rawDist": 313.2835202159556,
-            "pts": [
-              [
-                2364.611316857773,
-                3276.751655864967
-              ],
-              [
-                2092.385976639531,
-                3431.7998038125097
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 6,
-            "to": 7,
-            "dist": 1000000,
-            "rawDist": 313.2835202159556,
-            "pts": [
-              [
-                2364.611316857773,
-                3276.751655864967
-              ],
-              [
-                2092.385976639531,
-                3431.7998038125097
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 7,
-            "to": 8,
-            "dist": 1000000,
-            "rawDist": 709.4492205704578,
-            "pts": [
-              [
-                2090.778023191605,
-                3432.715626725567
-              ],
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 7,
-            "to": 8,
-            "dist": 1000000,
-            "rawDist": 709.4492205704578,
-            "pts": [
-              [
-                2090.778023191605,
-                3432.715626725567
-              ],
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 8,
-            "to": 9,
-            "dist": 1000000,
-            "rawDist": 355.9585692095715,
-            "pts": [
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ],
-              [
-                1165,
-                3960
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 8,
-            "to": 9,
-            "dist": 1000000,
-            "rawDist": 355.9585692095715,
-            "pts": [
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ],
-              [
-                1165,
-                3960
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
+            "pathDir": "clockwise"
           },
           {
             "from": 10,
@@ -25177,7 +25494,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 8,
+            "from": 1,
             "to": 22,
             "dist": 69.08599873359583,
             "rawDist": 69.08599873359583,
@@ -25197,7 +25514,7 @@
           },
           {
             "from": 22,
-            "to": 8,
+            "to": 1,
             "dist": 1000000,
             "rawDist": 69.08599873359583,
             "pts": [
@@ -25324,7 +25641,7 @@
           },
           {
             "from": 25,
-            "to": 9,
+            "to": 0,
             "dist": 241.60945786889292,
             "rawDist": 241.60945786889292,
             "pts": [
@@ -25362,7 +25679,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 9,
+            "from": 0,
             "to": 25,
             "dist": 1000000,
             "rawDist": 241.60945786889292,
@@ -25401,7 +25718,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 2,
+            "from": 7,
             "to": 26,
             "dist": 63.1383756556,
             "rawDist": 63.1383756556,
@@ -25421,7 +25738,7 @@
           },
           {
             "from": 26,
-            "to": 2,
+            "to": 7,
             "dist": 1000000,
             "rawDist": 63.1383756556,
             "pts": [
@@ -25729,22 +26046,30 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 1,
+            "from": 8,
             "to": 34,
-            "dist": 123.71550096524514,
-            "rawDist": 123.71550096524514,
+            "dist": 124.63051514077829,
+            "rawDist": 124.63051514077829,
             "pts": [
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.56449704142
               ],
               [
-                4193.5,
-                2227.5
+                4185.5,
+                2239
               ],
               [
-                4203,
-                2212
+                4196.5,
+                2231
+              ],
+              [
+                4201.5,
+                2220.5
+              ],
+              [
+                4203.5,
+                2203
               ],
               [
                 4204.5,
@@ -25764,22 +26089,30 @@
             "pathDir": "counter_clockwise"
           },
           {
-            "from": 1,
+            "from": 8,
             "to": 34,
             "dist": 1000000,
-            "rawDist": 123.71550096524514,
+            "rawDist": 124.63051514077829,
             "pts": [
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.56449704142
               ],
               [
-                4193.5,
-                2227.5
+                4185.5,
+                2239
               ],
               [
-                4203,
-                2212
+                4196.5,
+                2231
+              ],
+              [
+                4201.5,
+                2220.5
+              ],
+              [
+                4203.5,
+                2203
               ],
               [
                 4204.5,
@@ -26409,7 +26742,7 @@
             "pathDir": "both"
           },
           {
-            "from": 3,
+            "from": 6,
             "to": 44,
             "dist": 169.65996258789886,
             "rawDist": 169.65996258789886,
@@ -26441,7 +26774,7 @@
           },
           {
             "from": 44,
-            "to": 3,
+            "to": 6,
             "dist": 1000000,
             "rawDist": 169.65996258789886,
             "pts": [
@@ -26771,7 +27104,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 7,
+            "from": 2,
             "to": 49,
             "dist": 1000000,
             "rawDist": 254.60576501048246,
@@ -26803,7 +27136,7 @@
           },
           {
             "from": 49,
-            "to": 7,
+            "to": 2,
             "dist": 1000000,
             "rawDist": 254.60576501048246,
             "pts": [
@@ -26909,7 +27242,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 6,
+            "from": 3,
             "to": 52,
             "dist": 85.8282680796658,
             "rawDist": 85.8282680796658,
@@ -26929,7 +27262,7 @@
           },
           {
             "from": 52,
-            "to": 6,
+            "to": 3,
             "dist": 1000000,
             "rawDist": 85.8282680796658,
             "pts": [
@@ -27100,7 +27433,7 @@
           },
           {
             "from": 52,
-            "to": 5,
+            "to": 4,
             "dist": 1000000,
             "rawDist": 239.46075985084389,
             "pts": [
@@ -27127,7 +27460,7 @@
           },
           {
             "from": 52,
-            "to": 5,
+            "to": 4,
             "dist": 1000000,
             "rawDist": 239.46075985084389,
             "pts": [
@@ -27270,7 +27603,7 @@
           },
           {
             "from": 58,
-            "to": 4,
+            "to": 5,
             "dist": 198.0988127242865,
             "rawDist": 198.0988127242865,
             "pts": [
@@ -27305,7 +27638,7 @@
           },
           {
             "from": 58,
-            "to": 4,
+            "to": 5,
             "dist": 1000000,
             "rawDist": 198.0988127242865,
             "pts": [
@@ -38551,44 +38884,44 @@
       "standard": {
         "nodes": [
           [
-            4220,
-            2220
+            1165,
+            3960
           ],
           [
-            4159.685852090032,
-            2254.3524115755627
+            1474.307500566508,
+            3783.8314072059825
           ],
           [
-            3866.6456965161556,
-            2421.255806239571
+            2090.778023191604,
+            3432.7156267255677
           ],
           [
-            3424.15836577843,
-            2673.2780502604032
-          ],
-          [
-            2846.2043366409416,
-            3002.456449834619
-          ],
-          [
-            2556.86028619103,
-            3167.2546978813775
-          ],
-          [
-            2364.611316857773,
+            2364.6113168577735,
             3276.751655864967
           ],
           [
-            2092.385976639531,
-            3431.7998038125097
+            2556.080558337507,
+            3167.6987981972957
           ],
           [
-            1474.3075005665082,
-            3783.831407205982
+            2844.253653233554,
+            3003.567477372706
           ],
           [
-            1165,
-            3960
+            3424.1583657784295,
+            2673.2780502604037
+          ],
+          [
+            3866.645696516155,
+            2421.255806239571
+          ],
+          [
+            4159.4820518784445,
+            2254.4684876371543
+          ],
+          [
+            4220,
+            2220
           ],
           [
             3105,
@@ -39291,344 +39624,344 @@
           {
             "from": 0,
             "to": 1,
-            "dist": 69.41098341878114,
-            "rawDist": 69.41098341878114,
+            "dist": 355.95856920957067,
+            "rawDist": 355.95856920957067,
             "pts": [
               [
-                4220,
-                2220
+                1165,
+                3960
               ],
               [
-                4159.685852090032,
-                2254.3524115755627
+                1474.307500566508,
+                3783.8314072059825
               ]
             ],
             "linkId": "id_jnrp39cxa",
             "pathType": "runway",
-            "pathDir": "counter_clockwise"
+            "pathDir": "clockwise"
           },
           {
-            "from": 0,
+            "from": 1,
+            "to": 0,
+            "dist": 1000000,
+            "rawDist": 355.95856920957067,
+            "pts": [
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ],
+              [
+                1165,
+                3960
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 1,
+            "to": 2,
+            "dist": 709.4492205704577,
+            "rawDist": 709.4492205704577,
+            "pts": [
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ],
+              [
+                2090.778023191604,
+                3432.7156267255677
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 2,
             "to": 1,
             "dist": 1000000,
-            "rawDist": 69.41098341878114,
+            "rawDist": 709.4492205704577,
+            "pts": [
+              [
+                2090.778023191604,
+                3432.7156267255677
+              ],
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "dist": 313.283520215956,
+            "rawDist": 313.283520215956,
+            "pts": [
+              [
+                2092.385976639531,
+                3431.7998038125097
+              ],
+              [
+                2364.611316857774,
+                3276.751655864967
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "dist": 1000000,
+            "rawDist": 313.283520215956,
+            "pts": [
+              [
+                2364.611316857774,
+                3276.751655864967
+              ],
+              [
+                2092.385976639531,
+                3431.7998038125097
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "dist": 220.3474442745134,
+            "rawDist": 220.3474442745134,
+            "pts": [
+              [
+                2364.611316857774,
+                3276.751655864967
+              ],
+              [
+                2556.080558337507,
+                3167.6987981972957
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 4,
+            "to": 3,
+            "dist": 1000000,
+            "rawDist": 220.3474442745134,
+            "pts": [
+              [
+                2556.080558337507,
+                3167.6987981972957
+              ],
+              [
+                2364.611316857774,
+                3276.751655864967
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 4,
+            "to": 5,
+            "dist": 330.73925315555334,
+            "rawDist": 330.73925315555334,
+            "pts": [
+              [
+                2556.8602861910304,
+                3167.254697881377
+              ],
+              [
+                2844.253653233554,
+                3003.567477372706
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 5,
+            "to": 4,
+            "dist": 1000000,
+            "rawDist": 330.73925315555334,
+            "pts": [
+              [
+                2844.253653233554,
+                3003.567477372706
+              ],
+              [
+                2556.8602861910304,
+                3167.254697881377
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 5,
+            "to": 6,
+            "dist": 665.1235062321108,
+            "rawDist": 665.1235062321108,
+            "pts": [
+              [
+                2846.2043366409425,
+                3002.4564498346185
+              ],
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 6,
+            "to": 5,
+            "dist": 1000000,
+            "rawDist": 665.1235062321108,
+            "pts": [
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ],
+              [
+                2846.2043366409425,
+                3002.4564498346185
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 6,
+            "to": 7,
+            "dist": 509.22514602550143,
+            "rawDist": 509.22514602550143,
+            "pts": [
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ],
+              [
+                3866.645696516155,
+                2421.255806239571
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 7,
+            "to": 6,
+            "dist": 1000000,
+            "rawDist": 509.22514602550143,
+            "pts": [
+              [
+                3866.645696516155,
+                2421.255806239571
+              ],
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 7,
+            "to": 8,
+            "dist": 337.00317605098803,
+            "rawDist": 337.00317605098803,
+            "pts": [
+              [
+                3866.645696516155,
+                2421.255806239571
+              ],
+              [
+                4159.4820518784445,
+                2254.4684876371543
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 8,
+            "to": 7,
+            "dist": 1000000,
+            "rawDist": 337.00317605098803,
+            "pts": [
+              [
+                4159.4820518784445,
+                2254.4684876371543
+              ],
+              [
+                3866.645696516155,
+                2421.255806239571
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 8,
+            "to": 9,
+            "dist": 67.81895770191176,
+            "rawDist": 67.81895770191176,
+            "pts": [
+              [
+                4161.069230769231,
+                2253.5644970414205
+              ],
+              [
+                4220,
+                2220
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 9,
+            "to": 8,
+            "dist": 1000000,
+            "rawDist": 67.81895770191176,
             "pts": [
               [
                 4220,
                 2220
               ],
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.5644970414205
               ]
             ],
             "linkId": "id_jnrp39cxa",
             "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 1,
-            "to": 2,
-            "dist": 336.648697693344,
-            "rawDist": 336.648697693344,
-            "pts": [
-              [
-                4159.174030596499,
-                2254.643923653713
-              ],
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 1,
-            "to": 2,
-            "dist": 1000000,
-            "rawDist": 336.648697693344,
-            "pts": [
-              [
-                4159.174030596499,
-                2254.643923653713
-              ],
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 2,
-            "to": 3,
-            "dist": 509.2251460255015,
-            "rawDist": 509.2251460255015,
-            "pts": [
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ],
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 2,
-            "to": 3,
-            "dist": 1000000,
-            "rawDist": 509.2251460255015,
-            "pts": [
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ],
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 3,
-            "to": 4,
-            "dist": 665.1235062321122,
-            "rawDist": 665.1235062321122,
-            "pts": [
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ],
-              [
-                2846.2043366409416,
-                3002.456449834619
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 3,
-            "to": 4,
-            "dist": 1000000,
-            "rawDist": 665.1235062321122,
-            "pts": [
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ],
-              [
-                2846.2043366409416,
-                3002.456449834619
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 4,
-            "to": 5,
-            "dist": 330.73925315555357,
-            "rawDist": 330.73925315555357,
-            "pts": [
-              [
-                2844.253653233554,
-                3003.567477372706
-              ],
-              [
-                2556.86028619103,
-                3167.2546978813775
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 4,
-            "to": 5,
-            "dist": 1000000,
-            "rawDist": 330.73925315555357,
-            "pts": [
-              [
-                2844.253653233554,
-                3003.567477372706
-              ],
-              [
-                2556.86028619103,
-                3167.2546978813775
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 5,
-            "to": 6,
-            "dist": 220.3474442745136,
-            "rawDist": 220.3474442745136,
-            "pts": [
-              [
-                2556.080558337507,
-                3167.6987981972957
-              ],
-              [
-                2364.611316857773,
-                3276.751655864967
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 5,
-            "to": 6,
-            "dist": 1000000,
-            "rawDist": 220.3474442745136,
-            "pts": [
-              [
-                2556.080558337507,
-                3167.6987981972957
-              ],
-              [
-                2364.611316857773,
-                3276.751655864967
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 6,
-            "to": 7,
-            "dist": 313.2835202159556,
-            "rawDist": 313.2835202159556,
-            "pts": [
-              [
-                2364.611316857773,
-                3276.751655864967
-              ],
-              [
-                2092.385976639531,
-                3431.7998038125097
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 6,
-            "to": 7,
-            "dist": 1000000,
-            "rawDist": 313.2835202159556,
-            "pts": [
-              [
-                2364.611316857773,
-                3276.751655864967
-              ],
-              [
-                2092.385976639531,
-                3431.7998038125097
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 7,
-            "to": 8,
-            "dist": 709.4492205704578,
-            "rawDist": 709.4492205704578,
-            "pts": [
-              [
-                2090.778023191605,
-                3432.715626725567
-              ],
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 7,
-            "to": 8,
-            "dist": 1000000,
-            "rawDist": 709.4492205704578,
-            "pts": [
-              [
-                2090.778023191605,
-                3432.715626725567
-              ],
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 8,
-            "to": 9,
-            "dist": 355.9585692095715,
-            "rawDist": 355.9585692095715,
-            "pts": [
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ],
-              [
-                1165,
-                3960
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 8,
-            "to": 9,
-            "dist": 1000000,
-            "rawDist": 355.9585692095715,
-            "pts": [
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ],
-              [
-                1165,
-                3960
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
+            "pathDir": "clockwise"
           },
           {
             "from": 10,
@@ -40049,7 +40382,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 8,
+            "from": 1,
             "to": 22,
             "dist": 69.08599873359583,
             "rawDist": 69.08599873359583,
@@ -40069,7 +40402,7 @@
           },
           {
             "from": 22,
-            "to": 8,
+            "to": 1,
             "dist": 1000000,
             "rawDist": 69.08599873359583,
             "pts": [
@@ -40196,7 +40529,7 @@
           },
           {
             "from": 25,
-            "to": 9,
+            "to": 0,
             "dist": 241.60945786889292,
             "rawDist": 241.60945786889292,
             "pts": [
@@ -40234,7 +40567,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 9,
+            "from": 0,
             "to": 25,
             "dist": 1000000,
             "rawDist": 241.60945786889292,
@@ -40273,7 +40606,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 2,
+            "from": 7,
             "to": 26,
             "dist": 63.1383756556,
             "rawDist": 63.1383756556,
@@ -40293,7 +40626,7 @@
           },
           {
             "from": 26,
-            "to": 2,
+            "to": 7,
             "dist": 1000000,
             "rawDist": 63.1383756556,
             "pts": [
@@ -40601,22 +40934,30 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 1,
+            "from": 8,
             "to": 34,
-            "dist": 123.71550096524514,
-            "rawDist": 123.71550096524514,
+            "dist": 124.63051514077829,
+            "rawDist": 124.63051514077829,
             "pts": [
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.56449704142
               ],
               [
-                4193.5,
-                2227.5
+                4185.5,
+                2239
               ],
               [
-                4203,
-                2212
+                4196.5,
+                2231
+              ],
+              [
+                4201.5,
+                2220.5
+              ],
+              [
+                4203.5,
+                2203
               ],
               [
                 4204.5,
@@ -40636,22 +40977,30 @@
             "pathDir": "counter_clockwise"
           },
           {
-            "from": 1,
+            "from": 8,
             "to": 34,
             "dist": 1000000,
-            "rawDist": 123.71550096524514,
+            "rawDist": 124.63051514077829,
             "pts": [
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.56449704142
               ],
               [
-                4193.5,
-                2227.5
+                4185.5,
+                2239
               ],
               [
-                4203,
-                2212
+                4196.5,
+                2231
+              ],
+              [
+                4201.5,
+                2220.5
+              ],
+              [
+                4203.5,
+                2203
               ],
               [
                 4204.5,
@@ -41281,7 +41630,7 @@
             "pathDir": "both"
           },
           {
-            "from": 3,
+            "from": 6,
             "to": 44,
             "dist": 1000000,
             "rawDist": 169.65996258789886,
@@ -41313,7 +41662,7 @@
           },
           {
             "from": 44,
-            "to": 3,
+            "to": 6,
             "dist": 1000000,
             "rawDist": 169.65996258789886,
             "pts": [
@@ -41643,7 +41992,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 7,
+            "from": 2,
             "to": 49,
             "dist": 254.60576501048246,
             "rawDist": 254.60576501048246,
@@ -41675,7 +42024,7 @@
           },
           {
             "from": 49,
-            "to": 7,
+            "to": 2,
             "dist": 1000000,
             "rawDist": 254.60576501048246,
             "pts": [
@@ -41781,7 +42130,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 6,
+            "from": 3,
             "to": 52,
             "dist": 85.8282680796658,
             "rawDist": 85.8282680796658,
@@ -41801,7 +42150,7 @@
           },
           {
             "from": 52,
-            "to": 6,
+            "to": 3,
             "dist": 1000000,
             "rawDist": 85.8282680796658,
             "pts": [
@@ -41972,7 +42321,7 @@
           },
           {
             "from": 52,
-            "to": 5,
+            "to": 4,
             "dist": 239.46075985084389,
             "rawDist": 239.46075985084389,
             "pts": [
@@ -41999,7 +42348,7 @@
           },
           {
             "from": 52,
-            "to": 5,
+            "to": 4,
             "dist": 1000000,
             "rawDist": 239.46075985084389,
             "pts": [
@@ -42142,7 +42491,7 @@
           },
           {
             "from": 58,
-            "to": 4,
+            "to": 5,
             "dist": 1000000,
             "rawDist": 198.0988127242865,
             "pts": [
@@ -42177,7 +42526,7 @@
           },
           {
             "from": 58,
-            "to": 4,
+            "to": 5,
             "dist": 1000000,
             "rawDist": 198.0988127242865,
             "pts": [
@@ -53421,44 +53770,44 @@
       "pureGroundExcludeRunway": {
         "nodes": [
           [
-            4220,
-            2220
+            1165,
+            3960
           ],
           [
-            4159.685852090032,
-            2254.3524115755627
+            1474.307500566508,
+            3783.8314072059825
           ],
           [
-            3866.6456965161556,
-            2421.255806239571
+            2090.778023191604,
+            3432.7156267255677
           ],
           [
-            3424.15836577843,
-            2673.2780502604032
-          ],
-          [
-            2846.2043366409416,
-            3002.456449834619
-          ],
-          [
-            2556.86028619103,
-            3167.2546978813775
-          ],
-          [
-            2364.611316857773,
+            2364.6113168577735,
             3276.751655864967
           ],
           [
-            2092.385976639531,
-            3431.7998038125097
+            2556.080558337507,
+            3167.6987981972957
           ],
           [
-            1474.3075005665082,
-            3783.831407205982
+            2844.253653233554,
+            3003.567477372706
           ],
           [
-            1165,
-            3960
+            3424.1583657784295,
+            2673.2780502604037
+          ],
+          [
+            3866.645696516155,
+            2421.255806239571
+          ],
+          [
+            4159.4820518784445,
+            2254.4684876371543
+          ],
+          [
+            4220,
+            2220
           ],
           [
             3105,
@@ -54162,343 +54511,343 @@
             "from": 0,
             "to": 1,
             "dist": 1000000,
-            "rawDist": 69.41098341878114,
+            "rawDist": 355.95856920957067,
             "pts": [
               [
-                4220,
-                2220
+                1165,
+                3960
               ],
               [
-                4159.685852090032,
-                2254.3524115755627
+                1474.307500566508,
+                3783.8314072059825
               ]
             ],
             "linkId": "id_jnrp39cxa",
             "pathType": "runway",
-            "pathDir": "counter_clockwise"
+            "pathDir": "clockwise"
           },
           {
-            "from": 0,
+            "from": 1,
+            "to": 0,
+            "dist": 1000000,
+            "rawDist": 355.95856920957067,
+            "pts": [
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ],
+              [
+                1165,
+                3960
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 1,
+            "to": 2,
+            "dist": 1000000,
+            "rawDist": 709.4492205704577,
+            "pts": [
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ],
+              [
+                2090.778023191604,
+                3432.7156267255677
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 2,
             "to": 1,
             "dist": 1000000,
-            "rawDist": 69.41098341878114,
+            "rawDist": 709.4492205704577,
+            "pts": [
+              [
+                2090.778023191604,
+                3432.7156267255677
+              ],
+              [
+                1474.307500566508,
+                3783.8314072059825
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 2,
+            "to": 3,
+            "dist": 1000000,
+            "rawDist": 313.283520215956,
+            "pts": [
+              [
+                2092.385976639531,
+                3431.7998038125097
+              ],
+              [
+                2364.611316857774,
+                3276.751655864967
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 3,
+            "to": 2,
+            "dist": 1000000,
+            "rawDist": 313.283520215956,
+            "pts": [
+              [
+                2364.611316857774,
+                3276.751655864967
+              ],
+              [
+                2092.385976639531,
+                3431.7998038125097
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 3,
+            "to": 4,
+            "dist": 1000000,
+            "rawDist": 220.3474442745134,
+            "pts": [
+              [
+                2364.611316857774,
+                3276.751655864967
+              ],
+              [
+                2556.080558337507,
+                3167.6987981972957
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 4,
+            "to": 3,
+            "dist": 1000000,
+            "rawDist": 220.3474442745134,
+            "pts": [
+              [
+                2556.080558337507,
+                3167.6987981972957
+              ],
+              [
+                2364.611316857774,
+                3276.751655864967
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 4,
+            "to": 5,
+            "dist": 1000000,
+            "rawDist": 330.73925315555334,
+            "pts": [
+              [
+                2556.8602861910304,
+                3167.254697881377
+              ],
+              [
+                2844.253653233554,
+                3003.567477372706
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 5,
+            "to": 4,
+            "dist": 1000000,
+            "rawDist": 330.73925315555334,
+            "pts": [
+              [
+                2844.253653233554,
+                3003.567477372706
+              ],
+              [
+                2556.8602861910304,
+                3167.254697881377
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 5,
+            "to": 6,
+            "dist": 1000000,
+            "rawDist": 665.1235062321108,
+            "pts": [
+              [
+                2846.2043366409425,
+                3002.4564498346185
+              ],
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 6,
+            "to": 5,
+            "dist": 1000000,
+            "rawDist": 665.1235062321108,
+            "pts": [
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ],
+              [
+                2846.2043366409425,
+                3002.4564498346185
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 6,
+            "to": 7,
+            "dist": 1000000,
+            "rawDist": 509.22514602550143,
+            "pts": [
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ],
+              [
+                3866.645696516155,
+                2421.255806239571
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 7,
+            "to": 6,
+            "dist": 1000000,
+            "rawDist": 509.22514602550143,
+            "pts": [
+              [
+                3866.645696516155,
+                2421.255806239571
+              ],
+              [
+                3424.1583657784295,
+                2673.2780502604037
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 7,
+            "to": 8,
+            "dist": 1000000,
+            "rawDist": 337.00317605098803,
+            "pts": [
+              [
+                3866.645696516155,
+                2421.255806239571
+              ],
+              [
+                4159.4820518784445,
+                2254.4684876371543
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 8,
+            "to": 7,
+            "dist": 1000000,
+            "rawDist": 337.00317605098803,
+            "pts": [
+              [
+                4159.4820518784445,
+                2254.4684876371543
+              ],
+              [
+                3866.645696516155,
+                2421.255806239571
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 8,
+            "to": 9,
+            "dist": 1000000,
+            "rawDist": 67.81895770191176,
+            "pts": [
+              [
+                4161.069230769231,
+                2253.5644970414205
+              ],
+              [
+                4220,
+                2220
+              ]
+            ],
+            "linkId": "id_jnrp39cxa",
+            "pathType": "runway",
+            "pathDir": "clockwise"
+          },
+          {
+            "from": 9,
+            "to": 8,
+            "dist": 1000000,
+            "rawDist": 67.81895770191176,
             "pts": [
               [
                 4220,
                 2220
               ],
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.5644970414205
               ]
             ],
             "linkId": "id_jnrp39cxa",
             "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 1,
-            "to": 2,
-            "dist": 1000000,
-            "rawDist": 336.648697693344,
-            "pts": [
-              [
-                4159.174030596499,
-                2254.643923653713
-              ],
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 1,
-            "to": 2,
-            "dist": 1000000,
-            "rawDist": 336.648697693344,
-            "pts": [
-              [
-                4159.174030596499,
-                2254.643923653713
-              ],
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 2,
-            "to": 3,
-            "dist": 1000000,
-            "rawDist": 509.2251460255015,
-            "pts": [
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ],
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 2,
-            "to": 3,
-            "dist": 1000000,
-            "rawDist": 509.2251460255015,
-            "pts": [
-              [
-                3866.6456965161556,
-                2421.255806239571
-              ],
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 3,
-            "to": 4,
-            "dist": 1000000,
-            "rawDist": 665.1235062321122,
-            "pts": [
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ],
-              [
-                2846.2043366409416,
-                3002.456449834619
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 3,
-            "to": 4,
-            "dist": 1000000,
-            "rawDist": 665.1235062321122,
-            "pts": [
-              [
-                3424.15836577843,
-                2673.2780502604032
-              ],
-              [
-                2846.2043366409416,
-                3002.456449834619
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 4,
-            "to": 5,
-            "dist": 1000000,
-            "rawDist": 330.73925315555357,
-            "pts": [
-              [
-                2844.253653233554,
-                3003.567477372706
-              ],
-              [
-                2556.86028619103,
-                3167.2546978813775
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 4,
-            "to": 5,
-            "dist": 1000000,
-            "rawDist": 330.73925315555357,
-            "pts": [
-              [
-                2844.253653233554,
-                3003.567477372706
-              ],
-              [
-                2556.86028619103,
-                3167.2546978813775
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 5,
-            "to": 6,
-            "dist": 1000000,
-            "rawDist": 220.3474442745136,
-            "pts": [
-              [
-                2556.080558337507,
-                3167.6987981972957
-              ],
-              [
-                2364.611316857773,
-                3276.751655864967
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 5,
-            "to": 6,
-            "dist": 1000000,
-            "rawDist": 220.3474442745136,
-            "pts": [
-              [
-                2556.080558337507,
-                3167.6987981972957
-              ],
-              [
-                2364.611316857773,
-                3276.751655864967
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 6,
-            "to": 7,
-            "dist": 1000000,
-            "rawDist": 313.2835202159556,
-            "pts": [
-              [
-                2364.611316857773,
-                3276.751655864967
-              ],
-              [
-                2092.385976639531,
-                3431.7998038125097
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 6,
-            "to": 7,
-            "dist": 1000000,
-            "rawDist": 313.2835202159556,
-            "pts": [
-              [
-                2364.611316857773,
-                3276.751655864967
-              ],
-              [
-                2092.385976639531,
-                3431.7998038125097
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 7,
-            "to": 8,
-            "dist": 1000000,
-            "rawDist": 709.4492205704578,
-            "pts": [
-              [
-                2090.778023191605,
-                3432.715626725567
-              ],
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 7,
-            "to": 8,
-            "dist": 1000000,
-            "rawDist": 709.4492205704578,
-            "pts": [
-              [
-                2090.778023191605,
-                3432.715626725567
-              ],
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 8,
-            "to": 9,
-            "dist": 1000000,
-            "rawDist": 355.9585692095715,
-            "pts": [
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ],
-              [
-                1165,
-                3960
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
-          },
-          {
-            "from": 8,
-            "to": 9,
-            "dist": 1000000,
-            "rawDist": 355.9585692095715,
-            "pts": [
-              [
-                1474.3075005665087,
-                3783.831407205982
-              ],
-              [
-                1165,
-                3960
-              ]
-            ],
-            "linkId": "id_jnrp39cxa",
-            "pathType": "runway",
-            "pathDir": "counter_clockwise"
+            "pathDir": "clockwise"
           },
           {
             "from": 10,
@@ -54919,7 +55268,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 8,
+            "from": 1,
             "to": 22,
             "dist": 69.08599873359583,
             "rawDist": 69.08599873359583,
@@ -54939,7 +55288,7 @@
           },
           {
             "from": 22,
-            "to": 8,
+            "to": 1,
             "dist": 1000000,
             "rawDist": 69.08599873359583,
             "pts": [
@@ -55066,7 +55415,7 @@
           },
           {
             "from": 25,
-            "to": 9,
+            "to": 0,
             "dist": 241.60945786889292,
             "rawDist": 241.60945786889292,
             "pts": [
@@ -55104,7 +55453,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 9,
+            "from": 0,
             "to": 25,
             "dist": 1000000,
             "rawDist": 241.60945786889292,
@@ -55143,7 +55492,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 2,
+            "from": 7,
             "to": 26,
             "dist": 63.1383756556,
             "rawDist": 63.1383756556,
@@ -55163,7 +55512,7 @@
           },
           {
             "from": 26,
-            "to": 2,
+            "to": 7,
             "dist": 1000000,
             "rawDist": 63.1383756556,
             "pts": [
@@ -55471,22 +55820,30 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 1,
+            "from": 8,
             "to": 34,
-            "dist": 123.71550096524514,
-            "rawDist": 123.71550096524514,
+            "dist": 124.63051514077829,
+            "rawDist": 124.63051514077829,
             "pts": [
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.56449704142
               ],
               [
-                4193.5,
-                2227.5
+                4185.5,
+                2239
               ],
               [
-                4203,
-                2212
+                4196.5,
+                2231
+              ],
+              [
+                4201.5,
+                2220.5
+              ],
+              [
+                4203.5,
+                2203
               ],
               [
                 4204.5,
@@ -55506,22 +55863,30 @@
             "pathDir": "counter_clockwise"
           },
           {
-            "from": 1,
+            "from": 8,
             "to": 34,
             "dist": 1000000,
-            "rawDist": 123.71550096524514,
+            "rawDist": 124.63051514077829,
             "pts": [
               [
-                4159.685852090032,
-                2254.3524115755627
+                4161.069230769231,
+                2253.56449704142
               ],
               [
-                4193.5,
-                2227.5
+                4185.5,
+                2239
               ],
               [
-                4203,
-                2212
+                4196.5,
+                2231
+              ],
+              [
+                4201.5,
+                2220.5
+              ],
+              [
+                4203.5,
+                2203
               ],
               [
                 4204.5,
@@ -56151,7 +56516,7 @@
             "pathDir": "both"
           },
           {
-            "from": 3,
+            "from": 6,
             "to": 44,
             "dist": 1000000,
             "rawDist": 169.65996258789886,
@@ -56183,7 +56548,7 @@
           },
           {
             "from": 44,
-            "to": 3,
+            "to": 6,
             "dist": 1000000,
             "rawDist": 169.65996258789886,
             "pts": [
@@ -56513,7 +56878,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 7,
+            "from": 2,
             "to": 49,
             "dist": 254.60576501048246,
             "rawDist": 254.60576501048246,
@@ -56545,7 +56910,7 @@
           },
           {
             "from": 49,
-            "to": 7,
+            "to": 2,
             "dist": 1000000,
             "rawDist": 254.60576501048246,
             "pts": [
@@ -56651,7 +57016,7 @@
             "pathDir": "clockwise"
           },
           {
-            "from": 6,
+            "from": 3,
             "to": 52,
             "dist": 85.8282680796658,
             "rawDist": 85.8282680796658,
@@ -56671,7 +57036,7 @@
           },
           {
             "from": 52,
-            "to": 6,
+            "to": 3,
             "dist": 1000000,
             "rawDist": 85.8282680796658,
             "pts": [
@@ -56842,7 +57207,7 @@
           },
           {
             "from": 52,
-            "to": 5,
+            "to": 4,
             "dist": 239.46075985084389,
             "rawDist": 239.46075985084389,
             "pts": [
@@ -56869,7 +57234,7 @@
           },
           {
             "from": 52,
-            "to": 5,
+            "to": 4,
             "dist": 1000000,
             "rawDist": 239.46075985084389,
             "pts": [
@@ -57012,7 +57377,7 @@
           },
           {
             "from": 58,
-            "to": 4,
+            "to": 5,
             "dist": 1000000,
             "rawDist": 198.0988127242865,
             "pts": [
@@ -57047,7 +57412,7 @@
           },
           {
             "from": 58,
-            "to": 4,
+            "to": 5,
             "dist": 1000000,
             "rawDist": 198.0988127242865,
             "pts": [

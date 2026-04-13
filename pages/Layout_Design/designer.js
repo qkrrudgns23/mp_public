@@ -2812,6 +2812,110 @@
     if (need <= 0) return rotatedRectsOverlap(cornersA, cornersB);
     return minDistanceConvexQuads(cornersA, cornersB) < need;
   }
+  function buildStandSafetyPolygonLocalPoints(depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return null;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return null;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const eps = 0.08;
+    if (noseHalf >= halfW - eps) return null;
+    const xNose = -halfD;
+    const xStop = -halfD + nc;
+    if (xStop <= xNose + eps || xStop >= halfD - eps) return null;
+    const latRun = halfW - noseHalf;
+    if (latRun <= eps) return null;
+    const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return null;
+    const pts = [];
+    pts.push([xNose, -noseHalf]);
+    pts.push([xNose, noseHalf]);
+    pts.push([xStop, noseHalf]);
+    pts.push([Math.min(xBendEnd, halfD), halfW]);
+    if (xBendEnd < halfD - eps) {
+      pts.push([halfD, halfW]);
+      pts.push([halfD, -halfW]);
+      pts.push([xBendEnd, -halfW]);
+    } else {
+      pts.push([halfD, -halfW]);
+    }
+    pts.push([xStop, -noseHalf]);
+    return pts;
+  }
+  function standOuterContourWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
+    const polyLocal = buildStandSafetyPolygonLocalPoints(depM, widM, category);
+    if (polyLocal && polyLocal.length >= 3) {
+      return polyLocal.map(function(p) { return standFootprintLocalToWorld(cx, cy, angleRad, p[0], p[1]); });
+    }
+    return [
+      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, -widM / 2),
+      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, -widM / 2),
+      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, widM / 2),
+      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, widM / 2),
+    ];
+  }
+  function standGapSegmentsWorldForSpec(cx, cy, angleRad, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return [];
+    const g = Number(r.gap), ws = Number(r.wingspan);
+    const halfD = depM / 2, halfW = widM / 2;
+    const eps = 0.12;
+    if (!(isFinite(g) && g > eps && isFinite(ws) && ws > 0)) return [];
+    const yLim = halfW - g;
+    if (!(yLim > eps && yLim < halfW - eps)) return [];
+    const a0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, yLim);
+    const a1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, yLim);
+    const b0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, -yLim);
+    const b1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, -yLim);
+    return [[a0, a1], [b0, b1]];
+  }
+  function standGapSegmentsIntersectOuterPolygon(gapSegs, polygon) {
+    if (!Array.isArray(gapSegs) || !gapSegs.length || !Array.isArray(polygon) || polygon.length < 2) return false;
+    for (let i = 0; i < gapSegs.length; i++) {
+      const seg = gapSegs[i];
+      if (!seg || seg.length < 2) continue;
+      const g0 = seg[0], g1 = seg[1];
+      for (let j = 0; j < polygon.length; j++) {
+        const p0 = polygon[j], p1 = polygon[(j + 1) % polygon.length];
+        if (segIntersect(g0, g1, p0, p1)) return true;
+      }
+    }
+    return false;
+  }
+  function standGapLineHitsExistingOuterContours(candidateCenter, candidateAngleRad, candidateCategory) {
+    const depC = getStandDepthMeters(candidateCategory || 'C');
+    const widC = getStandWidthMeters(candidateCategory || 'C');
+    const gapSegs = standGapSegmentsWorldForSpec(candidateCenter[0], candidateCenter[1], candidateAngleRad, depC, widC, candidateCategory || 'C');
+    if (!gapSegs.length) return false;
+    function hitWithPolygon(poly) { return standGapSegmentsIntersectOuterPolygon(gapSegs, poly); }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const o = state.remoteStands[i];
+      const oc = getRemoteStandCenterPx(o);
+      const oa = getRemoteStandAngleRad(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    const temps = state.tempStands || [];
+    for (let i = 0; i < temps.length; i++) {
+      const o = temps[i];
+      const oc = getRemoteStandCenterPx(o);
+      const oa = getRemoteStandAngleRad(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const o = state.pbbStands[i];
+      const oc = getStandConnectionPx(o);
+      const oa = getPBBStandAngle(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    return false;
+  }
   function pbbStandOverlapsTerminal(pbb) {
     const corners = getPBBStandCorners(pbb);
     for (let t = 0; t < state.terminals.length; t++) {
@@ -2829,21 +2933,30 @@
   }
   function pbbStandOverlapsExisting(pbb, excludeId) {
     if (pbbStandOverlapsTerminal(pbb)) return true;
-    const corners = getPBBStandCorners(pbb);
     const cat = pbb.category || 'C';
+    const center = getStandConnectionPx(pbb);
+    const angle = getPBBStandAngle(pbb);
+    if (standGapLineHitsExistingOuterContours(center, angle, cat)) return true;
+    return false;
+  }
+  function pbbStandOuterContoursOverlapExisting(pbb, excludeId) {
+    const corners = getPBBStandCorners(pbb);
     for (let i = 0; i < state.pbbStands.length; i++) {
       const other = state.pbbStands[i];
+      if (!other) continue;
       if (excludeId && other.id === excludeId) continue;
-      if (standFootprintsTooClose(corners, cat, getPBBStandCorners(other), other.category || 'C')) return true;
+      if (rotatedRectsOverlap(corners, getPBBStandCorners(other))) return true;
     }
     for (let i = 0; i < state.remoteStands.length; i++) {
       const st = state.remoteStands[i];
-      if (standFootprintsTooClose(corners, cat, getRemoteStandCorners(st), st.category || 'C')) return true;
+      if (!st) continue;
+      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
     }
     const temps = state.tempStands || [];
     for (let i = 0; i < temps.length; i++) {
       const st = temps[i];
-      if (standFootprintsTooClose(corners, cat, getRemoteStandCorners(st), st.category || 'C')) return true;
+      if (!st) continue;
+      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
     }
     return false;
   }
@@ -2942,6 +3055,7 @@
       const o = state.tempStands[i];
       if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
+    if (standGapLineHitsExistingOuterContours([Number(wx), Number(wy)], angleDeg * Math.PI / 180, category)) return false;
     const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
     if (findDuplicateLayoutName('remote', null, baseName)) {
       alertDuplicateLayoutName();
@@ -2983,6 +3097,7 @@
       const o = state.pbbStands[i];
       if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
     }
+    if (standGapLineHitsExistingOuterContours([Number(sx), Number(sy)], angleDeg * Math.PI / 180, category)) return false;
     const baseName = (document.getElementById('tempStandName') && document.getElementById('tempStandName').value.trim()) || getDefaultTempStandName();
     if (findDuplicateLayoutName('tempStand', null, baseName)) {
       alertDuplicateLayoutName();
@@ -17955,8 +18070,11 @@
       const depPv = getStandDepthMeters(catPv);
       const widPv = getStandWidthMeters(catPv);
       const overlap = state.previewPbb.overlap;
+      const warnOuterOverlap = !!state.previewPbb.warnOuterOverlap;
       const angle = getPBBStandAngle(state.previewPbb);
-      ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.25)';
+      ctx.fillStyle = overlap
+        ? 'rgba(239,68,68,0.35)'
+        : (warnOuterOverlap ? 'rgba(245,158,11,0.30)' : 'rgba(34,197,94,0.25)');
       ctx.save();
       ctx.translate(ex, ey);
       ctx.rotate(angle);
@@ -18018,7 +18136,7 @@
     return LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
   }
   function getMarkerIslandPavementFromPanel() {
-    const el = document.querySelector('input[name="markerIslandPavement"]:checked');
+    const el = document.getElementById('markerIslandPavement');
     const v = el && el.value;
     if (v === 'asphalt' || v === 'cement') return v;
     return 'asphalt';
@@ -18036,15 +18154,13 @@
     return pathPavementDefaultForPathType(pathType);
   }
   function syncMarkerIslandPavementFromSelection() {
-    const nodes = document.querySelectorAll('input[name="markerIslandPavement"]');
-    if (!nodes || !nodes.length) return;
+    const el = document.getElementById('markerIslandPavement');
+    if (!el) return;
     const so = state.selectedObject;
     if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
     const mode = islandMarkerPavementResolved(so.obj);
-    nodes.forEach(function(inp) {
-      if (document.activeElement === inp) return;
-      inp.checked = inp.value === mode;
-    });
+    if (document.activeElement === el) return;
+    el.value = mode;
   }
   function syncMarkerIslandSidebarWidthsFromSelection() {
     const oEl = document.getElementById('markerIslandOuterWidthM');
@@ -18077,13 +18193,12 @@
     }
     if (oEl) oEl.addEventListener('input', applyOuterToSelectedIsland);
     if (iEl) iEl.addEventListener('input', applyInnerToSelectedIsland);
-    document.querySelectorAll('input[name="markerIslandPavement"]').forEach(function(radio) {
-      radio.addEventListener('change', function() {
-        const so = state.selectedObject;
-        if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
-        so.obj.pavement = getMarkerIslandPavementFromPanel();
-        scheduleDraw();
-      });
+    const pavEl = document.getElementById('markerIslandPavement');
+    if (pavEl) pavEl.addEventListener('change', function() {
+      const so = state.selectedObject;
+      if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
+      so.obj.pavement = getMarkerIslandPavementFromPanel();
+      scheduleDraw();
     });
   })();
   function layoutIslandWorldPointsForDraw(m) {
@@ -19348,11 +19463,6 @@
             pbb.y1 = Ty;
             pbb.x2 = Bx;
             pbb.y2 = By;
-            const sb = getPbbTerminalContactSetbackM(pbb);
-            if (sb > 0) {
-              pbb.apronSiteX = wx + fr.nx * sb;
-              pbb.apronSiteY = wy + fr.ny * sb;
-            }
             pbb.pbbBridges.forEach(function(bridge) {
               if (!bridge.points || bridge.points.length < 3) return;
               bridge.points[0].x = Tx;
@@ -19511,6 +19621,7 @@
           if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) { overlap = true; break; }
         }
       }
+      if (!overlap && standGapLineHitsExistingOuterContours([candidate.x, candidate.y], angleDeg * Math.PI / 180, category)) overlap = true;
       const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
       if (candidate.x < 0 || candidate.y < 0 || candidate.x > maxX || candidate.y > maxY) overlap = true;
       const nextRem = { x: candidate.x, y: candidate.y, overlap };
@@ -19550,6 +19661,7 @@
             if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) { overlap = true; break; }
           }
         }
+        if (!overlap && standGapLineHitsExistingOuterContours([candidate.x, candidate.y], angleDeg * Math.PI / 180, category)) overlap = true;
         const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
         if (candidate.x < 0 || candidate.y < 0 || candidate.x > maxX || candidate.y > maxY) overlap = true;
         const nextTs = { x: candidate.x, y: candidate.y, overlap };
@@ -19603,12 +19715,13 @@
           terminalContactSetbackM: offM
         };
         const overlap = pbbStandOverlapsExisting(preview);
+        const warnOuterOverlap = !overlap && pbbStandOuterContoursOverlapExisting(preview);
         const nextPbb = {
           x1: wallX, y1: wallY, x2: px2, y2: py2, category: preview.category,
-          overlap, angleDeg: previewAng, apronSiteX: preview.apronSiteX, apronSiteY: preview.apronSiteY
+          overlap, warnOuterOverlap, angleDeg: previewAng, apronSiteX: preview.apronSiteX, apronSiteY: preview.apronSiteY
         };
         const prevPbb = state.previewPbb;
-        const pbbSame = prevPbb && prevPbb.x1 === nextPbb.x1 && prevPbb.y1 === nextPbb.y1 && prevPbb.x2 === nextPbb.x2 && prevPbb.y2 === nextPbb.y2 && String(prevPbb.category || '') === String(nextPbb.category || '') && !!prevPbb.overlap === !!nextPbb.overlap
+        const pbbSame = prevPbb && prevPbb.x1 === nextPbb.x1 && prevPbb.y1 === nextPbb.y1 && prevPbb.x2 === nextPbb.x2 && prevPbb.y2 === nextPbb.y2 && String(prevPbb.category || '') === String(nextPbb.category || '') && !!prevPbb.overlap === !!nextPbb.overlap && !!prevPbb.warnOuterOverlap === !!nextPbb.warnOuterOverlap
           && Number(prevPbb.apronSiteX) === Number(nextPbb.apronSiteX) && Number(prevPbb.apronSiteY) === Number(nextPbb.apronSiteY);
         if (!pbbSame) {
           state.previewPbb = nextPbb;

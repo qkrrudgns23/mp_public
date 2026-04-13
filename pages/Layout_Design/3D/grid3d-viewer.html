@@ -702,12 +702,14 @@
     var major = [];
     var kx = 0;
     for (var x = 0; x <= maxX; x += cs, kx++) {
+      if (x <= 1e-6 || x >= maxX - 1e-6) continue;
       var a = vecXY(x, 0, zGrid);
       var b = vecXY(x, maxY, zGrid);
       if (kx % majorEvery === 0) { major.push(a, b); } else { faint.push(a, b); }
     }
     var ky = 0;
     for (var y = 0; y <= maxY; y += cs, ky++) {
+      if (y <= 1e-6 || y >= maxY - 1e-6) continue;
       var c = vecXY(0, y, zGrid);
       var d = vecXY(maxX, y, zGrid);
       if (ky % majorEvery === 0) { major.push(c, d); } else { faint.push(c, d); }
@@ -811,6 +813,95 @@
     if (!obj || !obj.vertices || obj.vertices.length < 2) return;
     var w = obj.width != null ? Number(obj.width) : defaultWidth;
     addThickPath(obj.vertices, w, color, zLift + 0.12);
+  }
+  function addEdgePrism2D(a, b, z0, z1, thicknessM, colorHex) {
+    if (!a || !b) return;
+    var ax = Number(a[0]), ay = Number(a[1]), bx = Number(b[0]), by = Number(b[1]);
+    if (!isFinite(ax) || !isFinite(ay) || !isFinite(bx) || !isFinite(by)) return;
+    var zMid = Number(z0) + Math.max(0.2, Number(z1) - Number(z0)) * 0.5;
+    var pa = layoutPointToSceneGround(ax, ay, zMid);
+    var pb = layoutPointToSceneGround(bx, by, zMid);
+    var dx = pb.x - pa.x, dy = pb.y - pa.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    if (!(len > 1e-6)) return;
+    var h = Math.max(0.2, Number(z1) - Number(z0));
+    var t = Math.max(0.2, Number(thicknessM) || 0.8);
+    var geom = new THREE.BoxGeometry(len, t, h);
+    var mat = new THREE.MeshStandardMaterial({
+      color: colorHex,
+      metalness: 0.18,
+      roughness: 0.62,
+      envMapIntensity: 0.9,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
+    });
+    var mesh = new THREE.Mesh(geom, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.position.set((pa.x + pb.x) * 0.5, (pa.y + pb.y) * 0.5, Number(z0) + h * 0.5);
+    mesh.rotation.z = Math.atan2(dy, dx);
+    scene.add(mesh);
+  }
+  function closestPointOnSegment2D(a, b, p) {
+    var x1 = Number(a[0]), y1 = Number(a[1]);
+    var x2 = Number(b[0]), y2 = Number(b[1]);
+    var px = Number(p[0]), py = Number(p[1]);
+    if (!(isFinite(x1) && isFinite(y1) && isFinite(x2) && isFinite(y2) && isFinite(px) && isFinite(py))) return null;
+    var dx = x2 - x1, dy = y2 - y1;
+    var len2 = dx * dx + dy * dy;
+    if (!(len2 > 1e-12)) return [x1, y1];
+    var t = ((px - x1) * dx + (py - y1) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return [x1 + dx * t, y1 + dy * t];
+  }
+  function getTerminalEdgeProjectionForPoint(wx, wy) {
+    var px = Number(wx), py = Number(wy);
+    if (!(isFinite(px) && isFinite(py))) return null;
+    var best = null;
+    var bestD2 = Infinity;
+    (L.terminals || []).forEach(function (term) {
+      var vv = term && term.vertices;
+      if (!Array.isArray(vv) || vv.length < 2) return;
+      var cx = 0, cy = 0, cnt = 0;
+      for (var ci = 0; ci < vv.length; ci++) {
+        var cv = vv[ci];
+        var cwx = Number(cv && (cv.x != null ? cv.x : cv[0]));
+        var cwy = Number(cv && (cv.y != null ? cv.y : cv[1]));
+        if (!isFinite(cwx) || !isFinite(cwy)) continue;
+        cx += cwx;
+        cy += cwy;
+        cnt++;
+      }
+      if (cnt < 2) return;
+      cx /= cnt;
+      cy /= cnt;
+      for (var i = 0; i < vv.length; i++) {
+        var v0 = vv[i], v1 = vv[(i + 1) % vv.length];
+        var x0 = Number(v0 && (v0.x != null ? v0.x : v0[0]));
+        var y0 = Number(v0 && (v0.y != null ? v0.y : v0[1]));
+        var x1 = Number(v1 && (v1.x != null ? v1.x : v1[0]));
+        var y1 = Number(v1 && (v1.y != null ? v1.y : v1[1]));
+        if (!(isFinite(x0) && isFinite(y0) && isFinite(x1) && isFinite(y1))) continue;
+        var near = closestPointOnSegment2D([x0, y0], [x1, y1], [px, py]);
+        if (!near) continue;
+        var ddx = near[0] - px, ddy = near[1] - py;
+        var d2 = ddx * ddx + ddy * ddy;
+        if (d2 >= bestD2) continue;
+        var edx = x1 - x0, edy = y1 - y0;
+        var el = Math.sqrt(edx * edx + edy * edy) || 1;
+        var tx = edx / el, ty = edy / el;
+        var nx = -ty, ny = tx;
+        var inx = cx - near[0], iny = cy - near[1];
+        if (nx * inx + ny * iny > 0) {
+          nx = -nx;
+          ny = -ny;
+        }
+        bestD2 = d2;
+        best = { wall: near, tx: tx, ty: ty, nx: nx, ny: ny };
+      }
+    });
+    return best;
   }
 
   if (!useGroundTex) {
@@ -938,6 +1029,63 @@
     scene.add(mesh);
   });
   }
+
+  (L.pbbStands || []).forEach(function (pbb) {
+    if (!pbb) return;
+    var x1 = Number(pbb.x1), y1 = Number(pbb.y1), x2 = Number(pbb.x2), y2 = Number(pbb.y2);
+    var bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
+    var b0 = bridges[0] && bridges[0].points && bridges[0].points[0];
+    var b1 = bridges[0] && bridges[0].points && bridges[0].points[1];
+    var srcX = isFinite(x1) ? x1 : Number(b0 && b0.x);
+    var srcY = isFinite(y1) ? y1 : Number(b0 && b0.y);
+    var proj = getTerminalEdgeProjectionForPoint(srcX, srcY);
+    var wallX = proj ? proj.wall[0] : srcX;
+    var wallY = proj ? proj.wall[1] : srcY;
+    var tx, ty, nx, ny;
+    if (proj) {
+      tx = proj.tx; ty = proj.ty; nx = proj.nx; ny = proj.ny;
+      var hintX = isFinite(x2) ? x2 : Number(b1 && b1.x);
+      var hintY = isFinite(y2) ? y2 : Number(b1 && b1.y);
+      if (isFinite(hintX) && isFinite(hintY)) {
+        var hx = hintX - wallX, hy = hintY - wallY;
+        if (nx * hx + ny * hy < 0) {
+          nx = -nx;
+          ny = -ny;
+        }
+      }
+    } else {
+      if (!(isFinite(x1) && isFinite(y1) && isFinite(x2) && isFinite(y2))) return;
+      nx = x2 - x1; ny = y2 - y1;
+      var nLen = Math.sqrt(nx * nx + ny * ny) || 1;
+      nx /= nLen; ny /= nLen;
+      tx = -ny; ty = nx;
+      wallX = x1; wallY = y1;
+    }
+    var bw = Number(pbb.boardingWidthM);
+    if (!isFinite(bw) || bw <= 0) bw = 5;
+    var halfW = bw * 0.5;
+    var boardA = [wallX - tx * halfW, wallY - ty * halfW];
+    var boardB = [wallX + tx * halfW, wallY + ty * halfW];
+    var zBase = groundSurfaceZ + zLift;
+    addEdgePrism2D(boardA, boardB, zBase + 8.0, zBase + 13.0, Math.max(0.55, cs * 0.012), 0xe5e7eb);
+    var bh = Number(pbb.boardingHeightM);
+    if (!isFinite(bh) || bh <= 0) bh = 15;
+    var boardAnchorX = wallX + nx * bh;
+    var boardAnchorY = wallY + ny * bh;
+    bridges.forEach(function (bridge) {
+      var pts = bridge && bridge.points;
+      if (!Array.isArray(pts) || pts.length < 3) return;
+      var p1 = pts[1], p2 = pts[2];
+      if (!p1 || !p2) return;
+      var p1x = Number(p1.x), p1y = Number(p1.y), p2x = Number(p2.x), p2y = Number(p2.y);
+      if (!(isFinite(p1x) && isFinite(p1y) && isFinite(p2x) && isFinite(p2y))) return;
+      var dxA = boardAnchorX - p1x;
+      var dyA = boardAnchorY - p1y;
+      var a = [p1x + dxA, p1y + dyA];
+      var b = [p2x + dxA, p2y + dyA];
+      addEdgePrism2D(a, b, zBase + 8.5, zBase + 12.5, Math.max(0.45, cs * 0.01), 0xcbd5e1);
+    });
+  });
 
   if (!useGroundTex) {
   (L.holdingPoints || []).forEach(function (hp) {
