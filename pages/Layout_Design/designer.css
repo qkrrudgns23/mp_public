@@ -39,14 +39,122 @@
     #sim-controls-container #flightSimSlider { flex: 1; min-width: 80px; width: auto; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); }
     #sim-controls-container #flightSimTimeLabel { font-size: 11px; color: var(--ui-text-primary); min-width: 120px; flex-shrink: 0; display: inline-block; }
     #view-toggle-stack { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
-    #view-toggle { display: inline-flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--ui-border-default); background: var(--ui-bg-control); transition: var(--ui-transition); }
+    /* overflow must be visible so the Layer popover (positioned above the bar) is not clipped */
+    #view-toggle { display: inline-flex; border-radius: 8px; overflow: visible; border: 1px solid var(--ui-border-default); background: var(--ui-bg-control); transition: var(--ui-transition); }
     #view-toggle .tool-btn { margin: 0; border: none; border-radius: 0; font-size: 11px; font-weight: 500; padding: 6px 12px; transition: var(--ui-transition); }
     #view-toggle .tool-btn.active { background: var(--ui-accent-muted); color: var(--ui-accent); }
     #view-toggle .tool-btn:not(.active) { background: transparent; color: var(--ui-text-secondary); }
     #view-toggle .tool-btn:hover { background: var(--ui-bg-overlay); color: var(--ui-text-primary); }
     #view-toggle .tool-btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; color: var(--ui-text-muted); }
-    #view-toggle #btnRoadWidthToggle:not(.active) { color: color-mix(in srgb, var(--ui-text-secondary) 35%, var(--ui-text-primary) 65%); }
-    #view-toggle #btnRoadWidthToggle.active { color: color-mix(in srgb, var(--ui-accent) 68%, #ffffff 32%); }
+    #view-toggle .layer-popover-wrap { position: relative; display: inline-flex; align-self: stretch; }
+    #view-toggle .layer-popover-panel {
+      position: absolute;
+      right: 0;
+      bottom: 100%;
+      margin-bottom: 6px;
+      min-width: 176px;
+      max-width: min(232px, 85vw);
+      padding: 4px 6px;
+      border-radius: 10px;
+      border: 1px solid color-mix(in srgb, var(--ui-border-default) 48%, transparent);
+      background: color-mix(in srgb, var(--ui-bg-elevated) 62%, transparent);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      pointer-events: auto;
+    }
+    #view-toggle .layer-popover-panel[hidden] { display: none !important; }
+    #view-toggle .layer-popover-all-btn {
+      width: 100%;
+      margin: 0 0 1px 0;
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--ui-border-default);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--ui-text-primary);
+      background: var(--ui-bg-overlay);
+      cursor: pointer;
+      transition: var(--ui-transition);
+    }
+    #view-toggle .layer-popover-all-btn:hover {
+      background: var(--ui-bg-surface);
+      border-color: var(--ui-border-strong);
+      color: var(--ui-accent);
+    }
+    #view-toggle .layer-popover-all-btn.active {
+      background: var(--ui-accent-muted);
+      color: var(--ui-accent);
+      border-color: color-mix(in srgb, var(--ui-accent, #38bdf8) 35%, var(--ui-border-default));
+    }
+    #view-toggle .layer-popover-grid-image-row {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 8px;
+      padding: 0;
+      margin-bottom: 8px;
+    }
+    #view-toggle .layer-popover-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 0;
+      padding: 0;
+    }
+    #view-toggle .layer-popover-group + .layer-popover-group {
+      margin-top: 10px;
+    }
+    #view-toggle .layer-popover-section-parent {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 4px;
+      margin: 0;
+      padding: 0 1px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--ui-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      line-height: 1.15;
+    }
+    #view-toggle .layer-popover-section-parent:hover { color: var(--ui-text-primary); }
+    #view-toggle .layer-popover-section-parent input {
+      cursor: pointer;
+      accent-color: var(--ui-accent);
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+      margin: 0;
+    }
+    #view-toggle .layer-popover-section-parent-text { padding-top: 0.5px; }
+    #view-toggle .layer-popover-group-items {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 0 0 1px 18px;
+    }
+    #view-toggle .layer-popover-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      line-height: 1.15;
+      color: var(--ui-text-primary);
+      cursor: pointer;
+      user-select: none;
+    }
+    #view-toggle .layer-popover-row:hover { color: var(--ui-accent); }
+    #view-toggle .layer-popover-row input { cursor: pointer; accent-color: var(--ui-accent); width: 12px; height: 12px; flex-shrink: 0; }
     .global-update-wrap { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; vertical-align: middle; }
     .global-update-sync-dot {
       align-self: center;
@@ -120,7 +228,24 @@
       transition: width 0.2s ease-out;
     }
     #info-bar { display: none; position: absolute; bottom: 8px; left: 10px; right: 10px; padding: 8px 12px; min-height: 2.2em; border-radius: 8px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); color: var(--ui-text-secondary); font-size: 12px; align-items: center; pointer-events: none; z-index: 5; }
-    #right-panel { position: absolute; top: 0; right: 0; bottom: 0; width: var(--style-right-panel-width-full, 25vw); max-width: calc(100vw - var(--style-right-panel-resize-viewport-margin, 8px)); background: color-mix(in srgb, var(--style-right-panel-bg, color-mix(in srgb, var(--ui-bg-surface) 86%, var(--ui-bg-elevated) 14%)) var(--style-right-panel-bg-mix-percent, 95%), transparent); border-left: 1px solid var(--ui-border-default); padding: 12px; font-size: 12px; overflow-y: auto; z-index: 20; transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+    #right-panel {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: var(--style-right-panel-width-full, 25vw);
+      max-width: calc(100vw - var(--style-right-panel-resize-viewport-margin, 8px));
+      background: color-mix(in srgb, var(--style-right-panel-bg, var(--ui-bg-elevated)) 62%, transparent);
+      border-left: 1px solid color-mix(in srgb, var(--ui-border-default) 48%, transparent);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: -8px 0 24px rgba(0, 0, 0, 0.32);
+      padding: 12px;
+      font-size: 12px;
+      overflow-y: auto;
+      z-index: 20;
+      transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
     #right-panel.panel-resize-dragging { transition: none !important; }
     #right-panel.collapsed { width: var(--style-right-panel-resize-collapsed, 44px) !important; min-width: var(--style-right-panel-resize-collapsed, 44px); max-width: none; padding: 8px; overflow: hidden; }
     #right-panel.collapsed .panel-content { display: none; }

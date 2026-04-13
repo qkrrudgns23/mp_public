@@ -12,11 +12,59 @@
             <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
             <button class="tool-btn" id="btnView3D" title="Open 3D viewer (new window)">3D</button>
             <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
-            <button class="tool-btn active" id="btnGridToggle" title="Toggle grid visibility">Grid</button>
-            <button class="tool-btn active" id="btnImageToggle" title="Toggle background image visibility">Image</button>
-            <button class="tool-btn active" id="btnRoadWidthToggle" title="Toggle road width vs schematic (centerlines on top)">Width</button>
+            <div class="layer-popover-wrap" id="layerPopoverWrap">
+              <button type="button" class="tool-btn active" id="btnLayerPopover" aria-expanded="false" aria-haspopup="true" aria-controls="layerPopoverPanel" title="Layer visibility (grid, image, paths, stands, markers…)">Layer</button>
+              <div id="layerPopoverPanel" class="layer-popover-panel" role="menu" aria-label="Layers" hidden>
+                <button type="button" class="layer-popover-all-btn" id="btnLayerPopoverAll" title="Toggle all layers on or off">All</button>
+                <div class="layer-popover-grid-image-row" role="group" aria-label="Grid and image">
+                  <label class="layer-popover-section-parent" title="Grid">
+                    <input type="checkbox" data-layer-key="grid" aria-label="Grid" />
+                    <span class="layer-popover-section-parent-text">Grid</span>
+                  </label>
+                  <label class="layer-popover-section-parent" title="Image">
+                    <input type="checkbox" data-layer-key="image" aria-label="Image" />
+                    <span class="layer-popover-section-parent-text">Image</span>
+                  </label>
+                </div>
+                <div class="layer-popover-group">
+                  <label class="layer-popover-section-parent">
+                    <input type="checkbox" data-layer-section-parent="lines" aria-label="Lines: toggle all line layers" />
+                    <span class="layer-popover-section-parent-text">Lines</span>
+                  </label>
+                  <div class="layer-popover-group-items">
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="pathLines" /> Path</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="standLines" /> Stand</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="islandAreaLines" /> Island &amp; area</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="buildingLines" /> Building</label>
+                  </div>
+                </div>
+                <div class="layer-popover-group">
+                  <label class="layer-popover-section-parent">
+                    <input type="checkbox" data-layer-section-parent="fill" aria-label="Fill: toggle all fill layers" />
+                    <span class="layer-popover-section-parent-text">Fill</span>
+                  </label>
+                  <div class="layer-popover-group-items">
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="pathFill" /> Path</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="standFill" /> Stand</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="islandAreaFill" /> Island &amp; area</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="buildingFill" /> Building</label>
+                  </div>
+                </div>
+                <div class="layer-popover-group">
+                  <label class="layer-popover-section-parent">
+                    <input type="checkbox" data-layer-section-parent="etc" aria-label="ETC: toggle text, dummy flight, junction" />
+                    <span class="layer-popover-section-parent-text">ETC</span>
+                  </label>
+                  <div class="layer-popover-group-items">
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="textRuler" /> Text &amp; ruler</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="dummyFlight" /> Dummy flight</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="junction" /> Junction</label>
+                  </div>
+                </div>
+              </div>
+            </div>
             <button type="button" class="tool-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle layout AI assistant (placeholder UI)">AI mode</button>
-            <button type="button" class="tool-btn" id="btnLayoutMarkersToggle" aria-pressed="false" title="Show layout markers (text, ruler, dummy flight)">Marker</button>
+            <button type="button" class="tool-btn" id="btnDesignerPageUpdate" title="Re-apply current settings and refresh all views without reloading this window">Update</button>
             <span class="global-update-wrap">
               <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Pro Sim loads the latest sim JSON into the designer when it finishes" role="status" aria-label="Pro Sim sync status"></span>
               <button class="tool-btn" id="btnGlobalUpdate" title="Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage">Pro Sim</button>
@@ -363,10 +411,12 @@
             <label>Available RW Direction</label>
             <div id="runwayExitAllowedDirection"></div>
           </div>
-          <span class="compact-label-like" id="pathPavementLabel" style="margin-top:8px;">Pavement</span>
-          <div class="marker-island-pavement-choice-gr" role="radiogroup" aria-labelledby="pathPavementLabel">
-            <label class="marker-island-pavement-choice"><input type="radio" name="pathPavement" value="asphalt" checked /> Asphalt</label>
-            <label class="marker-island-pavement-choice"><input type="radio" name="pathPavement" value="cement" /> Cement</label>
+          <div class="compact-field" style="margin-top:8px;">
+            <label for="pathPavement">Pavement</label>
+            <select id="pathPavement">
+              <option value="asphalt">Asphalt</option>
+              <option value="cement">Cement</option>
+            </select>
           </div>
           <button class="small draw-toggle-btn" id="btnTaxiwayDraw">Draw</button>
         </div>

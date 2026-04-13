@@ -22,9 +22,6 @@
   const panel = document.getElementById('right-panel');
   const panelToggle = document.getElementById('panel-toggle');
   const resetViewBtn = document.getElementById('btnResetView');
-  const gridToggleBtn = document.getElementById('btnGridToggle');
-  const imageToggleBtn = document.getElementById('btnImageToggle');
-  const roadWidthToggleBtn = document.getElementById('btnRoadWidthToggle');
   const GRID_LAYOUT_IMAGE_DEFAULTS = {
     opacity: _dc.gridLayoutImage.opacity,
     opacityMin: _dc.gridLayoutImage.opacityMin,

@@ -549,7 +549,6 @@
     if (typeof graphPathDeparture !== 'function' || typeof cumulativeDistAlongPolylineToPoint !== 'function') return;
     if (typeof polylinePointAtDistance !== 'function' || typeof polylineTotalLength !== 'function') return;
     const tSecDraw = state.simTimeSec;
-    if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSecDraw);
     const HOLDING_QUEUE_GHOST_SPACING_M = 70;
     const dia = typeof c2dHoldingPointDiameterM === 'function' ? c2dHoldingPointDiameterM() : 24;
     const rad = Math.max(10, dia * 0.55);
@@ -819,6 +818,9 @@
     }
     drawProSimFlightPathEdges();
     drawApproachPreviewPaths2D();
+    if (state.hasSimulationResult && state.globalUpdateFresh && state.flights && state.flights.length) {
+      if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
+    }
     drawHoldingQueueGhostFlights2D();
     drawFlights2D();
     drawPathJunctions();
