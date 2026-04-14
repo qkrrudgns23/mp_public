@@ -487,6 +487,150 @@ def _piece_tags_at_runway_endpoint(
     return best if best_d <= tol_m else {}
 
 
+def _point_near_any_line(pt: Tuple[float, float], lines: Sequence[LineString], tol_m: float) -> bool:
+    p = Point(pt[0], pt[1])
+    for ln in lines:
+        if ln is None or ln.is_empty:
+            continue
+        if float(ln.distance(p)) <= tol_m:
+            return True
+    return False
+
+
+def _parking_endpoint_class(
+    pt: Tuple[float, float],
+    own_idx: int,
+    parking_lines: Sequence[Tuple[LineString, Dict[str, Any]]],
+    taxi_lines: Sequence[LineString],
+    tol_m: float,
+) -> str:
+    if _point_near_any_line(pt, taxi_lines, tol_m):
+        return "taxiway"
+    p = Point(pt[0], pt[1])
+    for i, (ln, _tags) in enumerate(parking_lines):
+        if i == own_idx or ln is None or ln.is_empty:
+            continue
+        if float(ln.distance(p)) <= tol_m:
+            return "parking_intersection"
+    return "apron_origin"
+
+
+def _parking_neighbors_at_point(
+    pt: Tuple[float, float],
+    own_idx: int,
+    parking_lines: Sequence[Tuple[LineString, Dict[str, Any]]],
+    tol_m: float,
+) -> List[int]:
+    p = Point(pt[0], pt[1])
+    out: List[int] = []
+    for i, (ln, _tags) in enumerate(parking_lines):
+        if i == own_idx or ln is None or ln.is_empty:
+            continue
+        if float(ln.distance(p)) <= tol_m:
+            out.append(i)
+    return out
+
+
+def _append_apron_taxiway_path(
+    out_list: List[Dict[str, Any]],
+    pts: List[Tuple[float, float]],
+    name: str,
+    width_m: float,
+    pavement: str,
+    pos_pl: int,
+) -> None:
+    if len(pts) < 2:
+        return
+    dedup: List[Tuple[float, float]] = []
+    for p in pts:
+        if not dedup or abs(dedup[-1][0] - p[0]) > 1e-9 or abs(dedup[-1][1] - p[1]) > 1e-9:
+            dedup.append(p)
+    if len(dedup) < 2:
+        return
+    verts = _round_vertex_list_xy([{"x": p[0], "y": p[1]} for p in dedup], pos_pl)
+    if len(verts) < 2:
+        return
+    out_list.append(
+        {
+            "id": _new_id("tw"),
+            "name": name,
+            "vertices": verts,
+            "width": width_m,
+            "direction": "both",
+            "avgMoveVelocity": 10,
+            "pathType": "apron_taxiway",
+            "pavement": pavement or "asphalt",
+        }
+    )
+
+
+def _line_path_between_points(
+    ln: LineString,
+    a: Tuple[float, float],
+    b: Tuple[float, float],
+) -> List[Tuple[float, float]]:
+    if ln is None or ln.is_empty or len(ln.coords) < 2:
+        return [a, b]
+    coords = [(float(x), float(y)) for x, y in ln.coords]
+    p_a = Point(a[0], a[1])
+    p_b = Point(b[0], b[1])
+    da = float(ln.project(p_a))
+    db = float(ln.project(p_b))
+    pa = ln.interpolate(da)
+    pb = ln.interpolate(db)
+    if da <= db:
+        lo, hi = da, db
+        rev = False
+    else:
+        lo, hi = db, da
+        rev = True
+    out: List[Tuple[float, float]] = []
+    out.append((float(pa.x), float(pa.y)) if not rev else (float(pb.x), float(pb.y)))
+    acc = 0.0
+    for i in range(len(coords) - 1):
+        x0, y0 = coords[i]
+        x1, y1 = coords[i + 1]
+        seg_len = math.hypot(x1 - x0, y1 - y0)
+        if seg_len < 1e-9:
+            continue
+        seg_start = acc
+        seg_end = acc + seg_len
+        if seg_end <= lo + 1e-9:
+            acc = seg_end
+            continue
+        if seg_start >= hi - 1e-9:
+            break
+        if seg_start >= lo - 1e-9 and seg_start <= hi + 1e-9:
+            out.append((x0, y0))
+        if seg_end >= lo - 1e-9 and seg_end <= hi + 1e-9:
+            out.append((x1, y1))
+        acc = seg_end
+    out.append((float(pb.x), float(pb.y)) if not rev else (float(pa.x), float(pa.y)))
+    dedup: List[Tuple[float, float]] = []
+    for p in (reversed(out) if rev else out):
+        if not dedup or abs(dedup[-1][0] - p[0]) > 1e-9 or abs(dedup[-1][1] - p[1]) > 1e-9:
+            dedup.append(p)
+    return dedup
+
+
+def _nearest_gate_for_point(
+    pt: Tuple[float, float],
+    gates: Sequence[Tuple[float, float, Dict[str, str], str]],
+    max_m: float,
+) -> Optional[Tuple[float, float, Dict[str, str], str]]:
+    best = None
+    best_d = 1e30
+    x, y = pt
+    for gx, gy, tags, fid in gates:
+        d = math.hypot(gx - x, gy - y)
+        if d < best_d:
+            best_d = d
+            best = (gx, gy, tags, fid)
+    if best is None or best_d > max_m:
+        return None
+    return best
+
+
 def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Dict[str, Any]:
     """
     Build a layout dict from the same structure ``airport_overpass_fetch.build_storage_document`` writes:
@@ -610,56 +754,56 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     pbb_stands: List[Dict[str, Any]] = []
     remote_stands: List[Dict[str, Any]] = []
     stand_records: List[Dict[str, Any]] = []
-
-    for gx, gy, tags, fid in gates:
-        nearest_pl, d_pl = _nearest_line_dist_point(parking_lines, gx, gy)
-        contact = False
-        if nearest_pl is not None and d_pl <= gate_search:
-            if terminal_union is None or terminal_union.is_empty:
-                contact = False
-            else:
-                contact = nearest_pl.distance(terminal_union) <= leadin_max
+    parking_apron_paths: List[Dict[str, Any]] = []
+    cat = str(rules["stands"]["default_category"])
+    mode = str(rules["stands"]["default_category_mode"])
+    parking_tol_m = 1.5
+    contact_thresh_m = 80.0
+    parking_width = float(rules["taxiways"]["default_width_m"])
+    for pi, (pln, ptags) in enumerate(parking_lines):
+        if pln is None or pln.is_empty or len(pln.coords) < 2:
+            continue
+        p0 = (float(pln.coords[0][0]), float(pln.coords[0][1]))
+        p1 = (float(pln.coords[-1][0]), float(pln.coords[-1][1]))
+        c0 = _parking_endpoint_class(p0, pi, parking_lines, taxi_mate_geoms, parking_tol_m)
+        c1 = _parking_endpoint_class(p1, pi, parking_lines, taxi_mate_geoms, parking_tol_m)
+        origin = p0 if c0 == "apron_origin" else (p1 if c1 == "apron_origin" else None)
+        inter = p0 if c0 == "parking_intersection" else (p1 if c1 == "parking_intersection" else None)
+        taxi_ep = p0 if c0 == "taxiway" else (p1 if c1 == "taxiway" else None)
+        if origin is None:
+            # Only create apron artifacts from explicit class-3 endpoint.
+            continue
+        gate_match = _nearest_gate_for_point(origin, gates, gate_search)
+        if gate_match is not None:
+            gx_m, gy_m, gtags_m, fid_m = gate_match
+            stand_name = _safe_name(gtags_m.get("ref") or gtags_m.get("name"), f"GATE-{fid_m}")
+            sx, sy = gx_m, gy_m
         else:
-            if terminal_union is not None and not terminal_union.is_empty:
-                contact = Point(gx, gy).distance(terminal_union) <= leadin_max
-
-        name = _safe_name(tags.get("ref") or tags.get("name"), f"GATE-{fid}")
-        cat = str(rules["stands"]["default_category"])
-        mode = str(rules["stands"]["default_category_mode"])
-
-        if contact:
-            sx, sy = gx, gy
-            parking_ln_gate: Optional[LineString] = None
-            if nearest_pl is not None and isinstance(nearest_pl, LineString):
-                parking_ln_gate = nearest_pl
-                st, _txy = _parking_stand_and_taxi_endpoints(nearest_pl, taxi_mate_geoms)
-                sx, sy = st
-            jb_near_m = float(rules["taxiways"].get("jet_bridge_near_stand_m", 55.0))
-            jb_n = _count_jet_bridges_near((sx, sy), (gx, gy), parking_ln_gate, jet_bridge_lines, jb_near_m)
-            pbb_count = max(1, jb_n)
-
-            ang = 0.0
-            if parking_ln_gate is not None:
-                _, taxi_ep = _parking_stand_and_taxi_endpoints(parking_ln_gate, taxi_mate_geoms)
-                ang_lead = math.degrees(math.atan2(sy - taxi_ep[1], sx - taxi_ep[0]))
-                ang = (ang_lead + 180.0) % 360.0
-            elif terminal_union is not None and not terminal_union.is_empty:
-                try:
-                    nr = _union_exterior(terminal_union)
-                    if nr is not None:
-                        nearest_pt = nr.interpolate(nr.project(Point(sx, sy)))
-                        ang_t = math.degrees(math.atan2(sy - nearest_pt.y, sx - nearest_pt.x))
-                        ang = (ang_t + 180.0) % 360.0
-                except Exception:
-                    ang = 0.0
-            rad = math.radians(ang)
-            dx, dy = math.cos(rad) * stub, math.sin(rad) * stub
-            pbx1, pby1 = sx - math.cos(rad) * wall_len * 0.3, sy - math.sin(rad) * wall_len * 0.3
-            pbx2, pby2 = pbx1 + math.cos(rad) * wall_len, pby1 + math.sin(rad) * wall_len
-            pbb_id = _new_id("pbb")
-            pbb_obj: Dict[str, Any] = {
-                "id": pbb_id,
-                "name": name,
+            stand_name = _safe_name(ptags.get("ref") or ptags.get("name"), f"PARK-{pi+1}")
+            sx, sy = origin
+        contact = False
+        nearest_pt = None
+        if terminal_union is not None and not terminal_union.is_empty:
+            nr = _union_exterior(terminal_union)
+            if nr is not None:
+                nearest_pt = nr.interpolate(nr.project(Point(sx, sy)))
+                contact = float(Point(sx, sy).distance(nearest_pt)) < contact_thresh_m
+        if contact and nearest_pt is not None:
+            nx = sx - float(nearest_pt.x)
+            ny = sy - float(nearest_pt.y)
+            nlen = math.hypot(nx, ny)
+            if nlen < 1e-6:
+                nx, ny = 1.0, 0.0
+                nlen = 1.0
+            nx /= nlen
+            ny /= nlen
+            ang = math.degrees(math.atan2(ny, nx))
+            dx, dy = nx * stub, ny * stub
+            pbx1, pby1 = sx - nx * wall_len * 0.3, sy - ny * wall_len * 0.3
+            pbx2, pby2 = pbx1 + nx * wall_len, pby1 + ny * wall_len
+            pbb_obj = {
+                "id": _new_id("pbb"),
+                "name": stand_name,
                 "x1": _quantize_m(pbx1, pos_pl),
                 "y1": _quantize_m(pby1, pos_pl),
                 "x2": _quantize_m(pbx2, pos_pl),
@@ -667,10 +811,11 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 "category": cat,
                 "categoryMode": mode,
                 "allowedAircraftTypes": [],
-                "pbbCount": int(pbb_count),
+                "pbbCount": 1,
                 "angleDeg": ang,
-                "apronSiteX": _quantize_m(sx + dx, pos_pl),
-                "apronSiteY": _quantize_m(sy + dy, pos_pl),
+                # Keep stand attach point at class-3 apron origin / matched gate anchor.
+                "apronSiteX": _quantize_m(sx, pos_pl),
+                "apronSiteY": _quantize_m(sy, pos_pl),
                 "boardingWidthM": 5,
                 "boardingHeightM": 15,
                 "pbbArmLenM": max(10.0, stub),
@@ -678,23 +823,14 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 "edgeRow": _quantize_m(sy / cell, pos_pl),
             }
             pbb_stands.append(pbb_obj)
-            stand_records.append(
-                {
-                    "kind": "contact",
-                    "pbb": pbb_obj,
-                    "gx": gx,
-                    "gy": gy,
-                    "nearest_line": nearest_pl,
-                    "d_pl": d_pl,
-                }
-            )
+            stand_records.append({"kind": "contact", "pbb": pbb_obj, "nearest_line": pln, "d_pl": 0.0})
         else:
             remote_stands.append(
                 {
                     "id": _new_id("remote"),
-                    "name": name,
-                    "x": _quantize_m(gx, pos_pl),
-                    "y": _quantize_m(gy, pos_pl),
+                    "name": stand_name,
+                    "x": _quantize_m(sx, pos_pl),
+                    "y": _quantize_m(sy, pos_pl),
                     "category": cat,
                     "angleDeg": 0,
                     "categoryMode": mode,
@@ -703,6 +839,143 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 }
             )
             stand_records.append({"kind": "remote"})
+        if inter is not None:
+            neigh = _parking_neighbors_at_point(inter, pi, parking_lines, parking_tol_m)
+            taxi_targets: List[Tuple[Tuple[float, float], LineString]] = []
+            for ni in neigh:
+                nln, _nt = parking_lines[ni]
+                if nln is None or nln.is_empty or len(nln.coords) < 2:
+                    continue
+                np0 = (float(nln.coords[0][0]), float(nln.coords[0][1]))
+                np1 = (float(nln.coords[-1][0]), float(nln.coords[-1][1]))
+                cnp0 = _parking_endpoint_class(np0, ni, parking_lines, taxi_mate_geoms, parking_tol_m)
+                cnp1 = _parking_endpoint_class(np1, ni, parking_lines, taxi_mate_geoms, parking_tol_m)
+                if cnp0 == "taxiway":
+                    taxi_targets.append((np0, nln))
+                if cnp1 == "taxiway":
+                    taxi_targets.append((np1, nln))
+                # Fallback for branch: if explicit taxiway endpoint is absent, use the endpoint opposite from intersection.
+                if cnp0 != "taxiway" and cnp1 != "taxiway":
+                    d0 = math.hypot(np0[0] - inter[0], np0[1] - inter[1])
+                    d1 = math.hypot(np1[0] - inter[0], np1[1] - inter[1])
+                    far = np0 if d0 >= d1 else np1
+                    taxi_targets.append((far, nln))
+            if taxi_ep is not None:
+                taxi_targets.append((taxi_ep, pln))
+            uniq_targets: List[Tuple[Tuple[float, float], LineString]] = []
+            seen_t = set()
+            for tp, tln in taxi_targets:
+                k = (_quantize_m(tp[0], 2), _quantize_m(tp[1], 2), id(tln))
+                if k in seen_t:
+                    continue
+                seen_t.add(k)
+                uniq_targets.append((tp, tln))
+            # Rule lock: if 1-1/1-2 exists create two branches from 3->2, otherwise fallback to 3->1 direct.
+            for ti, (tp, tln) in enumerate(uniq_targets[:2]):
+                path_a = _line_path_between_points(pln, origin, inter)
+                path_b = _line_path_between_points(tln, inter, tp)
+                full_path = path_a + (path_b[1:] if len(path_b) >= 2 else [])
+                _append_apron_taxiway_path(
+                    parking_apron_paths,
+                    full_path,
+                    f"Apron Taxiway {stand_name}-{ti+1}",
+                    parking_width,
+                    str(ptags.get("surface", "asphalt") or "asphalt"),
+                    pos_pl,
+                )
+            if not uniq_targets and taxi_ep is not None:
+                full_path = _line_path_between_points(pln, origin, taxi_ep)
+                _append_apron_taxiway_path(
+                    parking_apron_paths,
+                    full_path,
+                    f"Apron Taxiway {stand_name}",
+                    parking_width,
+                    str(ptags.get("surface", "asphalt") or "asphalt"),
+                    pos_pl,
+                )
+        else:
+            if taxi_ep is None:
+                continue
+            full_path = _line_path_between_points(pln, origin, taxi_ep)
+            _append_apron_taxiway_path(
+                parking_apron_paths,
+                full_path,
+                f"Apron Taxiway {stand_name}",
+                parking_width,
+                str(ptags.get("surface", "asphalt") or "asphalt"),
+                pos_pl,
+            )
+
+    # Fallback to legacy gate-based stand synthesis when parking_position lines are absent.
+    if not parking_lines:
+        for gx, gy, tags, fid in gates:
+            nearest_pl, d_pl = _nearest_line_dist_point(parking_lines, gx, gy)
+            contact = False
+            if nearest_pl is not None and d_pl <= gate_search:
+                if terminal_union is None or terminal_union.is_empty:
+                    contact = False
+                else:
+                    contact = nearest_pl.distance(terminal_union) <= leadin_max
+            else:
+                if terminal_union is not None and not terminal_union.is_empty:
+                    contact = Point(gx, gy).distance(terminal_union) <= leadin_max
+            name = _safe_name(tags.get("ref") or tags.get("name"), f"GATE-{fid}")
+            if contact:
+                sx, sy = gx, gy
+                parking_ln_gate: Optional[LineString] = None
+                if nearest_pl is not None and isinstance(nearest_pl, LineString):
+                    parking_ln_gate = nearest_pl
+                    st, _txy = _parking_stand_and_taxi_endpoints(nearest_pl, taxi_mate_geoms)
+                    sx, sy = st
+                jb_near_m = float(rules["taxiways"].get("jet_bridge_near_stand_m", 55.0))
+                jb_n = _count_jet_bridges_near((sx, sy), (gx, gy), parking_ln_gate, jet_bridge_lines, jb_near_m)
+                pbb_count = max(1, jb_n)
+                ang = 0.0
+                if parking_ln_gate is not None:
+                    _, taxi_ep2 = _parking_stand_and_taxi_endpoints(parking_ln_gate, taxi_mate_geoms)
+                    ang_lead = math.degrees(math.atan2(sy - taxi_ep2[1], sx - taxi_ep2[0]))
+                    ang = (ang_lead + 180.0) % 360.0
+                rad = math.radians(ang)
+                dx, dy = math.cos(rad) * stub, math.sin(rad) * stub
+                pbx1, pby1 = sx - math.cos(rad) * wall_len * 0.3, sy - math.sin(rad) * wall_len * 0.3
+                pbx2, pby2 = pbx1 + math.cos(rad) * wall_len, pby1 + math.sin(rad) * wall_len
+                pbb_obj: Dict[str, Any] = {
+                    "id": _new_id("pbb"),
+                    "name": name,
+                    "x1": _quantize_m(pbx1, pos_pl),
+                    "y1": _quantize_m(pby1, pos_pl),
+                    "x2": _quantize_m(pbx2, pos_pl),
+                    "y2": _quantize_m(pby2, pos_pl),
+                    "category": cat,
+                    "categoryMode": mode,
+                    "allowedAircraftTypes": [],
+                    "pbbCount": int(pbb_count),
+                    "angleDeg": ang,
+                    "apronSiteX": _quantize_m(sx + dx, pos_pl),
+                    "apronSiteY": _quantize_m(sy + dy, pos_pl),
+                    "boardingWidthM": 5,
+                    "boardingHeightM": 15,
+                    "pbbArmLenM": max(10.0, stub),
+                    "edgeCol": _quantize_m(sx / cell, pos_pl),
+                    "edgeRow": _quantize_m(sy / cell, pos_pl),
+                }
+                pbb_stands.append(pbb_obj)
+                stand_records.append({"kind": "contact", "pbb": pbb_obj, "nearest_line": nearest_pl, "d_pl": d_pl})
+            else:
+                remote_stands.append(
+                    {
+                        "id": _new_id("remote"),
+                        "name": name,
+                        "x": _quantize_m(gx, pos_pl),
+                        "y": _quantize_m(gy, pos_pl),
+                        "category": cat,
+                        "angleDeg": 0,
+                        "categoryMode": mode,
+                        "allowedAircraftTypes": [],
+                        "allowedTerminals": [],
+                    }
+                )
+                stand_records.append({"kind": "remote"})
 
     rw_default_w = float(rules["taxiways"]["runway_default_width_m"])
     runway_paths: List[Dict[str, Any]] = []
@@ -769,6 +1042,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 "pavement": str(tags.get("surface", "asphalt") or "asphalt"),
             }
         )
+    taxiways_out.extend(parking_apron_paths)
 
     taxi_spines: List[Tuple[LineString, str]] = []
     for tw in taxiways_out:
@@ -892,6 +1166,76 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 "buildingType": "terminal",
             }
         )
+
+    # Enforce stand type rule on final terminal contours:
+    # inside 80 m -> contact stand, 80 m+ -> remote stand.
+    if terminals_out and remote_stands:
+        term_polys_out: List[Polygon] = []
+        for t in terminals_out:
+            tv = t.get("vertices")
+            if not isinstance(tv, list) or len(tv) < 3:
+                continue
+            pts = []
+            for v in tv:
+                if not isinstance(v, dict):
+                    continue
+                pts.append((float(v.get("x", 0.0)), float(v.get("y", 0.0))))
+            if len(pts) >= 3:
+                term_polys_out.append(Polygon(pts))
+        term_union_out = unary_union(term_polys_out) if term_polys_out else None
+        term_ring_out = _union_exterior(term_union_out) if term_union_out is not None else None
+        kept_remote: List[Dict[str, Any]] = []
+        promoted_contact: List[Dict[str, Any]] = []
+        for rs in remote_stands:
+            sx = float(rs.get("x", 0.0))
+            sy = float(rs.get("y", 0.0))
+            if term_union_out is None or term_union_out.is_empty:
+                kept_remote.append(rs)
+                continue
+            d_term = float(Point(sx, sy).distance(term_union_out))
+            if d_term >= contact_thresh_m or term_ring_out is None:
+                kept_remote.append(rs)
+                continue
+            nr = term_ring_out.interpolate(term_ring_out.project(Point(sx, sy)))
+            nx, ny = float(nr.x), float(nr.y)
+            dx = sx - nx
+            dy = sy - ny
+            dlen = math.hypot(dx, dy)
+            if dlen < 1e-6:
+                dx, dy = 1.0, 0.0
+                dlen = 1.0
+            dx /= dlen
+            dy /= dlen
+            ang = (math.degrees(math.atan2(dy, dx)) + 180.0) % 360.0
+            x1 = nx - dx * wall_len * 0.5
+            y1 = ny - dy * wall_len * 0.5
+            x2 = nx + dx * wall_len * 0.5
+            y2 = ny + dy * wall_len * 0.5
+            promoted_contact.append(
+                {
+                    "id": _new_id("pbb"),
+                    "name": str(rs.get("name", "")),
+                    "x1": _quantize_m(x1, pos_pl),
+                    "y1": _quantize_m(y1, pos_pl),
+                    "x2": _quantize_m(x2, pos_pl),
+                    "y2": _quantize_m(y2, pos_pl),
+                    "category": cat,
+                    "categoryMode": mode,
+                    "allowedAircraftTypes": [],
+                    "pbbCount": 1,
+                    "angleDeg": _quantize_m(ang, 2),
+                    "apronSiteX": _quantize_m(sx, pos_pl),
+                    "apronSiteY": _quantize_m(sy, pos_pl),
+                    "boardingWidthM": 5,
+                    "boardingHeightM": 15,
+                    "pbbArmLenM": max(10.0, stub),
+                    "edgeCol": _quantize_m(sx / cell, pos_pl),
+                    "edgeRow": _quantize_m(sy / cell, pos_pl),
+                }
+            )
+        remote_stands = kept_remote
+        if promoted_contact:
+            pbb_stands.extend(promoted_contact)
 
     grid_layers = {
         "grid": False,
