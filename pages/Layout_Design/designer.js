@@ -987,6 +987,11 @@
     rwySepPanelDirty: true,
     rwySepSnapshotStaleGen: 0,
     pathPolylineCacheRev: 0,
+    pathGraphCache: null,
+    pathGraphCacheValid: false,
+    pathGraphCacheSig: '',
+    pathGraphCacheDirty: false,
+    pathGraphInvalidatedAtMs: 0,
     flightSchedulePage: 0,
     kpiRollingDetailExpanded: false,
     flightPathRevealFlightId: null,
@@ -1059,6 +1064,22 @@
   function bumpPathPolylineCacheRev() {
     state.pathPolylineCacheRev = (state.pathPolylineCacheRev | 0) + 1;
   }
+  function invalidatePathGraphCache(hardReset) {
+    if (hardReset) {
+      state.pathGraphCache = null;
+      state.pathGraphCacheValid = false;
+      state.pathGraphCacheSig = '';
+      state.pathGraphCacheDirty = true;
+      state.pathGraphInvalidatedAtMs = 0;
+      return;
+    }
+    state.pathGraphCacheDirty = true;
+    state.pathGraphInvalidatedAtMs = Date.now();
+    if (!state.pathGraphCacheValid) {
+      state.pathGraphCache = null;
+      state.pathGraphCacheSig = '';
+    }
+  }
   function cloneFlightsWithoutPathPolylineCache(flights) {
     return (flights || []).map(function(f) {
       const raw = JSON.parse(JSON.stringify(f));
@@ -1097,6 +1118,7 @@
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
   function redrawLayoutAfterEdit() {
+    invalidatePathGraphCache(true);
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     if (typeof draw === 'function') draw();
     if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
@@ -1677,6 +1699,7 @@
     if (Array.isArray(obj.tempStands)) state.tempStands = obj.tempStands.map(normalizeTempStandObject);
     else state.tempStands = [];
     state.taxiways = mergeTaxiwaysFromLayoutObject(obj);
+    invalidatePathGraphCache(true);
     if (Array.isArray(obj.holdingPoints)) {
       state.holdingPoints = obj.holdingPoints.map(function(h) {
         const hx = Number(h && h.x);
@@ -13304,9 +13327,43 @@
 
   function drawPathJunctions() {
     if (!state.layers.junction) return;
+    if (!(state.taxiways && state.taxiways.length)) return;
+    const sigT0 = performance.now();
+    const nowMs = Date.now();
+    const rebuildCooldownMs = 280;
+    const graphSig = (state.taxiways || []).map(function(tw) {
+      if (!tw || !tw.vertices) return '';
+      const verts = tw.vertices.map(function(v) { return String(Number(v.col)) + ',' + String(Number(v.row)); }).join(';');
+      return String(tw.id || '') + '|' + String(tw.pathType || '') + '|' + String(tw.direction || '') + '|' + verts;
+    }).join('||');
+    if (state.pathGraphCacheValid && state.pathGraphCacheSig && state.pathGraphCacheSig !== graphSig) {
+      state.pathGraphCacheDirty = true;
+      state.pathGraphInvalidatedAtMs = nowMs;
+    }
     let g = null;
-    if (state.taxiways && state.taxiways.length) {
-      try { g = buildPathGraph(); } catch (e) { console.error('drawPathJunctions: buildPathGraph failed', e); }
+    const cacheHit = !!(state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === graphSig);
+    const hasCache = !!(state.pathGraphCacheValid && state.pathGraphCache);
+    const rebuildDue = !!(state.pathGraphCacheDirty && (nowMs - (state.pathGraphInvalidatedAtMs || 0) >= rebuildCooldownMs));
+    const shouldRebuildNow = (!hasCache) || rebuildDue;
+    if (cacheHit) {
+      g = state.pathGraphCache;
+    } else if (shouldRebuildNow) {
+      const t0 = performance.now();
+      try {
+        g = buildPathGraph();
+        state.pathGraphCache = g;
+        state.pathGraphCacheValid = true;
+        state.pathGraphCacheSig = graphSig;
+        state.pathGraphCacheDirty = false;
+      } catch (e) {
+        state.pathGraphCache = null;
+        state.pathGraphCacheValid = false;
+        state.pathGraphCacheSig = '';
+        state.pathGraphCacheDirty = true;
+        console.error('drawPathJunctions: buildPathGraph failed', e);
+      }
+    } else if (hasCache) {
+      g = state.pathGraphCache;
     }
     if (!g) return;
     const validJunctions = g.validJunctions || [];

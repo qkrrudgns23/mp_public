@@ -4,8 +4,8 @@ into a designer layout JSON matching ``data/Layout_storage/default_layout.json``
 
 Coordinate system: local ENU-style metres with origin at the south-west corner of the
 computed grid (all x,y >= 0). Grid cell size matches layout ``cellSize`` (metres per cell edge).
-Layout Y is mirrored about the horizontal midline of the grid (``y' = rows*cellSize - y``)
-so that the designer matches the expected airside orientation.
+Layout stores projected local metres shifted to grid origin with Y mirrored to match
+the designer's screen-space orientation.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ OSM_TO_LAYOUT_RULES: Dict[str, Any] = {
         "kind": "local_enu_metres",
         "earth_radius_m": 6378137.0,
         "origin_lon_lat": "bounds_center",
-        "axes": "x=east_metres, y=north_metres in projection; layout Y then mirrored in grid height (rows*cellSize)",
+        "axes": "x=east_metres, y=north_metres in projection; layout uses shifted local metres with Y flip",
     },
     "stands": {
         "default_category": "C",
@@ -233,7 +233,7 @@ def _project_lonlat(
 
 
 def _layout_xy_from_raw(x_raw: float, y_raw: float, x_off: float, y_off: float, y_span_m: float) -> Tuple[float, float]:
-    """Projected metres shifted to grid origin, then Y mirrored in full grid height."""
+    """Projected metres shifted to grid origin with layout-space Y mirroring."""
     x = x_raw - x_off
     y0 = y_raw - y_off
     return x, y_span_m - y0
