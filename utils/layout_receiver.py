@@ -3,23 +3,31 @@ Save Layout/load: data/Layout_storage/ Save by name to.
 - Save: name If there is Layout_storage/{name}.json, If there is no current_layout.json (Run Simulationdragon).
 - POST /api/save-layout: body { "layout": {...}, "name": "optional" } or the entire layout object.
 - GET /api/load-layout?name=xxx: Layout_storage/{name}.json return.
+- GET /api/export-layout-geometry?name=xxx: polylines + points derived from that layout (designer world x/y).
+- POST /api/fetch-airport-map: body { "icao": "RPLL" } → OSM (OpenAirportMap source) → data/map_storage/{ICAO}_map.json
+  and ``pages/Layout_Design/Map/osm_to_layout.py`` → data/Layout_storage/{ICAO}_OSM.json (same keys as default layout).
 """
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import json
 import re
+import sys
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 import time
 from datetime import datetime, timedelta
+from functools import lru_cache
 from typing import Any, Dict, Optional
 
 # Standalone receiver: Layout JSON must be data/Layout_storage/ Save only to
 _ROOT = Path(__file__).resolve().parents[1]
 LAYOUT_STORAGE_DIR = (_ROOT / "data" / "Layout_storage").resolve()
+MAP_STORAGE_DIR = (_ROOT / "data" / "map_storage").resolve()
 RESULT_STORAGE_DIR = (_ROOT / "data" / "Result_storage").resolve()
 LAYOUT_FILE = LAYOUT_STORAGE_DIR / "current_layout.json"
 DEFAULT_LAYOUT_PATH = LAYOUT_STORAGE_DIR / "default_layout.json"
@@ -30,6 +38,72 @@ _GRID3D_VIEWER_HTML = (_ROOT / "pages" / "Layout_Design" / "3D" / "grid3d-viewer
 LAYOUT_RECEIVER_PORT = 8765
 _PORT = LAYOUT_RECEIVER_PORT
 _RESERVED_NAMES = frozenset({"current_layout", "default_layout"})
+
+
+@lru_cache(maxsize=1)
+def _airport_overpass_fetch_module():
+    path = (_ROOT / "pages" / "Layout_Design" / "Map" / "airport_overpass_fetch.py").resolve()
+    spec = importlib.util.spec_from_file_location("airport_overpass_fetch", path)
+    if spec is None or spec.loader is None:
+        raise ImportError("airport_overpass_fetch spec")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+@lru_cache(maxsize=1)
+def _osm_to_layout_module():
+    path = (_ROOT / "pages" / "Layout_Design" / "Map" / "osm_to_layout.py").resolve()
+    spec = importlib.util.spec_from_file_location("osm_to_layout", path)
+    if spec is None or spec.loader is None:
+        raise ImportError("osm_to_layout spec")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def save_airport_map_for_icao(icao_raw: str) -> Dict[str, Any]:
+    """Fetch OSM airport airside features and write data/map_storage/{ICAO}_map.json."""
+    mod = _airport_overpass_fetch_module()
+    icao = mod.sanitize_icao((icao_raw or "").strip())
+    if not icao:
+        raise ValueError("invalid or missing icao (use 3–4 letter/digit ICAO)")
+    doc = mod.build_storage_document(icao)
+    MAP_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    out_name = f"{icao}_map.json"
+    out_path = (MAP_STORAGE_DIR / out_name).resolve()
+    if out_path.parent != MAP_STORAGE_DIR:
+        raise ValueError("invalid output path")
+    out_path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+    gj = doc.get("geojson") if isinstance(doc.get("geojson"), dict) else {}
+    feats = gj.get("features") if isinstance(gj.get("features"), list) else []
+    layout_name = f"{icao}_OSM"
+    layout_file = f"{layout_name}.json"
+    layout_path = f"data/Layout_storage/{layout_file}"
+    layout_error: Optional[str] = None
+    try:
+        ol = _osm_to_layout_module()
+        layout_obj = ol.build_layout_from_map_storage_document(doc, icao)
+        LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        layout_disk = (LAYOUT_STORAGE_DIR / layout_file).resolve()
+        if layout_disk.parent != LAYOUT_STORAGE_DIR:
+            raise ValueError("invalid layout output path")
+        layout_disk.write_text(json.dumps(layout_obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        layout_error = str(e)
+    out: Dict[str, Any] = {
+        "ok": True,
+        "file": out_name,
+        "path": f"data/map_storage/{out_name}",
+        "featureCount": len(feats),
+        "layoutName": layout_name,
+        "layoutFile": layout_file,
+        "layoutPath": layout_path,
+    }
+    if layout_error is not None:
+        out["layoutError"] = layout_error
+    return out
+
 
 _sim_progress: Dict[str, Any] = {
     "running": False,
@@ -86,6 +160,23 @@ def _layout_path_for_read(name: str) -> Optional[Path]:
     except Exception:
         pass
     return path
+
+
+def build_layout_geometry_export(name: str) -> Dict[str, Any]:
+    """Load Layout_storage/{name}.json and return polylines + points (designer world x/y)."""
+    from utils.layout_geometry_export import export_layout_geometry
+
+    n = (name or "").strip()
+    if not n:
+        raise ValueError("missing name")
+    path = _layout_path_for_read(n)
+    if not path or not path.is_file():
+        raise FileNotFoundError(n)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("layout file must be a JSON object")
+    geo = export_layout_geometry(raw)
+    return {"ok": True, "layoutName": n, **geo}
 
 
 def save_layout_to_file(layout: Dict[str, Any], name: Optional[str] = None) -> None:
@@ -206,6 +297,44 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        req_path = (urlparse(self.path).path or self.path or "/").split("?", 1)[0].rstrip("/") or "/"
+        if req_path == "/api/fetch-airport-map":
+            self.send_response(405)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Allow", "POST, OPTIONS")
+            self._send_cors()
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "method_not_allowed",
+                        "hint": "Use POST with JSON body: {\"icao\":\"RPLL\"}",
+                    }
+                ).encode("utf-8")
+            )
+            return
+        if req_path == "/api/layout-receiver-health":
+            try:
+                mtime = Path(__file__).stat().st_mtime
+            except OSError:
+                mtime = None
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._send_cors()
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "module": "utils.layout_receiver",
+                        "fetchAirportMapPost": True,
+                        "receiverSourceMtime": mtime,
+                        "hint": "POST /api/fetch-airport-map with {\"icao\":\"RPLL\"}. If you still get 404 on POST, another process may be bound to this port with old code — stop it and restart run_app.py.",
+                    }
+                ).encode("utf-8")
+            )
+            return
         if self.path.startswith("/api/list-layouts"):
             try:
                 names = list_layout_names()
@@ -300,6 +429,36 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
             return
+        if self.path.startswith("/api/export-layout-geometry"):
+            qs = parse_qs(urlparse(self.path).query)
+            names = qs.get("name", [])
+            name = (names[0] or "").strip() if names else ""
+            try:
+                payload = build_layout_geometry_export(name)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+            except FileNotFoundError:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": "not_found"}).encode("utf-8"))
+            except ValueError as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
         if self.path.startswith("/api/sim-progress"):
             with _sim_lock:
                 body = json.dumps(_sim_progress).encode("utf-8")
@@ -376,6 +535,25 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 self._send_cors()
                 self.end_headers()
                 self.wfile.write(b'{"ok":true}')
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
+        if path == "/api/fetch-airport-map" or path.startswith("/api/fetch-airport-map"):
+            try:
+                obj = json.loads(body) if body else {}
+                icao_raw = ""
+                if isinstance(obj, dict):
+                    icao_raw = (obj.get("icao") or obj.get("ICAO") or "").strip()
+                result = save_airport_map_for_icao(icao_raw)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode("utf-8"))
             except Exception as e:
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
@@ -556,14 +734,48 @@ def _run_simulation_thread(layout: Dict[str, Any], result_stem: str) -> None:
 
 _server: Optional[HTTPServer] = None
 _thread: Optional[threading.Thread] = None
+_receiver_boot_mtime: Optional[float] = None
+_receiver_restart_lock = threading.Lock()
 
 
 def start_layout_receiver(port: int = LAYOUT_RECEIVER_PORT) -> str:
-    """Launch the layout receiving server in the background and connect to it URLreturns."""
-    global _server, _thread
-    if _server is not None:
-        return f"http://127.0.0.1:{_PORT}"
-    _server = HTTPServer(("127.0.0.1", port), LayoutReceiverHandler)
-    _thread = threading.Thread(target=_server.serve_forever, daemon=True)
-    _thread.start()
-    return f"http://127.0.0.1:{port}"
+    """Launch the layout receiving server in the background and connect to it URLreturns.
+
+    When ``layout_receiver.py`` changes on disk (e.g. Streamlit reruns after a git pull), the
+    embedded HTTP server is shut down and the module is reloaded so new routes (such as
+    ``POST /api/fetch-airport-map``) take effect without a full Python process restart.
+    """
+    global _server, _thread, _receiver_boot_mtime
+    with _receiver_restart_lock:
+        try:
+            cur_mtime = Path(__file__).stat().st_mtime
+        except OSError:
+            cur_mtime = None
+        if _server is not None:
+            unchanged = (
+                _receiver_boot_mtime is not None
+                and cur_mtime is not None
+                and cur_mtime <= _receiver_boot_mtime + 0.01
+            )
+            if unchanged:
+                return f"http://127.0.0.1:{_PORT}"
+            try:
+                _server.shutdown()
+            except Exception:
+                pass
+            try:
+                _server.server_close()
+            except Exception:
+                pass
+            _server = None
+            if _thread is not None and _thread.is_alive():
+                _thread.join(timeout=5.0)
+            _thread = None
+            _receiver_boot_mtime = None
+            reloaded = importlib.reload(sys.modules[__name__])
+            return reloaded.start_layout_receiver(port)
+        _server = HTTPServer(("127.0.0.1", port), LayoutReceiverHandler)
+        _thread = threading.Thread(target=_server.serve_forever, daemon=True)
+        _thread.start()
+        _receiver_boot_mtime = cur_mtime
+        return f"http://127.0.0.1:{port}"

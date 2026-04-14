@@ -24,6 +24,8 @@ from urllib.parse import parse_qs, urlparse
 from utils.layout_receiver import (
     LAYOUT_STORAGE_DIR,
     save_layout_to_file,
+    save_airport_map_for_icao,
+    build_layout_geometry_export,
     list_layout_names,
     delete_layout,
     _safe_layout_path,
@@ -91,10 +93,40 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
             return
+        if self.path.startswith("/api/export-layout-geometry"):
+            qs = parse_qs(urlparse(self.path).query)
+            names = qs.get("name", [])
+            name = (names[0] or "").strip() if names else ""
+            try:
+                payload = build_layout_geometry_export(name)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+            except FileNotFoundError:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": "not_found"}).encode("utf-8"))
+            except ValueError as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
         self._proxy()
 
     def do_POST(self):
-        path = self.path.rstrip("/")
+        path = (urlparse(self.path).path or self.path).rstrip("/")
         if path == "/api/delete-layout":
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
@@ -133,6 +165,25 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self._send_cors()
                 self.end_headers()
                 self.wfile.write(b'{"ok":true}')
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
+        if path == "/api/fetch-airport-map":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else b"{}"
+            try:
+                obj = json.loads(body.decode("utf-8"))
+                icao_raw = (obj.get("icao") or obj.get("ICAO") or "").strip() if isinstance(obj, dict) else ""
+                result = save_airport_map_for_icao(icao_raw)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode("utf-8"))
             except Exception as e:
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")

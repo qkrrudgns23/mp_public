@@ -14955,6 +14955,91 @@
         btn.addEventListener('click', function() { switchLayoutTab(this.getAttribute('data-sltab')); });
       });
     }
+    (function initLayoutLoadPaneAirportTab() {
+      const pane = document.getElementById('layout-load-pane');
+      if (!pane) return;
+      pane.querySelectorAll('.layout-load-subtab[data-loadsub]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          const sub = this.getAttribute('data-loadsub');
+          pane.querySelectorAll('.layout-load-subtab[data-loadsub]').forEach(function(b) {
+            const on = b.getAttribute('data-loadsub') === sub;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          pane.querySelectorAll('.layout-load-subpane').forEach(function(p) {
+            p.classList.toggle('active', p.getAttribute('data-loadsub') === sub);
+          });
+          if (sub === 'layouts') fetchAndRefreshLayoutList();
+        });
+      });
+      const btnFetch = document.getElementById('btnFetchAirportMap');
+      const msgEl = document.getElementById('layoutAirportMapMsg');
+      if (btnFetch) {
+        btnFetch.addEventListener('click', function() {
+          const inp = pane.querySelector('input[name="airportMapIcao"]:checked');
+          const icao = inp ? String(inp.value || '').trim().toUpperCase() : '';
+          if (!icao) {
+            if (msgEl) { msgEl.textContent = 'Select an airport.'; msgEl.style.color = '#f97316'; }
+            return;
+          }
+          const apiBase = getLayoutApiBase();
+          if (msgEl) { msgEl.textContent = 'Fetching from OpenStreetMap (Overpass)…'; msgEl.style.color = '#9ca3af'; }
+          btnFetch.disabled = true;
+          fetch(apiBase + '/api/fetch-airport-map', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ icao: icao })
+          })
+            .then(function(r) { return r.json().then(function(j) { return { r: r, j: j }; }); })
+            .then(function(o) {
+              if (!o.r.ok || !o.j || o.j.ok !== true) {
+                const er = (o.j && o.j.error) ? o.j.error : ('HTTP ' + o.r.status);
+                throw new Error(er);
+              }
+              const j = o.j;
+              if (msgEl) {
+                msgEl.textContent = 'Saved data/map_storage/' + (j.file || '') + ' (' + (j.featureCount != null ? j.featureCount : 0) + ' features)';
+                msgEl.style.color = '#9ca3af';
+              }
+              if (j.layoutError) {
+                console.warn('OSM → layout import failed', j.layoutError);
+                if (msgEl) { msgEl.textContent += ' — layout: ' + j.layoutError; }
+              }
+              if (j.layoutName && !j.layoutError) {
+                return fetch(apiBase + '/api/load-layout?name=' + encodeURIComponent(j.layoutName)).then(function(r2) {
+                  if (!r2.ok) throw new Error('load-layout HTTP ' + r2.status);
+                  return r2.json();
+                }).then(function(layoutObj) {
+                  try {
+                    state.hasSimulationResult = false;
+                    applyLayoutObject(layoutObj);
+                    if (typeof resizeCanvas === 'function') resizeCanvas();
+                    if (typeof reset2DView === 'function') reset2DView();
+                    if (typeof syncPanelFromState === 'function') syncPanelFromState();
+                    if (typeof draw === 'function') draw();
+                    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+                    if (typeof updateLayoutNameBar === 'function') updateLayoutNameBar(j.layoutName);
+                    if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+                    if (msgEl) { msgEl.textContent += ' · Loaded layout ' + j.layoutName; }
+                  } catch (err) {
+                    console.error('applyLayoutObject after airport fetch', err);
+                    throw err;
+                  }
+                });
+              }
+              return undefined;
+            })
+            .catch(function(e) {
+              console.warn('fetch-airport-map failed', e);
+              if (msgEl) {
+                msgEl.textContent = (e && e.message) ? String(e.message) : 'Request failed';
+                msgEl.style.color = '#f97316';
+              }
+            })
+            .finally(function() { btnFetch.disabled = false; });
+        });
+      }
+    })();
     function getLayoutApiBase() {
       if (LAYOUT_API_URL && LAYOUT_API_URL !== 'null') return LAYOUT_API_URL;
       try { if (window.location && window.location.origin && window.location.origin !== 'null') return window.location.origin; } catch(e) {}

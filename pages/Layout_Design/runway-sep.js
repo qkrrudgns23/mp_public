@@ -1,385 +1,385 @@
-      name: (t.name || '').trim() || 'Building'
-    }; });
-    function termNameById(id) {
-      const tt = termsForLabel.find(function(t) { return t.id === id; });
-      return tt ? tt.name : (id || 'Building');
+      draw();
+      update3DSceneWhenVisible();
+      if (shouldResampleRet) triggerArrivalConfigResampleFromLayoutEdit();
     }
-    const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
-    (state.flights || []).forEach(function(f) {
-      if (!f || !f.standId) return;
-      const stand = allStands.find(function(s) { return s.id === f.standId; });
-      if (!stand) return;
-      const isRemote = (state.remoteStands || []).some(function(r) { return r.id === stand.id; });
-      if (!isRemote) return;
-      const termId = (f.token && f.token.terminalId) || null;
-      if (!termId) return;
-      const allowed = Array.isArray(stand.allowedTerminals) ? stand.allowedTerminals : [];
-      if (allowed.length && !allowed.includes(termId)) {
-        const flightLabel = f.id || f.flightNo || f.reg || '';
-        const standLabel = stand.name || 'Remote';
-        const termLabel = termNameById(termId);
-        const allowedLabel = allowed.map(termNameById).join(', ');
-        msgs.push('Flight ' + (flightLabel || '') + ' building setting(' + termLabel + ') does not match Remote stand ' + standLabel + ' available building settings (' + allowedLabel + ').');
+  });
+  const taxiwayPathTypeKindEl = document.getElementById('taxiwayPathTypeKind');
+  if (taxiwayPathTypeKindEl) {
+    taxiwayPathTypeKindEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        const ptCur = tw.pathType || 'taxiway';
+        if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
+          const kind = String(this.value || 'normal');
+          tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+        }
+        updateObjectInfo();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        draw();
+        update3DSceneWhenVisible();
       }
     });
-    return msgs;
   }
-
-  function updateFlightError(msgs) {
-    const el = document.getElementById('flightError');
+  const runwayMinArrVelEl = document.getElementById('runwayMinArrVelocity');
+  if (runwayMinArrVelEl) {
+    runwayMinArrVelEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        if (tw.pathType !== 'runway') return;
+        const val = Number(this.value);
+        const v = (typeof val === 'number' && isFinite(val) && val > 0) ? Math.max(1, Math.min(150, val)) : 15;
+        tw.minArrVelocity = v;
+        this.value = v;
+        updateObjectInfo();
+        renderObjectList();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        draw();
+      }
+    });
+  }
+  [
+    ['runwayLineupDistM_CW', 'clockwise'],
+    ['runwayLineupDistM_CCW', 'counter_clockwise']
+  ].forEach(function(item) {
+    const lineupEl = document.getElementById(item[0]);
+    if (!lineupEl) return;
+    lineupEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        if (tw.pathType !== 'runway') return;
+        const val = Number(this.value);
+        const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : 0;
+        if (item[1] === 'clockwise') tw.lineupDistM_CW = v;
+        else tw.lineupDistM_CCW = v;
+        tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
+        this.value = String(v);
+        updateObjectInfo();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      }
+    });
+  });
+  [
+    ['runwayStartDisplacedThresholdM', 'startDisplacedThresholdM', function(tw) { return getEffectiveRunwayStartDisplacedThresholdM(tw); }],
+    ['runwayStartBlastPadM', 'startBlastPadM', function(tw) { return getEffectiveRunwayStartBlastPadM(tw); }],
+    ['runwayEndDisplacedThresholdM', 'endDisplacedThresholdM', function(tw) { return getEffectiveRunwayEndDisplacedThresholdM(tw); }],
+    ['runwayEndBlastPadM', 'endBlastPadM', function(tw) { return getEffectiveRunwayEndBlastPadM(tw); }]
+  ].forEach(function(item) {
+    const el = document.getElementById(item[0]);
     if (!el) return;
-    el.textContent = Array.isArray(msgs) ? msgs.join(' / ') : (msgs || '');
-  }
+    el.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        if (tw.pathType !== 'runway') return;
+        const val = Number(this.value);
+        const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : item[2](tw);
+        tw[item[1]] = v;
+        this.value = String(v);
+        updateObjectInfo();
+        draw();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      }
+    });
+  });
 
-  const REVERSE_COST = (function() {
-    const v = Number((PATH_SEARCH_CFG || {}).reverseCost);
-    return (isFinite(v) && v > 0) ? v : 1000000;
-  })();
-  function pathDist(a, b) { return Math.hypot(a[0]-b[0], a[1]-b[1]); }
-
-  function clamp(v, min, max) {
-    return Math.max(min, Math.min(max, v));
-  }
-  function sampleNormal(mu, sigma) {
-    const u1 = Math.random() || 1e-9;
-    const u2 = Math.random() || 1e-9;
-    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    return mu + sigma * z;
-  }
-
-  function pathPointKey(p) {
-    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-    const cellCol = Math.round(p[0] / cs * 2) / 2;
-    const cellRow = Math.round(p[1] / cs * 2) / 2;
-    return cellCol + ',' + cellRow;
-  }
-
-  function kpiToNumber(value) {
-    const n = Number(value);
-    return isFinite(n) ? n : null;
-  }
-
-  function kpiRound(value, digits) {
-    const n = kpiToNumber(value);
-    if (n == null) return null;
-    const pow = Math.pow(10, digits || 0);
-    return Math.round(n * pow) / pow;
-  }
-
-  function kpiFormatCount(value) {
-    const n = kpiToNumber(value);
-    return n == null ? '—' : String(Math.round(n));
-  }
-
-  function _kpiDurationSeconds(value, unit) {
-    const n = kpiToNumber(value);
-    if (n == null) return null;
-    return unit === 'minutes' ? Math.max(0, Math.round(n * 60)) : Math.max(0, Math.round(n));
-  }
-
-  function _kpiFormatCompactDuration(totalSec, allowHours) {
-    if (totalSec == null) return '—';
-    const hours = Math.floor(totalSec / 3600);
-    const mins = Math.floor((totalSec % 3600) / 60);
-    const secs = totalSec % 60;
-    if (allowHours && hours > 0) return hours + 'h ' + mins + 'm';
-    if (mins > 0) return mins + 'm' + (secs > 0 ? ' ' + secs + 's' : (allowHours ? '' : ' 0s'));
-    return secs + 's';
-  }
-
-  function _kpiFormatValueWithUnit(value, digits, unitLabel) {
-    const n = kpiToNumber(value);
-    if (n == null) return '—';
-    return (digits > 0 ? n.toFixed(digits) : kpiRound(n, digits)) + ' ' + unitLabel;
-  }
-
-  function kpiFormatMinutesCompact(value) {
-    return _kpiFormatCompactDuration(_kpiDurationSeconds(value, 'minutes'), true);
-  }
-
-  function kpiFormatSecondsCompact(value) {
-    return _kpiFormatCompactDuration(_kpiDurationSeconds(value, 'seconds'), false);
-  }
-
-  function kpiFormatMinutesValue(value) {
-    return _kpiFormatValueWithUnit(value, 1, 'min');
-  }
-
-  function kpiFormatSecondsValue(value) {
-    return _kpiFormatValueWithUnit(value, 0, 'sec');
-  }
-
-  function kpiFormatClockBucket(minute) {
-    const n = kpiToNumber(minute);
-    if (n == null) return '—';
-    const total = Math.floor(n);
-    const hh = ((Math.floor(total / 60) % 24) + 24) % 24;
-    return String(hh).padStart(2, '0') + ':00';
+  function getMinArrVelocityMpsForRunwayId(runwayId) {
+    if (runwayId == null || runwayId === '') return 15;
+    const list = state.taxiways || [];
+    let tw = list.find(t => t.id === runwayId && t.pathType === 'runway');
+    if (!tw) return 15;
+    const v = tw.minArrVelocity;
+    if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, Math.min(150, v));
+    return 15;
   }
   
-  function kpiFormatClockBucket15(minute) {
-    const n = kpiToNumber(minute);
-    if (n == null) return '—';
-    const total = Math.floor(n);
-    const hh = ((Math.floor(total / 60) % 24) + 24) % 24;
-    const mm = ((total % 60) + 60) % 60;
-    return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
-  }
-  function kpiMinuteOfDay(t) {
-    const n = kpiToNumber(t);
-    if (n == null || !isFinite(n)) return null;
-    const m = Math.floor(n);
-    return ((m % 1440) + 1440) % 1440;
-  }
-  function kpiRollWindowOverlapsInterval(w, winMin, startMod, endMod) {
-    if (startMod == null || endMod == null) return false;
-    const winEnd = w + winMin;
-    function segOverlap(a0, a1, b0, b1) {
-      return a1 > b0 && a0 < b1;
+  function runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn) {
+    const vf0 = Math.max(1, Math.min(150, vFloorIn));
+    const vf = Math.min(vf0, v0);
+    if (!(a > 0) || distM <= 0) return { vAtRet: v0, tSec: 0 };
+    if (v0 <= vf) return { vAtRet: v0, tSec: distM / Math.max(v0, 1e-6) };
+    const dStop = (v0 * v0 - vf * vf) / (2 * a);
+    if (distM < dStop) {
+      const vEnd = Math.sqrt(Math.max(0, v0 * v0 - 2 * a * distM));
+      return { vAtRet: vEnd, tSec: (v0 - vEnd) / a };
     }
-    if (endMod > startMod) return segOverlap(startMod, endMod, w, winEnd);
-    if (endMod === startMod) return false;
-    return segOverlap(startMod, 1440, w, winEnd) || segOverlap(0, endMod, w, winEnd);
+    const tDecel = (v0 - vf) / a;
+    const tCruise = (distM - dStop) / vf;
+    return { vAtRet: vf, tSec: tDecel + tCruise };
+  }
+  function parseTimeToMinutes(val) {
+    if (!val) return 0;
+    const s = String(val).trim();
+    if (!s) return 0;
+    const isoDt = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (isoDt) {
+      const h = parseInt(isoDt[4], 10) || 0;
+      const m = parseInt(isoDt[5], 10) || 0;
+      const sec = isoDt[6] ? (parseInt(isoDt[6], 10) || 0) : 0;
+      return Math.max(0, h * 60 + m + sec / 60);
+    }
+    if (s.includes(':')) {
+      const parts = s.split(':');
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      const sec = (parts.length >= 3) ? (parseInt(parts[2], 10) || 0) : 0;
+      return Math.max(0, h * 60 + m + sec / 60);
+    }
+    const num = parseFloat(s);
+    return isNaN(num) ? 0 : Math.max(0, num);
   }
 
-  function kpiFormatClock(minute) {
-    const n = kpiToNumber(minute);
-    if (n == null) return '—';
-    return formatMinutesToHHMMSS(n);
+  function snapSimTimeSecForSlider(tSec) {
+    const lo = state.simStartSec;
+    const hi = state.simDurationSec;
+    const step = SIM_TIME_SLIDER_SNAP_SEC;
+    const t = Number(tSec);
+    if (!isFinite(t)) return lo;
+    if (!isFinite(lo) || !isFinite(hi) || hi < lo) return t;
+    const clamped = Math.max(lo, Math.min(hi, t));
+    if (!(step > 0)) return clamped;
+    let snapped = lo + Math.round((clamped - lo) / step) * step;
+    if (snapped < lo) snapped = lo;
+    if (snapped > hi) snapped = hi;
+    return snapped;
   }
-
-  function kpiFormatSnapshotTime() {
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    const ss = String(now.getSeconds()).padStart(2, '0');
-    return hh + ':' + mm + ':' + ss;
+  function updateFlightSimPlaybackLabelsDom() {
+    const label = document.getElementById('flightSimTimeLabel');
+    const t = state.simTimeSec;
+    if (label) label.textContent = formatSecondsToHHMMSS(t);
   }
-
-  function kpiSum(items, selector) {
-    return (items || []).reduce(function(acc, item) {
-      const value = selector(item);
-      return acc + (kpiToNumber(value) || 0);
-    }, 0);
+  
+  function minFirstArrivalTouchdownSecAmongFlights() {
+    let minS = Infinity;
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.arrDep === 'Dep') return;
+      if (arrivalAirsideBlocked(f)) return;
+      const w = getFlightAirsideWindowSec(f);
+      if (!w) return;
+      const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], NaN));
+      if (!isFinite(eldtMin)) return;
+      const eldtS = eldtMin * 60;
+      if (eldtS < minS) minS = eldtS;
+    });
+    return (isFinite(minS) && minS < Infinity) ? minS : null;
   }
-
-  function kpiAverage(items, selector) {
-    const vals = (items || []).map(selector).map(kpiToNumber).filter(v => v != null);
-    if (!vals.length) return null;
-    return kpiSum(vals, function(v) { return v; }) / vals.length;
-  }
-
-  function kpiStandLabelById(standId) {
-    const stands = (state.pbbStands || []).concat(state.remoteStands || []);
-    const stand = stands.find(function(s) { return s && s.id === standId; });
-    return stand ? ((stand.name && stand.name.trim()) || stand.id || 'Stand') : 'Unassigned';
-  }
-
-  function kpiBuildMetricRow(label, primary, secondary) {
-    return '' +
-      '<div class="kpi-metric-row">' +
-        '<div class="kpi-metric-label">' + escapeHtml(label) + '</div>' +
-        '<div class="kpi-metric-values">' +
-          '<div class="kpi-metric-primary">' + escapeHtml(primary) + '</div>' +
-          '<div class="kpi-metric-secondary">' + escapeHtml(secondary) + '</div>' +
-        '</div>' +
-      '</div>';
-  }
-
-  function kpiBuildSummaryCard(label, value, tone) {
-    return '' +
-      '<div class="kpi-card ' + escapeHtml(tone || '') + '">' +
-        '<div class="kpi-card-label">' + escapeHtml(label) + '</div>' +
-        '<div class="kpi-card-value">' + escapeHtml(value) + '</div>' +
-      '</div>';
-  }
-
-  function kpiBuildPanel(title, badge, rows) {
-    return '' +
-      '<div class="kpi-panel">' +
-        '<div class="kpi-panel-header">' +
-          '<div class="kpi-panel-title">' + escapeHtml(title) + '</div>' +
-          '<div class="kpi-panel-badge">' + escapeHtml(badge) + '</div>' +
-        '</div>' +
-        '<div class="kpi-metric-list">' + rows.join('') + '</div>' +
-      '</div>';
-  }
-
-  function kpiBucketOnHour(bucket) {
-    const bs = kpiToNumber(bucket && bucket.bucketStart);
-    if (bs == null || !isFinite(bs)) return false;
-    const im = Math.floor(bs);
-    return (im % 60 + 60) % 60 === 0;
-  }
-  function kpiDisposeInteractiveCharts() {
-    try {
-      if (window.__kpiChartGate) { window.__kpiChartGate.destroy(); window.__kpiChartGate = null; }
-      if (window.__kpiChartRunway) { window.__kpiChartRunway.destroy(); window.__kpiChartRunway = null; }
-    } catch (e) { console.warn('kpiDisposeInteractiveCharts', e); }
-  }
-  function kpiChartCommonOptions(buckets) {
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { labels: { color: '#94a3b8', font: { size: 12, family: 'var(--ui-font, system-ui, sans-serif)' } } },
-
-
-        tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.94)',
-          titleColor: '#f1f5f9',
-          bodyColor: '#e2e8f0',
-          borderColor: 'rgba(148, 163, 184, 0.28)',
-          borderWidth: 1,
-          padding: 10,
-          callbacks: {
-            title: function(items) {
-              const i = items && items[0] ? items[0].dataIndex : 0;
-              const b = buckets[i];
-              if (!b) return '';
-              const w = b.bucketStart != null ? kpiFormatClockBucket15(b.bucketStart) : (b.label || '');
-              return 'w = ' + w + ' (60m rolling from w)';
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          grid: { color: 'rgba(255,255,255,0.07)' },
-          ticks: {
-            color: '#94a3b8',
-            maxRotation: buckets.length > 24 ? 40 : 0,
-            autoSkip: buckets.length > 36,
-            maxTicksLimit: buckets.length > 36 ? 20 : undefined,
-            font: { size: 12 },
-            callback: function(tickValue, idx) {
-              let i = idx;
-              if (typeof tickValue === 'number' && isFinite(tickValue) && tickValue >= 0 && tickValue < buckets.length) {
-                i = Math.round(tickValue);
-              }
-              const b = buckets[i];
-              if (!b || !kpiBucketOnHour(b)) return '';
-              return kpiFormatClockBucket(b.bucketStart);
-            }
-          }
-        },
-        y: {
-          beginAtZero: true,
-          grid: { color: 'rgba(255,255,255,0.07)' },
-          ticks: { color: '#94a3b8', precision: 0, font: { size: 12 } }
-        }
+  function recomputeSimDuration() {
+    let minT = Infinity;
+    let maxT = -Infinity;
+    (state.flights || []).forEach(function(f) {
+      if (!f) return;
+      const w = getFlightAirsideWindowSec(f);
+      if (!w) return;
+      if (w.t0 < minT) minT = w.t0;
+      if (w.t1 > maxT) maxT = w.t1;
+    });
+    if (!isFinite(minT) || !isFinite(maxT)) {
+      minT = 0;
+      maxT = 0;
+    }
+    let simLo = minT;
+    if (PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC > 0) {
+      const firstTdS = minFirstArrivalTouchdownSecAmongFlights();
+      if (firstTdS != null) {
+        simLo = Math.max(0, firstTdS - PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC);
       }
-    };
+    }
+    let durSec = Math.max(maxT, minT);
+    const capAbs = state.simPlaybackEndCapSec;
+    if (capAbs != null && isFinite(Number(capAbs))) {
+      durSec = Math.min(durSec, Number(capAbs));
+    }
+    state.simDurationSec = durSec;
+    if (simLo > state.simDurationSec - 1e-6) {
+      simLo = Math.max(0, state.simDurationSec - 1);
+    }
+    state.simStartSec = simLo;
+    if ((state.flights || []).length > 0 && isFinite(minT) && isFinite(maxT) && state.simDurationSec <= state.simStartSec) {
+      state.simDurationSec = state.simStartSec + 1;
+    }
+    state.simTimeSec = Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simTimeSec));
+    state.simTimeSec = snapSimTimeSecForSlider(state.simTimeSec);
+    const slider = document.getElementById('flightSimSlider');
+    if (slider) {
+      slider.min = state.simStartSec;
+      slider.max = state.simDurationSec;
+      slider.step = String(SIM_TIME_SLIDER_SNAP_SEC);
+      slider.value = state.simTimeSec;
+      if (state.simDurationSec <= state.simStartSec) slider.disabled = true;
+      else slider.disabled = false;
+    }
+    updateFlightSimPlaybackLabelsDom();
+    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
-  function kpiMountInteractiveCharts(buckets) {
-    if (typeof Chart === 'undefined') {
-      console.warn('Chart.js failed to load; KPI charts are static until CDN is available.');
+  function applySimPlaybackBarDomVisibility() {
+    const wrap = document.getElementById('sim-controls-wrap');
+    const inner = document.getElementById('sim-controls-container');
+    const hideBtn = document.getElementById('btnHideSimPlaybackBar');
+    const hasSim = state.hasSimulationResult && state.flights.length > 0;
+    if (!wrap) return;
+    if (!hasSim || !state.simPlaybackDockVisible) {
+      wrap.style.display = 'none';
       return;
     }
-    if (!buckets || !buckets.length) return;
-    const labels = buckets.map(function(b) { return b.label || kpiFormatClockBucket15(b.bucketStart); });
-    const occ = buckets.map(function(b) { return b.occupancy || 0; });
-    const arr = buckets.map(function(b) { return b.arrivals || 0; });
-    const dep = buckets.map(function(b) { return b.departures || 0; });
-    const tot = buckets.map(function(b) { return b.total || 0; });
-    const opt = kpiChartCommonOptions(buckets);
-    const elG = document.getElementById('kpiChartGateOcc');
-    if (elG) {
-      window.__kpiChartGate = new Chart(elG, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Gate occupancy',
-            data: occ,
-            borderColor: '#a78bfa',
-            backgroundColor: 'rgba(167, 139, 250, 0.22)',
-            fill: true,
-            tension: 0.28,
-            pointRadius: 3,
-            pointHoverRadius: 7,
-            pointBackgroundColor: '#ddd6fe'
-          }]
-        },
-        options: opt
-      });
-    }
-    const elR = document.getElementById('kpiChartRunway');
-    if (elR) {
-      window.__kpiChartRunway = new Chart(elR, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              type: 'bar',
-              label: 'Runway arr (ELDT)',
-              data: arr,
-              backgroundColor: 'rgba(56, 189, 248, 0.72)',
-              order: 3
-            },
-            {
-              type: 'bar',
-              label: 'Runway dep (ETOT)',
-              data: dep,
-              backgroundColor: 'rgba(251, 146, 60, 0.72)',
-              order: 3
-            },
-            {
-              type: 'line',
-              label: 'Total',
-              data: tot,
-              borderColor: '#c4b5fd',
-              backgroundColor: 'transparent',
-              borderWidth: 3,
-              tension: 0.22,
-              pointRadius: 3,
-              pointHoverRadius: 6,
-              order: 1
-            }
-          ]
-        },
-        options: opt
-      });
-    }
+    wrap.style.display = 'flex';
+    if (inner) inner.style.display = 'flex';
+    if (hideBtn) hideBtn.setAttribute('aria-expanded', 'true');
   }
-  function kpiGateChartPlaceholder(buckets) {
-    if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No gate occupancy data is available for the current snapshot.</div>';
-    return '<div class="kpi-chart-canvas-host kpi-chart-wrap--gate-fill"><canvas id="kpiChartGateOcc" aria-label="Gate occupancy chart"></canvas></div>';
-  }
-  function kpiRunwayChartPlaceholder(buckets) {
-    if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No arrival or departure events are available for the current snapshot.</div>';
-    return '<div class="kpi-chart-canvas-host"><canvas id="kpiChartRunway" aria-label="Runway traffic chart"></canvas></div>';
+  function syncSimulationPlaybackAfterTimelines() {
+    state.hasSimulationResult = (state.flights || []).length > 0;
+    if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+    if (!state.hasSimulationResult) return;
+    const simSliderAfter = document.getElementById('flightSimSlider');
+    state.simTimeSec = snapSimTimeSecForSlider(Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simStartSec)));
+    if (simSliderAfter) simSliderAfter.value = state.simTimeSec;
+    updateFlightSimPlaybackLabelsDom();
   }
 
-  function collectKpiSnapshot() {
-    const flights = Array.isArray(state.flights) ? state.flights.slice() : [];
-    const rows = flights.map(function(f) {
-      const arrTaxiMin = kpiToNumber(typeof getBaseVttArrMinutes === 'function' ? getBaseVttArrMinutes(f) : null);
-      const depBlockOutMin = kpiToNumber(typeof getDepBlockOutMin === 'function' ? getDepBlockOutMin(f) : null);
-      const depTaxiMin = kpiToNumber(typeof getBaseVttDepMinutesToLineup === 'function' ? getBaseVttDepMinutesToLineup(f) : null);
-      const rotSec = kpiToNumber(f && f.arrRotSec != null ? f.arrRotSec : (typeof getArrRotMinutes === 'function' ? getArrRotMinutes(f) * 60 : null));
-      const depRotSec = (f && f.arrDep === 'Dep' && typeof computeDepRotSecondsForFlight === 'function')
-        ? computeDepRotSecondsForFlight(f)
-        : ((typeof SCHED_DEP_ROT_MIN === 'number' && isFinite(SCHED_DEP_ROT_MIN)) ? SCHED_DEP_ROT_MIN * 60 : null);
-      const arrTaxiDelayMin = kpiToNumber(f && f.vttADelayMin != null ? f.vttADelayMin : 0);
-      const depTaxiDelayMin = kpiToNumber(f && f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
-      const sibt = kpiToNumber(f && f.sibtMin_orig != null ? f.sibtMin_orig : (f && f.timeMin != null ? f.timeMin : null));
-      const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiMin != null && rotSec != null ? Math.max(0, sibt - arrTaxiMin - rotSec / 60) : null));
-      const dwellMin = kpiToNumber(f && f.dwellMin != null ? f.dwellMin : null);
-      const sobt = kpiToNumber(f && f.sobtMin_orig != null ? f.sobtMin_orig : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
-      const sttDepMinK = kpiToNumber(typeof getBaseVttDepMinutesToHoldingSlot === 'function' ? getBaseVttDepMinutesToHoldingSlot(f) : depTaxiMin);
-      const depRotMinK = depRotSec != null && isFinite(depRotSec) ? depRotSec / 60 : null;
-      const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depRotMinK != null && sttDepMinK != null ? sobt + depRotMinK + sttDepMinK : (sobt != null && depBlockOutMin != null ? sobt + depBlockOutMin : null)));
-      const eldt = kpiToNumber(f && f.eldtMin != null ? f.eldtMin : (f && f.sldtMin_d != null ? f.sldtMin_d : sldt));
-      const eibt = kpiToNumber(f && f.eibtMin != null ? f.eibtMin : (eldt != null && arrTaxiMin != null && rotSec != null ? eldt + arrTaxiMin + rotSec / 60 + (kpiToNumber(f.vttADelayMin) || 0) : sibt));
-      const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
-      const etot = kpiToNumber(f && f.etotMin != null ? f.etotMin : (f && f.stotMin_d != null ? f.stotMin_d : stot));
-      const failed = !!(f && flightBlockedLikeNoWay(f));
-      const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
-      const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
-      const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
-      const acDepDelay = (etot != null && stot != null) ? Math.max(0, etot - stot) : null;
-      return {
-        flight: f,
+  function formatTotalSecondsToHHMMSS(totalSec) {
+    const parts = _splitTotalSeconds(totalSec);
+    return parts.hh + ':' + parts.mm + ':' + parts.ss;
+  }
+  function formatMinutesToHHMMSS(minsRaw) {
+    return formatTotalSecondsToHHMMSS(_normalizeTimeToSeconds(minsRaw, 'minutes', 'round'));
+  }
+  function flightScheduleBaseDateIso(f) {
+    if (!f) return DEFAULT_SIBT_DATE;
+    const raw = f.sibtDate != null ? f.sibtDate : (f.serviceDate != null ? f.serviceDate : null);
+    const d = (raw == null ? '' : String(raw)).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    return DEFAULT_SIBT_DATE;
+  }
+  function formatFlightScheduleDateTime(f, minsRaw) {
+    const base = flightScheduleBaseDateIso(f);
+    const sec = _normalizeTimeToSeconds(minsRaw, 'minutes', 'round');
+    const minTotal = sec / 60;
+    const ps = base.split('-');
+    const Y = parseInt(ps[0], 10);
+    const Mo = parseInt(ps[1], 10) - 1;
+    const D = parseInt(ps[2], 10);
+    if (!isFinite(Y) || !isFinite(Mo) || !isFinite(D)) return formatMinutesToHHMMSS(minsRaw);
+    const t0 = new Date(Y, Mo, D, 0, 0, 0);
+    t0.setMinutes(t0.getMinutes() + minTotal);
+    const pad = function(n) { return (n < 10 ? '0' : '') + n; };
+    return t0.getFullYear() + '-' + pad(t0.getMonth() + 1) + '-' + pad(t0.getDate()) + ' ' + pad(t0.getHours()) + ':' + pad(t0.getMinutes()) + ':' + pad(t0.getSeconds());
+  }
+  function formatSignedMinutesToHHMMSS(minsRaw) {
+    const n = Number(minsRaw);
+    if (!isFinite(n)) return '—';
+    const sign = n < 0 ? '-' : '';
+    return sign + formatMinutesToHHMMSS(Math.abs(n));
+  }
+  function formatSecondsToHHMMSS(secRaw) {
+    return formatTotalSecondsToHHMMSS(_normalizeTimeToSeconds(secRaw, 'seconds', 'floor'));
+  }
+
+  function getStandBusyIntervals(standId, ignoreFlightId) {
+    const intervals = [];
+    if (!standId) return intervals;
+    (state.flights || []).forEach(f => {
+      if (!f || f.id === ignoreFlightId) return;
+      if (f.arrDep !== 'Arr') return;
+      if (f.standId !== standId) return;
+      const win = getFlightAirsideWindowSec(f);
+      if (!win) return;
+      const end = win.t1;
+      const dwellMin = (f.sobtMin_d != null && f.sibtMin_d != null) ? (f.sobtMin_d - f.sibtMin_d) : (f.dwellMin || 0);
+      const dwellSec = Math.max(0, dwellMin * 60);
+      const start = Math.max(0, end - dwellSec);
+      if (end > start) intervals.push({ start, end });
+    });
+    intervals.sort((a, b) => a.start - b.start);
+    return intervals;
+  }
+
+  function isStandOccupiedAtSimSec(standId, tSec) {
+    if (!standId || !state.hasSimulationResult) return false;
+    const t = Number(tSec);
+    if (!isFinite(t)) return false;
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f || f.standId !== standId) continue;
+      const m = f.timeline_meta;
+      if (m && typeof m.eibtSec === 'number' && typeof m.eobtSec === 'number') {
+        if (t + 1e-3 >= m.eibtSec && t <= m.eobtSec + 1e-3) return true;
+        continue;
+      }
+      if (f.arrDep !== 'Dep' && (f.noWayArr || f.arrRetFailed)) {
+        const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
+        const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
+        const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], eibtMin + (typeof f.dwellMin === 'number' && isFinite(f.dwellMin) ? f.dwellMin : 45));
+        const eibtS = eibtMin * 60;
+        const eobtS = eobtMin * 60;
+        if (t + 1e-3 >= eibtS && t <= eobtS + 1e-3) return true;
+      }
+    }
+    return false;
+  }
+
+  function findStandAvailableArrivalTime(standId, desiredArrival, dwellSec) {
+    let s = Math.max(0, desiredArrival);
+    const intervals = getStandBusyIntervals(standId, null);
+    for (let i = 0; i < intervals.length; i++) {
+      const iv = intervals[i];
+      if (s + dwellSec <= iv.start) return s;
+      if (s < iv.end) s = iv.end;
+    }
+    return s;
+  }
+
+  function getTerminalForStand(stand) {
+    if (!stand || !state.terminals.length) return null;
+    const [px, py] = getStandConnectionPx(stand);
+    let nearest = null;
+    let nearestD2 = Infinity;
+    for (let i = 0; i < state.terminals.length; i++) {
+      const t = state.terminals[i];
+      if (!t.vertices || t.vertices.length < 1) continue;
+      const termPix = t.vertices.map(v => cellToPixel(v.col, v.row));
+      if (t.closed && termPix.length >= 3 && pointInPolygonXY([px, py], termPix)) return t;
+      let cx = 0, cy = 0;
+      termPix.forEach(p => { cx += p[0]; cy += p[1]; });
+      cx /= termPix.length;
+      cy /= termPix.length;
+      const dx = px - cx, dy = py - cy;
+      const d2 = dx*dx + dy*dy;
+      if (d2 < nearestD2) {
+        nearestD2 = d2;
+        nearest = t;
+      }
+    }
+    return nearest;
+  }
+
+  function flightCanUseStand(f, stand) {
+    if (!stand) return true;
+    const mode = getStandCategoryMode(stand);
+    if (mode === 'aircraft') {
+      const allowedTypes = getStandAllowedAircraftTypes(stand);
+      const flightType = String(f.aircraftType || '').trim();
+      if (!allowedTypes.length || !flightType || allowedTypes.indexOf(flightType) < 0) return false;
+    } else {
+      const order = { A:1,B:2,C:3,D:4,E:5,F:6 };
+      const fCode = (f.code || 'C').toUpperCase();
+      const sCat = (stand.category || 'F').toUpperCase();
+      const fc = order[fCode] || 99;
+      const sc = order[sCat] || 0;
+      if (fc > sc) return false;
+    }
+    const ft = (f.terminalId || (f.token && f.token.terminalId)) || null;
+    if (!ft) return true;
+    const isRemote = (state.remoteStands || []).some(function(r) { return r.id === stand.id; });
+    if (isRemote) {
+      const allowed = Array.isArray(stand.allowedTerminals) ? stand.allowedTerminals : [];
+      if (allowed.length) return allowed.includes(ft);
+    }
+    const term = getTerminalForStand(stand);
+    const standTermId = term ? term.id : null;
+    if (!standTermId) return false;
+    return ft === standTermId;
+  }
+
+  function assignStandToFlight(f, standId) {
+    if (!f) return false;
+    if (standId) {
+      const allStands = (state.pbbStands || []).concat(state.remoteStands || []);

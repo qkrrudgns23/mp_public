@@ -700,6 +700,14 @@
     .layout-save-load-tab:hover { background: var(--ui-bg-overlay); color: var(--ui-text-primary); }
     .layout-save-load-tab.active { background: var(--ui-accent-muted); color: var(--ui-accent); }
     .layout-save-load-tab.active:hover { filter: brightness(1.1); }
+    .layout-load-subtabs { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+    .layout-load-subtab { flex: 1; min-width: 0; padding: 5px 6px; font-size: 10px; font-weight: 500; letter-spacing: 0.04em; cursor: pointer; background: var(--ui-bg-control); color: var(--ui-text-secondary); border-radius: 6px; transition: var(--ui-transition); border: none; }
+    .layout-load-subtab:hover { background: var(--ui-bg-overlay); color: var(--ui-text-primary); }
+    .layout-load-subtab.active { background: var(--ui-accent-muted); color: var(--ui-accent); }
+    .layout-load-subpane { display: none; }
+    .layout-load-subpane.active { display: block; }
+    .layout-airport-icao-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 11px; color: var(--ui-text-primary); cursor: pointer; user-select: none; }
+    .layout-airport-icao-row input { cursor: pointer; }
     .flight-subtab.active { background: var(--ui-accent-muted); color: var(--ui-accent); }
     .flight-subtab.active:hover { filter: brightness(1.1); }
     .layout-save-load-pane { display: none; }

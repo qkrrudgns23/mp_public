@@ -610,8 +610,21 @@
             <div id="layoutMessageSave" style="font-size:11px;color:#9ca3af;margin-top:4px;"></div>
           </div>
           <div id="layout-load-pane" class="layout-save-load-pane">
-            <div class="section-title" style="margin-top:0;">Layout storage</div>
-            <div id="layoutLoadList" class="obj-list"></div>
+            <div class="layout-load-subtabs" role="tablist" aria-label="Load sub-views">
+              <button type="button" class="layout-load-subtab active" role="tab" aria-selected="true" data-loadsub="layouts">Layout storage</button>
+              <button type="button" class="layout-load-subtab" role="tab" aria-selected="false" data-loadsub="airport">Load Airport Data</button>
+            </div>
+            <div class="layout-load-subpane active" data-loadsub="layouts" id="layout-load-subpane-layouts">
+              <div id="layoutLoadList" class="obj-list"></div>
+            </div>
+            <div class="layout-load-subpane" data-loadsub="airport" id="layout-load-subpane-airport">
+              <p style="font-size:11px;color:#9ca3af;margin:0 0 8px;line-height:1.45;">OpenStreetMap (same data as <a href="https://openairportmap.org/" target="_blank" rel="noopener noreferrer">OpenAirportMap</a>): runways, taxiways, terminals as GeoJSON. Saved under <code style="font-size:10px;">data/map_storage/</code>.</p>
+              <div class="layout-airport-icao-row"><label><input type="radio" name="airportMapIcao" value="RPLL" checked /> RPLL</label></div>
+              <div class="layout-airport-icao-row"><label><input type="radio" name="airportMapIcao" value="RKSI" /> RKSI</label></div>
+              <div class="layout-airport-icao-row"><label><input type="radio" name="airportMapIcao" value="ATPY" /> ATPY</label></div>
+              <button type="button" class="small" id="btnFetchAirportMap" style="margin-top:10px;">Load Data</button>
+              <div id="layoutAirportMapMsg" style="font-size:11px;color:#9ca3af;margin-top:8px;"></div>
+            </div>
           </div>
         </div>
       </div>
