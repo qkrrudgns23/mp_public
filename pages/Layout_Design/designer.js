@@ -112,11 +112,11 @@
   function c2dRunwayFill() { return _canvas2dStyle.runwayFill || 'rgba(75, 85, 99, 0.78)'; }
   function c2dTaxiwayPavementStroke() {
     const s = _canvas2dStyle.taxiwayPavementStroke;
-    return (typeof s === 'string' && s.trim()) ? s.trim() : '#6d6a61';
+    return (typeof s === 'string' && s.trim()) ? s.trim() : '#827f76';
   }
   function c2dTaxiwayPavementFill() {
     const s = _canvas2dStyle.taxiwayPavementFill;
-    return (typeof s === 'string' && s.trim()) ? s.trim() : '#7b796d';
+    return (typeof s === 'string' && s.trim()) ? s.trim() : '#908e82';
   }
   function c2dRunwayOutline() { return _canvas2dStyle.runwayOutline || '#cbd5e1'; }
   function c2dRunwayMarkingColor() { return _canvas2dStyle.runwayMarkingColor || '#f8fafc'; }
@@ -3300,8 +3300,6 @@
       if (pt === 'runway') runwayPaths.push(ser);
       else if (pt === 'runway_exit') runwayTaxiways.push(ser);
       else {
-        if (pt === 'apron_taxiway') ser.pathType = 'apron_taxiway';
-        else if (pt === 'general_queue_taxiway') ser.pathType = 'general_queue_taxiway';
         taxiways.push(ser);
       }
     });

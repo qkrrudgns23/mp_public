@@ -384,9 +384,9 @@ def _tiers_style_section(info: dict, key: str) -> dict:
 def _grid_view_background(info: dict) -> str:
     """tiers.style.gridView.background → 2D/3D workspace fill color."""
     gv = _tiers_style_section(info, "gridView")
-    bg = str(gv.get("background", "#252525")).strip()
+    bg = str(gv.get("background", "#0c0c0f")).strip()
     if not bg.startswith("#") or len(bg) not in (4, 7):
-        bg = "#252525"
+        bg = "#0c0c0f"
     return bg
 
 

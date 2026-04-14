@@ -102,7 +102,7 @@ OSM_TAG_TO_LAYOUT_ROLE: Dict[str, str] = {
     "aeroway=taxiway": "taxiways or apron_taxiway (near terminal)",
     "aeroway=taxilane": "taxiways",
     "aeroway=parking_position": "apronLinks (stand end) + stand placement; not a taxiway path",
-    "aeroway=jet_bridge": "pbbCount on contact stands only; not a taxiway path",
+    "aeroway=jet_bridge": "ignored for pbbCount in v1 (contact stands use pbbCount=1); not a taxiway path",
     "aeroway=holding_position": "holdingPoints (hpKind runway_holding if near runway centerline)",
     "aeroway=terminal": "terminals polygon → building vertices",
     "aeroway=gate": "pbbStands or remoteStands (see OSM_TO_LAYOUT_RULES.stands)",
@@ -415,29 +415,6 @@ def _nearest_point_on_lines(
     return best_x, best_y, best_id, best_d
 
 
-def _count_jet_bridges_near(
-    stand_pt: Tuple[float, float],
-    gate_pt: Tuple[float, float],
-    parking_ln: Optional[LineString],
-    jet_lines: Sequence[LineString],
-    near_m: float,
-) -> int:
-    if not jet_lines:
-        return 0
-    ps = Point(stand_pt[0], stand_pt[1])
-    pg = Point(gate_pt[0], gate_pt[1])
-    buf = ps.buffer(near_m).union(pg.buffer(near_m))
-    if parking_ln is not None and not parking_ln.is_empty:
-        buf = unary_union([buf, parking_ln.buffer(8.0)])
-    n = 0
-    for jln in jet_lines:
-        if jln is None or jln.is_empty:
-            continue
-        if jln.intersects(buf):
-            n += 1
-    return n
-
-
 def _runway_width_m(tags: Dict[str, str], default_m: float) -> float:
     w = _float_tag(tags, "width", 0.0)
     return w if w > 0 else default_m
@@ -513,6 +490,51 @@ def _parking_endpoint_class(
         if float(ln.distance(p)) <= tol_m:
             return "parking_intersection"
     return "apron_origin"
+
+
+def _parking_edge_into_apron_origin_unit_deg(pln: LineString, origin_at_start: bool) -> Tuple[float, float, float]:
+    """PBB / remote apron: unit (nx, ny) and angleDeg, 180° opposite to the parking edge into apron_origin."""
+    cc = list(pln.coords)
+    if len(cc) < 2:
+        return -1.0, 0.0, 180.0
+    if origin_at_start:
+        vx = float(cc[0][0]) - float(cc[1][0])
+        vy = float(cc[0][1]) - float(cc[1][1])
+    else:
+        vx = float(cc[-1][0]) - float(cc[-2][0])
+        vy = float(cc[-1][1]) - float(cc[-2][1])
+    lnlen = math.hypot(vx, vy)
+    if lnlen < 1e-9:
+        return -1.0, 0.0, 180.0
+    ex, ey = vx / lnlen, vy / lnlen
+    nx, ny = -ex, -ey
+    return nx, ny, math.degrees(math.atan2(ny, nx))
+
+
+def _match_parking_apron_edge_unit_deg_for_xy(
+    parking_lines: Sequence[Tuple[LineString, Dict[str, Any]]],
+    sx: float,
+    sy: float,
+    taxi_mate_geoms: Sequence[LineString],
+    parking_tol_m: float,
+    layout_xy_tol_m: float,
+) -> Optional[Tuple[float, float, float]]:
+    """If (sx,sy) matches a parking apron_origin, return (nx, ny, angleDeg) for that lead-in edge; else None."""
+    for pi2, (pln2, _pt2) in enumerate(parking_lines):
+        if pln2 is None or pln2.is_empty or len(pln2.coords) < 2:
+            continue
+        p0 = (float(pln2.coords[0][0]), float(pln2.coords[0][1]))
+        p1 = (float(pln2.coords[-1][0]), float(pln2.coords[-1][1]))
+        c0 = _parking_endpoint_class(p0, pi2, parking_lines, taxi_mate_geoms, parking_tol_m)
+        c1 = _parking_endpoint_class(p1, pi2, parking_lines, taxi_mate_geoms, parking_tol_m)
+        origin = p0 if c0 == "apron_origin" else (p1 if c1 == "apron_origin" else None)
+        if origin is None:
+            continue
+        if math.hypot(origin[0] - sx, origin[1] - sy) > layout_xy_tol_m:
+            continue
+        origin_at_start = c0 == "apron_origin"
+        return _parking_edge_into_apron_origin_unit_deg(pln2, origin_at_start)
+    return None
 
 
 def _parking_neighbors_at_point(
@@ -712,7 +734,6 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     parking_lines: List[Tuple[LineString, Dict[str, Any]]] = []
     taxi_lines: List[Tuple[LineString, Dict[str, str], str]] = []  # line, tags, aeroway
     runway_lines: List[Tuple[LineString, Dict[str, str]]] = []
-    jet_bridge_lines: List[LineString] = []
     holding_layout_xy: List[Tuple[float, float, Dict[str, str]]] = []
     gates: List[Tuple[float, float, Dict[str, str], str]] = []  # x,y,tags,feat_key
     txe_points: List[Tuple[float, float]] = []
@@ -738,8 +759,6 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 terminal_named_polys.append((term_name, poly))
         if aw == "parking_position" and isinstance(gxy, LineString) and len(gxy.coords) >= 2:
             parking_lines.append((gxy, tags))
-        if aw == "jet_bridge" and isinstance(gxy, LineString) and len(gxy.coords) >= 2:
-            jet_bridge_lines.append(gxy)
         if aw in ("holding_position", "holding"):
             if isinstance(gxy, Point):
                 holding_layout_xy.append((float(gxy.x), float(gxy.y), tags))
@@ -812,24 +831,14 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         else:
             stand_name = f"PARK-{pi+1}"
         contact = False
-        nearest_pt = None
         if terminal_union is not None and not terminal_union.is_empty:
-            nr = _union_exterior(terminal_union)
-            if nr is not None:
-                nearest_pt = nr.interpolate(nr.project(Point(sx, sy)))
-                contact = float(Point(sx, sy).distance(nearest_pt)) < contact_thresh_m
+            pt_st = Point(sx, sy)
+            d_term = float(pt_st.distance(terminal_union))
+            contact = d_term < contact_thresh_m
         source_pbb_id: Optional[str] = None
-        if contact and nearest_pt is not None:
-            nx = sx - float(nearest_pt.x)
-            ny = sy - float(nearest_pt.y)
-            nlen = math.hypot(nx, ny)
-            if nlen < 1e-6:
-                nx, ny = 1.0, 0.0
-                nlen = 1.0
-            nx /= nlen
-            ny /= nlen
-            ang = math.degrees(math.atan2(ny, nx))
-            dx, dy = nx * stub, ny * stub
+        if contact:
+            origin_at_start = c0 == "apron_origin"
+            nx, ny, ang = _parking_edge_into_apron_origin_unit_deg(pln, origin_at_start)
             pbx1, pby1 = sx - nx * wall_len * 0.3, sy - ny * wall_len * 0.3
             pbx2, pby2 = pbx1 + nx * wall_len, pby1 + ny * wall_len
             pbb_obj = {
@@ -857,13 +866,15 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             stand_records.append({"kind": "contact", "pbb": pbb_obj, "nearest_line": pln, "d_pl": 0.0})
             source_pbb_id = str(pbb_obj["id"])
         else:
+            origin_at_start_r = c0 == "apron_origin"
+            _rx, _ry, rang = _parking_edge_into_apron_origin_unit_deg(pln, origin_at_start_r)
             remote_obj = {
                 "id": _new_id("remote"),
                 "name": stand_name,
                 "x": _quantize_m(sx, pos_pl),
                 "y": _quantize_m(sy, pos_pl),
                 "category": cat,
-                "angleDeg": 0,
+                "angleDeg": _quantize_m(rang, pos_pl),
                 "categoryMode": mode,
                 "allowedAircraftTypes": [],
                 "allowedTerminals": [],
@@ -957,18 +968,16 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     parking_ln_gate = nearest_pl
                     st, _txy = _parking_stand_and_taxi_endpoints(nearest_pl, taxi_mate_geoms)
                     sx, sy = st
-                jb_near_m = float(rules["taxiways"].get("jet_bridge_near_stand_m", 55.0))
-                jb_n = _count_jet_bridges_near((sx, sy), (gx, gy), parking_ln_gate, jet_bridge_lines, jb_near_m)
-                pbb_count = max(1, jb_n)
                 ang = 0.0
-                if parking_ln_gate is not None:
-                    _, taxi_ep2 = _parking_stand_and_taxi_endpoints(parking_ln_gate, taxi_mate_geoms)
-                    ang_lead = math.degrees(math.atan2(sy - taxi_ep2[1], sx - taxi_ep2[0]))
-                    ang = (ang_lead + 180.0) % 360.0
-                rad = math.radians(ang)
-                dx, dy = math.cos(rad) * stub, math.sin(rad) * stub
-                pbx1, pby1 = sx - math.cos(rad) * wall_len * 0.3, sy - math.sin(rad) * wall_len * 0.3
-                pbx2, pby2 = pbx1 + math.cos(rad) * wall_len, pby1 + math.sin(rad) * wall_len
+                nx, ny = 1.0, 0.0
+                if parking_ln_gate is not None and not parking_ln_gate.is_empty and len(parking_ln_gate.coords) >= 2:
+                    ccg = list(parking_ln_gate.coords)
+                    d_s0 = math.hypot(sx - float(ccg[0][0]), sy - float(ccg[0][1]))
+                    d_s1 = math.hypot(sx - float(ccg[-1][0]), sy - float(ccg[-1][1]))
+                    origin_at_start = d_s0 <= d_s1
+                    nx, ny, ang = _parking_edge_into_apron_origin_unit_deg(parking_ln_gate, origin_at_start)
+                pbx1, pby1 = sx - nx * wall_len * 0.3, sy - ny * wall_len * 0.3
+                pbx2, pby2 = pbx1 + nx * wall_len, pby1 + ny * wall_len
                 pbb_obj: Dict[str, Any] = {
                     "id": _new_id("pbb"),
                     "name": name,
@@ -979,10 +988,10 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     "category": cat,
                     "categoryMode": mode,
                     "allowedAircraftTypes": [],
-                    "pbbCount": int(pbb_count),
+                    "pbbCount": 1,
                     "angleDeg": ang,
-                    "apronSiteX": _quantize_m(sx + dx, pos_pl),
-                    "apronSiteY": _quantize_m(sy + dy, pos_pl),
+                    "apronSiteX": _quantize_m(sx, pos_pl),
+                    "apronSiteY": _quantize_m(sy, pos_pl),
                     "boardingWidthM": 5,
                     "boardingHeightM": 15,
                     "pbbArmLenM": max(10.0, stub),
@@ -1053,7 +1062,6 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         if len(verts) < 2:
             continue
         w = _float_tag(tags, "width", float(rules["taxiways"]["default_width_m"]))
-        path_type = "general_queue_taxiway"
         tw_id = _new_id("tw")
         taxiways_out.append(
             {
@@ -1063,7 +1071,6 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 "width": w,
                 "direction": "both",
                 "avgMoveVelocity": 10,
-                "pathType": path_type,
                 "pavement": str(tags.get("surface", "asphalt") or "asphalt"),
             }
         )
@@ -1241,6 +1248,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         term_ring_out = _union_exterior(term_union_out) if term_union_out is not None else None
         kept_remote: List[Dict[str, Any]] = []
         promoted_contact: List[Dict[str, Any]] = []
+        remote_id_to_promoted_pbb_id: Dict[str, str] = {}
         for rs in remote_stands:
             sx = float(rs.get("x", 0.0))
             sy = float(rs.get("y", 0.0))
@@ -1251,24 +1259,38 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             if d_term >= contact_thresh_m or term_ring_out is None:
                 kept_remote.append(rs)
                 continue
-            nr = term_ring_out.interpolate(term_ring_out.project(Point(sx, sy)))
-            nx, ny = float(nr.x), float(nr.y)
-            dx = sx - nx
-            dy = sy - ny
-            dlen = math.hypot(dx, dy)
-            if dlen < 1e-6:
-                dx, dy = 1.0, 0.0
-                dlen = 1.0
-            dx /= dlen
-            dy /= dlen
-            ang = (math.degrees(math.atan2(dy, dx)) + 180.0) % 360.0
-            x1 = nx - dx * wall_len * 0.5
-            y1 = ny - dy * wall_len * 0.5
-            x2 = nx + dx * wall_len * 0.5
-            y2 = ny + dy * wall_len * 0.5
+            edge_orient = _match_parking_apron_edge_unit_deg_for_xy(
+                parking_lines, sx, sy, taxi_mate_geoms, parking_tol_m, 2.0
+            )
+            if edge_orient is not None:
+                nx, ny, ang = edge_orient
+                x1 = sx - nx * wall_len * 0.3
+                y1 = sy - ny * wall_len * 0.3
+                x2 = x1 + nx * wall_len
+                y2 = y1 + ny * wall_len
+            else:
+                nr = term_ring_out.interpolate(term_ring_out.project(Point(sx, sy)))
+                nx, ny = float(nr.x), float(nr.y)
+                dx = sx - nx
+                dy = sy - ny
+                dlen = math.hypot(dx, dy)
+                if dlen < 1e-6:
+                    dx, dy = 1.0, 0.0
+                    dlen = 1.0
+                dx /= dlen
+                dy /= dlen
+                ang = (math.degrees(math.atan2(dy, dx)) + 180.0) % 360.0
+                x1 = nx - dx * wall_len * 0.5
+                y1 = ny - dy * wall_len * 0.5
+                x2 = nx + dx * wall_len * 0.5
+                y2 = ny + dy * wall_len * 0.5
+            old_remote_id = str(rs.get("id", "") or "")
+            new_pbb_id = _new_id("pbb")
+            if old_remote_id:
+                remote_id_to_promoted_pbb_id[old_remote_id] = new_pbb_id
             promoted_contact.append(
                 {
-                    "id": _new_id("pbb"),
+                    "id": new_pbb_id,
                     "name": str(rs.get("name", "")),
                     "x1": _quantize_m(x1, pos_pl),
                     "y1": _quantize_m(y1, pos_pl),
@@ -1291,6 +1313,12 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         remote_stands = kept_remote
         if promoted_contact:
             pbb_stands.extend(promoted_contact)
+        if remote_id_to_promoted_pbb_id:
+            for al in apron_links:
+                pid = str(al.get("pbbId") or "")
+                repl = remote_id_to_promoted_pbb_id.get(pid)
+                if repl:
+                    al["pbbId"] = repl
 
     grid_layers = {
         "grid": False,
