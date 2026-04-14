@@ -6064,7 +6064,11 @@
         const previewBh = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
         const wallX = ex, wallY = ey;
         const px2 = wallX + nx * previewBh, py2 = wallY + ny * previewBh;
-        const offM = PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
+        const cfgRow = standConfigRowForIcaoCat(category);
+        const noseClear = cfgRow ? Number(cfgRow.nose_clear) : NaN;
+        const offM = (Number.isFinite(noseClear) && noseClear > 0)
+          ? noseClear
+          : PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
         const previewAng = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
         const preview = {
           x1: wallX, y1: wallY, x2: px2, y2: py2, category,
@@ -6137,7 +6141,7 @@
     const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
     const cands = [];
     state.pbbStands.forEach(pbb => {
-      const pt = getStandAircraftMarkerWorldPxForPbb(pbb);
+      const pt = getStandConnectionPx(pbb);
       cands.push({ id: pbb.id, kind: 'pbb', x: pt[0], y: pt[1] });
     });
     state.remoteStands.forEach(st => {

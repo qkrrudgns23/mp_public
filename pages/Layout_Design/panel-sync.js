@@ -152,12 +152,8 @@
     return xBendEnd;
   }
   function getStandAircraftMarkerWorldPxForPbb(pbb) {
-    const cat = (pbb && pbb.category) || 'C';
-    const dep = getStandDepthMeters(cat);
-    const wid = getStandWidthMeters(cat);
-    const lx = standSafetyAircraftCenterLocalXM(dep, wid, cat);
     const cxy = getStandConnectionPx(pbb);
-    return standFootprintLocalToWorld(cxy[0], cxy[1], getPBBStandAngle(pbb), lx, 0);
+    return [cxy[0], cxy[1]];
   }
   function getStandAircraftMarkerWorldPxForRemoteLike(st) {
     const cat = (st && st.category) || 'C';
@@ -171,7 +167,7 @@
   function getStandApronTaxiwayAttachWorldPx(stand) {
     if (!stand) return [0, 0];
     const isPbb = (state.pbbStands || []).some(function(s) { return s && s.id === stand.id; });
-    if (isPbb) return getStandAircraftMarkerWorldPxForPbb(stand);
+    if (isPbb) return getStandConnectionPx(stand);
     return getStandAircraftMarkerWorldPxForRemoteLike(stand);
   }
   function getStandBoundsRect(cx, cy, sizeM) {
@@ -506,7 +502,11 @@
     const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
     const wallX = ex, wallY = ey;
     const bxOut = wallX + nx * boardingH, byOut = wallY + ny * boardingH;
-    const offM = PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
+    const cfgRow = standConfigRowForIcaoCat(category);
+    const noseClear = cfgRow ? Number(cfgRow.nose_clear) : NaN;
+    const offM = (Number.isFinite(noseClear) && noseClear > 0)
+      ? noseClear
+      : PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
     const newPbb = {
       x1: wallX, y1: wallY, x2: bxOut, y2: byOut, category,
       angleDeg: standAngleDeg,
