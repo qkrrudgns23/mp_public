@@ -774,13 +774,13 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             # Only create apron artifacts from explicit class-3 endpoint.
             continue
         gate_match = _nearest_gate_for_point(origin, gates, gate_search)
+        # Rule lock: point-3 (apron_origin) is the stand attach center ("middle circle").
+        sx, sy = origin
         if gate_match is not None:
-            gx_m, gy_m, gtags_m, fid_m = gate_match
+            _gx_m, _gy_m, gtags_m, fid_m = gate_match
             stand_name = _safe_name(gtags_m.get("ref") or gtags_m.get("name"), f"GATE-{fid_m}")
-            sx, sy = gx_m, gy_m
         else:
             stand_name = _safe_name(ptags.get("ref") or ptags.get("name"), f"PARK-{pi+1}")
-            sx, sy = origin
         contact = False
         nearest_pt = None
         if terminal_union is not None and not terminal_union.is_empty:
