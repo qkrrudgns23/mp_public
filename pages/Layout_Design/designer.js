@@ -1171,7 +1171,8 @@
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
   function redrawLayoutAfterEdit() {
-    invalidatePathGraphCache(false);
+    // Layout edits (move/delete/reshape) should refresh junctions immediately.
+    invalidatePathGraphCache(true);
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     if (typeof draw === 'function') draw();
     if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
@@ -17930,7 +17931,8 @@
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     const _twVb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
-    const _twPanCoarse = !!(state.isPanning && (state.scale || 1) < 0.4);
+    const _twPanLite = !!(state.isPanning && layoutViewportWidthWorldM() > LAYOUT_DRAG_LITE_VIEWPORT_WIDTH_THRESHOLD_M);
+    const _twPanCoarse = !!(_twPanLite && (state.scale || 1) < 0.4);
     function centerlineWidthWorld(baseWorld, minScreenPx) {
       const s = Math.max(0.08, state.scale || 1);
       return Math.max(baseWorld, minScreenPx / s);
@@ -17938,7 +17940,7 @@
     function strokeTwCenterlineBlackThenYellow(yellowStroke) {
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      if (state.isPanning) return;
+      if (_twPanLite) return;
       ctx.lineWidth = centerlineWidthWorld(1.5, 1.0);
       ctx.strokeStyle = '#0a0a0a';
       ctx.stroke();
@@ -18748,6 +18750,12 @@
   let _drawRafId = 0;
   /** While panning or shortly after wheel zoom, skip heavy path layers for smoother interaction. */
   let _layoutDetailSuppressUntil = 0;
+  const LAYOUT_DRAG_LITE_VIEWPORT_WIDTH_THRESHOLD_M = 1200;
+  function layoutViewportWidthWorldM() {
+    if (!layoutDrawCanvas) return Infinity;
+    const s = Math.max(state.scale || 1, 1e-9);
+    return (layoutDrawCanvas.width / dpr) / s;
+  }
   function layoutViewIsDragging() {
     return !!(
       state.pathArcDrag ||
@@ -18764,6 +18772,8 @@
   function layoutViewSkipsTaxiDetail(drawOpts) {
     if (drawOpts && drawOpts.forceFullLayoutDraw) return false;
     const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const wideViewport = layoutViewportWidthWorldM() > LAYOUT_DRAG_LITE_VIEWPORT_WIDTH_THRESHOLD_M;
+    if (!wideViewport) return false;
     return !!state.isPanning || layoutViewIsDragging() || now < _layoutDetailSuppressUntil;
   }
   function safeDraw(drawOpts) { try { draw(drawOpts); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
