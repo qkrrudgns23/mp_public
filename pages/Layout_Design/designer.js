@@ -12647,6 +12647,81 @@
     if (so && so.type === 'taxiway' && String(so.id) === String(tw.id)) return true;
     return taxiwayWorldAabbIntersectsViewport(tw, vb);
   }
+  function terminalWorldAabbFromVertices(term) {
+    if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let ok = false;
+    for (let i = 0; i < term.vertices.length; i++) {
+      const v = term.vertices[i];
+      if (!v) continue;
+      const col = Number(v.col), row = Number(v.row);
+      if (!isFinite(col) || !isFinite(row)) continue;
+      const x = col * CELL_SIZE;
+      const y = row * CELL_SIZE;
+      ok = true;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
+  }
+  const LAYOUT_RENDER_VIEWPORT_BUFFER_M = 200;
+  function layoutWorldViewportAabbWithBufferM(bufferM) {
+    if (!layoutDrawCanvas) return { minWx: -Infinity, maxWx: Infinity, minWy: -Infinity, maxWy: Infinity, marginWorld: 0 };
+    const w = layoutDrawCanvas.width / dpr;
+    const h = layoutDrawCanvas.height / dpr;
+    const s = state.scale || 1;
+    const m = Math.max(0, Number(bufferM) || 0);
+    return {
+      minWx: (0 - state.panX) / s - m,
+      maxWx: (w - state.panX) / s + m,
+      minWy: (0 - state.panY) / s - m,
+      maxWy: (h - state.panY) / s + m,
+      marginWorld: m
+    };
+  }
+  function aabbIntersectsViewport(vb, aabb) {
+    if (!vb || !aabb) return true;
+    return !(aabb.maxX < vb.minWx || aabb.minX > vb.maxWx || aabb.maxY < vb.minWy || aabb.minY > vb.maxWy);
+  }
+  function pointsWorldAabb(points) {
+    if (!Array.isArray(points) || !points.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let ok = false;
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      if (!p || p.length < 2) continue;
+      const x = Number(p[0]), y = Number(p[1]);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      ok = true;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
+  }
+  function markerWorldAabb(m) {
+    if (!m) return null;
+    const pts = [];
+    if (Array.isArray(m.points)) {
+      for (let i = 0; i < m.points.length; i++) {
+        const p = m.points[i];
+        if (!p) continue;
+        const x = Number(p.x), y = Number(p.y);
+        if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+      }
+    }
+    [['x', 'y'], ['x1', 'y1'], ['x2', 'y2']].forEach(function(pair) {
+      const x = Number(m[pair[0]]), y = Number(m[pair[1]]);
+      if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+    });
+    const a = pointsWorldAabb(pts);
+    if (!a) return null;
+    const pad = Math.max(8, CELL_SIZE * 0.8);
+    return { minX: a.minX - pad, minY: a.minY - pad, maxX: a.maxX + pad, maxY: a.maxY + pad };
+  }
   function overlayJunctionFillForWorldPoint(p, gCache) {
     if (!gCache || !p) return '#22c55e';
     const mergeR = PATH_JUNCTION_MERGE_RADIUS_PX * 3.5;
@@ -13627,7 +13702,7 @@
     const nowMs = Date.now();
     const twN = (state.taxiways || []).length;
     const rebuildCooldownMs = twN > 500 ? 5000 : 280;
-    const vb = layoutWorldViewportAabbWorldM();
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     const scaleRef = state.scale || 1;
     const panCoarse = !!(state.isPanning && scaleRef < 0.42);
     const ultraZoomOut = scaleRef < 0.17;
@@ -13765,7 +13840,7 @@
 
   function drawQueueTaxiwayLaneMarkers() {
     if (!state.layers.junction) return;
-    const vbQ = layoutWorldViewportAabbWorldM();
+    const vbQ = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -14144,6 +14219,8 @@
 
   function drawFlights2D() {
     if (!state.hasSimulationResult || !state.flights.length) return;
+    if (state.isPanning) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -14154,6 +14231,7 @@
       const pose = getFlightPoseAtTimeForDraw(f, tSecDraw);
       if (!pose) return;
       const x = pose.x, y = pose.y, dx = pose.dx, dy = pose.dy;
+      if (!aabbIntersectsViewport(vb, { minX: x, minY: y, maxX: x, maxY: y })) return;
       const len = Math.hypot(dx, dy) || 1;
       const nx = dx / len, ny = dy / len;
       const silN = Number(_acSil.noseX), silWR = Number(_acSil.wingRearX), silUY = Number(_acSil.wingUpperY);
@@ -16993,6 +17071,7 @@
     ctx.restore();
   }
   function drawTerminals(interactiveLite) {
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17000,6 +17079,10 @@
     state.terminals.forEach(term => {
       const isDrawingTerm = state.terminalDrawingId === term.id;
       if (term.vertices.length === 0 && !isDrawingTerm) return;
+      if (!isDrawingTerm) {
+        const termAabb = terminalWorldAabbFromVertices(term);
+        if (termAabb && !aabbIntersectsViewport(vb, termAabb)) return;
+      }
       const selected = state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.id === term.id;
       const buildingTheme = getBuildingTheme(term);
       const termPts = term.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
@@ -17069,6 +17152,7 @@
   }
 
   function drawPBBs(interactiveLite) {
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17076,6 +17160,11 @@
     state.pbbStands.forEach(pbb => {
       const x1 = Number(pbb.x1), y1 = Number(pbb.y1), x2 = Number(pbb.x2), y2 = Number(pbb.y2);
       if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) return;
+      const pbbSelForCull = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
+      if (!pbbSelForCull) {
+        const pbbAabb = pointsWorldAabb(getPBBStandCorners(pbb));
+        if (pbbAabb && !aabbIntersectsViewport(vb, pbbAabb)) return;
+      }
       rebuildPbbBridgeGeometry(pbb);
       const depP = getStandDepthMeters(pbb.category || 'C');
       const widP = getStandWidthMeters(pbb.category || 'C');
@@ -17182,11 +17271,17 @@
   }
 
   function drawRemoteStands(interactiveLite) {
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     state.remoteStands.forEach(st => {
+      const remoteSelForCull = state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.id === st.id;
+      if (!remoteSelForCull) {
+        const remoteAabb = pointsWorldAabb(getRemoteStandCorners(st));
+        if (remoteAabb && !aabbIntersectsViewport(vb, remoteAabb)) return;
+      }
       const [cx, cy] = getRemoteStandCenterPx(st);
       const depR = getStandDepthMeters(st.category || 'C');
       const widR = getStandWidthMeters(st.category || 'C');
@@ -17241,6 +17336,7 @@
   }
 
   function drawTempStands(interactiveLite) {
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17248,6 +17344,11 @@
     const mode = settingModeSelect ? settingModeSelect.value : 'grid';
     const temps = state.tempStands || [];
     temps.forEach(function(st) {
+      const tempSelForCull = state.selectedObject && state.selectedObject.type === 'tempStand' && state.selectedObject.id === st.id;
+      if (!tempSelForCull) {
+        const tempAabb = pointsWorldAabb(getRemoteStandCorners(st));
+        if (tempAabb && !aabbIntersectsViewport(vb, tempAabb)) return;
+      }
       const cxcy = getRemoteStandCenterPx(st);
       const cx = cxcy[0], cy = cxcy[1];
       const depT = getStandDepthMeters(st.category || 'C');
@@ -17828,7 +17929,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const _twVb = layoutWorldViewportAabbWorldM();
+    const _twVb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     const _twPanCoarse = !!(state.isPanning && (state.scale || 1) < 0.4);
     function centerlineWidthWorld(baseWorld, minScreenPx) {
       const s = Math.max(0.08, state.scale || 1);
@@ -18494,6 +18595,7 @@
   }
   function drawHoldingPoints2D(interactiveLite) {
     if (!ctx) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -18505,6 +18607,8 @@
     }
     (state.holdingPoints || []).forEach(function(hp) {
       if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return;
+      const hpAabb = { minX: hp.x - CELL_SIZE, minY: hp.y - CELL_SIZE, maxX: hp.x + CELL_SIZE, maxY: hp.y + CELL_SIZE };
+      if (!aabbIntersectsViewport(vb, hpAabb)) return;
       const selected = sel && state.selectedObject.id === hp.id;
       drawHoldingPointGridMarking(ctx, hp.x, hp.y, hp.hpKind, selected, false);
       const waitN = countFlightsWaitingAtHoldingPoint2D(hp, state.simTimeSec);
@@ -18644,10 +18748,23 @@
   let _drawRafId = 0;
   /** While panning or shortly after wheel zoom, skip heavy path layers for smoother interaction. */
   let _layoutDetailSuppressUntil = 0;
+  function layoutViewIsDragging() {
+    return !!(
+      state.pathArcDrag ||
+      state.dragVertex ||
+      state.dragTaxiwayVertex ||
+      state.dragStandRotation ||
+      state.dragPbbBridgeVertex ||
+      state.dragStandConnection ||
+      state.dragRemoteStandPosition ||
+      state.dragApronLinkVertex ||
+      state.dragLayoutMarkerHandle
+    );
+  }
   function layoutViewSkipsTaxiDetail(drawOpts) {
     if (drawOpts && drawOpts.forceFullLayoutDraw) return false;
     const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    return !!state.isPanning || now < _layoutDetailSuppressUntil;
+    return !!state.isPanning || layoutViewIsDragging() || now < _layoutDetailSuppressUntil;
   }
   function safeDraw(drawOpts) { try { draw(drawOpts); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
   function flushDrawNow() {
@@ -18908,6 +19025,7 @@
   function drawLayoutAreaMarkers2DFloor() {
     if (!ctx || !layoutMarkersVisible()) return;
     if (!layerIslandAreaFillEffective()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -18919,6 +19037,8 @@
       if (!pts || pts.length < 3) return;
       const poly = pts.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
       if (poly.length < 3) return;
+      const areaAabb = pointsWorldAabb(poly);
+      if (areaAabb && !aabbIntersectsViewport(vb, areaAabb)) return;
       ctx.beginPath();
       ctx.moveTo(poly[0][0], poly[0][1]);
       for (let j = 1; j < poly.length; j++) ctx.lineTo(poly[j][0], poly[j][1]);
@@ -18944,6 +19064,7 @@
   }
   function drawLayoutIslandMarkers2DEarly() {
     if (!ctx || !layoutMarkersVisible()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -18953,12 +19074,16 @@
         if (!m || m.kind !== 'island' || islandMarkerPavementResolved(m) !== 'cement') return;
         const pts = layoutIslandWorldPointsForDraw(m);
         if (pts.length < 3) return;
+        const islandAabb = pointsWorldAabb(pts);
+        if (islandAabb && !aabbIntersectsViewport(vb, islandAabb)) return;
         drawLayoutIslandMarkerPavementWorld(ctx, pts, m);
       });
       (state.layoutMarkers || []).forEach(function(m) {
         if (!m || m.kind !== 'island' || islandMarkerPavementResolved(m) !== 'asphalt') return;
         const pts = layoutIslandWorldPointsForDraw(m);
         if (pts.length < 3) return;
+        const islandAabb = pointsWorldAabb(pts);
+        if (islandAabb && !aabbIntersectsViewport(vb, islandAabb)) return;
         drawLayoutIslandMarkerPavementWorld(ctx, pts, m);
       });
     }
@@ -18980,6 +19105,7 @@
   }
   function drawLayoutIslandMarkersOverlay2D() {
     if (!ctx || !layoutMarkersVisible()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -18990,6 +19116,8 @@
         if (!m || m.kind !== 'island') return;
         const pts = layoutIslandWorldPointsForDraw(m);
         if (pts.length < 3) return;
+        const islandAabb = pointsWorldAabb(pts);
+        if (islandAabb && !aabbIntersectsViewport(vb, islandAabb)) return;
         const isSel = !!(sel && sel.type === 'layoutMarker' && String(sel.id) === String(m.id));
         drawLayoutIslandMarkerLinesWorld(ctx, pts, isSel);
       });
@@ -18998,6 +19126,7 @@
   }
   function drawLayoutAreaMarkerOutlines2D() {
     if (!ctx || !layoutMarkersVisible()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -19012,6 +19141,8 @@
       if (!pts || pts.length < 3) return;
       const poly = pts.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
       if (poly.length < 3) return;
+      const areaAabb = pointsWorldAabb(poly);
+      if (areaAabb && !aabbIntersectsViewport(vb, areaAabb)) return;
       const isSel = !!(sel && sel.type === 'layoutMarker' && String(sel.id) === String(m.id));
       ctx.beginPath();
       ctx.moveTo(poly[0][0], poly[0][1]);
@@ -19037,6 +19168,7 @@
   }
   function drawLayoutMarkers2D(interactiveLite) {
     if (!ctx || !layoutMarkersVisible()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -19068,6 +19200,10 @@
       if (!markerTool) {
         if ((m.kind === 'text' || m.kind === 'ruler') && !state.layers.textRuler) return;
         if (m.kind === 'flight' && !state.layers.dummyFlight) return;
+      }
+      if (!(state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id)) {
+        const mkAabb = markerWorldAabb(m);
+        if (mkAabb && !aabbIntersectsViewport(vb, mkAabb)) return;
       }
       const sel = state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id;
       if (m.kind === 'text') {
@@ -19328,8 +19464,10 @@
     if (state.hasSimulationResult && state.flights && state.flights.length) {
       if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
     }
-    drawHoldingQueueGhostFlights2D();
-    drawFlights2D();
+    if (!interactiveLite) {
+      drawHoldingQueueGhostFlights2D();
+      drawFlights2D();
+    }
     if (!interactiveLite) {
       drawPathJunctions();
       drawQueueTaxiwayLaneMarkers();
@@ -20305,7 +20443,12 @@
       if (state.previewHoldingPoint) { state.previewHoldingPoint = null; clearedPreview = true; }
       if (clearedPreview) { scheduleDraw(); drewThisMove = true; }
     }
-    scheduleLayoutTooltipRaf(ev, wx, wy);
+    if (layoutViewIsDragging()) {
+      flushLayoutTooltipRaf();
+      if (flightTooltip) flightTooltip.style.display = 'none';
+    } else {
+      scheduleLayoutTooltipRaf(ev, wx, wy);
+    }
     if (hoverChanged && !drewThisMove) { scheduleDraw(); drewThisMove = true; }
   });
   container.addEventListener('mouseleave', function() {
@@ -20383,6 +20526,10 @@
     const wasPanning = !!state.isPanning;
     flushDrawNow();
     state.isPanning = false;
+    if (wasPanning) {
+      const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      _layoutDetailSuppressUntil = Math.max(_layoutDetailSuppressUntil, nowPerf + 120);
+    }
     if (state.dragVertex) {
       state.dragVertex = null;
       return;
