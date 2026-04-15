@@ -100,7 +100,7 @@ OSM_TO_LAYOUT_RULES: Dict[str, Any] = {
 OSM_TAG_TO_LAYOUT_ROLE: Dict[str, str] = {
     "aeroway=runway": "runwayPaths (centerline polyline)",
     "aeroway=taxiway": "taxiways or apron_taxiway (near terminal)",
-    "aeroway=taxilane": "taxiways",
+    "aeroway=taxilane": "taxiways + apronLinks(stand-end 판단)",
     "aeroway=parking_position": "apronLinks (stand end) + stand placement; not a taxiway path",
     "aeroway=jet_bridge": "ignored for pbbCount in v1 (contact stands use pbbCount=1); not a taxiway path",
     "aeroway=holding_position": "holdingPoints (hpKind runway_holding if near runway centerline)",
@@ -757,7 +757,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 terminal_polys.append(poly)
                 term_name = _safe_name(tags.get("name") or tags.get("ref"), f"Terminal-{len(terminal_named_polys)+1}")
                 terminal_named_polys.append((term_name, poly))
-        if aw == "parking_position" and isinstance(gxy, LineString) and len(gxy.coords) >= 2:
+        if aw in ("parking_position", "taxilane") and isinstance(gxy, LineString) and len(gxy.coords) >= 2:
             parking_lines.append((gxy, tags))
         if aw in ("holding_position", "holding"):
             if isinstance(gxy, Point):

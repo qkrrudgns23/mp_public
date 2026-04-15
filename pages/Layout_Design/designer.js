@@ -16830,7 +16830,7 @@
     _gridUnderlayDirty = false;
   }
 
-  function drawGrid() {
+  function drawGrid(interactiveLite) {
     const w = layoutDrawCanvas.width / dpr, h = layoutDrawCanvas.height / dpr;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -16885,9 +16885,11 @@
       ctx.lineTo(maxX, y);
       ctx.stroke();
     }
-    ctx.fillStyle = '#aaa';
-    ctx.font = '10px system-ui';
-    ctx.fillText('0,0', 4, 2);
+    if (!interactiveLite) {
+      ctx.fillStyle = '#aaa';
+      ctx.font = '10px system-ui';
+      ctx.fillText('0,0', 4, 2);
+    }
     const cx = (GRID_COLS * CELL_SIZE) / 2;
     const cy = (GRID_ROWS * CELL_SIZE) / 2;
     ctx.beginPath();
@@ -16990,7 +16992,7 @@
     }
     ctx.restore();
   }
-  function drawTerminals() {
+  function drawTerminals(interactiveLite) {
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17034,7 +17036,7 @@
             }
             if (term.closed) ctx.closePath();
             ctx.stroke();
-            if (term.closed && term.vertices.length > 0) {
+            if (!interactiveLite && term.closed && term.vertices.length > 0) {
               let cx = 0, cy = 0;
               term.vertices.forEach(v => {
                 const [px, py] = cellToPixel(v.col, v.row);
@@ -17066,7 +17068,7 @@
     ctx.restore();
   }
 
-  function drawPBBs() {
+  function drawPBBs(interactiveLite) {
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17081,7 +17083,7 @@
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
       const sl = !!state.layers.standLines, sf = !!state.layers.standFill;
       if (!sl && !sf && !sel) return;
-      drawPbbBoardingRectangle(ctx, pbb, sel);
+      if (!interactiveLite) drawPbbBoardingRectangle(ctx, pbb, sel);
       const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
       bridges.forEach(function(bridge, bridgeIdx) {
         const pts = Array.isArray(bridge.points) ? bridge.points : [];
@@ -17105,12 +17107,12 @@
         ctx.moveTo(quad[0][0], quad[0][1]);
         for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
         ctx.closePath();
-        if (sf) {
+        if (sf && !interactiveLite) {
           ctx.fillStyle = sel ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.1)';
           ctx.fill();
           drawPolygonDiagonalHatch45M(ctx, quad, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.38)', hairW);
         }
-        if (sl) {
+        if (sl && !interactiveLite) {
           ctx.beginPath();
           ctx.moveTo(quad[0][0], quad[0][1]);
           for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
@@ -17141,24 +17143,26 @@
       ctx.translate(ex, ey);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      if (sf) {
+      if (sf && !interactiveLite) {
         ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFill);
         fillStandSafetyFootprintInLocalAxes(ctx, depP, widP, pbb.category || 'C');
       }
       if (sl) {
         drawStandSafetyContourInLocalAxes(ctx, depP, widP, pbb.category || 'C', sel);
-        drawStandApronMarkingsInLocalAxes(ctx, depP, widP, pbb.category || 'C');
-        const nameRaw = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : String(state.pbbStands.indexOf(pbb) + 1);
-        const labelPrefix = getStandCategoryMode(pbb) === 'aircraft' ? 'AC' : (pbb.category || 'C');
-        const label = labelPrefix + ' / ' + nameRaw;
-        const pad = 3;
-        const tx = depP / 2 - pad;
-        const ty = -widP / 2 + pad;
-        ctx.fillStyle = apronLinked ? '#dcd8cf' : '#d1d5db';
-        ctx.font = '8px system-ui';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'top';
-        ctx.fillText(String(label), tx, ty);
+        if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depP, widP, pbb.category || 'C');
+        if (!interactiveLite) {
+          const nameRaw = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : String(state.pbbStands.indexOf(pbb) + 1);
+          const labelPrefix = getStandCategoryMode(pbb) === 'aircraft' ? 'AC' : (pbb.category || 'C');
+          const label = labelPrefix + ' / ' + nameRaw;
+          const pad = 3;
+          const tx = depP / 2 - pad;
+          const ty = -widP / 2 + pad;
+          ctx.fillStyle = apronLinked ? '#dcd8cf' : '#d1d5db';
+          ctx.font = '8px system-ui';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'top';
+          ctx.fillText(String(label), tx, ty);
+        }
       }
       ctx.restore();
       if (sl || sel) {
@@ -17177,7 +17181,7 @@
     ctx.restore();
   }
 
-  function drawRemoteStands() {
+  function drawRemoteStands(interactiveLite) {
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17198,24 +17202,26 @@
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      if (sf) {
+      if (sf && !interactiveLite) {
         ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillR);
         fillStandSafetyFootprintInLocalAxes(ctx, depR, widR, st.category || 'C');
       }
       if (sl) {
         drawStandSafetyContourInLocalAxes(ctx, depR, widR, st.category || 'C', sel);
-        drawStandApronMarkingsInLocalAxes(ctx, depR, widR, st.category || 'C');
-        const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
-        const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
-        const label = labelPrefix + ' / ' + nameRaw;
-        const pad = 3;
-        const tx = depR / 2 - pad;
-        const ty = -widR / 2 + pad;
-        ctx.fillStyle = apronLinkedR ? '#dcd8cf' : '#d1d5db';
-        ctx.font = '8px system-ui';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'top';
-        ctx.fillText(String(label), tx, ty);
+        if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depR, widR, st.category || 'C');
+        if (!interactiveLite) {
+          const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
+          const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
+          const label = labelPrefix + ' / ' + nameRaw;
+          const pad = 3;
+          const tx = depR / 2 - pad;
+          const ty = -widR / 2 + pad;
+          ctx.fillStyle = apronLinkedR ? '#dcd8cf' : '#d1d5db';
+          ctx.font = '8px system-ui';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'top';
+          ctx.fillText(String(label), tx, ty);
+        }
       }
       ctx.restore();
       if (sl || sel) {
@@ -17234,7 +17240,7 @@
     ctx.restore();
   }
 
-  function drawTempStands() {
+  function drawTempStands(interactiveLite) {
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17261,22 +17267,24 @@
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      if (sf) {
+      if (sf && !interactiveLite) {
         ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillT);
         fillStandSafetyFootprintInLocalAxes(ctx, depT, widT, st.category || 'C');
       }
       if (sl) {
         drawStandSafetyContourInLocalAxes(ctx, depT, widT, st.category || 'C', sel);
-        drawStandApronMarkingsInLocalAxes(ctx, depT, widT, st.category || 'C');
-        ctx.setLineDash([]);
-        const pad = 3;
-        const tx = depT / 2 - pad;
-        const ty = -widT / 2 + pad;
-        ctx.fillStyle = '#e9d5ff';
-        ctx.font = '8px system-ui';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'top';
-        ctx.fillText(String(label), tx, ty);
+        if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depT, widT, st.category || 'C');
+        if (!interactiveLite) {
+          ctx.setLineDash([]);
+          const pad = 3;
+          const tx = depT / 2 - pad;
+          const ty = -widT / 2 + pad;
+          ctx.fillStyle = '#e9d5ff';
+          ctx.font = '8px system-ui';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'top';
+          ctx.fillText(String(label), tx, ty);
+        }
       }
       ctx.restore();
       if (mode === 'apronTaxiway' && (sl || sel)) {
@@ -17815,20 +17823,25 @@
     });
   }
 
-  function drawTaxiways() {
+  function drawTaxiways(interactiveLite) {
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     const _twVb = layoutWorldViewportAabbWorldM();
     const _twPanCoarse = !!(state.isPanning && (state.scale || 1) < 0.4);
+    function centerlineWidthWorld(baseWorld, minScreenPx) {
+      const s = Math.max(0.08, state.scale || 1);
+      return Math.max(baseWorld, minScreenPx / s);
+    }
     function strokeTwCenterlineBlackThenYellow(yellowStroke) {
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.lineWidth = 1.5;
+      if (state.isPanning) return;
+      ctx.lineWidth = centerlineWidthWorld(1.5, 1.0);
       ctx.strokeStyle = '#0a0a0a';
       ctx.stroke();
-      ctx.lineWidth = 1;
+      ctx.lineWidth = centerlineWidthWorld(1, 0.8);
       ctx.strokeStyle = yellowStroke;
       ctx.stroke();
     }
@@ -17861,6 +17874,7 @@
       if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g) return;
+      if (interactiveLite && g.isApronTaxiwayPath) return;
       const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel, pathLineCap = g.pathLineCap, pathFillWide = g.pathFillWide;
       let strokeC, fillC;
       if (sel) {
@@ -17907,7 +17921,7 @@
           } else ctx.stroke();
         }
       }
-      if ((!_twPanCoarse || sel || drawing) && isRunwayPath && tw.vertices.length >= 2 && pathFillWide) {
+      if (!interactiveLite && (!_twPanCoarse || sel || drawing) && isRunwayPath && tw.vertices.length >= 2 && pathFillWide) {
         const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
         drawRunwayDecorations(tw, runwayPts, width, { baseOnly: true });
       }
@@ -17916,12 +17930,14 @@
       if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g || tw.vertices.length < 2) return;
+      if (interactiveLite && g.isApronTaxiwayPath) return;
       const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, pathFillWide = g.pathFillWide, pathLineCap = g.pathLineCap, width = g.width;
       if (!state.layers.pathLines) return;
+      if (interactiveLite && !isRunwayPath) return;
       if (pathFillWide) {
         let skipRunwayCenterlineStroke = false;
         if (isRunwayPath) {
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = centerlineWidthWorld(1.5, 1.4);
           const rwPtsCk = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
           const tLen = runwayPolylineLengthPx(rwPtsCk);
           const rwW = Math.max(24, Number(width) || RUNWAY_PATH_DEFAULT_WIDTH);
@@ -17974,7 +17990,7 @@
           strokeTwCenterlineBlackThenYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
         }
       } else {
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = centerlineWidthWorld(1.5, 1.4);
         ctx.strokeStyle = c2dRunwayCenterlineColor();
         ctx.setLineDash([10, 12]);
         ctx.lineCap = pathLineCap;
@@ -17998,6 +18014,7 @@
       if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g || !g.isRunwayPath || tw.vertices.length < 2 || !g.pathFillWide) return;
+      if (interactiveLite && !g.sel) return;
       if (_twPanCoarse && !g.sel) return;
       const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
       drawRunwayPavedCenterlineDashed(tw, runwayPts, g.width);
@@ -18006,6 +18023,7 @@
       if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g || !g.isRunwayPath || tw.vertices.length < 2 || !g.pathFillWide) return;
+      if (interactiveLite && !g.sel) return;
       if (_twPanCoarse && !g.sel) return;
       const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
       drawRunwayDecorations(tw, runwayPts, g.width, { markingsOnly: true });
@@ -18016,6 +18034,7 @@
       if (!g) return;
       const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel;
       if (!state.layers.pathLines) {
+        if (interactiveLite && !drawing && !sel) return;
         if (drawing && tw.vertices.length >= 1) {
           const ptsPx = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
           const ptrTw = state.layoutPathDrawPointer;
@@ -18039,7 +18058,7 @@
                 ctx.font = 'bold ' + c2dPathDrawStartLabelFontPx() + 'px system-ui';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('Start', x, y + c2dPathDrawStartLabelOffsetY());
+                if (!interactiveLite) ctx.fillText('Start', x, y + c2dPathDrawStartLabelOffsetY());
               } else {
                 layoutMarkerDrawEndpointDot(ctx, x, y, vertexSelected);
               }
@@ -18053,6 +18072,7 @@
         }
         return;
       }
+      if (interactiveLite && !drawing && !sel) return;
       const dir = getTaxiwayDirection(tw);
       if ((!_twPanCoarse || sel || g.drawing) && dir !== 'both' && tw.vertices.length >= 2) {
         const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
@@ -18091,7 +18111,7 @@
           ctx.fill();
         }
       }
-      if ((!_twPanCoarse || sel || g.drawing) && isRunwayPath && tw.vertices.length >= 2) {
+      if (!interactiveLite && (!_twPanCoarse || sel || g.drawing) && isRunwayPath && tw.vertices.length >= 2) {
         const rwPts = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
         if (rwPts.length >= 2) {
           const lenPx = runwayPolylineLengthPx(rwPts);
@@ -18189,7 +18209,7 @@
               ctx.font = 'bold ' + c2dPathDrawStartLabelFontPx() + 'px system-ui';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              ctx.fillText('Start', x, y + c2dPathDrawStartLabelOffsetY());
+              if (!interactiveLite) ctx.fillText('Start', x, y + c2dPathDrawStartLabelOffsetY());
             } else {
               layoutMarkerDrawEndpointDot(ctx, x, y, vertexSelected);
             }
@@ -18472,7 +18492,7 @@
     });
     ctx.restore();
   }
-  function drawHoldingPoints2D() {
+  function drawHoldingPoints2D(interactiveLite) {
     if (!ctx) return;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -18488,7 +18508,7 @@
       const selected = sel && state.selectedObject.id === hp.id;
       drawHoldingPointGridMarking(ctx, hp.x, hp.y, hp.hpKind, selected, false);
       const waitN = countFlightsWaitingAtHoldingPoint2D(hp, state.simTimeSec);
-      if (waitN > 0) {
+      if (waitN > 0 && !interactiveLite) {
         const tt = findHoldingPointPathGeometry(hp);
         const bump = Math.max(12, (Number(tt.pathWidthM) || 0) * 0.42);
         const bx = hp.x + tt.ux * bump;
@@ -18534,7 +18554,7 @@
     ctx.restore();
   }
 
-  function drawStandPreview() {
+  function drawStandPreview(interactiveLite) {
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -18552,9 +18572,9 @@
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      fillStandSafetyFootprintInLocalAxes(ctx, depPr, widPr, category);
+      if (!interactiveLite) fillStandSafetyFootprintInLocalAxes(ctx, depPr, widPr, category);
       drawStandSafetyContourInLocalAxes(ctx, depPr, widPr, category, false);
-      drawStandApronMarkingsInLocalAxes(ctx, depPr, widPr, category);
+      if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depPr, widPr, category);
       ctx.restore();
     }
     if (mode === 'tempStand' && state.previewTempStand) {
@@ -18569,9 +18589,9 @@
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      fillStandSafetyFootprintInLocalAxes(ctx, depPt, widPt, category);
+      if (!interactiveLite) fillStandSafetyFootprintInLocalAxes(ctx, depPt, widPt, category);
       drawStandSafetyContourInLocalAxes(ctx, depPt, widPt, category, false);
-      drawStandApronMarkingsInLocalAxes(ctx, depPt, widPt, category);
+      if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depPt, widPt, category);
       ctx.restore();
       ctx.setLineDash([]);
       const pjr = Math.max(3, 3.5 / Math.max(state.scale, 0.08));
@@ -18605,14 +18625,16 @@
       ctx.translate(ex, ey);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      fillStandSafetyFootprintInLocalAxes(ctx, depPv, widPv, catPv);
+      if (!interactiveLite) fillStandSafetyFootprintInLocalAxes(ctx, depPv, widPv, catPv);
       drawStandSafetyContourInLocalAxes(ctx, depPv, widPv, catPv, false);
-      drawStandApronMarkingsInLocalAxes(ctx, depPv, widPv, catPv);
-      ctx.fillStyle = '#bbf7d0';
-      ctx.font = '10px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(state.previewPbb.category || document.getElementById('standCategory').value || 'C', 0, 0);
+      if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depPv, widPv, catPv);
+      if (!interactiveLite) {
+        ctx.fillStyle = '#bbf7d0';
+        ctx.font = '10px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(state.previewPbb.category || document.getElementById('standCategory').value || 'C', 0, 0);
+      }
       ctx.restore();
     }
     ctx.restore();
@@ -18620,6 +18642,13 @@
 
   let _safeDrawErrLogged = false;
   let _drawRafId = 0;
+  /** While panning or shortly after wheel zoom, skip heavy path layers for smoother interaction. */
+  let _layoutDetailSuppressUntil = 0;
+  function layoutViewSkipsTaxiDetail(drawOpts) {
+    if (drawOpts && drawOpts.forceFullLayoutDraw) return false;
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    return !!state.isPanning || now < _layoutDetailSuppressUntil;
+  }
   function safeDraw(drawOpts) { try { draw(drawOpts); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
   function flushDrawNow() {
     if (_drawRafId) {
@@ -19006,7 +19035,7 @@
     });
     ctx.restore();
   }
-  function drawLayoutMarkers2D() {
+  function drawLayoutMarkers2D(interactiveLite) {
     if (!ctx || !layoutMarkersVisible()) return;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -19042,6 +19071,7 @@
       }
       const sel = state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id;
       if (m.kind === 'text') {
+        if (interactiveLite) return;
         const x = Number(m.x), y = Number(m.y);
         if (!isFinite(x) || !isFinite(y)) return;
         const fs = Math.max(10, 12 / Math.max(state.scale, 0.12));
@@ -19075,16 +19105,18 @@
         const dx = x2 - x1, dy = y2 - y1;
         const lenM = Math.hypot(dx, dy);
         const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-        const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
-        ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const label = lenM.toFixed(1) + ' m';
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = 'rgba(15,23,42,0.85)';
-        ctx.fillStyle = '#f1f5f9';
-        ctx.strokeText(label, mx, my - fs * 0.9);
-        ctx.fillText(label, mx, my - fs * 0.9);
+        if (!interactiveLite) {
+          const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
+          ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const label = lenM.toFixed(1) + ' m';
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+          ctx.fillStyle = '#f1f5f9';
+          ctx.strokeText(label, mx, my - fs * 0.9);
+          ctx.fillText(label, mx, my - fs * 0.9);
+        }
         if (sel) {
           layoutMarkerDrawEndpointDot(ctx, x1, y1, true);
           layoutMarkerDrawEndpointDot(ctx, x2, y2, true);
@@ -19190,16 +19222,18 @@
       const dx = h[0] - d0.x, dy = h[1] - d0.y;
       const lenM = Math.hypot(dx, dy);
       const mx = (d0.x + h[0]) / 2, my = (d0.y + h[1]) / 2;
-      const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
-      ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const label = lenM.toFixed(1) + ' m';
-      ctx.lineWidth = 2.5;
-      ctx.strokeStyle = 'rgba(15,23,42,0.85)';
-      ctx.fillStyle = '#f1f5f9';
-      ctx.strokeText(label, mx, my - fs * 0.9);
-      ctx.fillText(label, mx, my - fs * 0.9);
+      if (!interactiveLite) {
+        const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
+        ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const label = lenM.toFixed(1) + ' m';
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+        ctx.fillStyle = '#f1f5f9';
+        ctx.strokeText(label, mx, my - fs * 0.9);
+        ctx.fillText(label, mx, my - fs * 0.9);
+      }
     }
     if (state.markerDrawing && getMarkerSubKindFromPanel() === 'flight' && state.markerFlightHoverSnap && (markerTool || state.layers.dummyFlight)) {
       const ghost = {
@@ -19265,20 +19299,21 @@
   function draw(drawOpts) {
     if (!ctx || !layoutDrawCanvas) return;
     if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
-    drawGrid();
+    const interactiveLite = layoutViewSkipsTaxiDetail(drawOpts);
+    drawGrid(interactiveLite);
     drawLayoutAreaMarkers2DFloor();
     drawLayoutAreaMarkerOutlines2D();
     drawLayoutIslandMarkers2DEarly();
-    drawTerminals();
-    drawTaxiways();
+    drawTerminals(interactiveLite);
+    drawTaxiways(interactiveLite);
     drawLayoutIslandMarkersOverlay2D();
     drawPathArcPreview();
-    drawHoldingPoints2D();
-    drawPBBs();
-    drawRemoteStands();
-    drawTempStands();
-    drawApronTaxiwayLinks();
-    drawStandPreview();
+    drawHoldingPoints2D(interactiveLite);
+    drawPBBs(interactiveLite);
+    drawRemoteStands(interactiveLite);
+    drawTempStands(interactiveLite);
+    if (!interactiveLite) drawApronTaxiwayLinks();
+    drawStandPreview(interactiveLite);
     drawSelectedLayoutEdge();
     {
       const sel = state.selectedObject;
@@ -19295,9 +19330,11 @@
     }
     drawHoldingQueueGhostFlights2D();
     drawFlights2D();
-    drawPathJunctions();
-    drawQueueTaxiwayLaneMarkers();
-    drawLayoutMarkers2D();
+    if (!interactiveLite) {
+      drawPathJunctions();
+      drawQueueTaxiwayLaneMarkers();
+    }
+    drawLayoutMarkers2D(interactiveLite);
     syncMarkerTextDraftInputPosition();
     syncMarkerFlightBlazerOverlayButton();
     updatePathArcHud();
@@ -19349,7 +19386,7 @@
     state.selectedVertex = null;
     invalidateGridUnderlay();
     try {
-      draw({ bypassSimScrubGuard: true });
+      draw({ bypassSimScrubGuard: true, forceFullLayoutDraw: true });
     } finally {
       layoutDrawCanvas = savedLayoutDrawCanvas;
       ctx = savedCtx;
@@ -21006,12 +21043,17 @@
     ev.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
-    const wx = (mx - state.panX) / state.scale, wy = (my - state.panY) / state.scale;
-    const factor = 1 - ev.deltaY * 0.002;
-    state.scale *= factor;
+    const wx = (mx - state.panX) / Math.max(state.scale, 1e-9), wy = (my - state.panY) / Math.max(state.scale, 1e-9);
+    let dy = ev.deltaY;
+    if (ev.deltaMode === 1) dy *= 16;
+    else if (ev.deltaMode === 2) dy *= 120;
+    const step = dy < 0 ? 1.15 : (1 / 1.15);
+    state.scale *= step;
     state.scale = Math.max(CANVAS_MIN_ZOOM, Math.min(CANVAS_MAX_ZOOM, state.scale));
     state.panX = mx - wx * state.scale;
     state.panY = my - wy * state.scale;
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    _layoutDetailSuppressUntil = nowPerf + 200;
     scheduleDraw();
   }, { passive: false });
 
