@@ -20453,6 +20453,7 @@
       const term = state.terminals.find(t => t.id === state.dragVertex.terminalId);
       if (term && term.vertices[state.dragVertex.index]) {
         const v = term.vertices[state.dragVertex.index];
+        if (v.col === snappedPt.col && v.row === snappedPt.row) return;
         v.col = snappedPt.col;
         v.row = snappedPt.row;
         scheduleDraw(); drewThisMove = true;
@@ -20463,10 +20464,10 @@
       const tw = state.taxiways.find(t => t.id === state.dragTaxiwayVertex.taxiwayId);
       if (tw && tw.vertices[state.dragTaxiwayVertex.index]) {
         const v = tw.vertices[state.dragTaxiwayVertex.index];
+        if (v.col === snappedPt.col && v.row === snappedPt.row) return;
         v.col = snappedPt.col;
         v.row = snappedPt.row;
         scheduleDraw(); drewThisMove = true;
-        update3DSceneWhenVisible();
       }
       return;
     }
@@ -20476,33 +20477,33 @@
         if (pbb) {
           const origin = getPbbRotationOriginPx(pbb);
           const nextDeg = normalizeAngleDeg(Math.atan2(wy - origin[1], wx - origin[0]) * 180 / Math.PI);
+          if (Math.abs(nextDeg - (Number(pbb.angleDeg) || 0)) < 1e-4) return;
           pbb.angleDeg = nextDeg;
           const angleInput = document.getElementById('standAngle');
           if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
           scheduleDraw(); drewThisMove = true;
-          update3DSceneWhenVisible();
         }
       } else if (state.dragStandRotation.type === 'remote') {
         const st = state.remoteStands.find(function(item) { return item.id === state.dragStandRotation.id; });
         if (st) {
           const center = getRemoteStandCenterPx(st);
           const nextDeg = normalizeAngleDeg(Math.atan2(wy - center[1], wx - center[0]) * 180 / Math.PI);
+          if (Math.abs(nextDeg - (Number(st.angleDeg) || 0)) < 1e-4) return;
           st.angleDeg = nextDeg;
           const angleInput = document.getElementById('remoteAngle');
           if (angleInput) angleInput.value = String(Math.round(nextDeg));
           scheduleDraw(); drewThisMove = true;
-          update3DSceneWhenVisible();
         }
       } else if (state.dragStandRotation.type === 'tempStand') {
         const st = (state.tempStands || []).find(function(item) { return item.id === state.dragStandRotation.id; });
         if (st) {
           const center = getRemoteStandCenterPx(st);
           const nextDeg = normalizeAngleDeg(Math.atan2(wy - center[1], wx - center[0]) * 180 / Math.PI);
+          if (Math.abs(nextDeg - (Number(st.angleDeg) || 0)) < 1e-4) return;
           st.angleDeg = nextDeg;
           const angleInput = document.getElementById('tempStandAngle');
           if (angleInput) angleInput.value = String(Math.round(nextDeg));
           scheduleDraw(); drewThisMove = true;
-          update3DSceneWhenVisible();
         }
       }
       return;
@@ -20533,33 +20534,35 @@
             bumpPathPolylineCacheRev();
           }
         } else {
-          pt.x = snappedPx[0];
-          pt.y = snappedPx[1];
+          const nx = snappedPx[0], ny = snappedPx[1];
+          if (Math.abs(pt.x - nx) < 1e-5 && Math.abs(pt.y - ny) < 1e-5) return;
+          pt.x = nx;
+          pt.y = ny;
         }
         scheduleDraw(); drewThisMove = true;
-        update3DSceneWhenVisible();
       }
       return;
     }
     if (state.dragStandConnection) {
       const pbb = state.pbbStands.find(function(item) { return item.id === state.dragStandConnection.pbbId; });
       if (pbb) {
-        pbb.apronSiteX = snappedPx[0];
-        pbb.apronSiteY = snappedPx[1];
+        const nx = snappedPx[0], ny = snappedPx[1];
+        if (Math.abs(pbb.apronSiteX - nx) < 1e-5 && Math.abs(pbb.apronSiteY - ny) < 1e-5) return;
+        pbb.apronSiteX = nx;
+        pbb.apronSiteY = ny;
         scheduleDraw(); drewThisMove = true;
-        update3DSceneWhenVisible();
       }
       return;
     }
     if (state.dragRemoteStandPosition) {
       const st = state.remoteStands.find(function(item) { return item.id === state.dragRemoteStandPosition.standId; });
       if (st) {
+        if (st.col === snappedPt.col && st.row === snappedPt.row) return;
         st.x = snappedPx[0];
         st.y = snappedPx[1];
         st.col = snappedPt.col;
         st.row = snappedPt.row;
         scheduleDraw(); drewThisMove = true;
-        update3DSceneWhenVisible();
       }
       return;
     }
@@ -20571,20 +20574,21 @@
         const mi = state.dragApronLinkVertex.midIndex;
         if (lk.midVertices && mi >= 0 && mi < lk.midVertices.length &&
             col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {
-          lk.midVertices[mi].col = snappedPt.col;
-          lk.midVertices[mi].row = snappedPt.row;
+          const mv = lk.midVertices[mi];
+          if (mv.col === snappedPt.col && mv.row === snappedPt.row) return;
+          mv.col = snappedPt.col;
+          mv.row = snappedPt.row;
           markApronLinkJunctionOverlayDirty(lk.id);
           scheduleDraw(); drewThisMove = true;
-          update3DSceneWhenVisible();
         }
       } else if (state.dragApronLinkVertex.kind === 'taxiway') {
         const snap = snapWorldPointToTaxiwayPolyline(wx, wy, lk.taxiwayId);
         if (snap) {
+          if (Math.abs(lk.tx - snap[0]) < 1e-5 && Math.abs(lk.ty - snap[1]) < 1e-5) return;
           lk.tx = snap[0];
           lk.ty = snap[1];
           markApronLinkJunctionOverlayDirty(lk.id);
           scheduleDraw(); drewThisMove = true;
-          update3DSceneWhenVisible();
         }
       }
       return;

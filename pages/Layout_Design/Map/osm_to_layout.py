@@ -63,7 +63,6 @@ OSM_TO_LAYOUT_RULES: Dict[str, Any] = {
         "apron_taxiway_near_terminal_m": 50.0,
         "include_aeroway_linestrings": (
             "taxiway",
-            "taxilane",
         ),
         "jet_bridge_near_stand_m": 55.0,
     },
@@ -100,7 +99,7 @@ OSM_TO_LAYOUT_RULES: Dict[str, Any] = {
 OSM_TAG_TO_LAYOUT_ROLE: Dict[str, str] = {
     "aeroway=runway": "runwayPaths (centerline polyline)",
     "aeroway=taxiway": "taxiways or apron_taxiway (near terminal)",
-    "aeroway=taxilane": "taxiways + apronLinks(stand-end 판단)",
+    "aeroway=taxilane": "parking_position과 동일 처리(stand/apronLinks 생성)",
     "aeroway=parking_position": "apronLinks (stand end) + stand placement; not a taxiway path",
     "aeroway=jet_bridge": "ignored for pbbCount in v1 (contact stands use pbbCount=1); not a taxiway path",
     "aeroway=holding_position": "holdingPoints (hpKind runway_holding if near runway centerline)",
