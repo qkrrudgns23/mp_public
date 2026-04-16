@@ -14105,7 +14105,8 @@
         ctx.fill();
       });
     }
-    const nearbyTol2 = Math.pow(PATH_JUNCTION_MERGE_RADIUS_PX * 1.85, 2);
+    /** Same threshold as `mergeNearbyPathPointsForDraw` / graph junction merge (`pathSearch.junctionMergeRadiusPx`, default 7 layout units). */
+    const nearbyTol2 = Math.pow(PATH_JUNCTION_MERGE_RADIUS_PX, 2);
     const gColorRef = gGlobal || g;
     function alreadyDrawnAtOverlay(p) {
       if (!gColorRef) return false;
@@ -20303,7 +20304,10 @@
       }
     });
   }
-  container.addEventListener('mousemove', function(ev) {
+  function layoutSnapDragActive() {
+    return !!(state.pathArcDrag || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragRemoteStandPosition || state.dragApronLinkVertex || state.dragStandRotation || state.dragLayoutMarkerHandle);
+  }
+  function onLayoutCanvasCoordinateMove(ev) {
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
     const [wx, wy] = screenToWorld(sx, sy);
@@ -20807,7 +20811,13 @@
       scheduleLayoutTooltipRaf(ev, wx, wy);
     }
     if (hoverChanged && !drewThisMove) { scheduleDraw(); drewThisMove = true; }
-  });
+  }
+  container.addEventListener('mousemove', onLayoutCanvasCoordinateMove);
+  document.addEventListener('mousemove', function(ev) {
+    if (!layoutSnapDragActive()) return;
+    if (container && ev.target && typeof container.contains === 'function' && container.contains(ev.target)) return;
+    onLayoutCanvasCoordinateMove(ev);
+  }, true);
   container.addEventListener('mouseleave', function() {
     flushLayoutTooltipRaf();
     if (flightTooltip) flightTooltip.style.display = 'none';
@@ -20816,10 +20826,6 @@
     if (cursorPixelReadoutEl) cursorPixelReadoutEl.textContent = '—';
     state.dragStart = null;
     state.isPanning = false;
-    state.dragStandRotation = null;
-    state.dragPbbBridgeVertex = null;
-    state.dragStandConnection = null;
-    state.dragRemoteStandPosition = null;
     state.hoverCell = null;
     state.previewPbb = null;
     state.previewRemote = null;
@@ -20829,7 +20835,6 @@
     state.markerRulerHoverWorld = null;
     state.markerIslandHoverWorld = null;
     state.markerAreaHoverWorld = null;
-    state.dragLayoutMarkerHandle = null;
     flushDrawNow();
   });
   container.addEventListener('dblclick', function(ev) {
@@ -20878,7 +20883,7 @@
     return best;
   }
 
-  container.addEventListener('mouseup', function(ev) {
+  function onLayoutContainerMouseUp(ev) {
     if (ev.button !== 0) return;
     const wasPanning = !!state.isPanning;
     flushDrawNow();
@@ -21204,7 +21209,8 @@
       }
     }
     state.dragStart = null;
-  });
+  }
+  document.addEventListener('mouseup', onLayoutContainerMouseUp, true);
   let scene3d = null, camera3d = null, renderer3d = null, controls3d = null, grid3DMapper = null, raycaster3d = null, mouse3d = null, groundPlane3d = null, gridGroup3d = null;
   let mouse3dDown = null;
   const view3dContainer = document.getElementById('view3d-container');
