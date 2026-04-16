@@ -977,6 +977,8 @@
     apronLinkTemp: null,
     apronLinkMidpoints: [],
     apronLinkPointerWorld: null,
+    /** Map apron link id -> true: draw taxiway×apron polyline junction overlay until path graph sync (no full graph rebuild). */
+    apronLinkJunctionOverlayDirtyIds: null,
     layoutPathDrawPointer: null,
     hoverCell: null,
     vttArrCacheRev: 0,
@@ -992,6 +994,7 @@
     pathGraphCacheSig: '',
     pathGraphCacheDirty: false,
     pathGraphInvalidatedAtMs: 0,
+    pathGraphAllowHeavySimExport: false,
     flightSchedulePage: 0,
     kpiRollingDetailExpanded: false,
     flightPathRevealFlightId: null,
@@ -1064,13 +1067,76 @@
   function bumpPathPolylineCacheRev() {
     state.pathPolylineCacheRev = (state.pathPolylineCacheRev | 0) + 1;
   }
+  const PATH_GRAPH_REBUILD_DEBOUNCE_MS = 400;
+  const PATH_GRAPH_ASYNC_REBUILD_MIN_TW = 200;
+  /** When true, never run buildPathGraph from draw/serialize except via applyPathGraphSyncNow() (Update / Pro Sim). */
+  const PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION = true;
+  let _pathGraphRebuildTimer = null;
+  let _pathGraphRebuildSigQueued = '';
+  function cancelPathGraphRebuildTimer() {
+    if (_pathGraphRebuildTimer) {
+      clearTimeout(_pathGraphRebuildTimer);
+      _pathGraphRebuildTimer = null;
+    }
+    _pathGraphRebuildSigQueued = '';
+  }
+  function queuePathGraphRebuild(graphSig) {
+    if (graphSig === _pathGraphRebuildSigQueued && _pathGraphRebuildTimer) return;
+    if (_pathGraphRebuildTimer) clearTimeout(_pathGraphRebuildTimer);
+    _pathGraphRebuildSigQueued = graphSig;
+    _pathGraphRebuildTimer = setTimeout(function() {
+      _pathGraphRebuildTimer = null;
+      _pathGraphRebuildSigQueued = '';
+      const sigNow = computeTaxiwaysGraphSig();
+      if (sigNow !== graphSig) return;
+      try {
+        const gNew = buildPathGraph();
+        state.pathGraphCache = gNew;
+        state.pathGraphCacheValid = true;
+        state.pathGraphCacheSig = sigNow;
+        state.pathGraphCacheDirty = false;
+      } catch (e) {
+        state.pathGraphCache = null;
+        state.pathGraphCacheValid = false;
+        state.pathGraphCacheSig = '';
+        state.pathGraphCacheDirty = true;
+        console.error('queuePathGraphRebuild: buildPathGraph failed', e);
+      }
+      scheduleDraw();
+    }, PATH_GRAPH_REBUILD_DEBOUNCE_MS);
+  }
+  function applyPathGraphSyncNow() {
+    cancelPathGraphRebuildTimer();
+    const graphSig = computeTaxiwaysGraphSig();
+    try {
+      const gNew = buildPathGraph();
+      state.pathGraphCache = gNew;
+      state.pathGraphCacheValid = true;
+      state.pathGraphCacheSig = graphSig;
+      state.pathGraphCacheDirty = false;
+      state.apronLinkJunctionOverlayDirtyIds = null;
+    } catch (e) {
+      state.pathGraphCache = null;
+      state.pathGraphCacheValid = false;
+      state.pathGraphCacheSig = '';
+      state.pathGraphCacheDirty = true;
+      console.error('applyPathGraphSyncNow: buildPathGraph failed', e);
+    }
+  }
+  function markApronLinkJunctionOverlayDirty(linkId) {
+    if (linkId == null || linkId === '') return;
+    if (!state.apronLinkJunctionOverlayDirtyIds) state.apronLinkJunctionOverlayDirtyIds = {};
+    state.apronLinkJunctionOverlayDirtyIds[String(linkId)] = true;
+  }
   function invalidatePathGraphCache(hardReset) {
+    cancelPathGraphRebuildTimer();
     if (hardReset) {
       state.pathGraphCache = null;
       state.pathGraphCacheValid = false;
       state.pathGraphCacheSig = '';
       state.pathGraphCacheDirty = true;
       state.pathGraphInvalidatedAtMs = 0;
+      state.apronLinkJunctionOverlayDirtyIds = null;
       return;
     }
     state.pathGraphCacheDirty = true;
@@ -1087,7 +1153,40 @@
       return String(tw.id || '') + '|' + String(tw.pathType || '') + '|' + String(tw.direction || '') + '|' + verts;
     }).join('||');
   }
+  function stripPathGraphCacheJunctionsNearTaxiwayWorld(tw) {
+    const g = state.pathGraphCache;
+    if (!g || g.__junctionStale || !tw) return;
+    const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : null;
+    if (!pts || pts.length < 2) return;
+    const mergeR = (typeof PATH_JUNCTION_MERGE_RADIUS_PX === 'number' && isFinite(PATH_JUNCTION_MERGE_RADIUS_PX)) ? PATH_JUNCTION_MERGE_RADIUS_PX : 8;
+    const tol = Math.max(mergeR * 2.2, 12);
+    const tol2 = tol * tol;
+    function distPointToSegSq(p, a, b) {
+      const pr = projectOnSegment(a, b, p);
+      const dpx = p[0] - pr.p[0], dpy = p[1] - pr.p[1];
+      return dpx * dpx + dpy * dpy;
+    }
+    function pointNearDeletedTw(p) {
+      if (!p || !Array.isArray(p) || p.length < 2) return false;
+      if (!isFinite(p[0]) || !isFinite(p[1])) return false;
+      for (let seg = 0; seg < pts.length - 1; seg++) {
+        const a = pts[seg], b = pts[seg + 1];
+        if (!a || !b || !isFinite(a[0]) || !isFinite(b[0])) continue;
+        if (distPointToSegSq(p, a, b) <= tol2) return true;
+      }
+      return false;
+    }
+    function filt(arr) {
+      if (!Array.isArray(arr)) return arr;
+      return arr.filter(function(pt) { return !pointNearDeletedTw(pt); });
+    }
+    if (Array.isArray(g.validJunctions)) g.validJunctions = filt(g.validJunctions);
+    if (Array.isArray(g.connectedJunctions)) g.connectedJunctions = filt(g.connectedJunctions);
+    if (Array.isArray(g.junctions)) g.junctions = filt(g.junctions);
+    if (Array.isArray(g.disconnectedValidJunctions)) g.disconnectedValidJunctions = filt(g.disconnectedValidJunctions);
+  }
   function markPathGraphJunctionStaleShellAfterLayoutEdit() {
+    cancelPathGraphRebuildTimer();
     state.pathGraphCache = {
       __junctionStale: true,
       validJunctions: [],
@@ -1171,8 +1270,12 @@
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
   function redrawLayoutAfterEdit() {
-    // Layout edits (move/delete/reshape) should refresh junctions immediately.
-    invalidatePathGraphCache(true);
+    // Full reset rebuilds junctions in draw(); manual-sync mode keeps last graph for display until Update / Pro Sim.
+    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+      invalidatePathGraphCache(false);
+    } else {
+      invalidatePathGraphCache(true);
+    }
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     if (typeof draw === 'function') draw();
     if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
@@ -1518,9 +1621,16 @@
     else if (type === 'holdingPoint') state.holdingPoints = (state.holdingPoints || []).filter(h => h.id !== id);
     else if (type === 'taxiway') {
       state.taxiways = state.taxiways.filter(tw => tw.id !== id);
-      markPathGraphJunctionStaleShellAfterLayoutEdit();
+      if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+        invalidatePathGraphCache(false);
+      } else {
+        markPathGraphJunctionStaleShellAfterLayoutEdit();
+      }
     }
-    else if (type === 'apronLink') state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
+    else if (type === 'apronLink') {
+      state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
+      if (state.apronLinkJunctionOverlayDirtyIds) delete state.apronLinkJunctionOverlayDirtyIds[String(id)];
+    }
     else if (type === 'flight') {
       state.flights = state.flights.filter(f => f.id !== id);
       bumpRwySepSnapshotStaleGen();
@@ -1529,6 +1639,9 @@
     else if (type === 'layoutMarker') state.layoutMarkers = (state.layoutMarkers || []).filter(function(m) { return m && m.id !== id; });
     else if (type === 'layoutEdge') {}
     if (removedTaxiway) {
+      if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.pathGraphCacheValid && state.pathGraphCache && !state.pathGraphCache.__junctionStale) {
+        stripPathGraphCacheJunctionsNearTaxiwayWorld(removedTaxiway);
+      }
       const shouldResampleRet = (removedTaxiway.pathType === 'runway' || removedTaxiway.pathType === 'runway_exit');
       if (removedTaxiway.pathType === 'runway_exit') {
         (state.flights || []).forEach(function(f) {
@@ -1870,6 +1983,14 @@
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
     else draw();
+    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.layers && state.layers.junction) {
+      try {
+        if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
+        if (typeof draw === 'function') draw();
+      } catch (ePg) {
+        console.warn('applyLayoutObject: path graph sync', ePg);
+      }
+    }
     if (typeof renderFlightList === 'function') renderFlightList();
   }
   /** E-series minutes and ARR_ROT_SEC from ``airside_sim`` schedule row only (seconds → minutes). */
@@ -2238,6 +2359,7 @@
     state.holdingPoints = snap.holdingPoints || [];
     state.taxiways = snap.taxiways;
     state.apronLinks = snap.apronLinks;
+    state.apronLinkJunctionOverlayDirtyIds = null;
     state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
     syncLayoutImageBitmap();
     state.layoutEdgeNames = snap.layoutEdgeNames || {};
@@ -3382,9 +3504,17 @@
     let networkJunctions = pathJunctionsToNetworkJunctions(state.pathGraphJunctions);
     if (!networkJunctions.length && typeof buildPathGraph === 'function') {
       try {
-        const gj = buildPathGraph(null);
-        const cj = (gj && (gj.connectedJunctions || gj.junctions)) || [];
-        networkJunctions = pathJunctionsToNetworkJunctions(cj);
+        let gj = null;
+        const sig = computeTaxiwaysGraphSig();
+        if (state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === sig) {
+          gj = state.pathGraphCache;
+        } else if (!PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+          gj = buildPathGraph(null);
+        }
+        if (gj) {
+          const cj = (gj && (gj.connectedJunctions || gj.junctions)) || [];
+          networkJunctions = pathJunctionsToNetworkJunctions(cj);
+        }
       } catch (e) { /* ignore */ }
     }
     let edgeExport = [];
@@ -5106,6 +5236,7 @@
     const midSel = midIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
     state.selectedVertex = { type: 'apronLink', id: lk.id, kind: 'mid', midIndex: midSel };
     bumpPathPolylineCacheRev();
+    markApronLinkJunctionOverlayDirty(lk.id);
   }
   function isPathArcHudVertexSelection() {
     const so = state.selectedObject;
@@ -5200,6 +5331,7 @@
       if (!Array.isArray(lk.midVertices)) lk.midVertices = [];
       lk.midVertices.splice(Math.max(0, hit.insertIndex - 1), 0, pt);
       state.selectedVertex = { type: 'apronLink', id: lk.id, kind: 'mid', midIndex: Math.max(0, hit.insertIndex - 1) };
+      markApronLinkJunctionOverlayDirty(lk.id);
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
       return true;
@@ -5374,6 +5506,7 @@
       if (!lk.midVertices.length) delete lk.midVertices;
       state.selectedVertex = null;
       updateObjectInfo();
+      markApronLinkJunctionOverlayDirty(lk.id);
       if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
       else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
       return true;
@@ -12919,6 +13052,138 @@
     return mergeNearbyPathPointsForDraw(raw, PATH_JUNCTION_MERGE_RADIUS_PX);
   }
 
+  /** World-space polyline for apron link in progress (matches drawApronTaxiwayLinks draft). */
+  function getApronLinkDrawingDraftWorldPts() {
+    if (!state.apronLinkDrawing || !state.apronLinkTemp) return null;
+    const t = state.apronLinkTemp;
+    const ptsPx = [];
+    if (t.kind === 'pbb' || t.kind === 'remote') {
+      const st = findStandById(t.standId);
+      if (st) ptsPx.push(getStandApronTaxiwayAttachWorldPx(st));
+    } else if (t.kind === 'taxiway') {
+      if (isFinite(Number(t.x)) && isFinite(Number(t.y))) ptsPx.push([Number(t.x), Number(t.y)]);
+    }
+    (state.apronLinkMidpoints || []).forEach(function(c) {
+      if (c && isFinite(Number(c.x)) && isFinite(Number(c.y))) ptsPx.push([Number(c.x), Number(c.y)]);
+      else ptsPx.push(cellToPixel(Number(c.col), Number(c.row)));
+    });
+    const hoverApron = (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2 &&
+      isFinite(state.apronLinkPointerWorld[0]) && isFinite(state.apronLinkPointerWorld[1]))
+      ? state.apronLinkPointerWorld
+      : null;
+    if (ptsPx.length < 1) return null;
+    if (ptsPx.length < 2 && !hoverApron) return null;
+    const full = hoverApron ? ptsPx.concat([hoverApron]) : ptsPx.slice();
+    return dedupePathPoints(full);
+  }
+
+  /** Junction world points where an open polyline crosses taxiway centerlines (same geometry as in-progress taxiway overlay). */
+  function collectPathJunctionWorldPointsForOpenPolyline(polyPts, pathList) {
+    if (!polyPts || polyPts.length < 2 || !pathList || !pathList.length) return [];
+    const junctions = [];
+    const segPad = CELL_SIZE * 32;
+    for (let seg = 0; seg < polyPts.length - 1; seg++) {
+      const a = polyPts[seg], b = polyPts[seg + 1];
+      const segBox = segmentWorldAabbPadded(a, b, segPad);
+      pathList.forEach(function(other) {
+        if (!other) return;
+        const otherBox = taxiwayWorldAabb(other);
+        if (otherBox && !aabbWorldIntersects2D(segBox, otherBox)) return;
+        const otherOrd = getOrderedPoints(other);
+        if (!otherOrd || otherOrd.length < 2) return;
+        for (let oseg = 0; oseg < otherOrd.length - 1; oseg++) {
+          const c = otherOrd[oseg], d = otherOrd[oseg + 1];
+          const isec = segmentSegmentIntersection(a, b, c, d);
+          if (isec) {
+            const pr = projectOnSegment(a, b, isec.p);
+            junctions.push({ tAlong: seg + pr.t, p: pr.p });
+          } else {
+            const ov = collinearSegmentOverlapOnAB(a, b, c, d);
+            if (ov) {
+              const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+              const dx = bx - ax, dy = by - ay;
+              const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
+              const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
+              const pr0 = projectOnSegment(a, b, p0);
+              junctions.push({ tAlong: seg + pr0.t, p: pr0.p });
+              if (dist2(p0, p1ov) > SPLIT_TOL_D2) {
+                const pr1 = projectOnSegment(a, b, p1ov);
+                junctions.push({ tAlong: seg + pr1.t, p: pr1.p });
+              }
+            } else {
+              [c, d].forEach(function(q) {
+                if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                  const prq = projectOnSegment(a, b, q);
+                  if (prq.t >= 0 && prq.t <= 1) junctions.push({ tAlong: seg + prq.t, p: prq.p });
+                }
+              });
+            }
+          }
+        }
+        otherOrd.forEach(function(q) {
+          if (!pointOnSegmentStrict(a, b, q)) return;
+          const prq = projectOnSegment(a, b, q);
+          junctions.push({ tAlong: seg + prq.t, p: prq.p });
+        });
+      });
+      {
+        const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+        const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
+        (state.holdingPoints || []).forEach(function(hp) {
+          if (!hp) return;
+          const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
+          if (k !== 'intermediate') return;
+          if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
+          const prh = projectOnSegment(a, b, [hp.x, hp.y]);
+          if (prh.t >= 0 && prh.t <= 1 && dist2(prh.p, [hp.x, hp.y]) <= hpTolD2) {
+            junctions.push({ tAlong: seg + prh.t, p: prh.p });
+          }
+        });
+      }
+      (state.tempStands || []).forEach(function(st) {
+        if (!st) return;
+        const corners = getRemoteStandCorners(st);
+        if (!corners || corners.length < 4) return;
+        for (let ei = 0; ei < 4; ei++) {
+          const c = corners[ei], d = corners[(ei + 1) % 4];
+          const isec2 = segmentSegmentIntersection(a, b, c, d);
+          if (isec2) {
+            const pr2 = projectOnSegment(a, b, isec2.p);
+            if (pr2.t >= 0 && pr2.t <= 1) junctions.push({ tAlong: seg + pr2.t, p: pr2.p });
+          } else {
+            const ov2 = collinearSegmentOverlapOnAB(a, b, c, d);
+            if (ov2) {
+              const ax2 = a[0], ay2 = a[1], bx2 = b[0], by2 = b[1];
+              const dx2 = bx2 - ax2, dy2 = by2 - ay2;
+              const p0b = [ax2 + ov2.t0 * dx2, ay2 + ov2.t0 * dy2];
+              const p1b = [ax2 + ov2.t1 * dx2, ay2 + ov2.t1 * dy2];
+              const pr0b = projectOnSegment(a, b, p0b);
+              junctions.push({ tAlong: seg + pr0b.t, p: pr0b.p });
+              if (dist2(p0b, p1b) > SPLIT_TOL_D2) {
+                const pr1b = projectOnSegment(a, b, p1b);
+                junctions.push({ tAlong: seg + pr1b.t, p: pr1b.p });
+              }
+            } else {
+              [c, d].forEach(function(q) {
+                if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                  const prq2 = projectOnSegment(a, b, q);
+                  if (prq2.t >= 0 && prq2.t <= 1) junctions.push({ tAlong: seg + prq2.t, p: prq2.p });
+                }
+              });
+            }
+          }
+        }
+      });
+    }
+    const raw = [];
+    for (let ji = 0; ji < junctions.length; ji++) {
+      const j = junctions[ji];
+      const p = j && j.p;
+      if (p && isFinite(p[0]) && isFinite(p[1])) raw.push(p);
+    }
+    return mergeNearbyPathPointsForDraw(raw, PATH_JUNCTION_MERGE_RADIUS_PX);
+  }
+
   function buildPathGraph(selectedArrRetId, runwayDirectionForExit, pathGraphOpts) {
     const opts = pathGraphOpts && typeof pathGraphOpts === 'object' ? pathGraphOpts : {};
     const pureGroundExcludeRunway = !!opts.pureGroundExcludeRunway;
@@ -13003,21 +13268,42 @@
     }
 
     const pathList = state.taxiways || [];
+    function segmentBBoxInflated2d(a, b, pad) {
+      const p = pad || 0;
+      const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+      return {
+        minX: Math.min(ax, bx) - p,
+        maxX: Math.max(ax, bx) + p,
+        minY: Math.min(ay, by) - p,
+        maxY: Math.max(ay, by) + p
+      };
+    }
+    function bboxesOverlap2d(A, B) {
+      if (!A || !B) return true;
+      return !(A.maxX < B.minX || B.maxX < A.minX || A.maxY < B.minY || B.maxY < A.minY);
+    }
+    const orderedPtsCache = new Array(pathList.length);
+    for (let _ci = 0; _ci < pathList.length; _ci++) {
+      orderedPtsCache[_ci] = getOrderedPoints(pathList[_ci]);
+    }
     const apronNodeStand = [];
     const minD2 = 1e-6;
-    pathList.forEach(obj => {
+    pathList.forEach(function(obj, objIdx) {
       if (omitOtherRunwayExits && selectedArrRetId != null && obj && obj.pathType === 'runway_exit' && obj.id !== selectedArrRetId) return;
-      const pts = getOrderedPoints(obj);
+      const pts = orderedPtsCache[objIdx];
       if (!pts || pts.length < 2) return;
       const junctions = [];
       for (let seg = 0; seg < pts.length - 1; seg++) {
         const a = pts[seg], b = pts[seg+1];
-        pathList.forEach(other => {
-          if (other.id === obj.id) return;
-          const otherOrd = getOrderedPoints(other);
-          if (!otherOrd || otherOrd.length < 2) return;
+        const segAbBbox = segmentBBoxInflated2d(a, b, 1e-6);
+        for (let oi = 0; oi < pathList.length; oi++) {
+          const other = pathList[oi];
+          if (other.id === obj.id) continue;
+          const otherOrd = orderedPtsCache[oi];
+          if (!otherOrd || otherOrd.length < 2) continue;
           for (let oseg = 0; oseg < otherOrd.length - 1; oseg++) {
             const c = otherOrd[oseg], d = otherOrd[oseg+1];
+            if (!bboxesOverlap2d(segAbBbox, segmentBBoxInflated2d(c, d, 1e-6))) continue;
             const isec = segmentSegmentIntersection(a, b, c, d);
             if (isec) {
               const { t } = projectOnSegment(a, b, isec.p);
@@ -13050,7 +13336,7 @@
             const { t, p: proj } = projectOnSegment(a, b, q);
             junctions.push({ tAlong: seg + t, p: proj });
           });
-        });
+        }
         const isRunway = obj.pathType === 'runway';
         if (!isRunway) {
           (state.apronLinks || []).forEach(lk => {
@@ -13325,6 +13611,7 @@
 
   function buildSimPathGraphExport() {
     if (!state.taxiways || !state.taxiways.length) return null;
+    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && !state.pathGraphAllowHeavySimExport) return null;
     try {
       return {
         version: 1,
@@ -13352,12 +13639,19 @@
   function rebuildDerivedGraphEdges() {
     state.derivedGraphEdges = [];
     if (!state.taxiways || !state.taxiways.length) return;
-    let g;
-    try {
-      g = buildPathGraph(null);
-    } catch (err) {
-      console.error('rebuildDerivedGraphEdges: buildPathGraph failed', err);
+    const graphSig = computeTaxiwaysGraphSig();
+    let g = null;
+    if (state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === graphSig) {
+      g = state.pathGraphCache;
+    } else if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
       return;
+    } else {
+      try {
+        g = buildPathGraph(null);
+      } catch (err) {
+        console.error('rebuildDerivedGraphEdges: buildPathGraph failed', err);
+        return;
+      }
     }
     if (!g || !g.edges || !g.nodes) return;
     const seen = new Set();
@@ -13736,18 +14030,25 @@
     if (cacheHit) {
       g = state.pathGraphCache;
     } else if (shouldRebuildNow) {
-      try {
-        g = buildPathGraph();
-        state.pathGraphCache = g;
-        state.pathGraphCacheValid = true;
-        state.pathGraphCacheSig = graphSig;
-        state.pathGraphCacheDirty = false;
-      } catch (e) {
-        state.pathGraphCache = null;
-        state.pathGraphCacheValid = false;
-        state.pathGraphCacheSig = '';
-        state.pathGraphCacheDirty = true;
-        console.error('drawPathJunctions: buildPathGraph failed', e);
+      if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+        g = hasCache ? state.pathGraphCache : null;
+      } else if (twN >= PATH_GRAPH_ASYNC_REBUILD_MIN_TW) {
+        queuePathGraphRebuild(graphSig);
+        g = hasCache ? state.pathGraphCache : null;
+      } else {
+        try {
+          g = buildPathGraph();
+          state.pathGraphCache = g;
+          state.pathGraphCacheValid = true;
+          state.pathGraphCacheSig = graphSig;
+          state.pathGraphCacheDirty = false;
+        } catch (e) {
+          state.pathGraphCache = null;
+          state.pathGraphCacheValid = false;
+          state.pathGraphCacheSig = '';
+          state.pathGraphCacheDirty = true;
+          console.error('drawPathJunctions: buildPathGraph failed', e);
+        }
       }
     } else if (hasCache) {
       g = state.pathGraphCache;
@@ -13755,7 +14056,7 @@
     const staleSigMismatch = !!(hasCache && state.pathGraphCacheSig && state.pathGraphCacheSig !== graphSig);
     const sigDiff = staleSigMismatch ? graphSigTaxiwayDiff(state.pathGraphCacheSig, graphSig) : { removed: [], changed: [] };
     let gGlobal = g;
-    if (staleSigMismatch && sigDiff.removed.length) gGlobal = null;
+    if (staleSigMismatch && sigDiff.removed.length && !PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) gGlobal = null;
     const overlayTwIds = [];
     if (staleSigMismatch && !sigDiff.removed.length && sigDiff.changed.length) {
       const capOv = 28;
@@ -13766,6 +14067,10 @@
     const drawId = state.taxiwayDrawingId;
     const twDraw = drawId ? (state.taxiways || []).find(function(t) { return t && String(t.id) === String(drawId); }) : null;
     const needDrawingTwOverlay = !!(twDraw && twDraw.vertices && twDraw.vertices.length >= 2);
+    const apronDraftPts = getApronLinkDrawingDraftWorldPts();
+    const needApronLinkDrawOverlay = !!(apronDraftPts && apronDraftPts.length >= 2);
+    const dirtyApronKeys = state.apronLinkJunctionOverlayDirtyIds ? Object.keys(state.apronLinkJunctionOverlayDirtyIds) : [];
+    const needApronLinkSavedOverlay = dirtyApronKeys.length > 0;
     let cacheHasDots = false;
     let redJunctions = [];
     let connectedJunctions = [];
@@ -13775,7 +14080,7 @@
       redJunctions = gGlobal.disconnectedValidJunctions != null ? gGlobal.disconnectedValidJunctions : validJunctions;
       cacheHasDots = (connectedJunctions && connectedJunctions.length > 0) || (redJunctions && redJunctions.length > 0);
     }
-    if (!cacheHasDots && !needDrawingTwOverlay && !overlayTwIds.length) return;
+    if (!cacheHasDots && !needDrawingTwOverlay && !overlayTwIds.length && !needApronLinkDrawOverlay && !needApronLinkSavedOverlay) return;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -13829,12 +14134,40 @@
         ctx.fill();
       }
     }
+    function flushOverlayDotsForApronLinkDraft(draftPoly) {
+      if (!draftPoly || draftPoly.length < 2) return;
+      let localPts = collectPathJunctionWorldPointsForOpenPolyline(draftPoly, state.taxiways || []);
+      localPts = filterPtsWorld(localPts);
+      localPts = subsamplePts(localPts);
+      for (let li = 0; li < localPts.length; li++) {
+        const lp = localPts[li];
+        if (alreadyDrawnAtOverlay(lp)) continue;
+        ctx.fillStyle = overlayJunctionFillForWorldPoint(lp, gColorRef);
+        ctx.beginPath();
+        ctx.arc(lp[0], lp[1], rGreen, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
     if (needDrawingTwOverlay) flushOverlayDotsForTaxiway(twDraw);
     for (let oi = 0; oi < overlayTwIds.length; oi++) {
       const tid = overlayTwIds[oi];
       if (drawId && String(drawId) === String(tid)) continue;
       const twO = (state.taxiways || []).find(function(t) { return t && String(t.id) === String(tid); });
       flushOverlayDotsForTaxiway(twO);
+    }
+    if (needApronLinkDrawOverlay) flushOverlayDotsForApronLinkDraft(apronDraftPts);
+    if (needApronLinkSavedOverlay && state.apronLinkJunctionOverlayDirtyIds) {
+      for (let di = 0; di < dirtyApronKeys.length; di++) {
+        const lid = dirtyApronKeys[di];
+        const lk = (state.apronLinks || []).find(function(l) { return l && String(l.id) === String(lid); });
+        if (!lk) {
+          delete state.apronLinkJunctionOverlayDirtyIds[lid];
+          continue;
+        }
+        const polySaved = getApronLinkPolylineWorldPts(lk);
+        if (polySaved.length >= 2) flushOverlayDotsForApronLinkDraft(polySaved);
+      }
+      if (!Object.keys(state.apronLinkJunctionOverlayDirtyIds).length) state.apronLinkJunctionOverlayDirtyIds = null;
     }
     ctx.restore();
   }
@@ -14864,10 +15197,15 @@
         const layoutName = (state.currentLayoutName && String(state.currentLayoutName).trim()) || INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout';
         let layoutPayload;
         try {
+          if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
+          state.pathGraphAllowHeavySimExport = true;
           layoutPayload = serializeCurrentLayout();
         } catch (e1) {
+          state.pathGraphAllowHeavySimExport = false;
           failProSim(e1 && e1.message);
           return;
+        } finally {
+          state.pathGraphAllowHeavySimExport = false;
         }
         let layoutForSim = layoutPayload;
         try {
@@ -15708,7 +16046,14 @@
           alert('this TaxiwayIs TerminalIt overlaps with . Please draw a different path.');
           pushUndo();
           state.taxiways = state.taxiways.filter(t => t.id !== tw.id);
-          markPathGraphJunctionStaleShellAfterLayoutEdit();
+          if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+            invalidatePathGraphCache(false);
+            if (state.pathGraphCacheValid && state.pathGraphCache && !state.pathGraphCache.__junctionStale) {
+              stripPathGraphCacheJunctionsNearTaxiwayWorld(tw);
+            }
+          } else {
+            markPathGraphJunctionStaleShellAfterLayoutEdit();
+          }
         }
         state.taxiwayDrawingId = null;
         state.layoutPathDrawPointer = null;
@@ -20224,6 +20569,7 @@
             col >= 0 && row >= 0 && col <= GRID_COLS && row <= GRID_ROWS) {
           lk.midVertices[mi].col = snappedPt.col;
           lk.midVertices[mi].row = snappedPt.row;
+          markApronLinkJunctionOverlayDirty(lk.id);
           scheduleDraw(); drewThisMove = true;
           update3DSceneWhenVisible();
         }
@@ -20232,6 +20578,7 @@
         if (snap) {
           lk.tx = snap[0];
           lk.ty = snap[1];
+          markApronLinkJunctionOverlayDirty(lk.id);
           scheduleDraw(); drewThisMove = true;
           update3DSceneWhenVisible();
         }
@@ -20740,6 +21087,7 @@
                   };
                   if (midVertices && midVertices.length) linkRec.midVertices = midVertices;
                   state.apronLinks.push(linkRec);
+                  markApronLinkJunctionOverlayDirty(newId);
                   syncPanelFromState();
                   if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
                   else {
@@ -21011,6 +21359,7 @@
   if (btnDesignerPageUpdate) {
     btnDesignerPageUpdate.addEventListener('click', function() {
       if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
+      if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
       if (typeof renderObjectList === 'function') renderObjectList();
       if (typeof updateObjectInfo === 'function') updateObjectInfo();
       if (typeof renderFlightList === 'function') renderFlightList(false, true);
