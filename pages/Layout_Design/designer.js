@@ -5617,7 +5617,7 @@
       const t = state.terminals.find(x => x.id === state.currentTerminalId);
       if (t) return t;
     }
-    return state.terminals[0] || null;
+    return null;
   }
 
   function polygonAreaM2(vertices) {
@@ -5653,8 +5653,8 @@
     if (gridImageMetaEl) gridImageMetaEl.textContent = overlay ? ('Loaded: ' + (overlay.name || 'Layout image')) : 'No file selected.';
     if (gridImageClearBtn) gridImageClearBtn.disabled = !overlay;
     if (!overlay && gridImageFileEl) gridImageFileEl.value = '';
-    if (state.terminals.length && (!state.currentTerminalId || !state.terminals.some(t => t.id === state.currentTerminalId)))
-      state.currentTerminalId = state.terminals[0].id;
+    if (state.currentTerminalId && !state.terminals.some(t => t.id === state.currentTerminalId))
+      state.currentTerminalId = null;
     const term = getCurrentTerminal();
     if (term) {
       const buildingTypeSel = document.getElementById('buildingType');
@@ -16019,6 +16019,8 @@
 
   document.getElementById('btnTerminalDraw').addEventListener('click', function() {
     state.selectedObject = null;
+    state.selectedVertex = null;
+    state.currentTerminalId = null;
     if (state.terminalDrawingId) {
       const t = state.terminals.find(x => x.id === state.terminalDrawingId);
       if (t && !t.closed && t.vertices.length >= 3) {
@@ -16035,7 +16037,7 @@
       return;
     }
     const selectedBuildingType = normalizeBuildingType(document.getElementById('buildingType') ? document.getElementById('buildingType').value : BUILDING_TYPE_DEFAULT);
-    const nameBase = document.getElementById('terminalName').value.trim() || getDefaultBuildingNameForType(selectedBuildingType);
+    const nameBase = getDefaultBuildingNameForType(selectedBuildingType);
     const floorsEl = document.getElementById('terminalFloors');
     const f2fEl = document.getElementById('terminalFloorToFloor');
     let floors = floorsEl ? parseInt(floorsEl.value, 10) : 1;
