@@ -20256,11 +20256,14 @@
   }
   window.addEventListener('pointerup', function(ev) {
     if (ev.button !== 0) return;
+    // Mouse selection is finalized in document mouseup; clearing here drops click-pick state.
+    if (ev && String(ev.pointerType || '').toLowerCase() === 'mouse') return;
     clearCanvasPanGesture(ev);
   }, true);
   window.addEventListener('mouseup', function(ev) {
     if (ev.button !== 0) return;
-    clearCanvasPanGesture();
+    // Let document mouseup selection flow run first, then cleanup stale pan state.
+    setTimeout(function() { clearCanvasPanGesture(); }, 0);
   }, true);
   function flushLayoutTooltipRaf() {
     if (_layoutTooltipRafId) {
