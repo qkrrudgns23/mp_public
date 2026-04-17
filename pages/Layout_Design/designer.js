@@ -2722,6 +2722,16 @@
     const cos = Math.cos(angleRad), sin = Math.sin(angleRad);
     return [cx + lx * cos - ly * sin, cy + lx * sin + ly * cos];
   }
+  function standStopbarCenterShiftLocalX(depM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || depM <= 0) return 0;
+    const nc = Number(r.nose_clear);
+    if (!isFinite(nc) || nc <= 0) return 0;
+    const halfD = depM / 2;
+    const xStopOld = -halfD + nc;
+    if (!(xStopOld > -halfD && xStopOld < halfD)) return 0;
+    return -xStopOld;
+  }
   /** Nose (−X) width = nose_width; stop bar at nose_clear from nose edge; 45° flare to full stand width (±halfW), then rectangle to tail (+halfD). */
   function buildStandSafetyPolygonPath(ctx, depM, widM, category) {
     const r = standConfigRowForIcaoCat(category);
@@ -2739,19 +2749,20 @@
     if (latRun <= eps) return false;
     const xBendEnd = xStop + latRun;
     if (xBendEnd > halfD + eps) return false;
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
     ctx.beginPath();
-    ctx.moveTo(xNose, -noseHalf);
-    ctx.lineTo(xNose, noseHalf);
-    ctx.lineTo(xStop, noseHalf);
-    ctx.lineTo(Math.min(xBendEnd, halfD), halfW);
+    ctx.moveTo(xNose + shiftX, -noseHalf);
+    ctx.lineTo(xNose + shiftX, noseHalf);
+    ctx.lineTo(xStop + shiftX, noseHalf);
+    ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
     if (xBendEnd < halfD - eps) {
-      ctx.lineTo(halfD, halfW);
-      ctx.lineTo(halfD, -halfW);
-      ctx.lineTo(xBendEnd, -halfW);
+      ctx.lineTo(halfD + shiftX, halfW);
+      ctx.lineTo(halfD + shiftX, -halfW);
+      ctx.lineTo(xBendEnd + shiftX, -halfW);
     } else {
-      ctx.lineTo(halfD, -halfW);
+      ctx.lineTo(halfD + shiftX, -halfW);
     }
-    ctx.lineTo(xStop, -noseHalf);
+    ctx.lineTo(xStop + shiftX, -noseHalf);
     ctx.closePath();
     return true;
   }
@@ -2771,16 +2782,19 @@
     ctx.lineCap = 'butt';
     ctx.lineJoin = 'miter';
     const nc = Number(r.nose_clear), pb = Number(r.pushback);
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
     if (isFinite(nc) && isFinite(pb)) {
-      const xStop = -halfD + nc;
-      const xPush = halfD - pb;
+      const xStop = 0;
+      const xPush = (halfD - pb) + shiftX;
+      const xMin = (-halfD) + shiftX;
+      const xMax = (halfD) + shiftX;
       if (xStop > -halfD + eps && xStop < halfD - eps) {
         ctx.beginPath();
         ctx.moveTo(xStop, -halfW);
         ctx.lineTo(xStop, halfW);
         ctx.stroke();
       }
-      if (xPush < halfD - eps && xPush > -halfD + eps) {
+      if (xPush < xMax - eps && xPush > xMin + eps) {
         ctx.beginPath();
         ctx.moveTo(xPush, -halfW);
         ctx.lineTo(xPush, halfW);
@@ -2792,12 +2806,12 @@
       const yLim = halfW - g;
       if (yLim > eps && yLim < halfW - eps) {
         ctx.beginPath();
-        ctx.moveTo(-halfD, yLim);
-        ctx.lineTo(halfD, yLim);
+        ctx.moveTo(-halfD + shiftX, yLim);
+        ctx.lineTo(halfD + shiftX, yLim);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(-halfD, -yLim);
-        ctx.lineTo(halfD, -yLim);
+        ctx.moveTo(-halfD + shiftX, -yLim);
+        ctx.lineTo(halfD + shiftX, -yLim);
         ctx.stroke();
       }
     }
@@ -2808,8 +2822,9 @@
       ctx.fill();
       return;
     }
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
     ctx.beginPath();
-    ctx.rect(-depM / 2, -widM / 2, depM, widM);
+    ctx.rect((-depM / 2) + shiftX, -widM / 2, depM, widM);
     ctx.fill();
   }
   function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
@@ -2852,12 +2867,8 @@
     return [cxy[0], cxy[1]];
   }
   function getStandAircraftMarkerWorldPxForRemoteLike(st) {
-    const cat = (st && st.category) || 'C';
-    const dep = getStandDepthMeters(cat);
-    const wid = getStandWidthMeters(cat);
-    const lx = standSafetyAircraftCenterLocalXM(dep, wid, cat);
-    const cxy = getRemoteStandCenterPx(st);
-    return standFootprintLocalToWorld(cxy[0], cxy[1], getRemoteStandAngleRad(st), lx, 0);
+    const cxy = getStandConnectionPx(st);
+    return [cxy[0], cxy[1]];
   }
   /** Apron–taxiway UI attach point: PBB = aircraft marker; remote/temp = same local xBendEnd offset as Contact (getStandAircraftMarkerWorldPxFor*). */
   function getStandApronTaxiwayAttachWorldPx(stand) {
@@ -2879,6 +2890,9 @@
   }
   function getRemoteStandCenterPx(st) {
     if (!st) return [0, 0];
+    if (st.apronSiteX != null && st.apronSiteY != null) {
+      return [Number(st.apronSiteX), Number(st.apronSiteY)];
+    }
     if (typeof st.x === 'number' && isFinite(st.x) && typeof st.y === 'number' && isFinite(st.y)) {
       return [Number(st.x), Number(st.y)];
     }
@@ -2899,15 +2913,17 @@
   function getRemoteStandCorners(stLike) {
     const [cx, cy] = getRemoteStandCenterPx(stLike);
     const cat = (stLike && stLike.category) || 'C';
-    const halfD = getStandDepthMeters(cat) / 2;
+    const dep = getStandDepthMeters(cat);
+    const halfD = dep / 2;
     const halfW = getStandWidthMeters(cat) / 2;
     const angle = getRemoteStandAngleRad(stLike);
+    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
     const cos = Math.cos(angle), sin = Math.sin(angle);
     return [
-      [cx + (-halfD)*cos - (-halfW)*sin, cy + (-halfD)*sin + (-halfW)*cos],
-      [cx + ( halfD)*cos - (-halfW)*sin, cy + ( halfD)*sin + (-halfW)*cos],
-      [cx + ( halfD)*cos - ( halfW)*sin, cy + ( halfD)*sin + ( halfW)*cos],
-      [cx + (-halfD)*cos - ( halfW)*sin, cy + (-halfD)*sin + ( halfW)*cos]
+      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
+      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
     ];
   }
   function rectsOverlap(a, b) {
@@ -2939,15 +2955,17 @@
     const center = getStandConnectionPx(pbb);
     const cx = center[0], cy = center[1];
     const cat = pbb.category || 'C';
-    const halfD = getStandDepthMeters(cat) / 2;
+    const dep = getStandDepthMeters(cat);
+    const halfD = dep / 2;
     const halfW = getStandWidthMeters(cat) / 2;
     const angle = getPBBStandAngle(pbb);
+    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
     const cos = Math.cos(angle), sin = Math.sin(angle);
     return [
-      [cx + (-halfD)*cos - (-halfW)*sin, cy + (-halfD)*sin + (-halfW)*cos],
-      [cx + ( halfD)*cos - (-halfW)*sin, cy + ( halfD)*sin + (-halfW)*cos],
-      [cx + ( halfD)*cos - ( halfW)*sin, cy + ( halfD)*sin + ( halfW)*cos],
-      [cx + (-halfD)*cos - ( halfW)*sin, cy + (-halfD)*sin + ( halfW)*cos]
+      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
+      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
     ];
   }
   function pointInPolygonXY(p, verts) {
@@ -20565,7 +20583,8 @@
       const pbb = state.pbbStands.find(function(item) { return item.id === state.dragStandConnection.pbbId; });
       if (pbb) {
         const nx = snappedPx[0], ny = snappedPx[1];
-        if (Math.abs(pbb.apronSiteX - nx) < 1e-5 && Math.abs(pbb.apronSiteY - ny) < 1e-5) return;
+        const prev = getStandConnectionPx(pbb);
+        if (Math.abs(prev[0] - nx) < 1e-5 && Math.abs(prev[1] - ny) < 1e-5) return;
         pbb.apronSiteX = nx;
         pbb.apronSiteY = ny;
         scheduleDraw(); drewThisMove = true;
