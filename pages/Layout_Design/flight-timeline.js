@@ -1,3 +1,215 @@
+          'timeMin',
+          'sibtDate',
+          'dwellMin',
+          'minDwellMin',
+          'noWayArr',
+          'noWayDep',
+          'eOverlapPushed',
+          'arrRetFailed',
+          'serviceDate',
+          'sldtMin_orig',
+          'sibtMin_orig',
+          'sobtMin_orig',
+          'stotMin_orig',
+          'sldtMin_d',
+          'sibtMin_d',
+          'sobtMin_d',
+          'stotMin_d',
+          'arrRunwayDirUsed',
+          'depRunwayDirUsed',
+          'arrTdDistM',
+          'arrVTdMs',
+          'arrDecelMs2',
+          'arrDep',
+        ];
+        simFlightKeys.forEach(function(k) {
+          if (Object.prototype.hasOwnProperty.call(f, k) && f[k] !== undefined) {
+            copy[k] = f[k];
+          }
+        });
+        if (Array.isArray(f.edge_list) && f.edge_list.length) {
+          copy.edge_list = f.edge_list.slice();
+        }
+        const t = f.token || {};
+        const arrRwyId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
+        const apronId = (f.standId != null ? f.standId : (t.apronId != null ? t.apronId : null));
+        const termId = f.terminalId || t.terminalId || null;
+        const depRwyId = f.depRunwayId || t.depRunwayId || null;
+        const exitTwId = (f.sampledArrRet != null && f.sampledArrRet !== '') ? f.sampledArrRet : (t.ExitTaxiwayId != null ? t.ExitTaxiwayId : null);
+        copy.token = {
+          arrRunwayId: arrRwyId,
+          ExitTaxiwayId: exitTwId || null,
+          apronId: apronId || null,
+          terminalId: termId || null,
+          depRunwayId: depRwyId || null,
+        };
+        function _twNameById(id) {
+          if (id == null || id === '') return null;
+          const tw = (state.taxiways || []).find(function(x) { return x && x.id === id; });
+          if (!tw) return String(id);
+          const n = (tw.name && String(tw.name).trim()) || '';
+          return n || String(tw.id || id);
+        }
+        function _standNameById(id) {
+          if (id == null || id === '') return null;
+          if (typeof findStandById === 'function') {
+            const st = findStandById(id);
+            if (!st) return String(id);
+            const n = (st.name && String(st.name).trim()) || '';
+            return n || String(st.id || id);
+          }
+          return String(id);
+        }
+        function _labelOrId(id, getLab) {
+          if (id == null || id === '') return null;
+          if (typeof getLab === 'function') {
+            const lab = getLab(id);
+            if (lab && lab !== '—') return lab;
+          }
+          return String(id);
+        }
+        copy.token_name = {
+          arrRunwayId: _labelOrId(arrRwyId, typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById : null),
+          ExitTaxiwayId: exitTwId ? _twNameById(exitTwId) : null,
+          apronId: apronId ? _standNameById(apronId) : null,
+          terminalId: _labelOrId(termId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
+          depRunwayId: _labelOrId(depRwyId, typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById : null),
+        };
+        const schedExport = flightScheduleMinutesForRow(f);
+        copy.sibtDateTime = formatFlightScheduleDateTime(f, schedExport.sibt);
+        copy.sobtDateTime = formatFlightScheduleDateTime(f, schedExport.sobt);
+        copy.sldtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sldt_d);
+        copy.sibtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sibt_d);
+        copy.sobtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sobt_d);
+        copy.stotDateTime_d = formatFlightScheduleDateTime(f, schedExport.stot_d);
+        return copy;
+      }),
+      layoutMarkers: (state.layoutMarkers || []).map(function(m) {
+        if (!m || !m.kind) return null;
+        if (m.kind === 'text') {
+          return { kind: 'text', id: m.id, x: Number(m.x), y: Number(m.y), text: String(m.text || '') };
+        }
+        if (m.kind === 'ruler') {
+          return { kind: 'ruler', id: m.id, x1: Number(m.x1), y1: Number(m.y1), x2: Number(m.x2), y2: Number(m.y2) };
+        }
+        if (m.kind === 'island') {
+          const pts = Array.isArray(m.points) ? m.points.map(function(p) {
+            return { x: Number(p && p.x), y: Number(p && p.y) };
+          }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : [];
+          if (pts.length < 3) return null;
+          return {
+            kind: 'island',
+            id: m.id,
+            points: pts,
+            outerWidthM: islandOuterWidthMResolved(m),
+            innerWidthM: islandInnerWidthMResolved(m),
+            pavement: islandMarkerPavementResolved(m)
+          };
+        }
+        if (m.kind === 'area') {
+          const pts = Array.isArray(m.points) ? m.points.map(function(p) {
+            return { x: Number(p && p.x), y: Number(p && p.y) };
+          }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : [];
+          if (pts.length < 3) return null;
+          return { kind: 'area', id: m.id, points: pts };
+        }
+        if (m.kind === 'flight') {
+          const si = (typeof m.segIndex === 'number' && isFinite(m.segIndex)) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
+          return {
+            kind: 'flight',
+            id: m.id,
+            taxiwayId: m.taxiwayId,
+            segIndex: si,
+            t: Number(m.t),
+            aircraftType: String(m.aircraftType || '').trim(),
+            blazerEnabled: !!m.blazerEnabled,
+            headingReversed: !!m.headingReversed,
+            blazerColor: MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) >= 0 ? String(m.blazerColor).trim() : MARKER_BLAZER_COLOR_OPTIONS[0],
+            blazerLeftTrail: Array.isArray(m.blazerLeftTrail) ? m.blazerLeftTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : [],
+            blazerRightTrail: Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : []
+          };
+        }
+        return null;
+      }).filter(Boolean),
+      simPathGraph: buildSimPathGraphExport()
+    };
+  }
+  function buildLayout3DViewerPayload() {
+    let tSec = Number(state.simTimeSec);
+    if (!isFinite(tSec)) tSec = 0;
+    const layout = serializeCurrentLayout();
+    const flightDrawPoses = [];
+    (state.flights || []).forEach(function(f) {
+      if (!f) return;
+      let pose = null;
+      if (typeof getFlightPoseAtTimeForDraw === 'function') {
+        pose = getFlightPoseAtTimeForDraw(f, tSec);
+      }
+      flightDrawPoses.push({
+        id: f.id,
+        reg: f.reg,
+        aircraftType: f.aircraftType,
+        code: f.code,
+        arrDep: f.arrDep,
+        pose: pose && isFinite(pose.x) && isFinite(pose.y) ? { x: pose.x, y: pose.y, dx: pose.dx, dy: pose.dy } : null
+      });
+    });
+    const enrichedFootprints = {
+      remote: (state.remoteStands || []).map(function(st) {
+        return {
+          id: st && st.id,
+          name: st && st.name,
+          corners: typeof getRemoteStandCorners === 'function' ? getRemoteStandCorners(st) : null
+        };
+      }).filter(function(r) { return r.corners && r.corners.length >= 3; }),
+      pbb: (state.pbbStands || []).map(function(pbb) {
+        return {
+          id: pbb && pbb.id,
+          name: pbb && pbb.name,
+          corners: typeof getPBBStandCorners === 'function' ? getPBBStandCorners(pbb) : null
+        };
+      }).filter(function(r) { return r.corners && r.corners.length >= 3; })
+    };
+    const enrichedApronLinkPolylines = (state.apronLinks || []).map(function(lk) {
+      if (!lk || typeof getApronLinkPolylineWorldPts !== 'function') return null;
+      const pts = getApronLinkPolylineWorldPts(lk);
+      if (!pts || pts.length < 2) return null;
+      return {
+        id: lk.id,
+        points: pts.map(function(p) { return { x: p[0], y: p[1] }; })
+      };
+    }).filter(Boolean);
+    const payload = {
+      version: 1,
+      kind: 'grid3dViewer',
+      layoutApiUrl: (typeof LAYOUT_API_URL === 'string' && LAYOUT_API_URL) ? LAYOUT_API_URL : '',
+      grid3dAssetApiUrl: (typeof GRID3D_ASSET_API_URL === 'string' && GRID3D_ASSET_API_URL) ? GRID3D_ASSET_API_URL : '',
+      exportedAt: new Date().toISOString(),
+      simTimeSec: tSec,
+      viewerConfig: {
+        gridMajorInterval: GRID_MAJOR_INTERVAL,
+        gridViewBg: GRID_VIEW_BG
+      },
+      layout: layout,
+      flightDrawPoses: flightDrawPoses,
+      enrichedFootprints: enrichedFootprints,
+      enrichedApronLinkPolylines: enrichedApronLinkPolylines
+    };
+    try {
+      let tiled = null;
+      if (typeof exportLayoutGroundTilesFor3D === 'function') tiled = exportLayoutGroundTilesFor3D();
+      if (tiled && tiled.tiles && tiled.tiles.length === 4) {
+        payload.layoutGroundTiles = tiled;
+      } else if (typeof exportLayoutGroundTextureFor3D === 'function') {
+        const gt = exportLayoutGroundTextureFor3D();
+        if (gt && gt.dataUrl) payload.layoutGroundTexture = gt;
+      }
+    } catch (eTex) {
+      console.warn('exportLayoutGroundTilesFor3D / exportLayoutGroundTextureFor3D failed', eTex);
+    }
+    return payload;
+  }
+  function openGrid3DViewerWindow() {
     const tpl = typeof window.__GRID3D_VIEWER_HTML_TEMPLATE__ === 'string' ? window.__GRID3D_VIEWER_HTML_TEMPLATE__ : '';
     if (!tpl || tpl.length < 80) {
       console.error('Grid 3D viewer template missing');
@@ -323,7 +535,9 @@
   function drawPbbBoardingRectangle(ctx, pbb, sel) {
     const poly = getPbbBoardingRectangleCornersWorldPx(pbb);
     if (!poly || poly.length < 4) return;
-    const sl = !!state.layers.standLines, sf = !!state.layers.standFill;
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
+    const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
     if (!sl && !sf) return;
     ctx.save();
     ctx.beginPath();
@@ -479,6 +693,7 @@
   }
 
   function layerIslandAreaFillEffective() {
+    if (state.isPanning) return false;
     if (state.markerDrawing && getMarkerSubKindFromPanel() === 'island') return true;
     if (state.markerDrawing && getMarkerSubKindFromPanel() === 'area') return true;
     return !!state.layers.islandAreaFill;
@@ -1113,218 +1328,3 @@
     if (hpHit) return hpHit;
     const apronLkHit = hitTestApronLink(wx, wy);
     if (apronLkHit) return apronLkHit;
-    if (!state.taxiwayDrawingId) {
-      const pathCenterlineHitRadiusWorld = 10 / Math.max(state.scale, 0.08);
-      const pathCenterlineHitD2 = pathCenterlineHitRadiusWorld * pathCenterlineHitRadiusWorld;
-      for (let i = state.taxiways.length - 1; i >= 0; i--) {
-        const tw = state.taxiways[i];
-        if (tw.vertices.length < 2) continue;
-        for (let j = 0; j < tw.vertices.length - 1; j++) {
-          const [x1, y1] = cellToPixel(tw.vertices[j].col, tw.vertices[j].row);
-          const [x2, y2] = cellToPixel(tw.vertices[j + 1].col, tw.vertices[j + 1].row);
-          const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-          if (near && dist2(near, click) < pathCenterlineHitD2) return { type: 'taxiway', id: tw.id, obj: tw };
-        }
-      }
-    }
-    if (layoutMarkersVisible()) {
-      const arHit = hitTestLayoutMarker(wx, wy, { onlyKind: 'area' });
-      if (arHit) return arHit;
-    }
-    return null;
-  }
-
-  function hitTestSimFlightAtWorld(wx, wy) {
-    if (!state.hasSimulationResult || !state.flights || !state.flights.length) return null;
-    const tSec = state.simTimeSec;
-    if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
-    let best = null;
-    let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
-    const flights = state.flights;
-    for (let i = 0; i < flights.length; i++) {
-      const f = flights[i];
-      if (!f || flightBlockedLikeNoWay(f)) continue;
-      const pose = getFlightPoseAtTimeForDraw(f, tSec);
-      if (!pose) continue;
-      const dx = pose.x - wx, dy = pose.y - wy;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = f;
-      }
-    }
-    return best;
-  }
-
-  function hitTestTerminalVertex(wx, wy) {
-    const maxD2 = (CELL_SIZE * HIT_TERM_VTX_CF) ** 2;
-    const cands = [];
-    state.terminals.forEach(t => {
-      t.vertices.forEach((v, idx) => {
-        cands.push({ terminalId: t.id, index: idx, v });
-      });
-    });
-    const best = findNearestItem(cands, c => cellToPixel(c.v.col, c.v.row), wx, wy, maxD2);
-    return best ? { terminalId: best.terminalId, index: best.index } : null;
-  }
-
-  function hitTestTaxiwayVertex(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'taxiway') return null;
-    const tw = state.selectedObject.obj;
-    if (!tw || !tw.vertices || tw.vertices.length === 0) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    tw.vertices.forEach((v, idx) => {
-      const [vx, vy] = cellToPixel(v.col, v.row);
-      const d2 = dist2([vx, vy], click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = { taxiwayId: tw.id, index: idx };
-      }
-    });
-    return best;
-  }
-  function hitTestPbbEditablePoint(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'pbb') return null;
-    const pbb = state.selectedObject.obj;
-    if (!pbb || pbb.id !== state.selectedObject.id) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    (Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : []).forEach(function(bridge, bridgeIdx) {
-      (Array.isArray(bridge.points) ? bridge.points : []).forEach(function(pt, ptIdx) {
-        if (ptIdx === 1) return;
-        const d2 = dist2([Number(pt.x) || 0, Number(pt.y) || 0], click);
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = { type: 'bridge', bridgeIndex: bridgeIdx, pointIndex: ptIdx };
-        }
-      });
-    });
-    const apronPt = getStandAircraftMarkerWorldPxForPbb(pbb);
-    const apronD2 = dist2(apronPt, click);
-    if (apronD2 < bestD2) best = { type: 'apronSite' };
-    return best;
-  }
-  function hitTestRemoteStandDragPoint(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'remote') return null;
-    const st = state.selectedObject.obj;
-    if (!st || st.id !== state.selectedObject.id) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
-    const mk = getStandAircraftMarkerWorldPxForRemoteLike(st);
-    if (dist2(mk, click) <= maxD2) return { type: 'remoteCenter' };
-    return null;
-  }
-  function findInsertSegment(vertices, closed, wx, wy) {
-    if (!Array.isArray(vertices) || vertices.length < 2) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * INSERT_VERTEX_HIT_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    const lastSeg = closed ? vertices.length : (vertices.length - 1);
-    function vertexToPixel(v) {
-      if (Array.isArray(v) && v.length >= 2) return [Number(v[0]) || 0, Number(v[1]) || 0];
-      if (v && v.x != null && v.y != null) return [Number(v.x) || 0, Number(v.y) || 0];
-      return cellToPixel(v.col, v.row);
-    }
-    for (let i = 0; i < lastSeg; i++) {
-      const curr = vertices[i];
-      const next = vertices[(i + 1) % vertices.length];
-      const p1 = vertexToPixel(curr);
-      const p2 = vertexToPixel(next);
-      const near = closestPointOnSegment(p1, p2, click);
-      if (!near) continue;
-      const d2 = dist2(near, click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = { insertIndex: i + 1, near: near };
-      }
-    }
-    return best;
-  }
-  const PATH_ARC_MIN_BULGE_PX = 2;
-  const PATH_ARC_MAX_BULGE_FRAC = 0.45;
-  function pathArcAngleDiffCCW(t0, t1) {
-    let d = t1 - t0;
-    while (d < 0) d += 2 * Math.PI;
-    while (d >= 2 * Math.PI) d -= 2 * Math.PI;
-    return d;
-  }
-  function pathArcPointBetweenAnglesCCW(tStart, tProbe, spanCCW) {
-    return pathArcAngleDiffCCW(tStart, tProbe) <= spanCCW + 1e-10;
-  }
-  function pathArcCircumcircle(ax, ay, bx, by, cx, cy) {
-    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-    if (Math.abs(d) < 1e-12) return null;
-    const a2 = ax * ax + ay * ay;
-    const b2 = bx * bx + by * by;
-    const c2 = cx * cx + cy * cy;
-    const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
-    const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
-    const r = Math.hypot(ax - ux, ay - uy);
-    if (!(r > 1e-9)) return null;
-    return { ox: ux, oy: uy, r: r };
-  }
-  /** Endpoints A,B and point C on arc; returns world px polyline A→B along the circle through C. */
-  function pathArcSampleThreePointWorldPx(ax, ay, bx, by, cx, cy, maxChordStepPx) {
-    const cc = pathArcCircumcircle(ax, ay, bx, by, cx, cy);
-    if (!cc) return [[ax, ay], [bx, by]];
-    const ta = Math.atan2(ay - cc.oy, ax - cc.ox);
-    const tb = Math.atan2(by - cc.oy, bx - cc.ox);
-    const tc = Math.atan2(cy - cc.oy, cx - cc.ox);
-    const spanAB = pathArcAngleDiffCCW(ta, tb);
-    let tStart, span, reverseOrder;
-    if (pathArcPointBetweenAnglesCCW(ta, tc, spanAB)) {
-      tStart = ta;
-      span = spanAB;
-      reverseOrder = false;
-    } else {
-      tStart = tb;
-      span = pathArcAngleDiffCCW(tb, ta);
-      reverseOrder = true;
-    }
-    const arcLen = cc.r * span;
-    const mcs = Math.max(3, typeof maxChordStepPx === 'number' && maxChordStepPx > 0 ? maxChordStepPx : CELL_SIZE * 0.28);
-    const n = Math.max(8, Math.min(96, Math.ceil(arcLen / mcs)));
-    const pts = [];
-    for (let i = 0; i <= n; i++) {
-      const ang = tStart + (span * i) / n;
-      pts.push([cc.ox + cc.r * Math.cos(ang), cc.oy + cc.r * Math.sin(ang)]);
-    }
-    if (reverseOrder) pts.reverse();
-    pts[0] = [ax, ay];
-    pts[pts.length - 1] = [bx, by];
-    return pts;
-  }
-  /** Subdivide polyline so each segment length ≤ maxStepPx (smoother grid snap for arcs). */
-  function pathArcDensifyPolylinePx(pts, maxStepPx) {
-    if (!pts || pts.length < 2) return pts ? pts.slice() : [];
-    const m = Math.max(1e-6, maxStepPx);
-    const out = [[pts[0][0], pts[0][1]]];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const x0 = pts[i][0], y0 = pts[i][1], x1 = pts[i + 1][0], y1 = pts[i + 1][1];
-      const len = Math.hypot(x1 - x0, y1 - y0);
-      const steps = Math.max(1, Math.ceil(len / m));
-      for (let s = 1; s <= steps; s++) {
-        const t = s / steps;
-        out.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
-      }
-    }
-    return out;
-  }
-  function pathArcComputePreviewWorldPxFromAB(Ax, Ay, Bx, By, wx, wy) {
-    const dx = Bx - Ax, dy = By - Ay;
-    const chordLen = Math.hypot(dx, dy) || 1;
-    const ex = dx / chordLen, ey = dy / chordLen;
-    const nx = -ey, ny = ex;
-    const M = [(Ax + Bx) * 0.5, (Ay + By) * 0.5];
-    let h = (wx - M[0]) * nx + (wy - M[1]) * ny;
-    const maxH = chordLen * PATH_ARC_MAX_BULGE_FRAC;
-    h = Math.max(-maxH, Math.min(maxH, h));
-    if (Math.abs(h) < PATH_ARC_MIN_BULGE_PX) return [[Ax, Ay], [Bx, By]];
-    const Cx = M[0] + nx * h, Cy = M[1] + ny * h;
-    return pathArcSampleThreePointWorldPx(Ax, Ay, Bx, By, Cx, Cy, Math.max(CELL_SIZE * 0.28, chordLen / 28));

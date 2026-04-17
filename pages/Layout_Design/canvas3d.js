@@ -1,3 +1,850 @@
+    });
+    return best;
+  }
+
+  class MinHeap {
+    constructor() { this.h = []; }
+    push(item) {
+      this.h.push(item);
+      let i = this.h.length - 1;
+      while (i > 0) {
+        const p = (i - 1) >> 1;
+        if (this.h[p][0] <= this.h[i][0]) break;
+        [this.h[p], this.h[i]] = [this.h[i], this.h[p]];
+        i = p;
+      }
+    }
+    pop() {
+      const top = this.h[0];
+      const last = this.h.pop();
+      if (this.h.length) {
+        this.h[0] = last;
+        let i = 0;
+        while (true) {
+          let s = i, l = 2*i+1, r = 2*i+2;
+          if (l < this.h.length && this.h[l][0] < this.h[s][0]) s = l;
+          if (r < this.h.length && this.h[r][0] < this.h[s][0]) s = r;
+          if (s === i) break;
+          [this.h[s], this.h[i]] = [this.h[i], this.h[s]];
+          i = s;
+        }
+      }
+      return top;
+    }
+    get size() { return this.h.length; }
+  }
+
+  function pathDijkstra(g, startIdx, endIdx) {
+    const n = g.nodes.length;
+    const dist = Array(n).fill(Infinity);
+    const prev = Array(n).fill(null);
+    if (startIdx == null || endIdx == null) return null;
+    dist[startIdx] = 0;
+    const heap = new MinHeap();
+    heap.push([0, startIdx]);
+    while (heap.size) {
+      const [d, u] = heap.pop();
+      if (d > dist[u]) continue;
+      if (u === endIdx) break;
+      for (const [v, w] of g.adj[u]) {
+        const nd = d + w;
+        if (nd < dist[v]) {
+          dist[v] = nd;
+          prev[v] = u;
+          heap.push([nd, v]);
+        }
+      }
+    }
+    if (dist[endIdx] === Infinity || dist[endIdx] >= REVERSE_COST) return null;
+    const path = [];
+    for (let cur = endIdx; cur !== null; cur = prev[cur]) path.push(cur);
+    return path.reverse();
+  }
+
+  /** RET 출구 근처 여러 그래프 노드에서 gFull 상 스탠드까지 다익스트라를 시도해, 단일 nearest 스냅이 다른 성분에 묶이는 경우를 완화한다. */
+  function gatherRetExitPivotIndicesOnGFull(gFull, retEndPx, pivotG1Px, rPts) {
+    const mergeRM = PATH_JUNCTION_MERGE_RADIUS_PX;
+    const pxPts = [];
+    if (pivotG1Px && pivotG1Px.length >= 2) pxPts.push(pivotG1Px);
+    if (retEndPx && retEndPx.length >= 2) pxPts.push(retEndPx);
+    if (rPts && rPts.length >= 2) {
+      pxPts.push(rPts[rPts.length - 1]);
+      if (rPts.length >= 3) pxPts.push(rPts[rPts.length - 2]);
+    }
+    const indices = [];
+    const seen = new Set();
+    for (let i = 0; i < pxPts.length; i++) {
+      const idx = nearestPathNode(gFull, pxPts[i]);
+      if (idx != null && !seen.has(idx)) {
+        seen.add(idx);
+        indices.push(idx);
+      }
+    }
+    const rNear = mergeRM * 6;
+    const r2 = rNear * rNear;
+    if (retEndPx && retEndPx.length >= 2 && gFull.nodes && gFull.nodes.length) {
+      const scored = [];
+      for (let ni = 0; ni < gFull.nodes.length; ni++) {
+        const d2 = dist2(gFull.nodes[ni], retEndPx);
+        if (d2 <= r2) scored.push({ ni: ni, d2: d2 });
+      }
+      scored.sort(function(a, b) { return a.d2 - b.d2; });
+      const cap = 36;
+      for (let k = 0; k < scored.length && k < cap; k++) {
+        const ni = scored[k].ni;
+        if (!seen.has(ni)) {
+          seen.add(ni);
+          indices.push(ni);
+        }
+      }
+    }
+    return indices;
+  }
+  function pathDijkstraFromRetExitToStand(gFull, endNodeFull, candidateStartIndices) {
+    if (!gFull || endNodeFull == null || !candidateStartIndices || !candidateStartIndices.length) return { path: null, startIdx: null };
+    let bestPath = null;
+    let bestD = Infinity;
+    const seenStart = new Set();
+    for (let ci = 0; ci < candidateStartIndices.length; ci++) {
+      const s = candidateStartIndices[ci];
+      if (s == null || seenStart.has(s)) continue;
+      seenStart.add(s);
+      const path = pathDijkstra(gFull, s, endNodeFull);
+      if (!path || path.length < 2) continue;
+      const d = pathTotalDist(gFull, path);
+      if (!(d < REVERSE_COST)) continue;
+      if (d < bestD) {
+        bestD = d;
+        bestPath = path;
+      }
+    }
+    return { path: bestPath, startIdx: bestPath ? bestPath[0] : null };
+  }
+
+  function nearestPathNode(g, p) {
+    let best = 0, bestD2 = dist2(g.nodes[0], p);
+    for (let i = 1; i < g.nodes.length; i++) {
+      const d2 = dist2(g.nodes[i], p);
+      if (d2 < bestD2) { bestD2 = d2; best = i; }
+    }
+    return best;
+  }
+  function nearestPathNodeFromSet(g, nodeSet, p) {
+    if (!g || !g.nodes || !g.nodes.length || !nodeSet || !nodeSet.size) return null;
+    let best = null, bestD2 = Infinity;
+    nodeSet.forEach(function(idx) {
+      if (idx == null || !g.nodes[idx]) return;
+      const d2 = dist2(g.nodes[idx], p);
+      if (d2 < bestD2) { bestD2 = d2; best = idx; }
+    });
+    return best;
+  }
+  /** Avoid snapping to another runway's polyline when multiple runways exist (same idea as departure lineup). */
+  function nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx) {
+    if (!g || !g.nodes || !g.nodes.length || !runwayPx) return null;
+    const rwSet = g.runwayNodeIndicesById && g.runwayNodeIndicesById[runwayId];
+    if (rwSet && rwSet.size)
+      return nearestPathNodeFromSet(g, rwSet, runwayPx) ?? nearestPathNode(g, runwayPx);
+    return nearestPathNode(g, runwayPx);
+  }
+
+  function pathTotalDist(g, pathIndices) {
+    let d = 0;
+    for (let i = 0; i < pathIndices.length - 1; i++) {
+      const a = g.nodes[pathIndices[i]], b = g.nodes[pathIndices[i+1]];
+      const e = g.edgeMap ? g.edgeMap[pathIndices[i] + ':' + pathIndices[i+1]] : null;
+      if (e) d += e.dist; else d += pathDist(a, b);
+    }
+    return d;
+  }
+
+  /** RET gate filtering only: exit direction is not chosen via taxi Dijkstra. Use flight token / defaults. */
+  function probePreferredArrivalRunwayDir(f) {
+    void f;
+    return 'both';
+  }
+  function resolveArrivalRunwayDirForRetGate(f) {
+    const fromFlight = normalizeRwDirectionValue(f.arrRunwayDirUsed);
+    if (fromFlight === 'clockwise' || fromFlight === 'counter_clockwise') return fromFlight;
+    const probed = probePreferredArrivalRunwayDir(f);
+    if (probed === 'clockwise' || probed === 'counter_clockwise') return probed;
+    return 'both';
+  }
+
+  function graphPathArrival(f) {
+    if (f) {
+      f.noWayArr = false;
+      delete f._noWayArrDetail;
+    }
+    return null;
+  }
+
+  function graphPathDeparture(f, opts) {
+    if (f) {
+      f.noWayDep = false;
+      delete f._noWayDepDetail;
+    }
+    return null;
+  }
+
+  function clonePathPtsForCache(pts) {
+    if (!Array.isArray(pts) || pts.length < 2) return null;
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      if (Array.isArray(p) && p.length >= 2) out.push([Number(p[0]), Number(p[1])]);
+    }
+    return out.length >= 2 ? out : null;
+  }
+
+  
+  function normalizedArrRetCacheKey(f) {
+    const id = f.sampledArrRet != null ? f.sampledArrRet : null;
+    if (id == null) return '';
+    const ok = (state.taxiways || []).some(function(t) {
+      return t && t.id === id && t.pathType === 'runway_exit';
+    });
+    return ok ? String(id) : '';
+  }
+
+  function getPathForFlight(f) {
+    if (!f) return null;
+    resolveStand(f);
+    delete f.cachedArrPathPts;
+    delete f._pathPolylineArrRetKey;
+    return null;
+  }
+
+  function getPathForFlightDeparture(f) {
+    if (!f) return null;
+    resolveStand(f);
+    delete f.cachedDepPathPts;
+    return null;
+  }
+
+  function ensureFlightPaths(f) {
+    void f;
+  }
+
+  function findStandById(id) {
+    return (state.pbbStands || []).find(function(s) { return s.id === id; }) ||
+           (state.remoteStands || []).find(function(s) { return s.id === id; }) ||
+           (state.tempStands || []).find(function(s) { return s.id === id; });
+  }
+
+  function buildTimeAxisTicks(minT, maxT, baseMinT, baseSpan, zoom) {
+    const span = maxT - minT;
+    const axisStep = span <= 60 ? TICK_STEP_SPAN_LE60 : (span <= 240 ? TICK_STEP_SPAN_LE240 : TICK_STEP_ELSE);
+    let ticks = [];
+    let tt = Math.floor(minT / axisStep) * axisStep;
+    while (tt + 1e-9 < minT) tt += axisStep;
+    while (tt <= maxT + 1e-9) {
+      const leftPct = baseSpan > 1e-9 ? ((tt - baseMinT) / baseSpan) * 100 * zoom : 0;
+      ticks.push({ leftPct: leftPct, label: formatMinutesToHHMM(tt) });
+      tt += axisStep;
+    }
+    if (ticks.length > MAX_TICKS_SHOWN) {
+      const step = Math.ceil(ticks.length / MAX_TICKS_SHOWN);
+      const reduced = [];
+      for (let i = 0; i < ticks.length; i += step) reduced.push(ticks[i]);
+      const last = ticks[ticks.length - 1];
+      if (reduced[reduced.length - 1] !== last) reduced.push(last);
+      ticks = reduced;
+    }
+    return ticks;
+  }
+
+  function computeFlightPath(flight, direction) {
+    void flight;
+    void direction;
+    return { pts: null, timeline: null };
+  }
+
+  const FLIGHT_PATH_PROGRESS_PCT_START = 22;
+  const FLIGHT_PATH_PROGRESS_PCT_END = 48;
+  const PATH_DIRECTION_ARROWS_MAX = 48;
+  function updateAllFlightPaths(onDone) {
+    draw();
+    if (typeof onDone === 'function') onDone();
+  }
+
+  function drawPathJunctions() {
+    if (!state.layers.junction) return;
+    if (!(state.taxiways && state.taxiways.length)) return;
+    const nowMs = Date.now();
+    const twN = (state.taxiways || []).length;
+    const rebuildCooldownMs = twN > 500 ? 5000 : 280;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const scaleRef = state.scale || 1;
+    const panCoarse = !!(state.isPanning && scaleRef < 0.42);
+    const ultraZoomOut = scaleRef < 0.17;
+    function filterPtsWorld(pts) {
+      if (!pts || !pts.length) return [];
+      const out = [];
+      for (let i = 0; i < pts.length; i++) {
+        if (worldPointInsideLayoutViewportAabb(pts[i], vb)) out.push(pts[i]);
+      }
+      return out;
+    }
+    function subsamplePts(pts) {
+      const cap = ultraZoomOut ? 380 : (scaleRef < 0.3 ? 1200 : 20000);
+      if (!pts || pts.length <= cap) return pts;
+      const step = Math.ceil(pts.length / cap);
+      const out = [];
+      for (let i = 0; i < pts.length; i += step) out.push(pts[i]);
+      return out;
+    }
+    const graphSig = computeTaxiwaysGraphSig();
+    if (state.pathGraphCacheValid && state.pathGraphCacheSig && state.pathGraphCacheSig !== graphSig) {
+      state.pathGraphCacheDirty = true;
+      state.pathGraphInvalidatedAtMs = nowMs;
+    }
+    let g = null;
+    const cacheHit = !!(state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === graphSig && !state.pathGraphCache.__junctionStale);
+    const hasCache = !!(state.pathGraphCacheValid && state.pathGraphCache);
+    const rebuildDue = !!(state.pathGraphCacheDirty && (nowMs - (state.pathGraphInvalidatedAtMs || 0) >= rebuildCooldownMs));
+    const shouldRebuildNow = (!hasCache) || rebuildDue;
+    if (cacheHit) {
+      g = state.pathGraphCache;
+    } else if (shouldRebuildNow) {
+      if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+        g = hasCache ? state.pathGraphCache : null;
+      } else if (twN >= PATH_GRAPH_ASYNC_REBUILD_MIN_TW) {
+        queuePathGraphRebuild(graphSig);
+        g = hasCache ? state.pathGraphCache : null;
+      } else {
+        try {
+          g = buildPathGraph();
+          state.pathGraphCache = g;
+          state.pathGraphCacheValid = true;
+          state.pathGraphCacheSig = graphSig;
+          state.pathGraphCacheDirty = false;
+        } catch (e) {
+          state.pathGraphCache = null;
+          state.pathGraphCacheValid = false;
+          state.pathGraphCacheSig = '';
+          state.pathGraphCacheDirty = true;
+          console.error('drawPathJunctions: buildPathGraph failed', e);
+        }
+      }
+    } else if (hasCache) {
+      g = state.pathGraphCache;
+    }
+    const staleSigMismatch = !!(hasCache && state.pathGraphCacheSig && state.pathGraphCacheSig !== graphSig);
+    const sigDiff = staleSigMismatch ? graphSigTaxiwayDiff(state.pathGraphCacheSig, graphSig) : { removed: [], changed: [] };
+    let gGlobal = g;
+    if (staleSigMismatch && sigDiff.removed.length && !PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) gGlobal = null;
+    const overlayTwIds = [];
+    if (staleSigMismatch && !sigDiff.removed.length && sigDiff.changed.length) {
+      const capOv = 28;
+      for (let ci = 0; ci < sigDiff.changed.length && overlayTwIds.length < capOv; ci++) {
+        overlayTwIds.push(sigDiff.changed[ci]);
+      }
+    }
+    const drawId = state.taxiwayDrawingId;
+    const twDraw = drawId ? (state.taxiways || []).find(function(t) { return t && String(t.id) === String(drawId); }) : null;
+    const needDrawingTwOverlay = !!(twDraw && twDraw.vertices && twDraw.vertices.length >= 2);
+    const apronDraftPts = getApronLinkDrawingDraftWorldPts();
+    const needApronLinkDrawOverlay = !!(apronDraftPts && apronDraftPts.length >= 2);
+    const dirtyApronKeys = state.apronLinkJunctionOverlayDirtyIds ? Object.keys(state.apronLinkJunctionOverlayDirtyIds) : [];
+    const needApronLinkSavedOverlay = dirtyApronKeys.length > 0;
+    let cacheHasDots = false;
+    let redJunctions = [];
+    let connectedJunctions = [];
+    if (gGlobal) {
+      const validJunctions = gGlobal.validJunctions || [];
+      connectedJunctions = gGlobal.connectedJunctions || gGlobal.junctions || [];
+      redJunctions = gGlobal.disconnectedValidJunctions != null ? gGlobal.disconnectedValidJunctions : validJunctions;
+      cacheHasDots = (connectedJunctions && connectedJunctions.length > 0) || (redJunctions && redJunctions.length > 0);
+    }
+    if (!cacheHasDots && !needDrawingTwOverlay && !overlayTwIds.length && !needApronLinkDrawOverlay && !needApronLinkSavedOverlay) return;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    const r = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
+    const rGreen = r * 0.7;
+    if (cacheHasDots) {
+      let reds = panCoarse ? [] : filterPtsWorld(redJunctions);
+      let greens = filterPtsWorld(connectedJunctions);
+      reds = subsamplePts(reds);
+      greens = subsamplePts(greens);
+      ctx.fillStyle = '#ef4444';
+      reds.forEach(function(p) {
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.fillStyle = '#22c55e';
+      greens.forEach(function(p) {
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], rGreen, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    /** Same threshold as `mergeNearbyPathPointsForDraw` / graph junction merge (`pathSearch.junctionMergeRadiusPx`, default 7 layout units). */
+    const nearbyTol2 = Math.pow(PATH_JUNCTION_MERGE_RADIUS_PX, 2);
+    const gColorRef = gGlobal || g;
+    function alreadyDrawnAtOverlay(p) {
+      if (!gColorRef) return false;
+      const cg = gColorRef.connectedJunctions || gColorRef.junctions || [];
+      const rg = gColorRef.disconnectedValidJunctions != null ? gColorRef.disconnectedValidJunctions : (gColorRef.validJunctions || []);
+      let i;
+      for (i = 0; i < cg.length; i++) {
+        if (dist2(p, cg[i]) <= nearbyTol2) return true;
+      }
+      for (i = 0; i < rg.length; i++) {
+        if (dist2(p, rg[i]) <= nearbyTol2) return true;
+      }
+      return false;
+    }
+    function flushOverlayDotsForTaxiway(twO) {
+      if (!twO || !twO.vertices || twO.vertices.length < 2) return;
+      let localPts = collectPathJunctionWorldPointsForTaxiway(twO, state.taxiways || []);
+      localPts = filterPtsWorld(localPts);
+      localPts = subsamplePts(localPts);
+      for (let li = 0; li < localPts.length; li++) {
+        const lp = localPts[li];
+        if (alreadyDrawnAtOverlay(lp)) continue;
+        ctx.fillStyle = overlayJunctionFillForWorldPoint(lp, gColorRef);
+        ctx.beginPath();
+        ctx.arc(lp[0], lp[1], rGreen, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    function flushOverlayDotsForApronLinkDraft(draftPoly) {
+      if (!draftPoly || draftPoly.length < 2) return;
+      let localPts = collectPathJunctionWorldPointsForOpenPolyline(draftPoly, state.taxiways || []);
+      localPts = filterPtsWorld(localPts);
+      localPts = subsamplePts(localPts);
+      for (let li = 0; li < localPts.length; li++) {
+        const lp = localPts[li];
+        if (alreadyDrawnAtOverlay(lp)) continue;
+        ctx.fillStyle = overlayJunctionFillForWorldPoint(lp, gColorRef);
+        ctx.beginPath();
+        ctx.arc(lp[0], lp[1], rGreen, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    if (needDrawingTwOverlay) flushOverlayDotsForTaxiway(twDraw);
+    for (let oi = 0; oi < overlayTwIds.length; oi++) {
+      const tid = overlayTwIds[oi];
+      if (drawId && String(drawId) === String(tid)) continue;
+      const twO = (state.taxiways || []).find(function(t) { return t && String(t.id) === String(tid); });
+      flushOverlayDotsForTaxiway(twO);
+    }
+    if (needApronLinkDrawOverlay) flushOverlayDotsForApronLinkDraft(apronDraftPts);
+    if (needApronLinkSavedOverlay && state.apronLinkJunctionOverlayDirtyIds) {
+      for (let di = 0; di < dirtyApronKeys.length; di++) {
+        const lid = dirtyApronKeys[di];
+        const lk = (state.apronLinks || []).find(function(l) { return l && String(l.id) === String(lid); });
+        if (!lk) {
+          delete state.apronLinkJunctionOverlayDirtyIds[lid];
+          continue;
+        }
+        const polySaved = getApronLinkPolylineWorldPts(lk);
+        if (polySaved.length >= 2) flushOverlayDotsForApronLinkDraft(polySaved);
+      }
+      if (!Object.keys(state.apronLinkJunctionOverlayDirtyIds).length) state.apronLinkJunctionOverlayDirtyIds = null;
+    }
+    ctx.restore();
+  }
+
+  function drawQueueTaxiwayLaneMarkers() {
+    if (!state.layers.junction) return;
+    const vbQ = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    const r = Math.max(3.5, CELL_SIZE * 0.22) * LAYOUT_VERTEX_DOT_SCALE;
+    (state.taxiways || []).forEach(function(tw) {
+      if (!tw || tw.pathType !== 'general_queue_taxiway' || !tw.vertices || tw.vertices.length < 2) return;
+      if (!taxiwayShouldDrawInViewport(tw, vbQ)) return;
+      const jm = queueTaxiwayAutoJunctionMarkersAlong(tw, QUEUE_TAXIWAY_JUNCTION_SPACING_M);
+      for (let j = 0; j < jm.length; j++) {
+        const xy = jm[j].p;
+        if (!worldPointInsideLayoutViewportAabb(xy, vbQ)) continue;
+        ctx.beginPath();
+        ctx.arc(xy[0], xy[1], r, 0, Math.PI * 2);
+        ctx.fillStyle = '#22c55e';
+        ctx.fill();
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+      }
+    });
+    ctx.restore();
+  }
+
+  function drawSelectedLayoutEdge() {
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'layoutEdge' || !sel.obj) return;
+    const e = sel.obj;
+    const edgePts = (e.pts && e.pts.length >= 2) ? e.pts : [[e.x1, e.y1], [e.x2, e.y2]];
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    function layoutEdgePath() {
+      ctx.beginPath();
+      ctx.moveTo(edgePts[0][0], edgePts[0][1]);
+      for (let i = 1; i < edgePts.length; i++) ctx.lineTo(edgePts[i][0], edgePts[i][1]);
+    }
+    layoutEdgePath();
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.lineWidth = Math.max(7, CELL_SIZE * 0.2);
+    ctx.strokeStyle = c2dObjectSelectedStroke();
+    ctx.shadowColor = c2dObjectSelectedGlow();
+    ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.stroke();
+    ctx.restore();
+    layoutEdgePath();
+    ctx.setLineDash([]);
+    ctx.lineWidth = Math.max(4, CELL_SIZE * 0.12);
+    ctx.strokeStyle = c2dObjectSelectedStroke();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const PRO_SIM_PHASE_Z = {
+    Landing: 0,
+    Arr_taxi: 1,
+    Arr_taxi_occupied: 1,
+    Dep_taxi: 2,
+    Holding_lineup: 3,
+    Lineup_departure: 4,
+  };
+  function proSimPhaseStrokeStyle(phaseRaw) {
+    const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : 'Landing';
+    if (p === 'Arr_taxi_occupied') {
+      return { wMul: 1.72, stroke: '#a855f7' };
+    }
+    if (p === 'Arr_taxi') {
+      return { wMul: 1.72, stroke: '#3b82f6' };
+    }
+    if (p === 'Dep_taxi' || p === 'Holding_lineup') {
+      return { wMul: 0.58, stroke: '#ef4444' };
+    }
+    if (p === 'Lineup_departure') {
+      return { wMul: 0.45, stroke: '#f97316' };
+    }
+    return { wMul: 1.72, stroke: '#22c55e' };
+  }
+  function drawProSimSegmentArrows(edgePts, arrowFill, spacingPx, headSizePx) {
+    if (!Array.isArray(edgePts) || edgePts.length < 2) return;
+    const spacing = Math.max(14, spacingPx || 36);
+    let count = 0;
+    const headSize = Math.max(4, headSizePx || 10);
+    let refUx = 0;
+    let refUy = 0;
+    let refSet = false;
+    for (let i = 1; i < edgePts.length && !refSet; i++) {
+      const p0 = edgePts[i - 1];
+      const p1 = edgePts[i];
+      const segLen = pathDist(p0, p1);
+      if (segLen < 1e-6) continue;
+      refUx = (p1[0] - p0[0]) / segLen;
+      refUy = (p1[1] - p0[1]) / segLen;
+      refSet = true;
+    }
+    if (!refSet) return;
+    for (let i = 1; i < edgePts.length && count < PATH_DIRECTION_ARROWS_MAX; i++) {
+      const p0 = edgePts[i - 1];
+      const p1 = edgePts[i];
+      const segLen = pathDist(p0, p1);
+      if (segLen < 1e-6) continue;
+      const ux = (p1[0] - p0[0]) / segLen;
+      const uy = (p1[1] - p0[1]) / segLen;
+      if (ux * refUx + uy * refUy < -0.08) continue;
+      const px = -uy;
+      const py = ux;
+      for (let d = spacing * 0.55; d < segLen - headSize * 0.35 && count < PATH_DIRECTION_ARROWS_MAX; d += spacing) {
+        const tTip = d / segLen;
+        const tipx = p0[0] + (p1[0] - p0[0]) * tTip;
+        const tipy = p0[1] + (p1[1] - p0[1]) * tTip;
+        const baseX = tipx - ux * headSize;
+        const baseY = tipy - uy * headSize;
+        ctx.save();
+        ctx.fillStyle = arrowFill;
+        ctx.beginPath();
+        ctx.moveTo(tipx, tipy);
+        ctx.lineTo(baseX + px * headSize * 0.45, baseY + py * headSize * 0.45);
+        ctx.lineTo(baseX - px * headSize * 0.45, baseY - py * headSize * 0.45);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        count++;
+      }
+    }
+  }
+  function orientProSimEdgePts(edgePts, prevEnd, prevUx, prevUy) {
+    let pts = edgePts.slice();
+    if (pts.length < 2) return pts;
+    if (prevEnd) {
+      const d0 = dist2(pts[0], prevEnd);
+      const d1 = dist2(pts[pts.length - 1], prevEnd);
+      if (d1 + 9 < d0) {
+        pts.reverse();
+      } else if (Math.abs(d0 - d1) <= 36 && prevUx != null && prevUy != null) {
+        let vx = 0;
+        let vy = 0;
+        for (let i = 1; i < pts.length; i++) {
+          const dx = pts[i][0] - pts[i - 1][0];
+          const dy = pts[i][1] - pts[i - 1][1];
+          const sl = Math.hypot(dx, dy);
+          if (sl > 1e-6) {
+            vx = dx / sl;
+            vy = dy / sl;
+            break;
+          }
+        }
+        if (vx * prevUx + vy * prevUy < -0.15) pts.reverse();
+      }
+    } else if (prevUx != null && prevUy != null) {
+      let vx = 0;
+      let vy = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const dx = pts[i][0] - pts[i - 1][0];
+        const dy = pts[i][1] - pts[i - 1][1];
+        const sl = Math.hypot(dx, dy);
+        if (sl > 1e-6) {
+          vx = dx / sl;
+          vy = dy / sl;
+          break;
+        }
+      }
+      if (vx * prevUx + vy * prevUy < -0.15) pts.reverse();
+    }
+    return pts;
+  }
+  function proSimOutgoingUnit(edgePts) {
+    if (!edgePts || edgePts.length < 2) return { ux: null, uy: null };
+    for (let i = edgePts.length - 1; i >= 1; i--) {
+      const dx = edgePts[i][0] - edgePts[i - 1][0];
+      const dy = edgePts[i][1] - edgePts[i - 1][1];
+      const sl = Math.hypot(dx, dy);
+      if (sl > 1e-6) return { ux: dx / sl, uy: dy / sl };
+    }
+    return { ux: null, uy: null };
+  }
+  function drawProSimFlightPathEdges() {
+    const sel = state.selectedObject;
+    const rid = state.flightPathRevealFlightId;
+    if (!sel || sel.type !== 'flight' || !sel.obj || rid == null || String(sel.id) !== String(rid)) return;
+    const ids = sel.obj.edge_list || sel.obj.proSimEdgeList;
+    if (!Array.isArray(ids) || !ids.length) return;
+    if (typeof rebuildDerivedGraphEdges === 'function') rebuildDerivedGraphEdges();
+    const byId = {};
+    (state.derivedGraphEdges || []).forEach(function(ed) {
+      if (ed && ed.id) byId[ed.id] = ed;
+    });
+    const baseW = Math.max(4.2, CELL_SIZE * 0.148);
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    let prevEnd = null;
+    let prevUx = null;
+    let prevUy = null;
+    let lastDrawnKey = null;
+    let seqIx = 0;
+    const drawList = [];
+    ids.forEach(function(entry) {
+      let key = '';
+      let phase = 'Landing';
+      if (entry != null) {
+        if (typeof entry === 'string' || typeof entry === 'number') {
+          key = String(entry).trim();
+        } else if (typeof entry === 'object') {
+          const rawId = entry.edge_id != null ? entry.edge_id : entry.id;
+          key = rawId != null ? String(rawId).trim() : '';
+          if (entry.phase != null) phase = String(entry.phase).trim() || 'Landing';
+        }
+      }
+      if (key && key === lastDrawnKey) {
+        return;
+      }
+      const st = proSimPhaseStrokeStyle(phase);
+      const lineW = baseW * st.wMul;
+      const e = key ? byId[key] : null;
+      if (!e) return;
+      let rawPts = (e.pts && e.pts.length >= 2) ? e.pts.slice() : [[e.x1, e.y1], [e.x2, e.y2]];
+      let edgePts = orientProSimEdgePts(rawPts, prevEnd, prevUx, prevUy);
+      const z = Object.prototype.hasOwnProperty.call(PRO_SIM_PHASE_Z, phase) ? PRO_SIM_PHASE_Z[phase] : 0;
+      drawList.push({
+        edgePts: edgePts,
+        st: st,
+        lineW: lineW,
+        z: z,
+        seq: seqIx++,
+      });
+      prevEnd = edgePts[edgePts.length - 1];
+      const ou = proSimOutgoingUnit(edgePts);
+      if (ou.ux != null) {
+        prevUx = ou.ux;
+        prevUy = ou.uy;
+      }
+      lastDrawnKey = key;
+    });
+    drawList.sort(function(a, b) {
+      if (a.z !== b.z) return a.z - b.z;
+      return a.seq - b.seq;
+    });
+    drawList.forEach(function(item) {
+      const edgePts = item.edgePts;
+      ctx.beginPath();
+      ctx.moveTo(edgePts[0][0], edgePts[0][1]);
+      for (let i = 1; i < edgePts.length; i++) ctx.lineTo(edgePts[i][0], edgePts[i][1]);
+      ctx.strokeStyle = item.st.stroke;
+      ctx.lineWidth = item.lineW;
+      ctx.globalAlpha = 0.92;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      drawProSimSegmentArrows(
+        edgePts,
+        'rgba(250, 250, 250, 0.82)',
+        Math.max(20, CELL_SIZE * 0.34),
+        Math.max(4.5, CELL_SIZE * 0.135)
+      );
+    });
+    ctx.restore();
+  }
+
+  function polylineLengthPx(pathPts) {
+    let total = 0;
+    for (let i = 1; i < pathPts.length; i++) total += pathDist(pathPts[i - 1], pathPts[i]);
+    return total;
+  }
+  function pointAlongPolylinePx(pathPts, distPx) {
+    if (!Array.isArray(pathPts) || pathPts.length < 2) return null;
+    let remain = Math.max(0, Number(distPx) || 0);
+    for (let i = 1; i < pathPts.length; i++) {
+      const p0 = pathPts[i - 1];
+      const p1 = pathPts[i];
+      const segLen = pathDist(p0, p1);
+      if (!(segLen > 1e-6)) continue;
+      if (remain <= segLen) {
+        const t = remain / segLen;
+        return [p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t];
+      }
+      remain -= segLen;
+    }
+    return pathPts[pathPts.length - 1];
+  }
+  function drawPolylineDirectionArrows(pathPts, strokeStyle, arrowFill, lineWidth, spacingPx, headSizePx, omitStroke) {
+    if (!Array.isArray(pathPts) || pathPts.length < 2) return;
+    const totalLen = polylineLengthPx(pathPts);
+    if (!(totalLen > 1e-6)) return;
+    const spacing = Math.max(16, spacingPx || 42);
+    let arrowCount = 0;
+    for (let distPx = spacing * 0.75; distPx < totalLen && arrowCount < PATH_DIRECTION_ARROWS_MAX; distPx += spacing) {
+      const tail = pointAlongPolylinePx(pathPts, distPx - Math.max(6, headSizePx * 0.9));
+      const tip = pointAlongPolylinePx(pathPts, distPx);
+      if (!tail || !tip) continue;
+      const dx = tip[0] - tail[0];
+      const dy = tip[1] - tail[1];
+      const len = Math.hypot(dx, dy);
+      if (!(len > 1e-6)) continue;
+      const ux = dx / len;
+      const uy = dy / len;
+      const px = -uy;
+      const py = ux;
+      const headSize = Math.max(4, headSizePx || 10);
+      const baseX = tip[0] - ux * headSize;
+      const baseY = tip[1] - uy * headSize;
+      ctx.save();
+      ctx.fillStyle = arrowFill;
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = Math.max(1.5, lineWidth * 0.22);
+      ctx.beginPath();
+      ctx.moveTo(tip[0], tip[1]);
+      ctx.lineTo(baseX + px * headSize * 0.45, baseY + py * headSize * 0.45);
+      ctx.lineTo(baseX - px * headSize * 0.45, baseY - py * headSize * 0.45);
+      ctx.closePath();
+      ctx.fill();
+      if (!omitStroke) ctx.stroke();
+      ctx.restore();
+      arrowCount++;
+    }
+  }
+  function drawFlightPathHighlight() {
+    return;
+  }
+
+  function drawDeparturePathHighlight() {
+    return;
+  }
+
+  function drawApproachPreviewPaths2D() {
+    if (!state.hasSimulationResult || !state.globalUpdateFresh) return;
+    const flights = state.flights || [];
+    let f = null;
+    for (let i = 0; i < flights.length; i++) {
+      const ff = flights[i];
+      if (!ff || ff.arrDep === 'Dep' || arrivalAirsideBlocked(ff)) continue;
+      const token = ff.token || {};
+      const rwId = ff.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || ff.arrRunwayId;
+      if (rwId == null || rwId === '') continue;
+      f = ff;
+      break;
+    }
+    if (!f) return;
+    const token = f.token || {};
+    const runwayId = f.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || f.arrRunwayId;
+    const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
+    const tdDist = touchdownDistMForTimeline(f);
+    const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
+    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M);
+    let pts;
+    if (pack && pack.pts && pack.pts.length >= 2) {
+      pts = pack.pts;
+    } else {
+      const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
+      if (!rsPt) return;
+      pts = [approachPointBeforeThresholdJs(runwayId, rwDir, APPROACH_OFFSET_WORLD_M, anchorDist), [rsPt[0], rsPt[1]]];
+    }
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([]);
+    ctx.strokeStyle = c2dApproachPreviewStroke();
+    ctx.lineWidth = c2dApproachPreviewWidthM();
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFlights2D() {
+    if (!state.hasSimulationResult || !state.flights.length) return;
+    if (state.isPanning) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    const tSecDraw = state.simTimeSec;
+    state.flights.forEach(f => {
+      if (flightBlockedLikeNoWay(f)) return;
+      const pose = getFlightPoseAtTimeForDraw(f, tSecDraw);
+      if (!pose) return;
+      const x = pose.x, y = pose.y, dx = pose.dx, dy = pose.dy;
+      if (!aabbIntersectsViewport(vb, { minX: x, minY: y, maxX: x, maxY: y })) return;
+      const len = Math.hypot(dx, dy) || 1;
       const nx = dx / len, ny = dy / len;
       const silN = Number(_acSil.noseX), silWR = Number(_acSil.wingRearX), silUY = Number(_acSil.wingUpperY);
       const silTN = Number(_acSil.tailNeckX), silLY = Number(_acSil.wingLowerY);
@@ -628,10 +1475,15 @@
         const layoutName = (state.currentLayoutName && String(state.currentLayoutName).trim()) || INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout';
         let layoutPayload;
         try {
+          if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
+          state.pathGraphAllowHeavySimExport = true;
           layoutPayload = serializeCurrentLayout();
         } catch (e1) {
+          state.pathGraphAllowHeavySimExport = false;
           failProSim(e1 && e1.message);
           return;
+        } finally {
+          state.pathGraphAllowHeavySimExport = false;
         }
         let layoutForSim = layoutPayload;
         try {
@@ -1472,6 +2324,14 @@
           alert('this TaxiwayIs TerminalIt overlaps with . Please draw a different path.');
           pushUndo();
           state.taxiways = state.taxiways.filter(t => t.id !== tw.id);
+          if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+            invalidatePathGraphCache(false);
+            if (state.pathGraphCacheValid && state.pathGraphCache && !state.pathGraphCache.__junctionStale) {
+              stripPathGraphCacheJunctionsNearTaxiwayWorld(tw);
+            }
+          } else {
+            markPathGraphJunctionStaleShellAfterLayoutEdit();
+          }
         }
         state.taxiwayDrawingId = null;
         state.layoutPathDrawPointer = null;
@@ -2835,6 +3695,9 @@
     ctx.restore();
   }
   function drawTerminals(interactiveLite) {
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressBuildingFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -2842,6 +3705,10 @@
     state.terminals.forEach(term => {
       const isDrawingTerm = state.terminalDrawingId === term.id;
       if (term.vertices.length === 0 && !isDrawingTerm) return;
+      if (!isDrawingTerm) {
+        const termAabb = terminalWorldAabbFromVertices(term);
+        if (termAabb && !aabbIntersectsViewport(vb, termAabb)) return;
+      }
       const selected = state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.id === term.id;
       const buildingTheme = getBuildingTheme(term);
       const termPts = term.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
@@ -2852,7 +3719,8 @@
         drawLayoutPathDraftVertexDots(ctx, termPts, hoverTerm);
       } else {
         const hairW = layoutHairlineStrokeWidthWorld();
-        const bl = !!state.layers.buildingLines, bf = !!state.layers.buildingFill;
+        const bl = !!state.layers.buildingLines;
+        const bf = !!state.layers.buildingFill && !suppressBuildingFill;
         if (bl || bf || selected) {
           ctx.lineWidth = hairW;
           ctx.strokeStyle = selected ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.88)';
@@ -2911,6 +3779,9 @@
   }
 
   function drawPBBs(interactiveLite) {
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -2918,12 +3789,17 @@
     state.pbbStands.forEach(pbb => {
       const x1 = Number(pbb.x1), y1 = Number(pbb.y1), x2 = Number(pbb.x2), y2 = Number(pbb.y2);
       if (!Number.isFinite(x1) || !Number.isFinite(y1) || !Number.isFinite(x2) || !Number.isFinite(y2)) return;
+      const pbbSelForCull = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
+      if (!pbbSelForCull) {
+        const pbbAabb = pointsWorldAabb(getPBBStandCorners(pbb));
+        if (pbbAabb && !aabbIntersectsViewport(vb, pbbAabb)) return;
+      }
       rebuildPbbBridgeGeometry(pbb);
       const depP = getStandDepthMeters(pbb.category || 'C');
       const widP = getStandWidthMeters(pbb.category || 'C');
       const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
-      const sl = !!state.layers.standLines, sf = !!state.layers.standFill;
+      const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
       if (!sl && !sf && !sel) return;
       if (!interactiveLite) drawPbbBoardingRectangle(ctx, pbb, sel);
       const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
@@ -3024,11 +3900,19 @@
   }
 
   function drawRemoteStands(interactiveLite) {
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     state.remoteStands.forEach(st => {
+      const remoteSelForCull = state.selectedObject && state.selectedObject.type === 'remote' && state.selectedObject.id === st.id;
+      if (!remoteSelForCull) {
+        const remoteAabb = pointsWorldAabb(getRemoteStandCorners(st));
+        if (remoteAabb && !aabbIntersectsViewport(vb, remoteAabb)) return;
+      }
       const [cx, cy] = getRemoteStandCenterPx(st);
       const depR = getStandDepthMeters(st.category || 'C');
       const widR = getStandWidthMeters(st.category || 'C');
@@ -3038,7 +3922,7 @@
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const apronLinkedR = standHasApronTaxiwayLink(st.id);
       const idleFillR = apronLinkedR ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)';
-      const sl = !!state.layers.standLines, sf = !!state.layers.standFill;
+      const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
       if (!sl && !sf && !sel) return;
       ctx.save();
       ctx.translate(cx, cy);
@@ -3083,6 +3967,9 @@
   }
 
   function drawTempStands(interactiveLite) {
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -3090,6 +3977,11 @@
     const mode = settingModeSelect ? settingModeSelect.value : 'grid';
     const temps = state.tempStands || [];
     temps.forEach(function(st) {
+      const tempSelForCull = state.selectedObject && state.selectedObject.type === 'tempStand' && state.selectedObject.id === st.id;
+      if (!tempSelForCull) {
+        const tempAabb = pointsWorldAabb(getRemoteStandCorners(st));
+        if (tempAabb && !aabbIntersectsViewport(vb, tempAabb)) return;
+      }
       const cxcy = getRemoteStandCenterPx(st);
       const cx = cxcy[0], cy = cxcy[1];
       const depT = getStandDepthMeters(st.category || 'C');
@@ -3103,7 +3995,7 @@
       const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('T' + String(idx + 1).padStart(3, '0'));
       const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
       const label = labelPrefix + ' / ' + nameRaw;
-      const sl = !!state.layers.standLines, sf = !!state.layers.standFill;
+      const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
       if (!sl && !sf && !sel) return;
       ctx.save();
       ctx.translate(cx, cy);
@@ -3670,17 +4562,17 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
+    const _twVb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const _twPanLite = !!(state.isPanning && layoutViewportWidthWorldM() > LAYOUT_DRAG_LITE_VIEWPORT_WIDTH_THRESHOLD_M);
+    const _twPanCoarse = !!(_twPanLite && (state.scale || 1) < 0.4);
     function centerlineWidthWorld(baseWorld, minScreenPx) {
       const s = Math.max(0.08, state.scale || 1);
       return Math.max(baseWorld, minScreenPx / s);
     }
-    function strokeTwCenterlineBlackThenYellow(yellowStroke) {
+    function strokeTwCenterlineYellow(yellowStroke) {
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      if (state.isPanning) return;
-      ctx.lineWidth = centerlineWidthWorld(1.5, 1.0);
-      ctx.strokeStyle = '#0a0a0a';
-      ctx.stroke();
+      if (_twPanLite) return;
       ctx.lineWidth = centerlineWidthWorld(1, 0.8);
       ctx.strokeStyle = yellowStroke;
       ctx.stroke();
@@ -3695,7 +4587,7 @@
       const width = tw.width != null ? tw.width : widthDefault;
       const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
       const pathLineCap = 'butt';
-      const pathFillWide = !!state.layers.pathFill;
+      const pathFillWide = !!state.layers.pathFill && !state.isPanning;
       return { drawing, isRunwayPath, isRunwayExit, isApronTaxiwayPath, width, widthDefault, sel, pathLineCap, pathFillWide };
     }
     function forEachTaxiwayInPavementUnderlayOrder(callback) {
@@ -3711,6 +4603,7 @@
       });
     }
     forEachTaxiwayInPavementUnderlayOrder(tw => {
+      if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g) return;
       if (interactiveLite && g.isApronTaxiwayPath) return;
@@ -3760,12 +4653,13 @@
           } else ctx.stroke();
         }
       }
-      if (!interactiveLite && isRunwayPath && tw.vertices.length >= 2 && pathFillWide) {
+      if (!interactiveLite && (!_twPanCoarse || sel || drawing) && isRunwayPath && tw.vertices.length >= 2 && pathFillWide) {
         const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
         drawRunwayDecorations(tw, runwayPts, width, { baseOnly: true });
       }
     });
     state.taxiways.forEach(tw => {
+      if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g || tw.vertices.length < 2) return;
       if (interactiveLite && g.isApronTaxiwayPath) return;
@@ -3810,7 +4704,7 @@
             ctx.stroke();
             ctx.restore();
           } else {
-            strokeTwCenterlineBlackThenYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+            strokeTwCenterlineYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
           }
         }
         ctx.setLineDash([]);
@@ -3825,7 +4719,7 @@
           ctx.strokeStyle = c2dObjectSelectedStroke();
           ctx.stroke();
         } else {
-          strokeTwCenterlineBlackThenYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+          strokeTwCenterlineYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
         }
       } else {
         ctx.lineWidth = centerlineWidthWorld(1.5, 1.4);
@@ -3849,20 +4743,25 @@
       }
     });
     state.taxiways.forEach(tw => {
+      if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g || !g.isRunwayPath || tw.vertices.length < 2 || !g.pathFillWide) return;
       if (interactiveLite && !g.sel) return;
+      if (_twPanCoarse && !g.sel) return;
       const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
       drawRunwayPavedCenterlineDashed(tw, runwayPts, g.width);
     });
     state.taxiways.forEach(tw => {
+      if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g || !g.isRunwayPath || tw.vertices.length < 2 || !g.pathFillWide) return;
       if (interactiveLite && !g.sel) return;
+      if (_twPanCoarse && !g.sel) return;
       const runwayPts = tw.vertices.map(v => cellToPixel(v.col, v.row));
       drawRunwayDecorations(tw, runwayPts, g.width, { markingsOnly: true });
     });
     state.taxiways.forEach(tw => {
+      if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g) return;
       const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel;
@@ -3907,7 +4806,7 @@
       }
       if (interactiveLite && !drawing && !sel) return;
       const dir = getTaxiwayDirection(tw);
-      if (!interactiveLite && dir !== 'both' && tw.vertices.length >= 2) {
+      if ((!_twPanCoarse || sel || g.drawing) && dir !== 'both' && tw.vertices.length >= 2) {
         const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
         const totalLen = pts.reduce((acc, p, i) => acc + (i > 0 ? Math.hypot(p[0]-pts[i-1][0], p[1]-pts[i-1][1]) : 0), 0);
         let numArrows;
@@ -3944,7 +4843,7 @@
           ctx.fill();
         }
       }
-      if (!interactiveLite && isRunwayPath && tw.vertices.length >= 2) {
+      if (!interactiveLite && (!_twPanCoarse || sel || g.drawing) && isRunwayPath && tw.vertices.length >= 2) {
         const rwPts = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
         if (rwPts.length >= 2) {
           const lenPx = runwayPolylineLengthPx(rwPts);
@@ -4077,11 +4976,6 @@
         for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
       }
       if (state.layers.pathLines) {
-        ctx.beginPath();
-        traceApronLinkPoly();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = '#0a0a0a';
-        ctx.stroke();
         ctx.beginPath();
         traceApronLinkPoly();
         ctx.lineWidth = 1;
@@ -4327,6 +5221,7 @@
   }
   function drawHoldingPoints2D(interactiveLite) {
     if (!ctx) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -4338,6 +5233,8 @@
     }
     (state.holdingPoints || []).forEach(function(hp) {
       if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return;
+      const hpAabb = { minX: hp.x - CELL_SIZE, minY: hp.y - CELL_SIZE, maxX: hp.x + CELL_SIZE, maxY: hp.y + CELL_SIZE };
+      if (!aabbIntersectsViewport(vb, hpAabb)) return;
       const selected = sel && state.selectedObject.id === hp.id;
       drawHoldingPointGridMarking(ctx, hp.x, hp.y, hp.hpKind, selected, false);
       const waitN = countFlightsWaitingAtHoldingPoint2D(hp, state.simTimeSec);
@@ -4388,6 +5285,8 @@
   }
 
   function drawStandPreview(interactiveLite) {
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -4405,7 +5304,7 @@
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      if (!interactiveLite) fillStandSafetyFootprintInLocalAxes(ctx, depPr, widPr, category);
+      if (!interactiveLite && !suppressStandFill) fillStandSafetyFootprintInLocalAxes(ctx, depPr, widPr, category);
       drawStandSafetyContourInLocalAxes(ctx, depPr, widPr, category, false);
       if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depPr, widPr, category);
       ctx.restore();
@@ -4422,7 +5321,7 @@
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      if (!interactiveLite) fillStandSafetyFootprintInLocalAxes(ctx, depPt, widPt, category);
+      if (!interactiveLite && !suppressStandFill) fillStandSafetyFootprintInLocalAxes(ctx, depPt, widPt, category);
       drawStandSafetyContourInLocalAxes(ctx, depPt, widPt, category, false);
       if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depPt, widPt, category);
       ctx.restore();
@@ -4458,7 +5357,7 @@
       ctx.translate(ex, ey);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      if (!interactiveLite) fillStandSafetyFootprintInLocalAxes(ctx, depPv, widPv, catPv);
+      if (!interactiveLite && !suppressStandFill) fillStandSafetyFootprintInLocalAxes(ctx, depPv, widPv, catPv);
       drawStandSafetyContourInLocalAxes(ctx, depPv, widPv, catPv, false);
       if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depPv, widPv, catPv);
       if (!interactiveLite) {
@@ -4475,11 +5374,33 @@
 
   let _safeDrawErrLogged = false;
   let _drawRafId = 0;
+  /** While panning or shortly after wheel zoom, skip heavy path layers for smoother interaction. */
   let _layoutDetailSuppressUntil = 0;
+  const LAYOUT_DRAG_LITE_VIEWPORT_WIDTH_THRESHOLD_M = 1200;
+  function layoutViewportWidthWorldM() {
+    if (!layoutDrawCanvas) return Infinity;
+    const s = Math.max(state.scale || 1, 1e-9);
+    return (layoutDrawCanvas.width / dpr) / s;
+  }
+  function layoutViewIsDragging() {
+    return !!(
+      state.pathArcDrag ||
+      state.dragVertex ||
+      state.dragTaxiwayVertex ||
+      state.dragStandRotation ||
+      state.dragPbbBridgeVertex ||
+      state.dragStandConnection ||
+      state.dragRemoteStandPosition ||
+      state.dragApronLinkVertex ||
+      state.dragLayoutMarkerHandle
+    );
+  }
   function layoutViewSkipsTaxiDetail(drawOpts) {
     if (drawOpts && drawOpts.forceFullLayoutDraw) return false;
     const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    return !!state.isPanning || now < _layoutDetailSuppressUntil;
+    const wideViewport = layoutViewportWidthWorldM() > LAYOUT_DRAG_LITE_VIEWPORT_WIDTH_THRESHOLD_M;
+    if (!wideViewport) return false;
+    return !!state.isPanning || layoutViewIsDragging() || now < _layoutDetailSuppressUntil;
   }
   function safeDraw(drawOpts) { try { draw(drawOpts); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
   function flushDrawNow() {
@@ -4740,6 +5661,7 @@
   function drawLayoutAreaMarkers2DFloor() {
     if (!ctx || !layoutMarkersVisible()) return;
     if (!layerIslandAreaFillEffective()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -4751,6 +5673,8 @@
       if (!pts || pts.length < 3) return;
       const poly = pts.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
       if (poly.length < 3) return;
+      const areaAabb = pointsWorldAabb(poly);
+      if (areaAabb && !aabbIntersectsViewport(vb, areaAabb)) return;
       ctx.beginPath();
       ctx.moveTo(poly[0][0], poly[0][1]);
       for (let j = 1; j < poly.length; j++) ctx.lineTo(poly[j][0], poly[j][1]);
@@ -4776,6 +5700,7 @@
   }
   function drawLayoutIslandMarkers2DEarly() {
     if (!ctx || !layoutMarkersVisible()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -4785,12 +5710,16 @@
         if (!m || m.kind !== 'island' || islandMarkerPavementResolved(m) !== 'cement') return;
         const pts = layoutIslandWorldPointsForDraw(m);
         if (pts.length < 3) return;
+        const islandAabb = pointsWorldAabb(pts);
+        if (islandAabb && !aabbIntersectsViewport(vb, islandAabb)) return;
         drawLayoutIslandMarkerPavementWorld(ctx, pts, m);
       });
       (state.layoutMarkers || []).forEach(function(m) {
         if (!m || m.kind !== 'island' || islandMarkerPavementResolved(m) !== 'asphalt') return;
         const pts = layoutIslandWorldPointsForDraw(m);
         if (pts.length < 3) return;
+        const islandAabb = pointsWorldAabb(pts);
+        if (islandAabb && !aabbIntersectsViewport(vb, islandAabb)) return;
         drawLayoutIslandMarkerPavementWorld(ctx, pts, m);
       });
     }
@@ -4812,6 +5741,7 @@
   }
   function drawLayoutIslandMarkersOverlay2D() {
     if (!ctx || !layoutMarkersVisible()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -4822,6 +5752,8 @@
         if (!m || m.kind !== 'island') return;
         const pts = layoutIslandWorldPointsForDraw(m);
         if (pts.length < 3) return;
+        const islandAabb = pointsWorldAabb(pts);
+        if (islandAabb && !aabbIntersectsViewport(vb, islandAabb)) return;
         const isSel = !!(sel && sel.type === 'layoutMarker' && String(sel.id) === String(m.id));
         drawLayoutIslandMarkerLinesWorld(ctx, pts, isSel);
       });
@@ -4830,6 +5762,7 @@
   }
   function drawLayoutAreaMarkerOutlines2D() {
     if (!ctx || !layoutMarkersVisible()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -4844,6 +5777,8 @@
       if (!pts || pts.length < 3) return;
       const poly = pts.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
       if (poly.length < 3) return;
+      const areaAabb = pointsWorldAabb(poly);
+      if (areaAabb && !aabbIntersectsViewport(vb, areaAabb)) return;
       const isSel = !!(sel && sel.type === 'layoutMarker' && String(sel.id) === String(m.id));
       ctx.beginPath();
       ctx.moveTo(poly[0][0], poly[0][1]);
@@ -4869,6 +5804,7 @@
   }
   function drawLayoutMarkers2D(interactiveLite) {
     if (!ctx || !layoutMarkersVisible()) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -4900,6 +5836,10 @@
       if (!markerTool) {
         if ((m.kind === 'text' || m.kind === 'ruler') && !state.layers.textRuler) return;
         if (m.kind === 'flight' && !state.layers.dummyFlight) return;
+      }
+      if (!(state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id)) {
+        const mkAabb = markerWorldAabb(m);
+        if (mkAabb && !aabbIntersectsViewport(vb, mkAabb)) return;
       }
       const sel = state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id;
       if (m.kind === 'text') {
@@ -5160,8 +6100,10 @@
     if (state.hasSimulationResult && state.flights && state.flights.length) {
       if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
     }
-    drawHoldingQueueGhostFlights2D();
-    drawFlights2D();
+    if (!interactiveLite) {
+      drawHoldingQueueGhostFlights2D();
+      drawFlights2D();
+    }
     if (!interactiveLite) {
       drawPathJunctions();
       drawQueueTaxiwayLaneMarkers();
@@ -5642,7 +6584,10 @@
       }
     });
   }
-  container.addEventListener('mousemove', function(ev) {
+  function layoutSnapDragActive() {
+    return !!(state.pathArcDrag || state.dragVertex || state.dragTaxiwayVertex || state.dragPbbBridgeVertex || state.dragStandConnection || state.dragRemoteStandPosition || state.dragApronLinkVertex || state.dragStandRotation || state.dragLayoutMarkerHandle);
+  }
+  function onLayoutCanvasCoordinateMove(ev) {
     const rect = canvas.getBoundingClientRect();
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
     const [wx, wy] = screenToWorld(sx, sy);
@@ -5913,6 +6858,7 @@
           if (mv.col === snappedPt.col && mv.row === snappedPt.row) return;
           mv.col = snappedPt.col;
           mv.row = snappedPt.row;
+          markApronLinkJunctionOverlayDirty(lk.id);
           scheduleDraw(); drewThisMove = true;
         }
       } else if (state.dragApronLinkVertex.kind === 'taxiway') {
@@ -5921,6 +6867,7 @@
           if (Math.abs(lk.tx - snap[0]) < 1e-5 && Math.abs(lk.ty - snap[1]) < 1e-5) return;
           lk.tx = snap[0];
           lk.ty = snap[1];
+          markApronLinkJunctionOverlayDirty(lk.id);
           scheduleDraw(); drewThisMove = true;
         }
       }
@@ -6141,9 +7088,20 @@
       if (state.previewHoldingPoint) { state.previewHoldingPoint = null; clearedPreview = true; }
       if (clearedPreview) { scheduleDraw(); drewThisMove = true; }
     }
-    scheduleLayoutTooltipRaf(ev, wx, wy);
+    if (layoutViewIsDragging()) {
+      flushLayoutTooltipRaf();
+      if (flightTooltip) flightTooltip.style.display = 'none';
+    } else {
+      scheduleLayoutTooltipRaf(ev, wx, wy);
+    }
     if (hoverChanged && !drewThisMove) { scheduleDraw(); drewThisMove = true; }
-  });
+  }
+  container.addEventListener('mousemove', onLayoutCanvasCoordinateMove);
+  document.addEventListener('mousemove', function(ev) {
+    if (!layoutSnapDragActive()) return;
+    if (container && ev.target && typeof container.contains === 'function' && container.contains(ev.target)) return;
+    onLayoutCanvasCoordinateMove(ev);
+  }, true);
   container.addEventListener('mouseleave', function() {
     flushLayoutTooltipRaf();
     if (flightTooltip) flightTooltip.style.display = 'none';
@@ -6152,10 +7110,6 @@
     if (cursorPixelReadoutEl) cursorPixelReadoutEl.textContent = '—';
     state.dragStart = null;
     state.isPanning = false;
-    state.dragStandRotation = null;
-    state.dragPbbBridgeVertex = null;
-    state.dragStandConnection = null;
-    state.dragRemoteStandPosition = null;
     state.hoverCell = null;
     state.previewPbb = null;
     state.previewRemote = null;
@@ -6165,7 +7119,6 @@
     state.markerRulerHoverWorld = null;
     state.markerIslandHoverWorld = null;
     state.markerAreaHoverWorld = null;
-    state.dragLayoutMarkerHandle = null;
     flushDrawNow();
   });
   container.addEventListener('dblclick', function(ev) {
@@ -6214,11 +7167,15 @@
     return best;
   }
 
-  container.addEventListener('mouseup', function(ev) {
+  function onLayoutContainerMouseUp(ev) {
     if (ev.button !== 0) return;
     const wasPanning = !!state.isPanning;
     flushDrawNow();
     state.isPanning = false;
+    if (wasPanning) {
+      const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      _layoutDetailSuppressUntil = Math.max(_layoutDetailSuppressUntil, nowPerf + 120);
+    }
     if (state.dragVertex) {
       state.dragVertex = null;
       return;
@@ -6419,6 +7376,7 @@
                   };
                   if (midVertices && midVertices.length) linkRec.midVertices = midVertices;
                   state.apronLinks.push(linkRec);
+                  markApronLinkJunctionOverlayDirty(newId);
                   syncPanelFromState();
                   if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
                   else {
@@ -6444,7 +7402,7 @@
           }
           draw();
         }
-      } else if (pickHit) {
+      } else if (pickHit && !layoutDrawModePreventsBackgroundObjectPick()) {
         state.flightPathRevealFlightId = null;
         state.selectedObject = pickHit;
         if (pickHit.type === 'terminal') state.currentTerminalId = pickHit.id;
@@ -6535,7 +7493,8 @@
       }
     }
     state.dragStart = null;
-  });
+  }
+  document.addEventListener('mouseup', onLayoutContainerMouseUp, true);
   let scene3d = null, camera3d = null, renderer3d = null, controls3d = null, grid3DMapper = null, raycaster3d = null, mouse3d = null, groundPlane3d = null, gridGroup3d = null;
   let mouse3dDown = null;
   const view3dContainer = document.getElementById('view3d-container');
@@ -6690,6 +7649,7 @@
   if (btnDesignerPageUpdate) {
     btnDesignerPageUpdate.addEventListener('click', function() {
       if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
+      if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
       if (typeof renderObjectList === 'function') renderObjectList();
       if (typeof updateObjectInfo === 'function') updateObjectInfo();
       if (typeof renderFlightList === 'function') renderFlightList(false, true);

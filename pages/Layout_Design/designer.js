@@ -4105,7 +4105,9 @@
   function drawPbbBoardingRectangle(ctx, pbb, sel) {
     const poly = getPbbBoardingRectangleCornersWorldPx(pbb);
     if (!poly || poly.length < 4) return;
-    const sl = !!state.layers.standLines, sf = !!state.layers.standFill;
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
+    const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
     if (!sl && !sf) return;
     ctx.save();
     ctx.beginPath();
@@ -4261,6 +4263,7 @@
   }
 
   function layerIslandAreaFillEffective() {
+    if (state.isPanning) return false;
     if (state.markerDrawing && getMarkerSubKindFromPanel() === 'island') return true;
     if (state.markerDrawing && getMarkerSubKindFromPanel() === 'area') return true;
     return !!state.layers.islandAreaFill;
@@ -17419,6 +17422,8 @@
   }
   function drawTerminals(interactiveLite) {
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressBuildingFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17440,7 +17445,8 @@
         drawLayoutPathDraftVertexDots(ctx, termPts, hoverTerm);
       } else {
         const hairW = layoutHairlineStrokeWidthWorld();
-        const bl = !!state.layers.buildingLines, bf = !!state.layers.buildingFill;
+        const bl = !!state.layers.buildingLines;
+        const bf = !!state.layers.buildingFill && !suppressBuildingFill;
         if (bl || bf || selected) {
           ctx.lineWidth = hairW;
           ctx.strokeStyle = selected ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.88)';
@@ -17500,6 +17506,8 @@
 
   function drawPBBs(interactiveLite) {
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17517,7 +17525,7 @@
       const widP = getStandWidthMeters(pbb.category || 'C');
       const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
-      const sl = !!state.layers.standLines, sf = !!state.layers.standFill;
+      const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
       if (!sl && !sf && !sel) return;
       if (!interactiveLite) drawPbbBoardingRectangle(ctx, pbb, sel);
       const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
@@ -17619,6 +17627,8 @@
 
   function drawRemoteStands(interactiveLite) {
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17638,7 +17648,7 @@
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const apronLinkedR = standHasApronTaxiwayLink(st.id);
       const idleFillR = apronLinkedR ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)';
-      const sl = !!state.layers.standLines, sf = !!state.layers.standFill;
+      const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
       if (!sl && !sf && !sel) return;
       ctx.save();
       ctx.translate(cx, cy);
@@ -17684,6 +17694,8 @@
 
   function drawTempStands(interactiveLite) {
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -17709,7 +17721,7 @@
       const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('T' + String(idx + 1).padStart(3, '0'));
       const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
       const label = labelPrefix + ' / ' + nameRaw;
-      const sl = !!state.layers.standLines, sf = !!state.layers.standFill;
+      const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
       if (!sl && !sf && !sel) return;
       ctx.save();
       ctx.translate(cx, cy);
@@ -18283,13 +18295,10 @@
       const s = Math.max(0.08, state.scale || 1);
       return Math.max(baseWorld, minScreenPx / s);
     }
-    function strokeTwCenterlineBlackThenYellow(yellowStroke) {
+    function strokeTwCenterlineYellow(yellowStroke) {
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
       if (_twPanLite) return;
-      ctx.lineWidth = centerlineWidthWorld(1.5, 1.0);
-      ctx.strokeStyle = '#0a0a0a';
-      ctx.stroke();
       ctx.lineWidth = centerlineWidthWorld(1, 0.8);
       ctx.strokeStyle = yellowStroke;
       ctx.stroke();
@@ -18304,7 +18313,7 @@
       const width = tw.width != null ? tw.width : widthDefault;
       const sel = state.selectedObject && state.selectedObject.type === 'taxiway' && state.selectedObject.id === tw.id;
       const pathLineCap = 'butt';
-      const pathFillWide = !!state.layers.pathFill;
+      const pathFillWide = !!state.layers.pathFill && !state.isPanning;
       return { drawing, isRunwayPath, isRunwayExit, isApronTaxiwayPath, width, widthDefault, sel, pathLineCap, pathFillWide };
     }
     function forEachTaxiwayInPavementUnderlayOrder(callback) {
@@ -18421,7 +18430,7 @@
             ctx.stroke();
             ctx.restore();
           } else {
-            strokeTwCenterlineBlackThenYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+            strokeTwCenterlineYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
           }
         }
         ctx.setLineDash([]);
@@ -18436,7 +18445,7 @@
           ctx.strokeStyle = c2dObjectSelectedStroke();
           ctx.stroke();
         } else {
-          strokeTwCenterlineBlackThenYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+          strokeTwCenterlineYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
         }
       } else {
         ctx.lineWidth = centerlineWidthWorld(1.5, 1.4);
@@ -18693,11 +18702,6 @@
         for (let pi = 1; pi < poly.length; pi++) ctx.lineTo(poly[pi][0], poly[pi][1]);
       }
       if (state.layers.pathLines) {
-        ctx.beginPath();
-        traceApronLinkPoly();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = '#0a0a0a';
-        ctx.stroke();
         ctx.beginPath();
         traceApronLinkPoly();
         ctx.lineWidth = 1;
@@ -19007,6 +19011,8 @@
   }
 
   function drawStandPreview(interactiveLite) {
+    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -19024,7 +19030,7 @@
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      if (!interactiveLite) fillStandSafetyFootprintInLocalAxes(ctx, depPr, widPr, category);
+      if (!interactiveLite && !suppressStandFill) fillStandSafetyFootprintInLocalAxes(ctx, depPr, widPr, category);
       drawStandSafetyContourInLocalAxes(ctx, depPr, widPr, category, false);
       if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depPr, widPr, category);
       ctx.restore();
@@ -19041,7 +19047,7 @@
       ctx.translate(cx, cy);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      if (!interactiveLite) fillStandSafetyFootprintInLocalAxes(ctx, depPt, widPt, category);
+      if (!interactiveLite && !suppressStandFill) fillStandSafetyFootprintInLocalAxes(ctx, depPt, widPt, category);
       drawStandSafetyContourInLocalAxes(ctx, depPt, widPt, category, false);
       if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depPt, widPt, category);
       ctx.restore();
@@ -19077,7 +19083,7 @@
       ctx.translate(ex, ey);
       ctx.rotate(angle);
       ctx.setLineDash([]);
-      if (!interactiveLite) fillStandSafetyFootprintInLocalAxes(ctx, depPv, widPv, catPv);
+      if (!interactiveLite && !suppressStandFill) fillStandSafetyFootprintInLocalAxes(ctx, depPv, widPv, catPv);
       drawStandSafetyContourInLocalAxes(ctx, depPv, widPv, catPv, false);
       if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depPv, widPv, catPv);
       if (!interactiveLite) {

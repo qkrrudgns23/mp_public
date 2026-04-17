@@ -1,3 +1,200 @@
+      const sliced = obj.taxiways.slice();
+      sliced.forEach(function(tw) {
+        normalizeTaxiwayVerticesFromPersistLoad(tw);
+        normalizeTaxiwayWidthInPlace(tw);
+        normalizePathPavementInPlace(tw);
+      });
+      return sliced;
+    }
+    return [];
+  }
+  function normalizeLayoutMarkerFromLoad(m) {
+    if (!m || typeof m !== 'object') return null;
+    const k = m.kind || m.type;
+    if (k === 'text') {
+      const x = Number(m.x), y = Number(m.y);
+      if (!isFinite(x) || !isFinite(y)) return null;
+      const text = m.text != null ? String(m.text).slice(0, 500) : '';
+      return { kind: 'text', id: m.id || id(), x: x, y: y, text: text || 'Text' };
+    }
+    if (k === 'ruler') {
+      const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
+      if (![x1, y1, x2, y2].every(isFinite)) return null;
+      return { kind: 'ruler', id: m.id || id(), x1: x1, y1: y1, x2: x2, y2: y2 };
+    }
+    if (k === 'island') {
+      const rawPts = Array.isArray(m.points) ? m.points : [];
+      const points = rawPts.map(function(p) {
+        return { x: Number(p && p.x), y: Number(p && p.y) };
+      }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
+      if (points.length < 3) return null;
+      let ow = Number(m.outerWidthM);
+      let iw = Number(m.innerWidthM);
+      if (!isFinite(ow) || ow < 0) ow = LAYOUT_ISLAND_OUTER_WIDTH_DEFAULT_M;
+      else ow = Math.min(500, ow);
+      if (!isFinite(iw) || iw < 0) iw = LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
+      else iw = Math.min(200, iw);
+      return { kind: 'island', id: m.id || id(), points: points, outerWidthM: ow, innerWidthM: iw, pavement: islandMarkerPavementResolved(m) };
+    }
+    if (k === 'area') {
+      const rawPts = Array.isArray(m.points) ? m.points : [];
+      const points = rawPts.map(function(p) {
+        return { x: Number(p && p.x), y: Number(p && p.y) };
+      }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
+      if (points.length < 3) return null;
+      return { kind: 'area', id: m.id || id(), points: points };
+    }
+    if (k === 'flight') {
+      if (m.taxiwayId == null || m.taxiwayId === '') return null;
+      const segIndex = Math.max(0, parseInt(m.segIndex, 10) || 0);
+      let t = Number(m.t);
+      if (!isFinite(t)) t = 0.5;
+      const leftTrail = Array.isArray(m.blazerLeftTrail) ? m.blazerLeftTrail : [];
+      const rightTrail = Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail : [];
+      return {
+        kind: 'flight',
+        id: m.id || id(),
+        taxiwayId: m.taxiwayId,
+        segIndex: segIndex,
+        t: Math.max(0, Math.min(1, t)),
+        aircraftType: String(m.aircraftType || '').trim() || ((AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320'),
+        blazerEnabled: !!m.blazerEnabled,
+        headingReversed: !!m.headingReversed,
+        blazerColor: MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) >= 0 ? String(m.blazerColor).trim() : MARKER_BLAZER_COLOR_OPTIONS[0],
+        blazerLeftTrail: leftTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }),
+        blazerRightTrail: rightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); })
+      };
+    }
+    return null;
+  }
+  function isLayoutPolygonMarkerKind(kind) {
+    return kind === 'island' || kind === 'area';
+  }
+  /** Area markers are drawn under other layout objects; keep them at the front of the array (low z in reverse hit-test). */
+  function normalizeLayoutMarkerAreaZOrder(markers) {
+    if (!Array.isArray(markers) || !markers.length) return markers || [];
+    const areas = [];
+    const rest = [];
+    for (let i = 0; i < markers.length; i++) {
+      const m = markers[i];
+      if (!m) continue;
+      if (m.kind === 'area') areas.push(m);
+      else rest.push(m);
+    }
+    return areas.concat(rest);
+  }
+  function applyLayoutObject(obj) {
+    if (!obj || typeof obj !== 'object') return;
+    if (obj.grid) {
+      if (typeof obj.grid.cols === 'number') GRID_COLS = obj.grid.cols;
+      if (typeof obj.grid.rows === 'number') GRID_ROWS = obj.grid.rows;
+      if (typeof obj.grid.cellSize === 'number') CELL_SIZE = obj.grid.cellSize;
+    }
+    hydrateLayersFromGridObject(obj.grid || null, obj);
+    state.layoutImageOverlay = normalizeLayoutImageOverlay(
+      (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
+    );
+    invalidateGridUnderlay();
+    syncLayoutImageBitmap();
+    syncLayerPopoverFromState();
+    if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
+    if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
+    if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
+    if (Array.isArray(obj.tempStands)) state.tempStands = obj.tempStands.map(normalizeTempStandObject);
+    else state.tempStands = [];
+    state.taxiways = mergeTaxiwaysFromLayoutObject(obj);
+    invalidatePathGraphCache(true);
+    if (Array.isArray(obj.holdingPoints)) {
+      state.holdingPoints = obj.holdingPoints.map(function(h) {
+        const hx = Number(h && h.x);
+        const hy = Number(h && h.y);
+        let hpKind = null;
+        if (h && h.hpKind != null) hpKind = normalizeHoldingPointKind(h.hpKind);
+        if (!hpKind) {
+          const snap = snapHoldingPointOnAllowedTaxiways(hx, hy);
+          hpKind = (snap && snap.pathType) ? pathTypeToHpKind(snap.pathType) : 'intermediate';
+        }
+        return {
+          id: (h && h.id) ? h.id : id(),
+          name: h && h.name != null ? String(h.name) : '',
+          x: hx,
+          y: hy,
+          hpKind: hpKind
+        };
+      }).filter(function(h) { return h && isFinite(h.x) && isFinite(h.y); });
+    } else state.holdingPoints = [];
+    if (Array.isArray(obj.apronLinks)) {
+      const csAL = _layoutCellSizeForPersistLoad();
+      state.apronLinks = obj.apronLinks.map(function(lk) {
+        const copy = Object.assign({}, lk);
+        if (Array.isArray(copy.midVertices)) {
+          copy.midVertices = copy.midVertices.map(function(v) {
+            if (!v || typeof v !== 'object') return { col: 0, row: 0 };
+            const x = Number(v.x), y = Number(v.y);
+            if (isFinite(x) && isFinite(y)) return { col: x / csAL, row: y / csAL };
+            return { col: Number(v.col) || 0, row: Number(v.row) || 0 };
+          });
+        }
+        return copy;
+      });
+    }
+    if (Array.isArray(obj.directionModes) && obj.directionModes.length) {
+      state.directionModes = obj.directionModes.slice();
+    }
+    if (Array.isArray(obj.layoutMarkers)) {
+      state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(obj.layoutMarkers.map(normalizeLayoutMarkerFromLoad).filter(Boolean));
+    } else if (!Array.isArray(state.layoutMarkers)) {
+      state.layoutMarkers = [];
+    }
+    if (Array.isArray(obj.flights)) {
+      state.flights = obj.flights.slice();
+      state.flights.forEach(f => {
+        const t = f.token || {};
+        if (f.aircraftType && typeof getCodeForAircraft === 'function') {
+          f.code = getCodeForAircraft(f.aircraftType);
+        } else if (f.code && typeof AIRCRAFT_TYPES !== 'undefined') {
+          const match = AIRCRAFT_TYPES.find(a => a.icao === f.code);
+          f.aircraftType = match ? match.id : (AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320';
+        }
+        f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
+        f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
+        f.terminalId = f.terminalId || t.terminalId || null;
+        const apronId = t.apronId != null ? t.apronId : (f.standId != null ? f.standId : null);
+        f.standId = apronId;
+        f.token = {
+          nodes: Array.isArray(t.nodes) ? t.nodes.slice() : ['runway','taxiway','apron','terminal'],
+          runwayId: f.arrRunwayId || null,
+          apronId: apronId,
+          terminalId: f.terminalId || null,
+          depRunwayId: f.depRunwayId || null,
+        };
+        f.noWayArr = false;
+        f.noWayDep = false;
+        delete f._noWayArrDetail;
+        delete f._noWayDepDetail;
+        f.arrRetFailed = false;
+        f.sampledArrRet = null;
+        f.arrRotSec = null;
+        f.arrRunwayIdUsed = null;
+        f.arrTdDistM = null;
+        f.arrRetDistM = null;
+        f.arrVTdMs = null;
+        f.arrDecelMs2 = null;
+        f.arrVRetInMs = null;
+        f.arrVRetOutMs = null;
+        f.timeline = null;
+        delete f.timeline_meta;
+        delete f.cachedArrPathPts;
+        delete f.cachedDepPathPts;
+        delete f._pathPolylineCacheRev;
+        delete f._pathPolylineArrRetKey;
+        f.__schedRetRotRev = null;
+        f.__schedVttArrRev = null;
+        f.__schedVttArrMin = null;
+        delete f.eldtMin;
+        delete f.eibtMin;
+        delete f.eobtMin;
+        delete f.etotMin;
         delete f.eldtMin_orig;
         delete f.eibtMin_orig;
         delete f.eobtMin_orig;
@@ -16,6 +213,14 @@
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
     else draw();
+    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.layers && state.layers.junction) {
+      try {
+        if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
+        if (typeof draw === 'function') draw();
+      } catch (ePg) {
+        console.warn('applyLayoutObject: path graph sync', ePg);
+      }
+    }
     if (typeof renderFlightList === 'function') renderFlightList();
   }
   /** E-series minutes and ARR_ROT_SEC from ``airside_sim`` schedule row only (seconds → minutes). */
@@ -384,6 +589,7 @@
     state.holdingPoints = snap.holdingPoints || [];
     state.taxiways = snap.taxiways;
     state.apronLinks = snap.apronLinks;
+    state.apronLinkJunctionOverlayDirtyIds = null;
     state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
     syncLayoutImageBitmap();
     state.layoutEdgeNames = snap.layoutEdgeNames || {};
@@ -512,209 +718,3 @@
   };
   const RSEP_SEQ_META = _rwy.seqMeta || {
     'ARR→ARR': { driver: 'Wake of leading arrival aircraft', refPoint: 'Touchdown / final approach point of the leading arrival', input: 'Lead (arrival) × Trail (arrival) matrix input' },
-    'DEP→DEP': { driver: 'Wake of leading departure aircraft', refPoint: 'Take-off / runway entry point of the leading departure', input: 'Lead (departure) × Trail (departure) matrix input' },
-    'ARR→DEP': { driver: 'Leading aircraft ROT (runway occupancy time)', refPoint: 'Trailing aircraft: time from lineup to gear-off (lineup–gear-off)', input: 'Lead arrival category — 1D separation inputs' },
-    'DEP→ARR': { driver: 'Wake / ROT of leading departure', refPoint: 'Runway vacation / ROT end of the leading departure', input: 'Trail (arrival category) 1‑D input' },
-  };
-  function rsepGetCatLabel(stdKey, cat) {
-    const t = RSEP_CAT_LABELS[stdKey];
-    if (!t) return '';
-    return t[cat] || '';
-  }
-  function rsepGetSeqMeta(seq) {
-    return RSEP_SEQ_META[seq] || null;
-  }
-  function _rsepStringValue(value) {
-    return value != null ? String(value) : '';
-  }
-  function _rsepMakeCategoryValues(cats, src, asMatrix) {
-    const out = {};
-    cats.forEach(leadCat => {
-      if (!asMatrix) {
-        out[leadCat] = _rsepStringValue(src && src[leadCat]);
-        return;
-      }
-      out[leadCat] = {};
-      cats.forEach(trailCat => {
-        out[leadCat][trailCat] = _rsepStringValue(src && src[leadCat] && src[leadCat][trailCat]);
-      });
-    });
-    return out;
-  }
-  function rsepMakeMatrix(cats, src) {
-    return _rsepMakeCategoryValues(cats, src, true);
-  }
-  function rsepMake1D(cats, src) {
-    return _rsepMakeCategoryValues(cats, src, false);
-  }
-  function rsepMakeSeqData(stdKey) {
-    const cats = RSEP_STD_CATS[stdKey] || [];
-    const def = RSEP_DEFAULTS[stdKey] || {};
-    const arrDep = rsepMake1D(cats, def['ARR→DEP']);
-    const boost = RSEP_ARRDEP_BOOST_SEC;
-    cats.forEach(function(c) {
-      const s = arrDep[c];
-      if (s === '' || s == null) return;
-      const n = Number(s);
-      if (isFinite(n)) arrDep[c] = String(Math.round(n + boost));
-    });
-    return {
-      'ARR→ARR': rsepMakeMatrix(cats, def['ARR→ARR']),
-      'DEP→DEP': rsepMakeMatrix(cats, def['DEP→DEP']),
-      'ARR→DEP': arrDep,
-      'DEP→ARR': rsepMake1D(cats, def['DEP→ARR']),
-    };
-  }
-
-  function rsepColorForValue(val) {
-    const n = Number(val);
-    if (!isFinite(n) || val === '' || val == null) {
-      return { bg: '#1a1a1a', color: '#e5e7eb', border: '#444444' };
-    }
-    const th = RSEP_COLOR_THRESHOLDS;
-    for (let i = 0; i < th.length; i++) {
-      if (n < th[i]) return RSEP_COLOR_STYLES[i] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
-    }
-    return RSEP_COLOR_STYLES[th.length] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
-  }
-  function rsepLegendHtml(filled, total) {
-    const th = RSEP_COLOR_THRESHOLDS;
-    const countColor = filled === total ? '#68d391' : '#9ca3af';
-    let html = '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
-    const lab = RSEP_LEGEND_LAB;
-    if (th.length) {
-      const st0 = rsepColorForValue(Math.max(0, th[0] - 1));
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st0.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st0.color + ';">' + escapeHtml(rsepLegendFmt(lab.ltFirst || '<{0}s', th[0])) + '</span></span>';
-      for (let i = 1; i < th.length; i++) {
-        const lo = th[i - 1], hi = th[i];
-        const mid = lo + (hi - lo) / 2;
-        const st = rsepColorForValue(mid);
-        const text = rsepLegendFmt(lab.rangeMid || '{0}–{1}s', lo, hi - 1);
-        html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st.color + ';">' + escapeHtml(text) + '</span></span>';
-      }
-      const lastT = th[th.length - 1];
-      const stL = rsepColorForValue(lastT + 1000);
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + stL.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + stL.color + ';">' + escapeHtml(rsepLegendFmt(lab.gteLast || '≥{0}s', lastT)) + '</span></span>';
-    }
-    html += '<span style="margin-left:4px;color:' + countColor + ';">' + filled + '/' + total + '</span>';
-    html += '</div>';
-    return html;
-  }
-  function rsepMakeConfig(stdKey) {
-    const std = RSEP_STANDARDS[stdKey] || RSEP_STANDARDS['ICAO'];
-    const cats = RSEP_STD_CATS[stdKey];
-    const rot = std.ROT || {};
-    const rotCopy = {};
-    const boost = RSEP_ARRDEP_BOOST_SEC;
-    cats.forEach(function(c) {
-      if (rot[c] == null || rot[c] === '') rotCopy[c] = '';
-      else {
-        const n = Number(rot[c]);
-
-
-        rotCopy[c] = isFinite(n) ? String(Math.round(n + boost)) : String(rot[c]);
-      }
-    });
-    return {
-      standard: stdKey,
-      mode: 'MIX',
-      activeSeq: 'ARR→ARR',
-      seqData: rsepMakeSeqData(stdKey),
-      rot: rotCopy,
-    };
-  }
-  function rsepGetConfigForRunway(rw) {
-    if (!rw) return null;
-    if (!rw.rwySepConfig) {
-      rw.rwySepConfig = rsepMakeConfig('ICAO');
-    }
-    const cfg = rw.rwySepConfig;
-    if (!RSEP_STD_CATS[cfg.standard]) {
-      rw.rwySepConfig = rsepMakeConfig('ICAO');
-      return rw.rwySepConfig;
-    }
-    return cfg;
-  }
-  let dpr = window.devicePixelRatio || 1;
-  let ctx = (canvas && typeof canvas.getContext === 'function') ? canvas.getContext('2d') : null;
-  let layoutDrawCanvas = canvas;
-
-  function screenToWorld(sx, sy) {
-    return [(sx - state.panX) / state.scale, (sy - state.panY) / state.scale];
-  }
-  function worldToScreenCanvas(wx, wy) {
-    return [wx * state.scale + state.panX, wy * state.scale + state.panY];
-  }
-  function cellToPixel(col, row) { return [col * CELL_SIZE, row * CELL_SIZE]; }
-  function getTaxiwayAvgMoveVelocityForPath(path) {
-    if (path && typeof path.avgMoveVelocity === 'number' && isFinite(path.avgMoveVelocity) && path.avgMoveVelocity > 0)
-      return Math.max(1, Math.min(50, path.avgMoveVelocity));
-    const el = document.getElementById('taxiwayAvgMoveVelocity');
-    const v = el ? Number(el.value) : 10;
-    return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
-  }
-  function roundToStep(value, step) {
-    const n = Number(value);
-    const s = Number(step);
-    if (!isFinite(n)) return 0;
-    if (!isFinite(s) || s <= 0) return n;
-    return Math.round(n / s) * s;
-  }
-  function clampToGridBounds(col, row) {
-    const c = Math.max(0, Math.min(GRID_COLS, Number(col) || 0));
-    const r = Math.max(0, Math.min(GRID_ROWS, Number(row) || 0));
-    return [c, r];
-  }
-  function pixelToCell(x, y) {
-    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-    const snappedCol = roundToStep(x / cs, GRID_SNAP_STEP_CELL);
-    const snappedRow = roundToStep(y / cs, GRID_SNAP_STEP_CELL);
-    return clampToGridBounds(snappedCol, snappedRow);
-  }
-  function worldPointToCellPoint(wx, wy, snapToGrid) {
-    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-    const step = snapToGrid ? GRID_SNAP_STEP_CELL : FREE_DRAW_STEP_CELL;
-    const col = roundToStep(wx / cs, step);
-    const row = roundToStep(wy / cs, step);
-    const clamped = clampToGridBounds(col, row);
-    return { col: clamped[0], row: clamped[1] };
-  }
-  function worldPointToPixel(wx, wy, snapToGrid) {
-    const pt = worldPointToCellPoint(wx, wy, snapToGrid);
-    return cellToPixel(pt.col, pt.row);
-  }
-  const ICAO_STAND_SIZE_M = (function() {
-    const m = _layoutTier.standSizesMByIcaoCategory;
-    if (m && typeof m === 'object') {
-      const o = {};
-      Object.keys(m).forEach(k => { o[k] = Number(m[k]); });
-      return o;
-    }
-    return { A: 20, B: 30, C: 40, D: 50, E: 60, F: 80 };
-  })();
-  function getStandSizeMeters(cat) { return ICAO_STAND_SIZE_M[cat] || 40; }
-  const STAND_CONFIG_ROW_BY_CODE = (function() {
-    const raw = _layoutTier.standConfig;
-    const out = {};
-    if (!raw || typeof raw !== 'object') return out;
-    Object.keys(raw).forEach(function(k) {
-      if (k === 'description') return;
-      const row = raw[k];
-      if (!row || typeof row !== 'object') return;
-      const ws = Number(row.wingspan), g = Number(row.gap), rd = Number(row.road);
-      const ln = Number(row.length), nc = Number(row.nose_clear), pb = Number(row.pushback);
-      const dp = Number(row.depth);
-      if (![ws, g, rd, ln, nc, pb, dp].every(isFinite)) return;
-      const rowOut = { wingspan: ws, gap: g, road: rd, length: ln, nose_clear: nc, pushback: pb, depth: dp };
-      const og = Number(row.outer_gear), nsc = Number(row.nose_side_clear), nw = Number(row.nose_width);
-      if (isFinite(og)) rowOut.outer_gear = og;
-      if (isFinite(nsc)) rowOut.nose_side_clear = nsc;
-      if (isFinite(nw)) rowOut.nose_width = nw;
-      out[String(k).toUpperCase().slice(0, 1)] = rowOut;
-    });
-    return out;
-  })();
-  function standConfigRowForIcaoCat(cat) {
-    const s = String(cat == null ? 'C' : cat).toUpperCase();
-    let c = 'C';
-    for (let i = 0; i < s.length; i++) {

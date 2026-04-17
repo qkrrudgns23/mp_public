@@ -1,3 +1,199 @@
+    btn.setAttribute('aria-expanded', o ? 'true' : 'false');
+    if (o) panel.removeAttribute('hidden');
+    else panel.setAttribute('hidden', '');
+  }
+  function clampLayoutImageOpacity(value) {
+    const n = Number(value);
+    if (!isFinite(n)) return GRID_LAYOUT_IMAGE_DEFAULTS.opacity;
+    return Math.max(GRID_LAYOUT_IMAGE_DEFAULTS.opacityMin, Math.min(GRID_LAYOUT_IMAGE_DEFAULTS.opacityMax, n));
+  }
+  function clampLayoutImageSize(value, fallback) {
+    const n = Number(value);
+    if (!isFinite(n) || n <= 0) return fallback;
+    return n;
+  }
+  function clampLayoutImagePoint(value, fallback) {
+    const n = Number(value);
+    return isFinite(n) ? n : fallback;
+  }
+  function getLayoutImageAspectRatio(overlay) {
+    if (!overlay || typeof overlay !== 'object') return 1;
+    const ow = Number(overlay.originalWidthPx);
+    const oh = Number(overlay.originalHeightPx);
+    if (isFinite(ow) && ow > 0 && isFinite(oh) && oh > 0) return oh / ow;
+    const w = Number(overlay.widthM);
+    const h = Number(overlay.heightM);
+    if (isFinite(w) && w > 0 && isFinite(h) && h > 0) return h / w;
+    return 1;
+  }
+  function applyLayoutImageWidthByAspect(widthM) {
+    if (!state.layoutImageOverlay) return;
+    const nextWidth = clampLayoutImageSize(widthM, state.layoutImageOverlay.widthM);
+    const aspect = getLayoutImageAspectRatio(state.layoutImageOverlay);
+    state.layoutImageOverlay.widthM = nextWidth;
+    state.layoutImageOverlay.heightM = clampLayoutImageSize(nextWidth * aspect, state.layoutImageOverlay.heightM);
+  }
+  function applyLayoutImageHeightByAspect(heightM) {
+    if (!state.layoutImageOverlay) return;
+    const nextHeight = clampLayoutImageSize(heightM, state.layoutImageOverlay.heightM);
+    const aspect = getLayoutImageAspectRatio(state.layoutImageOverlay);
+    state.layoutImageOverlay.heightM = nextHeight;
+    state.layoutImageOverlay.widthM = clampLayoutImageSize(nextHeight / Math.max(aspect, 1e-9), state.layoutImageOverlay.widthM);
+  }
+  function normalizeLayoutImageOverlay(raw) {
+    if (!raw || typeof raw !== 'object' || !raw.dataUrl) return null;
+    const widthM = clampLayoutImageSize(raw.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM);
+    const heightM = clampLayoutImageSize(raw.heightM, GRID_LAYOUT_IMAGE_DEFAULTS.heightM);
+    const originalWidthPx = clampLayoutImageSize(raw.originalWidthPx, widthM);
+    const originalHeightPx = clampLayoutImageSize(raw.originalHeightPx, heightM);
+    return {
+      name: String(raw.name || 'Layout image'),
+      type: String(raw.type || 'image/png'),
+      dataUrl: String(raw.dataUrl || ''),
+      opacity: clampLayoutImageOpacity(raw.opacity),
+      widthM: widthM,
+      heightM: heightM,
+      originalWidthPx: originalWidthPx,
+      originalHeightPx: originalHeightPx,
+      topLeftCol: clampLayoutImagePoint(raw.topLeftCol, GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol),
+      topLeftRow: clampLayoutImagePoint(raw.topLeftRow, GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow)
+    };
+  }
+  function syncLayoutImageBitmap() {
+    const overlay = state.layoutImageOverlay;
+    if (!overlay || !overlay.dataUrl) {
+      layoutImageBitmap = null;
+      layoutImageBitmapSrc = '';
+      return;
+    }
+    if (layoutImageBitmap && layoutImageBitmapSrc === overlay.dataUrl) return;
+    layoutImageBitmap = null;
+    layoutImageBitmapSrc = '';
+    const img = new Image();
+    const src = overlay.dataUrl;
+    img.onload = function() {
+      if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
+      layoutImageBitmap = img;
+      layoutImageBitmapSrc = src;
+      invalidateGridUnderlay();
+      safeDraw();
+    };
+    img.onerror = function() {
+      if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
+      layoutImageBitmap = null;
+      layoutImageBitmapSrc = '';
+      invalidateGridUnderlay();
+      safeDraw();
+    };
+    img.src = src;
+  }
+  function toggleLayoutDrawMode(flagKey, previewKey, tempKey) {
+    state.selectedObject = null;
+    if (state[flagKey]) {
+      state[flagKey] = false;
+      if (previewKey) state[previewKey] = null;
+      if (tempKey) state[tempKey] = null;
+      if (flagKey === 'apronLinkDrawing') {
+        state.apronLinkMidpoints = [];
+        state.apronLinkPointerWorld = null;
+      }
+    } else {
+      state[flagKey] = true;
+      if (previewKey) state[previewKey] = null;
+      if (tempKey) state[tempKey] = null;
+      if (flagKey === 'apronLinkDrawing') {
+        state.apronLinkMidpoints = [];
+        state.apronLinkPointerWorld = null;
+      }
+    }
+    syncPanelFromState();
+    draw();
+  }
+  function layoutDrawModePreventsBackgroundObjectPick() {
+    return !!(state.pbbDrawing || state.remoteDrawing || state.tempStandDrawing || state.holdingPointDrawing ||
+      state.apronLinkDrawing || state.terminalDrawingId || state.taxiwayDrawingId || state.markerDrawing);
+  }
+  function handlePbbOrRemoteMouseUp2D(mode, wx, wy) {
+    if (mode === 'pbb' && state.pbbDrawing) {
+      if (tryPlacePbbAt(wx, wy)) { syncPanelFromState(); draw(); }
+      return true;
+    }
+    if (mode === 'remote' && state.remoteDrawing) {
+      const prev = state.previewRemote;
+      if (prev && !prev.overlap && tryPlaceRemoteAt(prev.x, prev.y)) { syncPanelFromState(); draw(); }
+      return true;
+    }
+    if (mode === 'tempStand' && state.tempStandDrawing) {
+      const prev = state.previewTempStand;
+      if (prev && !prev.overlap && tryPlaceTempStandAt(prev.x, prev.y)) { syncPanelFromState(); draw(); }
+      return true;
+    }
+    if (mode === 'holdingPoint' && state.holdingPointDrawing) {
+      const prev = state.previewHoldingPoint;
+      if (prev && tryPlaceHoldingPointAt(prev.x, prev.y, prev.pathType || 'taxiway')) { syncPanelFromState(); draw(); }
+      return true;
+    }
+    return false;
+  }
+  function tryCommitStandPlacement3D(mode, wx, wy, col, row) {
+    if (mode === 'pbb' && state.pbbDrawing) {
+      if (tryPlacePbbAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
+      return;
+    }
+    if (mode === 'remote' && state.remoteDrawing) {
+      if (tryPlaceRemoteAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
+    }
+    if (mode === 'tempStand' && state.tempStandDrawing) {
+      if (tryPlaceTempStandAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
+    }
+  }
+  function findLayoutObjectByListType(typ, idr) {
+    if (typ === 'terminal') return state.terminals.find(t => t.id === idr);
+    if (typ === 'pbb') return state.pbbStands.find(p => p.id === idr);
+    if (typ === 'remote') return state.remoteStands.find(r => r.id === idr);
+    if (typ === 'tempStand') return (state.tempStands || []).find(function(s) { return s.id === idr; });
+    if (typ === 'holdingPoint') return (state.holdingPoints || []).find(h => h.id === idr);
+    if (typ === 'taxiway') return state.taxiways.find(tw => tw.id === idr);
+    if (typ === 'apronLink') return state.apronLinks.find(lk => lk.id === idr);
+    if (typ === 'layoutEdge') return (state.derivedGraphEdges || []).find(function(e) { return e.id === idr; });
+    if (typ === 'flight') return state.flights.find(f => f.id === idr);
+    if (typ === 'layoutMarker') return (state.layoutMarkers || []).find(function(m) { return m && m.id === idr; });
+    return null;
+  }
+  function removeLayoutObjectFromState(type, id) {
+    const removedTaxiway = (type === 'taxiway')
+      ? (state.taxiways || []).find(function(tw) { return tw.id === id; })
+      : null;
+    if (type === 'terminal') state.terminals = state.terminals.filter(t => t.id !== id);
+    else if (type === 'pbb') state.pbbStands = state.pbbStands.filter(p => p.id !== id);
+    else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
+    else if (type === 'tempStand') state.tempStands = (state.tempStands || []).filter(function(s) { return s.id !== id; });
+    else if (type === 'holdingPoint') state.holdingPoints = (state.holdingPoints || []).filter(h => h.id !== id);
+    else if (type === 'taxiway') {
+      state.taxiways = state.taxiways.filter(tw => tw.id !== id);
+      if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+        invalidatePathGraphCache(false);
+      } else {
+        markPathGraphJunctionStaleShellAfterLayoutEdit();
+      }
+    }
+    else if (type === 'apronLink') {
+      state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
+      if (state.apronLinkJunctionOverlayDirtyIds) delete state.apronLinkJunctionOverlayDirtyIds[String(id)];
+    }
+    else if (type === 'flight') {
+      state.flights = state.flights.filter(f => f.id !== id);
+      bumpRwySepSnapshotStaleGen();
+      state.rwySepPanelDirty = true;
+    }
+    else if (type === 'layoutMarker') state.layoutMarkers = (state.layoutMarkers || []).filter(function(m) { return m && m.id !== id; });
+    else if (type === 'layoutEdge') {}
+    if (removedTaxiway) {
+      if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.pathGraphCacheValid && state.pathGraphCache && !state.pathGraphCache.__junctionStale) {
+        stripPathGraphCacheJunctionsNearTaxiwayWorld(removedTaxiway);
+      }
+      const shouldResampleRet = (removedTaxiway.pathType === 'runway' || removedTaxiway.pathType === 'runway_exit');
+      if (removedTaxiway.pathType === 'runway_exit') {
         (state.flights || []).forEach(function(f) {
           if (!f || f.sampledArrRet !== id) return;
           f.sampledArrRet = null;
@@ -122,199 +318,3 @@
       return out;
     }
     if (Array.isArray(obj.taxiways)) {
-      const sliced = obj.taxiways.slice();
-      sliced.forEach(function(tw) {
-        normalizeTaxiwayVerticesFromPersistLoad(tw);
-        normalizeTaxiwayWidthInPlace(tw);
-        normalizePathPavementInPlace(tw);
-      });
-      return sliced;
-    }
-    return [];
-  }
-  function normalizeLayoutMarkerFromLoad(m) {
-    if (!m || typeof m !== 'object') return null;
-    const k = m.kind || m.type;
-    if (k === 'text') {
-      const x = Number(m.x), y = Number(m.y);
-      if (!isFinite(x) || !isFinite(y)) return null;
-      const text = m.text != null ? String(m.text).slice(0, 500) : '';
-      return { kind: 'text', id: m.id || id(), x: x, y: y, text: text || 'Text' };
-    }
-    if (k === 'ruler') {
-      const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
-      if (![x1, y1, x2, y2].every(isFinite)) return null;
-      return { kind: 'ruler', id: m.id || id(), x1: x1, y1: y1, x2: x2, y2: y2 };
-    }
-    if (k === 'island') {
-      const rawPts = Array.isArray(m.points) ? m.points : [];
-      const points = rawPts.map(function(p) {
-        return { x: Number(p && p.x), y: Number(p && p.y) };
-      }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
-      if (points.length < 3) return null;
-      let ow = Number(m.outerWidthM);
-      let iw = Number(m.innerWidthM);
-      if (!isFinite(ow) || ow < 0) ow = LAYOUT_ISLAND_OUTER_WIDTH_DEFAULT_M;
-      else ow = Math.min(500, ow);
-      if (!isFinite(iw) || iw < 0) iw = LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
-      else iw = Math.min(200, iw);
-      return { kind: 'island', id: m.id || id(), points: points, outerWidthM: ow, innerWidthM: iw, pavement: islandMarkerPavementResolved(m) };
-    }
-    if (k === 'area') {
-      const rawPts = Array.isArray(m.points) ? m.points : [];
-      const points = rawPts.map(function(p) {
-        return { x: Number(p && p.x), y: Number(p && p.y) };
-      }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
-      if (points.length < 3) return null;
-      return { kind: 'area', id: m.id || id(), points: points };
-    }
-    if (k === 'flight') {
-      if (m.taxiwayId == null || m.taxiwayId === '') return null;
-      const segIndex = Math.max(0, parseInt(m.segIndex, 10) || 0);
-      let t = Number(m.t);
-      if (!isFinite(t)) t = 0.5;
-      const leftTrail = Array.isArray(m.blazerLeftTrail) ? m.blazerLeftTrail : [];
-      const rightTrail = Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail : [];
-      return {
-        kind: 'flight',
-        id: m.id || id(),
-        taxiwayId: m.taxiwayId,
-        segIndex: segIndex,
-        t: Math.max(0, Math.min(1, t)),
-        aircraftType: String(m.aircraftType || '').trim() || ((AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320'),
-        blazerEnabled: !!m.blazerEnabled,
-        headingReversed: !!m.headingReversed,
-        blazerColor: MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) >= 0 ? String(m.blazerColor).trim() : MARKER_BLAZER_COLOR_OPTIONS[0],
-        blazerLeftTrail: leftTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }),
-        blazerRightTrail: rightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); })
-      };
-    }
-    return null;
-  }
-  function isLayoutPolygonMarkerKind(kind) {
-    return kind === 'island' || kind === 'area';
-  }
-  /** Area markers are drawn under other layout objects; keep them at the front of the array (low z in reverse hit-test). */
-  function normalizeLayoutMarkerAreaZOrder(markers) {
-    if (!Array.isArray(markers) || !markers.length) return markers || [];
-    const areas = [];
-    const rest = [];
-    for (let i = 0; i < markers.length; i++) {
-      const m = markers[i];
-      if (!m) continue;
-      if (m.kind === 'area') areas.push(m);
-      else rest.push(m);
-    }
-    return areas.concat(rest);
-  }
-  function applyLayoutObject(obj) {
-    if (!obj || typeof obj !== 'object') return;
-    if (obj.grid) {
-      if (typeof obj.grid.cols === 'number') GRID_COLS = obj.grid.cols;
-      if (typeof obj.grid.rows === 'number') GRID_ROWS = obj.grid.rows;
-      if (typeof obj.grid.cellSize === 'number') CELL_SIZE = obj.grid.cellSize;
-    }
-    hydrateLayersFromGridObject(obj.grid || null, obj);
-    state.layoutImageOverlay = normalizeLayoutImageOverlay(
-      (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
-    );
-    invalidateGridUnderlay();
-    syncLayoutImageBitmap();
-    syncLayerPopoverFromState();
-    if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
-    if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
-    if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
-    if (Array.isArray(obj.tempStands)) state.tempStands = obj.tempStands.map(normalizeTempStandObject);
-    else state.tempStands = [];
-    state.taxiways = mergeTaxiwaysFromLayoutObject(obj);
-    if (Array.isArray(obj.holdingPoints)) {
-      state.holdingPoints = obj.holdingPoints.map(function(h) {
-        const hx = Number(h && h.x);
-        const hy = Number(h && h.y);
-        let hpKind = null;
-        if (h && h.hpKind != null) hpKind = normalizeHoldingPointKind(h.hpKind);
-        if (!hpKind) {
-          const snap = snapHoldingPointOnAllowedTaxiways(hx, hy);
-          hpKind = (snap && snap.pathType) ? pathTypeToHpKind(snap.pathType) : 'intermediate';
-        }
-        return {
-          id: (h && h.id) ? h.id : id(),
-          name: h && h.name != null ? String(h.name) : '',
-          x: hx,
-          y: hy,
-          hpKind: hpKind
-        };
-      }).filter(function(h) { return h && isFinite(h.x) && isFinite(h.y); });
-    } else state.holdingPoints = [];
-    if (Array.isArray(obj.apronLinks)) {
-      const csAL = _layoutCellSizeForPersistLoad();
-      state.apronLinks = obj.apronLinks.map(function(lk) {
-        const copy = Object.assign({}, lk);
-        if (Array.isArray(copy.midVertices)) {
-          copy.midVertices = copy.midVertices.map(function(v) {
-            if (!v || typeof v !== 'object') return { col: 0, row: 0 };
-            const x = Number(v.x), y = Number(v.y);
-            if (isFinite(x) && isFinite(y)) return { col: x / csAL, row: y / csAL };
-            return { col: Number(v.col) || 0, row: Number(v.row) || 0 };
-          });
-        }
-        return copy;
-      });
-    }
-    if (Array.isArray(obj.directionModes) && obj.directionModes.length) {
-      state.directionModes = obj.directionModes.slice();
-    }
-    if (Array.isArray(obj.layoutMarkers)) {
-      state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(obj.layoutMarkers.map(normalizeLayoutMarkerFromLoad).filter(Boolean));
-    } else if (!Array.isArray(state.layoutMarkers)) {
-      state.layoutMarkers = [];
-    }
-    if (Array.isArray(obj.flights)) {
-      state.flights = obj.flights.slice();
-      state.flights.forEach(f => {
-        const t = f.token || {};
-        if (f.aircraftType && typeof getCodeForAircraft === 'function') {
-          f.code = getCodeForAircraft(f.aircraftType);
-        } else if (f.code && typeof AIRCRAFT_TYPES !== 'undefined') {
-          const match = AIRCRAFT_TYPES.find(a => a.icao === f.code);
-          f.aircraftType = match ? match.id : (AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320';
-        }
-        f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
-        f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
-        f.terminalId = f.terminalId || t.terminalId || null;
-        const apronId = t.apronId != null ? t.apronId : (f.standId != null ? f.standId : null);
-        f.standId = apronId;
-        f.token = {
-          nodes: Array.isArray(t.nodes) ? t.nodes.slice() : ['runway','taxiway','apron','terminal'],
-          runwayId: f.arrRunwayId || null,
-          apronId: apronId,
-          terminalId: f.terminalId || null,
-          depRunwayId: f.depRunwayId || null,
-        };
-        f.noWayArr = false;
-        f.noWayDep = false;
-        delete f._noWayArrDetail;
-        delete f._noWayDepDetail;
-        f.arrRetFailed = false;
-        f.sampledArrRet = null;
-        f.arrRotSec = null;
-        f.arrRunwayIdUsed = null;
-        f.arrTdDistM = null;
-        f.arrRetDistM = null;
-        f.arrVTdMs = null;
-        f.arrDecelMs2 = null;
-        f.arrVRetInMs = null;
-        f.arrVRetOutMs = null;
-        f.timeline = null;
-        delete f.timeline_meta;
-        delete f.cachedArrPathPts;
-        delete f.cachedDepPathPts;
-        delete f._pathPolylineCacheRev;
-        delete f._pathPolylineArrRetKey;
-        f.__schedRetRotRev = null;
-        f.__schedVttArrRev = null;
-        f.__schedVttArrMin = null;
-        delete f.eldtMin;
-        delete f.eibtMin;
-        delete f.eobtMin;
-        delete f.etotMin;

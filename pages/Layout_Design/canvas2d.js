@@ -1,3 +1,221 @@
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (!markingsOnly) {
+      drawExtensionSegment(startFrame, startSegSign, 0, startDisp);
+      drawExtensionSegment(startFrame, startSegSign, startDisp, startBlast);
+      drawExtensionSegment(endFrame, endSegSign, 0, endDisp);
+      drawExtensionSegment(endFrame, endSegSign, endDisp, endBlast);
+    }
+    if (!baseOnly) {
+      drawDisplacedThresholdArrows(startFrame, startArrowPos, startArrowDir, 0, startDisp);
+      drawDisplacedThresholdArrows(endFrame, endArrowPos, endArrowDir, 0, endDisp);
+      drawBlastPadChevrons(startFrame, startSegSign, startDisp, startBlast);
+      drawBlastPadChevrons(endFrame, endSegSign, endDisp, endBlast);
+    }
+
+    const thresholdInset = Math.min(Math.max(runwayWidth * 0.58, 26), totalLen * 0.12);
+    const thresholdStripeLen = Math.min(Math.max(runwayWidth * 0.54, 20), 34);
+    const thresholdStripeWidth = Math.max(3, runwayWidth * 0.085);
+    if (!baseOnly) {
+      [-runwayWidth * 0.30, -runwayWidth * 0.18, -runwayWidth * 0.06, runwayWidth * 0.06, runwayWidth * 0.18, runwayWidth * 0.30].forEach(function(offset) {
+        drawRectAtBothEnds(thresholdInset, offset, thresholdStripeLen, thresholdStripeWidth, thresholdColor);
+      });
+    }
+
+    const aimingDist = Math.min(Math.max(300, runwayWidth * 3.5), totalLen * 0.28);
+    if (!baseOnly) {
+      if (aimingDist < (totalLen * 0.5) - (runwayWidth * 0.6)) {
+        drawSymmetricPairAtBothEnds(
+          aimingDist,
+          runwayWidth * 0.20,
+          Math.min(Math.max(runwayWidth * 1.2, 54), 92),
+          Math.max(6, runwayWidth * 0.12),
+          aimingPointColor
+        );
+      }
+    }
+
+    if (!baseOnly) {
+      [150, 450].forEach(function(distPx) {
+        if (distPx >= (totalLen * 0.5) - (runwayWidth * 0.8)) return;
+        [runwayWidth * 0.14, runwayWidth * 0.28].forEach(function(offsetPx) {
+          drawSymmetricPairAtBothEnds(
+            distPx,
+            offsetPx,
+            Math.min(Math.max(runwayWidth * 0.52, 22), 42),
+            Math.max(4, runwayWidth * 0.08),
+            touchdownColor
+          );
+        });
+      });
+    }
+    ctx.restore();
+  }
+
+  /** Paved-segment runway centerline; drawn after all taxiway width strokes so RTX width cannot cover it. */
+  function drawRunwayPavedCenterlineDashed(tw, pts, widthPx) {
+    if (!tw || tw.pathType !== 'runway') return;
+    if (!pts || pts.length < 2) return;
+    const totalLen = runwayPolylineLengthPx(pts);
+    const runwayWidth = Math.max(24, Number(widthPx) || RUNWAY_PATH_DEFAULT_WIDTH);
+    if (totalLen < Math.max(220, runwayWidth * 3)) return;
+    const startDisp = getEffectiveRunwayStartDisplacedThresholdM(tw);
+    const startBlast = getEffectiveRunwayStartBlastPadM(tw);
+    const endDisp = getEffectiveRunwayEndDisplacedThresholdM(tw);
+    const endBlast = getEffectiveRunwayEndBlastPadM(tw);
+    const lowFrame = getPolylinePointAndFrameAtDistance(pts, 0);
+    const highFrame = getPolylinePointAndFrameAtDistance(pts, totalLen);
+    if (!lowFrame || !highFrame) return;
+    const isCcw = normalizeRwDirectionValue(getTaxiwayDirection(tw)) === 'counter_clockwise';
+    const paveStart = isCcw ? (endDisp + endBlast) : (startDisp + startBlast);
+    const paveEnd = isCcw ? (totalLen - startDisp - startBlast) : (totalLen - endDisp - endBlast);
+    if (!(paveEnd > paveStart + 1)) return;
+    const clPts = polylineSliceBetweenDistances(pts, paveStart, paveEnd);
+    if (!clPts || clPts.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = c2dRunwayCenterlineColor();
+    ctx.lineWidth = Math.max(1, runwayWidth * 0.02);
+    const dashPx = Math.max(10, runwayWidth * 0.2);
+    const gapPx = Math.max(8, runwayWidth * 0.16);
+    ctx.setLineDash([dashPx, gapPx]);
+    ctx.lineDashOffset = 0;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    ctx.beginPath();
+    ctx.moveTo(clPts[0][0], clPts[0][1]);
+    for (let ci = 1; ci < clPts.length; ci++) ctx.lineTo(clPts[ci][0], clPts[ci][1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function polylineTailFromDistancePx(pts, distPx) {
+    if (!pts || pts.length < 2) return [];
+    const total = runwayPolylineLengthPx(pts);
+    const d = Math.max(0, Math.min(distPx, total));
+    if (d <= 1e-9) return pts.map(p => [p[0], p[1]]);
+    let acc = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      const segLen = pathDist(p1, p2);
+      if (segLen < 1e-9) continue;
+      if (acc + segLen >= d - 1e-6) {
+        const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+        const lp = [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])];
+        const out = [lp];
+        for (let j = i + 1; j < pts.length; j++) out.push([pts[j][0], pts[j][1]]);
+        return out;
+      }
+      acc += segLen;
+    }
+    return [[pts[pts.length - 1][0], pts[pts.length - 1][1]]];
+  }
+
+  function polylineSliceBetweenDistances(pts, d0, d1) {
+    if (!pts || pts.length < 2) return [];
+    const total = runwayPolylineLengthPx(pts);
+    let a = Math.max(0, Math.min(typeof d0 === 'number' ? d0 : 0, total));
+    let b = Math.max(a, Math.min(typeof d1 === 'number' ? d1 : total, total));
+    if (b - a < 1e-6) return [];
+    function pointAtDist(d) {
+      let acc = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p1 = pts[i], p2 = pts[i + 1];
+        const segLen = pathDist(p1, p2);
+        if (segLen < 1e-9) continue;
+        if (acc + segLen >= d - 1e-6) {
+          const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+          return { pt: [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])], segIndex: i };
+        }
+        acc += segLen;
+      }
+      const last = pts[pts.length - 1];
+      return { pt: [last[0], last[1]], segIndex: Math.max(0, pts.length - 2) };
+    }
+    const start = pointAtDist(a);
+    const end = pointAtDist(b);
+    const out = [[start.pt[0], start.pt[1]]];
+    if (start.segIndex === end.segIndex) {
+      if (dist2(start.pt, end.pt) > 1e-9) out.push([end.pt[0], end.pt[1]]);
+      return out;
+    }
+    for (let si = start.segIndex + 1; si <= end.segIndex; si++) {
+      if (si < pts.length) out.push([pts[si][0], pts[si][1]]);
+    }
+    if (dist2(out[out.length - 1], end.pt) > 1e-9) out.push([end.pt[0], end.pt[1]]);
+    return dedupePathPoints(out);
+  }
+
+  function syncStartEndFromVertices(obj) {
+    if (!obj || !obj.vertices || obj.vertices.length < 2) return;
+    const first = obj.vertices[0], last = obj.vertices[obj.vertices.length - 1];
+    obj.start_point = { col: first.col, row: first.row };
+    obj.end_point = { col: last.col, row: last.row };
+  }
+  /** CW↔CCW 전환 시 vertices 반전 → vertices[0]이 현재 direction 기준 시작점, lineup은 해당 모드 거리로 표시. */
+  function runwayReverseVerticesIfDirectionChanged(tw, nextDirRaw) {
+    if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) return;
+    const prevNorm = (tw.direction === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+    const nextNorm = (String(nextDirRaw || '').trim() === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+    if (prevNorm === nextNorm) return;
+    tw.vertices.reverse();
+    syncStartEndFromVertices(tw);
+  }
+  function getTaxiwayOrderedPoints(tw) {
+    if (!tw.vertices || tw.vertices.length < 2) return null;
+    const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
+    return pts;
+  }
+  function getOrderedPoints(obj) {
+    if (!obj || !obj.vertices || obj.vertices.length < 2) return null;
+    const isRunway = obj.pathType === 'runway';
+    if (isRunway) { const r = getRunwayPath(obj.id); return r && r.pts ? r.pts : null; }
+    return getTaxiwayOrderedPoints(obj);
+  }
+
+  function projectOnSegment(a, b, q) {
+    const ax = a[0], ay = a[1], bx = b[0], by = b[1], qx = q[0], qy = q[1];
+    const dx = bx - ax, dy = by - ay, den = dx*dx + dy*dy;
+    if (den < 1e-12) return { t: 0, p: a };
+    let t = ((qx-ax)*dx + (qy-ay)*dy) / den;
+    t = Math.max(0, Math.min(1, t));
+    return { t, p: [ax+t*dx, ay+t*dy] };
+  }
+  function segmentSegmentIntersection(a, b, c, d) {
+    const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+    const cx = c[0], cy = c[1], dx = d[0], dy = d[1];
+    const rx = bx - ax, ry = by - ay, sx = dx - cx, sy = dy - cy;
+    const cross = rx * sy - ry * sx;
+    if (Math.abs(cross) < 1e-12) return null;
+    const t = ((cx - ax) * sy - (cy - ay) * sx) / cross;
+    const s = ((cx - ax) * ry - (cy - ay) * rx) / cross;
+    if (t < 0 || t > 1 || s < 0 || s > 1) return null;
+    return { p: [ax + t * rx, ay + t * ry] };
+  }
+  function collinearSegmentOverlapOnAB(a, b, c, d) {
+    const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    if (len2 < 1e-12) return null;
+    const len = Math.sqrt(len2);
+    function perpDistAB(p) {
+      return Math.abs((p[0] - ax) * dy - (p[1] - ay) * dx) / len;
+    }
+    const lineTol = Math.max(0.55, len * 1e-9);
+    if (perpDistAB(c) > lineTol || perpDistAB(d) > lineTol) return null;
+    function tOnAB(p) {
+      return ((p[0] - ax) * dx + (p[1] - ay) * dy) / len2;
+    }
+    const tc = tOnAB(c), td = tOnAB(d);
+    const lo = Math.min(tc, td), hi = Math.max(tc, td);
+    const o0 = Math.max(0, lo), o1 = Math.min(1, hi);
+    if (o1 < o0 - 1e-9) return null;
+    return { t0: o0, t1: o1 };
+  }
+  const SPLIT_TOL_D2 = 0.25;
   function pointOnSegmentStrict(a, b, q) {
     const { p } = projectOnSegment(a, b, q);
     return dist2(p, q) <= SPLIT_TOL_D2;
@@ -508,6 +726,451 @@
     return out;
   }
 
+  function layoutWorldViewportAabbWorldM() {
+    if (!layoutDrawCanvas) return { minWx: -Infinity, maxWx: Infinity, minWy: -Infinity, maxWy: Infinity, marginWorld: 0 };
+    const w = layoutDrawCanvas.width / dpr;
+    const h = layoutDrawCanvas.height / dpr;
+    const s = state.scale || 1;
+    const marginWorld = CELL_SIZE * Math.max(6, 96 / Math.max(s, 0.06));
+    return {
+      minWx: (0 - state.panX) / s - marginWorld,
+      maxWx: (w - state.panX) / s + marginWorld,
+      minWy: (0 - state.panY) / s - marginWorld,
+      maxWy: (h - state.panY) / s + marginWorld,
+      marginWorld: marginWorld
+    };
+  }
+  function worldPointInsideLayoutViewportAabb(p, vb) {
+    if (!p || p.length < 2 || !vb) return false;
+    return p[0] >= vb.minWx && p[0] <= vb.maxWx && p[1] >= vb.minWy && p[1] <= vb.maxWy;
+  }
+  function taxiwayWorldAabb(tw) {
+    if (!tw || !tw.vertices || !tw.vertices.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let vi = 0; vi < tw.vertices.length; vi++) {
+      const v = tw.vertices[vi];
+      const xy = cellToPixel(Number(v.col), Number(v.row));
+      minX = Math.min(minX, xy[0]); maxX = Math.max(maxX, xy[0]);
+      minY = Math.min(minY, xy[1]); maxY = Math.max(maxY, xy[1]);
+    }
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+  }
+  function taxiwayWorldAabbIntersectsViewport(tw, vb) {
+    const a = taxiwayWorldAabb(tw);
+    if (!a || !vb) return true;
+    const pad = CELL_SIZE * 3;
+    return !(a.maxX + pad < vb.minWx - pad || a.minX - pad > vb.maxWx + pad || a.maxY + pad < vb.minWy - pad || a.minY - pad > vb.maxWy + pad);
+  }
+  function taxiwayShouldDrawInViewport(tw, vb) {
+    if (!tw || !vb) return true;
+    if (state.taxiwayDrawingId != null && String(state.taxiwayDrawingId) === String(tw.id)) return true;
+    const so = state.selectedObject;
+    if (so && so.type === 'taxiway' && String(so.id) === String(tw.id)) return true;
+    return taxiwayWorldAabbIntersectsViewport(tw, vb);
+  }
+  function terminalWorldAabbFromVertices(term) {
+    if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let ok = false;
+    for (let i = 0; i < term.vertices.length; i++) {
+      const v = term.vertices[i];
+      if (!v) continue;
+      const col = Number(v.col), row = Number(v.row);
+      if (!isFinite(col) || !isFinite(row)) continue;
+      const x = col * CELL_SIZE;
+      const y = row * CELL_SIZE;
+      ok = true;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
+  }
+  const LAYOUT_RENDER_VIEWPORT_BUFFER_M = 200;
+  function layoutWorldViewportAabbWithBufferM(bufferM) {
+    if (!layoutDrawCanvas) return { minWx: -Infinity, maxWx: Infinity, minWy: -Infinity, maxWy: Infinity, marginWorld: 0 };
+    const w = layoutDrawCanvas.width / dpr;
+    const h = layoutDrawCanvas.height / dpr;
+    const s = state.scale || 1;
+    const m = Math.max(0, Number(bufferM) || 0);
+    return {
+      minWx: (0 - state.panX) / s - m,
+      maxWx: (w - state.panX) / s + m,
+      minWy: (0 - state.panY) / s - m,
+      maxWy: (h - state.panY) / s + m,
+      marginWorld: m
+    };
+  }
+  function aabbIntersectsViewport(vb, aabb) {
+    if (!vb || !aabb) return true;
+    return !(aabb.maxX < vb.minWx || aabb.minX > vb.maxWx || aabb.maxY < vb.minWy || aabb.minY > vb.maxWy);
+  }
+  function pointsWorldAabb(points) {
+    if (!Array.isArray(points) || !points.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let ok = false;
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      if (!p || p.length < 2) continue;
+      const x = Number(p[0]), y = Number(p[1]);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      ok = true;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
+  }
+  function markerWorldAabb(m) {
+    if (!m) return null;
+    const pts = [];
+    if (Array.isArray(m.points)) {
+      for (let i = 0; i < m.points.length; i++) {
+        const p = m.points[i];
+        if (!p) continue;
+        const x = Number(p.x), y = Number(p.y);
+        if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+      }
+    }
+    [['x', 'y'], ['x1', 'y1'], ['x2', 'y2']].forEach(function(pair) {
+      const x = Number(m[pair[0]]), y = Number(m[pair[1]]);
+      if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+    });
+    const a = pointsWorldAabb(pts);
+    if (!a) return null;
+    const pad = Math.max(8, CELL_SIZE * 0.8);
+    return { minX: a.minX - pad, minY: a.minY - pad, maxX: a.maxX + pad, maxY: a.maxY + pad };
+  }
+  function overlayJunctionFillForWorldPoint(p, gCache) {
+    if (!gCache || !p) return '#22c55e';
+    const mergeR = PATH_JUNCTION_MERGE_RADIUS_PX * 3.5;
+    const mergeR2 = mergeR * mergeR;
+    const conn = gCache.connectedJunctions || gCache.junctions || [];
+    const disc = gCache.disconnectedValidJunctions;
+    let i;
+    for (i = 0; i < conn.length; i++) {
+      if (dist2(p, conn[i]) <= mergeR2) return '#22c55e';
+    }
+    if (disc && disc.length) {
+      for (i = 0; i < disc.length; i++) {
+        if (dist2(p, disc[i]) <= mergeR2) return '#ef4444';
+      }
+    }
+    return '#22c55e';
+  }
+  function segmentWorldAabbPadded(a, b, pad) {
+    const p = Number(pad) && isFinite(pad) ? pad : 0;
+    return {
+      minX: Math.min(a[0], b[0]) - p,
+      maxX: Math.max(a[0], b[0]) + p,
+      minY: Math.min(a[1], b[1]) - p,
+      maxY: Math.max(a[1], b[1]) + p
+    };
+  }
+  function aabbWorldIntersects2D(ax, bx) {
+    if (!ax || !bx) return true;
+    return !(ax.maxX < bx.minX || ax.minX > bx.maxX || ax.maxY < bx.minY || ax.minY > bx.maxY);
+  }
+  function collectPathJunctionWorldPointsForTaxiway(obj, pathList) {
+    if (!obj || !pathList || !pathList.length) return [];
+    const pts = getOrderedPoints(obj);
+    if (!pts || pts.length < 2) return [];
+    const junctions = [];
+    const segPad = CELL_SIZE * 32;
+    for (let seg = 0; seg < pts.length - 1; seg++) {
+      const a = pts[seg], b = pts[seg + 1];
+      const segBox = segmentWorldAabbPadded(a, b, segPad);
+      pathList.forEach(function(other) {
+        if (!other || other.id === obj.id) return;
+        const otherBox = taxiwayWorldAabb(other);
+        if (otherBox && !aabbWorldIntersects2D(segBox, otherBox)) return;
+        const otherOrd = getOrderedPoints(other);
+        if (!otherOrd || otherOrd.length < 2) return;
+        for (let oseg = 0; oseg < otherOrd.length - 1; oseg++) {
+          const c = otherOrd[oseg], d = otherOrd[oseg + 1];
+          const isec = segmentSegmentIntersection(a, b, c, d);
+          if (isec) {
+            const pr = projectOnSegment(a, b, isec.p);
+            junctions.push({ tAlong: seg + pr.t, p: pr.p });
+          } else {
+            const ov = collinearSegmentOverlapOnAB(a, b, c, d);
+            if (ov) {
+              const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+              const dx = bx - ax, dy = by - ay;
+              const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
+              const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
+              const pr0 = projectOnSegment(a, b, p0);
+              junctions.push({ tAlong: seg + pr0.t, p: pr0.p });
+              if (dist2(p0, p1ov) > SPLIT_TOL_D2) {
+                const pr1 = projectOnSegment(a, b, p1ov);
+                junctions.push({ tAlong: seg + pr1.t, p: pr1.p });
+              }
+            } else {
+              [c, d].forEach(function(q) {
+                if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                  const prq = projectOnSegment(a, b, q);
+                  if (prq.t >= 0 && prq.t <= 1) junctions.push({ tAlong: seg + prq.t, p: prq.p });
+                }
+              });
+            }
+          }
+        }
+        otherOrd.forEach(function(q) {
+          if (!pointOnSegmentStrict(a, b, q)) return;
+          const prq = projectOnSegment(a, b, q);
+          junctions.push({ tAlong: seg + prq.t, p: prq.p });
+        });
+      });
+      const isRunway = obj.pathType === 'runway';
+      if (!isRunway) {
+        (state.apronLinks || []).forEach(function(lk) {
+          if (lk.taxiwayId !== obj.id || lk.tx == null || lk.ty == null) return;
+          const linkPt = [Number(lk.tx), Number(lk.ty)];
+          const pr = projectOnSegment(a, b, linkPt);
+          if (pr.t >= 0 && pr.t <= 1 && dist2(pr.p, linkPt) <= SPLIT_TOL_D2) {
+            junctions.push({ tAlong: seg + pr.t, p: pr.p });
+          }
+        });
+      }
+      {
+        const ptHp = obj.pathType;
+        if (ptHp === 'runway_exit' || ptHp === 'taxiway' || ptHp === 'apron_taxiway' || ptHp === 'general_queue_taxiway') {
+          const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+          const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
+          (state.holdingPoints || []).forEach(function(hp) {
+            if (!hp) return;
+            const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
+            if (ptHp === 'runway_exit') {
+              if (k !== 'runway_holding') return;
+            } else {
+              if (k !== 'intermediate') return;
+            }
+            if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
+            const prh = projectOnSegment(a, b, [hp.x, hp.y]);
+            if (prh.t >= 0 && prh.t <= 1 && dist2(prh.p, [hp.x, hp.y]) <= hpTolD2) {
+              junctions.push({ tAlong: seg + prh.t, p: prh.p });
+            }
+          });
+        }
+      }
+      {
+        const ptTs = obj.pathType;
+        if (
+          ptTs === 'runway_exit' ||
+          ptTs === 'taxiway' ||
+          ptTs === 'apron_taxiway' ||
+          ptTs === 'runway_taxiway' ||
+          ptTs === 'general_queue_taxiway'
+        ) {
+          (state.tempStands || []).forEach(function(st) {
+            if (!st) return;
+            const corners = getRemoteStandCorners(st);
+            if (!corners || corners.length < 4) return;
+            for (let ei = 0; ei < 4; ei++) {
+              const c = corners[ei], d = corners[(ei + 1) % 4];
+              const isec2 = segmentSegmentIntersection(a, b, c, d);
+              if (isec2) {
+                const pr2 = projectOnSegment(a, b, isec2.p);
+                if (pr2.t >= 0 && pr2.t <= 1) junctions.push({ tAlong: seg + pr2.t, p: pr2.p });
+              } else {
+                const ov2 = collinearSegmentOverlapOnAB(a, b, c, d);
+                if (ov2) {
+                  const ax2 = a[0], ay2 = a[1], bx2 = b[0], by2 = b[1];
+                  const dx2 = bx2 - ax2, dy2 = by2 - ay2;
+                  const p0b = [ax2 + ov2.t0 * dx2, ay2 + ov2.t0 * dy2];
+                  const p1b = [ax2 + ov2.t1 * dx2, ay2 + ov2.t1 * dy2];
+                  const pr0b = projectOnSegment(a, b, p0b);
+                  junctions.push({ tAlong: seg + pr0b.t, p: pr0b.p });
+                  if (dist2(p0b, p1b) > SPLIT_TOL_D2) {
+                    const pr1b = projectOnSegment(a, b, p1b);
+                    junctions.push({ tAlong: seg + pr1b.t, p: pr1b.p });
+                  }
+                } else {
+                  [c, d].forEach(function(q) {
+                    if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                      const prq2 = projectOnSegment(a, b, q);
+                      if (prq2.t >= 0 && prq2.t <= 1) junctions.push({ tAlong: seg + prq2.t, p: prq2.p });
+                    }
+                  });
+                }
+              }
+            }
+          });
+        }
+      }
+    }
+    if (obj.pathType === 'general_queue_taxiway') {
+      queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
+        junctions.push({ tAlong: qj.tAlong, p: qj.p });
+      });
+    }
+    if (obj.pathType === 'runway') {
+      const ldm = getEffectiveRunwayLineupDistM(obj);
+      const rpath = getRunwayPath(obj.id);
+      if (rpath && rpath.pts && rpath.pts.length >= 2 && ldm > 1e-6) {
+        let total = 0;
+        for (let ri = 0; ri < rpath.pts.length - 1; ri++) total += pathDist(rpath.pts[ri], rpath.pts[ri + 1]);
+        const d = Math.min(ldm, total);
+        if (d > 1e-6) {
+          let acc = 0;
+          for (let ri = 0; ri < rpath.pts.length - 1; ri++) {
+            const p1 = rpath.pts[ri], p2 = rpath.pts[ri + 1];
+            const segLen = pathDist(p1, p2);
+            if (segLen < 1e-9) continue;
+            if (acc + segLen >= d - 1e-6) {
+              const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+              const px = p1[0] + t * (p2[0] - p1[0]), py = p1[1] + t * (p2[1] - p1[1]);
+              junctions.push({ tAlong: ri + t, p: [px, py] });
+              break;
+            }
+            acc += segLen;
+          }
+        }
+      }
+    }
+    const raw = [];
+    for (let ji = 0; ji < junctions.length; ji++) {
+      const j = junctions[ji];
+      const p = j && j.p;
+      if (p && isFinite(p[0]) && isFinite(p[1])) raw.push(p);
+    }
+    return mergeNearbyPathPointsForDraw(raw, PATH_JUNCTION_MERGE_RADIUS_PX);
+  }
+
+  /** World-space polyline for apron link in progress (matches drawApronTaxiwayLinks draft). */
+  function getApronLinkDrawingDraftWorldPts() {
+    if (!state.apronLinkDrawing || !state.apronLinkTemp) return null;
+    const t = state.apronLinkTemp;
+    const ptsPx = [];
+    if (t.kind === 'pbb' || t.kind === 'remote') {
+      const st = findStandById(t.standId);
+      if (st) ptsPx.push(getStandApronTaxiwayAttachWorldPx(st));
+    } else if (t.kind === 'taxiway') {
+      if (isFinite(Number(t.x)) && isFinite(Number(t.y))) ptsPx.push([Number(t.x), Number(t.y)]);
+    }
+    (state.apronLinkMidpoints || []).forEach(function(c) {
+      if (c && isFinite(Number(c.x)) && isFinite(Number(c.y))) ptsPx.push([Number(c.x), Number(c.y)]);
+      else ptsPx.push(cellToPixel(Number(c.col), Number(c.row)));
+    });
+    const hoverApron = (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2 &&
+      isFinite(state.apronLinkPointerWorld[0]) && isFinite(state.apronLinkPointerWorld[1]))
+      ? state.apronLinkPointerWorld
+      : null;
+    if (ptsPx.length < 1) return null;
+    if (ptsPx.length < 2 && !hoverApron) return null;
+    const full = hoverApron ? ptsPx.concat([hoverApron]) : ptsPx.slice();
+    return dedupePathPoints(full);
+  }
+
+  /** Junction world points where an open polyline crosses taxiway centerlines (same geometry as in-progress taxiway overlay). */
+  function collectPathJunctionWorldPointsForOpenPolyline(polyPts, pathList) {
+    if (!polyPts || polyPts.length < 2 || !pathList || !pathList.length) return [];
+    const junctions = [];
+    const segPad = CELL_SIZE * 32;
+    for (let seg = 0; seg < polyPts.length - 1; seg++) {
+      const a = polyPts[seg], b = polyPts[seg + 1];
+      const segBox = segmentWorldAabbPadded(a, b, segPad);
+      pathList.forEach(function(other) {
+        if (!other) return;
+        const otherBox = taxiwayWorldAabb(other);
+        if (otherBox && !aabbWorldIntersects2D(segBox, otherBox)) return;
+        const otherOrd = getOrderedPoints(other);
+        if (!otherOrd || otherOrd.length < 2) return;
+        for (let oseg = 0; oseg < otherOrd.length - 1; oseg++) {
+          const c = otherOrd[oseg], d = otherOrd[oseg + 1];
+          const isec = segmentSegmentIntersection(a, b, c, d);
+          if (isec) {
+            const pr = projectOnSegment(a, b, isec.p);
+            junctions.push({ tAlong: seg + pr.t, p: pr.p });
+          } else {
+            const ov = collinearSegmentOverlapOnAB(a, b, c, d);
+            if (ov) {
+              const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+              const dx = bx - ax, dy = by - ay;
+              const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
+              const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
+              const pr0 = projectOnSegment(a, b, p0);
+              junctions.push({ tAlong: seg + pr0.t, p: pr0.p });
+              if (dist2(p0, p1ov) > SPLIT_TOL_D2) {
+                const pr1 = projectOnSegment(a, b, p1ov);
+                junctions.push({ tAlong: seg + pr1.t, p: pr1.p });
+              }
+            } else {
+              [c, d].forEach(function(q) {
+                if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                  const prq = projectOnSegment(a, b, q);
+                  if (prq.t >= 0 && prq.t <= 1) junctions.push({ tAlong: seg + prq.t, p: prq.p });
+                }
+              });
+            }
+          }
+        }
+        otherOrd.forEach(function(q) {
+          if (!pointOnSegmentStrict(a, b, q)) return;
+          const prq = projectOnSegment(a, b, q);
+          junctions.push({ tAlong: seg + prq.t, p: prq.p });
+        });
+      });
+      {
+        const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+        const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
+        (state.holdingPoints || []).forEach(function(hp) {
+          if (!hp) return;
+          const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
+          if (k !== 'intermediate') return;
+          if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
+          const prh = projectOnSegment(a, b, [hp.x, hp.y]);
+          if (prh.t >= 0 && prh.t <= 1 && dist2(prh.p, [hp.x, hp.y]) <= hpTolD2) {
+            junctions.push({ tAlong: seg + prh.t, p: prh.p });
+          }
+        });
+      }
+      (state.tempStands || []).forEach(function(st) {
+        if (!st) return;
+        const corners = getRemoteStandCorners(st);
+        if (!corners || corners.length < 4) return;
+        for (let ei = 0; ei < 4; ei++) {
+          const c = corners[ei], d = corners[(ei + 1) % 4];
+          const isec2 = segmentSegmentIntersection(a, b, c, d);
+          if (isec2) {
+            const pr2 = projectOnSegment(a, b, isec2.p);
+            if (pr2.t >= 0 && pr2.t <= 1) junctions.push({ tAlong: seg + pr2.t, p: pr2.p });
+          } else {
+            const ov2 = collinearSegmentOverlapOnAB(a, b, c, d);
+            if (ov2) {
+              const ax2 = a[0], ay2 = a[1], bx2 = b[0], by2 = b[1];
+              const dx2 = bx2 - ax2, dy2 = by2 - ay2;
+              const p0b = [ax2 + ov2.t0 * dx2, ay2 + ov2.t0 * dy2];
+              const p1b = [ax2 + ov2.t1 * dx2, ay2 + ov2.t1 * dy2];
+              const pr0b = projectOnSegment(a, b, p0b);
+              junctions.push({ tAlong: seg + pr0b.t, p: pr0b.p });
+              if (dist2(p0b, p1b) > SPLIT_TOL_D2) {
+                const pr1b = projectOnSegment(a, b, p1b);
+                junctions.push({ tAlong: seg + pr1b.t, p: pr1b.p });
+              }
+            } else {
+              [c, d].forEach(function(q) {
+                if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                  const prq2 = projectOnSegment(a, b, q);
+                  if (prq2.t >= 0 && prq2.t <= 1) junctions.push({ tAlong: seg + prq2.t, p: prq2.p });
+                }
+              });
+            }
+          }
+        }
+      });
+    }
+    const raw = [];
+    for (let ji = 0; ji < junctions.length; ji++) {
+      const j = junctions[ji];
+      const p = j && j.p;
+      if (p && isFinite(p[0]) && isFinite(p[1])) raw.push(p);
+    }
+    return mergeNearbyPathPointsForDraw(raw, PATH_JUNCTION_MERGE_RADIUS_PX);
+  }
+
   function buildPathGraph(selectedArrRetId, runwayDirectionForExit, pathGraphOpts) {
     const opts = pathGraphOpts && typeof pathGraphOpts === 'object' ? pathGraphOpts : {};
     const pureGroundExcludeRunway = !!opts.pureGroundExcludeRunway;
@@ -592,21 +1255,42 @@
     }
 
     const pathList = state.taxiways || [];
+    function segmentBBoxInflated2d(a, b, pad) {
+      const p = pad || 0;
+      const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+      return {
+        minX: Math.min(ax, bx) - p,
+        maxX: Math.max(ax, bx) + p,
+        minY: Math.min(ay, by) - p,
+        maxY: Math.max(ay, by) + p
+      };
+    }
+    function bboxesOverlap2d(A, B) {
+      if (!A || !B) return true;
+      return !(A.maxX < B.minX || B.maxX < A.minX || A.maxY < B.minY || B.maxY < A.minY);
+    }
+    const orderedPtsCache = new Array(pathList.length);
+    for (let _ci = 0; _ci < pathList.length; _ci++) {
+      orderedPtsCache[_ci] = getOrderedPoints(pathList[_ci]);
+    }
     const apronNodeStand = [];
     const minD2 = 1e-6;
-    pathList.forEach(obj => {
+    pathList.forEach(function(obj, objIdx) {
       if (omitOtherRunwayExits && selectedArrRetId != null && obj && obj.pathType === 'runway_exit' && obj.id !== selectedArrRetId) return;
-      const pts = getOrderedPoints(obj);
+      const pts = orderedPtsCache[objIdx];
       if (!pts || pts.length < 2) return;
       const junctions = [];
       for (let seg = 0; seg < pts.length - 1; seg++) {
         const a = pts[seg], b = pts[seg+1];
-        pathList.forEach(other => {
-          if (other.id === obj.id) return;
-          const otherOrd = getOrderedPoints(other);
-          if (!otherOrd || otherOrd.length < 2) return;
+        const segAbBbox = segmentBBoxInflated2d(a, b, 1e-6);
+        for (let oi = 0; oi < pathList.length; oi++) {
+          const other = pathList[oi];
+          if (other.id === obj.id) continue;
+          const otherOrd = orderedPtsCache[oi];
+          if (!otherOrd || otherOrd.length < 2) continue;
           for (let oseg = 0; oseg < otherOrd.length - 1; oseg++) {
             const c = otherOrd[oseg], d = otherOrd[oseg+1];
+            if (!bboxesOverlap2d(segAbBbox, segmentBBoxInflated2d(c, d, 1e-6))) continue;
             const isec = segmentSegmentIntersection(a, b, c, d);
             if (isec) {
               const { t } = projectOnSegment(a, b, isec.p);
@@ -639,7 +1323,7 @@
             const { t, p: proj } = projectOnSegment(a, b, q);
             junctions.push({ tAlong: seg + t, p: proj });
           });
-        });
+        }
         const isRunway = obj.pathType === 'runway';
         if (!isRunway) {
           (state.apronLinks || []).forEach(lk => {
@@ -914,6 +1598,7 @@
 
   function buildSimPathGraphExport() {
     if (!state.taxiways || !state.taxiways.length) return null;
+    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && !state.pathGraphAllowHeavySimExport) return null;
     try {
       return {
         version: 1,
@@ -941,12 +1626,19 @@
   function rebuildDerivedGraphEdges() {
     state.derivedGraphEdges = [];
     if (!state.taxiways || !state.taxiways.length) return;
-    let g;
-    try {
-      g = buildPathGraph(null);
-    } catch (err) {
-      console.error('rebuildDerivedGraphEdges: buildPathGraph failed', err);
+    const graphSig = computeTaxiwaysGraphSig();
+    let g = null;
+    if (state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === graphSig) {
+      g = state.pathGraphCache;
+    } else if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
       return;
+    } else {
+      try {
+        g = buildPathGraph(null);
+      } catch (err) {
+        console.error('rebuildDerivedGraphEdges: buildPathGraph failed', err);
+        return;
+      }
     }
     if (!g || !g.edges || !g.nodes) return;
     const seen = new Set();
@@ -1016,695 +1708,3 @@
         const d2 = dist2(near, click);
         if (d2 < bestD2) { bestD2 = d2; best = ed; }
       }
-    });
-    return best;
-  }
-
-  class MinHeap {
-    constructor() { this.h = []; }
-    push(item) {
-      this.h.push(item);
-      let i = this.h.length - 1;
-      while (i > 0) {
-        const p = (i - 1) >> 1;
-        if (this.h[p][0] <= this.h[i][0]) break;
-        [this.h[p], this.h[i]] = [this.h[i], this.h[p]];
-        i = p;
-      }
-    }
-    pop() {
-      const top = this.h[0];
-      const last = this.h.pop();
-      if (this.h.length) {
-        this.h[0] = last;
-        let i = 0;
-        while (true) {
-          let s = i, l = 2*i+1, r = 2*i+2;
-          if (l < this.h.length && this.h[l][0] < this.h[s][0]) s = l;
-          if (r < this.h.length && this.h[r][0] < this.h[s][0]) s = r;
-          if (s === i) break;
-          [this.h[s], this.h[i]] = [this.h[i], this.h[s]];
-          i = s;
-        }
-      }
-      return top;
-    }
-    get size() { return this.h.length; }
-  }
-
-  function pathDijkstra(g, startIdx, endIdx) {
-    const n = g.nodes.length;
-    const dist = Array(n).fill(Infinity);
-    const prev = Array(n).fill(null);
-    if (startIdx == null || endIdx == null) return null;
-    dist[startIdx] = 0;
-    const heap = new MinHeap();
-    heap.push([0, startIdx]);
-    while (heap.size) {
-      const [d, u] = heap.pop();
-      if (d > dist[u]) continue;
-      if (u === endIdx) break;
-      for (const [v, w] of g.adj[u]) {
-        const nd = d + w;
-        if (nd < dist[v]) {
-          dist[v] = nd;
-          prev[v] = u;
-          heap.push([nd, v]);
-        }
-      }
-    }
-    if (dist[endIdx] === Infinity || dist[endIdx] >= REVERSE_COST) return null;
-    const path = [];
-    for (let cur = endIdx; cur !== null; cur = prev[cur]) path.push(cur);
-    return path.reverse();
-  }
-
-  /** RET 출구 근처 여러 그래프 노드에서 gFull 상 스탠드까지 다익스트라를 시도해, 단일 nearest 스냅이 다른 성분에 묶이는 경우를 완화한다. */
-  function gatherRetExitPivotIndicesOnGFull(gFull, retEndPx, pivotG1Px, rPts) {
-    const mergeRM = PATH_JUNCTION_MERGE_RADIUS_PX;
-    const pxPts = [];
-    if (pivotG1Px && pivotG1Px.length >= 2) pxPts.push(pivotG1Px);
-    if (retEndPx && retEndPx.length >= 2) pxPts.push(retEndPx);
-    if (rPts && rPts.length >= 2) {
-      pxPts.push(rPts[rPts.length - 1]);
-      if (rPts.length >= 3) pxPts.push(rPts[rPts.length - 2]);
-    }
-    const indices = [];
-    const seen = new Set();
-    for (let i = 0; i < pxPts.length; i++) {
-      const idx = nearestPathNode(gFull, pxPts[i]);
-      if (idx != null && !seen.has(idx)) {
-        seen.add(idx);
-        indices.push(idx);
-      }
-    }
-    const rNear = mergeRM * 6;
-    const r2 = rNear * rNear;
-    if (retEndPx && retEndPx.length >= 2 && gFull.nodes && gFull.nodes.length) {
-      const scored = [];
-      for (let ni = 0; ni < gFull.nodes.length; ni++) {
-        const d2 = dist2(gFull.nodes[ni], retEndPx);
-        if (d2 <= r2) scored.push({ ni: ni, d2: d2 });
-      }
-      scored.sort(function(a, b) { return a.d2 - b.d2; });
-      const cap = 36;
-      for (let k = 0; k < scored.length && k < cap; k++) {
-        const ni = scored[k].ni;
-        if (!seen.has(ni)) {
-          seen.add(ni);
-          indices.push(ni);
-        }
-      }
-    }
-    return indices;
-  }
-  function pathDijkstraFromRetExitToStand(gFull, endNodeFull, candidateStartIndices) {
-    if (!gFull || endNodeFull == null || !candidateStartIndices || !candidateStartIndices.length) return { path: null, startIdx: null };
-    let bestPath = null;
-    let bestD = Infinity;
-    const seenStart = new Set();
-    for (let ci = 0; ci < candidateStartIndices.length; ci++) {
-      const s = candidateStartIndices[ci];
-      if (s == null || seenStart.has(s)) continue;
-      seenStart.add(s);
-      const path = pathDijkstra(gFull, s, endNodeFull);
-      if (!path || path.length < 2) continue;
-      const d = pathTotalDist(gFull, path);
-      if (!(d < REVERSE_COST)) continue;
-      if (d < bestD) {
-        bestD = d;
-        bestPath = path;
-      }
-    }
-    return { path: bestPath, startIdx: bestPath ? bestPath[0] : null };
-  }
-
-  function nearestPathNode(g, p) {
-    let best = 0, bestD2 = dist2(g.nodes[0], p);
-    for (let i = 1; i < g.nodes.length; i++) {
-      const d2 = dist2(g.nodes[i], p);
-      if (d2 < bestD2) { bestD2 = d2; best = i; }
-    }
-    return best;
-  }
-  function nearestPathNodeFromSet(g, nodeSet, p) {
-    if (!g || !g.nodes || !g.nodes.length || !nodeSet || !nodeSet.size) return null;
-    let best = null, bestD2 = Infinity;
-    nodeSet.forEach(function(idx) {
-      if (idx == null || !g.nodes[idx]) return;
-      const d2 = dist2(g.nodes[idx], p);
-      if (d2 < bestD2) { bestD2 = d2; best = idx; }
-    });
-    return best;
-  }
-  /** Avoid snapping to another runway's polyline when multiple runways exist (same idea as departure lineup). */
-  function nearestPathNodeOnRunwayPolyline(g, runwayId, runwayPx) {
-    if (!g || !g.nodes || !g.nodes.length || !runwayPx) return null;
-    const rwSet = g.runwayNodeIndicesById && g.runwayNodeIndicesById[runwayId];
-    if (rwSet && rwSet.size)
-      return nearestPathNodeFromSet(g, rwSet, runwayPx) ?? nearestPathNode(g, runwayPx);
-    return nearestPathNode(g, runwayPx);
-  }
-
-  function pathTotalDist(g, pathIndices) {
-    let d = 0;
-    for (let i = 0; i < pathIndices.length - 1; i++) {
-      const a = g.nodes[pathIndices[i]], b = g.nodes[pathIndices[i+1]];
-      const e = g.edgeMap ? g.edgeMap[pathIndices[i] + ':' + pathIndices[i+1]] : null;
-      if (e) d += e.dist; else d += pathDist(a, b);
-    }
-    return d;
-  }
-
-  /** RET gate filtering only: exit direction is not chosen via taxi Dijkstra. Use flight token / defaults. */
-  function probePreferredArrivalRunwayDir(f) {
-    void f;
-    return 'both';
-  }
-  function resolveArrivalRunwayDirForRetGate(f) {
-    const fromFlight = normalizeRwDirectionValue(f.arrRunwayDirUsed);
-    if (fromFlight === 'clockwise' || fromFlight === 'counter_clockwise') return fromFlight;
-    const probed = probePreferredArrivalRunwayDir(f);
-    if (probed === 'clockwise' || probed === 'counter_clockwise') return probed;
-    return 'both';
-  }
-
-  function graphPathArrival(f) {
-    if (f) {
-      f.noWayArr = false;
-      delete f._noWayArrDetail;
-    }
-    return null;
-  }
-
-  function graphPathDeparture(f, opts) {
-    if (f) {
-      f.noWayDep = false;
-      delete f._noWayDepDetail;
-    }
-    return null;
-  }
-
-  function clonePathPtsForCache(pts) {
-    if (!Array.isArray(pts) || pts.length < 2) return null;
-    const out = [];
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i];
-      if (Array.isArray(p) && p.length >= 2) out.push([Number(p[0]), Number(p[1])]);
-    }
-    return out.length >= 2 ? out : null;
-  }
-
-  
-  function normalizedArrRetCacheKey(f) {
-    const id = f.sampledArrRet != null ? f.sampledArrRet : null;
-    if (id == null) return '';
-    const ok = (state.taxiways || []).some(function(t) {
-      return t && t.id === id && t.pathType === 'runway_exit';
-    });
-    return ok ? String(id) : '';
-  }
-
-  function getPathForFlight(f) {
-    if (!f) return null;
-    resolveStand(f);
-    delete f.cachedArrPathPts;
-    delete f._pathPolylineArrRetKey;
-    return null;
-  }
-
-  function getPathForFlightDeparture(f) {
-    if (!f) return null;
-    resolveStand(f);
-    delete f.cachedDepPathPts;
-    return null;
-  }
-
-  function ensureFlightPaths(f) {
-    void f;
-  }
-
-  function findStandById(id) {
-    return (state.pbbStands || []).find(function(s) { return s.id === id; }) ||
-           (state.remoteStands || []).find(function(s) { return s.id === id; }) ||
-           (state.tempStands || []).find(function(s) { return s.id === id; });
-  }
-
-  function buildTimeAxisTicks(minT, maxT, baseMinT, baseSpan, zoom) {
-    const span = maxT - minT;
-    const axisStep = span <= 60 ? TICK_STEP_SPAN_LE60 : (span <= 240 ? TICK_STEP_SPAN_LE240 : TICK_STEP_ELSE);
-    let ticks = [];
-    let tt = Math.floor(minT / axisStep) * axisStep;
-    while (tt + 1e-9 < minT) tt += axisStep;
-    while (tt <= maxT + 1e-9) {
-      const leftPct = baseSpan > 1e-9 ? ((tt - baseMinT) / baseSpan) * 100 * zoom : 0;
-      ticks.push({ leftPct: leftPct, label: formatMinutesToHHMM(tt) });
-      tt += axisStep;
-    }
-    if (ticks.length > MAX_TICKS_SHOWN) {
-      const step = Math.ceil(ticks.length / MAX_TICKS_SHOWN);
-      const reduced = [];
-      for (let i = 0; i < ticks.length; i += step) reduced.push(ticks[i]);
-      const last = ticks[ticks.length - 1];
-      if (reduced[reduced.length - 1] !== last) reduced.push(last);
-      ticks = reduced;
-    }
-    return ticks;
-  }
-
-  function computeFlightPath(flight, direction) {
-    void flight;
-    void direction;
-    return { pts: null, timeline: null };
-  }
-
-  const FLIGHT_PATH_PROGRESS_PCT_START = 22;
-  const FLIGHT_PATH_PROGRESS_PCT_END = 48;
-  const PATH_DIRECTION_ARROWS_MAX = 48;
-  function updateAllFlightPaths(onDone) {
-    draw();
-    if (typeof onDone === 'function') onDone();
-  }
-
-  function drawPathJunctions() {
-    if (!state.layers.junction) return;
-    let g = null;
-    if (state.taxiways && state.taxiways.length) {
-      try { g = buildPathGraph(); } catch (e) { console.error('drawPathJunctions: buildPathGraph failed', e); }
-    }
-    if (!g) return;
-    const validJunctions = g.validJunctions || [];
-    const connectedJunctions = g.connectedJunctions || g.junctions || [];
-    const redJunctions = g.disconnectedValidJunctions != null ? g.disconnectedValidJunctions : validJunctions;
-    if (!validJunctions.length && !connectedJunctions.length) return;
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    const r = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
-    const rGreen = r * 0.7;
-    ctx.fillStyle = '#ef4444';
-    redJunctions.forEach(p => {
-      ctx.beginPath();
-      ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    ctx.fillStyle = '#22c55e';
-    connectedJunctions.forEach(p => {
-      ctx.beginPath();
-      ctx.arc(p[0], p[1], rGreen, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    // Edge distance numeric labels are intentionally hidden in layout view.
-    ctx.restore();
-  }
-
-  function drawQueueTaxiwayLaneMarkers() {
-    if (!state.layers.junction) return;
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    const r = Math.max(3.5, CELL_SIZE * 0.22) * LAYOUT_VERTEX_DOT_SCALE;
-    (state.taxiways || []).forEach(function(tw) {
-      if (!tw || tw.pathType !== 'general_queue_taxiway' || !tw.vertices || tw.vertices.length < 2) return;
-      const jm = queueTaxiwayAutoJunctionMarkersAlong(tw, QUEUE_TAXIWAY_JUNCTION_SPACING_M);
-      for (let j = 0; j < jm.length; j++) {
-        const xy = jm[j].p;
-        ctx.beginPath();
-        ctx.arc(xy[0], xy[1], r, 0, Math.PI * 2);
-        ctx.fillStyle = '#22c55e';
-        ctx.fill();
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 1.8;
-        ctx.stroke();
-      }
-    });
-    ctx.restore();
-  }
-
-  function drawSelectedLayoutEdge() {
-    const sel = state.selectedObject;
-    if (!sel || sel.type !== 'layoutEdge' || !sel.obj) return;
-    const e = sel.obj;
-    const edgePts = (e.pts && e.pts.length >= 2) ? e.pts : [[e.x1, e.y1], [e.x2, e.y2]];
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    function layoutEdgePath() {
-      ctx.beginPath();
-      ctx.moveTo(edgePts[0][0], edgePts[0][1]);
-      for (let i = 1; i < edgePts.length; i++) ctx.lineTo(edgePts[i][0], edgePts[i][1]);
-    }
-    layoutEdgePath();
-    ctx.save();
-    ctx.setLineDash([]);
-    ctx.lineWidth = Math.max(7, CELL_SIZE * 0.2);
-    ctx.strokeStyle = c2dObjectSelectedStroke();
-    ctx.shadowColor = c2dObjectSelectedGlow();
-    ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.stroke();
-    ctx.restore();
-    layoutEdgePath();
-    ctx.setLineDash([]);
-    ctx.lineWidth = Math.max(4, CELL_SIZE * 0.12);
-    ctx.strokeStyle = c2dObjectSelectedStroke();
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  const PRO_SIM_PHASE_Z = {
-    Landing: 0,
-    Arr_taxi: 1,
-    Arr_taxi_occupied: 1,
-    Dep_taxi: 2,
-    Holding_lineup: 3,
-    Lineup_departure: 4,
-  };
-  function proSimPhaseStrokeStyle(phaseRaw) {
-    const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : 'Landing';
-    if (p === 'Arr_taxi_occupied') {
-      return { wMul: 1.72, stroke: '#a855f7' };
-    }
-    if (p === 'Arr_taxi') {
-      return { wMul: 1.72, stroke: '#3b82f6' };
-    }
-    if (p === 'Dep_taxi' || p === 'Holding_lineup') {
-      return { wMul: 0.58, stroke: '#ef4444' };
-    }
-    if (p === 'Lineup_departure') {
-      return { wMul: 0.45, stroke: '#f97316' };
-    }
-    return { wMul: 1.72, stroke: '#22c55e' };
-  }
-  function drawProSimSegmentArrows(edgePts, arrowFill, spacingPx, headSizePx) {
-    if (!Array.isArray(edgePts) || edgePts.length < 2) return;
-    const spacing = Math.max(14, spacingPx || 36);
-    let count = 0;
-    const headSize = Math.max(4, headSizePx || 10);
-    let refUx = 0;
-    let refUy = 0;
-    let refSet = false;
-    for (let i = 1; i < edgePts.length && !refSet; i++) {
-      const p0 = edgePts[i - 1];
-      const p1 = edgePts[i];
-      const segLen = pathDist(p0, p1);
-      if (segLen < 1e-6) continue;
-      refUx = (p1[0] - p0[0]) / segLen;
-      refUy = (p1[1] - p0[1]) / segLen;
-      refSet = true;
-    }
-    if (!refSet) return;
-    for (let i = 1; i < edgePts.length && count < PATH_DIRECTION_ARROWS_MAX; i++) {
-      const p0 = edgePts[i - 1];
-      const p1 = edgePts[i];
-      const segLen = pathDist(p0, p1);
-      if (segLen < 1e-6) continue;
-      const ux = (p1[0] - p0[0]) / segLen;
-      const uy = (p1[1] - p0[1]) / segLen;
-      if (ux * refUx + uy * refUy < -0.08) continue;
-      const px = -uy;
-      const py = ux;
-      for (let d = spacing * 0.55; d < segLen - headSize * 0.35 && count < PATH_DIRECTION_ARROWS_MAX; d += spacing) {
-        const tTip = d / segLen;
-        const tipx = p0[0] + (p1[0] - p0[0]) * tTip;
-        const tipy = p0[1] + (p1[1] - p0[1]) * tTip;
-        const baseX = tipx - ux * headSize;
-        const baseY = tipy - uy * headSize;
-        ctx.save();
-        ctx.fillStyle = arrowFill;
-        ctx.beginPath();
-        ctx.moveTo(tipx, tipy);
-        ctx.lineTo(baseX + px * headSize * 0.45, baseY + py * headSize * 0.45);
-        ctx.lineTo(baseX - px * headSize * 0.45, baseY - py * headSize * 0.45);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-        count++;
-      }
-    }
-  }
-  function orientProSimEdgePts(edgePts, prevEnd, prevUx, prevUy) {
-    let pts = edgePts.slice();
-    if (pts.length < 2) return pts;
-    if (prevEnd) {
-      const d0 = dist2(pts[0], prevEnd);
-      const d1 = dist2(pts[pts.length - 1], prevEnd);
-      if (d1 + 9 < d0) {
-        pts.reverse();
-      } else if (Math.abs(d0 - d1) <= 36 && prevUx != null && prevUy != null) {
-        let vx = 0;
-        let vy = 0;
-        for (let i = 1; i < pts.length; i++) {
-          const dx = pts[i][0] - pts[i - 1][0];
-          const dy = pts[i][1] - pts[i - 1][1];
-          const sl = Math.hypot(dx, dy);
-          if (sl > 1e-6) {
-            vx = dx / sl;
-            vy = dy / sl;
-            break;
-          }
-        }
-        if (vx * prevUx + vy * prevUy < -0.15) pts.reverse();
-      }
-    } else if (prevUx != null && prevUy != null) {
-      let vx = 0;
-      let vy = 0;
-      for (let i = 1; i < pts.length; i++) {
-        const dx = pts[i][0] - pts[i - 1][0];
-        const dy = pts[i][1] - pts[i - 1][1];
-        const sl = Math.hypot(dx, dy);
-        if (sl > 1e-6) {
-          vx = dx / sl;
-          vy = dy / sl;
-          break;
-        }
-      }
-      if (vx * prevUx + vy * prevUy < -0.15) pts.reverse();
-    }
-    return pts;
-  }
-  function proSimOutgoingUnit(edgePts) {
-    if (!edgePts || edgePts.length < 2) return { ux: null, uy: null };
-    for (let i = edgePts.length - 1; i >= 1; i--) {
-      const dx = edgePts[i][0] - edgePts[i - 1][0];
-      const dy = edgePts[i][1] - edgePts[i - 1][1];
-      const sl = Math.hypot(dx, dy);
-      if (sl > 1e-6) return { ux: dx / sl, uy: dy / sl };
-    }
-    return { ux: null, uy: null };
-  }
-  function drawProSimFlightPathEdges() {
-    const sel = state.selectedObject;
-    const rid = state.flightPathRevealFlightId;
-    if (!sel || sel.type !== 'flight' || !sel.obj || rid == null || String(sel.id) !== String(rid)) return;
-    const ids = sel.obj.edge_list || sel.obj.proSimEdgeList;
-    if (!Array.isArray(ids) || !ids.length) return;
-    if (typeof rebuildDerivedGraphEdges === 'function') rebuildDerivedGraphEdges();
-    const byId = {};
-    (state.derivedGraphEdges || []).forEach(function(ed) {
-      if (ed && ed.id) byId[ed.id] = ed;
-    });
-    const baseW = Math.max(4.2, CELL_SIZE * 0.148);
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = 'transparent';
-    let prevEnd = null;
-    let prevUx = null;
-    let prevUy = null;
-    let lastDrawnKey = null;
-    let seqIx = 0;
-    const drawList = [];
-    ids.forEach(function(entry) {
-      let key = '';
-      let phase = 'Landing';
-      if (entry != null) {
-        if (typeof entry === 'string' || typeof entry === 'number') {
-          key = String(entry).trim();
-        } else if (typeof entry === 'object') {
-          const rawId = entry.edge_id != null ? entry.edge_id : entry.id;
-          key = rawId != null ? String(rawId).trim() : '';
-          if (entry.phase != null) phase = String(entry.phase).trim() || 'Landing';
-        }
-      }
-      if (key && key === lastDrawnKey) {
-        return;
-      }
-      const st = proSimPhaseStrokeStyle(phase);
-      const lineW = baseW * st.wMul;
-      const e = key ? byId[key] : null;
-      if (!e) return;
-      let rawPts = (e.pts && e.pts.length >= 2) ? e.pts.slice() : [[e.x1, e.y1], [e.x2, e.y2]];
-      let edgePts = orientProSimEdgePts(rawPts, prevEnd, prevUx, prevUy);
-      const z = Object.prototype.hasOwnProperty.call(PRO_SIM_PHASE_Z, phase) ? PRO_SIM_PHASE_Z[phase] : 0;
-      drawList.push({
-        edgePts: edgePts,
-        st: st,
-        lineW: lineW,
-        z: z,
-        seq: seqIx++,
-      });
-      prevEnd = edgePts[edgePts.length - 1];
-      const ou = proSimOutgoingUnit(edgePts);
-      if (ou.ux != null) {
-        prevUx = ou.ux;
-        prevUy = ou.uy;
-      }
-      lastDrawnKey = key;
-    });
-    drawList.sort(function(a, b) {
-      if (a.z !== b.z) return a.z - b.z;
-      return a.seq - b.seq;
-    });
-    drawList.forEach(function(item) {
-      const edgePts = item.edgePts;
-      ctx.beginPath();
-      ctx.moveTo(edgePts[0][0], edgePts[0][1]);
-      for (let i = 1; i < edgePts.length; i++) ctx.lineTo(edgePts[i][0], edgePts[i][1]);
-      ctx.strokeStyle = item.st.stroke;
-      ctx.lineWidth = item.lineW;
-      ctx.globalAlpha = 0.92;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-      drawProSimSegmentArrows(
-        edgePts,
-        'rgba(250, 250, 250, 0.82)',
-        Math.max(20, CELL_SIZE * 0.34),
-        Math.max(4.5, CELL_SIZE * 0.135)
-      );
-    });
-    ctx.restore();
-  }
-
-  function polylineLengthPx(pathPts) {
-    let total = 0;
-    for (let i = 1; i < pathPts.length; i++) total += pathDist(pathPts[i - 1], pathPts[i]);
-    return total;
-  }
-  function pointAlongPolylinePx(pathPts, distPx) {
-    if (!Array.isArray(pathPts) || pathPts.length < 2) return null;
-    let remain = Math.max(0, Number(distPx) || 0);
-    for (let i = 1; i < pathPts.length; i++) {
-      const p0 = pathPts[i - 1];
-      const p1 = pathPts[i];
-      const segLen = pathDist(p0, p1);
-      if (!(segLen > 1e-6)) continue;
-      if (remain <= segLen) {
-        const t = remain / segLen;
-        return [p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t];
-      }
-      remain -= segLen;
-    }
-    return pathPts[pathPts.length - 1];
-  }
-  function drawPolylineDirectionArrows(pathPts, strokeStyle, arrowFill, lineWidth, spacingPx, headSizePx, omitStroke) {
-    if (!Array.isArray(pathPts) || pathPts.length < 2) return;
-    const totalLen = polylineLengthPx(pathPts);
-    if (!(totalLen > 1e-6)) return;
-    const spacing = Math.max(16, spacingPx || 42);
-    let arrowCount = 0;
-    for (let distPx = spacing * 0.75; distPx < totalLen && arrowCount < PATH_DIRECTION_ARROWS_MAX; distPx += spacing) {
-      const tail = pointAlongPolylinePx(pathPts, distPx - Math.max(6, headSizePx * 0.9));
-      const tip = pointAlongPolylinePx(pathPts, distPx);
-      if (!tail || !tip) continue;
-      const dx = tip[0] - tail[0];
-      const dy = tip[1] - tail[1];
-      const len = Math.hypot(dx, dy);
-      if (!(len > 1e-6)) continue;
-      const ux = dx / len;
-      const uy = dy / len;
-      const px = -uy;
-      const py = ux;
-      const headSize = Math.max(4, headSizePx || 10);
-      const baseX = tip[0] - ux * headSize;
-      const baseY = tip[1] - uy * headSize;
-      ctx.save();
-      ctx.fillStyle = arrowFill;
-      ctx.strokeStyle = strokeStyle;
-      ctx.lineWidth = Math.max(1.5, lineWidth * 0.22);
-      ctx.beginPath();
-      ctx.moveTo(tip[0], tip[1]);
-      ctx.lineTo(baseX + px * headSize * 0.45, baseY + py * headSize * 0.45);
-      ctx.lineTo(baseX - px * headSize * 0.45, baseY - py * headSize * 0.45);
-      ctx.closePath();
-      ctx.fill();
-      if (!omitStroke) ctx.stroke();
-      ctx.restore();
-      arrowCount++;
-    }
-  }
-  function drawFlightPathHighlight() {
-    return;
-  }
-
-  function drawDeparturePathHighlight() {
-    return;
-  }
-
-  function drawApproachPreviewPaths2D() {
-    if (!state.hasSimulationResult || !state.globalUpdateFresh) return;
-    const flights = state.flights || [];
-    let f = null;
-    for (let i = 0; i < flights.length; i++) {
-      const ff = flights[i];
-      if (!ff || ff.arrDep === 'Dep' || arrivalAirsideBlocked(ff)) continue;
-      const token = ff.token || {};
-      const rwId = ff.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || ff.arrRunwayId;
-      if (rwId == null || rwId === '') continue;
-      f = ff;
-      break;
-    }
-    if (!f) return;
-    const token = f.token || {};
-    const runwayId = f.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || f.arrRunwayId;
-    const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
-    const tdDist = touchdownDistMForTimeline(f);
-    const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
-    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M);
-    let pts;
-    if (pack && pack.pts && pack.pts.length >= 2) {
-      pts = pack.pts;
-    } else {
-      const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
-      if (!rsPt) return;
-      pts = [approachPointBeforeThresholdJs(runwayId, rwDir, APPROACH_OFFSET_WORLD_M, anchorDist), [rsPt[0], rsPt[1]]];
-    }
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.setLineDash([]);
-    ctx.strokeStyle = c2dApproachPreviewStroke();
-    ctx.lineWidth = c2dApproachPreviewWidthM();
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let j = 1; j < pts.length; j++) ctx.lineTo(pts[j][0], pts[j][1]);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawFlights2D() {
-    if (!state.hasSimulationResult || !state.flights.length) return;
-    ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(state.panX, state.panY);
-    ctx.scale(state.scale, state.scale);
-    const tSecDraw = state.simTimeSec;
-    state.flights.forEach(f => {
-      if (flightBlockedLikeNoWay(f)) return;
-      const pose = getFlightPoseAtTimeForDraw(f, tSecDraw);
-      if (!pose) return;
-      const x = pose.x, y = pose.y, dx = pose.dx, dy = pose.dy;
-      const len = Math.hypot(dx, dy) || 1;
