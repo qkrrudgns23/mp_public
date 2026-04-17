@@ -18298,7 +18298,6 @@
     function strokeTwCenterlineYellow(yellowStroke) {
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      if (_twPanLite) return;
       ctx.lineWidth = centerlineWidthWorld(1, 0.8);
       ctx.strokeStyle = yellowStroke;
       ctx.stroke();
@@ -18332,7 +18331,7 @@
       if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g) return;
-      if (interactiveLite && g.isApronTaxiwayPath) return;
+      if (interactiveLite && g.isApronTaxiwayPath && !state.isPanning) return;
       const drawing = g.drawing, isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, width = g.width, sel = g.sel, pathLineCap = g.pathLineCap, pathFillWide = g.pathFillWide;
       let strokeC, fillC;
       if (sel) {
@@ -18388,10 +18387,10 @@
       if (!taxiwayShouldDrawInViewport(tw, _twVb)) return;
       const g = taxiwayDrawContext(tw);
       if (!g || tw.vertices.length < 2) return;
-      if (interactiveLite && g.isApronTaxiwayPath) return;
+      if (interactiveLite && g.isApronTaxiwayPath && !state.isPanning) return;
       const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, pathFillWide = g.pathFillWide, pathLineCap = g.pathLineCap, width = g.width;
       if (!state.layers.pathLines) return;
-      if (interactiveLite && !isRunwayPath) return;
+      if (interactiveLite && !isRunwayPath && !state.isPanning) return;
       if (pathFillWide) {
         let skipRunwayCenterlineStroke = false;
         if (isRunwayPath) {
@@ -19810,7 +19809,7 @@
     drawPBBs(interactiveLite);
     drawRemoteStands(interactiveLite);
     drawTempStands(interactiveLite);
-    if (!interactiveLite) drawApronTaxiwayLinks();
+    if (!interactiveLite || state.isPanning) drawApronTaxiwayLinks();
     drawStandPreview(interactiveLite);
     drawSelectedLayoutEdge();
     {
@@ -20238,16 +20237,26 @@
     ev.preventDefault();
     state.dragStart = { sx, sy, panX: state.panX, panY: state.panY };
     state.isPanning = false;
+    try {
+      if (ev.pointerId != null && canvas && typeof canvas.setPointerCapture === 'function') {
+        canvas.setPointerCapture(ev.pointerId);
+      }
+    } catch (e) {}
   });
-  function clearCanvasPanGesture() {
-    if (!state.isPanning) return;
+  function clearCanvasPanGesture(ev) {
+    if (!state.isPanning && !state.dragStart) return;
     state.dragStart = null;
     state.isPanning = false;
+    try {
+      if (ev && ev.pointerId != null && canvas && typeof canvas.releasePointerCapture === 'function') {
+        canvas.releasePointerCapture(ev.pointerId);
+      }
+    } catch (e) {}
     flushDrawNow();
   }
   window.addEventListener('pointerup', function(ev) {
     if (ev.button !== 0) return;
-    clearCanvasPanGesture();
+    clearCanvasPanGesture(ev);
   }, true);
   window.addEventListener('mouseup', function(ev) {
     if (ev.button !== 0) return;
@@ -20824,13 +20833,14 @@
   }
   container.addEventListener('mousemove', onLayoutCanvasCoordinateMove);
   document.addEventListener('mousemove', function(ev) {
-    if (!layoutSnapDragActive()) return;
+    if (!layoutSnapDragActive() && !state.dragStart && !state.isPanning) return;
     if (container && ev.target && typeof container.contains === 'function' && container.contains(ev.target)) return;
     onLayoutCanvasCoordinateMove(ev);
   }, true);
   container.addEventListener('mouseleave', function() {
     flushLayoutTooltipRaf();
     if (flightTooltip) flightTooltip.style.display = 'none';
+    if (state.dragStart || state.isPanning) return;
     _layoutReadoutLastCellKey = '';
     _layoutReadoutLastPixelStr = '';
     if (cursorPixelReadoutEl) cursorPixelReadoutEl.textContent = '—';
