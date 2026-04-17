@@ -1382,7 +1382,7 @@
         "runwayBandStrokeDim": "#141414",
         "taxiwayPavementStroke": "#827f76",
         "taxiwayPavementFill": "#908e82",
-        "runwayTaxiwayCenterlineStroke": "#fcd410",
+        "runwayTaxiwayCenterlineStroke": "#ca8a04",
         "taxiwayCenterlineStroke": "#fcd410",
         "pathArrivalArrowStroke": "rgba(252, 165, 165, 0.9)",
         "approachPreviewWidthM": 30,

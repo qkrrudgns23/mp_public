@@ -80,6 +80,7 @@ OSM_TO_LAYOUT_RULES: Dict[str, Any] = {
     },
     "terminals": {
         "aeroway_polygon_as_terminal": ("terminal",),
+        "aeroway_polygon_as_building": ("terminal", "hangar"),
     },
     "runways": {
         "aeroway_line_as_runway_centerline": ("runway",),
@@ -145,6 +146,26 @@ def _float_tag(tags: Dict[str, str], key: str, default: float) -> float:
         return v if math.isfinite(v) and v > 0 else default
     except (TypeError, ValueError):
         return default
+
+
+def _is_holding_position_feature(tags: Dict[str, str]) -> bool:
+    """Treat any feature containing holding_position semantics as a holding point source."""
+    aw = str(tags.get("aeroway", "")).strip().lower()
+    if aw in ("holding_position", "holding"):
+        return True
+    for v in tags.values():
+        if str(v).strip().lower() == "holding_position":
+            return True
+    return False
+
+
+def _building_type_from_aeroway(aw: str) -> str:
+    """Map OSM aeroway polygon to designer buildingType ids."""
+    key = str(aw or "").strip().lower()
+    if key == "hangar":
+        # Designer uses 'hanger' id in building type configuration.
+        return "hanger"
+    return "terminal"
 
 
 def _position_decimal_places(rules: Dict[str, Any]) -> int:
@@ -473,6 +494,47 @@ def _point_near_any_line(pt: Tuple[float, float], lines: Sequence[LineString], t
     return False
 
 
+def _line_directly_connected_to_any_runway(ln: LineString, runway_lines: Sequence[LineString], tol_m: float) -> bool:
+    """True when taxiway touches runway at endpoints or intersects its centerline."""
+    if ln is None or ln.is_empty or len(ln.coords) < 2:
+        return False
+    if not runway_lines:
+        return False
+    p0 = Point(float(ln.coords[0][0]), float(ln.coords[0][1]))
+    p1 = Point(float(ln.coords[-1][0]), float(ln.coords[-1][1]))
+    for rln in runway_lines:
+        if rln is None or rln.is_empty:
+            continue
+        if float(rln.distance(p0)) <= tol_m or float(rln.distance(p1)) <= tol_m:
+            return True
+        if ln.intersects(rln):
+            return True
+    return False
+
+
+def _is_runway_holding_tags(tags: Dict[str, str]) -> bool:
+    """True when holding-position semantics explicitly indicate runway context."""
+    hv = str(tags.get("holding_position:type", "")).strip().lower()
+    if hv == "runway":
+        return True
+    # Fallback for variant tag keys
+    for k, v in tags.items():
+        if str(k).strip().lower() == "holding_position:type" and str(v).strip().lower() == "runway":
+            return True
+    return False
+
+
+def _line_near_any_point(ln: LineString, pts: Sequence[Tuple[float, float]], tol_m: float) -> bool:
+    if ln is None or ln.is_empty or len(ln.coords) < 2:
+        return False
+    if not pts:
+        return False
+    for x, y in pts:
+        if float(ln.distance(Point(float(x), float(y)))) <= tol_m:
+            return True
+    return False
+
+
 def _parking_endpoint_class(
     pt: Tuple[float, float],
     own_idx: int,
@@ -734,6 +796,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     taxi_lines: List[Tuple[LineString, Dict[str, str], str]] = []  # line, tags, aeroway
     runway_lines: List[Tuple[LineString, Dict[str, str]]] = []
     holding_layout_xy: List[Tuple[float, float, Dict[str, str]]] = []
+    runway_holding_xy: List[Tuple[float, float]] = []
     gates: List[Tuple[float, float, Dict[str, str], str]] = []  # x,y,tags,feat_key
     txe_points: List[Tuple[float, float]] = []
 
@@ -758,13 +821,18 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 terminal_named_polys.append((term_name, poly))
         if aw in ("parking_position", "taxilane") and isinstance(gxy, LineString) and len(gxy.coords) >= 2:
             parking_lines.append((gxy, tags))
-        if aw in ("holding_position", "holding"):
+        if _is_holding_position_feature(tags):
             if isinstance(gxy, Point):
-                holding_layout_xy.append((float(gxy.x), float(gxy.y), tags))
+                hx, hy = float(gxy.x), float(gxy.y)
+                holding_layout_xy.append((hx, hy, tags))
+                if _is_runway_holding_tags(tags):
+                    runway_holding_xy.append((hx, hy))
             elif isinstance(gxy, LineString) and len(gxy.coords) >= 2:
                 mx = int(len(gxy.coords) / 2)
                 cx, cy = float(gxy.coords[mx][0]), float(gxy.coords[mx][1])
                 holding_layout_xy.append((cx, cy, tags))
+                if _is_runway_holding_tags(tags):
+                    runway_holding_xy.append((cx, cy))
         if aw in rules["taxiways"]["include_aeroway_linestrings"]:
             if isinstance(gxy, LineString) and len(gxy.coords) >= 2:
                 taxi_lines.append((gxy, tags, aw))
@@ -789,6 +857,53 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     px_raw, py_raw = _project_lonlat(float(coords[0]), float(coords[1]), lon0, lat0, r_earth)
                     px, py = _layout_xy_from_raw(px_raw, py_raw, x_off, y_off, y_span_m)
                     txe_points.append((px, py))
+
+    # Some source bundles keep holding_position only under osm.elements (not geojson.features).
+    # Pull them in as a fallback so holdingPoints conversion is stable across data shapes.
+    osm_obj = doc.get("osm")
+    if isinstance(osm_obj, dict):
+        elems = osm_obj.get("elements")
+        if isinstance(elems, list):
+            for el in elems:
+                if not isinstance(el, dict):
+                    continue
+                etags_raw = el.get("tags")
+                etags = {}
+                if isinstance(etags_raw, dict):
+                    for k, v in etags_raw.items():
+                        if v is None:
+                            continue
+                        etags[str(k)] = str(v)
+                if not _is_holding_position_feature(etags):
+                    continue
+                lat = el.get("lat")
+                lon = el.get("lon")
+                if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+                    hx_raw, hy_raw = _project_lonlat(float(lon), float(lat), lon0, lat0, r_earth)
+                    hx, hy = _layout_xy_from_raw(hx_raw, hy_raw, x_off, y_off, y_span_m)
+                    holding_layout_xy.append((float(hx), float(hy), etags))
+                    if _is_runway_holding_tags(etags):
+                        runway_holding_xy.append((float(hx), float(hy)))
+                    continue
+                geom_pts = el.get("geometry")
+                if isinstance(geom_pts, list) and geom_pts:
+                    xy_pts: List[Tuple[float, float]] = []
+                    for gp in geom_pts:
+                        if not isinstance(gp, dict):
+                            continue
+                        glat = gp.get("lat")
+                        glon = gp.get("lon")
+                        if not isinstance(glat, (int, float)) or not isinstance(glon, (int, float)):
+                            continue
+                        gx_raw, gy_raw = _project_lonlat(float(glon), float(glat), lon0, lat0, r_earth)
+                        gx, gy = _layout_xy_from_raw(gx_raw, gy_raw, x_off, y_off, y_span_m)
+                        xy_pts.append((float(gx), float(gy)))
+                    if xy_pts:
+                        mid = len(xy_pts) // 2
+                        mx, my = xy_pts[mid]
+                        holding_layout_xy.append((mx, my, etags))
+                        if _is_runway_holding_tags(etags):
+                            runway_holding_xy.append((mx, my))
 
     terminal_union = unary_union(terminal_polys) if terminal_polys else None
     leadin_max = float(rules["stands"]["leadin_to_terminal_max_m"])
@@ -1056,23 +1171,39 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         )
 
     taxiways_out: List[Dict[str, Any]] = []
+    runway_taxiways_out: List[Dict[str, Any]] = []
+    runway_centerlines = [ln for ln, _ in runway_lines if ln is not None and not ln.is_empty]
+    runway_taxiway_touch_tol_m = 2.0
+    runway_holding_touch_tol_m = 20.0
     for ln, tags, aw in taxi_lines:
         verts = _round_vertex_list_xy([{"x": float(x), "y": float(y)} for x, y in ln.coords], pos_pl)
         if len(verts) < 2:
             continue
         w = _float_tag(tags, "width", float(rules["taxiways"]["default_width_m"]))
         tw_id = _new_id("tw")
-        taxiways_out.append(
-            {
-                "id": tw_id,
-                "name": _safe_name(tags.get("ref") or tags.get("name"), f"{aw}-{tw_id}"),
-                "vertices": verts,
-                "width": w,
-                "direction": "both",
-                "avgMoveVelocity": 10,
-                "pavement": str(tags.get("surface", "asphalt") or "asphalt"),
-            }
-        )
+        base_obj: Dict[str, Any] = {
+            "id": tw_id,
+            "name": _safe_name(tags.get("ref") or tags.get("name"), f"{aw}-{tw_id}"),
+            "vertices": verts,
+            "width": w,
+            "direction": "both",
+            "avgMoveVelocity": 10,
+            "pavement": str(tags.get("surface", "asphalt") or "asphalt"),
+        }
+        # Rules:
+        # 1) taxiway directly connected to runway centerline -> runway taxiway
+        # 2) taxiway near holding_position:type=runway -> runway taxiway
+        is_runway_exit_like = _line_directly_connected_to_any_runway(ln, runway_centerlines, runway_taxiway_touch_tol_m)
+        if not is_runway_exit_like:
+            is_runway_exit_like = _line_near_any_point(ln, runway_holding_xy, runway_holding_touch_tol_m)
+        if is_runway_exit_like:
+            rtx_obj = dict(base_obj)
+            rtx_obj["maxExitVelocity"] = 30
+            rtx_obj["minExitVelocity"] = 15
+            rtx_obj["allowedRwDirections"] = ["clockwise", "counter_clockwise"]
+            runway_taxiways_out.append(rtx_obj)
+        else:
+            taxiways_out.append(base_obj)
 
     taxi_spines: List[Tuple[LineString, str]] = []
     for tw in taxiways_out:
@@ -1152,7 +1283,12 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     holding_points_out: List[Dict[str, Any]] = []
     hp_idx = 0
     hp_near_rw_m = 120.0
+    seen_hp_keys: set[Tuple[float, float]] = set()
     for hx, hy, htags in holding_layout_xy:
+        key = (_quantize_m(hx, 1), _quantize_m(hy, 1))
+        if key in seen_hp_keys:
+            continue
+        seen_hp_keys.add(key)
         hp_idx += 1
         hp_kind = "intermediate"
         hp_pt = Point(hx, hy)
@@ -1203,7 +1339,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         if not isinstance(props, dict):
             continue
         tags = _tags(props)
-        if tags.get("aeroway") not in rules["terminals"]["aeroway_polygon_as_terminal"]:
+        aw = str(tags.get("aeroway", "")).strip().lower()
+        if aw not in rules["terminals"].get("aeroway_polygon_as_building", ("terminal",)):
             continue
         geom = feat.get("geometry")
         if not isinstance(geom, dict):
@@ -1213,10 +1350,11 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             continue
         t_idx += 1
         tid = _new_id("term")
+        fallback_name = f"Hangar-{t_idx}" if aw == "hangar" else f"Terminal-{t_idx}"
         terminals_out.append(
             {
                 "id": tid,
-                "name": _safe_name(tags.get("name") or tags.get("ref"), f"Terminal-{t_idx}"),
+                "name": _safe_name(tags.get("name") or tags.get("ref"), fallback_name),
                 "vertices": verts,
                 "closed": True,
                 "floors": 1,
@@ -1224,7 +1362,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 "floorHeight": 5,
                 "departureCapacity": 100,
                 "arrivalCapacity": 100,
-                "buildingType": "terminal",
+                "buildingType": _building_type_from_aeroway(aw),
             }
         )
 
@@ -1234,6 +1372,9 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         term_polys_out: List[Polygon] = []
         for t in terminals_out:
             tv = t.get("vertices")
+            # Contact/remote reclassification must use real terminal buildings only.
+            if str(t.get("buildingType", "terminal")).strip().lower() != "terminal":
+                continue
             if not isinstance(tv, list) or len(tv) < 3:
                 continue
             pts = []
@@ -1355,7 +1496,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         "tempStands": [],
         "holdingPoints": holding_points_out,
         "runwayPaths": runway_paths,
-        "runwayTaxiways": [],
+        "runwayTaxiways": runway_taxiways_out,
         "taxiways": taxiways_out,
         "apronLinks": apron_links,
         "directionModes": [
@@ -1374,6 +1515,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             "gridYSpanM": _quantize_m(y_span_m, pos_pl),
             "counts": {
                 "runwayPaths": len(runway_paths),
+                "runwayTaxiways": len(runway_taxiways_out),
                 "taxiways": len(taxiways_out),
                 "terminals": len(terminals_out),
                 "pbbStands": len(pbb_stands),

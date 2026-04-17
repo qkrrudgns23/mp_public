@@ -17467,8 +17467,8 @@
         const bf = !!state.layers.buildingFill && !suppressBuildingFill;
         if (bl || bf || selected) {
           ctx.lineWidth = hairW;
-          ctx.strokeStyle = selected ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.88)';
-          ctx.fillStyle = selected ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)';
+          ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : buildingTheme.stroke;
+          ctx.fillStyle = selected ? c2dObjectSelectedFill() : buildingTheme.fill;
           ctx.beginPath();
           for (let i = 0; i < termPts.length; i++) {
             const [x,y] = termPts[i];
@@ -17480,7 +17480,13 @@
           }
           ctx.shadowBlur = 0;
           if (term.closed && buildingTheme.fillEnabled && bf) {
-            drawPolygonDiagonalHatch45M(ctx, termPts, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, selected ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.38)', hairW);
+            drawPolygonDiagonalHatch45M(
+              ctx,
+              termPts,
+              LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M,
+              selected ? c2dObjectSelectedStroke() : buildingTheme.stroke,
+              hairW
+            );
           }
           if (bl) {
             ctx.beginPath();

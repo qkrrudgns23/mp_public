@@ -55,6 +55,36 @@ try:
 except Exception:
     _logger.warning("Failed to load Information.json", exc_info=True)
 
+# Ensure hangar building keeps a distinct dark gray look in Layout Design.
+try:
+    _tiers = INFORMATION.get("tiers") if isinstance(INFORMATION, dict) else None
+    _style = _tiers.get("style") if isinstance(_tiers, dict) else None
+    _c2d = _style.get("canvas2d") if isinstance(_style, dict) else None
+    if isinstance(_c2d, dict):
+        _btypes = _c2d.get("buildingTypes")
+        if not isinstance(_btypes, dict):
+            _btypes = {}
+            _c2d["buildingTypes"] = _btypes
+        _terminal = _btypes.get("passenger_terminal")
+        if not isinstance(_terminal, dict):
+            _terminal = {}
+            _btypes["passenger_terminal"] = _terminal
+        _terminal["stroke"] = "#ffffff"
+        _terminal["fill"] = "rgba(255,255,255,0.20)"
+        _terminal["labelFill"] = "rgba(255,255,255,0.98)"
+        _terminal["fillEnabled"] = True
+        _hanger = _btypes.get("hanger")
+        if not isinstance(_hanger, dict):
+            _hanger = {}
+            _btypes["hanger"] = _hanger
+        # Force hangar visuals to dark gray regardless of existing Information.json values.
+        _hanger["stroke"] = "#3f3f46"
+        _hanger["fill"] = "rgba(39,39,42,0.62)"
+        _hanger["labelFill"] = "rgba(228,228,231,0.92)"
+        _hanger["fillEnabled"] = True
+except Exception:
+    _logger.warning("Failed to apply hangar style defaults", exc_info=True)
+
 
 def _info_path(*keys, default=None):
     d = INFORMATION
