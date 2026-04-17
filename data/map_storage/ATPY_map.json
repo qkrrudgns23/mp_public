@@ -2,7 +2,7 @@
   "icao": "ATPY",
   "openAirportMapUrl": "https://openairportmap.org/ATPY",
   "openStreetMapAttribution": "Data © OpenStreetMap contributors, ODbL 1.0.",
-  "fetchedAt": "2026-04-14T01:12:10.240235Z",
+  "fetchedAt": "2026-04-17T15:38:23.587563Z",
   "dataSource": "overpass",
   "openAirportMapApiUrl": null,
   "elementCount": 0,
@@ -12,7 +12,7 @@
     "version": 0.6,
     "generator": "Overpass API 0.7.62.11 87bfad18",
     "osm3s": {
-      "timestamp_osm_base": "2026-04-14T01:10:38Z",
+      "timestamp_osm_base": "2026-04-17T15:37:18Z",
       "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
     },
     "elements": []
@@ -21,5 +21,5 @@
     "type": "FeatureCollection",
     "features": []
   },
-  "osmTimestamp": "2026-04-14T01:10:38Z"
+  "osmTimestamp": "2026-04-17T15:37:18Z"
 }

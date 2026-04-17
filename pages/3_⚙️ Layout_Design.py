@@ -1,4 +1,5 @@
 import base64
+import csv
 import json
 import logging
 import math
@@ -616,6 +617,43 @@ _ui_g_minor_grid_min_scale = max(0.0, _cfg_float(_grid_info, "minorGridMinScale"
 layout_display_name = "default_layout"
 
 _IMAGE_DIR = _data_dir / "image"
+_AIRPORT_CSV_PATH = _data_dir / "raw" / "airport" / "airports.csv"
+
+
+def _load_airport_catalog_rows(path: Path) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    if not path.is_file():
+        return rows
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as fp:
+            reader = csv.DictReader(fp)
+            for rec in reader:
+                if not isinstance(rec, dict):
+                    continue
+                icao = str(rec.get("ICAO") or "").strip().upper()
+                if not icao:
+                    continue
+                iata = str(rec.get("IATA") or "").strip().upper()
+                name = str(rec.get("Airport name") or "").strip()
+                country = str(rec.get("Country") or "").strip()
+                city = str(rec.get("City") or "").strip()
+                rows.append(
+                    {
+                        "icao": icao,
+                        "iata": iata,
+                        "name": name,
+                        "country": country,
+                        "city": city,
+                    }
+                )
+    except Exception:
+        _logger.warning("Failed to parse airports.csv", exc_info=True)
+        return []
+    rows.sort(key=lambda x: (x.get("icao", ""), x.get("name", "")))
+    return rows
+
+
+_AIRPORT_CATALOG_ROWS = _load_airport_catalog_rows(_AIRPORT_CSV_PATH)
 
 
 def _read_svg_icon(filename: str) -> str:
@@ -803,6 +841,7 @@ def _designer_js_config_dict() -> dict[str, object]:
         },
         "defaultSimSpeed": float(_ui_default_sim_speed),
         "defaultFlightServiceDate": _default_flight_service_date,
+        "airportsCatalog": _AIRPORT_CATALOG_ROWS,
     }
 
 

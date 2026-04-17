@@ -15,11 +15,30 @@
   const GRID_MINOR_LINE_WIDTH = _dc.gridMinorLineWidth;
   const GRID_MAJOR_LINE_RGB = _dc.gridMajorLineRgb;
   const GRID_MINOR_LINE_RGB = _dc.gridMinorLineRgb;
+  const AIRPORTS_CATALOG = Array.isArray(_dc.airportsCatalog) ? _dc.airportsCatalog : [];
   const GRID_DRAW_VIEWPORT_MARGIN_CELLS = _dc.gridDrawViewportMarginCells;
   const GRID_MINOR_GRID_MIN_SCALE = _dc.gridMinorGridMinScale;
   let GRID_COLS = _dc.gridCols;
   let GRID_ROWS = _dc.gridRows;
   let CELL_SIZE = _dc.cellSize;
+  function normalizeAirportCatalogRows(rows) {
+    const out = [];
+    (rows || []).forEach(function(r) {
+      if (!r || typeof r !== 'object') return;
+      const icao = String(r.icao || '').trim().toUpperCase();
+      if (!icao) return;
+      out.push({
+        icao: icao,
+        iata: String(r.iata || '').trim().toUpperCase(),
+        name: String(r.name || '').trim(),
+        country: String(r.country || '').trim(),
+        city: String(r.city || '').trim()
+      });
+    });
+    return out;
+  }
+  const AIRPORT_SEARCH_ROWS = normalizeAirportCatalogRows(AIRPORTS_CATALOG);
+
   const DEFAULT_SIBT_DATE = (function() {
     const s = (_dc.defaultFlightServiceDate != null) ? String(_dc.defaultFlightServiceDate).trim() : '';
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
@@ -15844,10 +15863,64 @@
       });
       const btnFetch = document.getElementById('btnFetchAirportMap');
       const msgEl = document.getElementById('layoutAirportMapMsg');
+      const airportListEl = document.getElementById('airportMapIcaoList');
+      const airportSearchEl = document.getElementById('airportMapSearchInput');
+      let selectedAirportIcao = '';
+      function selectAirportIcao(icao) {
+        selectedAirportIcao = String(icao || '').trim().toUpperCase();
+        renderAirportRows();
+      }
+      function airportRowLabel(ap) {
+        const left = [ap.icao, ap.iata ? ('(' + ap.iata + ')') : ''].filter(Boolean).join(' ');
+        const right = [ap.name, ap.city].filter(Boolean).join(' · ');
+        return left + (right ? (' — ' + right) : '');
+      }
+      function renderAirportRows() {
+        if (!airportListEl) return;
+        const q = airportSearchEl ? String(airportSearchEl.value || '').trim().toLowerCase() : '';
+        let rows = AIRPORT_SEARCH_ROWS;
+        if (q) {
+          rows = AIRPORT_SEARCH_ROWS.filter(function(ap) {
+            return ap.icao.toLowerCase().indexOf(q) >= 0
+              || ap.iata.toLowerCase().indexOf(q) >= 0
+              || ap.name.toLowerCase().indexOf(q) >= 0
+              || ap.city.toLowerCase().indexOf(q) >= 0
+              || ap.country.toLowerCase().indexOf(q) >= 0;
+          });
+        }
+        if (!rows.length) {
+          airportListEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;padding:6px 2px;">No airports found.</div>';
+          return;
+        }
+        const cap = rows.slice(0, 120);
+        if (!selectedAirportIcao || cap.every(function(ap) { return ap.icao !== selectedAirportIcao; })) {
+          selectedAirportIcao = cap[0].icao;
+        }
+        airportListEl.innerHTML = cap.map(function(ap) {
+          const selected = ap.icao === selectedAirportIcao;
+          const title = [ap.icao, ap.iata ? ('(' + ap.iata + ')') : ''].filter(Boolean).join(' ');
+          const meta = [ap.name, ap.city, ap.country].filter(Boolean).join(' · ');
+          return ''
+            + '<button type="button" class="airport-option-item' + (selected ? ' selected' : '') + '" data-airport-icao="' + escapeAttr(ap.icao) + '" aria-pressed="' + (selected ? 'true' : 'false') + '">'
+            +   '<span class="airport-option-title">' + escapeHtml(title) + '</span>'
+            +   '<span class="airport-option-meta">' + escapeHtml(meta || airportRowLabel(ap)) + '</span>'
+            + '</button>';
+        }).join('');
+        airportListEl.querySelectorAll('.airport-option-item[data-airport-icao]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            selectAirportIcao(String(this.getAttribute('data-airport-icao') || ''));
+          });
+        });
+      }
+      if (airportSearchEl) airportSearchEl.addEventListener('input', renderAirportRows);
+      if (AIRPORT_SEARCH_ROWS.length) {
+        const pref = AIRPORT_SEARCH_ROWS.find(function(ap) { return ap.icao === 'RPLL'; });
+        selectedAirportIcao = pref ? 'RPLL' : AIRPORT_SEARCH_ROWS[0].icao;
+      }
+      renderAirportRows();
       if (btnFetch) {
         btnFetch.addEventListener('click', function() {
-          const inp = pane.querySelector('input[name="airportMapIcao"]:checked');
-          const icao = inp ? String(inp.value || '').trim().toUpperCase() : '';
+          const icao = String(selectedAirportIcao || '').trim().toUpperCase();
           if (!icao) {
             if (msgEl) { msgEl.textContent = 'Select an airport.'; msgEl.style.color = '#f97316'; }
             return;

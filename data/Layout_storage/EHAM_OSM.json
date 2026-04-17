@@ -1,0 +1,82 @@
+{
+  "grid": {
+    "cols": 728,
+    "rows": 940,
+    "cellSize": 10.0,
+    "showGrid": false,
+    "showImage": false,
+    "showRoadWidth": true,
+    "showLayoutMarkers": true,
+    "layers": {
+      "grid": false,
+      "image": false,
+      "pathLines": true,
+      "pathFill": true,
+      "standLines": true,
+      "standFill": true,
+      "islandAreaLines": true,
+      "islandAreaFill": true,
+      "buildingLines": true,
+      "buildingFill": true,
+      "textRuler": true,
+      "dummyFlight": true,
+      "junction": true
+    },
+    "layoutImageOverlay": null
+  },
+  "networkJunctions": [],
+  "Edge": [],
+  "terminals": [],
+  "pbbStands": [],
+  "remoteStands": [],
+  "tempStands": [],
+  "holdingPoints": [],
+  "runwayPaths": [],
+  "runwayTaxiways": [],
+  "taxiways": [],
+  "apronLinks": [],
+  "directionModes": [
+    {
+      "id": "dm_cw",
+      "name": "CW",
+      "direction": "clockwise"
+    },
+    {
+      "id": "dm_ccw",
+      "name": "CCW",
+      "direction": "counter_clockwise"
+    },
+    {
+      "id": "dm_both",
+      "name": "Both",
+      "direction": "both"
+    }
+  ],
+  "layoutMarkers": [],
+  "flights": [],
+  "_osmImport": {
+    "icao": "EHAM",
+    "converter": "osm_to_layout.py",
+    "rulesVersion": 2,
+    "lonLatOrigin": {
+      "lon": 4.75776535,
+      "lat": 52.32678045
+    },
+    "gridOriginShiftM": {
+      "x": -3636.84,
+      "y": -4696.77
+    },
+    "gridYSpanM": 9400.0,
+    "counts": {
+      "runwayPaths": 0,
+      "runwayTaxiways": 0,
+      "taxiways": 0,
+      "terminals": 0,
+      "pbbStands": 0,
+      "remoteStands": 0,
+      "txeIslands": 0,
+      "holdingPoints": 0,
+      "apronLinks": 0
+    }
+  }
+}
