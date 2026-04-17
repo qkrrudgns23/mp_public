@@ -620,6 +620,7 @@ def _append_apron_link_candidate(
     name: str,
     pbb_id: Optional[str],
     pos_pl: int,
+    source_parking_index: Optional[int] = None,
 ) -> None:
     if len(pts) < 2:
         return
@@ -632,7 +633,10 @@ def _append_apron_link_candidate(
     verts = _round_vertex_list_xy([{"x": p[0], "y": p[1]} for p in dedup], pos_pl)
     if len(verts) < 2:
         return
-    out_list.append({"name": str(name), "pbbId": str(pbb_id) if pbb_id else "", "points": verts})
+    row: Dict[str, Any] = {"name": str(name), "pbbId": str(pbb_id) if pbb_id else "", "points": verts}
+    if isinstance(source_parking_index, int) and source_parking_index >= 0:
+        row["sourceParkingIndex"] = int(source_parking_index)
+    out_list.append(row)
 
 
 def _line_path_between_points(
@@ -1039,6 +1043,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     _format_apron_taxiway_name(atx_terminal_name, stand_name, ti + 1),
                     source_pbb_id,
                     pos_pl,
+                    pi,
                 )
             if not uniq_targets and taxi_ep is not None:
                 full_path = _line_path_between_points(pln, origin, taxi_ep)
@@ -1048,6 +1053,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     _format_apron_taxiway_name(atx_terminal_name, stand_name, None),
                     source_pbb_id,
                     pos_pl,
+                    pi,
                 )
         else:
             if taxi_ep is None:
@@ -1059,6 +1065,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 _format_apron_taxiway_name(atx_terminal_name, stand_name, None),
                 source_pbb_id,
                 pos_pl,
+                pi,
             )
 
     # Fallback to legacy gate-based stand synthesis when parking_position lines are absent.
@@ -1221,6 +1228,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     apron_links: List[Dict[str, Any]] = []
     lk_i = 0
     linked_pbb_ids: set[str] = set()
+    successful_apron_parking_indices: set[int] = set()
+    parking_line_index_by_obj_id: Dict[int, int] = {id(ln): i for i, (ln, _t) in enumerate(parking_lines)}
     for cand in apron_link_candidates:
         pbb_id = str(cand.get("pbbId") or "").strip()
         pts = cand.get("points") if isinstance(cand.get("points"), list) else []
@@ -1248,6 +1257,9 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             }
         )
         linked_pbb_ids.add(pbb_id)
+        src_idx = cand.get("sourceParkingIndex")
+        if isinstance(src_idx, int) and src_idx >= 0:
+            successful_apron_parking_indices.add(int(src_idx))
     for rec in stand_records:
         if rec.get("kind") != "contact":
             continue
@@ -1276,6 +1288,34 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 "tx": _quantize_m(tx, pos_pl),
                 "ty": _quantize_m(ty, pos_pl),
                 "midVertices": mids,
+            }
+        )
+        src_idx2 = parking_line_index_by_obj_id.get(id(nearest_line))
+        if isinstance(src_idx2, int) and src_idx2 >= 0:
+            successful_apron_parking_indices.add(src_idx2)
+
+    # Fallback rule: if taxilane couldn't be realized as apronLinks, keep it as a taxiway path.
+    for pi, (pln, ptags) in enumerate(parking_lines):
+        if pi in successful_apron_parking_indices:
+            continue
+        aeroway_kind = str((ptags or {}).get("aeroway") or "").strip().lower()
+        if aeroway_kind != "taxilane":
+            continue
+        if pln is None or pln.is_empty or len(pln.coords) < 2:
+            continue
+        verts = _round_vertex_list_xy([{"x": float(x), "y": float(y)} for x, y in pln.coords], pos_pl)
+        if len(verts) < 2:
+            continue
+        tw_id = _new_id("tw")
+        taxiways_out.append(
+            {
+                "id": tw_id,
+                "name": _safe_name(ptags.get("ref") or ptags.get("name"), f"taxilane-{tw_id}"),
+                "vertices": verts,
+                "width": _float_tag(ptags, "width", float(rules["taxiways"]["default_width_m"])),
+                "direction": "both",
+                "avgMoveVelocity": 10,
+                "pavement": str(ptags.get("surface", "asphalt") or "asphalt"),
             }
         )
 

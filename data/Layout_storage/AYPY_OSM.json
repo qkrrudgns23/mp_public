@@ -1,0 +1,7593 @@
+{
+  "grid": {
+    "cols": 400,
+    "rows": 400,
+    "cellSize": 10.0,
+    "showGrid": false,
+    "showImage": false,
+    "showRoadWidth": true,
+    "showLayoutMarkers": true,
+    "layers": {
+      "grid": false,
+      "image": false,
+      "pathLines": true,
+      "pathFill": true,
+      "standLines": true,
+      "standFill": true,
+      "islandAreaLines": true,
+      "islandAreaFill": true,
+      "buildingLines": true,
+      "buildingFill": true,
+      "textRuler": true,
+      "dummyFlight": true,
+      "junction": true
+    },
+    "layoutImageOverlay": null
+  },
+  "networkJunctions": [],
+  "Edge": [],
+  "terminals": [
+    {
+      "id": "term-60f845a57d01",
+      "name": "Terminal-1",
+      "vertices": [
+        {
+          "x": 1721.11,
+          "y": 1726.45
+        },
+        {
+          "x": 1743.8,
+          "y": 1713.02
+        },
+        {
+          "x": 1780.83,
+          "y": 1775.63
+        },
+        {
+          "x": 1758.13,
+          "y": 1789.05
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-f81b0bb30b10",
+      "name": "Helifix Solutions",
+      "vertices": [
+        {
+          "x": 1264.04,
+          "y": 3031.53
+        },
+        {
+          "x": 1226.31,
+          "y": 3055.62
+        },
+        {
+          "x": 1245.96,
+          "y": 3086.41
+        },
+        {
+          "x": 1283.7,
+          "y": 3062.31
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "hanger"
+    },
+    {
+      "id": "term-0c786396f6c7",
+      "name": "Domestic Airport Terminal",
+      "vertices": [
+        {
+          "x": 551.1,
+          "y": 1840.09
+        },
+        {
+          "x": 574.72,
+          "y": 1880.62
+        },
+        {
+          "x": 595.1,
+          "y": 1915.6
+        },
+        {
+          "x": 597.45,
+          "y": 1919.64
+        },
+        {
+          "x": 580.53,
+          "y": 1929.5
+        },
+        {
+          "x": 581.46,
+          "y": 1931.12
+        },
+        {
+          "x": 586.31,
+          "y": 1939.43
+        },
+        {
+          "x": 555.59,
+          "y": 1957.35
+        },
+        {
+          "x": 549.72,
+          "y": 1947.26
+        },
+        {
+          "x": 544.08,
+          "y": 1937.6
+        },
+        {
+          "x": 539.53,
+          "y": 1929.78
+        },
+        {
+          "x": 523.68,
+          "y": 1902.61
+        },
+        {
+          "x": 519.73,
+          "y": 1895.82
+        },
+        {
+          "x": 503.43,
+          "y": 1867.88
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-036a7bdfbeae",
+      "name": "Terminal-4",
+      "vertices": [
+        {
+          "x": 544.08,
+          "y": 1937.6
+        },
+        {
+          "x": 535.58,
+          "y": 1942.58
+        },
+        {
+          "x": 547.2,
+          "y": 1962.39
+        },
+        {
+          "x": 548.57,
+          "y": 1961.59
+        },
+        {
+          "x": 554.0,
+          "y": 1958.4
+        },
+        {
+          "x": 555.59,
+          "y": 1957.35
+        },
+        {
+          "x": 549.72,
+          "y": 1947.26
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-755152602896",
+      "name": "Terminal-5",
+      "vertices": [
+        {
+          "x": 548.57,
+          "y": 1961.59
+        },
+        {
+          "x": 554.84,
+          "y": 1972.11
+        },
+        {
+          "x": 560.24,
+          "y": 1968.9
+        },
+        {
+          "x": 554.0,
+          "y": 1958.4
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-ba1f7479aa5e",
+      "name": "Terminal-6",
+      "vertices": [
+        {
+          "x": 565.73,
+          "y": 1980.8
+        },
+        {
+          "x": 561.77,
+          "y": 1983.26
+        },
+        {
+          "x": 618.73,
+          "y": 2074.73
+        },
+        {
+          "x": 622.39,
+          "y": 2072.46
+        },
+        {
+          "x": 619.22,
+          "y": 2067.36
+        },
+        {
+          "x": 603.05,
+          "y": 2040.6
+        },
+        {
+          "x": 600.25,
+          "y": 2036.07
+        },
+        {
+          "x": 600.11,
+          "y": 2035.8
+        },
+        {
+          "x": 587.39,
+          "y": 2014.85
+        },
+        {
+          "x": 584.38,
+          "y": 2010.77
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-20595c9f8ead",
+      "name": "Terminal-7",
+      "vertices": [
+        {
+          "x": 587.39,
+          "y": 2014.85
+        },
+        {
+          "x": 605.39,
+          "y": 2003.92
+        },
+        {
+          "x": 608.52,
+          "y": 2009.09
+        },
+        {
+          "x": 613.37,
+          "y": 2006.17
+        },
+        {
+          "x": 610.29,
+          "y": 2000.93
+        },
+        {
+          "x": 620.24,
+          "y": 1995.07
+        },
+        {
+          "x": 617.63,
+          "y": 1990.65
+        },
+        {
+          "x": 607.5,
+          "y": 1996.61
+        },
+        {
+          "x": 604.69,
+          "y": 1991.82
+        },
+        {
+          "x": 600.83,
+          "y": 1993.81
+        },
+        {
+          "x": 604.01,
+          "y": 1999.23
+        },
+        {
+          "x": 584.38,
+          "y": 2010.77
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-2a9465f0f139",
+      "name": "Terminal-8",
+      "vertices": [
+        {
+          "x": 603.05,
+          "y": 2040.6
+        },
+        {
+          "x": 621.6,
+          "y": 2029.14
+        },
+        {
+          "x": 624.65,
+          "y": 2034.07
+        },
+        {
+          "x": 628.77,
+          "y": 2031.51
+        },
+        {
+          "x": 625.24,
+          "y": 2025.8
+        },
+        {
+          "x": 635.38,
+          "y": 2019.54
+        },
+        {
+          "x": 632.88,
+          "y": 2015.5
+        },
+        {
+          "x": 622.98,
+          "y": 2021.61
+        },
+        {
+          "x": 620.02,
+          "y": 2016.8
+        },
+        {
+          "x": 615.68,
+          "y": 2019.47
+        },
+        {
+          "x": 618.83,
+          "y": 2024.58
+        },
+        {
+          "x": 600.25,
+          "y": 2036.07
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-4e7625ca5166",
+      "name": "Terminal-9",
+      "vertices": [
+        {
+          "x": 649.45,
+          "y": 2039.17
+        },
+        {
+          "x": 653.75,
+          "y": 2037.17
+        },
+        {
+          "x": 621.31,
+          "y": 1985.24
+        },
+        {
+          "x": 591.57,
+          "y": 1936.91
+        },
+        {
+          "x": 582.98,
+          "y": 1930.14
+        },
+        {
+          "x": 581.46,
+          "y": 1931.12
+        },
+        {
+          "x": 586.31,
+          "y": 1939.43
+        },
+        {
+          "x": 589.9,
+          "y": 1945.11
+        },
+        {
+          "x": 601.82,
+          "y": 1963.32
+        },
+        {
+          "x": 602.89,
+          "y": 1964.95
+        },
+        {
+          "x": 617.85,
+          "y": 1987.68
+        },
+        {
+          "x": 619.15,
+          "y": 1989.82
+        },
+        {
+          "x": 626.86,
+          "y": 2002.46
+        },
+        {
+          "x": 629.18,
+          "y": 2006.26
+        },
+        {
+          "x": 633.88,
+          "y": 2013.96
+        },
+        {
+          "x": 636.62,
+          "y": 2018.7
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-cbb4232d0346",
+      "name": "Terminal-10",
+      "vertices": [
+        {
+          "x": 626.86,
+          "y": 2002.46
+        },
+        {
+          "x": 617.8,
+          "y": 2003.49
+        },
+        {
+          "x": 613.37,
+          "y": 2006.17
+        },
+        {
+          "x": 608.52,
+          "y": 2009.09
+        },
+        {
+          "x": 604.85,
+          "y": 2011.3
+        },
+        {
+          "x": 604.28,
+          "y": 2018.6
+        },
+        {
+          "x": 605.62,
+          "y": 2020.51
+        },
+        {
+          "x": 611.65,
+          "y": 2022.2
+        },
+        {
+          "x": 615.68,
+          "y": 2019.47
+        },
+        {
+          "x": 620.02,
+          "y": 2016.8
+        },
+        {
+          "x": 625.37,
+          "y": 2013.74
+        },
+        {
+          "x": 629.18,
+          "y": 2006.26
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-0d74e9bfe1a0",
+      "name": "Terminal-11",
+      "vertices": [
+        {
+          "x": 597.73,
+          "y": 1978.02
+        },
+        {
+          "x": 592.0,
+          "y": 1981.17
+        },
+        {
+          "x": 590.06,
+          "y": 1986.86
+        },
+        {
+          "x": 592.56,
+          "y": 1992.3
+        },
+        {
+          "x": 599.49,
+          "y": 1994.51
+        },
+        {
+          "x": 600.83,
+          "y": 1993.81
+        },
+        {
+          "x": 604.69,
+          "y": 1991.82
+        },
+        {
+          "x": 606.55,
+          "y": 1985.53
+        },
+        {
+          "x": 603.77,
+          "y": 1979.49
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-43c836fc5b1b",
+      "name": "Terminal-12",
+      "vertices": [
+        {
+          "x": 624.65,
+          "y": 2034.07
+        },
+        {
+          "x": 623.38,
+          "y": 2035.14
+        },
+        {
+          "x": 631.98,
+          "y": 2048.84
+        },
+        {
+          "x": 640.3,
+          "y": 2043.62
+        },
+        {
+          "x": 631.62,
+          "y": 2029.8
+        },
+        {
+          "x": 628.77,
+          "y": 2031.51
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-61eec813766a",
+      "name": "Terminal-13",
+      "vertices": [
+        {
+          "x": 621.6,
+          "y": 2029.14
+        },
+        {
+          "x": 603.05,
+          "y": 2040.6
+        },
+        {
+          "x": 619.22,
+          "y": 2067.36
+        },
+        {
+          "x": 653.61,
+          "y": 2045.8
+        },
+        {
+          "x": 649.45,
+          "y": 2039.17
+        },
+        {
+          "x": 636.62,
+          "y": 2018.7
+        },
+        {
+          "x": 635.38,
+          "y": 2019.54
+        },
+        {
+          "x": 625.24,
+          "y": 2025.8
+        },
+        {
+          "x": 628.77,
+          "y": 2031.51
+        },
+        {
+          "x": 631.62,
+          "y": 2029.8
+        },
+        {
+          "x": 640.3,
+          "y": 2043.62
+        },
+        {
+          "x": 631.98,
+          "y": 2048.84
+        },
+        {
+          "x": 623.38,
+          "y": 2035.14
+        },
+        {
+          "x": 624.65,
+          "y": 2034.07
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-f5f407e98c9c",
+      "name": "Terminal-14",
+      "vertices": [
+        {
+          "x": 605.39,
+          "y": 2003.92
+        },
+        {
+          "x": 608.52,
+          "y": 2009.09
+        },
+        {
+          "x": 604.85,
+          "y": 2011.3
+        },
+        {
+          "x": 604.28,
+          "y": 2018.6
+        },
+        {
+          "x": 605.62,
+          "y": 2020.51
+        },
+        {
+          "x": 611.65,
+          "y": 2022.2
+        },
+        {
+          "x": 615.68,
+          "y": 2019.47
+        },
+        {
+          "x": 618.83,
+          "y": 2024.58
+        },
+        {
+          "x": 600.25,
+          "y": 2036.07
+        },
+        {
+          "x": 600.11,
+          "y": 2035.8
+        },
+        {
+          "x": 587.39,
+          "y": 2014.85
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-e3e43ace4316",
+      "name": "Terminal-15",
+      "vertices": [
+        {
+          "x": 600.83,
+          "y": 1993.81
+        },
+        {
+          "x": 604.01,
+          "y": 1999.23
+        },
+        {
+          "x": 584.97,
+          "y": 2009.78
+        },
+        {
+          "x": 569.9,
+          "y": 1984.49
+        },
+        {
+          "x": 579.04,
+          "y": 1978.9
+        },
+        {
+          "x": 577.69,
+          "y": 1975.18
+        },
+        {
+          "x": 583.26,
+          "y": 1972.22
+        },
+        {
+          "x": 585.72,
+          "y": 1975.43
+        },
+        {
+          "x": 586.82,
+          "y": 1974.92
+        },
+        {
+          "x": 584.7,
+          "y": 1970.44
+        },
+        {
+          "x": 590.29,
+          "y": 1967.9
+        },
+        {
+          "x": 591.89,
+          "y": 1971.54
+        },
+        {
+          "x": 593.17,
+          "y": 1970.86
+        },
+        {
+          "x": 591.48,
+          "y": 1967.4
+        },
+        {
+          "x": 596.8,
+          "y": 1964.1
+        },
+        {
+          "x": 599.0,
+          "y": 1967.99
+        },
+        {
+          "x": 602.89,
+          "y": 1964.95
+        },
+        {
+          "x": 619.15,
+          "y": 1989.82
+        },
+        {
+          "x": 617.63,
+          "y": 1990.65
+        },
+        {
+          "x": 607.5,
+          "y": 1996.61
+        },
+        {
+          "x": 604.69,
+          "y": 1991.82
+        },
+        {
+          "x": 606.55,
+          "y": 1985.53
+        },
+        {
+          "x": 603.77,
+          "y": 1979.49
+        },
+        {
+          "x": 597.73,
+          "y": 1978.02
+        },
+        {
+          "x": 592.0,
+          "y": 1981.17
+        },
+        {
+          "x": 590.06,
+          "y": 1986.86
+        },
+        {
+          "x": 592.56,
+          "y": 1992.3
+        },
+        {
+          "x": 599.49,
+          "y": 1994.51
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-cc606338ae63",
+      "name": "International Airport Terminal",
+      "vertices": [
+        {
+          "x": 679.52,
+          "y": 2049.52
+        },
+        {
+          "x": 668.28,
+          "y": 2056.45
+        },
+        {
+          "x": 665.97,
+          "y": 2052.67
+        },
+        {
+          "x": 653.83,
+          "y": 2060.1
+        },
+        {
+          "x": 656.29,
+          "y": 2064.12
+        },
+        {
+          "x": 655.83,
+          "y": 2064.13
+        },
+        {
+          "x": 630.59,
+          "y": 2079.71
+        },
+        {
+          "x": 642.27,
+          "y": 2098.62
+        },
+        {
+          "x": 649.02,
+          "y": 2109.57
+        },
+        {
+          "x": 654.29,
+          "y": 2118.11
+        },
+        {
+          "x": 670.55,
+          "y": 2144.47
+        },
+        {
+          "x": 675.15,
+          "y": 2151.93
+        },
+        {
+          "x": 692.52,
+          "y": 2180.06
+        },
+        {
+          "x": 703.06,
+          "y": 2197.16
+        },
+        {
+          "x": 707.65,
+          "y": 2205.27
+        },
+        {
+          "x": 733.53,
+          "y": 2190.5
+        },
+        {
+          "x": 756.38,
+          "y": 2176.81
+        },
+        {
+          "x": 753.58,
+          "y": 2172.24
+        },
+        {
+          "x": 752.29,
+          "y": 2167.42
+        },
+        {
+          "x": 717.35,
+          "y": 2110.82
+        },
+        {
+          "x": 685.93,
+          "y": 2059.89
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-b0ccb8ac3f1a",
+      "name": "Terminal-17",
+      "vertices": [
+        {
+          "x": 654.29,
+          "y": 2118.11
+        },
+        {
+          "x": 648.45,
+          "y": 2121.69
+        },
+        {
+          "x": 645.43,
+          "y": 2123.77
+        },
+        {
+          "x": 640.0,
+          "y": 2115.49
+        },
+        {
+          "x": 649.02,
+          "y": 2109.57
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-3cb1af244338",
+      "name": "Terminal-18",
+      "vertices": [
+        {
+          "x": 648.45,
+          "y": 2121.69
+        },
+        {
+          "x": 664.6,
+          "y": 2148.1
+        },
+        {
+          "x": 670.55,
+          "y": 2144.47
+        },
+        {
+          "x": 654.29,
+          "y": 2118.11
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-b7217ce64421",
+      "name": "Terminal-19",
+      "vertices": [
+        {
+          "x": 642.27,
+          "y": 2098.62
+        },
+        {
+          "x": 640.93,
+          "y": 2099.62
+        },
+        {
+          "x": 635.45,
+          "y": 2103.21
+        },
+        {
+          "x": 632.84,
+          "y": 2104.85
+        },
+        {
+          "x": 640.0,
+          "y": 2115.49
+        },
+        {
+          "x": 649.02,
+          "y": 2109.57
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-f21abfe27787",
+      "name": "Terminal-20",
+      "vertices": [
+        {
+          "x": 640.93,
+          "y": 2099.62
+        },
+        {
+          "x": 629.45,
+          "y": 2082.06
+        },
+        {
+          "x": 623.97,
+          "y": 2085.63
+        },
+        {
+          "x": 635.45,
+          "y": 2103.21
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-430e9f6e6bc5",
+      "name": "Terminal-21",
+      "vertices": [
+        {
+          "x": 622.39,
+          "y": 2072.46
+        },
+        {
+          "x": 626.77,
+          "y": 2072.86
+        },
+        {
+          "x": 630.45,
+          "y": 2078.9
+        },
+        {
+          "x": 629.45,
+          "y": 2082.06
+        },
+        {
+          "x": 623.97,
+          "y": 2085.63
+        },
+        {
+          "x": 620.43,
+          "y": 2083.9
+        },
+        {
+          "x": 617.49,
+          "y": 2078.31
+        },
+        {
+          "x": 618.73,
+          "y": 2074.73
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-221ebc068b95",
+      "name": "Terminal-22",
+      "vertices": [
+        {
+          "x": 560.24,
+          "y": 1968.9
+        },
+        {
+          "x": 564.0,
+          "y": 1970.84
+        },
+        {
+          "x": 567.68,
+          "y": 1976.88
+        },
+        {
+          "x": 566.68,
+          "y": 1980.03
+        },
+        {
+          "x": 561.2,
+          "y": 1983.62
+        },
+        {
+          "x": 557.67,
+          "y": 1981.88
+        },
+        {
+          "x": 556.39,
+          "y": 1979.62
+        },
+        {
+          "x": 554.02,
+          "y": 1975.39
+        },
+        {
+          "x": 554.84,
+          "y": 1972.11
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-4439dc3089a4",
+      "name": "Hangar-23",
+      "vertices": [
+        {
+          "x": 1072.18,
+          "y": 2697.95
+        },
+        {
+          "x": 1031.04,
+          "y": 2723.98
+        },
+        {
+          "x": 1052.42,
+          "y": 2758.7
+        },
+        {
+          "x": 1093.57,
+          "y": 2732.66
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "hanger"
+    },
+    {
+      "id": "term-9484920af4de",
+      "name": "Terminal-24",
+      "vertices": [
+        {
+          "x": 1202.26,
+          "y": 2939.44
+        },
+        {
+          "x": 1180.39,
+          "y": 2952.64
+        },
+        {
+          "x": 1184.08,
+          "y": 2958.95
+        },
+        {
+          "x": 1188.07,
+          "y": 2965.3
+        },
+        {
+          "x": 1193.06,
+          "y": 2974.15
+        },
+        {
+          "x": 1196.91,
+          "y": 2980.25
+        },
+        {
+          "x": 1203.43,
+          "y": 2990.86
+        },
+        {
+          "x": 1216.88,
+          "y": 2982.44
+        },
+        {
+          "x": 1225.33,
+          "y": 2977.66
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    },
+    {
+      "id": "term-6b09b0ab2ebb",
+      "name": "Terminal-25",
+      "vertices": [
+        {
+          "x": 749.9,
+          "y": 2180.4
+        },
+        {
+          "x": 757.43,
+          "y": 2175.75
+        },
+        {
+          "x": 781.0,
+          "y": 2215.54
+        },
+        {
+          "x": 795.61,
+          "y": 2206.65
+        },
+        {
+          "x": 806.54,
+          "y": 2224.61
+        },
+        {
+          "x": 807.62,
+          "y": 2226.39
+        },
+        {
+          "x": 811.89,
+          "y": 2233.4
+        },
+        {
+          "x": 808.14,
+          "y": 2235.69
+        },
+        {
+          "x": 794.51,
+          "y": 2213.29
+        },
+        {
+          "x": 776.57,
+          "y": 2224.21
+        }
+      ],
+      "closed": true,
+      "floors": 1,
+      "floorToFloor": 5,
+      "floorHeight": 5,
+      "departureCapacity": 100,
+      "arrivalCapacity": 100,
+      "buildingType": "terminal"
+    }
+  ],
+  "pbbStands": [],
+  "remoteStands": [],
+  "tempStands": [],
+  "holdingPoints": [],
+  "runwayPaths": [
+    {
+      "id": "rwy-044302752acd",
+      "name": "14R/32L",
+      "vertices": [
+        {
+          "x": 888.79,
+          "y": 1687.08
+        },
+        {
+          "x": 889.73,
+          "y": 1688.61
+        },
+        {
+          "x": 1237.52,
+          "y": 2281.8
+        },
+        {
+          "x": 1253.61,
+          "y": 2308.32
+        },
+        {
+          "x": 1268.76,
+          "y": 2330.1
+        },
+        {
+          "x": 1273.2,
+          "y": 2336.88
+        },
+        {
+          "x": 1445.06,
+          "y": 2599.76
+        },
+        {
+          "x": 1482.66,
+          "y": 2661.44
+        },
+        {
+          "x": 1572.82,
+          "y": 2818.49
+        }
+      ],
+      "width": 45.0,
+      "direction": "clockwise",
+      "minArrVelocity": 15,
+      "lineupDistM": 0,
+      "avgMoveVelocity": 10,
+      "startDisplacedThresholdM": 0.0,
+      "startBlastPadM": 0,
+      "endDisplacedThresholdM": 0.0,
+      "endBlastPadM": 0,
+      "pavement": "concrete"
+    },
+    {
+      "id": "rwy-48deff34d323",
+      "name": "14L/32R",
+      "vertices": [
+        {
+          "x": 978.05,
+          "y": 1263.01
+        },
+        {
+          "x": 982.74,
+          "y": 1270.42
+        },
+        {
+          "x": 1502.67,
+          "y": 2117.01
+        },
+        {
+          "x": 1504.99,
+          "y": 2120.85
+        },
+        {
+          "x": 1534.4,
+          "y": 2171.32
+        },
+        {
+          "x": 1540.4,
+          "y": 2181.22
+        },
+        {
+          "x": 1881.17,
+          "y": 2743.45
+        },
+        {
+          "x": 1926.68,
+          "y": 2821.34
+        },
+        {
+          "x": 2417.92,
+          "y": 3611.36
+        }
+      ],
+      "width": 45.0,
+      "direction": "clockwise",
+      "minArrVelocity": 15,
+      "lineupDistM": 0,
+      "avgMoveVelocity": 10,
+      "startDisplacedThresholdM": 0.0,
+      "startBlastPadM": 0,
+      "endDisplacedThresholdM": 0.0,
+      "endBlastPadM": 0,
+      "pavement": "concrete"
+    }
+  ],
+  "runwayTaxiways": [
+    {
+      "id": "tw-5cfd2988ce21",
+      "name": "taxiway-tw-5cfd2988ce21",
+      "vertices": [
+        {
+          "x": 889.73,
+          "y": 1688.61
+        },
+        {
+          "x": 805.51,
+          "y": 1735.26
+        },
+        {
+          "x": 804.0,
+          "y": 1736.23
+        },
+        {
+          "x": 781.07,
+          "y": 1750.76
+        },
+        {
+          "x": 772.43,
+          "y": 1755.85
+        },
+        {
+          "x": 750.18,
+          "y": 1769.35
+        },
+        {
+          "x": 730.05,
+          "y": 1781.48
+        },
+        {
+          "x": 719.87,
+          "y": 1788.08
+        },
+        {
+          "x": 709.72,
+          "y": 1794.18
+        },
+        {
+          "x": 686.0,
+          "y": 1808.77
+        },
+        {
+          "x": 645.15,
+          "y": 1833.8
+        },
+        {
+          "x": 642.41,
+          "y": 1836.3
+        },
+        {
+          "x": 640.23,
+          "y": 1839.37
+        },
+        {
+          "x": 639.47,
+          "y": 1842.71
+        },
+        {
+          "x": 639.15,
+          "y": 1848.42
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-ed769c04c20d",
+      "name": "taxiway-tw-ed769c04c20d",
+      "vertices": [
+        {
+          "x": 1926.68,
+          "y": 2821.34
+        },
+        {
+          "x": 1920.04,
+          "y": 2813.39
+        },
+        {
+          "x": 1915.67,
+          "y": 2809.79
+        },
+        {
+          "x": 1908.93,
+          "y": 2806.31
+        },
+        {
+          "x": 1900.3,
+          "y": 2803.07
+        },
+        {
+          "x": 1892.12,
+          "y": 2801.89
+        },
+        {
+          "x": 1882.38,
+          "y": 2804.02
+        },
+        {
+          "x": 1875.51,
+          "y": 2806.99
+        },
+        {
+          "x": 1866.39,
+          "y": 2811.59
+        },
+        {
+          "x": 1656.78,
+          "y": 2941.45
+        },
+        {
+          "x": 1568.08,
+          "y": 2996.42
+        },
+        {
+          "x": 1562.59,
+          "y": 2999.9
+        },
+        {
+          "x": 1539.63,
+          "y": 3014.4
+        },
+        {
+          "x": 1523.3,
+          "y": 3022.96
+        },
+        {
+          "x": 1519.83,
+          "y": 3025.11
+        },
+        {
+          "x": 1482.22,
+          "y": 3050.6
+        },
+        {
+          "x": 1459.62,
+          "y": 3065.33
+        },
+        {
+          "x": 1453.36,
+          "y": 3069.02
+        },
+        {
+          "x": 1448.57,
+          "y": 3071.3
+        },
+        {
+          "x": 1443.34,
+          "y": 3072.99
+        },
+        {
+          "x": 1435.9,
+          "y": 3074.25
+        },
+        {
+          "x": 1427.95,
+          "y": 3075.13
+        },
+        {
+          "x": 1379.81,
+          "y": 3082.23
+        },
+        {
+          "x": 1358.33,
+          "y": 3090.43
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-a33eea368350",
+      "name": "taxiway-tw-a33eea368350",
+      "vertices": [
+        {
+          "x": 1482.66,
+          "y": 2661.44
+        },
+        {
+          "x": 1472.58,
+          "y": 2653.79
+        },
+        {
+          "x": 1466.54,
+          "y": 2649.96
+        },
+        {
+          "x": 1458.37,
+          "y": 2647.24
+        },
+        {
+          "x": 1451.0,
+          "y": 2645.91
+        },
+        {
+          "x": 1445.91,
+          "y": 2646.13
+        },
+        {
+          "x": 1441.94,
+          "y": 2646.5
+        },
+        {
+          "x": 1437.15,
+          "y": 2647.83
+        },
+        {
+          "x": 1431.7,
+          "y": 2649.6
+        },
+        {
+          "x": 1354.9,
+          "y": 2692.58
+        },
+        {
+          "x": 1351.99,
+          "y": 2693.0
+        },
+        {
+          "x": 1347.93,
+          "y": 2693.01
+        },
+        {
+          "x": 1345.54,
+          "y": 2692.63
+        },
+        {
+          "x": 1343.32,
+          "y": 2691.84
+        },
+        {
+          "x": 1338.68,
+          "y": 2689.02
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-d996da5c1c15",
+      "name": "taxiway-tw-d996da5c1c15",
+      "vertices": [
+        {
+          "x": 1431.7,
+          "y": 2649.6
+        },
+        {
+          "x": 1435.61,
+          "y": 2645.7
+        },
+        {
+          "x": 1438.34,
+          "y": 2642.02
+        },
+        {
+          "x": 1441.13,
+          "y": 2637.52
+        },
+        {
+          "x": 1443.56,
+          "y": 2632.22
+        },
+        {
+          "x": 1445.4,
+          "y": 2627.29
+        },
+        {
+          "x": 1446.36,
+          "y": 2622.28
+        },
+        {
+          "x": 1446.29,
+          "y": 2616.9
+        },
+        {
+          "x": 1445.99,
+          "y": 2610.13
+        },
+        {
+          "x": 1445.06,
+          "y": 2599.76
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-44788ab7ca9e",
+      "name": "taxiway-tw-44788ab7ca9e",
+      "vertices": [
+        {
+          "x": 1866.39,
+          "y": 2811.59
+        },
+        {
+          "x": 1882.72,
+          "y": 2796.27
+        },
+        {
+          "x": 1888.26,
+          "y": 2788.11
+        },
+        {
+          "x": 1889.56,
+          "y": 2782.56
+        },
+        {
+          "x": 1889.95,
+          "y": 2777.31
+        },
+        {
+          "x": 1890.18,
+          "y": 2770.42
+        },
+        {
+          "x": 1889.57,
+          "y": 2764.85
+        },
+        {
+          "x": 1888.89,
+          "y": 2759.55
+        },
+        {
+          "x": 1886.21,
+          "y": 2754.16
+        },
+        {
+          "x": 1881.17,
+          "y": 2743.45
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-61b17d9a8cce",
+      "name": "taxiway-tw-61b17d9a8cce",
+      "vertices": [
+        {
+          "x": 1489.88,
+          "y": 2163.14
+        },
+        {
+          "x": 1497.51,
+          "y": 2160.67
+        },
+        {
+          "x": 1506.64,
+          "y": 2159.79
+        },
+        {
+          "x": 1514.15,
+          "y": 2160.97
+        },
+        {
+          "x": 1521.22,
+          "y": 2163.62
+        },
+        {
+          "x": 1529.47,
+          "y": 2169.36
+        },
+        {
+          "x": 1534.18,
+          "y": 2174.52
+        },
+        {
+          "x": 1540.4,
+          "y": 2181.22
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-2f9a76c3c993",
+      "name": "taxiway-tw-2f9a76c3c993",
+      "vertices": [
+        {
+          "x": 1553.35,
+          "y": 2125.62
+        },
+        {
+          "x": 1544.45,
+          "y": 2130.86
+        },
+        {
+          "x": 1540.52,
+          "y": 2135.04
+        },
+        {
+          "x": 1536.84,
+          "y": 2140.64
+        },
+        {
+          "x": 1534.18,
+          "y": 2149.04
+        },
+        {
+          "x": 1533.88,
+          "y": 2155.82
+        },
+        {
+          "x": 1533.88,
+          "y": 2163.03
+        },
+        {
+          "x": 1536.39,
+          "y": 2170.1
+        },
+        {
+          "x": 1540.4,
+          "y": 2181.22
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-06c8da94bf1b",
+      "name": "taxiway-tw-06c8da94bf1b",
+      "vertices": [
+        {
+          "x": 1170.42,
+          "y": 2360.39
+        },
+        {
+          "x": 1224.97,
+          "y": 2326.07
+        },
+        {
+          "x": 1253.61,
+          "y": 2308.32
+        },
+        {
+          "x": 1489.88,
+          "y": 2163.14
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-f08870ec2536",
+      "name": "taxiway-tw-f08870ec2536",
+      "vertices": [
+        {
+          "x": 1489.88,
+          "y": 2163.14
+        },
+        {
+          "x": 1494.57,
+          "y": 2159.35
+        },
+        {
+          "x": 1499.13,
+          "y": 2153.31
+        },
+        {
+          "x": 1502.52,
+          "y": 2145.21
+        },
+        {
+          "x": 1504.43,
+          "y": 2137.55
+        },
+        {
+          "x": 1504.14,
+          "y": 2127.54
+        },
+        {
+          "x": 1502.67,
+          "y": 2117.01
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-dc5eb0a90426",
+      "name": "taxiway-tw-dc5eb0a90426",
+      "vertices": [
+        {
+          "x": 1553.35,
+          "y": 2125.62
+        },
+        {
+          "x": 1542.43,
+          "y": 2129.01
+        },
+        {
+          "x": 1533.59,
+          "y": 2130.48
+        },
+        {
+          "x": 1526.09,
+          "y": 2130.34
+        },
+        {
+          "x": 1517.25,
+          "y": 2127.39
+        },
+        {
+          "x": 1509.74,
+          "y": 2122.82
+        },
+        {
+          "x": 1502.67,
+          "y": 2117.01
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-bbcc69f68089",
+      "name": "taxiway-tw-bbcc69f68089",
+      "vertices": [
+        {
+          "x": 1224.97,
+          "y": 2326.07
+        },
+        {
+          "x": 1231.1,
+          "y": 2318.45
+        },
+        {
+          "x": 1236.23,
+          "y": 2310.76
+        },
+        {
+          "x": 1238.53,
+          "y": 2303.58
+        },
+        {
+          "x": 1238.79,
+          "y": 2295.63
+        },
+        {
+          "x": 1237.52,
+          "y": 2281.8
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-d7f6c2046568",
+      "name": "taxiway-tw-d7f6c2046568",
+      "vertices": [
+        {
+          "x": 1224.97,
+          "y": 2326.07
+        },
+        {
+          "x": 1237.5,
+          "y": 2323.06
+        },
+        {
+          "x": 1248.79,
+          "y": 2323.59
+        },
+        {
+          "x": 1260.32,
+          "y": 2328.45
+        },
+        {
+          "x": 1273.2,
+          "y": 2336.88
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-42eab49b4de4",
+      "name": "taxiway-tw-42eab49b4de4",
+      "vertices": [
+        {
+          "x": 982.74,
+          "y": 1270.42
+        },
+        {
+          "x": 912.36,
+          "y": 1310.47
+        },
+        {
+          "x": 828.47,
+          "y": 1359.74
+        },
+        {
+          "x": 722.36,
+          "y": 1425.08
+        },
+        {
+          "x": 671.8,
+          "y": 1456.6
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    },
+    {
+      "id": "tw-541f14f0a9c1",
+      "name": "taxiway-tw-541f14f0a9c1",
+      "vertices": [
+        {
+          "x": 1589.5,
+          "y": 2889.66
+        },
+        {
+          "x": 1596.1,
+          "y": 2878.16
+        },
+        {
+          "x": 1600.15,
+          "y": 2858.53
+        },
+        {
+          "x": 1588.48,
+          "y": 2840.6
+        },
+        {
+          "x": 1572.82,
+          "y": 2818.49
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt",
+      "maxExitVelocity": 30,
+      "minExitVelocity": 15,
+      "allowedRwDirections": [
+        "clockwise",
+        "counter_clockwise"
+      ]
+    }
+  ],
+  "taxiways": [
+    {
+      "id": "tw-7fb41c135e44",
+      "name": "taxiway-tw-7fb41c135e44",
+      "vertices": [
+        {
+          "x": 772.43,
+          "y": 1755.85
+        },
+        {
+          "x": 785.49,
+          "y": 1778.29
+        },
+        {
+          "x": 790.35,
+          "y": 1786.64
+        },
+        {
+          "x": 852.67,
+          "y": 1886.65
+        },
+        {
+          "x": 891.69,
+          "y": 1950.11
+        },
+        {
+          "x": 950.86,
+          "y": 2042.55
+        },
+        {
+          "x": 990.86,
+          "y": 2112.0
+        },
+        {
+          "x": 1060.31,
+          "y": 2230.01
+        },
+        {
+          "x": 1061.36,
+          "y": 2232.04
+        },
+        {
+          "x": 1076.91,
+          "y": 2257.52
+        },
+        {
+          "x": 1137.56,
+          "y": 2354.05
+        },
+        {
+          "x": 1160.27,
+          "y": 2395.39
+        },
+        {
+          "x": 1162.12,
+          "y": 2398.5
+        },
+        {
+          "x": 1186.93,
+          "y": 2440.49
+        },
+        {
+          "x": 1198.53,
+          "y": 2460.03
+        },
+        {
+          "x": 1268.49,
+          "y": 2568.2
+        },
+        {
+          "x": 1282.05,
+          "y": 2590.17
+        },
+        {
+          "x": 1327.24,
+          "y": 2669.46
+        },
+        {
+          "x": 1331.41,
+          "y": 2677.81
+        },
+        {
+          "x": 1338.68,
+          "y": 2689.02
+        },
+        {
+          "x": 1349.88,
+          "y": 2707.59
+        },
+        {
+          "x": 1356.11,
+          "y": 2718.88
+        },
+        {
+          "x": 1413.17,
+          "y": 2807.47
+        },
+        {
+          "x": 1497.35,
+          "y": 2941.92
+        },
+        {
+          "x": 1499.39,
+          "y": 2945.19
+        },
+        {
+          "x": 1501.27,
+          "y": 2948.17
+        },
+        {
+          "x": 1527.01,
+          "y": 2988.84
+        },
+        {
+          "x": 1527.49,
+          "y": 2990.16
+        },
+        {
+          "x": 1530.69,
+          "y": 2998.96
+        },
+        {
+          "x": 1530.57,
+          "y": 3002.99
+        },
+        {
+          "x": 1529.77,
+          "y": 3007.26
+        },
+        {
+          "x": 1529.08,
+          "y": 3011.23
+        },
+        {
+          "x": 1527.57,
+          "y": 3015.35
+        },
+        {
+          "x": 1519.83,
+          "y": 3025.11
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-8ecf956a4ffd",
+      "name": "taxiway-tw-8ecf956a4ffd",
+      "vertices": [
+        {
+          "x": 1553.35,
+          "y": 2125.62
+        },
+        {
+          "x": 1643.79,
+          "y": 2069.64
+        },
+        {
+          "x": 1698.04,
+          "y": 2037.55
+        },
+        {
+          "x": 1706.29,
+          "y": 2029.75
+        },
+        {
+          "x": 1711.0,
+          "y": 2021.5
+        },
+        {
+          "x": 1712.62,
+          "y": 2015.75
+        },
+        {
+          "x": 1712.47,
+          "y": 2008.75
+        },
+        {
+          "x": 1710.64,
+          "y": 2002.43
+        },
+        {
+          "x": 1707.98,
+          "y": 1995.51
+        },
+        {
+          "x": 1704.67,
+          "y": 1989.39
+        },
+        {
+          "x": 1652.5,
+          "y": 1903.19
+        },
+        {
+          "x": 1645.45,
+          "y": 1892.1
+        },
+        {
+          "x": 1645.06,
+          "y": 1891.49
+        },
+        {
+          "x": 1630.85,
+          "y": 1868.07
+        },
+        {
+          "x": 1594.27,
+          "y": 1807.75
+        },
+        {
+          "x": 1582.45,
+          "y": 1788.27
+        },
+        {
+          "x": 1576.81,
+          "y": 1778.97
+        },
+        {
+          "x": 1528.34,
+          "y": 1699.0
+        },
+        {
+          "x": 1523.9,
+          "y": 1691.68
+        },
+        {
+          "x": 1506.66,
+          "y": 1663.18
+        },
+        {
+          "x": 1506.4,
+          "y": 1662.76
+        },
+        {
+          "x": 1444.87,
+          "y": 1562.81
+        },
+        {
+          "x": 1441.2,
+          "y": 1556.85
+        },
+        {
+          "x": 1406.9,
+          "y": 1500.95
+        },
+        {
+          "x": 1362.41,
+          "y": 1428.43
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-31e15ce220db",
+      "name": "taxiway-tw-31e15ce220db",
+      "vertices": [
+        {
+          "x": 784.09,
+          "y": 1970.99
+        },
+        {
+          "x": 795.34,
+          "y": 1991.23
+        },
+        {
+          "x": 806.32,
+          "y": 2006.92
+        },
+        {
+          "x": 809.86,
+          "y": 2011.22
+        },
+        {
+          "x": 813.3,
+          "y": 2015.4
+        },
+        {
+          "x": 828.64,
+          "y": 2035.06
+        },
+        {
+          "x": 858.66,
+          "y": 2076.26
+        },
+        {
+          "x": 862.15,
+          "y": 2081.04
+        },
+        {
+          "x": 869.32,
+          "y": 2091.53
+        },
+        {
+          "x": 889.41,
+          "y": 2129.01
+        },
+        {
+          "x": 909.09,
+          "y": 2116.82
+        },
+        {
+          "x": 913.3,
+          "y": 2114.21
+        },
+        {
+          "x": 924.62,
+          "y": 2107.01
+        },
+        {
+          "x": 925.79,
+          "y": 2106.32
+        },
+        {
+          "x": 936.98,
+          "y": 2099.75
+        },
+        {
+          "x": 944.35,
+          "y": 2097.89
+        },
+        {
+          "x": 950.83,
+          "y": 2096.25
+        },
+        {
+          "x": 959.67,
+          "y": 2096.45
+        },
+        {
+          "x": 967.68,
+          "y": 2097.74
+        },
+        {
+          "x": 973.13,
+          "y": 2099.54
+        },
+        {
+          "x": 979.0,
+          "y": 2102.64
+        },
+        {
+          "x": 985.55,
+          "y": 2106.61
+        },
+        {
+          "x": 990.86,
+          "y": 2112.0
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-5f6a688190a3",
+      "name": "taxiway-tw-5f6a688190a3",
+      "vertices": [
+        {
+          "x": 891.69,
+          "y": 1950.11
+        },
+        {
+          "x": 884.52,
+          "y": 1944.33
+        },
+        {
+          "x": 879.23,
+          "y": 1941.75
+        },
+        {
+          "x": 872.3,
+          "y": 1938.67
+        },
+        {
+          "x": 865.74,
+          "y": 1937.25
+        },
+        {
+          "x": 860.37,
+          "y": 1936.01
+        },
+        {
+          "x": 849.33,
+          "y": 1936.01
+        },
+        {
+          "x": 835.27,
+          "y": 1940.49
+        },
+        {
+          "x": 822.66,
+          "y": 1948.71
+        },
+        {
+          "x": 784.09,
+          "y": 1970.99
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-454f7352e922",
+      "name": "taxiway-tw-454f7352e922",
+      "vertices": [
+        {
+          "x": 1186.93,
+          "y": 2440.49
+        },
+        {
+          "x": 1183.06,
+          "y": 2456.74
+        },
+        {
+          "x": 1070.59,
+          "y": 2525.2
+        },
+        {
+          "x": 1054.65,
+          "y": 2534.56
+        },
+        {
+          "x": 1049.81,
+          "y": 2537.4
+        },
+        {
+          "x": 1021.71,
+          "y": 2553.92
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-8b50cf07dd5b",
+      "name": "taxiway-tw-8b50cf07dd5b",
+      "vertices": [
+        {
+          "x": 1412.11,
+          "y": 3003.92
+        },
+        {
+          "x": 1407.04,
+          "y": 3004.34
+        },
+        {
+          "x": 1401.12,
+          "y": 3005.01
+        },
+        {
+          "x": 1395.54,
+          "y": 3008.22
+        },
+        {
+          "x": 1391.98,
+          "y": 3011.44
+        },
+        {
+          "x": 1387.25,
+          "y": 3016.35
+        },
+        {
+          "x": 1384.71,
+          "y": 3022.44
+        },
+        {
+          "x": 1383.29,
+          "y": 3027.48
+        },
+        {
+          "x": 1381.95,
+          "y": 3034.62
+        },
+        {
+          "x": 1329.2,
+          "y": 3065.5
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-0ce6617ac8b3",
+      "name": "taxiway-tw-0ce6617ac8b3",
+      "vertices": [
+        {
+          "x": 1268.49,
+          "y": 2568.2
+        },
+        {
+          "x": 1268.98,
+          "y": 2572.37
+        },
+        {
+          "x": 1268.97,
+          "y": 2576.54
+        },
+        {
+          "x": 1268.04,
+          "y": 2580.12
+        },
+        {
+          "x": 1265.34,
+          "y": 2584.92
+        },
+        {
+          "x": 1261.86,
+          "y": 2588.12
+        },
+        {
+          "x": 1211.1,
+          "y": 2620.32
+        },
+        {
+          "x": 1208.87,
+          "y": 2621.66
+        },
+        {
+          "x": 1169.66,
+          "y": 2645.27
+        },
+        {
+          "x": 1134.2,
+          "y": 2668.02
+        },
+        {
+          "x": 1093.75,
+          "y": 2693.97
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-a4cea27d5443",
+      "name": "taxiway-tw-a4cea27d5443",
+      "vertices": [
+        {
+          "x": 1056.21,
+          "y": 2252.48
+        },
+        {
+          "x": 1019.65,
+          "y": 2277.6
+        },
+        {
+          "x": 925.03,
+          "y": 2338.63
+        },
+        {
+          "x": 912.96,
+          "y": 2346.41
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-46ebdeea76d0",
+      "name": "taxiway-tw-46ebdeea76d0",
+      "vertices": [
+        {
+          "x": 1650.55,
+          "y": 3235.36
+        },
+        {
+          "x": 1625.85,
+          "y": 3253.56
+        },
+        {
+          "x": 1604.82,
+          "y": 3266.64
+        },
+        {
+          "x": 1596.06,
+          "y": 3271.73
+        },
+        {
+          "x": 1590.68,
+          "y": 3273.93
+        },
+        {
+          "x": 1585.82,
+          "y": 3274.82
+        },
+        {
+          "x": 1580.38,
+          "y": 3273.64
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-70ec9f3ccd5c",
+      "name": "taxiway-tw-70ec9f3ccd5c",
+      "vertices": [
+        {
+          "x": 1342.07,
+          "y": 2890.57
+        },
+        {
+          "x": 1330.48,
+          "y": 2874.67
+        },
+        {
+          "x": 1306.68,
+          "y": 2841.63
+        },
+        {
+          "x": 1297.41,
+          "y": 2827.9
+        },
+        {
+          "x": 1288.4,
+          "y": 2809.74
+        },
+        {
+          "x": 1272.33,
+          "y": 2771.14
+        },
+        {
+          "x": 1265.49,
+          "y": 2759.39
+        },
+        {
+          "x": 1260.42,
+          "y": 2750.81
+        },
+        {
+          "x": 1255.48,
+          "y": 2742.14
+        },
+        {
+          "x": 1246.44,
+          "y": 2727.44
+        },
+        {
+          "x": 1202.89,
+          "y": 2654.41
+        },
+        {
+          "x": 1201.46,
+          "y": 2648.47
+        },
+        {
+          "x": 1200.79,
+          "y": 2643.56
+        },
+        {
+          "x": 1201.24,
+          "y": 2637.54
+        },
+        {
+          "x": 1203.36,
+          "y": 2631.62
+        },
+        {
+          "x": 1205.48,
+          "y": 2626.49
+        },
+        {
+          "x": 1208.87,
+          "y": 2621.66
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-1d5d272b022a",
+      "name": "taxiway-tw-1d5d272b022a",
+      "vertices": [
+        {
+          "x": 969.65,
+          "y": 2483.04
+        },
+        {
+          "x": 979.4,
+          "y": 2443.71
+        },
+        {
+          "x": 980.77,
+          "y": 2441.36
+        },
+        {
+          "x": 983.12,
+          "y": 2440.55
+        },
+        {
+          "x": 985.33,
+          "y": 2440.33
+        },
+        {
+          "x": 989.68,
+          "y": 2440.85
+        },
+        {
+          "x": 994.61,
+          "y": 2448.29
+        },
+        {
+          "x": 1049.81,
+          "y": 2537.4
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-a2364888ad20",
+      "name": "taxiway-tw-a2364888ad20",
+      "vertices": [
+        {
+          "x": 925.03,
+          "y": 2338.63
+        },
+        {
+          "x": 942.0,
+          "y": 2363.88
+        },
+        {
+          "x": 959.6,
+          "y": 2390.11
+        },
+        {
+          "x": 981.46,
+          "y": 2426.98
+        },
+        {
+          "x": 989.68,
+          "y": 2440.85
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-7c1b34af2d8a",
+      "name": "taxiway-tw-7c1b34af2d8a",
+      "vertices": [
+        {
+          "x": 816.78,
+          "y": 2178.05
+        },
+        {
+          "x": 859.29,
+          "y": 2147.94
+        },
+        {
+          "x": 889.41,
+          "y": 2129.01
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-cdfe9cc43d80",
+      "name": "taxiway-tw-cdfe9cc43d80",
+      "vertices": [
+        {
+          "x": 703.98,
+          "y": 2024.44
+        },
+        {
+          "x": 711.79,
+          "y": 2019.15
+        },
+        {
+          "x": 739.65,
+          "y": 2000.25
+        },
+        {
+          "x": 773.49,
+          "y": 1977.32
+        },
+        {
+          "x": 784.09,
+          "y": 1970.99
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-167393fcbee5",
+      "name": "taxiway-tw-167393fcbee5",
+      "vertices": [
+        {
+          "x": 740.72,
+          "y": 2079.89
+        },
+        {
+          "x": 790.9,
+          "y": 2043.91
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-c091babfaf63",
+      "name": "taxiway-tw-c091babfaf63",
+      "vertices": [
+        {
+          "x": 531.97,
+          "y": 1713.04
+        },
+        {
+          "x": 558.36,
+          "y": 1697.21
+        },
+        {
+          "x": 565.24,
+          "y": 1692.71
+        },
+        {
+          "x": 573.42,
+          "y": 1688.12
+        },
+        {
+          "x": 594.66,
+          "y": 1674.5
+        },
+        {
+          "x": 600.14,
+          "y": 1671.0
+        },
+        {
+          "x": 609.82,
+          "y": 1666.01
+        },
+        {
+          "x": 627.98,
+          "y": 1654.1
+        },
+        {
+          "x": 637.71,
+          "y": 1647.31
+        },
+        {
+          "x": 665.73,
+          "y": 1630.13
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-360684265900",
+      "name": "taxiway-tw-360684265900",
+      "vertices": [
+        {
+          "x": 1483.02,
+          "y": 3233.36
+        },
+        {
+          "x": 1536.56,
+          "y": 3204.28
+        },
+        {
+          "x": 1544.44,
+          "y": 3217.97
+        },
+        {
+          "x": 1550.99,
+          "y": 3228.5
+        },
+        {
+          "x": 1571.98,
+          "y": 3264.58
+        },
+        {
+          "x": 1572.62,
+          "y": 3265.33
+        },
+        {
+          "x": 1575.66,
+          "y": 3268.86
+        },
+        {
+          "x": 1578.02,
+          "y": 3271.87
+        },
+        {
+          "x": 1580.38,
+          "y": 3273.64
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-06a696ffedb0",
+      "name": "taxiway-tw-06a696ffedb0",
+      "vertices": [
+        {
+          "x": 1625.85,
+          "y": 3253.56
+        },
+        {
+          "x": 1623.45,
+          "y": 3258.1
+        },
+        {
+          "x": 1622.19,
+          "y": 3262.82
+        },
+        {
+          "x": 1622.27,
+          "y": 3267.53
+        },
+        {
+          "x": 1623.52,
+          "y": 3271.87
+        },
+        {
+          "x": 1641.71,
+          "y": 3301.78
+        },
+        {
+          "x": 1663.58,
+          "y": 3337.77
+        },
+        {
+          "x": 1664.53,
+          "y": 3339.25
+        },
+        {
+          "x": 1675.07,
+          "y": 3355.89
+        },
+        {
+          "x": 1679.12,
+          "y": 3362.81
+        },
+        {
+          "x": 1680.22,
+          "y": 3368.26
+        },
+        {
+          "x": 1680.15,
+          "y": 3373.63
+        },
+        {
+          "x": 1679.42,
+          "y": 3376.87
+        },
+        {
+          "x": 1677.06,
+          "y": 3380.7
+        },
+        {
+          "x": 1674.41,
+          "y": 3382.91
+        },
+        {
+          "x": 1665.71,
+          "y": 3388.69
+        },
+        {
+          "x": 1651.14,
+          "y": 3398.38
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-b5349f33020b",
+      "name": "taxiway-tw-b5349f33020b",
+      "vertices": [
+        {
+          "x": 1379.81,
+          "y": 3082.23
+        },
+        {
+          "x": 1400.13,
+          "y": 3116.7
+        },
+        {
+          "x": 1416.29,
+          "y": 3135.36
+        },
+        {
+          "x": 1445.31,
+          "y": 3163.6
+        },
+        {
+          "x": 1466.16,
+          "y": 3192.44
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-c7de9c4089d3",
+      "name": "taxiway-tw-c7de9c4089d3",
+      "vertices": [
+        {
+          "x": 686.0,
+          "y": 1808.77
+        },
+        {
+          "x": 683.69,
+          "y": 1812.34
+        },
+        {
+          "x": 682.43,
+          "y": 1814.88
+        },
+        {
+          "x": 681.85,
+          "y": 1817.42
+        },
+        {
+          "x": 681.78,
+          "y": 1821.69
+        },
+        {
+          "x": 682.17,
+          "y": 1829.38
+        },
+        {
+          "x": 683.8,
+          "y": 1873.12
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-1f26f1fc6887",
+      "name": "taxiway-tw-1f26f1fc6887",
+      "vertices": [
+        {
+          "x": 725.39,
+          "y": 1849.51
+        },
+        {
+          "x": 723.88,
+          "y": 1810.29
+        },
+        {
+          "x": 723.67,
+          "y": 1805.09
+        },
+        {
+          "x": 722.79,
+          "y": 1794.81
+        },
+        {
+          "x": 722.79,
+          "y": 1791.2
+        },
+        {
+          "x": 724.08,
+          "y": 1789.07
+        },
+        {
+          "x": 730.05,
+          "y": 1781.48
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-8b4506c4b77e",
+      "name": "taxiway-tw-8b4506c4b77e",
+      "vertices": [
+        {
+          "x": 570.02,
+          "y": 1807.06
+        },
+        {
+          "x": 573.29,
+          "y": 1813.53
+        },
+        {
+          "x": 586.06,
+          "y": 1838.81
+        },
+        {
+          "x": 586.98,
+          "y": 1840.62
+        },
+        {
+          "x": 592.74,
+          "y": 1844.01
+        },
+        {
+          "x": 597.14,
+          "y": 1845.8
+        },
+        {
+          "x": 601.16,
+          "y": 1846.42
+        },
+        {
+          "x": 604.95,
+          "y": 1847.03
+        },
+        {
+          "x": 608.68,
+          "y": 1847.23
+        },
+        {
+          "x": 620.26,
+          "y": 1840.16
+        },
+        {
+          "x": 626.64,
+          "y": 1836.12
+        },
+        {
+          "x": 637.59,
+          "y": 1830.23
+        },
+        {
+          "x": 640.72,
+          "y": 1828.29
+        },
+        {
+          "x": 676.12,
+          "y": 1806.2
+        },
+        {
+          "x": 710.68,
+          "y": 1785.13
+        },
+        {
+          "x": 714.06,
+          "y": 1783.07
+        },
+        {
+          "x": 719.43,
+          "y": 1781.74
+        },
+        {
+          "x": 722.42,
+          "y": 1781.52
+        },
+        {
+          "x": 725.84,
+          "y": 1781.48
+        },
+        {
+          "x": 730.05,
+          "y": 1781.48
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-390f5826b707",
+      "name": "taxiway-tw-390f5826b707",
+      "vertices": [
+        {
+          "x": 641.44,
+          "y": 1773.23
+        },
+        {
+          "x": 639.61,
+          "y": 1776.54
+        },
+        {
+          "x": 639.63,
+          "y": 1781.53
+        },
+        {
+          "x": 640.33,
+          "y": 1785.41
+        },
+        {
+          "x": 642.43,
+          "y": 1789.85
+        },
+        {
+          "x": 646.22,
+          "y": 1796.3
+        },
+        {
+          "x": 647.68,
+          "y": 1798.15
+        },
+        {
+          "x": 650.94,
+          "y": 1801.2
+        },
+        {
+          "x": 654.33,
+          "y": 1803.1
+        },
+        {
+          "x": 659.34,
+          "y": 1805.82
+        },
+        {
+          "x": 662.8,
+          "y": 1807.34
+        },
+        {
+          "x": 668.89,
+          "y": 1807.4
+        },
+        {
+          "x": 676.12,
+          "y": 1806.2
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-ee4649879ad1",
+      "name": "taxiway-tw-ee4649879ad1",
+      "vertices": [
+        {
+          "x": 603.33,
+          "y": 1784.61
+        },
+        {
+          "x": 605.93,
+          "y": 1794.62
+        },
+        {
+          "x": 609.56,
+          "y": 1807.46
+        },
+        {
+          "x": 613.69,
+          "y": 1820.59
+        },
+        {
+          "x": 617.6,
+          "y": 1824.67
+        },
+        {
+          "x": 621.77,
+          "y": 1826.69
+        },
+        {
+          "x": 626.65,
+          "y": 1829.04
+        },
+        {
+          "x": 633.57,
+          "y": 1829.72
+        },
+        {
+          "x": 637.59,
+          "y": 1830.23
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-8897cfd237c1",
+      "name": "taxiway-tw-8897cfd237c1",
+      "vertices": [
+        {
+          "x": 822.66,
+          "y": 1948.71
+        },
+        {
+          "x": 819.44,
+          "y": 1948.97
+        },
+        {
+          "x": 815.9,
+          "y": 1948.67
+        },
+        {
+          "x": 811.49,
+          "y": 1948.37
+        },
+        {
+          "x": 801.92,
+          "y": 1947.53
+        },
+        {
+          "x": 748.73,
+          "y": 1935.96
+        },
+        {
+          "x": 707.87,
+          "y": 1959.56
+        },
+        {
+          "x": 711.79,
+          "y": 2019.15
+        },
+        {
+          "x": 715.19,
+          "y": 2071.02
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-cef820a9e95e",
+      "name": "taxiway-tw-cef820a9e95e",
+      "vertices": [
+        {
+          "x": 658.37,
+          "y": 1953.08
+        },
+        {
+          "x": 707.87,
+          "y": 1959.56
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-69a29e49d82d",
+      "name": "taxiway-tw-69a29e49d82d",
+      "vertices": [
+        {
+          "x": 699.26,
+          "y": 1923.11
+        },
+        {
+          "x": 748.73,
+          "y": 1935.96
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-b243daca92ca",
+      "name": "taxiway-tw-b243daca92ca",
+      "vertices": [
+        {
+          "x": 748.46,
+          "y": 1861.13
+        },
+        {
+          "x": 749.02,
+          "y": 1880.52
+        },
+        {
+          "x": 749.26,
+          "y": 1895.96
+        },
+        {
+          "x": 772.99,
+          "y": 1920.0
+        },
+        {
+          "x": 791.28,
+          "y": 1939.21
+        },
+        {
+          "x": 801.92,
+          "y": 1947.53
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-45cfcea22b20",
+      "name": "taxiway-tw-45cfcea22b20",
+      "vertices": [
+        {
+          "x": 1349.88,
+          "y": 2707.59
+        },
+        {
+          "x": 1350.28,
+          "y": 2702.06
+        },
+        {
+          "x": 1351.11,
+          "y": 2698.69
+        },
+        {
+          "x": 1351.91,
+          "y": 2696.76
+        },
+        {
+          "x": 1352.7,
+          "y": 2695.33
+        },
+        {
+          "x": 1353.8,
+          "y": 2693.68
+        },
+        {
+          "x": 1354.9,
+          "y": 2692.58
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-0e4302c610f6",
+      "name": "taxiway-tw-0e4302c610f6",
+      "vertices": [
+        {
+          "x": 1592.38,
+          "y": 3347.2
+        },
+        {
+          "x": 1636.26,
+          "y": 3318.85
+        },
+        {
+          "x": 1638.8,
+          "y": 3316.57
+        },
+        {
+          "x": 1640.42,
+          "y": 3314.25
+        },
+        {
+          "x": 1641.38,
+          "y": 3311.6
+        },
+        {
+          "x": 1641.93,
+          "y": 3309.16
+        },
+        {
+          "x": 1642.16,
+          "y": 3306.77
+        },
+        {
+          "x": 1642.08,
+          "y": 3303.98
+        },
+        {
+          "x": 1641.71,
+          "y": 3301.78
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-27e0990d5939",
+      "name": "taxiway-tw-27e0990d5939",
+      "vertices": [
+        {
+          "x": 1613.58,
+          "y": 3383.65
+        },
+        {
+          "x": 1655.12,
+          "y": 3358.1
+        },
+        {
+          "x": 1658.72,
+          "y": 3355.74
+        },
+        {
+          "x": 1660.92,
+          "y": 3353.6
+        },
+        {
+          "x": 1662.69,
+          "y": 3350.89
+        },
+        {
+          "x": 1664.02,
+          "y": 3347.79
+        },
+        {
+          "x": 1664.61,
+          "y": 3344.99
+        },
+        {
+          "x": 1664.68,
+          "y": 3342.05
+        },
+        {
+          "x": 1664.53,
+          "y": 3339.25
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-4683234ebf01",
+      "name": "taxiway-tw-4683234ebf01",
+      "vertices": [
+        {
+          "x": 1580.92,
+          "y": 3298.59
+        },
+        {
+          "x": 1576.91,
+          "y": 3304.28
+        },
+        {
+          "x": 1575.11,
+          "y": 3307.92
+        },
+        {
+          "x": 1573.9,
+          "y": 3310.68
+        },
+        {
+          "x": 1573.82,
+          "y": 3312.26
+        },
+        {
+          "x": 1574.34,
+          "y": 3314.47
+        },
+        {
+          "x": 1586.26,
+          "y": 3334.39
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-aa8d67ed019f",
+      "name": "taxiway-tw-aa8d67ed019f",
+      "vertices": [
+        {
+          "x": 1598.78,
+          "y": 3287.48
+        },
+        {
+          "x": 1598.12,
+          "y": 3293.3
+        },
+        {
+          "x": 1598.34,
+          "y": 3297.35
+        },
+        {
+          "x": 1599.3,
+          "y": 3300.0
+        },
+        {
+          "x": 1611.3,
+          "y": 3318.26
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-880c34081bc7",
+      "name": "taxiway-tw-880c34081bc7",
+      "vertices": [
+        {
+          "x": 1546.06,
+          "y": 3320.25
+        },
+        {
+          "x": 1580.92,
+          "y": 3298.59
+        },
+        {
+          "x": 1598.78,
+          "y": 3287.48
+        },
+        {
+          "x": 1603.27,
+          "y": 3271.43
+        },
+        {
+          "x": 1604.82,
+          "y": 3266.64
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-0dc84b72f5cd",
+      "name": "taxiway-tw-0dc84b72f5cd",
+      "vertices": [
+        {
+          "x": 1521.32,
+          "y": 3286.97
+        },
+        {
+          "x": 1557.77,
+          "y": 3263.78
+        },
+        {
+          "x": 1560.71,
+          "y": 3262.74
+        },
+        {
+          "x": 1564.32,
+          "y": 3262.38
+        },
+        {
+          "x": 1569.11,
+          "y": 3263.48
+        },
+        {
+          "x": 1572.62,
+          "y": 3265.33
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-b79f4514dabc",
+      "name": "taxiway-tw-b79f4514dabc",
+      "vertices": [
+        {
+          "x": 1499.01,
+          "y": 3250.52
+        },
+        {
+          "x": 1534.36,
+          "y": 3228.8
+        },
+        {
+          "x": 1538.03,
+          "y": 3227.32
+        },
+        {
+          "x": 1542.01,
+          "y": 3226.73
+        },
+        {
+          "x": 1546.5,
+          "y": 3227.48
+        },
+        {
+          "x": 1550.99,
+          "y": 3228.5
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-efd3aa7bd95c",
+      "name": "taxiway-tw-efd3aa7bd95c",
+      "vertices": [
+        {
+          "x": 1292.29,
+          "y": 2998.59
+        },
+        {
+          "x": 1343.15,
+          "y": 2968.15
+        },
+        {
+          "x": 1350.28,
+          "y": 2970.14
+        },
+        {
+          "x": 1358.26,
+          "y": 2971.24
+        },
+        {
+          "x": 1366.89,
+          "y": 2969.38
+        },
+        {
+          "x": 1373.66,
+          "y": 2965.83
+        },
+        {
+          "x": 1379.07,
+          "y": 2961.1
+        },
+        {
+          "x": 1383.8,
+          "y": 2955.51
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-771f3b915cec",
+      "name": "taxiway-tw-771f3b915cec",
+      "vertices": [
+        {
+          "x": 1249.28,
+          "y": 2934.6
+        },
+        {
+          "x": 1299.38,
+          "y": 2904.07
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-2c0ea328ad5b",
+      "name": "taxiway-tw-2c0ea328ad5b",
+      "vertices": [
+        {
+          "x": 1216.19,
+          "y": 2865.91
+        },
+        {
+          "x": 1258.87,
+          "y": 2839.31
+        },
+        {
+          "x": 1265.2,
+          "y": 2842.18
+        },
+        {
+          "x": 1271.2,
+          "y": 2843.29
+        },
+        {
+          "x": 1279.83,
+          "y": 2842.78
+        },
+        {
+          "x": 1287.61,
+          "y": 2839.06
+        },
+        {
+          "x": 1293.36,
+          "y": 2833.82
+        },
+        {
+          "x": 1297.41,
+          "y": 2827.9
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-f7b54786c41f",
+      "name": "taxiway-tw-f7b54786c41f",
+      "vertices": [
+        {
+          "x": 1272.33,
+          "y": 2771.14
+        },
+        {
+          "x": 1271.62,
+          "y": 2764.63
+        },
+        {
+          "x": 1270.96,
+          "y": 2758.28
+        },
+        {
+          "x": 1271.74,
+          "y": 2752.73
+        },
+        {
+          "x": 1273.99,
+          "y": 2747.1
+        },
+        {
+          "x": 1275.99,
+          "y": 2743.92
+        },
+        {
+          "x": 1282.73,
+          "y": 2736.3
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-0c0d03f5095c",
+      "name": "taxiway-tw-0c0d03f5095c",
+      "vertices": [
+        {
+          "x": 1246.44,
+          "y": 2727.44
+        },
+        {
+          "x": 1253.82,
+          "y": 2733.0
+        },
+        {
+          "x": 1258.76,
+          "y": 2735.97
+        },
+        {
+          "x": 1263.72,
+          "y": 2737.44
+        },
+        {
+          "x": 1268.92,
+          "y": 2738.36
+        },
+        {
+          "x": 1274.36,
+          "y": 2738.43
+        },
+        {
+          "x": 1282.73,
+          "y": 2736.3
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-fa24be80c181",
+      "name": "taxiway-tw-fa24be80c181",
+      "vertices": [
+        {
+          "x": 1255.48,
+          "y": 2742.14
+        },
+        {
+          "x": 1249.57,
+          "y": 2742.15
+        },
+        {
+          "x": 1243.43,
+          "y": 2743.48
+        },
+        {
+          "x": 1237.29,
+          "y": 2747.72
+        },
+        {
+          "x": 1232.04,
+          "y": 2752.41
+        },
+        {
+          "x": 1228.69,
+          "y": 2757.55
+        },
+        {
+          "x": 1226.53,
+          "y": 2763.84
+        },
+        {
+          "x": 1223.46,
+          "y": 2772.62
+        },
+        {
+          "x": 1174.8,
+          "y": 2802.45
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-9b3d92444cac",
+      "name": "taxiway-tw-9b3d92444cac",
+      "vertices": [
+        {
+          "x": 979.4,
+          "y": 2443.71
+        },
+        {
+          "x": 980.26,
+          "y": 2440.0
+        },
+        {
+          "x": 980.84,
+          "y": 2436.94
+        },
+        {
+          "x": 981.28,
+          "y": 2433.26
+        },
+        {
+          "x": 981.43,
+          "y": 2430.1
+        },
+        {
+          "x": 981.46,
+          "y": 2426.98
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-19c938e7806a",
+      "name": "taxiway-tw-19c938e7806a",
+      "vertices": [
+        {
+          "x": 948.74,
+          "y": 2444.3
+        },
+        {
+          "x": 960.07,
+          "y": 2400.05
+        },
+        {
+          "x": 960.59,
+          "y": 2396.14
+        },
+        {
+          "x": 960.4,
+          "y": 2393.21
+        },
+        {
+          "x": 959.6,
+          "y": 2390.11
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-d1f868c883ac",
+      "name": "taxiway-tw-d1f868c883ac",
+      "vertices": [
+        {
+          "x": 1539.68,
+          "y": 3024.41
+        },
+        {
+          "x": 1538.99,
+          "y": 3019.33
+        },
+        {
+          "x": 1538.88,
+          "y": 3017.67
+        },
+        {
+          "x": 1539.29,
+          "y": 3015.83
+        },
+        {
+          "x": 1539.63,
+          "y": 3014.4
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-2c57efb3f78a",
+      "name": "taxiway-tw-2c57efb3f78a",
+      "vertices": [
+        {
+          "x": 1324.76,
+          "y": 2710.93
+        },
+        {
+          "x": 1328.24,
+          "y": 2709.66
+        },
+        {
+          "x": 1331.72,
+          "y": 2709.56
+        },
+        {
+          "x": 1339.58,
+          "y": 2709.75
+        },
+        {
+          "x": 1343.52,
+          "y": 2710.58
+        },
+        {
+          "x": 1346.45,
+          "y": 2711.7
+        },
+        {
+          "x": 1349.99,
+          "y": 2713.91
+        },
+        {
+          "x": 1353.18,
+          "y": 2716.68
+        },
+        {
+          "x": 1356.11,
+          "y": 2718.88
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-e5f0c18cac1c",
+      "name": "taxiway-tw-e5f0c18cac1c",
+      "vertices": [
+        {
+          "x": 1331.41,
+          "y": 2677.81
+        },
+        {
+          "x": 1332.73,
+          "y": 2683.27
+        },
+        {
+          "x": 1333.13,
+          "y": 2686.83
+        },
+        {
+          "x": 1332.95,
+          "y": 2689.25
+        },
+        {
+          "x": 1332.44,
+          "y": 2695.1
+        },
+        {
+          "x": 1331.52,
+          "y": 2699.9
+        },
+        {
+          "x": 1328.34,
+          "y": 2705.68
+        },
+        {
+          "x": 1324.76,
+          "y": 2710.93
+        },
+        {
+          "x": 1282.73,
+          "y": 2736.3
+        },
+        {
+          "x": 1260.42,
+          "y": 2750.81
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-51e9fbac4b7e",
+      "name": "taxiway-tw-51e9fbac4b7e",
+      "vertices": [
+        {
+          "x": 835.27,
+          "y": 1940.49
+        },
+        {
+          "x": 845.13,
+          "y": 1930.63
+        },
+        {
+          "x": 849.84,
+          "y": 1922.46
+        },
+        {
+          "x": 852.8,
+          "y": 1915.69
+        },
+        {
+          "x": 854.19,
+          "y": 1908.25
+        },
+        {
+          "x": 854.7,
+          "y": 1903.53
+        },
+        {
+          "x": 854.18,
+          "y": 1896.98
+        },
+        {
+          "x": 853.74,
+          "y": 1893.07
+        },
+        {
+          "x": 853.08,
+          "y": 1890.05
+        },
+        {
+          "x": 852.67,
+          "y": 1886.65
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-c384f1e705f0",
+      "name": "taxiway-tw-c384f1e705f0",
+      "vertices": [
+        {
+          "x": 936.98,
+          "y": 2099.75
+        },
+        {
+          "x": 942.54,
+          "y": 2094.05
+        },
+        {
+          "x": 945.86,
+          "y": 2089.01
+        },
+        {
+          "x": 948.79,
+          "y": 2083.13
+        },
+        {
+          "x": 951.03,
+          "y": 2077.68
+        },
+        {
+          "x": 953.11,
+          "y": 2071.46
+        },
+        {
+          "x": 953.65,
+          "y": 2065.33
+        },
+        {
+          "x": 953.9,
+          "y": 2059.31
+        },
+        {
+          "x": 953.27,
+          "y": 2053.9
+        },
+        {
+          "x": 950.86,
+          "y": 2042.55
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-949e5694aa58",
+      "name": "taxiway-tw-949e5694aa58",
+      "vertices": [
+        {
+          "x": 771.99,
+          "y": 2133.46
+        },
+        {
+          "x": 778.82,
+          "y": 2129.26
+        },
+        {
+          "x": 813.28,
+          "y": 2108.03
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-f9b28de35377",
+      "name": "taxiway-tw-f9b28de35377",
+      "vertices": [
+        {
+          "x": 676.99,
+          "y": 1743.81
+        },
+        {
+          "x": 678.83,
+          "y": 1752.53
+        },
+        {
+          "x": 683.21,
+          "y": 1774.27
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-8c498b4f0015",
+      "name": "taxiway-tw-8c498b4f0015",
+      "vertices": [
+        {
+          "x": 676.12,
+          "y": 1806.2
+        },
+        {
+          "x": 679.52,
+          "y": 1800.44
+        },
+        {
+          "x": 681.48,
+          "y": 1795.73
+        },
+        {
+          "x": 683.06,
+          "y": 1789.48
+        },
+        {
+          "x": 683.98,
+          "y": 1784.1
+        },
+        {
+          "x": 683.95,
+          "y": 1779.09
+        },
+        {
+          "x": 683.38,
+          "y": 1775.34
+        },
+        {
+          "x": 683.21,
+          "y": 1774.27
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-d673d6128f69",
+      "name": "taxiway-tw-d673d6128f69",
+      "vertices": [
+        {
+          "x": 640.72,
+          "y": 1828.29
+        },
+        {
+          "x": 644.25,
+          "y": 1820.59
+        },
+        {
+          "x": 645.56,
+          "y": 1816.95
+        },
+        {
+          "x": 647.2,
+          "y": 1812.86
+        },
+        {
+          "x": 647.89,
+          "y": 1808.2
+        },
+        {
+          "x": 648.31,
+          "y": 1802.46
+        },
+        {
+          "x": 647.68,
+          "y": 1798.15
+        },
+        {
+          "x": 646.5,
+          "y": 1794.37
+        },
+        {
+          "x": 641.44,
+          "y": 1773.23
+        },
+        {
+          "x": 638.84,
+          "y": 1764.02
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-919af4a3dbaf",
+      "name": "taxiway-tw-919af4a3dbaf",
+      "vertices": [
+        {
+          "x": 613.69,
+          "y": 1820.59
+        },
+        {
+          "x": 610.62,
+          "y": 1817.46
+        },
+        {
+          "x": 608.05,
+          "y": 1814.27
+        },
+        {
+          "x": 605.76,
+          "y": 1809.87
+        },
+        {
+          "x": 604.36,
+          "y": 1806.22
+        },
+        {
+          "x": 603.97,
+          "y": 1800.42
+        },
+        {
+          "x": 605.93,
+          "y": 1794.62
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-2547bd7b525d",
+      "name": "taxiway-tw-2547bd7b525d",
+      "vertices": [
+        {
+          "x": 608.68,
+          "y": 1847.23
+        },
+        {
+          "x": 609.97,
+          "y": 1843.78
+        },
+        {
+          "x": 611.5,
+          "y": 1838.58
+        },
+        {
+          "x": 613.15,
+          "y": 1833.37
+        },
+        {
+          "x": 614.0,
+          "y": 1828.58
+        },
+        {
+          "x": 614.02,
+          "y": 1823.7
+        },
+        {
+          "x": 613.69,
+          "y": 1820.59
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-ac46a3e822e0",
+      "name": "taxiway-tw-ac46a3e822e0",
+      "vertices": [
+        {
+          "x": 609.79,
+          "y": 1714.58
+        },
+        {
+          "x": 622.83,
+          "y": 1726.66
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-cbd1f3e0143c",
+      "name": "taxiway-tw-cbd1f3e0143c",
+      "vertices": [
+        {
+          "x": 1623.65,
+          "y": 1774.84
+        },
+        {
+          "x": 1628.97,
+          "y": 1774.81
+        },
+        {
+          "x": 1637.81,
+          "y": 1776.3
+        },
+        {
+          "x": 1642.82,
+          "y": 1778.94
+        },
+        {
+          "x": 1646.79,
+          "y": 1781.74
+        },
+        {
+          "x": 1675.8,
+          "y": 1827.54
+        },
+        {
+          "x": 1678.9,
+          "y": 1835.19
+        },
+        {
+          "x": 1679.64,
+          "y": 1841.24
+        },
+        {
+          "x": 1679.34,
+          "y": 1846.83
+        },
+        {
+          "x": 1678.44,
+          "y": 1853.58
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-93969319b656",
+      "name": "taxiway-tw-93969319b656",
+      "vertices": [
+        {
+          "x": 1661.16,
+          "y": 1752.28
+        },
+        {
+          "x": 1669.33,
+          "y": 1752.14
+        },
+        {
+          "x": 1675.36,
+          "y": 1753.02
+        },
+        {
+          "x": 1680.67,
+          "y": 1755.52
+        },
+        {
+          "x": 1685.08,
+          "y": 1760.68
+        },
+        {
+          "x": 1710.26,
+          "y": 1802.66
+        },
+        {
+          "x": 1711.73,
+          "y": 1807.95
+        },
+        {
+          "x": 1712.03,
+          "y": 1813.4
+        },
+        {
+          "x": 1711.0,
+          "y": 1820.77
+        },
+        {
+          "x": 1708.5,
+          "y": 1828.28
+        },
+        {
+          "x": 1705.18,
+          "y": 1837.0
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-4393078a2dd8",
+      "name": "taxiway-tw-4393078a2dd8",
+      "vertices": [
+        {
+          "x": 1630.85,
+          "y": 1868.07
+        },
+        {
+          "x": 1633.57,
+          "y": 1869.51
+        },
+        {
+          "x": 1635.93,
+          "y": 1870.65
+        },
+        {
+          "x": 1640.57,
+          "y": 1871.83
+        },
+        {
+          "x": 1645.46,
+          "y": 1871.87
+        },
+        {
+          "x": 1648.97,
+          "y": 1871.1
+        },
+        {
+          "x": 1653.13,
+          "y": 1869.29
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-3a83395a2240",
+      "name": "taxiway-tw-3a83395a2240",
+      "vertices": [
+        {
+          "x": 1582.45,
+          "y": 1788.27
+        },
+        {
+          "x": 1586.04,
+          "y": 1789.32
+        },
+        {
+          "x": 1592.38,
+          "y": 1789.62
+        },
+        {
+          "x": 1596.36,
+          "y": 1789.1
+        },
+        {
+          "x": 1601.66,
+          "y": 1788.07
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-bb79cc4880cf",
+      "name": "taxiway-tw-bb79cc4880cf",
+      "vertices": [
+        {
+          "x": 1645.45,
+          "y": 1892.1
+        },
+        {
+          "x": 1645.02,
+          "y": 1887.63
+        },
+        {
+          "x": 1645.62,
+          "y": 1882.55
+        },
+        {
+          "x": 1646.93,
+          "y": 1878.13
+        },
+        {
+          "x": 1649.59,
+          "y": 1873.71
+        },
+        {
+          "x": 1653.13,
+          "y": 1869.29
+        },
+        {
+          "x": 1678.44,
+          "y": 1853.58
+        },
+        {
+          "x": 1705.18,
+          "y": 1837.0
+        },
+        {
+          "x": 1741.78,
+          "y": 1814.29
+        },
+        {
+          "x": 1744.36,
+          "y": 1810.24
+        },
+        {
+          "x": 1746.27,
+          "y": 1804.13
+        },
+        {
+          "x": 1746.13,
+          "y": 1800.0
+        },
+        {
+          "x": 1744.44,
+          "y": 1793.37
+        },
+        {
+          "x": 1742.08,
+          "y": 1787.34
+        },
+        {
+          "x": 1710.56,
+          "y": 1738.74
+        },
+        {
+          "x": 1705.55,
+          "y": 1735.94
+        },
+        {
+          "x": 1701.72,
+          "y": 1734.46
+        },
+        {
+          "x": 1696.57,
+          "y": 1734.03
+        },
+        {
+          "x": 1690.53,
+          "y": 1734.62
+        },
+        {
+          "x": 1661.16,
+          "y": 1752.28
+        },
+        {
+          "x": 1623.65,
+          "y": 1774.84
+        },
+        {
+          "x": 1601.66,
+          "y": 1788.07
+        },
+        {
+          "x": 1598.41,
+          "y": 1791.82
+        },
+        {
+          "x": 1596.06,
+          "y": 1796.39
+        },
+        {
+          "x": 1595.17,
+          "y": 1799.85
+        },
+        {
+          "x": 1594.27,
+          "y": 1807.75
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-a8caa5657cba",
+      "name": "taxiway-tw-a8caa5657cba",
+      "vertices": [
+        {
+          "x": 1523.9,
+          "y": 1691.68
+        },
+        {
+          "x": 1523.15,
+          "y": 1685.06
+        },
+        {
+          "x": 1522.93,
+          "y": 1681.12
+        },
+        {
+          "x": 1523.82,
+          "y": 1677.03
+        },
+        {
+          "x": 1525.26,
+          "y": 1672.87
+        },
+        {
+          "x": 1527.88,
+          "y": 1669.48
+        },
+        {
+          "x": 1532.24,
+          "y": 1665.25
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-615e41eb7ae0",
+      "name": "taxiway-tw-615e41eb7ae0",
+      "vertices": [
+        {
+          "x": 1506.4,
+          "y": 1662.76
+        },
+        {
+          "x": 1510.13,
+          "y": 1664.55
+        },
+        {
+          "x": 1515.47,
+          "y": 1667.01
+        },
+        {
+          "x": 1519.92,
+          "y": 1667.9
+        },
+        {
+          "x": 1523.42,
+          "y": 1667.86
+        },
+        {
+          "x": 1527.83,
+          "y": 1667.2
+        },
+        {
+          "x": 1532.24,
+          "y": 1665.25
+        },
+        {
+          "x": 1532.84,
+          "y": 1664.99
+        },
+        {
+          "x": 1552.79,
+          "y": 1651.84
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-f7207b497dc0",
+      "name": "taxiway-tw-f7207b497dc0",
+      "vertices": [
+        {
+          "x": 1451.81,
+          "y": 1476.89
+        },
+        {
+          "x": 1469.56,
+          "y": 1505.76
+        },
+        {
+          "x": 1473.53,
+          "y": 1506.41
+        },
+        {
+          "x": 1477.8,
+          "y": 1507.96
+        },
+        {
+          "x": 1480.75,
+          "y": 1510.18
+        },
+        {
+          "x": 1482.81,
+          "y": 1512.46
+        },
+        {
+          "x": 1484.28,
+          "y": 1515.33
+        },
+        {
+          "x": 1485.31,
+          "y": 1518.27
+        },
+        {
+          "x": 1486.13,
+          "y": 1521.73
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-00df84adfaae",
+      "name": "taxiway-tw-00df84adfaae",
+      "vertices": [
+        {
+          "x": 1480.6,
+          "y": 1460.03
+        },
+        {
+          "x": 1498.35,
+          "y": 1488.81
+        },
+        {
+          "x": 1501.37,
+          "y": 1489.4
+        },
+        {
+          "x": 1504.31,
+          "y": 1490.44
+        },
+        {
+          "x": 1507.77,
+          "y": 1492.27
+        },
+        {
+          "x": 1510.71,
+          "y": 1494.86
+        },
+        {
+          "x": 1512.92,
+          "y": 1497.73
+        },
+        {
+          "x": 1514.11,
+          "y": 1500.89
+        },
+        {
+          "x": 1514.47,
+          "y": 1503.4
+        },
+        {
+          "x": 1514.53,
+          "y": 1505.39
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-22a84af0d527",
+      "name": "taxiway-tw-22a84af0d527",
+      "vertices": [
+        {
+          "x": 1547.75,
+          "y": 1486.09
+        },
+        {
+          "x": 1545.39,
+          "y": 1478.36
+        },
+        {
+          "x": 1543.7,
+          "y": 1475.63
+        },
+        {
+          "x": 1540.76,
+          "y": 1472.91
+        },
+        {
+          "x": 1537.52,
+          "y": 1471.37
+        },
+        {
+          "x": 1534.28,
+          "y": 1470.48
+        },
+        {
+          "x": 1531.12,
+          "y": 1470.33
+        },
+        {
+          "x": 1514.25,
+          "y": 1441.1
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-d9c2d0135189",
+      "name": "taxiway-tw-d9c2d0135189",
+      "vertices": [
+        {
+          "x": 1515.79,
+          "y": 1504.66
+        },
+        {
+          "x": 1517.64,
+          "y": 1506.35
+        },
+        {
+          "x": 1520.07,
+          "y": 1509.28
+        },
+        {
+          "x": 1522.28,
+          "y": 1513.48
+        },
+        {
+          "x": 1523.6,
+          "y": 1518.12
+        },
+        {
+          "x": 1523.39,
+          "y": 1522.69
+        },
+        {
+          "x": 1522.06,
+          "y": 1526.81
+        },
+        {
+          "x": 1547.61,
+          "y": 1568.93
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-8d56834e612e",
+      "name": "taxiway-tw-8d56834e612e",
+      "vertices": [
+        {
+          "x": 1486.13,
+          "y": 1521.73
+        },
+        {
+          "x": 1489.73,
+          "y": 1524.38
+        },
+        {
+          "x": 1492.15,
+          "y": 1527.18
+        },
+        {
+          "x": 1494.14,
+          "y": 1530.2
+        },
+        {
+          "x": 1495.25,
+          "y": 1533.14
+        },
+        {
+          "x": 1495.47,
+          "y": 1536.46
+        },
+        {
+          "x": 1495.11,
+          "y": 1540.14
+        },
+        {
+          "x": 1493.48,
+          "y": 1543.75
+        },
+        {
+          "x": 1519.48,
+          "y": 1586.53
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-b2afd27e6235",
+      "name": "taxiway-tw-b2afd27e6235",
+      "vertices": [
+        {
+          "x": 1405.35,
+          "y": 1401.12
+        },
+        {
+          "x": 1430.89,
+          "y": 1444.04
+        },
+        {
+          "x": 1434.13,
+          "y": 1444.2
+        },
+        {
+          "x": 1437.6,
+          "y": 1445.36
+        },
+        {
+          "x": 1440.47,
+          "y": 1447.36
+        },
+        {
+          "x": 1443.78,
+          "y": 1450.9
+        },
+        {
+          "x": 1445.63,
+          "y": 1454.57
+        },
+        {
+          "x": 1446.51,
+          "y": 1457.01
+        },
+        {
+          "x": 1446.87,
+          "y": 1459.44
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-e590b0b7db8c",
+      "name": "taxiway-tw-e590b0b7db8c",
+      "vertices": [
+        {
+          "x": 1433.11,
+          "y": 1384.25
+        },
+        {
+          "x": 1459.9,
+          "y": 1427.4
+        },
+        {
+          "x": 1463.37,
+          "y": 1427.99
+        },
+        {
+          "x": 1467.27,
+          "y": 1429.39
+        },
+        {
+          "x": 1470.87,
+          "y": 1431.97
+        },
+        {
+          "x": 1473.53,
+          "y": 1434.91
+        },
+        {
+          "x": 1475.3,
+          "y": 1438.52
+        },
+        {
+          "x": 1475.96,
+          "y": 1441.17
+        },
+        {
+          "x": 1476.47,
+          "y": 1443.24
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-5de636a5a9e1",
+      "name": "taxiway-tw-5de636a5a9e1",
+      "vertices": [
+        {
+          "x": 1406.9,
+          "y": 1500.95
+        },
+        {
+          "x": 1406.19,
+          "y": 1496.95
+        },
+        {
+          "x": 1406.26,
+          "y": 1492.72
+        },
+        {
+          "x": 1406.93,
+          "y": 1489.15
+        },
+        {
+          "x": 1408.51,
+          "y": 1485.61
+        },
+        {
+          "x": 1411.75,
+          "y": 1482.27
+        },
+        {
+          "x": 1427.59,
+          "y": 1471.44
+        },
+        {
+          "x": 1446.87,
+          "y": 1459.44
+        },
+        {
+          "x": 1476.47,
+          "y": 1443.24
+        },
+        {
+          "x": 1510.42,
+          "y": 1426.23
+        },
+        {
+          "x": 1509.68,
+          "y": 1421.36
+        },
+        {
+          "x": 1507.85,
+          "y": 1417.46
+        },
+        {
+          "x": 1505.12,
+          "y": 1414.07
+        },
+        {
+          "x": 1502.47,
+          "y": 1412.01
+        },
+        {
+          "x": 1499.15,
+          "y": 1411.06
+        },
+        {
+          "x": 1494.14,
+          "y": 1410.24
+        },
+        {
+          "x": 1466.83,
+          "y": 1365.92
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-a6dac96c419d",
+      "name": "taxiway-tw-a6dac96c419d",
+      "vertices": [
+        {
+          "x": 1444.87,
+          "y": 1562.81
+        },
+        {
+          "x": 1443.86,
+          "y": 1558.11
+        },
+        {
+          "x": 1443.86,
+          "y": 1554.28
+        },
+        {
+          "x": 1445.11,
+          "y": 1550.52
+        },
+        {
+          "x": 1446.69,
+          "y": 1547.91
+        },
+        {
+          "x": 1449.78,
+          "y": 1545.07
+        },
+        {
+          "x": 1486.13,
+          "y": 1521.73
+        },
+        {
+          "x": 1514.53,
+          "y": 1505.39
+        },
+        {
+          "x": 1515.79,
+          "y": 1504.66
+        },
+        {
+          "x": 1528.61,
+          "y": 1497.28
+        },
+        {
+          "x": 1547.75,
+          "y": 1486.09
+        },
+        {
+          "x": 1550.7,
+          "y": 1488.22
+        },
+        {
+          "x": 1553.35,
+          "y": 1491.62
+        },
+        {
+          "x": 1555.48,
+          "y": 1496.25
+        },
+        {
+          "x": 1556.14,
+          "y": 1501.26
+        },
+        {
+          "x": 1555.26,
+          "y": 1505.09
+        },
+        {
+          "x": 1553.87,
+          "y": 1507.74
+        },
+        {
+          "x": 1579.64,
+          "y": 1550.01
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-1e81deec39a3",
+      "name": "taxiway-tw-1e81deec39a3",
+      "vertices": [
+        {
+          "x": 1482.22,
+          "y": 3050.6
+        },
+        {
+          "x": 1476.55,
+          "y": 3051.86
+        },
+        {
+          "x": 1470.51,
+          "y": 3053.63
+        },
+        {
+          "x": 1466.24,
+          "y": 3054.45
+        },
+        {
+          "x": 1460.34,
+          "y": 3054.69
+        },
+        {
+          "x": 1454.87,
+          "y": 3054.03
+        },
+        {
+          "x": 1448.07,
+          "y": 3051.83
+        },
+        {
+          "x": 1441.56,
+          "y": 3047.76
+        },
+        {
+          "x": 1434.09,
+          "y": 3040.65
+        },
+        {
+          "x": 1422.56,
+          "y": 3020.68
+        },
+        {
+          "x": 1421.72,
+          "y": 3019.33
+        },
+        {
+          "x": 1412.11,
+          "y": 3003.92
+        },
+        {
+          "x": 1409.33,
+          "y": 2999.17
+        },
+        {
+          "x": 1383.8,
+          "y": 2955.51
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-cc93f50a1ed0",
+      "name": "taxiway-tw-cc93f50a1ed0",
+      "vertices": [
+        {
+          "x": 1343.15,
+          "y": 2968.15
+        },
+        {
+          "x": 1343.57,
+          "y": 2964.01
+        },
+        {
+          "x": 1344.56,
+          "y": 2958.73
+        },
+        {
+          "x": 1347.61,
+          "y": 2951.96
+        },
+        {
+          "x": 1352.0,
+          "y": 2945.87
+        },
+        {
+          "x": 1356.91,
+          "y": 2942.16
+        },
+        {
+          "x": 1363.85,
+          "y": 2939.44
+        },
+        {
+          "x": 1368.75,
+          "y": 2938.26
+        },
+        {
+          "x": 1373.7,
+          "y": 2938.57
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-a4b208f0f5e7",
+      "name": "taxiway-tw-a4b208f0f5e7",
+      "vertices": [
+        {
+          "x": 1383.8,
+          "y": 2955.51
+        },
+        {
+          "x": 1373.7,
+          "y": 2938.57
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-bfd15fe2d8c6",
+      "name": "taxiway-tw-bfd15fe2d8c6",
+      "vertices": [
+        {
+          "x": 1373.7,
+          "y": 2938.57
+        },
+        {
+          "x": 1342.07,
+          "y": 2890.57
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-dd105fabf647",
+      "name": "taxiway-tw-dd105fabf647",
+      "vertices": [
+        {
+          "x": 1299.38,
+          "y": 2904.07
+        },
+        {
+          "x": 1299.85,
+          "y": 2898.77
+        },
+        {
+          "x": 1301.59,
+          "y": 2892.42
+        },
+        {
+          "x": 1305.49,
+          "y": 2886.16
+        },
+        {
+          "x": 1311.24,
+          "y": 2880.41
+        },
+        {
+          "x": 1318.0,
+          "y": 2876.51
+        },
+        {
+          "x": 1324.6,
+          "y": 2874.82
+        },
+        {
+          "x": 1330.48,
+          "y": 2874.67
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-81f554e61e32",
+      "name": "taxiway-tw-81f554e61e32",
+      "vertices": [
+        {
+          "x": 1299.38,
+          "y": 2904.07
+        },
+        {
+          "x": 1305.99,
+          "y": 2905.78
+        },
+        {
+          "x": 1315.63,
+          "y": 2906.46
+        },
+        {
+          "x": 1324.93,
+          "y": 2905.11
+        },
+        {
+          "x": 1333.22,
+          "y": 2900.88
+        },
+        {
+          "x": 1338.64,
+          "y": 2895.8
+        },
+        {
+          "x": 1342.07,
+          "y": 2890.57
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-75da3c6ca4d2",
+      "name": "taxiway-tw-75da3c6ca4d2",
+      "vertices": [
+        {
+          "x": 1258.87,
+          "y": 2839.31
+        },
+        {
+          "x": 1261.01,
+          "y": 2831.29
+        },
+        {
+          "x": 1263.59,
+          "y": 2825.53
+        },
+        {
+          "x": 1266.63,
+          "y": 2820.28
+        },
+        {
+          "x": 1271.2,
+          "y": 2815.54
+        },
+        {
+          "x": 1277.3,
+          "y": 2811.82
+        },
+        {
+          "x": 1283.38,
+          "y": 2810.64
+        },
+        {
+          "x": 1288.4,
+          "y": 2809.74
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-74b4629e3808",
+      "name": "taxiway-tw-74b4629e3808",
+      "vertices": [
+        {
+          "x": 1381.95,
+          "y": 3034.62
+        },
+        {
+          "x": 1391.83,
+          "y": 3036.21
+        },
+        {
+          "x": 1400.45,
+          "y": 3035.96
+        },
+        {
+          "x": 1407.38,
+          "y": 3033.77
+        },
+        {
+          "x": 1413.47,
+          "y": 3030.39
+        },
+        {
+          "x": 1417.7,
+          "y": 3027.0
+        },
+        {
+          "x": 1419.73,
+          "y": 3024.13
+        },
+        {
+          "x": 1421.72,
+          "y": 3019.33
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-ac170d3db55b",
+      "name": "taxiway-tw-ac170d3db55b",
+      "vertices": [
+        {
+          "x": 1223.46,
+          "y": 2772.62
+        },
+        {
+          "x": 1231.85,
+          "y": 2774.99
+        },
+        {
+          "x": 1238.07,
+          "y": 2775.19
+        },
+        {
+          "x": 1246.67,
+          "y": 2774.17
+        },
+        {
+          "x": 1255.71,
+          "y": 2770.17
+        },
+        {
+          "x": 1260.06,
+          "y": 2765.8
+        },
+        {
+          "x": 1265.49,
+          "y": 2759.39
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-95d077719467",
+      "name": "taxiway-tw-95d077719467",
+      "vertices": [
+        {
+          "x": 1202.89,
+          "y": 2654.41
+        },
+        {
+          "x": 1200.46,
+          "y": 2651.93
+        },
+        {
+          "x": 1193.09,
+          "y": 2647.8
+        },
+        {
+          "x": 1188.51,
+          "y": 2645.57
+        },
+        {
+          "x": 1182.38,
+          "y": 2644.57
+        },
+        {
+          "x": 1177.13,
+          "y": 2644.79
+        },
+        {
+          "x": 1169.66,
+          "y": 2645.27
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-178a41f6c1a7",
+      "name": "taxiway-tw-178a41f6c1a7",
+      "vertices": [
+        {
+          "x": 1261.86,
+          "y": 2588.12
+        },
+        {
+          "x": 1264.89,
+          "y": 2586.88
+        },
+        {
+          "x": 1269.18,
+          "y": 2586.3
+        },
+        {
+          "x": 1273.34,
+          "y": 2586.5
+        },
+        {
+          "x": 1276.87,
+          "y": 2587.65
+        },
+        {
+          "x": 1278.99,
+          "y": 2588.55
+        },
+        {
+          "x": 1282.05,
+          "y": 2590.17
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-d02dc413bdbf",
+      "name": "taxiway-tw-d02dc413bdbf",
+      "vertices": [
+        {
+          "x": 1527.49,
+          "y": 2990.16
+        },
+        {
+          "x": 1532.51,
+          "y": 2994.55
+        },
+        {
+          "x": 1538.41,
+          "y": 2997.64
+        },
+        {
+          "x": 1543.54,
+          "y": 2999.82
+        },
+        {
+          "x": 1550.84,
+          "y": 3000.84
+        },
+        {
+          "x": 1557.13,
+          "y": 3000.2
+        },
+        {
+          "x": 1562.59,
+          "y": 2999.9
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-5a83cbb256e9",
+      "name": "taxiway-tw-5a83cbb256e9",
+      "vertices": [
+        {
+          "x": 1650.55,
+          "y": 3235.36
+        },
+        {
+          "x": 1653.5,
+          "y": 3232.2
+        },
+        {
+          "x": 1655.04,
+          "y": 3228.22
+        },
+        {
+          "x": 1656.06,
+          "y": 3223.74
+        },
+        {
+          "x": 1658.16,
+          "y": 3210.38
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-c98d289c45a1",
+      "name": "taxiway-tw-c98d289c45a1",
+      "vertices": [
+        {
+          "x": 1650.55,
+          "y": 3235.36
+        },
+        {
+          "x": 1654.52,
+          "y": 3234.38
+        },
+        {
+          "x": 1657.21,
+          "y": 3234.12
+        },
+        {
+          "x": 1661.19,
+          "y": 3234.64
+        },
+        {
+          "x": 1664.65,
+          "y": 3236.31
+        },
+        {
+          "x": 1674.33,
+          "y": 3236.24
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-60e20052789c",
+      "name": "taxiway-tw-60e20052789c",
+      "vertices": [
+        {
+          "x": 1137.56,
+          "y": 2354.05
+        },
+        {
+          "x": 1144.06,
+          "y": 2358.52
+        },
+        {
+          "x": 1155.09,
+          "y": 2361.86
+        },
+        {
+          "x": 1161.49,
+          "y": 2362.63
+        },
+        {
+          "x": 1170.42,
+          "y": 2360.39
+        },
+        {
+          "x": 1164.83,
+          "y": 2366.21
+        },
+        {
+          "x": 1162.01,
+          "y": 2372.11
+        },
+        {
+          "x": 1160.22,
+          "y": 2380.06
+        },
+        {
+          "x": 1159.7,
+          "y": 2388.01
+        },
+        {
+          "x": 1162.12,
+          "y": 2398.5
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-f996d2d8e836",
+      "name": "taxiway-tw-f996d2d8e836",
+      "vertices": [
+        {
+          "x": 1060.31,
+          "y": 2230.01
+        },
+        {
+          "x": 1062.52,
+          "y": 2238.78
+        },
+        {
+          "x": 1061.49,
+          "y": 2245.96
+        },
+        {
+          "x": 1056.21,
+          "y": 2252.48
+        },
+        {
+          "x": 1063.03,
+          "y": 2251.34
+        },
+        {
+          "x": 1069.95,
+          "y": 2252.63
+        },
+        {
+          "x": 1076.91,
+          "y": 2257.52
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-cb5cef370771",
+      "name": "taxiway-tw-cb5cef370771",
+      "vertices": [
+        {
+          "x": 859.29,
+          "y": 2147.94
+        },
+        {
+          "x": 865.37,
+          "y": 2150.53
+        },
+        {
+          "x": 874.51,
+          "y": 2151.12
+        },
+        {
+          "x": 883.64,
+          "y": 2150.14
+        },
+        {
+          "x": 890.24,
+          "y": 2145.29
+        },
+        {
+          "x": 896.07,
+          "y": 2139.45
+        },
+        {
+          "x": 889.41,
+          "y": 2129.01
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-efd1b2e47f33",
+      "name": "taxiway-tw-efd1b2e47f33",
+      "vertices": [
+        {
+          "x": 909.09,
+          "y": 2116.82
+        },
+        {
+          "x": 902.49,
+          "y": 2123.71
+        },
+        {
+          "x": 898.22,
+          "y": 2130.51
+        },
+        {
+          "x": 896.63,
+          "y": 2134.9
+        },
+        {
+          "x": 896.07,
+          "y": 2139.45
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-1f2d8bb7fe45",
+      "name": "taxiway-tw-1f2d8bb7fe45",
+      "vertices": [
+        {
+          "x": 813.28,
+          "y": 2108.03
+        },
+        {
+          "x": 819.47,
+          "y": 2108.42
+        },
+        {
+          "x": 829.92,
+          "y": 2107.39
+        },
+        {
+          "x": 839.94,
+          "y": 2104.44
+        },
+        {
+          "x": 844.35,
+          "y": 2102.24
+        },
+        {
+          "x": 850.53,
+          "y": 2097.37
+        },
+        {
+          "x": 855.84,
+          "y": 2092.22
+        },
+        {
+          "x": 859.67,
+          "y": 2087.51
+        },
+        {
+          "x": 862.15,
+          "y": 2081.04
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-2e7536392d6e",
+      "name": "taxiway-tw-2e7536392d6e",
+      "vertices": [
+        {
+          "x": 858.66,
+          "y": 2076.26
+        },
+        {
+          "x": 853.19,
+          "y": 2076.17
+        },
+        {
+          "x": 845.24,
+          "y": 2077.35
+        },
+        {
+          "x": 837.28,
+          "y": 2079.7
+        },
+        {
+          "x": 830.36,
+          "y": 2083.68
+        },
+        {
+          "x": 824.32,
+          "y": 2088.25
+        },
+        {
+          "x": 819.17,
+          "y": 2093.83
+        },
+        {
+          "x": 815.78,
+          "y": 2100.02
+        },
+        {
+          "x": 814.46,
+          "y": 2103.26
+        },
+        {
+          "x": 813.28,
+          "y": 2108.03
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-00cc7ba5551b",
+      "name": "taxiway-tw-00cc7ba5551b",
+      "vertices": [
+        {
+          "x": 828.64,
+          "y": 2035.06
+        },
+        {
+          "x": 825.35,
+          "y": 2039.93
+        },
+        {
+          "x": 821.38,
+          "y": 2043.33
+        },
+        {
+          "x": 814.31,
+          "y": 2046.71
+        },
+        {
+          "x": 807.25,
+          "y": 2047.45
+        },
+        {
+          "x": 801.94,
+          "y": 2047.75
+        },
+        {
+          "x": 795.61,
+          "y": 2046.12
+        },
+        {
+          "x": 790.9,
+          "y": 2043.91
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-af394315e52c",
+      "name": "taxiway-tw-af394315e52c",
+      "vertices": [
+        {
+          "x": 790.9,
+          "y": 2043.91
+        },
+        {
+          "x": 791.34,
+          "y": 2038.17
+        },
+        {
+          "x": 792.81,
+          "y": 2030.81
+        },
+        {
+          "x": 795.76,
+          "y": 2023.74
+        },
+        {
+          "x": 801.35,
+          "y": 2019.47
+        },
+        {
+          "x": 806.8,
+          "y": 2017.11
+        },
+        {
+          "x": 813.3,
+          "y": 2015.4
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-9bb3025267e5",
+      "name": "taxiway-tw-9bb3025267e5",
+      "vertices": [
+        {
+          "x": 784.09,
+          "y": 1970.99
+        },
+        {
+          "x": 782.03,
+          "y": 1969.07
+        },
+        {
+          "x": 775.84,
+          "y": 1968.77
+        },
+        {
+          "x": 768.19,
+          "y": 1969.8
+        },
+        {
+          "x": 759.5,
+          "y": 1973.04
+        },
+        {
+          "x": 753.31,
+          "y": 1977.02
+        },
+        {
+          "x": 748.6,
+          "y": 1980.84
+        },
+        {
+          "x": 745.21,
+          "y": 1985.71
+        },
+        {
+          "x": 742.41,
+          "y": 1991.74
+        },
+        {
+          "x": 739.65,
+          "y": 2000.25
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-f1d2ffee18bf",
+      "name": "taxiway-tw-f1d2ffee18bf",
+      "vertices": [
+        {
+          "x": 822.66,
+          "y": 1948.71
+        },
+        {
+          "x": 816.04,
+          "y": 1955.04
+        },
+        {
+          "x": 812.21,
+          "y": 1960.2
+        },
+        {
+          "x": 808.24,
+          "y": 1966.53
+        },
+        {
+          "x": 805.43,
+          "y": 1973.74
+        },
+        {
+          "x": 803.52,
+          "y": 1980.08
+        },
+        {
+          "x": 802.93,
+          "y": 1985.82
+        },
+        {
+          "x": 803.23,
+          "y": 1993.19
+        },
+        {
+          "x": 804.26,
+          "y": 1998.34
+        },
+        {
+          "x": 806.91,
+          "y": 2004.82
+        },
+        {
+          "x": 809.86,
+          "y": 2011.22
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-e31ca09d5e3c",
+      "name": "taxiway-tw-e31ca09d5e3c",
+      "vertices": [
+        {
+          "x": 869.32,
+          "y": 2091.53
+        },
+        {
+          "x": 873.57,
+          "y": 2095.73
+        },
+        {
+          "x": 878.48,
+          "y": 2100.19
+        },
+        {
+          "x": 885.85,
+          "y": 2105.1
+        },
+        {
+          "x": 891.88,
+          "y": 2107.89
+        },
+        {
+          "x": 897.01,
+          "y": 2109.34
+        },
+        {
+          "x": 903.27,
+          "y": 2110.12
+        },
+        {
+          "x": 912.52,
+          "y": 2109.79
+        },
+        {
+          "x": 919.11,
+          "y": 2108.45
+        },
+        {
+          "x": 925.79,
+          "y": 2106.32
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-c661f7ebe60f",
+      "name": "taxiway-tw-c661f7ebe60f",
+      "vertices": [
+        {
+          "x": 758.11,
+          "y": 1731.65
+        },
+        {
+          "x": 760.39,
+          "y": 1738.84
+        },
+        {
+          "x": 761.16,
+          "y": 1744.1
+        },
+        {
+          "x": 761.03,
+          "y": 1748.33
+        },
+        {
+          "x": 760.14,
+          "y": 1753.84
+        },
+        {
+          "x": 758.6,
+          "y": 1758.07
+        },
+        {
+          "x": 755.01,
+          "y": 1764.09
+        },
+        {
+          "x": 750.18,
+          "y": 1769.35
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-2116929496d2",
+      "name": "taxiway-tw-2116929496d2",
+      "vertices": [
+        {
+          "x": 750.18,
+          "y": 1769.35
+        },
+        {
+          "x": 756.28,
+          "y": 1767.69
+        },
+        {
+          "x": 760.64,
+          "y": 1766.92
+        },
+        {
+          "x": 766.67,
+          "y": 1767.3
+        },
+        {
+          "x": 771.8,
+          "y": 1768.71
+        },
+        {
+          "x": 775.64,
+          "y": 1770.38
+        },
+        {
+          "x": 780.52,
+          "y": 1773.97
+        },
+        {
+          "x": 785.49,
+          "y": 1778.29
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-eed83cf33156",
+      "name": "taxiway-tw-eed83cf33156",
+      "vertices": [
+        {
+          "x": 804.0,
+          "y": 1736.23
+        },
+        {
+          "x": 798.59,
+          "y": 1741.15
+        },
+        {
+          "x": 795.65,
+          "y": 1744.99
+        },
+        {
+          "x": 792.06,
+          "y": 1750.38
+        },
+        {
+          "x": 790.01,
+          "y": 1755.63
+        },
+        {
+          "x": 787.83,
+          "y": 1762.3
+        },
+        {
+          "x": 787.18,
+          "y": 1767.04
+        },
+        {
+          "x": 787.95,
+          "y": 1773.84
+        },
+        {
+          "x": 789.11,
+          "y": 1780.5
+        },
+        {
+          "x": 790.35,
+          "y": 1786.64
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-4fd64814c991",
+      "name": "taxiway-tw-4fd64814c991",
+      "vertices": [
+        {
+          "x": 710.68,
+          "y": 1785.13
+        },
+        {
+          "x": 707.05,
+          "y": 1785.94
+        },
+        {
+          "x": 702.41,
+          "y": 1785.78
+        },
+        {
+          "x": 697.48,
+          "y": 1784.82
+        },
+        {
+          "x": 692.25,
+          "y": 1782.62
+        },
+        {
+          "x": 687.76,
+          "y": 1779.67
+        },
+        {
+          "x": 685.4,
+          "y": 1777.24
+        },
+        {
+          "x": 683.38,
+          "y": 1775.34
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-f9343245c793",
+      "name": "taxiway-tw-f9343245c793",
+      "vertices": [
+        {
+          "x": 683.38,
+          "y": 1775.34
+        },
+        {
+          "x": 680.69,
+          "y": 1771.86
+        },
+        {
+          "x": 678.04,
+          "y": 1766.12
+        },
+        {
+          "x": 676.93,
+          "y": 1761.7
+        },
+        {
+          "x": 676.86,
+          "y": 1756.91
+        },
+        {
+          "x": 678.83,
+          "y": 1752.53
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-5ee40e89e9b1",
+      "name": "taxiway-tw-5ee40e89e9b1",
+      "vertices": [
+        {
+          "x": 586.06,
+          "y": 1838.81
+        },
+        {
+          "x": 580.2,
+          "y": 1833.88
+        },
+        {
+          "x": 577.64,
+          "y": 1830.69
+        },
+        {
+          "x": 575.36,
+          "y": 1826.29
+        },
+        {
+          "x": 573.94,
+          "y": 1822.64
+        },
+        {
+          "x": 573.57,
+          "y": 1816.84
+        },
+        {
+          "x": 573.29,
+          "y": 1813.53
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-9c4f6cce7dcf",
+      "name": "taxiway-tw-9c4f6cce7dcf",
+      "vertices": [
+        {
+          "x": 639.15,
+          "y": 1848.42
+        },
+        {
+          "x": 639.93,
+          "y": 1902.26
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-725c2bcf8346",
+      "name": "taxiway-tw-725c2bcf8346",
+      "vertices": [
+        {
+          "x": 714.06,
+          "y": 1783.07
+        },
+        {
+          "x": 711.86,
+          "y": 1785.76
+        },
+        {
+          "x": 710.74,
+          "y": 1788.76
+        },
+        {
+          "x": 709.72,
+          "y": 1794.18
+        },
+        {
+          "x": 710.41,
+          "y": 1797.7
+        },
+        {
+          "x": 712.2,
+          "y": 1801.49
+        },
+        {
+          "x": 714.65,
+          "y": 1805.17
+        },
+        {
+          "x": 718.78,
+          "y": 1808.19
+        },
+        {
+          "x": 722.47,
+          "y": 1810.08
+        },
+        {
+          "x": 723.88,
+          "y": 1810.29
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-74b3919f6576",
+      "name": "taxiway-tw-74b3919f6576",
+      "vertices": [
+        {
+          "x": 549.32,
+          "y": 1772.98
+        },
+        {
+          "x": 539.79,
+          "y": 1755.57
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-48f4e7c8ddec",
+      "name": "taxiway-tw-48f4e7c8ddec",
+      "vertices": [
+        {
+          "x": 531.97,
+          "y": 1713.04
+        },
+        {
+          "x": 528.17,
+          "y": 1716.62
+        },
+        {
+          "x": 525.49,
+          "y": 1723.76
+        },
+        {
+          "x": 525.03,
+          "y": 1730.04
+        },
+        {
+          "x": 524.82,
+          "y": 1732.91
+        },
+        {
+          "x": 527.5,
+          "y": 1743.62
+        },
+        {
+          "x": 531.97,
+          "y": 1750.32
+        },
+        {
+          "x": 539.79,
+          "y": 1755.57
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-255f1d3abbad",
+      "name": "taxiway-tw-255f1d3abbad",
+      "vertices": [
+        {
+          "x": 525.03,
+          "y": 1730.04
+        },
+        {
+          "x": 539.79,
+          "y": 1755.57
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-0d33f0612603",
+      "name": "taxiway-tw-0d33f0612603",
+      "vertices": [
+        {
+          "x": 575.71,
+          "y": 1737.56
+        },
+        {
+          "x": 587.57,
+          "y": 1748.83
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-bc7a281f6356",
+      "name": "taxiway-tw-bc7a281f6356",
+      "vertices": [
+        {
+          "x": 558.36,
+          "y": 1697.21
+        },
+        {
+          "x": 556.44,
+          "y": 1703.67
+        },
+        {
+          "x": 555.25,
+          "y": 1710.74
+        },
+        {
+          "x": 555.99,
+          "y": 1717.52
+        },
+        {
+          "x": 558.35,
+          "y": 1723.55
+        },
+        {
+          "x": 562.03,
+          "y": 1730.18
+        },
+        {
+          "x": 566.74,
+          "y": 1734.01
+        },
+        {
+          "x": 571.3,
+          "y": 1736.96
+        },
+        {
+          "x": 575.71,
+          "y": 1737.56
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-2b3208b55d21",
+      "name": "taxiway-tw-2b3208b55d21",
+      "vertices": [
+        {
+          "x": 531.97,
+          "y": 1713.04
+        },
+        {
+          "x": 537.88,
+          "y": 1712.94
+        },
+        {
+          "x": 547.89,
+          "y": 1713.83
+        },
+        {
+          "x": 553.34,
+          "y": 1715.89
+        },
+        {
+          "x": 562.18,
+          "y": 1721.19
+        },
+        {
+          "x": 567.33,
+          "y": 1724.73
+        },
+        {
+          "x": 572.48,
+          "y": 1729.3
+        },
+        {
+          "x": 574.54,
+          "y": 1732.83
+        },
+        {
+          "x": 575.71,
+          "y": 1737.56
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-4061b02693d3",
+      "name": "taxiway-tw-4061b02693d3",
+      "vertices": [
+        {
+          "x": 565.24,
+          "y": 1692.71
+        },
+        {
+          "x": 574.25,
+          "y": 1691.89
+        },
+        {
+          "x": 582.06,
+          "y": 1692.77
+        },
+        {
+          "x": 588.98,
+          "y": 1694.83
+        },
+        {
+          "x": 596.2,
+          "y": 1698.52
+        },
+        {
+          "x": 603.07,
+          "y": 1704.26
+        },
+        {
+          "x": 606.36,
+          "y": 1708.39
+        },
+        {
+          "x": 609.79,
+          "y": 1714.58
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-50ba90dc0bac",
+      "name": "taxiway-tw-50ba90dc0bac",
+      "vertices": [
+        {
+          "x": 594.66,
+          "y": 1674.5
+        },
+        {
+          "x": 591.77,
+          "y": 1680.55
+        },
+        {
+          "x": 590.74,
+          "y": 1687.91
+        },
+        {
+          "x": 591.04,
+          "y": 1693.06
+        },
+        {
+          "x": 591.77,
+          "y": 1698.66
+        },
+        {
+          "x": 594.13,
+          "y": 1704.26
+        },
+        {
+          "x": 597.37,
+          "y": 1708.68
+        },
+        {
+          "x": 601.51,
+          "y": 1712.42
+        },
+        {
+          "x": 605.92,
+          "y": 1713.98
+        },
+        {
+          "x": 609.79,
+          "y": 1714.58
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-702335c519e3",
+      "name": "taxiway-tw-702335c519e3",
+      "vertices": [
+        {
+          "x": 644.4,
+          "y": 1693.3
+        },
+        {
+          "x": 656.05,
+          "y": 1707.68
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-38998da017e0",
+      "name": "taxiway-tw-38998da017e0",
+      "vertices": [
+        {
+          "x": 600.14,
+          "y": 1671.0
+        },
+        {
+          "x": 605.29,
+          "y": 1669.32
+        },
+        {
+          "x": 611.07,
+          "y": 1668.55
+        },
+        {
+          "x": 616.33,
+          "y": 1669.45
+        },
+        {
+          "x": 620.04,
+          "y": 1670.34
+        },
+        {
+          "x": 625.55,
+          "y": 1672.14
+        },
+        {
+          "x": 628.17,
+          "y": 1673.63
+        },
+        {
+          "x": 630.3,
+          "y": 1674.84
+        },
+        {
+          "x": 634.27,
+          "y": 1677.78
+        },
+        {
+          "x": 639.02,
+          "y": 1682.14
+        },
+        {
+          "x": 642.74,
+          "y": 1686.63
+        },
+        {
+          "x": 644.14,
+          "y": 1690.09
+        },
+        {
+          "x": 644.4,
+          "y": 1693.3
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-8ea6a3359bb7",
+      "name": "taxiway-tw-8ea6a3359bb7",
+      "vertices": [
+        {
+          "x": 627.98,
+          "y": 1654.1
+        },
+        {
+          "x": 628.37,
+          "y": 1658.42
+        },
+        {
+          "x": 627.61,
+          "y": 1663.94
+        },
+        {
+          "x": 627.74,
+          "y": 1669.45
+        },
+        {
+          "x": 628.17,
+          "y": 1673.63
+        },
+        {
+          "x": 630.04,
+          "y": 1678.3
+        },
+        {
+          "x": 632.6,
+          "y": 1683.93
+        },
+        {
+          "x": 636.58,
+          "y": 1689.44
+        },
+        {
+          "x": 641.45,
+          "y": 1692.39
+        },
+        {
+          "x": 644.4,
+          "y": 1693.3
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-4119de54b260",
+      "name": "taxiway-tw-4119de54b260",
+      "vertices": [
+        {
+          "x": 665.73,
+          "y": 1630.13
+        },
+        {
+          "x": 673.64,
+          "y": 1627.88
+        },
+        {
+          "x": 684.72,
+          "y": 1628.46
+        },
+        {
+          "x": 691.33,
+          "y": 1630.41
+        },
+        {
+          "x": 696.96,
+          "y": 1634.3
+        },
+        {
+          "x": 702.5,
+          "y": 1637.66
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-d7884c7f8583",
+      "name": "taxiway-tw-d7884c7f8583",
+      "vertices": [
+        {
+          "x": 674.4,
+          "y": 1593.03
+        },
+        {
+          "x": 676.94,
+          "y": 1601.65
+        },
+        {
+          "x": 676.76,
+          "y": 1609.42
+        },
+        {
+          "x": 675.58,
+          "y": 1615.83
+        },
+        {
+          "x": 672.67,
+          "y": 1621.47
+        },
+        {
+          "x": 665.73,
+          "y": 1630.13
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-49a4481e7261",
+      "name": "taxiway-tw-49a4481e7261",
+      "vertices": [
+        {
+          "x": 671.8,
+          "y": 1456.6
+        },
+        {
+          "x": 659.65,
+          "y": 1464.07
+        },
+        {
+          "x": 649.93,
+          "y": 1472.81
+        },
+        {
+          "x": 643.13,
+          "y": 1481.74
+        },
+        {
+          "x": 639.05,
+          "y": 1490.88
+        },
+        {
+          "x": 636.52,
+          "y": 1501.96
+        },
+        {
+          "x": 635.94,
+          "y": 1514.19
+        },
+        {
+          "x": 637.7,
+          "y": 1526.64
+        },
+        {
+          "x": 641.58,
+          "y": 1536.74
+        },
+        {
+          "x": 645.19,
+          "y": 1542.79
+        },
+        {
+          "x": 674.4,
+          "y": 1593.03
+        },
+        {
+          "x": 676.81,
+          "y": 1597.19
+        },
+        {
+          "x": 702.5,
+          "y": 1637.66
+        },
+        {
+          "x": 758.11,
+          "y": 1731.65
+        },
+        {
+          "x": 772.43,
+          "y": 1755.85
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-3bb4f6c1e4d0",
+      "name": "taxiway-tw-3bb4f6c1e4d0",
+      "vertices": [
+        {
+          "x": 1183.06,
+          "y": 2456.74
+        },
+        {
+          "x": 1198.53,
+          "y": 2460.03
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-b377dacb029a",
+      "name": "taxiway-tw-b377dacb029a",
+      "vertices": [
+        {
+          "x": 1409.33,
+          "y": 2999.17
+        },
+        {
+          "x": 1492.76,
+          "y": 2949.41
+        },
+        {
+          "x": 1494.49,
+          "y": 2947.84
+        },
+        {
+          "x": 1495.61,
+          "y": 2946.83
+        },
+        {
+          "x": 1497.35,
+          "y": 2941.92
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-1d5202780083",
+      "name": "taxiway-tw-1d5202780083",
+      "vertices": [
+        {
+          "x": 1494.49,
+          "y": 2947.84
+        },
+        {
+          "x": 1497.14,
+          "y": 2947.68
+        },
+        {
+          "x": 1501.27,
+          "y": 2948.17
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-032acae5598d",
+      "name": "taxiway-tw-032acae5598d",
+      "vertices": [
+        {
+          "x": 1499.39,
+          "y": 2945.19
+        },
+        {
+          "x": 1589.5,
+          "y": 2889.66
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-428f93b8f222",
+      "name": "taxiway-tw-428f93b8f222",
+      "vertices": [
+        {
+          "x": 1589.5,
+          "y": 2889.66
+        },
+        {
+          "x": 1593.23,
+          "y": 2888.64
+        },
+        {
+          "x": 1599.65,
+          "y": 2889.16
+        },
+        {
+          "x": 1609.81,
+          "y": 2891.35
+        },
+        {
+          "x": 1620.12,
+          "y": 2897.44
+        },
+        {
+          "x": 1626.72,
+          "y": 2901.84
+        },
+        {
+          "x": 1637.55,
+          "y": 2912.15
+        },
+        {
+          "x": 1656.78,
+          "y": 2941.45
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    },
+    {
+      "id": "tw-3066c26047ac",
+      "name": "taxiway-tw-3066c26047ac",
+      "vertices": [
+        {
+          "x": 1519.83,
+          "y": 3025.11
+        },
+        {
+          "x": 1531.76,
+          "y": 3024.67
+        },
+        {
+          "x": 1539.68,
+          "y": 3024.41
+        },
+        {
+          "x": 1546.65,
+          "y": 3026.02
+        },
+        {
+          "x": 1674.33,
+          "y": 3236.24
+        },
+        {
+          "x": 1692.13,
+          "y": 3265.56
+        },
+        {
+          "x": 1702.29,
+          "y": 3281.8
+        },
+        {
+          "x": 1720.22,
+          "y": 3312.58
+        }
+      ],
+      "width": 23.0,
+      "direction": "both",
+      "avgMoveVelocity": 10,
+      "pavement": "asphalt"
+    }
+  ],
+  "apronLinks": [],
+  "directionModes": [
+    {
+      "id": "dm_cw",
+      "name": "CW",
+      "direction": "clockwise"
+    },
+    {
+      "id": "dm_ccw",
+      "name": "CCW",
+      "direction": "counter_clockwise"
+    },
+    {
+      "id": "dm_both",
+      "name": "Both",
+      "direction": "both"
+    }
+  ],
+  "layoutMarkers": [],
+  "flights": [],
+  "_osmImport": {
+    "icao": "AYPY",
+    "converter": "osm_to_layout.py",
+    "rulesVersion": 2,
+    "lonLatOrigin": {
+      "lon": 147.21789465,
+      "lat": -9.440255149999999
+    },
+    "gridOriginShiftM": {
+      "x": -1420.08,
+      "y": -1701.63
+    },
+    "gridYSpanM": 4000.0,
+    "counts": {
+      "runwayPaths": 2,
+      "runwayTaxiways": 14,
+      "taxiways": 125,
+      "terminals": 25,
+      "pbbStands": 0,
+      "remoteStands": 0,
+      "txeIslands": 0,
+      "holdingPoints": 0,
+      "apronLinks": 0
+    }
+  }
+}
