@@ -688,6 +688,67 @@ def _line_path_between_points(
     return dedup
 
 
+def _intersection_points_from_geom(geom: Any) -> List[Tuple[float, float]]:
+    out: List[Tuple[float, float]] = []
+    if geom is None or geom.is_empty:
+        return out
+
+    def add_xy(x: float, y: float) -> None:
+        key = (_quantize_m(x, 6), _quantize_m(y, 6))
+        for ox, oy in out:
+            if abs(ox - key[0]) <= 1e-6 and abs(oy - key[1]) <= 1e-6:
+                return
+        out.append(key)
+
+    if geom.geom_type == "Point":
+        add_xy(float(geom.x), float(geom.y))
+        return out
+    if geom.geom_type == "MultiPoint":
+        for sub in geom.geoms:
+            add_xy(float(sub.x), float(sub.y))
+        return out
+    if geom.geom_type == "LineString":
+        coords = list(geom.coords)
+        if coords:
+            add_xy(float(coords[0][0]), float(coords[0][1]))
+            add_xy(float(coords[-1][0]), float(coords[-1][1]))
+        return out
+    if hasattr(geom, "geoms"):
+        for sub in geom.geoms:
+            for x, y in _intersection_points_from_geom(sub):
+                add_xy(x, y)
+    return out
+
+
+def _nearest_branch_intersection_on_parking(
+    ln: LineString,
+    origin: Tuple[float, float],
+    own_idx: int,
+    parking_lines: Sequence[Tuple[LineString, Dict[str, Any]]],
+    tol_m: float,
+) -> Optional[Tuple[float, float]]:
+    if ln is None or ln.is_empty:
+        return None
+    ox, oy = float(origin[0]), float(origin[1])
+    best: Optional[Tuple[float, float]] = None
+    best_d = 1e30
+    for i, (other_ln, _tags) in enumerate(parking_lines):
+        if i == own_idx or other_ln is None or other_ln.is_empty:
+            continue
+        try:
+            inter = ln.intersection(other_ln)
+        except Exception:
+            continue
+        for ix, iy in _intersection_points_from_geom(inter):
+            if math.hypot(ix - ox, iy - oy) <= tol_m:
+                continue
+            d = math.hypot(ix - ox, iy - oy)
+            if d < best_d:
+                best_d = d
+                best = (float(ix), float(iy))
+    return best
+
+
 def _nearest_gate_for_point(
     pt: Tuple[float, float],
     gates: Sequence[Tuple[float, float, Dict[str, str], str]],
@@ -741,6 +802,31 @@ def _format_apron_taxiway_name(terminal_name: str, gate_name: str, branch_idx: O
     if branch_idx is None:
         return base
     return f"{base}_{branch_idx}"
+
+
+def _alpha_suffix(index: int) -> str:
+    n = max(0, int(index))
+    chars: List[str] = []
+    while True:
+        chars.append(chr(ord("A") + (n % 26)))
+        n = (n // 26) - 1
+        if n < 0:
+            break
+    return "".join(reversed(chars))
+
+
+def _dedupe_name_with_alpha_suffix(name: str, fallback: str, seen: set[str]) -> str:
+    base = _safe_name(name, fallback)
+    if base not in seen:
+        seen.add(base)
+        return base
+    suffix_i = 0
+    while True:
+        candidate = f"{base}_{_alpha_suffix(suffix_i)}"
+        if candidate not in seen:
+            seen.add(candidate)
+            return candidate
+        suffix_i += 1
 
 
 def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Dict[str, Any]:
@@ -1001,8 +1087,11 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             stand_records.append({"kind": "remote"})
             source_pbb_id = str(remote_obj["id"])
         atx_terminal_name = _nearest_terminal_label_for_point((sx, sy), terminal_named_polys)
-        if inter is not None:
-            neigh = _parking_neighbors_at_point(inter, pi, parking_lines, parking_tol_m)
+        branch_inter = inter
+        if branch_inter is None:
+            branch_inter = _nearest_branch_intersection_on_parking(pln, origin, pi, parking_lines, parking_tol_m)
+        if branch_inter is not None:
+            neigh = _parking_neighbors_at_point(branch_inter, pi, parking_lines, parking_tol_m)
             taxi_targets: List[Tuple[Tuple[float, float], LineString]] = []
             for ni in neigh:
                 nln, _nt = parking_lines[ni]
@@ -1018,8 +1107,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     taxi_targets.append((np1, nln))
                 # Fallback for branch: if explicit taxiway endpoint is absent, use the endpoint opposite from intersection.
                 if cnp0 != "taxiway" and cnp1 != "taxiway":
-                    d0 = math.hypot(np0[0] - inter[0], np0[1] - inter[1])
-                    d1 = math.hypot(np1[0] - inter[0], np1[1] - inter[1])
+                    d0 = math.hypot(np0[0] - branch_inter[0], np0[1] - branch_inter[1])
+                    d1 = math.hypot(np1[0] - branch_inter[0], np1[1] - branch_inter[1])
                     far = np0 if d0 >= d1 else np1
                     taxi_targets.append((far, nln))
             if taxi_ep is not None:
@@ -1034,8 +1123,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 uniq_targets.append((tp, tln))
             # Rule lock: if 1-1/1-2 exists create two branches from 3->2, otherwise fallback to 3->1 direct.
             for ti, (tp, tln) in enumerate(uniq_targets[:2]):
-                path_a = _line_path_between_points(pln, origin, inter)
-                path_b = _line_path_between_points(tln, inter, tp)
+                path_a = _line_path_between_points(pln, origin, branch_inter)
+                path_b = _line_path_between_points(tln, branch_inter, tp)
                 full_path = path_a + (path_b[1:] if len(path_b) >= 2 else [])
                 _append_apron_link_candidate(
                     apron_link_candidates,
@@ -1230,6 +1319,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     linked_pbb_ids: set[str] = set()
     successful_apron_parking_indices: set[int] = set()
     parking_line_index_by_obj_id: Dict[int, int] = {id(ln): i for i, (ln, _t) in enumerate(parking_lines)}
+    used_apron_link_names: set[str] = set()
     for cand in apron_link_candidates:
         pbb_id = str(cand.get("pbbId") or "").strip()
         pts = cand.get("points") if isinstance(cand.get("points"), list) else []
@@ -1245,10 +1335,11 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 continue
             mids.append({"x": _quantize_m(float(v.get("x", 0.0)), pos_pl), "y": _quantize_m(float(v.get("y", 0.0)), pos_pl)})
         lk_i += 1
+        link_name = _dedupe_name_with_alpha_suffix(str(cand.get("name") or ""), f"Apron Taxiway {lk_i}", used_apron_link_names)
         apron_links.append(
             {
                 "id": _new_id("alk"),
-                "name": _safe_name(str(cand.get("name") or ""), f"Apron Taxiway {lk_i}"),
+                "name": link_name,
                 "pbbId": pbb_id,
                 "taxiwayId": tw_id,
                 "tx": _quantize_m(tx, pos_pl),
@@ -1279,10 +1370,11 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             continue
         mids = _midvertices_along_parking(nearest_line, stand_pt, taxi_pt, pos_pl)
         lk_i += 1
+        link_name = _dedupe_name_with_alpha_suffix(f"Apron Taxiway {lk_i}", f"Apron Taxiway {lk_i}", used_apron_link_names)
         apron_links.append(
             {
                 "id": _new_id("alk"),
-                "name": f"Apron Taxiway {lk_i}",
+                "name": link_name,
                 "pbbId": pbb_id,
                 "taxiwayId": tw_id,
                 "tx": _quantize_m(tx, pos_pl),
