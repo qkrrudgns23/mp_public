@@ -14290,6 +14290,19 @@
       }
       return false;
     }
+    /** 녹색 Junction(경로 그래프 connected)이 같은 위치에 있으면 기하학적 단절 X는 생략. */
+    function endpointHasGreenPathJunctionNear(P) {
+      const g = state.pathGraphCache;
+      if (!g || g.__junctionStale) return false;
+      const greens = g.connectedJunctions || g.junctions || [];
+      if (!greens.length) return false;
+      for (let gi = 0; gi < greens.length; gi++) {
+        const q = greens[gi];
+        if (!q || q.length < 2) continue;
+        if (dist2(P, q) <= tol2) return true;
+      }
+      return false;
+    }
     const seen = new Set();
     const marks = [];
     for (let ti = 0; ti < list.length; ti++) {
@@ -14303,6 +14316,7 @@
         const P = pts[ii];
         if (!worldPointInsideLayoutViewportAabb(P, vb)) return;
         if (endpointConnected(tw, ii, P, pts)) return;
+        if (endpointHasGreenPathJunctionNear(P)) return;
         const key = String(Math.round(P[0] * 4)) + ',' + String(Math.round(P[1] * 4));
         if (seen.has(key)) return;
         seen.add(key);
