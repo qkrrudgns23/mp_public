@@ -1,9 +1,5705 @@
 {
   "baseDate": "2026-03-31",
-  "positions": {},
-  "schedule": [],
+  "positions": {
+    "id_mmcuy5gfc": [
+      {
+        "t": 25022,
+        "x": 914.852,
+        "y": 3406.267,
+        "v": 60.012,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25024,
+        "x": 1013.618,
+        "y": 3349.549,
+        "v": 56.946,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25026,
+        "x": 1107.066,
+        "y": 3295.885,
+        "v": 53.88,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25028,
+        "x": 1195.195,
+        "y": 3245.275,
+        "v": 50.814,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25030,
+        "x": 1278.007,
+        "y": 3197.719,
+        "v": 47.747,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25032,
+        "x": 1355.487,
+        "y": 3153.197,
+        "v": 44.68,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25034,
+        "x": 1427.648,
+        "y": 3111.728,
+        "v": 41.614,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25036,
+        "x": 1494.491,
+        "y": 3073.318,
+        "v": 38.547,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-007",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25038,
+        "x": 1556.017,
+        "y": 3037.963,
+        "v": 35.48,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-007",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25040,
+        "x": 1612.223,
+        "y": 3005.666,
+        "v": 32.412,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-007",
+        "phase": "Landing",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 25042,
+        "x": 1662.562,
+        "y": 2975.667,
+        "v": 29.3,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-010",
+        "phase": "Landing",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25044,
+        "x": 1682.755,
+        "y": 2929.572,
+        "v": 25.162,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-010",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25046,
+        "x": 1671.302,
+        "y": 2904.392,
+        "v": 13.831,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-100",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25048,
+        "x": 1661.69,
+        "y": 2886.853,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-100",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25050,
+        "x": 1652.125,
+        "y": 2869.289,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-078",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25052,
+        "x": 1639.09,
+        "y": 2845.977,
+        "v": 13.354,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-101",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25054,
+        "x": 1634.881,
+        "y": 2827.079,
+        "v": 9.68,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-103",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25056,
+        "x": 1645.46,
+        "y": 2810.643,
+        "v": 9.773,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-103",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25058,
+        "x": 1662.045,
+        "y": 2799.674,
+        "v": 9.942,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-185",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25060,
+        "x": 1679.384,
+        "y": 2789.706,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-185",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25062,
+        "x": 1696.723,
+        "y": 2779.738,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-185",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25064,
+        "x": 1714.062,
+        "y": 2769.771,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-185",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25066,
+        "x": 1731.401,
+        "y": 2759.803,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-185",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25068,
+        "x": 1748.548,
+        "y": 2749.509,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-185",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25070,
+        "x": 1765.694,
+        "y": 2739.212,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-185",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25072,
+        "x": 1782.84,
+        "y": 2728.916,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-185",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25074,
+        "x": 1799.986,
+        "y": 2718.62,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-185",
+        "phase": "Arr_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 25076,
+        "x": 1811.548,
+        "y": 2702.916,
+        "v": 9.75,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-187",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25078,
+        "x": 1812.501,
+        "y": 2683.212,
+        "v": 9.864,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-187",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25080,
+        "x": 1805.015,
+        "y": 2664.797,
+        "v": 9.939,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-269",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25082,
+        "x": 1802.961,
+        "y": 2645.115,
+        "v": 9.894,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-269",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25084,
+        "x": 1810.395,
+        "y": 2626.84,
+        "v": 9.865,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-269",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25086,
+        "x": 1825.379,
+        "y": 2614.123,
+        "v": 9.827,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-679",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25088,
+        "x": 1845.2,
+        "y": 2602.938,
+        "v": 11.379,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-680",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25090,
+        "x": 1862.716,
+        "y": 2593.284,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-680",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25092,
+        "x": 1881.853,
+        "y": 2582.601,
+        "v": 10.959,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-682",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25094,
+        "x": 1899.099,
+        "y": 2572.472,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-682",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25096,
+        "x": 1918.158,
+        "y": 2561.307,
+        "v": 11.044,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-684",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25098,
+        "x": 1935.487,
+        "y": 2551.322,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-684",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25100,
+        "x": 1952.817,
+        "y": 2541.338,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-684",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25102,
+        "x": 1971.887,
+        "y": 2530.354,
+        "v": 11.003,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-686",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25104,
+        "x": 1989.217,
+        "y": 2520.371,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-686",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25106,
+        "x": 2006.548,
+        "y": 2510.389,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-686",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25108,
+        "x": 2023.878,
+        "y": 2500.406,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-686",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25110,
+        "x": 2041.931,
+        "y": 2490.017,
+        "v": 10.414,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-688",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25112,
+        "x": 2059.891,
+        "y": 2479.69,
+        "v": 10.358,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-690",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25114,
+        "x": 2077.235,
+        "y": 2469.732,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-690",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25116,
+        "x": 2094.58,
+        "y": 2459.774,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-690",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25118,
+        "x": 2111.925,
+        "y": 2449.816,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-690",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25120,
+        "x": 2129.268,
+        "y": 2439.856,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-692",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25122,
+        "x": 2146.595,
+        "y": 2429.867,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-692",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25124,
+        "x": 2136.637,
+        "y": 2416.239,
+        "v": 8.439,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-165",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25126,
+        "x": 2122.496,
+        "y": 2402.095,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25128,
+        "x": 2108.313,
+        "y": 2387.994,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25130,
+        "x": 2094.13,
+        "y": 2373.893,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25132,
+        "x": 2079.947,
+        "y": 2359.792,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25134,
+        "x": 2065.759,
+        "y": 2345.696,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25136,
+        "x": 2051.568,
+        "y": 2331.603,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25138,
+        "x": 2037.376,
+        "y": 2317.511,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-736",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25140,
+        "x": 2023.18,
+        "y": 2303.423,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-736",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25142,
+        "x": 2008.985,
+        "y": 2289.334,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-736",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25144,
+        "x": 1994.96,
+        "y": 2275.076,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-736",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25146,
+        "x": 1980.954,
+        "y": 2260.799,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-736",
+        "phase": "Arr_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 25148,
+        "x": 1962.677,
+        "y": 2262.897,
+        "v": 9.198,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 1,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": false
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Arr_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 25150,
+        "x": 1948.0,
+        "y": 2276.154,
+        "v": 9.889,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Arr_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 25152,
+        "x": 1937.273,
+        "y": 2292.248,
+        "v": 9.671,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Arr_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 25154,
+        "x": 1921.905,
+        "y": 2305.048,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Arr_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 25156,
+        "x": 1906.533,
+        "y": 2317.843,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Arr_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 25158,
+        "x": 1891.162,
+        "y": 2330.639,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Arr_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 25160,
+        "x": 1888.39,
+        "y": 2332.946,
+        "v": 0.0,
+        "motionForward": false,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        }
+      },
+      {
+        "t": 28760,
+        "x": 1888.39,
+        "y": 2332.946,
+        "v": 0.0,
+        "motionForward": false,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Dep_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 28762,
+        "x": 1903.761,
+        "y": 2320.151,
+        "v": 10.0,
+        "motionForward": false,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Dep_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 28764,
+        "x": 1919.132,
+        "y": 2307.356,
+        "v": 10.0,
+        "motionForward": false,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Dep_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 28766,
+        "x": 1934.504,
+        "y": 2294.56,
+        "v": 10.0,
+        "motionForward": false,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Dep_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 28768,
+        "x": 1946.435,
+        "y": 2279.366,
+        "v": 9.659,
+        "motionForward": false,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Dep_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 28770,
+        "x": 1959.552,
+        "y": 2264.699,
+        "v": 9.839,
+        "motionForward": false,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Dep_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 28772,
+        "x": 1978.335,
+        "y": 2258.489,
+        "v": 9.891,
+        "motionForward": false,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-737",
+        "phase": "Dep_taxi",
+        "pathType": "apron_link",
+        "controlHalt": false
+      },
+      {
+        "t": 28774,
+        "x": 1992.434,
+        "y": 2272.501,
+        "v": 9.939,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-736",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28776,
+        "x": 2006.439,
+        "y": 2286.778,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-736",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28778,
+        "x": 2020.62,
+        "y": 2300.882,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-736",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28780,
+        "x": 2034.816,
+        "y": 2314.97,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-736",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28782,
+        "x": 2049.008,
+        "y": 2329.062,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28784,
+        "x": 2063.2,
+        "y": 2343.154,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28786,
+        "x": 2077.389,
+        "y": 2357.249,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28788,
+        "x": 2091.572,
+        "y": 2371.35,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28790,
+        "x": 2105.755,
+        "y": 2385.451,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28792,
+        "x": 2119.938,
+        "y": 2399.552,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-738",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28794,
+        "x": 2134.094,
+        "y": 2413.681,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-165",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28796,
+        "x": 2148.196,
+        "y": 2427.863,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-165",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28798,
+        "x": 2132.393,
+        "y": 2438.054,
+        "v": 9.402,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-692",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28800,
+        "x": 2115.053,
+        "y": 2448.02,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-690",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28802,
+        "x": 2097.708,
+        "y": 2457.978,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-690",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28804,
+        "x": 2080.363,
+        "y": 2467.936,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-690",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28806,
+        "x": 2063.019,
+        "y": 2477.895,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-690",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28808,
+        "x": 2045.057,
+        "y": 2488.218,
+        "v": 10.358,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-688",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28810,
+        "x": 2027.004,
+        "y": 2498.605,
+        "v": 10.414,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-686",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28812,
+        "x": 2009.673,
+        "y": 2508.588,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-686",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28814,
+        "x": 1992.343,
+        "y": 2518.571,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-686",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28816,
+        "x": 1975.012,
+        "y": 2528.554,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-686",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28818,
+        "x": 1955.942,
+        "y": 2539.537,
+        "v": 11.003,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-684",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28820,
+        "x": 1938.613,
+        "y": 2549.522,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-684",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28822,
+        "x": 1921.284,
+        "y": 2559.506,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-684",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28824,
+        "x": 1902.209,
+        "y": 2570.645,
+        "v": 11.044,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-682",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28826,
+        "x": 1884.963,
+        "y": 2580.774,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-682",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28828,
+        "x": 1865.875,
+        "y": 2591.543,
+        "v": 10.959,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-680",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28830,
+        "x": 1848.359,
+        "y": 2601.197,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-680",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28832,
+        "x": 1828.521,
+        "y": 2612.35,
+        "v": 11.379,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-679",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28834,
+        "x": 1808.481,
+        "y": 2623.95,
+        "v": 11.578,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-675",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28836,
+        "x": 1791.145,
+        "y": 2633.924,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-675",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28838,
+        "x": 1769.759,
+        "y": 2646.236,
+        "v": 12.339,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-674",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28840,
+        "x": 1752.421,
+        "y": 2656.206,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-672",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28842,
+        "x": 1735.083,
+        "y": 2666.176,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-672",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28844,
+        "x": 1717.75,
+        "y": 2676.155,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-670",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28846,
+        "x": 1700.42,
+        "y": 2686.138,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-670",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28848,
+        "x": 1683.09,
+        "y": 2696.121,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-670",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28850,
+        "x": 1661.732,
+        "y": 2708.353,
+        "v": 12.306,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-668",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28852,
+        "x": 1644.356,
+        "y": 2718.256,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-668",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28854,
+        "x": 1623.592,
+        "y": 2730.379,
+        "v": 12.022,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-667",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28856,
+        "x": 1606.373,
+        "y": 2740.552,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-665",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28858,
+        "x": 1589.154,
+        "y": 2750.726,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-661",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28860,
+        "x": 1571.863,
+        "y": 2760.775,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-661",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28862,
+        "x": 1550.618,
+        "y": 2772.741,
+        "v": 12.192,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-659",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28864,
+        "x": 1533.198,
+        "y": 2782.567,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-659",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28866,
+        "x": 1515.774,
+        "y": 2792.386,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-659",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28868,
+        "x": 1498.401,
+        "y": 2802.293,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-657",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28870,
+        "x": 1481.102,
+        "y": 2812.33,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-657",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28872,
+        "x": 1463.688,
+        "y": 2822.166,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-654",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28874,
+        "x": 1446.35,
+        "y": 2832.135,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-651",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28876,
+        "x": 1429.04,
+        "y": 2842.153,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-651",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28878,
+        "x": 1411.85,
+        "y": 2852.376,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-649",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28880,
+        "x": 1394.649,
+        "y": 2862.58,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-649",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28882,
+        "x": 1377.146,
+        "y": 2872.251,
+        "v": 9.999,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-644",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28884,
+        "x": 1355.297,
+        "y": 2884.271,
+        "v": 12.469,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-642",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28886,
+        "x": 1337.953,
+        "y": 2894.231,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-641",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28888,
+        "x": 1320.608,
+        "y": 2904.189,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-641",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28890,
+        "x": 1301.414,
+        "y": 2915.208,
+        "v": 11.066,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-639",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28892,
+        "x": 1282.986,
+        "y": 2927.954,
+        "v": 11.203,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-701",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28894,
+        "x": 1278.114,
+        "y": 2947.351,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-701",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28896,
+        "x": 1272.874,
+        "y": 2966.652,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-700",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28898,
+        "x": 1267.59,
+        "y": 2985.942,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-453",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28900,
+        "x": 1262.228,
+        "y": 3005.209,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-453",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28902,
+        "x": 1256.865,
+        "y": 3024.477,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-453",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28904,
+        "x": 1246.164,
+        "y": 3039.546,
+        "v": 9.241,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-451",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28906,
+        "x": 1228.719,
+        "y": 3049.328,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-225",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28908,
+        "x": 1211.419,
+        "y": 3059.363,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-225",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28910,
+        "x": 1194.118,
+        "y": 3069.398,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-225",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28912,
+        "x": 1176.818,
+        "y": 3079.432,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-220",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28914,
+        "x": 1159.516,
+        "y": 3089.464,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-220",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28916,
+        "x": 1142.148,
+        "y": 3099.382,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-449",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28918,
+        "x": 1124.75,
+        "y": 3109.246,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-448",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28920,
+        "x": 1107.353,
+        "y": 3119.112,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-448",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28922,
+        "x": 1089.956,
+        "y": 3128.979,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-448",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28924,
+        "x": 1072.593,
+        "y": 3138.904,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-216",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28926,
+        "x": 1055.274,
+        "y": 3148.907,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-216",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28928,
+        "x": 1037.955,
+        "y": 3158.91,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-216",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28930,
+        "x": 1020.636,
+        "y": 3168.913,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-216",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28932,
+        "x": 1003.3,
+        "y": 3178.886,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28934,
+        "x": 985.949,
+        "y": 3188.832,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28936,
+        "x": 968.597,
+        "y": 3198.778,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28938,
+        "x": 951.246,
+        "y": 3208.724,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28940,
+        "x": 933.894,
+        "y": 3218.67,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28942,
+        "x": 916.542,
+        "y": 3228.616,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28944,
+        "x": 899.191,
+        "y": 3238.562,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28946,
+        "x": 881.839,
+        "y": 3248.508,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28948,
+        "x": 864.488,
+        "y": 3258.454,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28950,
+        "x": 847.136,
+        "y": 3268.4,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28952,
+        "x": 829.784,
+        "y": 3278.346,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-447",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28954,
+        "x": 812.44,
+        "y": 3288.303,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-446",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28956,
+        "x": 795.094,
+        "y": 3298.26,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-445",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28958,
+        "x": 777.737,
+        "y": 3308.195,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-068",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28960,
+        "x": 760.428,
+        "y": 3318.215,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-472",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28962,
+        "x": 743.069,
+        "y": 3328.149,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-470",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28964,
+        "x": 725.716,
+        "y": 3338.091,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-470",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28966,
+        "x": 708.362,
+        "y": 3348.033,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-470",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28968,
+        "x": 691.008,
+        "y": 3357.976,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-470",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28970,
+        "x": 673.67,
+        "y": 3367.946,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28972,
+        "x": 656.334,
+        "y": 3377.918,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28974,
+        "x": 638.998,
+        "y": 3387.891,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28976,
+        "x": 621.661,
+        "y": 3397.863,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28978,
+        "x": 604.325,
+        "y": 3407.836,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28980,
+        "x": 586.989,
+        "y": 3417.808,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28982,
+        "x": 569.652,
+        "y": 3427.781,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28984,
+        "x": 552.316,
+        "y": 3437.753,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28986,
+        "x": 534.98,
+        "y": 3447.726,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28988,
+        "x": 517.643,
+        "y": 3457.698,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28990,
+        "x": 500.307,
+        "y": 3467.671,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28992,
+        "x": 482.97,
+        "y": 3477.643,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28994,
+        "x": 465.634,
+        "y": 3487.616,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-469",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28996,
+        "x": 448.275,
+        "y": 3497.549,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-108",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 28998,
+        "x": 430.896,
+        "y": 3507.446,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-108",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 29000,
+        "x": 413.516,
+        "y": 3517.343,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-108",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 29002,
+        "x": 396.136,
+        "y": 3527.24,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-108",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 29004,
+        "x": 378.757,
+        "y": 3537.136,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-108",
+        "phase": "Dep_taxi",
+        "pathType": "taxiway",
+        "controlHalt": false
+      },
+      {
+        "t": 29006,
+        "x": 362.224,
+        "y": 3548.215,
+        "v": 9.951,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-107",
+        "phase": "Dep_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29008,
+        "x": 351.065,
+        "y": 3564.544,
+        "v": 9.889,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-107",
+        "phase": "Dep_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29010,
+        "x": 348.009,
+        "y": 3584.147,
+        "v": 9.92,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-107",
+        "phase": "Dep_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29012,
+        "x": 353.678,
+        "y": 3603.118,
+        "v": 9.9,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-107",
+        "phase": "Dep_taxi",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29014,
+        "x": 363.239,
+        "y": 3620.684,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-003",
+        "phase": "Holding_lineup",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29016,
+        "x": 373.096,
+        "y": 3638.086,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-003",
+        "phase": "Holding_lineup",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29018,
+        "x": 383.121,
+        "y": 3655.392,
+        "v": 10.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-003",
+        "phase": "Holding_lineup",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29020,
+        "x": 393.833,
+        "y": 3672.237,
+        "v": 9.981,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-003",
+        "phase": "Holding_lineup",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29022,
+        "x": 410.431,
+        "y": 3682.736,
+        "v": 9.82,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-003",
+        "phase": "Holding_lineup",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29024,
+        "x": 430.16,
+        "y": 3681.637,
+        "v": 9.88,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-003",
+        "phase": "Holding_lineup",
+        "pathType": "runway_exit",
+        "controlHalt": false
+      },
+      {
+        "t": 29026,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 10.099,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29028,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 0.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29030,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 0.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29032,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 0.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29034,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 0.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29036,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 0.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29038,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 0.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29040,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 0.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29042,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 0.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29044,
+        "x": 448.817,
+        "y": 3673.898,
+        "v": 0.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29046,
+        "x": 471.464,
+        "y": 3660.893,
+        "v": 13.058,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29048,
+        "x": 501.026,
+        "y": 3643.918,
+        "v": 17.044,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29050,
+        "x": 537.506,
+        "y": 3622.97,
+        "v": 21.034,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29052,
+        "x": 580.91,
+        "y": 3598.045,
+        "v": 25.026,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29054,
+        "x": 631.237,
+        "y": 3569.143,
+        "v": 29.018,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29056,
+        "x": 688.49,
+        "y": 3536.264,
+        "v": 33.011,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29058,
+        "x": 752.67,
+        "y": 3499.406,
+        "v": 37.006,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-002",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29060,
+        "x": 823.779,
+        "y": 3458.569,
+        "v": 41.0,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-004",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29062,
+        "x": 901.818,
+        "y": 3413.752,
+        "v": 44.996,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29064,
+        "x": 986.787,
+        "y": 3364.957,
+        "v": 48.992,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29066,
+        "x": 1078.687,
+        "y": 3312.182,
+        "v": 52.988,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29068,
+        "x": 1177.518,
+        "y": 3255.427,
+        "v": 56.984,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29070,
+        "x": 1283.28,
+        "y": 3194.691,
+        "v": 60.981,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29072,
+        "x": 1395.956,
+        "y": 3129.941,
+        "v": 64.978,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-005",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29074,
+        "x": 1515.565,
+        "y": 3061.208,
+        "v": 68.975,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-007",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29076,
+        "x": 1642.104,
+        "y": 2988.495,
+        "v": 72.972,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-007",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29078,
+        "x": 1775.65,
+        "y": 2911.926,
+        "v": 76.969,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-011",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29080,
+        "x": 1916.073,
+        "y": 2831.282,
+        "v": 80.966,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-011",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29082,
+        "x": 2063.433,
+        "y": 2746.66,
+        "v": 84.964,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-012",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29084,
+        "x": 2217.718,
+        "y": 2658.044,
+        "v": 88.962,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-013",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29086,
+        "x": 2378.902,
+        "y": 2565.385,
+        "v": 92.96,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-013",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29088,
+        "x": 2547.079,
+        "y": 2468.847,
+        "v": 96.958,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-015",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29090,
+        "x": 2722.206,
+        "y": 2368.357,
+        "v": 100.955,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-018",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29092,
+        "x": 2904.235,
+        "y": 2263.828,
+        "v": 104.954,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-018",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29094,
+        "x": 3093.341,
+        "y": 2155.564,
+        "v": 108.952,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-018",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29096,
+        "x": 3289.208,
+        "y": 2043.016,
+        "v": 112.95,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-022",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29098,
+        "x": 3491.97,
+        "y": 1926.419,
+        "v": 116.948,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "edgeId": "layout-edge-023",
+        "phase": "Lineup_departure",
+        "pathType": "runway",
+        "controlHalt": false,
+        "runwayId": "rwy-1ea07258fb27"
+      },
+      {
+        "t": 29100,
+        "x": 3501.39,
+        "y": 1921.12,
+        "v": 5.404,
+        "motionForward": true,
+        "deadlockGhost": false,
+        "destinationApron": {
+          "standId": "pbb-72f017a5a944",
+          "capacity": 1,
+          "physicalOthersOnStand": 0,
+          "pipelineBooked": 0,
+          "pushbackCooldownActive": false,
+          "standPipelineOpen": true
+        },
+        "clearance": "PROCEED",
+        "controlHalt": false
+      }
+    ]
+  },
+  "schedule": [
+    {
+      "flight_id": "id_mmcuy5gfc",
+      "reg": null,
+      "flight_number": "7C5779",
+      "aircraft_type": "A320",
+      "ARR_RUNWAY_ID": "rwy-1ea07258fb27",
+      "DEP_RUNWAY_ID": "rwy-1ea07258fb27",
+      "HAS_LANDING": true,
+      "HAS_LINEUP_DEPARTURE": true,
+      "SLDT": 25200,
+      "SLDT_dt": "03/31 07:00:00",
+      "SIBT": 25200,
+      "SIBT_dt": "03/31 07:00:00",
+      "SOBT": 28800,
+      "SOBT_dt": "03/31 08:00:00",
+      "STOT": 28820,
+      "STOT_dt": "03/31 08:00:20",
+      "SLDT_sd": 25020,
+      "SLDT_sd_dt": "03/31 06:57:00",
+      "SIBT_sd": 25200,
+      "SIBT_sd_dt": "03/31 07:00:00",
+      "SOBT_sd": 28800,
+      "SOBT_sd_dt": "03/31 08:00:00",
+      "STOT_sd": 28980,
+      "STOT_sd_dt": "03/31 08:03:00",
+      "ELDT": 25020,
+      "ELDT_dt": "03/31 06:57:00",
+      "TOUCHDOWN_MOTION": 25020,
+      "TOUCHDOWN_MOTION_dt": "03/31 06:57:00",
+      "RUNWAY_ENTRY": 29026,
+      "RUNWAY_ENTRY_dt": "03/31 08:03:46",
+      "EXIT_RUNWAY": 25052,
+      "EXIT_RUNWAY_dt": "03/31 06:57:32",
+      "EIBT": 25160,
+      "EIBT_dt": "03/31 06:59:20",
+      "EOBT": 28762,
+      "EOBT_dt": "03/31 07:59:22",
+      "E_HOLD": 29016,
+      "E_HOLD_dt": "03/31 08:03:35",
+      "E_LINEUP": 29048,
+      "E_LINEUP_dt": "03/31 08:04:08",
+      "ETOT": 29100,
+      "ETOT_dt": "03/31 08:05:00"
+    }
+  ],
   "layout": null,
   "kpi": null,
-  "flights_detail": [],
+  "flights_detail": [
+    {
+      "flight_id": "id_mmcuy5gfc",
+      "edge_list": [],
+      "edge_list_finished": [
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 61.507170253930724,
+          "acceleration_ms2": -1.5320343918463173
+        },
+        {
+          "edge_id": "layout-edge-005",
+          "phase": "Landing",
+          "start_velocity_ms": 59.364707255302,
+          "acceleration_ms2": -1.5320343918463173
+        },
+        {
+          "edge_id": "layout-edge-007",
+          "phase": "Landing",
+          "start_velocity_ms": 38.48556405453545,
+          "acceleration_ms2": -1.5320343918463173
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Landing",
+          "start_velocity_ms": 28.022753593980816,
+          "acceleration_ms2": -1.5320343918463173
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 26.873445822136876,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-078",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-101",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-103",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-185",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-187",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-267",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-269",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-679",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-680",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-682",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-684",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-686",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-688",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-690",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-692",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-165",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-738",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-736",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-737",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-737",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-736",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-738",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-165",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-692",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-690",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-688",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-686",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-684",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-682",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-680",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-679",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-677",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-675",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-674",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-672",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-670",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-668",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-667",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-665",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-663",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-661",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-494",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-659",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-657",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-654",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-651",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-649",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-644",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-642",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-641",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-639",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-701",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-700",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-453",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-451",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-225",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-220",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-449",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-448",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-216",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-447",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-446",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-445",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-068",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-472",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-470",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-469",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-107",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-003",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 0.0
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10.0,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 42.34522029478365,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-005",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 46.164733073260436,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-007",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 69.2694988625424,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 75.54258149916696,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-011",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 77.81656662232128,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 84.01649879951404,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-013",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 90.20564310196117,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-015",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 98.62105275380681,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-016",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 100.86728058728129,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-018",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.52681271493287,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-020",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.55046855535899,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-022",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 113.23984243081792,
+          "acceleration_ms2": 2.0
+        },
+        {
+          "edge_id": "layout-edge-023",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 118.37146844866488,
+          "acceleration_ms2": 2.0
+        }
+      ],
+      "ok": true
+    }
+  ],
   "deadlock_resolve_event_count": 0
 }

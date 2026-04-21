@@ -17,6 +17,10 @@
 - **분기 누락 리스크**: `elif` 체인으로 WAIT/YIELD 체크가 건너뛰어질 수 있다. 이동 제어에서 안전 조건은 독립 `if`로 누락 없이 평가한다.
 - **활주로 강제 규칙**: deadlock용 forced-open이 있더라도 활주로 점유 안전 규칙(타 기체 점유 시 진입 금지)은 예외 없이 유지한다.
 - **말뿐인 완료 금지**: 터미널 실행 로그/검증 근거 없이 “해결”이라고 보고하지 않는다.
+- **dwell 방향 보존**: parked dwell 구간을 압축할 때 endpoint의 `motionForward`를 이웃 sample에서 가져오면 pushback/reverse 상태가 parked 구간 전체로 번질 수 있다. dwell 구간은 주기 직전 마지막 이동 sample의 방향을 유지하고, reverse는 실제 taxi-out moving sample부터만 적용한다.
+- **stationary fallback 기준 일치**: 프런트 `getFlightPoseAtTime()`는 정지 구간에서 `prev` 비정지 벡터를 우선 사용한다. 따라서 parked dwell의 `motionForward`는 “직전 row의 bool”이 아니라, `정지 직전 마지막 raw segment`와 `정지 후 첫 moving display 방향`이 일치하도록 선택해야 `R1`/`R2` 같이 서로 다른 stand geometry에서도 nose 방향이 안정적으로 유지된다.
+- **stand heading 의미 고정**: layout의 `angleDeg`는 stand nose가 아니라 tail/apron-open 방향이다. stand에 주기한 기체 방향을 판정할 때는 반드시 `nose = angleDeg + 180°` 기준을 써야 하며, helper에서 단순 normalize만 하면 `R1`/`R2`처럼 서로 반대 증상이 생긴다.
+- **동적 stand 배정 fallback**: 입력 flight의 `standId/apronId`가 비어 있어도 parked dwell 방향을 판정해야 한다. 이 경우 agent 초기 필드(`ag.apron_stand_id`)만 보면 `R3`~`R6`처럼 nose 기준을 잃으므로, dwell band의 history `destinationApron.standId`를 우선 복원해서 실제 배정 stand geometry를 사용해야 한다.
 - **경로그래프 캐시 + 페널티**: `_flight_route_impl`에서 그래프를 매번 재구성하면 reroute/다중 레그에서 비용이 폭증한다. 레이아웃 객체 단위로 캐시하고, 레이아웃 엣지 페널티는 그래프 변형 대신 Dijkstra 가중치에만 반영한다. 페널티 없는 경우에는 `adj`에 저장된 가중치 루프를 유지해 미세 성능 회귀를 막는다.
 - **시뮬레이션 시작 시 캐시 초기화**: 프로세스 내 다른 입력/레이아웃과 섞이지 않도록 `run_simulation` 진입 시 path graph 캐시를 비운다.
 - **터치다운 시각 캐시는 이동 단계와 분리**: `_compute_arr_touchdown_motion_abs_sec`는 전 기체 상태에 의존한다. 틱 초반(점유 갱신·예약·정체 프로브)에는 캐시를 쓰되, `apply_movement_controls`의 **이동 루프**에서는 기체별 순차 이동/중간 reroute로 `exit_runway_abs_sec` 등이 바뀔 수 있으므로 매 기체마다 재계산한다.

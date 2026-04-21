@@ -158,3 +158,101 @@
 - **wall (this runner, no cProfile)**: large ~70.7s vs ~80s prior run on same trajectory of work.
 - **next**: Optional: trim `str.strip` hot paths (~16s in profile); numpy only where float/tie semantics provably match golden.
 
+---
+
+### RUN 20260421T0500Z stand-dwell-heading-fix
+- **RUN_ID**: 20260421T0500Z
+- **command**:
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/MNL_OSM_sim_input.json --output data/Result_storage/_mnl_stand_heading_fix_result.json`
+  - `python -m harness.validate --input data/Result_storage/MNL_OSM_sim_input.json --result data/Result_storage/_mnl_stand_heading_fix_result.json`
+- **result**: PASS
+- **builder change**:
+  - `utils/airside_sim.py`의 `_compress_agent_history_for_dwell_export()`가 parked dwell 구간 양 끝점의 `motionForward`를 주기 직전 마지막 이동 샘플 기준으로 정규화
+  - dwell endpoint rewrite 시 기존 tail 필드를 유지하도록 row 재구성
+- **reviewer check**:
+  - `Information.json` 변경 없음
+  - I/O 계약 유지 (`PASS run+validate`)
+  - 영향 범위는 dwell export 압축 로직으로 제한
+- **evidence**:
+  - apron 6 / `pbb-72f017a5a944` / flight `id_mmcuy5gfc`
+  - parked dwell heading: `t=26000 -> 140.224`, `t=28769 -> 140.224`, `motionForward=True`
+  - pushback start 이후: `t=28771 -> 140.223`, `motionForward=False` (다음 moving sample부터 reverse 적용)
+- **next**: 동일한 dwell 압축 경로를 타는 다른 stand 케이스가 있으면 추가 샘플 검증
+
+---
+
+### RUN 20260421T0519Z mnl-r1-r2-parked-nose-fix
+- **RUN_ID**: 20260421T0519Z
+- **command**:
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/MNL_OSM_sim_input.json --output data/Result_storage/MNL_OSM_sim_result.json`
+  - `python -m harness.validate --input data/Result_storage/MNL_OSM_sim_input.json --result data/Result_storage/MNL_OSM_sim_result.json`
+- **result**: PASS
+- **builder change**:
+  - `_compress_agent_history_for_dwell_export()`의 parked dwell `motionForward`를 단순 고정값/직전 row 플래그가 아니라
+    `정지 직전 마지막 raw segment 방향`과 `정지 후 첫 moving display 방향`을 비교해서 선택하도록 수정
+  - stationary interval에서 프런트가 `prev` 벡터를 우선 사용하는 점을 기준으로 `R1`/`R2` 케이스를 동시에 만족하도록 보정
+- **reviewer check**:
+  - `Information.json` 변경 없음
+  - I/O 계약 유지 (`PASS run+validate`)
+  - 영향 범위는 dwell export 압축 로직으로 제한
+- **evidence**:
+  - `R1`: stand nose `140.220`, parked heading `[140.227, 140.227, 140.225]`
+  - `R2`: stand nose `160.977`, parked heading `[160.980, 160.980, 160.980]`
+- **next**: 다른 공항 입력에서도 동일한 stationary fallback 규칙이 문제를 일으키는 stand가 있는지 샘플 점검
+
+---
+
+### RUN 20260421T0530Z stand-nose-root-cause-fix
+- **RUN_ID**: 20260421T0530Z
+- **command**:
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/MNL_OSM_sim_input.json --output data/Result_storage/MNL_OSM_sim_result.json`
+  - `python -m harness.validate --input data/Result_storage/MNL_OSM_sim_input.json --result data/Result_storage/MNL_OSM_sim_result.json`
+- **result**: PASS
+- **builder change**:
+  - parked dwell `motionForward`를 history 추정만으로 정하지 않고, stand geometry에서 계산한 `nose heading`을 기준으로 선택
+  - `_stand_nose_heading_deg()` 추가: `angleDeg`(tail/open 기준)를 nose 방향으로 변환하고, 필요 시 PBB anchor→apronSite 벡터로 fallback
+- **root cause**:
+  - 기존 보정은 stationary interval의 방향을 주변 sample만으로 추정해서 stand geometry와 분리돼 있었음
+  - 게다가 `angleDeg`를 nose 방향으로 바꾸는 변환에서 180도 보정이 빠질 수 있는 구조여서 `R1`/`R2`가 엇갈렸음
+- **reviewer check**:
+  - `Information.json` 변경 없음
+  - I/O 계약 유지 (`PASS run+validate`)
+  - 영향 범위는 parked dwell 방향 선택 로직과 stand heading helper로 제한
+- **evidence**:
+  - `R1`: stand nose `140.220`, parked `[140.228, 140.228, 140.227]`
+  - `R2`: stand nose `160.977`, parked `[160.965, 160.965, 160.980]`
+- **next**: 필요 시 RKSI/RPLL 등 다른 입력에서 동일한 stand-nose 기준이 유지되는지 샘플 회귀 검증
+
+---
+
+### RUN 20260421T0539Z dynamic-stand-dwell-heading-fix
+- **RUN_ID**: 20260421T0539Z
+- **command**:
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/MNL_OSM_sim_input.json --output data/Result_storage/MNL_OSM_sim_result.json`
+  - `python -m harness.validate --input data/Result_storage/MNL_OSM_sim_input.json --result data/Result_storage/MNL_OSM_sim_result.json`
+  - rerun same command once more + parked-heading verifier
+- **result**: PASS
+- **builder change**:
+  - 입력 `standId/apronId`가 비어 있는 flight는 `_history_destination_stand_id()`로 dwell band의 `destinationApron.standId`를 복원
+  - parked dwell nose 기준 계산이 정적 입력 stand가 아니라 실제 시뮬레이션 중 배정된 stand를 사용할 수 있도록 보정
+- **root cause**:
+  - `R3`~`R6`은 동적 stand 배정 케이스라 `ag.apron_stand_id`가 비어 있었고, 기존 압축 로직은 stand nose를 계산하지 못해 기본 `motionForward`를 그대로 남겼음
+  - 그 결과 parked row가 일부 stand에서 정확히 180도 반대로 저장됐음
+- **reviewer check**:
+  - `Information.json` 변경 없음
+  - I/O 계약 유지 (`PASS run+validate`)
+  - 영향 범위는 parked dwell stand-id 복원과 nose heading lookup으로 제한
+- **evidence**:
+  - `R1`: stand nose `140.220`, parked `[140.223, 140.223, 140.226]`
+  - `R2`: stand nose `160.977`, parked `[160.981, 160.981, 160.980]`
+  - `R3`: stand nose `-135.050`, parked `[-135.046, -135.046, -135.047]`
+  - `R4`: stand nose `177.460`, parked `[177.470, 177.470, 177.470]`
+  - `R5`: stand nose `-120.014`, parked `[-120.013, -120.013, -120.014]`
+  - `R6`: stand nose `-120.004`, parked `[-120.003, -120.003, -120.003]`
+  - second rerun verifier: `bad []`
+- **next**: 동적 stand 배정이 많은 다른 입력에서도 동일 fallback이 잘 동작하는지 샘플 회귀 검증
+
