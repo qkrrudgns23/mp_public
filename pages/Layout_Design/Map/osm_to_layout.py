@@ -16,7 +16,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from shapely.geometry import LineString, MultiLineString, MultiPolygon, Point, Polygon
-from shapely.ops import linemerge, unary_union
+from shapely.ops import linemerge, nearest_points, unary_union
 
 # ---------------------------------------------------------------------------
 # Human-readable rules (edit here). Python code below reads these dicts.
@@ -132,6 +132,151 @@ def _new_id(prefix: str) -> str:
 def _safe_name(s: str, fallback: str) -> str:
     t = re.sub(r"\s+", " ", (s or "").strip())
     return t if t else fallback
+
+
+class _OsmStandNameAllocator:
+    """Contact → G001 / G_ABC; Remote → R001 / R_ABC; duplicates → *_1, *_2, ..."""
+
+    def __init__(self, prefix: str) -> None:
+        self._prefix = str(prefix or "G").strip().upper()[:1] or "G"
+        self._counts: Dict[str, int] = {}
+
+    def allocate(self, raw_hint: str) -> str:
+        s = re.sub(r"\s+", " ", (raw_hint or "").strip())
+        m = re.search(r"\d+", s)
+        if m:
+            n = int(m.group(0))
+            base = f"{self._prefix}{n:03d}"
+        else:
+            slug = re.sub(r"[^A-Za-z0-9]+", "_", re.sub(r"\d+", " ", s)).strip("_").upper()[:24]
+            if not slug:
+                slug = "X"
+            base = f"{self._prefix}_{slug}"
+        c = int(self._counts.get(base, 0))
+        self._counts[base] = c + 1
+        if c == 0:
+            return base
+        return f"{base}_{c}"
+
+
+def _layout_linestrings_from_taxiway_dicts(rows: List[Dict[str, Any]]) -> List[LineString]:
+    out: List[LineString] = []
+    for tw in rows:
+        if not isinstance(tw, dict):
+            continue
+        verts = tw.get("vertices")
+        if not isinstance(verts, list) or len(verts) < 2:
+            continue
+        pts: List[Tuple[float, float]] = []
+        for v in verts:
+            if not isinstance(v, dict):
+                continue
+            try:
+                pts.append((float(v.get("x", 0.0)), float(v.get("y", 0.0))))
+            except (TypeError, ValueError):
+                continue
+        if len(pts) >= 2:
+            ln = LineString(pts)
+            if not ln.is_empty:
+                out.append(ln)
+    return out
+
+
+def _min_distance_point_to_lines(px: float, py: float, lines: Sequence[LineString]) -> float:
+    pt = Point(float(px), float(py))
+    best = 1e18
+    for ln in lines:
+        if ln is None or ln.is_empty:
+            continue
+        d = float(ln.distance(pt))
+        if d < best:
+            best = d
+    return best
+
+
+def _flip_parking_wall_for_terminal_outward(
+    sx: float,
+    sy: float,
+    nx: float,
+    ny: float,
+    terminal_union: Any,
+) -> Tuple[float, float, float]:
+    """Jet-bridge wall axis (nx,ny): flip if it points into the terminal footprint (inward)."""
+    if terminal_union is None or terminal_union.is_empty:
+        return nx, ny, math.degrees(math.atan2(ny, nx))
+    pt = Point(float(sx), float(sy))
+    try:
+        if terminal_union.contains(pt):
+            return nx, ny, math.degrees(math.atan2(ny, nx))
+        b = terminal_union.boundary
+        if b is None or b.is_empty:
+            return nx, ny, math.degrees(math.atan2(ny, nx))
+        _np, nb = nearest_points(pt, b)
+        ox = float(pt.x - nb.x)
+        oy = float(pt.y - nb.y)
+        ln = math.hypot(ox, oy)
+        if ln < 1e-3:
+            return nx, ny, math.degrees(math.atan2(ny, nx))
+        ox /= ln
+        oy /= ln
+        if nx * ox + ny * oy < 0:
+            nx2, ny2 = -float(nx), -float(ny)
+            return nx2, ny2, math.degrees(math.atan2(ny2, nx2))
+    except Exception:
+        pass
+    return nx, ny, math.degrees(math.atan2(ny, nx))
+
+
+def _normalize_osm_stand_names_inplace(
+    pbb_stands: List[Dict[str, Any]],
+    remote_stands: List[Dict[str, Any]],
+) -> None:
+    g_alloc = _OsmStandNameAllocator("G")
+    r_alloc = _OsmStandNameAllocator("R")
+    for p in pbb_stands:
+        if not isinstance(p, dict):
+            continue
+        raw = str(p.get("name") or "").strip()
+        p["name"] = g_alloc.allocate(raw or "G")
+    for r in remote_stands:
+        if not isinstance(r, dict):
+            continue
+        raw = str(r.get("name") or "").strip()
+        r["name"] = r_alloc.allocate(raw or "R")
+
+
+def _sync_apron_link_names_after_stand_rename(
+    apron_links: List[Dict[str, Any]],
+    pbb_stands: List[Dict[str, Any]],
+    remote_stands: List[Dict[str, Any]],
+) -> None:
+    by_id: Dict[str, Dict[str, Any]] = {}
+    for p in pbb_stands:
+        if isinstance(p, dict) and p.get("id"):
+            by_id[str(p["id"])] = p
+    for r in remote_stands:
+        if isinstance(r, dict) and r.get("id"):
+            by_id[str(r["id"])] = r
+    used: set[str] = set()
+    for al in apron_links:
+        if not isinstance(al, dict):
+            continue
+        atx = al.pop("_atxTerminalName", None)
+        br_raw = al.pop("_branchIdx", None)
+        if not atx:
+            continue
+        pid = str(al.get("pbbId") or "")
+        st = by_id.get(pid)
+        if not st:
+            continue
+        sn = str(st.get("name") or "").strip()
+        br_opt: Optional[int]
+        try:
+            br_opt = int(br_raw) if br_raw is not None else None
+        except (TypeError, ValueError):
+            br_opt = None
+        base = _format_apron_taxiway_name(str(atx), sn, br_opt)
+        al["name"] = _dedupe_name_with_alpha_suffix(base, base, used)
 
 
 def _float_tag(tags: Dict[str, str], key: str, default: float) -> float:
@@ -621,6 +766,8 @@ def _append_apron_link_candidate(
     pbb_id: Optional[str],
     pos_pl: int,
     source_parking_index: Optional[int] = None,
+    atx_terminal_name: Optional[str] = None,
+    branch_idx: Optional[int] = None,
 ) -> None:
     if len(pts) < 2:
         return
@@ -636,6 +783,10 @@ def _append_apron_link_candidate(
     row: Dict[str, Any] = {"name": str(name), "pbbId": str(pbb_id) if pbb_id else "", "points": verts}
     if isinstance(source_parking_index, int) and source_parking_index >= 0:
         row["sourceParkingIndex"] = int(source_parking_index)
+    if atx_terminal_name is not None:
+        row["_atxTerminalName"] = str(atx_terminal_name)
+    if branch_idx is not None:
+        row["_branchIdx"] = int(branch_idx)
     out_list.append(row)
 
 
@@ -1043,6 +1194,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         if contact:
             origin_at_start = c0 == "apron_origin"
             nx, ny, ang = _parking_edge_into_apron_origin_unit_deg(pln, origin_at_start)
+            nx, ny, ang = _flip_parking_wall_for_terminal_outward(sx, sy, nx, ny, terminal_union)
             pbx1, pby1 = sx - nx * wall_len * 0.3, sy - ny * wall_len * 0.3
             pbx2, pby2 = pbx1 + nx * wall_len, pby1 + ny * wall_len
             pbb_obj = {
@@ -1133,6 +1285,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     source_pbb_id,
                     pos_pl,
                     pi,
+                    atx_terminal_name,
+                    ti + 1,
                 )
             if not uniq_targets and taxi_ep is not None:
                 full_path = _line_path_between_points(pln, origin, taxi_ep)
@@ -1143,6 +1297,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     source_pbb_id,
                     pos_pl,
                     pi,
+                    atx_terminal_name,
+                    None,
                 )
         else:
             if taxi_ep is None:
@@ -1155,6 +1311,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 source_pbb_id,
                 pos_pl,
                 pi,
+                atx_terminal_name,
+                None,
             )
 
     # Fallback to legacy gate-based stand synthesis when parking_position lines are absent.
@@ -1186,6 +1344,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     d_s1 = math.hypot(sx - float(ccg[-1][0]), sy - float(ccg[-1][1]))
                     origin_at_start = d_s0 <= d_s1
                     nx, ny, ang = _parking_edge_into_apron_origin_unit_deg(parking_ln_gate, origin_at_start)
+                nx, ny, ang = _flip_parking_wall_for_terminal_outward(sx, sy, nx, ny, terminal_union)
                 pbx1, pby1 = sx - nx * wall_len * 0.3, sy - ny * wall_len * 0.3
                 pbx2, pby2 = pbx1 + nx * wall_len, pby1 + ny * wall_len
                 pbb_obj: Dict[str, Any] = {
@@ -1336,17 +1495,23 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             mids.append({"x": _quantize_m(float(v.get("x", 0.0)), pos_pl), "y": _quantize_m(float(v.get("y", 0.0)), pos_pl)})
         lk_i += 1
         link_name = _dedupe_name_with_alpha_suffix(str(cand.get("name") or ""), f"Apron Taxiway {lk_i}", used_apron_link_names)
-        apron_links.append(
-            {
-                "id": _new_id("alk"),
-                "name": link_name,
-                "pbbId": pbb_id,
-                "taxiwayId": tw_id,
-                "tx": _quantize_m(tx, pos_pl),
-                "ty": _quantize_m(ty, pos_pl),
-                "midVertices": mids,
-            }
-        )
+        alk_row: Dict[str, Any] = {
+            "id": _new_id("alk"),
+            "name": link_name,
+            "pbbId": pbb_id,
+            "taxiwayId": tw_id,
+            "tx": _quantize_m(tx, pos_pl),
+            "ty": _quantize_m(ty, pos_pl),
+            "midVertices": mids,
+        }
+        if isinstance(cand.get("_atxTerminalName"), str) and cand.get("_atxTerminalName"):
+            alk_row["_atxTerminalName"] = str(cand.get("_atxTerminalName"))
+        if cand.get("_branchIdx") is not None:
+            try:
+                alk_row["_branchIdx"] = int(cand.get("_branchIdx"))
+            except (TypeError, ValueError):
+                pass
+        apron_links.append(alk_row)
         linked_pbb_ids.add(pbb_id)
         src_idx = cand.get("sourceParkingIndex")
         if isinstance(src_idx, int) and src_idx >= 0:
@@ -1412,9 +1577,12 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         )
 
     runway_geom_for_hp: List[LineString] = _linemerge_to_linestrings([ln for ln, _ in runway_lines])
+    rtx_spines = _layout_linestrings_from_taxiway_dicts(runway_taxiways_out)
+    tw_spines = _layout_linestrings_from_taxiway_dicts(taxiways_out)
     holding_points_out: List[Dict[str, Any]] = []
     hp_idx = 0
     hp_near_rw_m = 120.0
+    hp_on_spine_tol_m = 15.0
     seen_hp_keys: set[Tuple[float, float]] = set()
     for hx, hy, htags in holding_layout_xy:
         key = (_quantize_m(hx, 1), _quantize_m(hy, 1))
@@ -1422,12 +1590,25 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             continue
         seen_hp_keys.add(key)
         hp_idx += 1
-        hp_kind = "intermediate"
         hp_pt = Point(hx, hy)
-        for rln in runway_geom_for_hp:
-            if rln.distance(hp_pt) <= hp_near_rw_m:
+        hp_kind = "intermediate"
+        if rtx_spines or tw_spines:
+            d_rtx = _min_distance_point_to_lines(hx, hy, rtx_spines) if rtx_spines else 1e18
+            d_tw = _min_distance_point_to_lines(hx, hy, tw_spines) if tw_spines else 1e18
+            if d_rtx <= hp_on_spine_tol_m and d_rtx <= d_tw + 1e-6:
                 hp_kind = "runway_holding"
-                break
+            elif d_tw <= hp_on_spine_tol_m:
+                hp_kind = "intermediate"
+            else:
+                for rln in runway_geom_for_hp:
+                    if rln.distance(hp_pt) <= hp_near_rw_m:
+                        hp_kind = "runway_holding"
+                        break
+        else:
+            for rln in runway_geom_for_hp:
+                if rln.distance(hp_pt) <= hp_near_rw_m:
+                    hp_kind = "runway_holding"
+                    break
         holding_points_out.append(
             {
                 "id": _new_id("hp"),
@@ -1536,6 +1717,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             )
             if edge_orient is not None:
                 nx, ny, ang = edge_orient
+                nx, ny, ang = _flip_parking_wall_for_terminal_outward(sx, sy, nx, ny, term_union_out)
                 x1 = sx - nx * wall_len * 0.3
                 y1 = sy - ny * wall_len * 0.3
                 x2 = x1 + nx * wall_len
@@ -1591,6 +1773,9 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 repl = remote_id_to_promoted_pbb_id.get(pid)
                 if repl:
                     al["pbbId"] = repl
+
+    _normalize_osm_stand_names_inplace(pbb_stands, remote_stands)
+    _sync_apron_link_names_after_stand_rename(apron_links, pbb_stands, remote_stands)
 
     grid_layers = {
         "grid": False,

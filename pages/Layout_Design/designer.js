@@ -403,8 +403,8 @@
     const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM);
     const pathSpanM = halfLen * 2;
     const lineW = c2dHoldingPointMarkingLineWidthWorld();
-    const markYellow = c2dHoldingPointMarkingYellow();
-    const stroke = preview ? 'rgba(250, 204, 21, 0.7)' : (selected ? c2dObjectSelectedStroke() : markYellow);
+    const centerlineStroke = k === 'runway_holding' ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke();
+    const stroke = preview ? 'rgba(250, 204, 21, 0.7)' : (selected ? c2dObjectSelectedStroke() : centerlineStroke);
     const lw = preview ? Math.max(0.2, lineW * 0.92) : (selected ? lineW + 0.14 : lineW);
     const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
     const dashLen = Math.max(lineW * 2.2, pathSpanM * 0.13);
@@ -869,6 +869,12 @@
   }
 
   function id() { return 'id_' + Math.random().toString(36).slice(2, 11); }
+  /** Flight Schedule default: 3 uppercase letters + 5 digits (e.g. ABC12345). */
+  function randomRegNumber() {
+    let letters = '';
+    for (let i = 0; i < 3; i++) letters += String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    return letters + String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+  }
   function escapeHtml(str) {
     return String(str)
       .replace(/&/g, '&amp;')
@@ -1990,6 +1996,7 @@
         delete f.etotMin_orig;
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
+        if (!String(f.reg || '').trim()) f.reg = randomRegNumber();
       });
     } else {
       state.flights = [];
@@ -9224,11 +9231,34 @@
     const terminalCopies = makeUniqueNamedCopy(state.terminals || [], 'name');
     const termLabelById = {};
     terminalCopies.forEach(t => { termLabelById[t.id] = (t.name || '').trim() || 'Building'; });
+    function terminalHasApronLink(term) {
+      if (!term || !term.id) return false;
+      const tid = String(term.id);
+      const links = state.apronLinks || [];
+      for (let i = 0; i < links.length; i++) {
+        const lk = links[i];
+        if (!lk || !lk.pbbId) continue;
+        const pbb = (state.pbbStands || []).find(function(p) { return p && p.id === lk.pbbId; });
+        const rem = (state.remoteStands || []).find(function(r) { return r && r.id === lk.pbbId; });
+        const st = pbb || rem;
+        if (!st) continue;
+        const t = getTerminalForStand(st);
+        if (t && String(t.id) === tid) return true;
+      }
+      return false;
+    }
+    /** Building for Gantt row grouping: omit buildings with zero apron links (e.g. Hangar-22 with no ATX). */
+    function ganttAllocBuildingForStand(stand) {
+      const term = getTerminalForStand(stand);
+      if (!term) return null;
+      if (!terminalHasApronLink(term)) return null;
+      return term;
+    }
     const grouped = {};
     const order = [];
     const sortedStands = stands.slice().sort((a, b) => {
-      const ta = getTerminalForStand(a);
-      const tb = getTerminalForStand(b);
+      const ta = ganttAllocBuildingForStand(a);
+      const tb = ganttAllocBuildingForStand(b);
       const la = ta ? (termLabelById[ta.id] || ta.name || '') : '';
       const lb = tb ? (termLabelById[tb.id] || tb.name || '') : '';
       if (la < lb) return -1;
@@ -9240,7 +9270,7 @@
       return 0;
     });
     sortedStands.forEach(s => {
-      const term = getTerminalForStand(s);
+      const term = ganttAllocBuildingForStand(s);
       const key = term ? term.id : '__no_terminal__';
       if (!grouped[key]) {
         grouped[key] = { term, stands: [] };
@@ -9257,10 +9287,16 @@
       const headerLabel = term
         ? (termLabelById[term.id] || term.name || 'Building')
         : 'No Building';
+      const headerEsc = escapeHtml(headerLabel);
+      const headerLong = headerLabel.length > 26;
+      const headerTitleAttr = headerLong ? ' title="' + headerEsc + '"' : '';
+      const headerInner = headerLong
+        ? '<span style="display:block;max-width:168px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + headerEsc + '</span>'
+        : headerEsc;
       labelRows.push(
-        '<div class="alloc-terminal-header" data-collapsed="0">' +
+        '<div class="alloc-terminal-header" data-collapsed="0"' + headerTitleAttr + '>' +
           '<span class="alloc-section-toggle-icon">▼</span>' +
-          escapeHtml(headerLabel) +
+          headerInner +
         '</div>'
       );
       trackRows.push('<div class="alloc-row" data-stand-id="">' +
@@ -14213,6 +14249,88 @@
     ctx.restore();
   }
 
+  /**
+   * Red X at taxiway / runway-taxiway (taxiway, runway_exit, runway_taxiway) polyline ends that meet no
+   * other path vertex (within merge radius) and no apron-link vertex. Size ~ green junction dot.
+   */
+  function drawTaxiwayDanglingEndpointMarks() {
+    if (!state.layers.junction) return;
+    const list = state.taxiways || [];
+    if (!list.length) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const tol2 = Math.pow(PATH_JUNCTION_MERGE_RADIUS_PX, 2);
+    const r = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
+    const rGreen = r * 0.7;
+    const armLen = rGreen * 1.15;
+    function twPathPts(tw) {
+      if (!tw || !tw.vertices || tw.vertices.length < 2) return null;
+      return tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+    }
+    function endpointConnected(tw, ptIndex, P, pts) {
+      const n = pts.length;
+      const neighborIdx = ptIndex === 0 ? 1 : n - 2;
+      const allTw = state.taxiways || [];
+      for (let ti = 0; ti < allTw.length; ti++) {
+        const tw2 = allTw[ti];
+        if (!tw2) continue;
+        const p2 = twPathPts(tw2);
+        if (!p2) continue;
+        for (let j = 0; j < p2.length; j++) {
+          if (dist2(P, p2[j]) > tol2) continue;
+          if (tw2 === tw && (j === ptIndex || j === neighborIdx)) continue;
+          return true;
+        }
+      }
+      const links = state.apronLinks || [];
+      for (let li = 0; li < links.length; li++) {
+        const poly = getApronLinkPolylineWorldPts(links[li]);
+        for (let k = 0; k < poly.length; k++) {
+          if (dist2(P, poly[k]) <= tol2) return true;
+        }
+      }
+      return false;
+    }
+    const seen = new Set();
+    const marks = [];
+    for (let ti = 0; ti < list.length; ti++) {
+      const tw = list[ti];
+      const ptyp = (tw && tw.pathType) || 'taxiway';
+      if (ptyp !== 'taxiway' && ptyp !== 'runway_exit' && ptyp !== 'runway_taxiway') continue;
+      const pts = twPathPts(tw);
+      if (!pts) continue;
+      const n = pts.length;
+      [0, n - 1].forEach(function(ii) {
+        const P = pts[ii];
+        if (!worldPointInsideLayoutViewportAabb(P, vb)) return;
+        if (endpointConnected(tw, ii, P, pts)) return;
+        const key = String(Math.round(P[0] * 4)) + ',' + String(Math.round(P[1] * 4));
+        if (seen.has(key)) return;
+        seen.add(key);
+        marks.push(P);
+      });
+    }
+    if (!marks.length) return;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = Math.max(1.25, armLen * 0.2);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const d = armLen * 0.92;
+    marks.forEach(function(P) {
+      const cx = P[0], cy = P[1];
+      ctx.beginPath();
+      ctx.moveTo(cx - d, cy - d);
+      ctx.lineTo(cx + d, cy + d);
+      ctx.moveTo(cx + d, cy - d);
+      ctx.lineTo(cx - d, cy + d);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   function drawQueueTaxiwayLaneMarkers() {
     if (!state.layers.junction) return;
     const vbQ = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
@@ -14295,7 +14413,7 @@
       return { wMul: 0.58, stroke: '#ef4444' };
     }
     if (p === 'Lineup_departure') {
-      return { wMul: 0.45, stroke: '#f97316' };
+      return { wMul: 0.45, stroke: '#ff1493' };
     }
     return { wMul: 1.72, stroke: '#22c55e' };
   }
@@ -14396,6 +14514,15 @@
     }
     return { ux: null, uy: null };
   }
+  function proSimArrowFillForStroke(strokeHex) {
+    const s = String(strokeHex || '').trim();
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(s);
+    if (!m) return 'rgba(250, 250, 250, 0.82)';
+    const r = parseInt(m[1], 16);
+    const g = parseInt(m[2], 16);
+    const b = parseInt(m[3], 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',0.42)';
+  }
   function drawProSimFlightPathEdges() {
     const sel = state.selectedObject;
     const rid = state.flightPathRevealFlightId;
@@ -14407,7 +14534,8 @@
     (state.derivedGraphEdges || []).forEach(function(ed) {
       if (ed && ed.id) byId[ed.id] = ed;
     });
-    const baseW = Math.max(4.2, CELL_SIZE * 0.148);
+    /* Base stroke: ~1.5× legacy × 1.3 (extra thickness) */
+    const baseW = Math.max(4.2, CELL_SIZE * 0.148) * 1.5 * 1.3;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -14450,6 +14578,7 @@
         lineW: lineW,
         z: z,
         seq: seqIx++,
+        phase: phase,
       });
       prevEnd = edgePts[edgePts.length - 1];
       const ou = proSimOutgoingUnit(edgePts);
@@ -14473,11 +14602,18 @@
       ctx.globalAlpha = 0.92;
       ctx.stroke();
       ctx.globalAlpha = 1;
+      const ph = String(item.phase || '').trim();
+      const isRedOrPinkArrow = ph === 'Dep_taxi' || ph === 'Holding_lineup' || ph === 'Lineup_departure';
+      const arrowFill = isRedOrPinkArrow
+        ? proSimArrowFillForStroke(item.st.stroke)
+        : 'rgba(250, 250, 250, 0.82)';
+      const baseSpacing = Math.max(20, CELL_SIZE * 0.34) * 1.15;
+      const baseHead = Math.max(4.5, CELL_SIZE * 0.135) * 1.15;
       drawProSimSegmentArrows(
         edgePts,
-        'rgba(250, 250, 250, 0.82)',
-        Math.max(20, CELL_SIZE * 0.34),
-        Math.max(4.5, CELL_SIZE * 0.135)
+        arrowFill,
+        isRedOrPinkArrow ? baseSpacing * 2 : baseSpacing,
+        isRedOrPinkArrow ? baseHead * 2 : baseHead
       );
     });
     ctx.restore();
@@ -15414,7 +15550,11 @@
         if (sibtDateInputEl) sibtDateInputEl.value = sibtDateForFlight;
         const aircraftType = (document.getElementById('flightAircraftType').value || 'A320').trim();
         const code = getCodeForAircraft(aircraftType);
-        const reg = (document.getElementById('flightReg').value || '').trim();
+        let reg = (document.getElementById('flightReg').value || '').trim();
+        if (!reg) {
+          reg = randomRegNumber();
+          if (regEl) regEl.value = reg;
+        }
         let airlineCode = (document.getElementById('flightAirlineCode') && document.getElementById('flightAirlineCode').value || '').trim();
         let flightNumber = (document.getElementById('flightFlightNumber') && document.getElementById('flightFlightNumber').value || '').trim();
         if (!airlineCode) airlineCode = randomAirlineCode();
@@ -17695,8 +17835,7 @@
         if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depP, widP, pbb.category || 'C');
         if (!interactiveLite) {
           const nameRaw = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : String(state.pbbStands.indexOf(pbb) + 1);
-          const labelPrefix = getStandCategoryMode(pbb) === 'aircraft' ? 'AC' : (pbb.category || 'C');
-          const label = labelPrefix + ' / ' + nameRaw;
+          const label = nameRaw;
           const pad = 3;
           const tx = depP / 2 - pad;
           const ty = -widP / 2 + pad;
@@ -17762,8 +17901,7 @@
         if (!interactiveLite) drawStandApronMarkingsInLocalAxes(ctx, depR, widR, st.category || 'C');
         if (!interactiveLite) {
           const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('R' + String(state.remoteStands.indexOf(st) + 1).padStart(3, '0'));
-          const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
-          const label = labelPrefix + ' / ' + nameRaw;
+          const label = nameRaw;
           const pad = 3;
           const tx = depR / 2 - pad;
           const ty = -widR / 2 + pad;
@@ -19045,6 +19183,7 @@
   }
   function drawHoldingPoints2D(interactiveLite) {
     if (!ctx) return;
+    if (interactiveLite) return;
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -19930,6 +20069,7 @@
     }
     if (!interactiveLite) {
       drawPathJunctions();
+      drawTaxiwayDanglingEndpointMarks();
       drawQueueTaxiwayLaneMarkers();
     }
     drawLayoutMarkers2D(interactiveLite);

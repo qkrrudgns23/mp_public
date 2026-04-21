@@ -450,6 +450,84 @@
     ctx.restore();
   }
 
+  function drawTaxiwayDanglingEndpointMarks() {
+    if (!state.layers.junction) return;
+    const list = state.taxiways || [];
+    if (!list.length) return;
+    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
+    const tol2 = Math.pow(PATH_JUNCTION_MERGE_RADIUS_PX, 2);
+    const r = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
+    const rGreen = r * 0.7;
+    const armLen = rGreen * 1.15;
+    function twPathPts(tw) {
+      if (!tw || !tw.vertices || tw.vertices.length < 2) return null;
+      return tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+    }
+    function endpointConnected(tw, ptIndex, P, pts) {
+      const n = pts.length;
+      const neighborIdx = ptIndex === 0 ? 1 : n - 2;
+      const allTw = state.taxiways || [];
+      for (let ti = 0; ti < allTw.length; ti++) {
+        const tw2 = allTw[ti];
+        if (!tw2) continue;
+        const p2 = twPathPts(tw2);
+        if (!p2) continue;
+        for (let j = 0; j < p2.length; j++) {
+          if (dist2(P, p2[j]) > tol2) continue;
+          if (tw2 === tw && (j === ptIndex || j === neighborIdx)) continue;
+          return true;
+        }
+      }
+      const links = state.apronLinks || [];
+      for (let li = 0; li < links.length; li++) {
+        const poly = getApronLinkPolylineWorldPts(links[li]);
+        for (let k = 0; k < poly.length; k++) {
+          if (dist2(P, poly[k]) <= tol2) return true;
+        }
+      }
+      return false;
+    }
+    const seen = new Set();
+    const marks = [];
+    for (let ti = 0; ti < list.length; ti++) {
+      const tw = list[ti];
+      const ptyp = (tw && tw.pathType) || 'taxiway';
+      if (ptyp !== 'taxiway' && ptyp !== 'runway_exit' && ptyp !== 'runway_taxiway') continue;
+      const pts = twPathPts(tw);
+      if (!pts) continue;
+      const n = pts.length;
+      [0, n - 1].forEach(function(ii) {
+        const P = pts[ii];
+        if (!worldPointInsideLayoutViewportAabb(P, vb)) return;
+        if (endpointConnected(tw, ii, P, pts)) return;
+        const key = String(Math.round(P[0] * 4)) + ',' + String(Math.round(P[1] * 4));
+        if (seen.has(key)) return;
+        seen.add(key);
+        marks.push(P);
+      });
+    }
+    if (!marks.length) return;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(state.panX, state.panY);
+    ctx.scale(state.scale, state.scale);
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = Math.max(1.25, armLen * 0.2);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const d = armLen * 0.92;
+    marks.forEach(function(P) {
+      const cx = P[0], cy = P[1];
+      ctx.beginPath();
+      ctx.moveTo(cx - d, cy - d);
+      ctx.lineTo(cx + d, cy + d);
+      ctx.moveTo(cx + d, cy - d);
+      ctx.lineTo(cx - d, cy + d);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   function drawQueueTaxiwayLaneMarkers() {
     if (!state.layers.junction) return;
     const vbQ = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
@@ -532,7 +610,7 @@
       return { wMul: 0.58, stroke: '#ef4444' };
     }
     if (p === 'Lineup_departure') {
-      return { wMul: 0.45, stroke: '#f97316' };
+      return { wMul: 0.45, stroke: '#ff1493' };
     }
     return { wMul: 1.72, stroke: '#22c55e' };
   }
@@ -633,6 +711,15 @@
     }
     return { ux: null, uy: null };
   }
+  function proSimArrowFillForStroke(strokeHex) {
+    const s = String(strokeHex || '').trim();
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(s);
+    if (!m) return 'rgba(250, 250, 250, 0.82)';
+    const r = parseInt(m[1], 16);
+    const g = parseInt(m[2], 16);
+    const b = parseInt(m[3], 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',0.42)';
+  }
   function drawProSimFlightPathEdges() {
     const sel = state.selectedObject;
     const rid = state.flightPathRevealFlightId;
@@ -644,7 +731,7 @@
     (state.derivedGraphEdges || []).forEach(function(ed) {
       if (ed && ed.id) byId[ed.id] = ed;
     });
-    const baseW = Math.max(4.2, CELL_SIZE * 0.148);
+    const baseW = Math.max(4.2, CELL_SIZE * 0.148) * 1.5 * 1.3;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -687,6 +774,7 @@
         lineW: lineW,
         z: z,
         seq: seqIx++,
+        phase: phase,
       });
       prevEnd = edgePts[edgePts.length - 1];
       const ou = proSimOutgoingUnit(edgePts);
@@ -710,11 +798,18 @@
       ctx.globalAlpha = 0.92;
       ctx.stroke();
       ctx.globalAlpha = 1;
+      const ph = String(item.phase || '').trim();
+      const isRedOrPinkArrow = ph === 'Dep_taxi' || ph === 'Holding_lineup' || ph === 'Lineup_departure';
+      const arrowFill = isRedOrPinkArrow
+        ? proSimArrowFillForStroke(item.st.stroke)
+        : 'rgba(250, 250, 250, 0.82)';
+      const baseSpacing = Math.max(20, CELL_SIZE * 0.34) * 1.15;
+      const baseHead = Math.max(4.5, CELL_SIZE * 0.135) * 1.15;
       drawProSimSegmentArrows(
         edgePts,
-        'rgba(250, 250, 250, 0.82)',
-        Math.max(20, CELL_SIZE * 0.34),
-        Math.max(4.5, CELL_SIZE * 0.135)
+        arrowFill,
+        isRedOrPinkArrow ? baseSpacing * 2 : baseSpacing,
+        isRedOrPinkArrow ? baseHead * 2 : baseHead
       );
     });
     ctx.restore();
@@ -1390,6 +1485,11 @@
       });
     }
 
+    function randomRegNumber() {
+      let letters = '';
+      for (let i = 0; i < 3; i++) letters += String.fromCharCode(65 + Math.floor(Math.random() * 26));
+      return letters + String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+    }
     function randomAirlineCode() { return DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)]; }
     function randomFlightNumber(airlineCode) { return (airlineCode || randomAirlineCode()) + String(Math.floor(1000 + Math.random() * 9000)); }
     function getDefaultSibtMinutes() {
@@ -1651,7 +1751,11 @@
         if (sibtDateInputEl) sibtDateInputEl.value = sibtDateForFlight;
         const aircraftType = (document.getElementById('flightAircraftType').value || 'A320').trim();
         const code = getCodeForAircraft(aircraftType);
-        const reg = (document.getElementById('flightReg').value || '').trim();
+        let reg = (document.getElementById('flightReg').value || '').trim();
+        if (!reg) {
+          reg = randomRegNumber();
+          if (regEl) regEl.value = reg;
+        }
         let airlineCode = (document.getElementById('flightAirlineCode') && document.getElementById('flightAirlineCode').value || '').trim();
         let flightNumber = (document.getElementById('flightFlightNumber') && document.getElementById('flightFlightNumber').value || '').trim();
         if (!airlineCode) airlineCode = randomAirlineCode();
@@ -6105,6 +6209,7 @@
     }
     if (!interactiveLite) {
       drawPathJunctions();
+      drawTaxiwayDanglingEndpointMarks();
       drawQueueTaxiwayLaneMarkers();
     }
     drawLayoutMarkers2D(interactiveLite);

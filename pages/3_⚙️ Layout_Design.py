@@ -197,10 +197,10 @@ except Exception:
 
 
 def _random_reg_number() -> str:
-    """Generate a pseudo aircraft registration like HL-AB123."""
-    letters = "".join(random.choices(string.ascii_uppercase, k=2))
-    digits = f"{random.randint(0, 9999):04d}"
-    return f"HL-{letters}{digits}"
+    """Generate a pseudo registration: 3 letters + 5 digits (e.g. ABC12345)."""
+    letters = "".join(random.choices(string.ascii_uppercase, k=3))
+    digits = f"{random.randint(0, 99999):05d}"
+    return f"{letters}{digits}"
 
 
 def _ensure_random_regs(layout: dict) -> None:
