@@ -928,6 +928,36 @@ def _apron_token_xy(layout: Dict[str, Any], cell_size: float, stand_id: str) -> 
     return get_stand_connection_px(st, cell_size)
 
 
+def _stand_nose_heading_deg(layout: Dict[str, Any], cell_size: float, stand_id: str) -> Optional[float]:
+    def _norm_deg(ang: float) -> float:
+        return ((float(ang) + 180.0) % 360.0) - 180.0
+
+    st = find_stand_by_id(layout, str(stand_id))
+    if not st or not isinstance(st, dict):
+        return None
+    raw_angle = st.get("angleDeg")
+    try:
+        if raw_angle is not None:
+            ang = float(raw_angle)
+            if math.isfinite(ang):
+                return _norm_deg(ang + 180.0)
+    except (TypeError, ValueError):
+        pass
+    apron_xy = _apron_token_xy(layout, cell_size, str(stand_id))
+    x1 = st.get("x1")
+    y1 = st.get("y1")
+    try:
+        if apron_xy is not None and x1 is not None and y1 is not None:
+            dx = float(apron_xy[0]) - float(x1)
+            dy = float(apron_xy[1]) - float(y1)
+            if dx * dx + dy * dy > 1e-9:
+                ang = math.degrees(math.atan2(dy, dx)) + 180.0
+                return _norm_deg(ang)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
 def _as_xy_pairs(pts: Any) -> List[Tuple[float, float]]:
     out: List[Tuple[float, float]] = []
     if not isinstance(pts, list):
@@ -3190,6 +3220,7 @@ def _compress_agent_history_for_dwell_export(
     eibt_sec: Optional[float],
     eobt_sec: Optional[float],
     dep_taxi_start_abs_sec: Optional[float] = None,
+    parked_nose_heading_deg: Optional[float] = None,
 ) -> List[Tuple[float, ...]]:
     """
     Drop interior samples while on-stand dwell only, keeping endpoints only.
@@ -3225,7 +3256,63 @@ def _compress_agent_history_for_dwell_export(
     first_i = int(in_band[0])
     next_i = int(in_band[1])
     first_t, first_x, first_y, first_v, first_mf = history[first_i][:5]
-    next_t, next_x, next_y, next_v, next_mf = history[next_i][:5]
+    next_x = float(history[next_i][1])
+    next_y = float(history[next_i][2])
+    motion_eps2 = 0.08 * 0.08
+
+    def _norm_deg(ang: float) -> float:
+        return ((float(ang) + 180.0) % 360.0) - 180.0
+
+    def _row_motion_angle(i0: int, i1: int, apply_motion_forward: bool) -> Optional[float]:
+        if i0 < 0 or i1 <= i0 or i1 >= len(history):
+            return None
+        a = history[i0]
+        b = history[i1]
+        if len(a) < 5 or len(b) < 5:
+            return None
+        dx = float(b[1]) - float(a[1])
+        dy = float(b[2]) - float(a[2])
+        if dx * dx + dy * dy < motion_eps2:
+            return None
+        ang = math.degrees(math.atan2(dy, dx))
+        if apply_motion_forward and not bool(b[4]):
+            ang += 180.0
+        return _norm_deg(ang)
+
+    prev_raw_angle: Optional[float] = None
+    for j in range(first_i - 1, -1, -1):
+        ang = _row_motion_angle(j, j + 1, False)
+        if ang is not None:
+            prev_raw_angle = ang
+            break
+
+    dwell_mf = bool(first_mf)
+    if prev_raw_angle is not None and parked_nose_heading_deg is not None:
+        target_nose = _norm_deg(parked_nose_heading_deg)
+        forward_err = abs(_norm_deg(prev_raw_angle - target_nose))
+        reverse_err = abs(_norm_deg(prev_raw_angle + 180.0 - target_nose))
+        dwell_mf = forward_err <= reverse_err
+
+    def _rewrite_dwell_row(
+        row: Tuple[float, ...],
+        t_val: float,
+        x_val: float,
+        y_val: float,
+        mf_val: bool,
+        ghost_val: bool,
+        dst_val: Any,
+    ) -> Tuple[float, ...]:
+        tail = tuple(row[7:]) if len(row) > 7 else ()
+        return (
+            float(t_val),
+            float(x_val),
+            float(y_val),
+            0.0,
+            bool(mf_val),
+            bool(ghost_val),
+            dst_val,
+            *tail,
+        )
     first_gh = bool(history[first_i][5]) if len(history[first_i]) > 5 else False
     next_gh = bool(history[next_i][5]) if len(history[next_i]) > 5 else False
     if (
@@ -3238,20 +3325,35 @@ def _compress_agent_history_for_dwell_export(
     ):
         hist_mut = list(history)
         first_dst = history[first_i][6] if len(history[first_i]) > 6 else None
-        hist_mut[first_i] = (
+        hist_mut[first_i] = _rewrite_dwell_row(
+            history[first_i],
             float(first_t),
             float(next_x),
             float(next_y),
-            0.0,
-            bool(next_mf),
+            bool(dwell_mf),
             bool(next_gh or first_gh),
+            first_dst,
+        )
+        history = hist_mut
+    if abs(float(history[first_i][0]) - eibt) <= 1e-9 and bool(history[first_i][4]) != bool(dwell_mf):
+        hist_mut = list(history)
+        first_dst = history[first_i][6] if len(history[first_i]) > 6 else None
+        first_gh = bool(history[first_i][5]) if len(history[first_i]) > 5 else False
+        hist_mut[first_i] = _rewrite_dwell_row(
+            history[first_i],
+            float(history[first_i][0]),
+            float(history[first_i][1]),
+            float(history[first_i][2]),
+            bool(dwell_mf),
+            bool(first_gh),
             first_dst,
         )
         history = hist_mut
     last_i = int(in_band[-1])
     prev_i = int(in_band[-2])
-    last_t, last_x, last_y, last_v, last_mf = history[last_i][:5]
-    prev_t, prev_x, prev_y, prev_v, prev_mf = history[prev_i][:5]
+    last_t, last_x, last_y, last_v = history[last_i][:4]
+    prev_x = float(history[prev_i][1])
+    prev_y = float(history[prev_i][2])
     last_gh = bool(history[last_i][5]) if len(history[last_i]) > 5 else False
     prev_gh = bool(history[prev_i][5]) if len(history[prev_i]) > 5 else False
     if (
@@ -3264,13 +3366,27 @@ def _compress_agent_history_for_dwell_export(
     ):
         hist_mut = list(history)
         last_dst = history[last_i][6] if len(history[last_i]) > 6 else None
-        hist_mut[last_i] = (
+        hist_mut[last_i] = _rewrite_dwell_row(
+            history[last_i],
             float(last_t),
             float(prev_x),
             float(prev_y),
-            0.0,
-            bool(prev_mf),
+            bool(dwell_mf),
             bool(prev_gh or last_gh),
+            last_dst,
+        )
+        history = hist_mut
+    if abs(float(history[last_i][0]) - band_hi) <= 1e-9 and bool(history[last_i][4]) != bool(dwell_mf):
+        hist_mut = list(history)
+        last_dst = history[last_i][6] if len(history[last_i]) > 6 else None
+        last_gh = bool(history[last_i][5]) if len(history[last_i]) > 5 else False
+        hist_mut[last_i] = _rewrite_dwell_row(
+            history[last_i],
+            float(history[last_i][0]),
+            float(history[last_i][1]),
+            float(history[last_i][2]),
+            bool(dwell_mf),
+            bool(last_gh),
             last_dst,
         )
         history = hist_mut
@@ -3459,6 +3575,61 @@ def _flight_apron_stand_id_from_fobj(fobj: Dict[str, Any]) -> Optional[str]:
         return None
     s = str(raw).strip()
     return s if s else None
+
+
+def _history_destination_stand_id(
+    history: List[Tuple[float, ...]],
+    *,
+    t_lo: Optional[float] = None,
+    t_hi: Optional[float] = None,
+) -> Optional[str]:
+    def _extract_sid(dst: Any) -> Optional[str]:
+        if isinstance(dst, dict):
+            raw = dst.get("standId")
+        elif isinstance(dst, (list, tuple)) and dst:
+            raw = dst[0]
+        else:
+            raw = None
+        if raw is None:
+            return None
+        sid = str(raw).strip()
+        return sid if sid else None
+
+    for row in history:
+        if len(row) <= 6:
+            continue
+        t_abs = float(row[0])
+        if t_lo is not None and t_abs < float(t_lo) - 1e-9:
+            continue
+        if t_hi is not None and t_abs > float(t_hi) + 1e-9:
+            continue
+        sid = _extract_sid(row[6])
+        if sid:
+            return sid
+    for row in history:
+        if len(row) <= 6:
+            continue
+        sid = _extract_sid(row[6])
+        if sid:
+            return sid
+    return None
+
+
+def _resolve_parked_stand_id(
+    planned_stand_id: Optional[str],
+    history: List[Tuple[float, ...]],
+    eibt_sec: float,
+    eobt_sec: float,
+) -> str:
+    hist_sid = _history_destination_stand_id(
+        history,
+        t_lo=float(eibt_sec),
+        t_hi=float(eobt_sec),
+    )
+    if hist_sid:
+        return hist_sid
+    planned = str(planned_stand_id or "").strip()
+    return planned
 
 
 def _collect_stand_ids_for_resource_model(layout: Dict[str, Any]) -> List[str]:
@@ -7174,12 +7345,24 @@ def run_simulation(
         eobt_raw = sched_row.get("EOBT")
         if eibt_raw is None or eobt_raw is None:
             continue
+        parked_stand_id = _resolve_parked_stand_id(
+            ag.apron_stand_id,
+            ag.history,
+            float(eibt_raw),
+            float(eobt_raw),
+        )
+        parked_nose_heading_deg = _stand_nose_heading_deg(
+            layout,
+            float(cell_size),
+            parked_stand_id,
+        )
         ag.history = _compress_agent_history_for_dwell_export(
             ag.history,
             ag.eldt_anchor_sec,
             float(eibt_raw),
             float(eobt_raw),
             ag.dep_taxi_start_abs_sec,
+            parked_nose_heading_deg,
         )
 
     positions: Dict[str, List[Dict[str, Any]]] = {}
