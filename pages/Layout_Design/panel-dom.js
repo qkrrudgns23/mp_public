@@ -1,3 +1,8 @@
+      if (arrRwy === rwy.id) events.push({ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ });
+      if (depRwy === rwy.id) {
+        events.push({ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin_d, index: eventIndex++ });
+      }
+    });
     return { cfg, events };
   }
 
@@ -1153,8 +1158,3 @@
   }
 
   function getEffectiveRunwayEndDisplacedThresholdM(tw) {
-    if (!tw || tw.pathType !== 'runway') return RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
-    const v = tw.endDisplacedThresholdM;
-    return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
-  }
-

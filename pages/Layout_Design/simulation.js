@@ -1,3 +1,8 @@
+      const v = this.value || '';
+      if (tw.pathType === 'runway') {
+        runwayReverseVerticesIfDirectionChanged(tw, v);
+        tw.direction = (v === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+      } else tw.direction = v || 'both';
       updateObjectInfo();
       if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
       draw();
@@ -1090,8 +1095,3 @@
     const vMu = (typeof ac?.touchdown_speed_avg_ms === 'number') ? ac.touchdown_speed_avg_ms : 70;
     const aMu = (typeof ac?.deceleration_avg_ms2 === 'number') ? ac.deceleration_avg_ms2 : 2.5;
     const tdSigma = Math.round(tdMu * 0.1);
-    const vSigma = Math.round(vMu * 0.1);
-    const aSigma = Math.round(aMu * 0.1 * 10) / 10;
-    configByType[typeKey] = { tdMu, tdSigma, vMu, vSigma, aMu, aSigma };
-    return configByType[typeKey];
-  }

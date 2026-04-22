@@ -1,3 +1,8 @@
+      if (!(totalDist > 1e-6)) return;
+      adj[i].push([j, totalDist]);
+      adj[j].push([i, totalDist]);
+      registerDirectedEdge(i, j, totalDist, totalDist, pts.slice().reverse(), apronLinkId, 'apron_link', 'both');
+      registerDirectedEdge(j, i, totalDist, totalDist, pts, apronLinkId, 'apron_link', 'both');
     });
     function bfsReachable(startIndices) {
       const out = new Set();

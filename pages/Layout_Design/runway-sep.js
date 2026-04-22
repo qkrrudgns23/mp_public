@@ -1,3 +1,8 @@
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
   }
   const pbbBoardingHeightEl = document.getElementById('pbbBoardingHeight');
   if (pbbBoardingHeightEl) {
@@ -378,8 +383,3 @@
     if (state.selectedObject && state.selectedObject.type === 'taxiway') {
       const tw = state.selectedObject.obj;
       const shouldResampleRet = !!(tw && (tw.pathType === 'runway' || tw.pathType === 'runway_exit'));
-      const v = this.value || '';
-      if (tw.pathType === 'runway') {
-        runwayReverseVerticesIfDirectionChanged(tw, v);
-        tw.direction = (v === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
-      } else tw.direction = v || 'both';

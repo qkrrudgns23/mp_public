@@ -1,3 +1,8 @@
+    if (!tw || tw.pathType !== 'runway') return RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
+    const v = tw.endDisplacedThresholdM;
+    return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
+  }
+
   function getEffectiveRunwayEndBlastPadM(tw) {
     if (!tw || tw.pathType !== 'runway') return RUNWAY_END_BLAST_PAD_DEFAULT_M;
     const v = tw.endBlastPadM;
@@ -1703,8 +1708,3 @@
       if (!pts || pts.length < 2 || i === j) return;
       let totalDist = 0;
       for (let k = 0; k < pts.length - 1; k++) totalDist += pathDist(pts[k], pts[k + 1]);
-      if (!(totalDist > 1e-6)) return;
-      adj[i].push([j, totalDist]);
-      adj[j].push([i, totalDist]);
-      registerDirectedEdge(i, j, totalDist, totalDist, pts.slice().reverse(), apronLinkId, 'apron_link', 'both');
-      registerDirectedEdge(j, i, totalDist, totalDist, pts, apronLinkId, 'apron_link', 'both');

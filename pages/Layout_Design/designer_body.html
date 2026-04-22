@@ -338,13 +338,15 @@
             <input type="number" id="runwayMinArrVelocity" min="1" max="150" value="__UI_RW_MIN_ARR__" step="1" />
           </div>
           <div id="runwayLineupDistWrap" class="runway-lineup-dist-stack" style="display:none;">
-            <div class="compact-field wide">
-              <label>Lineup Point_CW (m)</label>
-              <input type="number" id="runwayLineupDistM_CW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
-            </div>
-            <div class="compact-field wide">
-              <label>Lineup Point_CCW (m)</label>
-              <input type="number" id="runwayLineupDistM_CCW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
+            <div class="runway-lineup-dist-pair-row">
+              <div class="compact-field">
+                <label for="runwayLineupDistM_CW">Lineup Point_CW (m)</label>
+                <input type="number" id="runwayLineupDistM_CW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
+              </div>
+              <div class="compact-field">
+                <label for="runwayLineupDistM_CCW">Lineup Point_CCW (m)</label>
+                <input type="number" id="runwayLineupDistM_CCW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
+              </div>
             </div>
           </div>
           <div id="runwayStartDisplacedThresholdWrap" class="inline-field wide" style="display:none;">
@@ -394,7 +396,7 @@
             <label>Available RW Direction</label>
             <div id="runwayExitAllowedDirection"></div>
           </div>
-          <div class="compact-field" style="margin-top:8px;">
+          <div class="compact-field">
             <label for="pathPavement">Pavement</label>
             <select id="pathPavement">
               <option value="asphalt">Asphalt</option>
@@ -428,9 +430,9 @@
           <div id="markerIslandWidthRow" class="compact-field wide" hidden>
             <label for="markerIslandOuterWidthM">Island outer width (m)</label>
             <input type="number" id="markerIslandOuterWidthM" min="0" max="500" step="0.5" value="20" inputmode="decimal" aria-label="Island outer paved width in meters" />
-            <label for="markerIslandInnerWidthM" style="margin-top:6px;display:block;">Island inner width (m)</label>
+            <label for="markerIslandInnerWidthM">Island inner width (m)</label>
             <input type="number" id="markerIslandInnerWidthM" min="0" max="200" step="0.5" value="7" inputmode="decimal" aria-label="Island inner paved width in meters" />
-            <label for="markerIslandPavement" style="margin-top:8px;display:block;">Pavement</label>
+            <label for="markerIslandPavement">Pavement</label>
             <select id="markerIslandPavement">
               <option value="asphalt">Asphalt</option>
               <option value="cement">Cement</option>
@@ -447,7 +449,7 @@
         </div>
 
         <div id="tab-flight" class="tab-content">
-          <div class="layout-save-load-tabs" style="margin-top:4px;">
+          <div class="layout-save-load-tabs flight-panel-subtabs">
             <button type="button" class="layout-save-load-tab flight-subtab active" data-flight-subtab="schedule">Flight Schedule</button>
             <button type="button" class="layout-save-load-tab flight-subtab" data-flight-subtab="config">Arrival Configuration</button>
           </div>
@@ -457,7 +459,7 @@
             <option value="Arr" selected>Arr (Arrival)</option>
             <option value="Dep">Dep (Departure)</option>
           </select>
-          <div id="flightPaneSchedule" class="compact-form">
+          <div id="flightPaneSchedule" class="compact-form flight-schedule-pane">
             <div class="compact-field wide">
               <label>SIBT (Date)</label>
               <input type="date" id="flightSibtDate" value="__DEFAULT_SIBT_DATE__" aria-label="SIBT (Date)" />
@@ -492,7 +494,7 @@
               <label>Min dwell (min)</label>
               <input type="number" id="flightMinDwell" min="0" max="__UI_FLIGHT_DWELL_MAX__" value="__UI_FLIGHT_MIN_DWELL__" step="__UI_FLIGHT_DWELL_STEP__" title="In case of delayed arrival EOBT = EIBT + Min Dwell Adjust to (0Not applicable to this side)" />
             </div>
-            <div id="flightAssignStrip" class="flight-assign-strip-wrap" style="margin:0 0 6px;" aria-label="Arrival runway, building, departure runway for selected flight">
+            <div id="flightAssignStrip" class="flight-assign-strip-wrap" aria-label="Arrival runway, building, departure runway for selected flight">
               <div class="flight-assign-strip-row">
                 <div class="compact-field">
                   <label for="flightAssignStripArr">Arr Rw</label>
@@ -509,9 +511,9 @@
               </div>
             </div>
             <button class="small" id="btnAddFlight">+ Add Flight</button>
-            <div id="flightError" style="color:#f97316;font-size:11px;margin-top:4px;"></div>
-            <div class="section-title" style="margin-top:10px;">Flight schedule</div>
-            <div id="flightSchedulePager" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:#9ca3af;margin:4px 0 6px;">
+            <div id="flightError" class="flight-schedule-inline-msg" style="color:#f97316;font-size:11px;"></div>
+            <div class="section-title">Flight schedule</div>
+            <div id="flightSchedulePager" class="flight-schedule-pager" style="display:none;">
               <span>총 <strong id="flightSchedulePagerTotal">0</strong>편</span>
               <span id="flightSchedulePagerRange"></span>
               <button type="button" class="tool-btn" id="btnFlightSchedPrev" title="이전 페이지">◀</button>
@@ -520,7 +522,7 @@
             <div id="flightList" class="obj-list"></div>
           </div>
 
-          <div id="flightPaneConfig" style="display:none;margin-top:8px;">
+          <div id="flightPaneConfig" class="flight-config-pane" style="display:none;">
             <div class="section-title">Arrival Configuration</div>
             <div id="flightConfigList" class="obj-list"></div>
           </div>

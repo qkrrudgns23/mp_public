@@ -1,3 +1,8 @@
+    const vSigma = Math.round(vMu * 0.1);
+    const aSigma = Math.round(aMu * 0.1 * 10) / 10;
+    configByType[typeKey] = { tdMu, tdSigma, vMu, vSigma, aMu, aSigma };
+    return configByType[typeKey];
+  }
   /** Same runway resolution as graphPathArrival (token.arrRunwayId before generic runwayId). */
   function resolveArrivalRunwayIdForFlight(f) {
     if (!f) return null;
@@ -2687,8 +2692,3 @@
       const vttArrMin = getBaseVttArrMinutes(f);
       const rotArrMin = getArrRotMinutes(f);
       const vttDepMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-      if (arrRwy === rwy.id) events.push({ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ });
-      if (depRwy === rwy.id) {
-        events.push({ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin_d, index: eventIndex++ });
-      }
-    });

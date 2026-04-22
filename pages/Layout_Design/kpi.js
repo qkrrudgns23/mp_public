@@ -26,6 +26,11 @@
     if (tabId === 'flight') {
       if (state.selectedObject && state.selectedObject.type === 'flight' && typeof hookSyncFlightPanelFromSelection === 'function')
         hookSyncFlightPanelFromSelection();
+      if (typeof renderFlightList === 'function') {
+        const flightListEl = document.getElementById('flightList');
+        const needsRerender = !flightListEl || !flightListEl.querySelector('.flight-schedule-table tbody tr:not(.flight-virt-spacer)');
+        if (needsRerender) renderFlightList();
+      }
     }
     if (tabId === 'allocation' && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
     if (tabId === 'rwysep') {
@@ -363,8 +368,3 @@
       if (state.selectedObject && state.selectedObject.type === 'pbb') {
         applyPbbBoardingAreaDimsFromInputs(state.selectedObject.obj);
         updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
-    });
