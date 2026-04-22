@@ -1,3 +1,79 @@
+      const tw = state.taxiways.find(t => t.id === sv.id);
+      if (!tw || !Array.isArray(tw.vertices) || sv.index < 0 || sv.index >= tw.vertices.length) return false;
+      if (tw.vertices.length <= 2) return false;
+      pushUndo();
+      tw.vertices.splice(sv.index, 1);
+      if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
+      state.selectedVertex = null;
+      syncPanelFromState();
+      updateObjectInfo();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    if (sv.type === 'apronLink') {
+      if (sv.kind !== 'mid') return false;
+      const lk = state.apronLinks.find(l => l.id === sv.id);
+      if (!lk || !Array.isArray(lk.midVertices) || sv.midIndex < 0 || sv.midIndex >= lk.midVertices.length) return false;
+      pushUndo();
+      lk.midVertices.splice(sv.midIndex, 1);
+      if (!lk.midVertices.length) delete lk.midVertices;
+      state.selectedVertex = null;
+      updateObjectInfo();
+      markApronLinkJunctionOverlayDirty(lk.id);
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    if (sv.type === 'layoutMarkerHandle' && sv.handle === 'islandVertex') {
+      const mk = (state.layoutMarkers || []).find(function(m) { return m && String(m.id) === String(sv.id); });
+      if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !Array.isArray(mk.points)) return false;
+      const idx = sv.vertexIndex;
+      if (typeof idx !== 'number' || idx < 0 || idx >= mk.points.length || mk.points.length <= 3) return false;
+      pushUndo();
+      mk.points.splice(idx, 1);
+      state.selectedVertex = null;
+      if (typeof updateObjectInfo === 'function') updateObjectInfo();
+      draw();
+      return true;
+    }
+    return false;
+  }
+
+  function removeLastDrawingVertex() {
+    if (state.terminalDrawingId) {
+      const term = state.terminals.find(t => t.id === state.terminalDrawingId);
+      if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return false;
+      pushUndo();
+      term.vertices.pop();
+      if (!term.vertices.length) state.layoutPathDrawPointer = null;
+      state.selectedVertex = null;
+      syncPanelFromState();
+      updateObjectInfo();
+      draw();
+      return true;
+    }
+    if (state.taxiwayDrawingId) {
+      const tw = state.taxiways.find(t => t.id === state.taxiwayDrawingId);
+      if (!tw || !Array.isArray(tw.vertices) || !tw.vertices.length) return false;
+      pushUndo();
+      tw.vertices.pop();
+      if (!tw.vertices.length) state.layoutPathDrawPointer = null;
+      if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
+      else {
+        tw.start_point = null;
+        tw.end_point = null;
+      }
+      state.selectedVertex = null;
+      syncPanelFromState();
+      updateObjectInfo();
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    if (settingModeSelect.value === 'apronTaxiway' && state.apronLinkDrawing && state.apronLinkTemp) {
+      if (state.apronLinkMidpoints && state.apronLinkMidpoints.length) {
+        state.apronLinkMidpoints.pop();
         draw();
         return true;
       }
@@ -472,79 +548,3 @@
         const cwEl = el('runwayLineupDistM_CW');
         const ccwEl = el('runwayLineupDistM_CCW');
         const lxCw = cwEl ? Number(cwEl.value) : NaN;
-        const lxCcw = ccwEl ? Number(ccwEl.value) : NaN;
-        tw.lineupDistM_CW = (typeof lxCw === 'number' && isFinite(lxCw) && lxCw >= 0) ? lxCw : 0;
-        tw.lineupDistM_CCW = (typeof lxCcw === 'number' && isFinite(lxCcw) && lxCcw >= 0) ? lxCcw : 0;
-        tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
-      } else if (tw.pathType !== 'runway') {
-        delete tw.lineupDistM;
-        delete tw.lineupDistM_CW;
-        delete tw.lineupDistM_CCW;
-      }
-      if (tw.pathType === 'runway') {
-        const startDisp = Number(el('runwayStartDisplacedThresholdM') ? el('runwayStartDisplacedThresholdM').value : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
-        const startBlast = Number(el('runwayStartBlastPadM') ? el('runwayStartBlastPadM').value : RUNWAY_START_BLAST_PAD_DEFAULT_M);
-        const endDisp = Number(el('runwayEndDisplacedThresholdM') ? el('runwayEndDisplacedThresholdM').value : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
-        const endBlast = Number(el('runwayEndBlastPadM') ? el('runwayEndBlastPadM').value : RUNWAY_END_BLAST_PAD_DEFAULT_M);
-        tw.startDisplacedThresholdM = (typeof startDisp === 'number' && isFinite(startDisp) && startDisp >= 0) ? startDisp : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.startBlastPadM = (typeof startBlast === 'number' && isFinite(startBlast) && startBlast >= 0) ? startBlast : RUNWAY_START_BLAST_PAD_DEFAULT_M;
-        tw.endDisplacedThresholdM = (typeof endDisp === 'number' && isFinite(endDisp) && endDisp >= 0) ? endDisp : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.endBlastPadM = (typeof endBlast === 'number' && isFinite(endBlast) && endBlast >= 0) ? endBlast : RUNWAY_END_BLAST_PAD_DEFAULT_M;
-      } else {
-        delete tw.startDisplacedThresholdM;
-        delete tw.startBlastPadM;
-        delete tw.endDisplacedThresholdM;
-        delete tw.endBlastPadM;
-      }
-    }
-  }
-
-  function syncSettingsPaneToMode() {
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
-    if (layoutModeTabs) {
-      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
-      });
-    }
-    document.querySelectorAll('.settings-pane').forEach(el => { el.style.display = 'none'; });
-    const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
-    const pane = document.getElementById('settings-' + paneKey);
-    if (pane) pane.style.display = 'block';
-    if (mode === 'marker') {
-      syncMarkerFlightAircraftRowVisibility();
-      syncMarkerIslandWidthRowVisibility();
-    }
-    if (isPathLayoutMode(mode)) {
-      const pt = pathTypeFromLayoutMode(mode);
-      syncPathFieldVisibilityForPathType(pt);
-      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
-        const nameInput = document.getElementById('taxiwayName');
-        if (nameInput) nameInput.value = '';
-        const widthInput = document.getElementById('taxiwayWidth');
-        if (widthInput) {
-          widthInput.value = pt === 'runway'
-            ? RUNWAY_PATH_DEFAULT_WIDTH
-            : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-        }
-        syncPathPavementRadiosToValue(pathPavementDefaultForPathType(pt));
-        if (pt === 'runway') {
-          const startDispInput = document.getElementById('runwayStartDisplacedThresholdM');
-          if (startDispInput) startDispInput.value = String(RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
-          const startBlastInput = document.getElementById('runwayStartBlastPadM');
-          if (startBlastInput) startBlastInput.value = String(RUNWAY_START_BLAST_PAD_DEFAULT_M);
-          const endDispInput = document.getElementById('runwayEndDisplacedThresholdM');
-          if (endDispInput) endDispInput.value = String(RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
-          const endBlastInput = document.getElementById('runwayEndBlastPadM');
-          if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
-        }
-      }
-    }
-    if (typeof renderObjectList === 'function') renderObjectList();
-  }
-
-  settingModeSelect.addEventListener('change', function() {
-    cancelActiveLayoutDrawingState();
-    state.selectedObject = null;
-    syncSettingsPaneToMode();
-  });
-  if (layoutModeTabs && settingModeSelect) {

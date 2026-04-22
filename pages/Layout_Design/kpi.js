@@ -1,3 +1,79 @@
+        const lxCcw = ccwEl ? Number(ccwEl.value) : NaN;
+        tw.lineupDistM_CW = (typeof lxCw === 'number' && isFinite(lxCw) && lxCw >= 0) ? lxCw : 0;
+        tw.lineupDistM_CCW = (typeof lxCcw === 'number' && isFinite(lxCcw) && lxCcw >= 0) ? lxCcw : 0;
+        tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
+      } else if (tw.pathType !== 'runway') {
+        delete tw.lineupDistM;
+        delete tw.lineupDistM_CW;
+        delete tw.lineupDistM_CCW;
+      }
+      if (tw.pathType === 'runway') {
+        const startDisp = Number(el('runwayStartDisplacedThresholdM') ? el('runwayStartDisplacedThresholdM').value : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
+        const startBlast = Number(el('runwayStartBlastPadM') ? el('runwayStartBlastPadM').value : RUNWAY_START_BLAST_PAD_DEFAULT_M);
+        const endDisp = Number(el('runwayEndDisplacedThresholdM') ? el('runwayEndDisplacedThresholdM').value : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
+        const endBlast = Number(el('runwayEndBlastPadM') ? el('runwayEndBlastPadM').value : RUNWAY_END_BLAST_PAD_DEFAULT_M);
+        tw.startDisplacedThresholdM = (typeof startDisp === 'number' && isFinite(startDisp) && startDisp >= 0) ? startDisp : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
+        tw.startBlastPadM = (typeof startBlast === 'number' && isFinite(startBlast) && startBlast >= 0) ? startBlast : RUNWAY_START_BLAST_PAD_DEFAULT_M;
+        tw.endDisplacedThresholdM = (typeof endDisp === 'number' && isFinite(endDisp) && endDisp >= 0) ? endDisp : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
+        tw.endBlastPadM = (typeof endBlast === 'number' && isFinite(endBlast) && endBlast >= 0) ? endBlast : RUNWAY_END_BLAST_PAD_DEFAULT_M;
+      } else {
+        delete tw.startDisplacedThresholdM;
+        delete tw.startBlastPadM;
+        delete tw.endDisplacedThresholdM;
+        delete tw.endBlastPadM;
+      }
+    }
+  }
+
+  function syncSettingsPaneToMode() {
+    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
+    if (layoutModeTabs) {
+      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+      });
+    }
+    document.querySelectorAll('.settings-pane').forEach(el => { el.style.display = 'none'; });
+    const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
+    const pane = document.getElementById('settings-' + paneKey);
+    if (pane) pane.style.display = 'block';
+    if (mode === 'marker') {
+      syncMarkerFlightAircraftRowVisibility();
+      syncMarkerIslandWidthRowVisibility();
+    }
+    if (isPathLayoutMode(mode)) {
+      const pt = pathTypeFromLayoutMode(mode);
+      syncPathFieldVisibilityForPathType(pt);
+      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
+        const nameInput = document.getElementById('taxiwayName');
+        if (nameInput) nameInput.value = '';
+        const widthInput = document.getElementById('taxiwayWidth');
+        if (widthInput) {
+          widthInput.value = pt === 'runway'
+            ? RUNWAY_PATH_DEFAULT_WIDTH
+            : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+        }
+        syncPathPavementRadiosToValue(pathPavementDefaultForPathType(pt));
+        if (pt === 'runway') {
+          const startDispInput = document.getElementById('runwayStartDisplacedThresholdM');
+          if (startDispInput) startDispInput.value = String(RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
+          const startBlastInput = document.getElementById('runwayStartBlastPadM');
+          if (startBlastInput) startBlastInput.value = String(RUNWAY_START_BLAST_PAD_DEFAULT_M);
+          const endDispInput = document.getElementById('runwayEndDisplacedThresholdM');
+          if (endDispInput) endDispInput.value = String(RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
+          const endBlastInput = document.getElementById('runwayEndBlastPadM');
+          if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
+        }
+      }
+    }
+    if (typeof renderObjectList === 'function') renderObjectList();
+  }
+
+  settingModeSelect.addEventListener('change', function() {
+    cancelActiveLayoutDrawingState();
+    state.selectedObject = null;
+    syncSettingsPaneToMode();
+  });
+  if (layoutModeTabs && settingModeSelect) {
     layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
       btn.addEventListener('click', function() {
         const mode = this.getAttribute('data-mode') || 'grid';
@@ -292,79 +368,3 @@
         rebuildPbbBridgeGeometry(pbb);
         updateObjectInfo();
         renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      } else {
-        renderAircraftConstraintChoices('standAircraftAccess', typeIds, letters);
-      }
-    });
-  }
-  const pbbLengthInputEl = document.getElementById('pbbLength');
-  if (pbbLengthInputEl) {
-    pbbLengthInputEl.addEventListener('change', function() {
-      const requested = Number(this.value);
-      const nextLen = (isFinite(requested) && requested > 0) ? requested : 15;
-      this.value = String(Math.max(1, Math.round(nextLen)));
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        const pbb = state.selectedObject.obj;
-        pbb.pbbArmLenM = nextLen;
-        applyPbbArmLengthToBridgeEnds(pbb, nextLen);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
-    });
-  }
-  const standAngleInputEl = document.getElementById('standAngle');
-  if (standAngleInputEl) {
-    standAngleInputEl.addEventListener('change', function() {
-      const nextDeg = normalizeAngleDeg(this.value);
-      this.value = String(Math.round(nextDeg));
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        const pbb = state.selectedObject.obj;
-        pbb.angleDeg = nextDeg;
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
-    });
-  }
-  const pbbBridgeCountInputEl = document.getElementById('pbbBridgeCount');
-  if (pbbBridgeCountInputEl) {
-    pbbBridgeCountInputEl.addEventListener('change', function() {
-      const nextCount = Math.max(1, Math.min(8, parseInt(this.value, 10) || 1));
-      this.value = String(nextCount);
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        const pbb = state.selectedObject.obj;
-        pbb.pbbCount = nextCount;
-        delete pbb.pbbBridges;
-        rebuildPbbBridgeGeometry(pbb);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
-    });
-  }
-  function applyPbbBoardingAreaDimsFromInputs(pbb) {
-    const wEl = document.getElementById('pbbBoardingWidth');
-    const hEl = document.getElementById('pbbBoardingHeight');
-    const nw = Math.max(0.5, Number(wEl && wEl.value) || 5);
-    const nh = Math.max(0.5, Number(hEl && hEl.value) || 15);
-    pbb.boardingWidthM = nw;
-    pbb.boardingHeightM = nh;
-    if (wEl) wEl.value = String(nw);
-    if (hEl) hEl.value = String(nh);
-    ensurePbbBoardingWallGeometry(pbb);
-    const arm = Number(pbb.pbbArmLenM);
-    if (isFinite(arm) && arm > 0) applyPbbArmLengthToBridgeEnds(pbb, arm);
-    bumpPathPolylineCacheRev();
-  }
-  const pbbBoardingWidthEl = document.getElementById('pbbBoardingWidth');
-  if (pbbBoardingWidthEl) {
-    pbbBoardingWidthEl.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        applyPbbBoardingAreaDimsFromInputs(state.selectedObject.obj);
-        updateObjectInfo();

@@ -1,3 +1,79 @@
+          ? Math.max(1, Math.min(50, val))
+          : 10;
+      tw.avgMoveVelocity = v;
+      this.value = v;
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+      update3DSceneWhenVisible();
+    }
+  });
+  document.getElementById('taxiwayMaxExitVel').addEventListener('change', function() {
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const tw = state.selectedObject.obj;
+      const val = Number(this.value);
+      if (tw.pathType === 'runway_exit') {
+        tw.maxExitVelocity = isFinite(val) && val > 0 ? val : null;
+        if (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.maxExitVelocity != null && tw.minExitVelocity > tw.maxExitVelocity) {
+          tw.minExitVelocity = tw.maxExitVelocity;
+        }
+      } else {
+        delete tw.maxExitVelocity;
+      }
+      if (isFinite(val) && val > 0) this.value = val; else this.value = tw.maxExitVelocity != null ? tw.maxExitVelocity : '';
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+      update3DSceneWhenVisible();
+    }
+  });
+  const minExitEl = document.getElementById('taxiwayMinExitVel');
+  if (minExitEl) {
+    minExitEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        const val = Number(this.value);
+        if (tw.pathType === 'runway_exit') {
+          let v = isFinite(val) && val > 0 ? val : 15;
+          if (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && v > tw.maxExitVelocity) v = tw.maxExitVelocity;
+          tw.minExitVelocity = v;
+          this.value = v;
+        } else {
+          delete tw.minExitVelocity;
+        }
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const runwayExitAllowedDirectionEl = document.getElementById('runwayExitAllowedDirection');
+  function triggerArrivalConfigResampleFromLayoutEdit() {
+    if (typeof renderFlightList === 'function') renderFlightList(false, true);
+    else if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
+  }
+  if (runwayExitAllowedDirectionEl) {
+    runwayExitAllowedDirectionEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('runway-exit-dir-check')) return;
+      syncChoiceChipStates(runwayExitAllowedDirectionEl);
+      if (!(state.selectedObject && state.selectedObject.type === 'taxiway')) return;
+      const tw = state.selectedObject.obj;
+      if (!tw || tw.pathType !== 'runway_exit') return;
+      tw.allowedRwDirections = getRunwayExitAllowedDirectionsFromPanel();
+        updateObjectInfo();
+        renderObjectList();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
+        else draw();
+        triggerArrivalConfigResampleFromLayoutEdit();
+      });
+  }
+  document.getElementById('taxiwayDirectionMode').addEventListener('change', function() {
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const tw = state.selectedObject.obj;
+      const shouldResampleRet = !!(tw && (tw.pathType === 'runway' || tw.pathType === 'runway_exit'));
       const v = this.value || '';
       if (tw.pathType === 'runway') {
         runwayReverseVerticesIfDirectionChanged(tw, v);
@@ -1019,79 +1095,3 @@
     return taxi + rollBundleSec / 60;
   }
   
-  function getNormalizedStandDwellBounds(f) {
-    let dwell = f.dwellMin != null ? f.dwellMin : 0;
-    let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
-    dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
-    minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
-    if (minDwell > dwell) minDwell = dwell;
-    return { dwell, minDwell };
-  }
-  
-  function applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotRunwayCandidateMin) {
-    if (!f) return;
-    const eibt = eibtMin != null && isFinite(eibtMin) ? eibtMin : 0;
-    const block = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-    const { dwell, minDwell } = getNormalizedStandDwellBounds(f);
-    const low = eibt + minDwell;
-    const high = eibt + dwell;
-    const sobtPref = (f.sobtMin_d != null)
-      ? f.sobtMin_d
-      : (f.sibtMin_d != null
-        ? f.sibtMin_d + dwell
-        : (f.timeMin != null ? f.timeMin + dwell : low));
-    const eobt = Math.min(Math.max(sobtPref, low), high);
-    const etotDraft = eobt + block;
-    let etot = etotDraft;
-    if (etotRunwayCandidateMin != null && isFinite(etotRunwayCandidateMin)) {
-      etot = Math.max(etotRunwayCandidateMin, etotDraft);
-    }
-    f.eobtMin = eobt;
-    f.etotMin = etot;
-    f.depTaxiDelayMin = Math.max(0, etot - etotDraft);
-  }
-
-  function pinEarliestEldtToSldtPerRunway(flights) {
-    void flights;
-  }
-
-  var __schedRetStatsBatchActive = false;
-  var __schedRetStatsCached = null;
-  function beginScheduleRetStatsBatch() {
-    __schedRetStatsBatchActive = true;
-    __schedRetStatsCached = null;
-  }
-  function endScheduleRetStatsBatch() {
-    __schedRetStatsBatchActive = false;
-    __schedRetStatsCached = null;
-  }
-  function getScheduleRetStatsAll() {
-    if (__schedRetStatsBatchActive) {
-      if (__schedRetStatsCached === null) {
-        __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-      }
-      return __schedRetStatsCached;
-    }
-    return typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-  }
-
-  function warmFlightPathsForSchedule(flights) {
-    void flights;
-  }
-
-  function warmPathsEnsureArrRetRot(flights, forceResampleRet) {
-    warmFlightPathsForSchedule(flights);
-    return (typeof ensureArrRetRotSampled === 'function')
-      ? ensureArrRetRotSampled(flights, !!forceResampleRet)
-      : getScheduleRetStatsAll();
-  }
-
-  function mutRotCfgEntryForType(configByType, f) {
-    const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-    const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
-    if (!typeKey) return null;
-    if (configByType[typeKey]) return configByType[typeKey];
-    const tdMu = (typeof ac?.touchdown_zone_avg_m === 'number') ? ac.touchdown_zone_avg_m : 900;
-    const vMu = (typeof ac?.touchdown_speed_avg_ms === 'number') ? ac.touchdown_speed_avg_ms : 70;
-    const aMu = (typeof ac?.deceleration_avg_ms2 === 'number') ? ac.deceleration_avg_ms2 : 2.5;
-    const tdSigma = Math.round(tdMu * 0.1);

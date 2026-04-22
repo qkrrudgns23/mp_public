@@ -1,3 +1,79 @@
+    return getStandAircraftMarkerWorldPxForRemoteLike(stand);
+  }
+  function getStandBoundsRect(cx, cy, sizeM) {
+    const h = sizeM / 2;
+    return { left: cx - h, right: cx + h, top: cy - h, bottom: cy + h };
+  }
+  function normalizeAngleDeg(deg) {
+    let a = Number(deg);
+    if (!isFinite(a)) a = 0;
+    while (a > 180) a -= 360;
+    while (a <= -180) a += 360;
+    return a;
+  }
+  function getRemoteStandCenterPx(st) {
+    if (!st) return [0, 0];
+    if (st.apronSiteX != null && st.apronSiteY != null) {
+      return [Number(st.apronSiteX), Number(st.apronSiteY)];
+    }
+    if (typeof st.x === 'number' && isFinite(st.x) && typeof st.y === 'number' && isFinite(st.y)) {
+      return [Number(st.x), Number(st.y)];
+    }
+    return cellToPixel(st.col || 0, st.row || 0);
+  }
+  /** Temp stand: taxiway centerline snap (sim_input junctionX/Y); defaults to stand x,y. */
+  function getTempStandTaxiwayJunctionPx(st) {
+    if (!st) return [0, 0];
+    const jx = st.junctionX != null ? Number(st.junctionX) : NaN;
+    const jy = st.junctionY != null ? Number(st.junctionY) : NaN;
+    if (Number.isFinite(jx) && Number.isFinite(jy)) return [jx, jy];
+    return getRemoteStandCenterPx(st);
+  }
+  function getRemoteStandAngleRad(st) {
+    const deg = normalizeAngleDeg(st && st.angleDeg != null ? st.angleDeg : 0);
+    return deg * Math.PI / 180;
+  }
+  function getRemoteStandCorners(stLike) {
+    const [cx, cy] = getRemoteStandCenterPx(stLike);
+    const cat = (stLike && stLike.category) || 'C';
+    const dep = getStandDepthMeters(cat);
+    const halfD = dep / 2;
+    const halfW = getStandWidthMeters(cat) / 2;
+    const angle = getRemoteStandAngleRad(stLike);
+    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    return [
+      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
+      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
+    ];
+  }
+  function rectsOverlap(a, b) {
+    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+  }
+  function getPbbAnchorPx(pbb) {
+    const x1 = Number(pbb && pbb.x1);
+    const y1 = Number(pbb && pbb.y1);
+    if (Number.isFinite(x1) && Number.isFinite(y1)) return [x1, y1];
+    const bridges = Array.isArray(pbb && pbb.pbbBridges) ? pbb.pbbBridges : [];
+    const starts = bridges.map(function(bridge) {
+      const pts = Array.isArray(bridge.points) ? bridge.points : [];
+      return pts.length ? [Number(pts[0].x) || 0, Number(pts[0].y) || 0] : null;
+    }).filter(Boolean);
+    if (starts.length) {
+      let sx = 0, sy = 0;
+      starts.forEach(function(pt) { sx += pt[0]; sy += pt[1]; });
+      return [sx / starts.length, sy / starts.length];
+    }
+    return [0, 0];
+  }
+  function getPBBStandAngle(pbb) {
+    if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg) * Math.PI / 180;
+    const anchor = getPbbAnchorPx(pbb);
+    const center = getStandConnectionPx(pbb);
+    return Math.atan2(center[1] - anchor[1], center[0] - anchor[0]);
+  }
   function getPBBStandCorners(pbb) {
     const center = getStandConnectionPx(pbb);
     const cx = center[0], cy = center[1];
@@ -372,79 +448,3 @@
     for (let i = 0; i < state.remoteStands.length; i++) {
       const o = state.remoteStands[i];
       if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
-    }
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      const o = state.pbbStands[i];
-      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
-    }
-    if (standGapLineHitsExistingOuterContours([Number(sx), Number(sy)], angleDeg * Math.PI / 180, category)) return false;
-    const baseName = (document.getElementById('tempStandName') && document.getElementById('tempStandName').value.trim()) || getDefaultTempStandName();
-    if (findDuplicateLayoutName('tempStand', null, baseName)) {
-      alertDuplicateLayoutName();
-      return false;
-    }
-    pushUndo();
-    state.tempStands.push(normalizeTempStandObject({
-      id: id(),
-      x: Number(sx),
-      y: Number(sy),
-      junctionX: Number(sx),
-      junctionY: Number(sy),
-      category,
-      name: baseName,
-      angleDeg,
-      categoryMode: categoryMode,
-      allowedIcaoCategories: allowedIcaoCategoriesT,
-      allowedAircraftTypes: panelAllowedTypesT,
-      allowedTerminals: Array.from((document.getElementById('tempStandTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
-    }));
-    return true;
-  }
-  function taxiwayOverlapsAnyTerminal(tw) {
-    if (!tw || !tw.vertices || tw.vertices.length < 2) return false;
-    const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-    for (let t = 0; t < state.terminals.length; t++) {
-      const term = state.terminals[t];
-      if (!term.closed || term.vertices.length < 3) continue;
-      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
-      for (let i = 0; i < vertsPix.length; i++) {
-        if (pointInPolygonXY(vertsPix[i], termPix)) return true;
-      }
-      for (let i = 0; i < vertsPix.length - 1; i++) {
-        const a1 = vertsPix[i], a2 = vertsPix[i+1];
-        for (let j = 0; j < termPix.length; j++) {
-          const b1 = termPix[j], b2 = termPix[(j+1) % termPix.length];
-          if (segIntersect(a1, a2, b1, b2)) return true;
-        }
-      }
-    }
-    return false;
-
-
-  }
-  function terminalOverlapsAnyTaxiway(term) {
-    if (!term || !term.vertices || term.vertices.length < 3) return false;
-    const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
-    if (!state.taxiways || !state.taxiways.length) return false;
-    for (let i = 0; i < state.taxiways.length; i++) {
-      const tw = state.taxiways[i];
-      if (!tw.vertices || tw.vertices.length < 2) continue;
-      const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-      for (let k = 0; k < vertsPix.length; k++) {
-        if (pointInPolygonXY(vertsPix[k], termPix)) return true;
-      }
-      for (let a = 0; a < vertsPix.length - 1; a++) {
-        const a1 = vertsPix[a], a2 = vertsPix[a+1];
-        for (let b = 0; b < termPix.length; b++) {
-          const b1 = termPix[b], b2 = termPix[(b+1) % termPix.length];
-          if (segIntersect(a1, a2, b1, b2)) return true;
-        }
-      }
-    }
-    return false;
-  }
-  function makeUniqueNamedCopy(list, _prop) {
-    return (list || []).map(function(obj) {
-      return Object.assign({}, obj);
-    });
-  }

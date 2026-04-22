@@ -1,3 +1,79 @@
+        const meta = f.timeline_meta;
+        if (meta && meta.playbackSource === 'des_result') continue;
+        const w = getFlightAirsideWindowSec(f);
+        if (!w) { f.timeline = null; continue; }
+        if (tSec > w.t1 + 1e-3 || tSec < w.t0 - pad - 1e-3) f.timeline = null;
+      }
+    }
+    const pending = [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f) continue;
+      if (flightBlockedLikeNoWay(f)) continue;
+      if (!isFlightAirsideLazyTimelineBuildEligible(f, tSec)) continue;
+      if (f.timeline && f.timeline.length) continue;
+      pending.push(f);
+    }
+    if (!pending.length) return;
+    const tN = Number(tSec);
+    const so = state.selectedObject;
+    pending.sort(function(a, b) {
+      const selA = so && so.type === 'flight' && so.id === a.id;
+      const selB = so && so.type === 'flight' && so.id === b.id;
+      if (selA !== selB) return selA ? -1 : 1;
+      const actA = isFlightAirsideActiveAtSimSec(a, tN) ? 0 : 1;
+      const actB = isFlightAirsideActiveAtSimSec(b, tN) ? 0 : 1;
+      if (actA !== actB) return actA - actB;
+      const wa = getFlightAirsideWindowSec(a);
+      const wb = getFlightAirsideWindowSec(b);
+      const da = wa ? Math.abs(tN - (wa.t0 + wa.t1) * 0.5) : Infinity;
+      const db = wb ? Math.abs(tN - (wb.t0 + wb.t1) * 0.5) : Infinity;
+      if (da !== db) return da - db;
+      return (wa && wb) ? (wa.t0 - wb.t0) : 0;
+    });
+    const cap = MAX_LAZY_TIMELINE_BUILDS_PER_FRAME;
+    for (let k = 0; k < pending.length && k < cap; k++) {
+      buildFullAirsideTimelineForFlight(pending[k]);
+    }
+  }
+  function rebuildAllFlightAirsideTimelines() {
+    clearAllFlightTimelines();
+  }
+
+  
+  function getRunwayLineupDistMByDirection(tw, dir) {
+    if (!tw || tw.pathType !== 'runway') return 0;
+    const isCcw = normalizeRwDirectionValue(dir) === 'counter_clockwise';
+    const primary = isCcw ? tw.lineupDistM_CCW : tw.lineupDistM_CW;
+    if (typeof primary === 'number' && isFinite(primary) && primary >= 0) return primary;
+    const legacy = tw.lineupDistM;
+    if (typeof legacy === 'number' && isFinite(legacy) && legacy >= 0) return legacy;
+    return 0;
+  }
+  function getEffectiveRunwayLineupDistM(tw) {
+    if (!tw || tw.pathType !== 'runway') return 0;
+    return getRunwayLineupDistMByDirection(tw, getTaxiwayDirection(tw));
+  }
+  function getEffectiveRunwayLineupDistFromStartM(tw, runwayLenM) {
+    if (!tw || tw.pathType !== 'runway') return 0;
+    const len = (typeof runwayLenM === 'number' && isFinite(runwayLenM) && runwayLenM >= 0) ? runwayLenM : 0;
+    const d = getRunwayLineupDistMByDirection(tw, getTaxiwayDirection(tw));
+    return Math.max(0, Math.min(len, d));
+  }
+
+  function getEffectiveRunwayStartDisplacedThresholdM(tw) {
+    if (!tw || tw.pathType !== 'runway') return RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
+    const v = tw.startDisplacedThresholdM;
+    return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
+  }
+
+  function getEffectiveRunwayStartBlastPadM(tw) {
+    if (!tw || tw.pathType !== 'runway') return RUNWAY_START_BLAST_PAD_DEFAULT_M;
+    const v = tw.startBlastPadM;
+    return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_START_BLAST_PAD_DEFAULT_M;
+  }
+
+  function getEffectiveRunwayEndDisplacedThresholdM(tw) {
     if (!tw || tw.pathType !== 'runway') return RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
     const v = tw.endDisplacedThresholdM;
     return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
@@ -1632,79 +1708,3 @@
       }
       if (obj.pathType === 'runway') {
         const ldm = getEffectiveRunwayLineupDistM(obj);
-        const rpath = getRunwayPath(obj.id);
-        if (rpath && rpath.pts && rpath.pts.length >= 2 && ldm > 1e-6) {
-          let total = 0;
-          for (let ri = 0; ri < rpath.pts.length - 1; ri++) total += pathDist(rpath.pts[ri], rpath.pts[ri + 1]);
-          const d = Math.min(ldm, total);
-          if (d > 1e-6) {
-            let acc = 0;
-            for (let ri = 0; ri < rpath.pts.length - 1; ri++) {
-              const p1 = rpath.pts[ri], p2 = rpath.pts[ri + 1];
-              const segLen = pathDist(p1, p2);
-              if (segLen < 1e-9) continue;
-              if (acc + segLen >= d - 1e-6) {
-                const t = Math.max(0, Math.min(1, (d - acc) / segLen));
-                const px = p1[0] + t * (p2[0] - p1[0]), py = p1[1] + t * (p2[1] - p1[1]);
-                junctions.push({ tAlong: ri + t, p: [px, py] });
-                break;
-              }
-              acc += segLen;
-            }
-          }
-        }
-      }
-      const waypoints = [
-        { tAlong: 0, p: pts[0], isJunction: false },
-        { tAlong: pts.length - 1, p: pts[pts.length - 1], isJunction: false }
-      ];
-      junctions.forEach(({ tAlong, p }) => waypoints.push({ tAlong, p, isJunction: true }));
-      waypoints.sort((x, y) => x.tAlong - y.tAlong);
-      const chain = [];
-      waypoints.forEach(function(wp) {
-        if (chain.length && Math.abs(wp.tAlong - chain[chain.length - 1].tAlong) < 1e-9 && dist2(wp.p, chain[chain.length - 1].p) < minD2) {
-          if (wp.isJunction) addJunction(wp.p);
-          return;
-        }
-        chain.push({ tAlong: wp.tAlong, p: wp.p, isJunction: !!wp.isJunction });
-        if (wp.isJunction) addJunction(wp.p);
-      });
-      if (obj.pathType === 'runway') {
-        const runwayNodeSet = runwayNodeIndicesById[obj.id] || (runwayNodeIndicesById[obj.id] = new Set());
-        chain.forEach(function(wp) {
-          runwayNodeSet.add(getOrAdd(wp.p));
-        });
-      }
-      const dir = getTaxiwayDirection(obj);
-      const tw_id = String(obj.id || '');
-      const path_type = String(obj.pathType || 'taxiway');
-      const isRunwayExit = obj.pathType === 'runway_exit';
-      const isTaxiway = obj.pathType === 'taxiway' || obj.pathType === 'apron_taxiway' || obj.pathType === 'general_queue_taxiway';
-      for (let i = 0; i < chain.length - 1; i++) {
-        const segPts = polylinePointsBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
-        let d = polylineDistanceBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
-        let cost = d;
-        if (isRunwayExit && !isRunwayExitDirectionAllowed(obj, runwayDirectionForExit)) {
-          cost = REVERSE_COST;
-        }
-        if (selectedArrRetId != null && isTaxiway) {
-          cost = d + TAXIWAY_HEURISTIC_COST;
-        }
-        if (pureGroundExcludeRunway && obj.pathType === 'runway') cost = REVERSE_COST;
-        addEdgeWithDirection(chain[i].p, chain[i + 1].p, dir, cost, d, segPts, tw_id, path_type);
-      }
-    });
-
-    const standNodeIndices = [];
-    const standIdToNodeIndex = {};
-    apronNodeStand.forEach(function(entry) {
-      const nodeP = entry.nodeP, standPt = entry.standPt, standId = entry.standId, chain = entry.chain;
-      const apronLinkId = entry.linkId != null ? String(entry.linkId) : 'apron_link';
-      const i = getOrAdd(nodeP);
-      const j = getOrAdd(standPt);
-      standNodeIndices.push(j);
-      if (standId != null) standIdToNodeIndex[standId] = j;
-      const pts = (chain && chain.length >= 2) ? dedupePathPoints(chain) : [nodeP, standPt];
-      if (!pts || pts.length < 2 || i === j) return;
-      let totalDist = 0;
-      for (let k = 0; k < pts.length - 1; k++) totalDist += pathDist(pts[k], pts[k + 1]);

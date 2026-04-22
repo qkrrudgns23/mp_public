@@ -1,3 +1,79 @@
+        draw();
+        update3DSceneWhenVisible();
+      } else {
+        renderAircraftConstraintChoices('standAircraftAccess', typeIds, letters);
+      }
+    });
+  }
+  const pbbLengthInputEl = document.getElementById('pbbLength');
+  if (pbbLengthInputEl) {
+    pbbLengthInputEl.addEventListener('change', function() {
+      const requested = Number(this.value);
+      const nextLen = (isFinite(requested) && requested > 0) ? requested : 15;
+      this.value = String(Math.max(1, Math.round(nextLen)));
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        const pbb = state.selectedObject.obj;
+        pbb.pbbArmLenM = nextLen;
+        applyPbbArmLengthToBridgeEnds(pbb, nextLen);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const standAngleInputEl = document.getElementById('standAngle');
+  if (standAngleInputEl) {
+    standAngleInputEl.addEventListener('change', function() {
+      const nextDeg = normalizeAngleDeg(this.value);
+      this.value = String(Math.round(nextDeg));
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        const pbb = state.selectedObject.obj;
+        pbb.angleDeg = nextDeg;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const pbbBridgeCountInputEl = document.getElementById('pbbBridgeCount');
+  if (pbbBridgeCountInputEl) {
+    pbbBridgeCountInputEl.addEventListener('change', function() {
+      const nextCount = Math.max(1, Math.min(8, parseInt(this.value, 10) || 1));
+      this.value = String(nextCount);
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        const pbb = state.selectedObject.obj;
+        pbb.pbbCount = nextCount;
+        delete pbb.pbbBridges;
+        rebuildPbbBridgeGeometry(pbb);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  function applyPbbBoardingAreaDimsFromInputs(pbb) {
+    const wEl = document.getElementById('pbbBoardingWidth');
+    const hEl = document.getElementById('pbbBoardingHeight');
+    const nw = Math.max(0.5, Number(wEl && wEl.value) || 5);
+    const nh = Math.max(0.5, Number(hEl && hEl.value) || 15);
+    pbb.boardingWidthM = nw;
+    pbb.boardingHeightM = nh;
+    if (wEl) wEl.value = String(nw);
+    if (hEl) hEl.value = String(nh);
+    ensurePbbBoardingWallGeometry(pbb);
+    const arm = Number(pbb.pbbArmLenM);
+    if (isFinite(arm) && arm > 0) applyPbbArmLengthToBridgeEnds(pbb, arm);
+    bumpPathPolylineCacheRev();
+  }
+  const pbbBoardingWidthEl = document.getElementById('pbbBoardingWidth');
+  if (pbbBoardingWidthEl) {
+    pbbBoardingWidthEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        applyPbbBoardingAreaDimsFromInputs(state.selectedObject.obj);
+        updateObjectInfo();
         renderObjectList();
         draw();
         update3DSceneWhenVisible();
@@ -307,79 +383,3 @@
       const val = Number(this.value);
       const v =
         (typeof val === 'number' && isFinite(val) && val > 0)
-          ? Math.max(1, Math.min(50, val))
-          : 10;
-      tw.avgMoveVelocity = v;
-      this.value = v;
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-      update3DSceneWhenVisible();
-    }
-  });
-  document.getElementById('taxiwayMaxExitVel').addEventListener('change', function() {
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      const val = Number(this.value);
-      if (tw.pathType === 'runway_exit') {
-        tw.maxExitVelocity = isFinite(val) && val > 0 ? val : null;
-        if (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.maxExitVelocity != null && tw.minExitVelocity > tw.maxExitVelocity) {
-          tw.minExitVelocity = tw.maxExitVelocity;
-        }
-      } else {
-        delete tw.maxExitVelocity;
-      }
-      if (isFinite(val) && val > 0) this.value = val; else this.value = tw.maxExitVelocity != null ? tw.maxExitVelocity : '';
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-      update3DSceneWhenVisible();
-    }
-  });
-  const minExitEl = document.getElementById('taxiwayMinExitVel');
-  if (minExitEl) {
-    minExitEl.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-        const tw = state.selectedObject.obj;
-        const val = Number(this.value);
-        if (tw.pathType === 'runway_exit') {
-          let v = isFinite(val) && val > 0 ? val : 15;
-          if (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && v > tw.maxExitVelocity) v = tw.maxExitVelocity;
-          tw.minExitVelocity = v;
-          this.value = v;
-        } else {
-          delete tw.minExitVelocity;
-        }
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
-    });
-  }
-  const runwayExitAllowedDirectionEl = document.getElementById('runwayExitAllowedDirection');
-  function triggerArrivalConfigResampleFromLayoutEdit() {
-    if (typeof renderFlightList === 'function') renderFlightList(false, true);
-    else if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
-  }
-  if (runwayExitAllowedDirectionEl) {
-    runwayExitAllowedDirectionEl.addEventListener('change', function(ev) {
-      const target = ev.target;
-      if (!target || !target.classList.contains('runway-exit-dir-check')) return;
-      syncChoiceChipStates(runwayExitAllowedDirectionEl);
-      if (!(state.selectedObject && state.selectedObject.type === 'taxiway')) return;
-      const tw = state.selectedObject.obj;
-      if (!tw || tw.pathType !== 'runway_exit') return;
-      tw.allowedRwDirections = getRunwayExitAllowedDirectionsFromPanel();
-        updateObjectInfo();
-        renderObjectList();
-        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
-        else draw();
-        triggerArrivalConfigResampleFromLayoutEdit();
-      });
-  }
-  document.getElementById('taxiwayDirectionMode').addEventListener('change', function() {
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      const shouldResampleRet = !!(tw && (tw.pathType === 'runway' || tw.pathType === 'runway_exit'));

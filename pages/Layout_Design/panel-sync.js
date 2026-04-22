@@ -547,84 +547,84 @@
     const cxy = getStandConnectionPx(st);
     return [cxy[0], cxy[1]];
   }
+  const APRON_SITE_MARKER_WIDTH_M = 5;
+  const APRON_SITE_MARKER_HEIGHT_M = 1;
+  function _ensureLayoutToastStack() {
+    let stack = document.getElementById('layout-toast-stack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.id = 'layout-toast-stack';
+      stack.className = 'layout-toast-stack';
+      document.body.appendChild(stack);
+    }
+    return stack;
+  }
+  function _formatToastTimestamp(d) {
+    const pad = function(n) { return String(n).padStart(2, '0'); };
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  function showLayoutSavedToast(layoutName, kind, subText) {
+    const stack = _ensureLayoutToastStack();
+    const el = document.createElement('div');
+    const variant = kind === 'error' ? 'is-error' : 'is-success';
+    el.className = 'layout-toast ' + variant;
+    const title = document.createElement('div');
+    title.className = 'layout-toast-title';
+    const ts = _formatToastTimestamp(new Date());
+    const name = String(layoutName || '').trim() || 'layout';
+    if (kind === 'error') {
+      title.textContent = ts + ' · save failed · ' + name;
+    } else {
+      title.textContent = ts + ' · saved · ' + name;
+    }
+    el.appendChild(title);
+    if (subText) {
+      const sub = document.createElement('div');
+      sub.className = 'layout-toast-sub';
+      sub.textContent = String(subText);
+      el.appendChild(sub);
+    }
+    stack.appendChild(el);
+    requestAnimationFrame(function() { el.classList.add('is-visible'); });
+    const lifeMs = kind === 'error' ? 4200 : 2600;
+    setTimeout(function() {
+      el.classList.remove('is-visible');
+      setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
+    }, lifeMs);
+  }
+  /**
+   * Render apron site anchor as a 5m × 1m rectangle. Long side (5m) is aligned
+   * with the stand's stopbar direction (local Y = perpendicular to the stand
+   * depth axis), so it matches the dashed stopbar line drawn near the nose.
+   * ``standAngleRad`` is the stand's depth-axis angle (same as ctx.rotate used
+   * when drawing the stand footprint). When omitted, the 5m side falls back to
+   * world horizontal.
+   */
+  function drawApronSiteMarker(ctx, cx, cy, fillStyle, strokeStyle, selected, standAngleRad) {
+    const w = APRON_SITE_MARKER_WIDTH_M;
+    const h = APRON_SITE_MARKER_HEIGHT_M;
+    const angle = (typeof standAngleRad === 'number' && isFinite(standAngleRad))
+      ? standAngleRad + Math.PI / 2
+      : 0;
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (angle) ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.rect(-w / 2, -h / 2, w, h);
+    if (fillStyle) {
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+    }
+    if (strokeStyle) {
+      const baseLw = Math.max(0.18, 0.24 / Math.max(state.scale, 0.1));
+      ctx.lineWidth = selected ? baseLw * 1.5 : baseLw;
+      ctx.strokeStyle = strokeStyle;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   /** Apron–taxiway UI attach point: PBB = aircraft marker; remote/temp = same local xBendEnd offset as Contact (getStandAircraftMarkerWorldPxFor*). */
   function getStandApronTaxiwayAttachWorldPx(stand) {
     if (!stand) return [0, 0];
     const isPbb = (state.pbbStands || []).some(function(s) { return s && s.id === stand.id; });
     if (isPbb) return getStandConnectionPx(stand);
-    return getStandAircraftMarkerWorldPxForRemoteLike(stand);
-  }
-  function getStandBoundsRect(cx, cy, sizeM) {
-    const h = sizeM / 2;
-    return { left: cx - h, right: cx + h, top: cy - h, bottom: cy + h };
-  }
-  function normalizeAngleDeg(deg) {
-    let a = Number(deg);
-    if (!isFinite(a)) a = 0;
-    while (a > 180) a -= 360;
-    while (a <= -180) a += 360;
-    return a;
-  }
-  function getRemoteStandCenterPx(st) {
-    if (!st) return [0, 0];
-    if (st.apronSiteX != null && st.apronSiteY != null) {
-      return [Number(st.apronSiteX), Number(st.apronSiteY)];
-    }
-    if (typeof st.x === 'number' && isFinite(st.x) && typeof st.y === 'number' && isFinite(st.y)) {
-      return [Number(st.x), Number(st.y)];
-    }
-    return cellToPixel(st.col || 0, st.row || 0);
-  }
-  /** Temp stand: taxiway centerline snap (sim_input junctionX/Y); defaults to stand x,y. */
-  function getTempStandTaxiwayJunctionPx(st) {
-    if (!st) return [0, 0];
-    const jx = st.junctionX != null ? Number(st.junctionX) : NaN;
-    const jy = st.junctionY != null ? Number(st.junctionY) : NaN;
-    if (Number.isFinite(jx) && Number.isFinite(jy)) return [jx, jy];
-    return getRemoteStandCenterPx(st);
-  }
-  function getRemoteStandAngleRad(st) {
-    const deg = normalizeAngleDeg(st && st.angleDeg != null ? st.angleDeg : 0);
-    return deg * Math.PI / 180;
-  }
-  function getRemoteStandCorners(stLike) {
-    const [cx, cy] = getRemoteStandCenterPx(stLike);
-    const cat = (stLike && stLike.category) || 'C';
-    const dep = getStandDepthMeters(cat);
-    const halfD = dep / 2;
-    const halfW = getStandWidthMeters(cat) / 2;
-    const angle = getRemoteStandAngleRad(stLike);
-    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
-    const cos = Math.cos(angle), sin = Math.sin(angle);
-    return [
-      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
-      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
-      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
-      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
-    ];
-  }
-  function rectsOverlap(a, b) {
-    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
-  }
-  function getPbbAnchorPx(pbb) {
-    const x1 = Number(pbb && pbb.x1);
-    const y1 = Number(pbb && pbb.y1);
-    if (Number.isFinite(x1) && Number.isFinite(y1)) return [x1, y1];
-    const bridges = Array.isArray(pbb && pbb.pbbBridges) ? pbb.pbbBridges : [];
-    const starts = bridges.map(function(bridge) {
-      const pts = Array.isArray(bridge.points) ? bridge.points : [];
-      return pts.length ? [Number(pts[0].x) || 0, Number(pts[0].y) || 0] : null;
-    }).filter(Boolean);
-    if (starts.length) {
-      let sx = 0, sy = 0;
-      starts.forEach(function(pt) { sx += pt[0]; sy += pt[1]; });
-      return [sx / starts.length, sy / starts.length];
-    }
-    return [0, 0];
-  }
-  function getPBBStandAngle(pbb) {
-    if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg) * Math.PI / 180;
-    const anchor = getPbbAnchorPx(pbb);
-    const center = getStandConnectionPx(pbb);
-    return Math.atan2(center[1] - anchor[1], center[0] - anchor[0]);
-  }

@@ -1,3 +1,79 @@
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
+      tw = Math.max(tw, ctx.measureText(txt).width + 8);
+      ctx.restore();
+    }
+    const th = fs + 8;
+    return { left: hx + 2, top: hy + 2, w: tw, h: th };
+  }
+  function hitTestLayoutMarker(wx, wy, opts) {
+    if (!layoutMarkersVisible()) return null;
+    const onlyKind = opts && opts.onlyKind;
+    const skipKind = opts && opts.skipKind;
+    const click = [wx, wy];
+    const padW = 6 / Math.max(state.scale, 0.1);
+    const list = state.layoutMarkers || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const m = list[i];
+      if (!m) continue;
+      if (onlyKind && m.kind !== onlyKind) continue;
+      if (skipKind && m.kind === skipKind) continue;
+      if (m.kind === 'text') {
+        const ax = Number(m.x), ay = Number(m.y);
+        if (isFinite(ax) && isFinite(ay)) {
+          const ar = layoutMarkerHandleHitRadiusWorld() * 1.15;
+          if (dist2(click, [ax, ay]) <= ar * ar)
+            return { type: 'layoutMarker', id: m.id, obj: m };
+        }
+        const r = layoutMarkerTextHitRect(m);
+        if (!r) continue;
+        if (click[0] >= r.left - padW && click[0] <= r.left + r.w + padW &&
+            click[1] >= r.top - padW && click[1] <= r.top + r.h + padW)
+          return { type: 'layoutMarker', id: m.id, obj: m };
+      } else if (m.kind === 'ruler') {
+        const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
+        if (![x1, y1, x2, y2].every(isFinite)) continue;
+        const er = layoutMarkerHandleHitRadiusWorld() * 1.1;
+        const er2 = er * er;
+        if (dist2(click, [x1, y1]) <= er2 || dist2(click, [x2, y2]) <= er2)
+          return { type: 'layoutMarker', id: m.id, obj: m };
+        const pr = projectOnSegment([x1, y1], [x2, y2], click);
+        if (pr.t < 0 || pr.t > 1) continue;
+        const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
+        if (dist2(pr.p, click) <= tol * tol)
+          return { type: 'layoutMarker', id: m.id, obj: m };
+      } else if (m.kind === 'flight') {
+        const pose = resolveMarkerFlightPose(m);
+        if (!pose) continue;
+        const tol = Math.max(CELL_SIZE * 1.1, 22 / Math.max(state.scale, 0.12));
+        if (dist2(click, [pose.x, pose.y]) <= tol * tol)
+          return { type: 'layoutMarker', id: m.id, obj: m };
+      } else if (m.kind === 'island' || m.kind === 'area') {
+        const pts = m.points;
+        if (!pts || pts.length < 3) continue;
+        const poly = pts.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
+        if (poly.length < 3) continue;
+        const er = layoutMarkerHandleHitRadiusWorld() * 1.1;
+        const er2 = er * er;
+        let nearVertex = false;
+        for (let ii = 0; ii < poly.length; ii++) {
+          if (dist2(click, poly[ii]) <= er2) {
+            nearVertex = true;
+            break;
+          }
+        }
+        if (nearVertex) return { type: 'layoutMarker', id: m.id, obj: m };
+        if (pointInPolygonXY(click, poly)) return { type: 'layoutMarker', id: m.id, obj: m };
+        const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
+        const tol2 = tol * tol;
+        const nn = poly.length;
+        for (let ei = 0; ei < nn; ei++) {
+          const p0 = poly[ei], p1 = poly[(ei + 1) % nn];
+          const pr = projectOnSegment(p0, p1, click);
+          if (pr.t < 0 || pr.t > 1) continue;
+          if (dist2(pr.p, click) <= tol2) return { type: 'layoutMarker', id: m.id, obj: m };
+        }
+      }
     }
     return null;
   }
@@ -782,79 +858,3 @@
       return true;
     }
     if (sv.type === 'taxiway') {
-      const tw = state.taxiways.find(t => t.id === sv.id);
-      if (!tw || !Array.isArray(tw.vertices) || sv.index < 0 || sv.index >= tw.vertices.length) return false;
-      if (tw.vertices.length <= 2) return false;
-      pushUndo();
-      tw.vertices.splice(sv.index, 1);
-      if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
-      state.selectedVertex = null;
-      syncPanelFromState();
-      updateObjectInfo();
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      return true;
-    }
-    if (sv.type === 'apronLink') {
-      if (sv.kind !== 'mid') return false;
-      const lk = state.apronLinks.find(l => l.id === sv.id);
-      if (!lk || !Array.isArray(lk.midVertices) || sv.midIndex < 0 || sv.midIndex >= lk.midVertices.length) return false;
-      pushUndo();
-      lk.midVertices.splice(sv.midIndex, 1);
-      if (!lk.midVertices.length) delete lk.midVertices;
-      state.selectedVertex = null;
-      updateObjectInfo();
-      markApronLinkJunctionOverlayDirty(lk.id);
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      return true;
-    }
-    if (sv.type === 'layoutMarkerHandle' && sv.handle === 'islandVertex') {
-      const mk = (state.layoutMarkers || []).find(function(m) { return m && String(m.id) === String(sv.id); });
-      if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !Array.isArray(mk.points)) return false;
-      const idx = sv.vertexIndex;
-      if (typeof idx !== 'number' || idx < 0 || idx >= mk.points.length || mk.points.length <= 3) return false;
-      pushUndo();
-      mk.points.splice(idx, 1);
-      state.selectedVertex = null;
-      if (typeof updateObjectInfo === 'function') updateObjectInfo();
-      draw();
-      return true;
-    }
-    return false;
-  }
-
-  function removeLastDrawingVertex() {
-    if (state.terminalDrawingId) {
-      const term = state.terminals.find(t => t.id === state.terminalDrawingId);
-      if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return false;
-      pushUndo();
-      term.vertices.pop();
-      if (!term.vertices.length) state.layoutPathDrawPointer = null;
-      state.selectedVertex = null;
-      syncPanelFromState();
-      updateObjectInfo();
-      draw();
-      return true;
-    }
-    if (state.taxiwayDrawingId) {
-      const tw = state.taxiways.find(t => t.id === state.taxiwayDrawingId);
-      if (!tw || !Array.isArray(tw.vertices) || !tw.vertices.length) return false;
-      pushUndo();
-      tw.vertices.pop();
-      if (!tw.vertices.length) state.layoutPathDrawPointer = null;
-      if (typeof syncStartEndFromVertices === 'function' && tw.vertices.length >= 2) syncStartEndFromVertices(tw);
-      else {
-        tw.start_point = null;
-        tw.end_point = null;
-      }
-      state.selectedVertex = null;
-      syncPanelFromState();
-      updateObjectInfo();
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      return true;
-    }
-    if (settingModeSelect.value === 'apronTaxiway' && state.apronLinkDrawing && state.apronLinkTemp) {
-      if (state.apronLinkMidpoints && state.apronLinkMidpoints.length) {
-        state.apronLinkMidpoints.pop();

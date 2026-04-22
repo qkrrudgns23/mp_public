@@ -1,3 +1,79 @@
+  function getNormalizedStandDwellBounds(f) {
+    let dwell = f.dwellMin != null ? f.dwellMin : 0;
+    let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+    dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+    minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+    if (minDwell > dwell) minDwell = dwell;
+    return { dwell, minDwell };
+  }
+  
+  function applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotRunwayCandidateMin) {
+    if (!f) return;
+    const eibt = eibtMin != null && isFinite(eibtMin) ? eibtMin : 0;
+    const block = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+    const { dwell, minDwell } = getNormalizedStandDwellBounds(f);
+    const low = eibt + minDwell;
+    const high = eibt + dwell;
+    const sobtPref = (f.sobtMin_d != null)
+      ? f.sobtMin_d
+      : (f.sibtMin_d != null
+        ? f.sibtMin_d + dwell
+        : (f.timeMin != null ? f.timeMin + dwell : low));
+    const eobt = Math.min(Math.max(sobtPref, low), high);
+    const etotDraft = eobt + block;
+    let etot = etotDraft;
+    if (etotRunwayCandidateMin != null && isFinite(etotRunwayCandidateMin)) {
+      etot = Math.max(etotRunwayCandidateMin, etotDraft);
+    }
+    f.eobtMin = eobt;
+    f.etotMin = etot;
+    f.depTaxiDelayMin = Math.max(0, etot - etotDraft);
+  }
+
+  function pinEarliestEldtToSldtPerRunway(flights) {
+    void flights;
+  }
+
+  var __schedRetStatsBatchActive = false;
+  var __schedRetStatsCached = null;
+  function beginScheduleRetStatsBatch() {
+    __schedRetStatsBatchActive = true;
+    __schedRetStatsCached = null;
+  }
+  function endScheduleRetStatsBatch() {
+    __schedRetStatsBatchActive = false;
+    __schedRetStatsCached = null;
+  }
+  function getScheduleRetStatsAll() {
+    if (__schedRetStatsBatchActive) {
+      if (__schedRetStatsCached === null) {
+        __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+      }
+      return __schedRetStatsCached;
+    }
+    return typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+  }
+
+  function warmFlightPathsForSchedule(flights) {
+    void flights;
+  }
+
+  function warmPathsEnsureArrRetRot(flights, forceResampleRet) {
+    warmFlightPathsForSchedule(flights);
+    return (typeof ensureArrRetRotSampled === 'function')
+      ? ensureArrRetRotSampled(flights, !!forceResampleRet)
+      : getScheduleRetStatsAll();
+  }
+
+  function mutRotCfgEntryForType(configByType, f) {
+    const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+    const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
+    if (!typeKey) return null;
+    if (configByType[typeKey]) return configByType[typeKey];
+    const tdMu = (typeof ac?.touchdown_zone_avg_m === 'number') ? ac.touchdown_zone_avg_m : 900;
+    const vMu = (typeof ac?.touchdown_speed_avg_ms === 'number') ? ac.touchdown_speed_avg_ms : 70;
+    const aMu = (typeof ac?.deceleration_avg_ms2 === 'number') ? ac.deceleration_avg_ms2 : 2.5;
+    const tdSigma = Math.round(tdMu * 0.1);
     const vSigma = Math.round(vMu * 0.1);
     const aSigma = Math.round(aMu * 0.1 * 10) / 10;
     configByType[typeKey] = { tdMu, tdSigma, vMu, vSigma, aMu, aSigma };
@@ -2616,79 +2692,3 @@
       f.stotMin = f.stotMin_d;
       f.sobtMin = f.sobtMin_d;
     });
-  }
-
-  function rsepGetSec(val) {
-    const n = Number(val);
-    return isFinite(n) && n >= 0 ? n : RSEP_MISSING_MATRIX_SEC;
-  }
-
-  function rsepApplySeparationToEvents(events, cfg) {
-    const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {};
-    const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {};
-    const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {};
-    const rot = (cfg.rot) ? cfg.rot : {};
-    const getSec = rsepGetSec;
-    events.sort((a, b) => a.time - b.time || a.index - b.index);
-    let lastArrETime = -1e9, lastArrCat = null;
-    let lastDepETime = -1e9, lastDepCat = null;
-    events.forEach(ev => {
-      if (ev.type === 'arr') {
-        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
-        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
-        const eTime = Math.max(ev.time, minFromArr, minFromDep);
-        ev.flight.eldtMin = eTime;
-        lastArrETime = eTime;
-        lastArrCat = ev.cat;
-      } else {
-        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
-        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
-        const etotSep = Math.max(ev.time, minFromArr, minFromDep);
-        const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
-        const rotM = (ev.rotArrMin != null && isFinite(ev.rotArrMin)) ? ev.rotArrMin : getArrRotMinutes(ev.flight);
-        const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + rotM + (ev.vttArrMin || 0) + vttADelay;
-        const vttDep = ev.vttDepMin || 0;
-        const etotMin = etotSep;
-        const eobtMin = etotMin - vttDep;
-        ev.flight.etotMin = etotMin;
-        lastDepETime = etotMin;
-        lastDepCat = ev.cat;
-      }
-    });
-    let minT = Infinity, maxT = -Infinity;
-    events.forEach(ev => {
-      const s = ev.time;
-      const e = ev.type === 'arr'
-        ? (ev.flight && ev.flight.eldtMin != null ? ev.flight.eldtMin : s)
-        : (ev.flight && ev.flight.etotMin != null ? ev.flight.etotMin : s);
-      if (s < minT) minT = s;
-      if (e < minT) minT = e;
-      if (s > maxT) maxT = s;
-      if (e > maxT) maxT = e;
-    });
-    if (!isFinite(minT) || !isFinite(maxT)) { minT = 0; maxT = 60; } else if (maxT <= minT) { maxT = minT + 60; }
-    return { minT, maxT };
-  }
-
-  function rsepCollectEventsForRunway(rwy, flights, runways) {
-    const cfg = rsepGetConfigForRunway(rwy);
-    if (!cfg) return null;
-    const stdKey = cfg.standard || 'ICAO';
-    const events = [];
-    let eventIndex = 0;
-    flights.forEach((f, flightIdx) => {
-      if (flightBlockedLikeNoWay(f)) return;
-      let arrRwy = f.arrRunwayId || (f.token && f.token.runwayId);
-      let depRwy = f.depRunwayId || (f.token && f.token.depRunwayId);
-      if (arrRwy == null && depRwy == null && runways.length === 1) { arrRwy = rwy.id; depRwy = rwy.id; }
-      else if (depRwy == null && arrRwy === rwy.id) depRwy = rwy.id;
-      else if (arrRwy == null && depRwy === rwy.id) arrRwy = rwy.id;
-      if (arrRwy !== rwy.id && depRwy !== rwy.id) return;
-      const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-      const cat = stdKey === 'ICAO' ? (ac && ac.icaoJHL ? ac.icaoJHL : 'M') : (ac && ac.recatEu ? ac.recatEu : 'D');
-      const sldtMin_d = f.sldtMin_d != null ? f.sldtMin_d : 0;
-      const stotMin_d = f.stotMin_d != null ? f.stotMin_d : 0;
-      const sobtMin_d = f.sobtMin_d != null ? f.sobtMin_d : 0;
-      const vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
-      const vttDepMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;

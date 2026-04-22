@@ -1228,3 +1228,46 @@
       line-height:1;
       cursor:not-allowed;
     }
+    .layout-toast-stack {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 9999;
+      pointer-events: none;
+      max-width: min(420px, calc(100vw - 32px));
+    }
+    .layout-toast {
+      min-width: 220px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(17, 24, 39, 0.92);
+      color: var(--ui-text-primary, #e5e7eb);
+      font-size: 12px;
+      line-height: 1.45;
+      letter-spacing: 0.01em;
+      border: 1px solid var(--ui-border-default, rgba(255,255,255,0.1));
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+      backdrop-filter: blur(6px);
+      pointer-events: auto;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+    }
+    .layout-toast.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .layout-toast.is-success { border-color: rgba(34, 197, 94, 0.4); }
+    .layout-toast.is-error { border-color: rgba(248, 113, 113, 0.5); color: #fecaca; }
+    .layout-toast-title {
+      font-weight: 600;
+      color: #f3f4f6;
+    }
+    .layout-toast-sub {
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--ui-text-muted, #9ca3af);
+    }

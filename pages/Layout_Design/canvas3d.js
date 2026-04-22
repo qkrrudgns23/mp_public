@@ -1,3 +1,79 @@
+        const rpath = getRunwayPath(obj.id);
+        if (rpath && rpath.pts && rpath.pts.length >= 2 && ldm > 1e-6) {
+          let total = 0;
+          for (let ri = 0; ri < rpath.pts.length - 1; ri++) total += pathDist(rpath.pts[ri], rpath.pts[ri + 1]);
+          const d = Math.min(ldm, total);
+          if (d > 1e-6) {
+            let acc = 0;
+            for (let ri = 0; ri < rpath.pts.length - 1; ri++) {
+              const p1 = rpath.pts[ri], p2 = rpath.pts[ri + 1];
+              const segLen = pathDist(p1, p2);
+              if (segLen < 1e-9) continue;
+              if (acc + segLen >= d - 1e-6) {
+                const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+                const px = p1[0] + t * (p2[0] - p1[0]), py = p1[1] + t * (p2[1] - p1[1]);
+                junctions.push({ tAlong: ri + t, p: [px, py] });
+                break;
+              }
+              acc += segLen;
+            }
+          }
+        }
+      }
+      const waypoints = [
+        { tAlong: 0, p: pts[0], isJunction: false },
+        { tAlong: pts.length - 1, p: pts[pts.length - 1], isJunction: false }
+      ];
+      junctions.forEach(({ tAlong, p }) => waypoints.push({ tAlong, p, isJunction: true }));
+      waypoints.sort((x, y) => x.tAlong - y.tAlong);
+      const chain = [];
+      waypoints.forEach(function(wp) {
+        if (chain.length && Math.abs(wp.tAlong - chain[chain.length - 1].tAlong) < 1e-9 && dist2(wp.p, chain[chain.length - 1].p) < minD2) {
+          if (wp.isJunction) addJunction(wp.p);
+          return;
+        }
+        chain.push({ tAlong: wp.tAlong, p: wp.p, isJunction: !!wp.isJunction });
+        if (wp.isJunction) addJunction(wp.p);
+      });
+      if (obj.pathType === 'runway') {
+        const runwayNodeSet = runwayNodeIndicesById[obj.id] || (runwayNodeIndicesById[obj.id] = new Set());
+        chain.forEach(function(wp) {
+          runwayNodeSet.add(getOrAdd(wp.p));
+        });
+      }
+      const dir = getTaxiwayDirection(obj);
+      const tw_id = String(obj.id || '');
+      const path_type = String(obj.pathType || 'taxiway');
+      const isRunwayExit = obj.pathType === 'runway_exit';
+      const isTaxiway = obj.pathType === 'taxiway' || obj.pathType === 'apron_taxiway' || obj.pathType === 'general_queue_taxiway';
+      for (let i = 0; i < chain.length - 1; i++) {
+        const segPts = polylinePointsBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
+        let d = polylineDistanceBetweenAlong(pts, chain[i].tAlong, chain[i + 1].tAlong);
+        let cost = d;
+        if (isRunwayExit && !isRunwayExitDirectionAllowed(obj, runwayDirectionForExit)) {
+          cost = REVERSE_COST;
+        }
+        if (selectedArrRetId != null && isTaxiway) {
+          cost = d + TAXIWAY_HEURISTIC_COST;
+        }
+        if (pureGroundExcludeRunway && obj.pathType === 'runway') cost = REVERSE_COST;
+        addEdgeWithDirection(chain[i].p, chain[i + 1].p, dir, cost, d, segPts, tw_id, path_type);
+      }
+    });
+
+    const standNodeIndices = [];
+    const standIdToNodeIndex = {};
+    apronNodeStand.forEach(function(entry) {
+      const nodeP = entry.nodeP, standPt = entry.standPt, standId = entry.standId, chain = entry.chain;
+      const apronLinkId = entry.linkId != null ? String(entry.linkId) : 'apron_link';
+      const i = getOrAdd(nodeP);
+      const j = getOrAdd(standPt);
+      standNodeIndices.push(j);
+      if (standId != null) standIdToNodeIndex[standId] = j;
+      const pts = (chain && chain.length >= 2) ? dedupePathPoints(chain) : [nodeP, standPt];
+      if (!pts || pts.length < 2 || i === j) return;
+      let totalDist = 0;
+      for (let k = 0; k < pts.length - 1; k++) totalDist += pathDist(pts[k], pts[k + 1]);
       if (!(totalDist > 1e-6)) return;
       adj[i].push([j, totalDist]);
       adj[j].push([i, totalDist]);
@@ -1992,6 +2068,14 @@
           alert('Flightcannot be created:\\n' + networkErrors.join('\\n'));
           return;
         }
+        const airlineCodeElLocal = document.getElementById('flightAirlineCode');
+        const flightNumberElLocal = document.getElementById('flightFlightNumber');
+        if (state.selectedObject && state.selectedObject.type === 'flight') {
+          state.selectedObject = null;
+          if (regEl) regEl.value = '';
+          if (airlineCodeElLocal) airlineCodeElLocal.value = '';
+          if (flightNumberElLocal) flightNumberElLocal.value = '';
+        }
         let timeStr = (document.getElementById('flightTime').value || '').trim();
         if (!timeStr) {
           timeStr = formatMinutesToHHMMSS(DEFAULT_SIBT_TIME_MIN);
@@ -2002,15 +2086,14 @@
         if (sibtDateInputEl) sibtDateInputEl.value = sibtDateForFlight;
         const aircraftType = (document.getElementById('flightAircraftType').value || 'A320').trim();
         const code = getCodeForAircraft(aircraftType);
-        let reg = (document.getElementById('flightReg').value || '').trim();
-        if (!reg) {
-          reg = randomRegNumber();
-          if (regEl) regEl.value = reg;
-        }
-        let airlineCode = (document.getElementById('flightAirlineCode') && document.getElementById('flightAirlineCode').value || '').trim();
-        let flightNumber = (document.getElementById('flightFlightNumber') && document.getElementById('flightFlightNumber').value || '').trim();
+        const reg = randomRegNumber();
+        if (regEl) regEl.value = '';
+        let airlineCode = (airlineCodeElLocal && airlineCodeElLocal.value || '').trim();
+        let flightNumber = (flightNumberElLocal && flightNumberElLocal.value || '').trim();
         if (!airlineCode) airlineCode = randomAirlineCode();
         if (!flightNumber) flightNumber = randomFlightNumber(airlineCode);
+        if (airlineCodeElLocal) airlineCodeElLocal.value = '';
+        if (flightNumberElLocal) flightNumberElLocal.value = '';
         let dwellMin = parseFloat(document.getElementById('flightDwell').value);
         let minDwellMin = parseFloat(document.getElementById('flightMinDwell').value);
         dwellMin = (typeof dwellMin === 'number' && !isNaN(dwellMin) && dwellMin >= 0) ? dwellMin : 0;
@@ -2413,8 +2496,7 @@
       if (tabId === 'load') fetchAndRefreshLayoutList();
     }
     const layoutMessageSaveEl = document.getElementById('layoutMessageSave');
-    const btnSaveCurrent = document.getElementById('btnSaveCurrentLayout');
-    if (btnSaveCurrent) btnSaveCurrent.addEventListener('click', function() {
+    function performSaveCurrentLayout() {
       const name = (state.currentLayoutName && state.currentLayoutName.trim()) || (INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout');
       try {
         if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
@@ -2423,12 +2505,39 @@
         fetchSaveLayout(name, data).then(function(r) {
           if (r.ok) {
             if (layoutMessageSaveEl) { layoutMessageSaveEl.textContent = 'saved: ' + name + '.json'; layoutMessageSaveEl.style.color = '#9ca3af'; }
-          } else if (layoutMessageSaveEl) { layoutMessageSaveEl.textContent = 'save failed (status ' + r.status + ')'; layoutMessageSaveEl.style.color = '#f97316'; }
+            showLayoutSavedToast(name, 'success');
+          } else if (layoutMessageSaveEl) {
+            layoutMessageSaveEl.textContent = 'save failed (status ' + r.status + ')';
+            layoutMessageSaveEl.style.color = '#f97316';
+            showLayoutSavedToast(name, 'error', 'save failed (status ' + r.status + ')');
+          } else {
+            showLayoutSavedToast(name, 'error', 'save failed (status ' + r.status + ')');
+          }
         }).catch(function(e) {
           console.warn('Object save fetch failed', e);
           if (layoutMessageSaveEl) { layoutMessageSaveEl.textContent = 'Connection failed: ' + (e && e.message); layoutMessageSaveEl.style.color = '#f97316'; }
+          showLayoutSavedToast(name, 'error', 'connection failed');
         });
-      } catch (e) { if (layoutMessageSaveEl) { layoutMessageSaveEl.textContent = 'error: ' + (e && e.message); layoutMessageSaveEl.style.color = '#f97316'; } }
+      } catch (e) {
+        if (layoutMessageSaveEl) { layoutMessageSaveEl.textContent = 'error: ' + (e && e.message); layoutMessageSaveEl.style.color = '#f97316'; }
+        showLayoutSavedToast(name, 'error', e && e.message);
+      }
+    }
+    const btnSaveCurrent = document.getElementById('btnSaveCurrentLayout');
+    if (btnSaveCurrent) btnSaveCurrent.addEventListener('click', performSaveCurrentLayout);
+    window.addEventListener('keydown', function(ev) {
+      const key = ev.key;
+      if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && (key === 's' || key === 'S')) {
+        ev.preventDefault();
+        try {
+          const tgt = ev.target;
+          if (tgt && typeof tgt.blur === 'function') {
+            const tag = tgt.tagName ? String(tgt.tagName).toUpperCase() : '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA') tgt.blur();
+          }
+        } catch (_e) {}
+        performSaveCurrentLayout();
+      }
     });
     const saveLoadTabRoot = document.getElementById('tab-saveload');
     if (saveLoadTabRoot) {
@@ -4321,13 +4430,9 @@
       }
       ctx.restore();
       if (sl || sel) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.fillStyle = sel ? c2dObjectSelectedStroke() : (apronLinked ? 'rgba(194,142,70,0.92)' : 'rgba(156,163,175,0.95)');
         const acMk = getStandAircraftMarkerWorldPxForPbb(pbb);
-        ctx.arc(acMk[0], acMk[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        const fill = sel ? c2dObjectSelectedStroke() : (apronLinked ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)');
+        drawApronSiteMarker(ctx, acMk[0], acMk[1], fill, null, sel, angle);
       }
       if (sel) {
         drawStandRotationHandle(getPbbRotationOriginPx(pbb), getPbbRotationHandlePx(pbb), rotationActive);
@@ -4387,13 +4492,9 @@
       }
       ctx.restore();
       if (sl || sel) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.fillStyle = sel ? c2dObjectSelectedStroke() : (apronLinkedR ? 'rgba(194,142,70,0.92)' : 'rgba(156,163,175,0.95)');
         const rm = getStandAircraftMarkerWorldPxForRemoteLike(st);
-        ctx.arc(rm[0], rm[1], sel ? 4.5 : 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        const fill = sel ? c2dObjectSelectedStroke() : (apronLinkedR ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)');
+        drawApronSiteMarker(ctx, rm[0], rm[1], fill, null, sel, angle);
       }
       if (sel) {
         drawStandRotationHandle([cx, cy], getRemoteRotationHandlePx(st), rotationActive);
@@ -4458,13 +4559,10 @@
       }
       ctx.restore();
       if (mode === 'apronTaxiway' && (sl || sel)) {
-        ctx.save();
-        ctx.fillStyle = sel ? '#c4b5fd' : '#7c3aed';
-        ctx.beginPath();
         const tm = getStandAircraftMarkerWorldPxForRemoteLike(st);
-        ctx.arc(tm[0], tm[1], 2.5 * LAYOUT_VERTEX_DOT_SCALE, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        const apronLinkedT = standHasApronTaxiwayLink(st.id);
+        const fill = sel ? '#c4b5fd' : (apronLinkedT ? c2dTaxiwayCenterlineStroke() : '#7c3aed');
+        drawApronSiteMarker(ctx, tm[0], tm[1], fill, null, sel, angle);
       }
       const junc = getTempStandTaxiwayJunctionPx(st);
       const jx = junc[0], jy = junc[1];

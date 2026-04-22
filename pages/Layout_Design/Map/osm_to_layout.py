@@ -51,6 +51,7 @@ OSM_TO_LAYOUT_RULES: Dict[str, Any] = {
         "pbb_wall_length_m": 22.0,
         "pbb_bridge_stub_m": 28.0,
         "pbb_default_pbb_count": 1,
+        "gate_name_match_m": 80.0,
     },
     "taxiways": {
         "default_width_m": 23.0,
@@ -134,29 +135,24 @@ def _safe_name(s: str, fallback: str) -> str:
     return t if t else fallback
 
 
-class _OsmStandNameAllocator:
-    """Contact → G001 / G_ABC; Remote → R001 / R_ABC; duplicates → *_1, *_2, ..."""
-
-    def __init__(self, prefix: str) -> None:
-        self._prefix = str(prefix or "G").strip().upper()[:1] or "G"
-        self._counts: Dict[str, int] = {}
-
-    def allocate(self, raw_hint: str) -> str:
-        s = re.sub(r"\s+", " ", (raw_hint or "").strip())
-        m = re.search(r"\d+", s)
-        if m:
+def _extract_gate_ref_number(tags: Dict[str, str]) -> Optional[int]:
+    """Pull the first integer from the gate's ``ref``/``name`` tags (OSM gate number)."""
+    if not isinstance(tags, dict):
+        return None
+    for key in ("ref", "name"):
+        raw = tags.get(key)
+        if raw is None:
+            continue
+        m = re.search(r"\d+", str(raw))
+        if not m:
+            continue
+        try:
             n = int(m.group(0))
-            base = f"{self._prefix}{n:03d}"
-        else:
-            slug = re.sub(r"[^A-Za-z0-9]+", "_", re.sub(r"\d+", " ", s)).strip("_").upper()[:24]
-            if not slug:
-                slug = "X"
-            base = f"{self._prefix}_{slug}"
-        c = int(self._counts.get(base, 0))
-        self._counts[base] = c + 1
-        if c == 0:
-            return base
-        return f"{base}_{c}"
+        except (TypeError, ValueError):
+            continue
+        if n >= 0:
+            return n
+    return None
 
 
 def _layout_linestrings_from_taxiway_dicts(rows: List[Dict[str, Any]]) -> List[LineString]:
@@ -227,22 +223,98 @@ def _flip_parking_wall_for_terminal_outward(
     return nx, ny, math.degrees(math.atan2(ny, nx))
 
 
+def _assign_stand_names_by_nearest_gate(
+    stands: List[Dict[str, Any]],
+    gates: Sequence[Tuple[float, float, Dict[str, str], str]],
+    prefix: str,
+    max_search_m: float,
+    get_xy,
+) -> None:
+    """Rename stands in place using the closest OSM gate ref.
+
+    - Matched (within ``max_search_m``): ``{prefix}{ref:03d}``; duplicates get ``_A/_B`` suffixes.
+    - Unmatched: ``{prefix}_AA``, ``{prefix}_AB`` … (two-letter sequence onward).
+    """
+    if not stands:
+        return
+    thresh = float(max_search_m) if max_search_m and max_search_m > 0 else 0.0
+    gate_list = [g for g in (gates or []) if isinstance(g, tuple) and len(g) >= 3]
+
+    numbered_bases: List[Optional[str]] = []
+    unmatched_idx: List[int] = []
+    for i, s in enumerate(stands):
+        if not isinstance(s, dict):
+            numbered_bases.append(None)
+            continue
+        try:
+            px, py = get_xy(s)
+            px = float(px)
+            py = float(py)
+        except (TypeError, ValueError):
+            numbered_bases.append(None)
+            unmatched_idx.append(i)
+            continue
+        best_num: Optional[int] = None
+        best_d = thresh if thresh > 0 else 1e30
+        for gx, gy, gtags, _fid in gate_list:
+            try:
+                d = math.hypot(float(gx) - px, float(gy) - py)
+            except (TypeError, ValueError):
+                continue
+            if thresh > 0 and d > thresh:
+                continue
+            if d >= best_d and best_num is not None:
+                continue
+            n = _extract_gate_ref_number(gtags)
+            if n is None:
+                continue
+            best_num = int(n)
+            best_d = d
+        if best_num is None:
+            numbered_bases.append(None)
+            unmatched_idx.append(i)
+        else:
+            numbered_bases.append(f"{prefix}{best_num:03d}")
+
+    from collections import Counter
+
+    base_counts = Counter(b for b in numbered_bases if b)
+    base_seq: Dict[str, int] = {}
+    for i, base in enumerate(numbered_bases):
+        if base is None:
+            continue
+        s = stands[i]
+        if base_counts.get(base, 0) <= 1:
+            s["name"] = base
+            continue
+        k = base_seq.get(base, 0)
+        base_seq[base] = k + 1
+        s["name"] = f"{base}_{_alpha_suffix(k)}"
+
+    for k, i in enumerate(unmatched_idx):
+        stands[i]["name"] = f"{prefix}_{_alpha_suffix(26 + k)}"
+
+
 def _normalize_osm_stand_names_inplace(
     pbb_stands: List[Dict[str, Any]],
     remote_stands: List[Dict[str, Any]],
+    gates: Sequence[Tuple[float, float, Dict[str, str], str]],
+    max_search_m: float,
 ) -> None:
-    g_alloc = _OsmStandNameAllocator("G")
-    r_alloc = _OsmStandNameAllocator("R")
-    for p in pbb_stands:
-        if not isinstance(p, dict):
-            continue
-        raw = str(p.get("name") or "").strip()
-        p["name"] = g_alloc.allocate(raw or "G")
-    for r in remote_stands:
-        if not isinstance(r, dict):
-            continue
-        raw = str(r.get("name") or "").strip()
-        r["name"] = r_alloc.allocate(raw or "R")
+    _assign_stand_names_by_nearest_gate(
+        pbb_stands,
+        gates,
+        "G",
+        max_search_m,
+        lambda s: (s.get("apronSiteX", 0.0), s.get("apronSiteY", 0.0)),
+    )
+    _assign_stand_names_by_nearest_gate(
+        remote_stands,
+        gates,
+        "R",
+        max_search_m,
+        lambda s: (s.get("x", 0.0), s.get("y", 0.0)),
+    )
 
 
 def _sync_apron_link_names_after_stand_rename(
@@ -1099,8 +1171,10 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     px, py = _layout_xy_from_raw(px_raw, py_raw, x_off, y_off, y_span_m)
                     txe_points.append((px, py))
 
-    # Some source bundles keep holding_position only under osm.elements (not geojson.features).
-    # Pull them in as a fallback so holdingPoints conversion is stable across data shapes.
+    # Some source bundles keep holding_position or gate nodes only under osm.elements
+    # (not geojson.features). Pull them in as a fallback so holdingPoints / stand-naming
+    # stay stable across data shapes.
+    seen_gate_ids = {str(g[3]) for g in gates if len(g) >= 4}
     osm_obj = doc.get("osm")
     if isinstance(osm_obj, dict):
         elems = osm_obj.get("elements")
@@ -1115,6 +1189,17 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                         if v is None:
                             continue
                         etags[str(k)] = str(v)
+                if str(etags.get("aeroway", "")).strip().lower() == "gate" and el.get("type") == "node":
+                    eid = str(el.get("id") or "")
+                    if eid and eid not in seen_gate_ids:
+                        lat_g = el.get("lat")
+                        lon_g = el.get("lon")
+                        if isinstance(lat_g, (int, float)) and isinstance(lon_g, (int, float)):
+                            gx_raw, gy_raw = _project_lonlat(float(lon_g), float(lat_g), lon0, lat0, r_earth)
+                            gx, gy = _layout_xy_from_raw(gx_raw, gy_raw, x_off, y_off, y_span_m)
+                            gates.append((float(gx), float(gy), etags, eid or _new_id("gate")))
+                            if eid:
+                                seen_gate_ids.add(eid)
                 if not _is_holding_position_feature(etags):
                     continue
                 lat = el.get("lat")
@@ -1774,7 +1859,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 if repl:
                     al["pbbId"] = repl
 
-    _normalize_osm_stand_names_inplace(pbb_stands, remote_stands)
+    gate_name_match_m = float(rules["stands"].get("gate_name_match_m", 80.0))
+    _normalize_osm_stand_names_inplace(pbb_stands, remote_stands, gates, gate_name_match_m)
     _sync_apron_link_names_after_stand_rename(apron_links, pbb_stands, remote_stands)
 
     grid_layers = {
