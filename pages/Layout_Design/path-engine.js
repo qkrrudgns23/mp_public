@@ -1,3 +1,26 @@
+    if (typ === 'holdingPoint') return (state.holdingPoints || []).find(h => h.id === idr);
+    if (typ === 'taxiway') return state.taxiways.find(tw => tw.id === idr);
+    if (typ === 'apronLink') return state.apronLinks.find(lk => lk.id === idr);
+    if (typ === 'layoutEdge') return (state.derivedGraphEdges || []).find(function(e) { return e.id === idr; });
+    if (typ === 'flight') return state.flights.find(f => f.id === idr);
+    if (typ === 'layoutMarker') return (state.layoutMarkers || []).find(function(m) { return m && m.id === idr; });
+    return null;
+  }
+  function removeLayoutObjectFromState(type, id) {
+    const removedTaxiway = (type === 'taxiway')
+      ? (state.taxiways || []).find(function(tw) { return tw.id === id; })
+      : null;
+    if (type === 'terminal') state.terminals = state.terminals.filter(t => t.id !== id);
+    else if (type === 'pbb') state.pbbStands = state.pbbStands.filter(p => p.id !== id);
+    else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
+    else if (type === 'tempStand') state.tempStands = (state.tempStands || []).filter(function(s) { return s.id !== id; });
+    else if (type === 'holdingPoint') state.holdingPoints = (state.holdingPoints || []).filter(h => h.id !== id);
+    else if (type === 'taxiway') {
+      state.taxiways = state.taxiways.filter(tw => tw.id !== id);
+      if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+        invalidatePathGraphCache(false);
+      } else {
+        markPathGraphJunctionStaleShellAfterLayoutEdit();
       }
     }
     else if (type === 'apronLink') {
@@ -695,26 +718,3 @@
   }
   function ensureDefaultDirectionModes() {
     if (state.directionModes.length === 0) {
-      state.directionModes = [
-        { id: id(), name: 'Mode A', direction: 'clockwise' },
-        { id: id(), name: 'Mode B', direction: 'counter_clockwise' },
-        { id: id(), name: 'Mode C', direction: 'both' }
-      ];
-    }
-  }
-  const undoStack = [];
-  const maxUndoLevels = _interactionConfigNum('maxUndoLevels', 50);
-  function pushUndo() {
-    const snap = {
-      terminals: JSON.parse(JSON.stringify(state.terminals || [])),
-      pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
-      remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
-      tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
-      holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
-      taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
-      apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
-      layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
-      layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
-      directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
-      flights: cloneFlightsWithoutPathPolylineCache(state.flights),
-      layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))

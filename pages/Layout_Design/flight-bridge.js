@@ -1,3 +1,26 @@
+  function getPBBStandCorners(pbb) {
+    const center = getStandConnectionPx(pbb);
+    const cx = center[0], cy = center[1];
+    const cat = pbb.category || 'C';
+    const dep = getStandDepthMeters(cat);
+    const halfD = dep / 2;
+    const halfW = getStandWidthMeters(cat) / 2;
+    const angle = getPBBStandAngle(pbb);
+    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    return [
+      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
+      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
+    ];
+  }
+  function pointInPolygonXY(p, verts) {
+    let inside = false;
+    const n = verts.length;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const vi = verts[i], vj = verts[j];
+      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
     }
     return inside;
   }
@@ -425,26 +448,3 @@
       return Object.assign({}, obj);
     });
   }
-
-  function _persistCellSizePx() {
-    return (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-  }
-  function persistVerticesCellsToXY(vertices) {
-    const cs = _persistCellSizePx();
-    if (!Array.isArray(vertices)) return [];
-    return vertices.map(function(v) {
-      if (!v || typeof v !== 'object') return { x: 0, y: 0 };
-      const c = Number(v.col), r = Number(v.row);
-      return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
-    });
-  }
-  function persistPointCellToXY(pt) {
-    if (!pt || typeof pt !== 'object') return null;
-    const xRaw = Number(pt.x), yRaw = Number(pt.y);
-    if (isFinite(xRaw) && isFinite(yRaw)) return { x: xRaw, y: yRaw };
-    const cs = _persistCellSizePx();
-    const c = Number(pt.col), r = Number(pt.row);
-    return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
-  }
-
-  function _polylineLengthPxForLineup(pts) {

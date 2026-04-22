@@ -1,3 +1,38 @@
+    });
+    function bfsReachable(startIndices) {
+      const out = new Set();
+      const q = startIndices.slice();
+      startIndices.forEach(function(idx) { out.add(idx); });
+      while (q.length) {
+        const u = q.shift();
+        (adj[u] || []).forEach(function(tuple) {
+          const v = tuple[0], w = tuple[1];
+          if (w >= REVERSE_COST) return;
+          if (!out.has(v)) { out.add(v); q.push(v); }
+        });
+      }
+      return out;
+    }
+    function nearestNode(p) {
+      let best = 0, bestD2 = dist2(nodes[0], p);
+      for (let i = 1; i < nodes.length; i++) {
+        const d2 = dist2(nodes[i], p);
+        if (d2 < bestD2) { bestD2 = d2; best = i; }
+      }
+      return best;
+    }
+    const runwayNodeIndices = [];
+    const runwayNodeSeen = new Set();
+    const runways = (state.taxiways || []).filter(function(t) { return t.pathType === 'runway'; });
+    runways.forEach(function(rw) {
+      const r = getRunwayPath(rw.id);
+      if (!r) return;
+      [r.startPx, r.endPx].forEach(function(p) {
+        if (!p) return;
+        const idx = nearestNode(p);
+        if (idx == null || runwayNodeSeen.has(idx)) return;
+        runwayNodeSeen.add(idx);
+        runwayNodeIndices.push(idx);
       });
     });
     const runwayReachable = runwayNodeIndices.length ? bfsReachable(runwayNodeIndices) : new Set();

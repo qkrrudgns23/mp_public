@@ -1,3 +1,38 @@
+    return { cfg, events };
+  }
+
+  function runSeparationPass(runways, flights, byRunway, phase) {
+    if (phase === 'initial') {
+      runways.forEach(rwy => {
+        const pack = rsepCollectEventsForRunway(rwy, flights, runways);
+        if (!pack) return;
+        const { cfg, events } = pack;
+        if (!events.length) {
+          byRunway[rwy.id] = { events: [], minT: 0, maxT: 0 };
+          return;
+        }
+        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg);
+        byRunway[rwy.id] = { events, minT, maxT };
+      });
+    } else {
+      runways.forEach(rwy => {
+        const cfg = rsepGetConfigForRunway(rwy);
+        if (!cfg) return;
+        const data = byRunway[rwy.id];
+        if (!data || !data.events || !data.events.length) return;
+        const events = data.events;
+        events.forEach(ev => {
+          ev.time = ev.type === 'arr'
+            ? (ev.flight.eldtMin != null ? ev.flight.eldtMin : ev.time)
+            : (ev.flight.etotMin != null ? ev.flight.etotMin : ev.time);
+        });
+        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg);
+        byRunway[rwy.id] = { events, minT, maxT };
+      });
+    }
+  }
+
+  function buildRunwaySeparationTimelineByRunwaySnapshot(flights) {
     const snapGen = state.rwySepSnapshotStaleGen | 0;
     if (state.__rwySepSnapCacheGen === snapGen && state.__rwySepSnapCache) return state.__rwySepSnapCache;
     const list = flights || state.flights || [];
@@ -1123,38 +1158,3 @@
     return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
   }
 
-  function getEffectiveRunwayEndBlastPadM(tw) {
-    if (!tw || tw.pathType !== 'runway') return RUNWAY_END_BLAST_PAD_DEFAULT_M;
-    const v = tw.endBlastPadM;
-    return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_END_BLAST_PAD_DEFAULT_M;
-  }
-
-  function runwayPolylineLengthPx(pts) {
-    if (!pts || pts.length < 2) return 0;
-    let s = 0;
-    for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
-    return s;
-  }
-
-  
-  function runwayApproachThresholdDistAlongM(runwayId, tdDistAlong) {
-    const path = getRunwayPath(runwayId);
-    if (!path || !path.pts || path.pts.length < 2) return 0;
-    const totalLen = runwayPolylineLengthPx(path.pts);
-    const tw = (state.taxiways || []).find(function(t) { return t && t.id === runwayId && t.pathType === 'runway'; });
-    if (!tw) return 0;
-    const startInset = getEffectiveRunwayStartDisplacedThresholdM(tw) + getEffectiveRunwayStartBlastPadM(tw);
-    const endInset = getEffectiveRunwayEndDisplacedThresholdM(tw) + getEffectiveRunwayEndBlastPadM(tw);
-    const isCcw = normalizeRwDirectionValue(getTaxiwayDirection(tw)) === 'counter_clockwise';
-    const lowInset = isCcw ? endInset : startInset;
-    const highInset = isCcw ? startInset : endInset;
-    const dLow = Math.min(Math.max(0, lowInset), totalLen);
-    const dHigh = Math.max(0, Math.min(totalLen, totalLen - highInset));
-    if (!(totalLen > 1e-6)) return dLow;
-    if (tdDistAlong <= totalLen * 0.5) return dLow;
-    return dHigh;
-  }
-
-  function getPolylinePointAndFrameAtDistance(pts, distPx) {
-    if (!pts || pts.length < 2) return null;
-    const total = runwayPolylineLengthPx(pts);

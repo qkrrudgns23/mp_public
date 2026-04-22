@@ -120,6 +120,21 @@
     });
     return out;
   }
+  function getAircraftConstraintOptionsForIcaoLetters(letters) {
+    const set = {};
+    normalizeAllowedIcaoCategories(letters).forEach(function(c) { set[c] = true; });
+    if (!Object.keys(set).length) return [];
+    const out = [];
+    AIRCRAFT_TYPES.forEach(function(a) {
+      const id = String(a.id || a.name || '').trim();
+      if (!id) return;
+      const ic = String(a.icao || 'C').trim().toUpperCase()[0];
+      if (!set[ic]) return;
+      const label = String(a.name || a.id || id || '').trim();
+      out.push({ id: id, label: label || id });
+    });
+    return out;
+  }
   function readIcaoCategoriesFromHost(hostId) {
     const host = typeof hostId === 'string' ? document.getElementById(hostId) : hostId;
     if (!host) return [];
@@ -313,18 +328,3 @@
     if (!t || !isFinite(f)) return opaque;
     const r = Math.max(0, Math.min(255, Math.round(t[0] * f)));
     const g = Math.max(0, Math.min(255, Math.round(t[1] * f)));
-    const b = Math.max(0, Math.min(255, Math.round(t[2] * f)));
-    return 'rgb(' + r + ',' + g + ',' + b + ')';
-  }
-  /** Same rgb as layout marker kind=area fill (`drawLayoutAreaMarkers2DFloor`, 3 lighten steps). */
-  function c2dRoadWidthBandSurfaceColor() {
-    return c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
-  }
-  /** Taxiway / apron taxiway width band: one step darker than marker area (2 lighten steps vs runway stroke). */
-  function c2dRoadWidthBandTaxiwaySurfaceColor() {
-    return c2dCssColorLightenSteps(c2dRunwayStroke(), 2);
-  }
-  /** Runway path & runway taxiway (runway_exit) width band: dark asphalt gray. */
-  function c2dRoadWidthBandRunwayAsphaltColor() {
-    return '#363636';
-  }

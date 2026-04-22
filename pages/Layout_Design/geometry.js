@@ -1,3 +1,26 @@
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof draw === 'function') draw();
+    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+  }
+  function setGlobalUpdateProgressUi(visible, label, pct) {
+    const ov = document.getElementById('globalUpdateOverlay');
+    const fill = document.getElementById('globalUpdateProgressFill');
+    const lab = document.getElementById('globalUpdateOverlayLabel');
+    const btn = document.getElementById('btnGlobalUpdate');
+    if (!ov) return;
+    if (visible) {
+      ov.classList.add('is-visible');
+      ov.setAttribute('aria-hidden', 'false');
+      if (lab && label != null) lab.textContent = label;
+      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (btn) btn.disabled = true;
+    } else {
+      ov.classList.remove('is-visible');
+      ov.setAttribute('aria-hidden', 'true');
+      if (fill) fill.style.width = '0%';
+      if (btn) btn.disabled = false;
+    }
+  }
   function scheduleAfterPaint(fn) {
     requestAnimationFrame(function() {
       requestAnimationFrame(function() { setTimeout(fn, 0); });
@@ -295,26 +318,3 @@
     if (typ === 'pbb') return state.pbbStands.find(p => p.id === idr);
     if (typ === 'remote') return state.remoteStands.find(r => r.id === idr);
     if (typ === 'tempStand') return (state.tempStands || []).find(function(s) { return s.id === idr; });
-    if (typ === 'holdingPoint') return (state.holdingPoints || []).find(h => h.id === idr);
-    if (typ === 'taxiway') return state.taxiways.find(tw => tw.id === idr);
-    if (typ === 'apronLink') return state.apronLinks.find(lk => lk.id === idr);
-    if (typ === 'layoutEdge') return (state.derivedGraphEdges || []).find(function(e) { return e.id === idr; });
-    if (typ === 'flight') return state.flights.find(f => f.id === idr);
-    if (typ === 'layoutMarker') return (state.layoutMarkers || []).find(function(m) { return m && m.id === idr; });
-    return null;
-  }
-  function removeLayoutObjectFromState(type, id) {
-    const removedTaxiway = (type === 'taxiway')
-      ? (state.taxiways || []).find(function(tw) { return tw.id === id; })
-      : null;
-    if (type === 'terminal') state.terminals = state.terminals.filter(t => t.id !== id);
-    else if (type === 'pbb') state.pbbStands = state.pbbStands.filter(p => p.id !== id);
-    else if (type === 'remote') state.remoteStands = state.remoteStands.filter(r => r.id !== id);
-    else if (type === 'tempStand') state.tempStands = (state.tempStands || []).filter(function(s) { return s.id !== id; });
-    else if (type === 'holdingPoint') state.holdingPoints = (state.holdingPoints || []).filter(h => h.id !== id);
-    else if (type === 'taxiway') {
-      state.taxiways = state.taxiways.filter(tw => tw.id !== id);
-      if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
-        invalidatePathGraphCache(false);
-      } else {
-        markPathGraphJunctionStaleShellAfterLayoutEdit();

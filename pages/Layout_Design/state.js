@@ -1,3 +1,18 @@
+    const b = Math.max(0, Math.min(255, Math.round(t[2] * f)));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+  /** Same rgb as layout marker kind=area fill (`drawLayoutAreaMarkers2DFloor`, 3 lighten steps). */
+  function c2dRoadWidthBandSurfaceColor() {
+    return c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
+  }
+  /** Taxiway / apron taxiway width band: one step darker than marker area (2 lighten steps vs runway stroke). */
+  function c2dRoadWidthBandTaxiwaySurfaceColor() {
+    return c2dCssColorLightenSteps(c2dRunwayStroke(), 2);
+  }
+  /** Runway path & runway taxiway (runway_exit) width band: dark asphalt gray. */
+  function c2dRoadWidthBandRunwayAsphaltColor() {
+    return '#363636';
+  }
   function pathPavementDefaultForPathType(pathType) {
     const pt = pathType || 'taxiway';
     if (pt === 'runway' || pt === 'runway_exit') return 'asphalt';
@@ -273,18 +288,3 @@
     const base = (isFinite(n) && n > 0) ? n : 1;
     return Math.max(0.5, base * LAYOUT_VERTEX_DOT_SCALE);
   }
-  function c2dPathDrawStartLabelFontPx() {
-    const n = Number(_canvas2dStyle.pathDrawStartLabelFontPx);
-    const base = (isFinite(n) && n >= 6) ? n : 8;
-    return Math.max(6, Math.round(base * LAYOUT_VERTEX_DOT_SCALE));
-  }
-  function c2dPathDrawStartLabelOffsetY() {
-    const n = Number(_canvas2dStyle.pathDrawStartLabelOffsetY);
-    const base = isFinite(n) ? n : -6;
-    return base * LAYOUT_VERTEX_DOT_SCALE;
-  }
-  const GANTT_COLORS = {
-    S_BAR: _ganttStyle.sBar || '#007aff',
-    S_SERIES: _ganttStyle.sSeries || '#38bdf8',
-    E_BAR: _ganttStyle.eBar || '#fb37c5',
-    E_SERIES: _ganttStyle.eSeries || '#fb923c',

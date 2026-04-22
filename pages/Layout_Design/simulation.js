@@ -1,3 +1,38 @@
+      updateObjectInfo();
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      draw();
+      update3DSceneWhenVisible();
+      if (shouldResampleRet) triggerArrivalConfigResampleFromLayoutEdit();
+    }
+  });
+  const taxiwayPathTypeKindEl = document.getElementById('taxiwayPathTypeKind');
+  if (taxiwayPathTypeKindEl) {
+    taxiwayPathTypeKindEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        const ptCur = tw.pathType || 'taxiway';
+        if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
+          const kind = String(this.value || 'normal');
+          tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+        }
+        updateObjectInfo();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const runwayMinArrVelEl = document.getElementById('runwayMinArrVelocity');
+  if (runwayMinArrVelEl) {
+    runwayMinArrVelEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        if (tw.pathType !== 'runway') return;
+        const val = Number(this.value);
+        const v = (typeof val === 'number' && isFinite(val) && val > 0) ? Math.max(1, Math.min(150, val)) : 15;
+        tw.minArrVelocity = v;
+        this.value = v;
+        updateObjectInfo();
         renderObjectList();
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         draw();
@@ -1060,38 +1095,3 @@
     configByType[typeKey] = { tdMu, tdSigma, vMu, vSigma, aMu, aSigma };
     return configByType[typeKey];
   }
-  /** Same runway resolution as graphPathArrival (token.arrRunwayId before generic runwayId). */
-  function resolveArrivalRunwayIdForFlight(f) {
-    if (!f) return null;
-    const t = f.token || {};
-    return t.arrRunwayId || t.runwayId || f.arrRunwayId || null;
-  }
-  function isValidSampledArrRetForFlight(f, retStatsAll) {
-    if (!f || f.sampledArrRet == null) return false;
-    if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
-    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
-    const arrDir = resolveArrivalRunwayDirForRetGate(f);
-    return retStatsAll.some(function(r) {
-      if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
-      if (arrRunwayId == null) return true;
-      if (!(r.runway && r.runway.id === arrRunwayId)) return false;
-      if (arrDir === 'clockwise' || arrDir === 'counter_clockwise') {
-        if (!isRunwayExitDirectionAllowed(r.exit, arrDir)) return false;
-      }
-      return true;
-    });
-  }
-  /** Runway-exit (RET) sampling for Arrival Configuration / schedule RET column. ROT(arr) seconds come from Pro Sim schedule (``ARR_ROT_SEC``), not from this function. */
-  function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {
-    if (!f) return;
-    const rev = state.vttArrCacheRev | 0;
-    if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
-    if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
-        f.sampledArrRet != null && f.arrRetFailed === false &&
-        isValidSampledArrRetForFlight(f, retStatsAll)) {
-      f.__schedRetRotRev = rev;
-      return;
-    }
-    if (f.sampledArrRet != null && !isValidSampledArrRetForFlight(f, retStatsAll)) {
-      f.sampledArrRet = null;
-      f.arrRetFailed = false;

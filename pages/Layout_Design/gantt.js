@@ -1,3 +1,26 @@
+        draw();
+        return true;
+      }
+      state.apronLinkTemp = null;
+      state.apronLinkMidpoints = [];
+      state.apronLinkPointerWorld = null;
+      draw();
+      return true;
+    }
+    if (settingModeSelect.value === 'marker' && state.markerDrawing && getMarkerSubKindFromPanel() === 'island' && state.markerIslandDraft && state.markerIslandDraft.points && state.markerIslandDraft.points.length) {
+      state.markerIslandDraft.points.pop();
+      if (!state.markerIslandDraft.points.length) state.markerIslandDraft = null;
+      state.markerIslandHoverWorld = null;
+      draw();
+      return true;
+    }
+    if (settingModeSelect.value === 'marker' && state.markerDrawing && getMarkerSubKindFromPanel() === 'area' && state.markerAreaDraft && state.markerAreaDraft.points && state.markerAreaDraft.points.length) {
+      state.markerAreaDraft.points.pop();
+      if (!state.markerAreaDraft.points.length) state.markerAreaDraft = null;
+      state.markerAreaHoverWorld = null;
+      draw();
+      return true;
+    }
     return false;
   }
 
@@ -99,7 +122,7 @@
       if (boardingWInput) boardingWInput.value = String(getPbbBoardingWidthM(pbb));
       if (boardingHInput) boardingHInput.value = String(getPbbBoardingHeightM(pbb));
       syncStandConstraintVisibility('stand');
-      renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb));
+      renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb), pbb.allowedIcaoCategories);
     }
     if (state.selectedObject && state.selectedObject.type === 'remote') {
       const st = state.selectedObject.obj;
@@ -107,7 +130,7 @@
       if (nameInput) nameInput.value = st.name || '';
       applyIcaoCategoriesToHost('remoteIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
       syncStandConstraintVisibility('remote');
-      renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st));
+      renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
       renderRemoteTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
     }
     if (state.selectedObject && state.selectedObject.type === 'tempStand') {
@@ -116,7 +139,7 @@
       if (nameInput) nameInput.value = st.name || '';
       applyIcaoCategoriesToHost('tempStandIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
       syncStandConstraintVisibility('tempStand');
-      renderAircraftConstraintChoices('tempStandAircraftAccess', getStandAllowedAircraftTypes(st));
+      renderAircraftConstraintChoices('tempStandAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
       renderTempStandTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
     }
     if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
@@ -245,14 +268,14 @@
       if (!skipStandPanelIdleReset) {
         applyIcaoCategoriesToHost('standIcaoCategories', ['C']);
         syncStandConstraintVisibility('stand');
-        renderAircraftConstraintChoices('standAircraftAccess', aircraftTypeIdsForIcaoLetters(['C']));
+        renderAircraftConstraintChoices('standAircraftAccess', aircraftTypeIdsForIcaoLetters(['C']), ['C']);
         applyIcaoCategoriesToHost('remoteIcaoCategories', ['C']);
         syncStandConstraintVisibility('remote');
-        renderAircraftConstraintChoices('remoteAircraftAccess', aircraftTypeIdsForIcaoLetters(['C']));
+        renderAircraftConstraintChoices('remoteAircraftAccess', aircraftTypeIdsForIcaoLetters(['C']), ['C']);
         renderRemoteTerminalAccessChoices([]);
         applyIcaoCategoriesToHost('tempStandIcaoCategories', ['C']);
         syncStandConstraintVisibility('tempStand');
-        renderAircraftConstraintChoices('tempStandAircraftAccess', aircraftTypeIdsForIcaoLetters(['C']));
+        renderAircraftConstraintChoices('tempStandAircraftAccess', aircraftTypeIdsForIcaoLetters(['C']), ['C']);
         renderTempStandTerminalAccessChoices([]);
       }
       const tempStandNameInput = document.getElementById('tempStandName');
@@ -525,26 +548,3 @@
     syncSettingsPaneToMode();
   });
   if (layoutModeTabs && settingModeSelect) {
-    layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const mode = this.getAttribute('data-mode') || 'grid';
-        if (settingModeSelect.value === mode) {
-          cancelActiveLayoutDrawingState();
-          syncSettingsPaneToMode();
-          return;
-        }
-        settingModeSelect.value = mode;
-        settingModeSelect.dispatchEvent(new Event('change'));
-      });
-    });
-  }
-  syncSettingsPaneToMode();
-
-  let activeTab = 'settings';
-  function switchToTab(tabId) {
-    activeTab = tabId;
-    cancelActiveLayoutDrawingState();
-    document.querySelectorAll('.right-panel-tab').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    const tabBtn = document.querySelector('.right-panel-tab[data-tab="' + tabId + '"]');
-    const tabEl = document.getElementById('tab-' + tabId);

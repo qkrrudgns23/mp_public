@@ -1,3 +1,38 @@
+  /** Same runway resolution as graphPathArrival (token.arrRunwayId before generic runwayId). */
+  function resolveArrivalRunwayIdForFlight(f) {
+    if (!f) return null;
+    const t = f.token || {};
+    return t.arrRunwayId || t.runwayId || f.arrRunwayId || null;
+  }
+  function isValidSampledArrRetForFlight(f, retStatsAll) {
+    if (!f || f.sampledArrRet == null) return false;
+    if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
+    const arrDir = resolveArrivalRunwayDirForRetGate(f);
+    return retStatsAll.some(function(r) {
+      if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
+      if (arrRunwayId == null) return true;
+      if (!(r.runway && r.runway.id === arrRunwayId)) return false;
+      if (arrDir === 'clockwise' || arrDir === 'counter_clockwise') {
+        if (!isRunwayExitDirectionAllowed(r.exit, arrDir)) return false;
+      }
+      return true;
+    });
+  }
+  /** Runway-exit (RET) sampling for Arrival Configuration / schedule RET column. ROT(arr) seconds come from Pro Sim schedule (``ARR_ROT_SEC``), not from this function. */
+  function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {
+    if (!f) return;
+    const rev = state.vttArrCacheRev | 0;
+    if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
+    if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
+        f.sampledArrRet != null && f.arrRetFailed === false &&
+        isValidSampledArrRetForFlight(f, retStatsAll)) {
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    if (f.sampledArrRet != null && !isValidSampledArrRetForFlight(f, retStatsAll)) {
+      f.sampledArrRet = null;
+      f.arrRetFailed = false;
       f.arrDecelMs2 = null;
     }
     const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
@@ -2657,38 +2692,3 @@
         events.push({ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin_d, index: eventIndex++ });
       }
     });
-    return { cfg, events };
-  }
-
-  function runSeparationPass(runways, flights, byRunway, phase) {
-    if (phase === 'initial') {
-      runways.forEach(rwy => {
-        const pack = rsepCollectEventsForRunway(rwy, flights, runways);
-        if (!pack) return;
-        const { cfg, events } = pack;
-        if (!events.length) {
-          byRunway[rwy.id] = { events: [], minT: 0, maxT: 0 };
-          return;
-        }
-        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg);
-        byRunway[rwy.id] = { events, minT, maxT };
-      });
-    } else {
-      runways.forEach(rwy => {
-        const cfg = rsepGetConfigForRunway(rwy);
-        if (!cfg) return;
-        const data = byRunway[rwy.id];
-        if (!data || !data.events || !data.events.length) return;
-        const events = data.events;
-        events.forEach(ev => {
-          ev.time = ev.type === 'arr'
-            ? (ev.flight.eldtMin != null ? ev.flight.eldtMin : ev.time)
-            : (ev.flight.etotMin != null ? ev.flight.etotMin : ev.time);
-        });
-        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg);
-        byRunway[rwy.id] = { events, minT, maxT };
-      });
-    }
-  }
-
-  function buildRunwaySeparationTimelineByRunwaySnapshot(flights) {

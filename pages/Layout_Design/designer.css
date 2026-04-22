@@ -373,18 +373,65 @@
     .compact-form > .section-title {
       grid-column: 1 / -1;
     }
+    /* ICAO A–F: same chip + panel treatment as Aircraft types / buildings */
     .icao-multi-checks {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.35rem 0.65rem;
-      align-items: center;
+      gap: 4px 5px;
+      align-items: flex-start;
+      min-width: 0;
+      margin-top: 4px;
+      padding: 5px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--ui-border-default);
+      background: var(--ui-bg-input);
+      font-size: 10px;
+      color: var(--ui-text-primary);
+      box-sizing: border-box;
     }
     .icao-letter-option {
       display: inline-flex;
-      align-items: center;
-      gap: 0.2rem;
-      font-size: 0.88rem;
+      align-items: flex-start;
+      gap: 4px;
+      cursor: pointer;
+      padding: 3px 6px;
+      border-radius: 6px;
+      border: 1px solid #374151;
+      background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+      color: #e5e7eb;
+      transition: var(--ui-transition);
+      user-select: none;
+      flex: 0 1 auto;
+      max-width: 100%;
+      min-width: 0;
+      font-size: inherit;
+      line-height: 1.25;
       white-space: nowrap;
+      box-sizing: border-box;
+    }
+    .icao-letter-option:hover {
+      border-color: #4b5563;
+      filter: brightness(1.05);
+    }
+    .icao-letter-option:has(.icao-letter-check:checked) {
+      border-color: #22c55e;
+      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.22) inset;
+    }
+    .icao-letter-option input.icao-letter-check {
+      width: 11px;
+      height: 11px;
+      min-width: 11px;
+      margin: 1px 0 0 0;
+      flex-shrink: 0;
+      accent-color: #22c55e;
+      cursor: pointer;
+    }
+    /* .compact-field label applies to all nested labels — reset chip row labels */
+    .compact-field .icao-multi-checks .icao-letter-option,
+    .inline-field .icao-multi-checks .icao-letter-option {
+      width: auto;
+      font-weight: 500;
+      letter-spacing: 0.01em;
     }
     .compact-field label,
     .inline-field label {
@@ -933,13 +980,67 @@
     #api-warning-banner { display: none; background: var(--ui-error-bg); color: var(--ui-error-text); padding: 10px 12px; font-size: 11px; border-radius: 8px; margin-bottom: 12px; line-height: 1.45; border: 1px solid var(--ui-error-border); }
     #api-warning-banner strong { color: var(--ui-text-primary); font-weight: 600; }
     #flight-tooltip { position: absolute; pointer-events: none; padding: 4px 8px; font-size: 11px; border-radius: 6px; background: var(--ui-bg-elevated); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); display: none; z-index: 40; box-shadow: 0 1px 3px rgba(0,0,0,0.4); max-width: 280px; }
-    #remoteTerminalAccess, #tempStandTerminalAccess, #runwayExitAllowedDirection, #standAircraftAccess, #remoteAircraftAccess, #tempStandAircraftAccess { margin-top: 4px; padding: 8px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-input); font-size: 11px; color: var(--ui-text-primary); max-height: 140px; overflow: auto; }
-    .choice-chip-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
-    .choice-chip { display:flex; align-items:center; gap:8px; cursor:pointer; padding:8px 10px; border-radius:10px; border:1px solid #374151; background:linear-gradient(180deg,#1f2937 0%,#111827 100%); color:#e5e7eb; transition:var(--ui-transition); user-select:none; }
-    .choice-chip:hover { border-color:#4b5563; filter:brightness(1.05); }
-    .choice-chip.is-checked { border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,0.22) inset; }
-    .choice-chip input { accent-color:#22c55e; inline-size:14px; block-size:14px; cursor:pointer; margin:0; flex:0 0 auto; }
-    .choice-chip-label { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; letter-spacing:0.2px; }
+    #remoteTerminalAccess, #tempStandTerminalAccess, #runwayExitAllowedDirection, #standAircraftAccess, #remoteAircraftAccess, #tempStandAircraftAccess {
+      margin-top: 4px;
+      padding: 5px 6px;
+      border-radius: 6px;
+      border: 1px solid var(--ui-border-default);
+      background: var(--ui-bg-input);
+      font-size: 10px;
+      color: var(--ui-text-primary);
+      max-height: 160px;
+      overflow: auto;
+      min-width: 0;
+    }
+    /* Multi-select chips: width follows label; wrap to as many per row as fit; shrink on narrow panels */
+    .choice-chip-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 5px;
+      align-items: flex-start;
+      min-width: 0;
+    }
+    .choice-chip {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 4px;
+      cursor: pointer;
+      padding: 3px 6px;
+      border-radius: 6px;
+      border: 1px solid #374151;
+      background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+      color: #e5e7eb;
+      transition: var(--ui-transition);
+      user-select: none;
+      flex: 0 1 auto;
+      max-width: 100%;
+      min-width: 0;
+      font-size: 10px;
+      line-height: 1.25;
+      box-sizing: border-box;
+    }
+    .choice-chip:hover { border-color: #4b5563; filter: brightness(1.05); }
+    .choice-chip.is-checked { border-color: #22c55e; box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.22) inset; }
+    .choice-chip input {
+      accent-color: #22c55e;
+      width: 11px;
+      height: 11px;
+      min-width: 11px;
+      margin: 1px 0 0 0;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+    .choice-chip-label {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      font-size: inherit;
+    }
     .sim-run-btn { background:var(--ui-accent) !important; color:#fff !important; font-weight:600; border-radius:6px; margin-left:10px; padding:6px 14px; font-size:11px; cursor:pointer; transition:var(--ui-transition); border:none; }
     .sim-run-btn:hover { background:var(--ui-accent-hover, #9181f8) !important; box-shadow:0 0 0 2px var(--ui-accent-ring); }
     .sim-run-btn:disabled { opacity:0.6; cursor:not-allowed; }

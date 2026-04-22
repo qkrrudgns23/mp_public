@@ -1,3 +1,26 @@
+      state.directionModes = [
+        { id: id(), name: 'Mode A', direction: 'clockwise' },
+        { id: id(), name: 'Mode B', direction: 'counter_clockwise' },
+        { id: id(), name: 'Mode C', direction: 'both' }
+      ];
+    }
+  }
+  const undoStack = [];
+  const maxUndoLevels = _interactionConfigNum('maxUndoLevels', 50);
+  function pushUndo() {
+    const snap = {
+      terminals: JSON.parse(JSON.stringify(state.terminals || [])),
+      pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
+      remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+      tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
+      holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
+      taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
+      apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
+      layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
+      layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
+      directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
+      flights: cloneFlightsWithoutPathPolylineCache(state.flights),
+      layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))
     };
     undoStack.push(snap);
     if (undoStack.length > maxUndoLevels) undoStack.shift();
@@ -605,26 +628,3 @@
     const center = getStandConnectionPx(pbb);
     return Math.atan2(center[1] - anchor[1], center[0] - anchor[0]);
   }
-  function getPBBStandCorners(pbb) {
-    const center = getStandConnectionPx(pbb);
-    const cx = center[0], cy = center[1];
-    const cat = pbb.category || 'C';
-    const dep = getStandDepthMeters(cat);
-    const halfD = dep / 2;
-    const halfW = getStandWidthMeters(cat) / 2;
-    const angle = getPBBStandAngle(pbb);
-    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
-    const cos = Math.cos(angle), sin = Math.sin(angle);
-    return [
-      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
-      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
-      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
-      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
-    ];
-  }
-  function pointInPolygonXY(p, verts) {
-    let inside = false;
-    const n = verts.length;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const vi = verts[i], vj = verts[j];
-      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;

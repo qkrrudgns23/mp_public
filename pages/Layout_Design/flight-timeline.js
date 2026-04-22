@@ -1,3 +1,26 @@
+
+  function _persistCellSizePx() {
+    return (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
+  }
+  function persistVerticesCellsToXY(vertices) {
+    const cs = _persistCellSizePx();
+    if (!Array.isArray(vertices)) return [];
+    return vertices.map(function(v) {
+      if (!v || typeof v !== 'object') return { x: 0, y: 0 };
+      const c = Number(v.col), r = Number(v.row);
+      return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
+    });
+  }
+  function persistPointCellToXY(pt) {
+    if (!pt || typeof pt !== 'object') return null;
+    const xRaw = Number(pt.x), yRaw = Number(pt.y);
+    if (isFinite(xRaw) && isFinite(yRaw)) return { x: xRaw, y: yRaw };
+    const cs = _persistCellSizePx();
+    const c = Number(pt.col), r = Number(pt.row);
+    return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
+  }
+
+  function _polylineLengthPxForLineup(pts) {
     if (!pts || pts.length < 2) return 0;
     let s = 0;
     for (let i = 0; i < pts.length - 1; i++) {
@@ -1305,26 +1328,3 @@
           if (dist2(pr.p, click) <= tol2) return { type: 'layoutMarker', id: m.id, obj: m };
         }
       }
-    }
-    return null;
-  }
-  function hideMarkerTextDraftEditor() {
-    const layer = document.getElementById('marker-text-edit-layer');
-    const input = document.getElementById('markerTextDraftInput');
-    if (layer) {
-      layer.setAttribute('hidden', '');
-      layer.setAttribute('aria-hidden', 'true');
-    }
-    if (input) input.value = '';
-  }
-  function syncMarkerTextDraftInputPosition() {
-    const draft = state.markerTextDraft;
-    const input = document.getElementById('markerTextDraftInput');
-    if (!draft || !draft.active || !input) return;
-    const sc = worldToScreenCanvas(draft.x, draft.y);
-    input.style.left = Math.round(sc[0] + 4) + 'px';
-    input.style.top = Math.round(sc[1] + 4) + 'px';
-  }
-  function showMarkerTextDraftEditor() {
-    const layer = document.getElementById('marker-text-edit-layer');
-    const input = document.getElementById('markerTextDraftInput');

@@ -1,3 +1,18 @@
+  function c2dPathDrawStartLabelFontPx() {
+    const n = Number(_canvas2dStyle.pathDrawStartLabelFontPx);
+    const base = (isFinite(n) && n >= 6) ? n : 8;
+    return Math.max(6, Math.round(base * LAYOUT_VERTEX_DOT_SCALE));
+  }
+  function c2dPathDrawStartLabelOffsetY() {
+    const n = Number(_canvas2dStyle.pathDrawStartLabelOffsetY);
+    const base = isFinite(n) ? n : -6;
+    return base * LAYOUT_VERTEX_DOT_SCALE;
+  }
+  const GANTT_COLORS = {
+    S_BAR: _ganttStyle.sBar || '#007aff',
+    S_SERIES: _ganttStyle.sSeries || '#38bdf8',
+    E_BAR: _ganttStyle.eBar || '#fb37c5',
+    E_SERIES: _ganttStyle.eSeries || '#fb923c',
     CONFLICT: _ganttStyle.conflict || '#7f1d1d',
     SELECTED: _ganttStyle.selected || '#fbbf24',
   };
@@ -440,9 +455,17 @@
       { id: 'counter_clockwise', label: 'CCW' },
     ], selectedIds, 'runway-exit-dir-check', 'runway-exit-dir');
   }
-  function renderAircraftConstraintChoices(containerId, selectedIds) {
+  function renderAircraftConstraintChoices(containerId, selectedIds, icaoLetters) {
     const container = document.getElementById(containerId);
-    renderChoiceChipList(container, getAircraftConstraintOptions(), selectedIds, 'aircraft-type-check', containerId);
+    if (!container) return;
+    let letters = normalizeAllowedIcaoCategories(icaoLetters);
+    if (!letters.length) letters = ['C'];
+    const items = getAircraftConstraintOptionsForIcaoLetters(letters);
+    const allowedIds = {};
+    items.forEach(function(it) { allowedIds[it.id] = true; });
+    const selectedArr = Array.isArray(selectedIds) ? selectedIds.map(String) : [];
+    const filteredSelected = selectedArr.filter(function(id) { return allowedIds[id]; });
+    renderChoiceChipList(container, items, filteredSelected, 'aircraft-type-check', containerId);
   }
   function syncStandConstraintVisibility(prefix) {
     const icaoWrap = document.getElementById(prefix + 'IcaoWrap');
@@ -805,26 +828,3 @@
     } else {
       invalidatePathGraphCache(true);
     }
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    if (typeof draw === 'function') draw();
-    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-  }
-  function setGlobalUpdateProgressUi(visible, label, pct) {
-    const ov = document.getElementById('globalUpdateOverlay');
-    const fill = document.getElementById('globalUpdateProgressFill');
-    const lab = document.getElementById('globalUpdateOverlayLabel');
-    const btn = document.getElementById('btnGlobalUpdate');
-    if (!ov) return;
-    if (visible) {
-      ov.classList.add('is-visible');
-      ov.setAttribute('aria-hidden', 'false');
-      if (lab && label != null) lab.textContent = label;
-      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
-      if (btn) btn.disabled = true;
-    } else {
-      ov.classList.remove('is-visible');
-      ov.setAttribute('aria-hidden', 'true');
-      if (fill) fill.style.width = '0%';
-      if (btn) btn.disabled = false;
-    }
-  }

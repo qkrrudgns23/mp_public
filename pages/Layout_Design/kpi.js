@@ -1,3 +1,26 @@
+    layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const mode = this.getAttribute('data-mode') || 'grid';
+        if (settingModeSelect.value === mode) {
+          cancelActiveLayoutDrawingState();
+          syncSettingsPaneToMode();
+          return;
+        }
+        settingModeSelect.value = mode;
+        settingModeSelect.dispatchEvent(new Event('change'));
+      });
+    });
+  }
+  syncSettingsPaneToMode();
+
+  let activeTab = 'settings';
+  function switchToTab(tabId) {
+    activeTab = tabId;
+    cancelActiveLayoutDrawingState();
+    document.querySelectorAll('.right-panel-tab').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    const tabBtn = document.querySelector('.right-panel-tab[data-tab="' + tabId + '"]');
+    const tabEl = document.getElementById('tab-' + tabId);
     if (tabBtn) tabBtn.classList.add('active');
     if (tabEl) tabEl.classList.add('active');
     if (tabId === 'flight') {
@@ -248,23 +271,27 @@
     standIcaoCategoriesHost.addEventListener('change', function(ev) {
       const t = ev.target;
       if (!t || !t.classList.contains('icao-letter-check')) return;
-      if (!state.selectedObject || state.selectedObject.type !== 'pbb') return;
-      const pbb = state.selectedObject.obj;
       let letters = readIcaoCategoriesFromHost('standIcaoCategories');
       if (!letters.length) {
         letters = ['C'];
         applyIcaoCategoriesToHost('standIcaoCategories', letters);
       }
-      pbb.categoryMode = 'icao';
-      pbb.allowedIcaoCategories = letters;
-      pbb.category = representativeCategoryFromLetters(letters);
-      pbb.allowedAircraftTypes = aircraftTypeIdsForIcaoLetters(letters);
-      renderAircraftConstraintChoices('standAircraftAccess', pbb.allowedAircraftTypes);
-      rebuildPbbBridgeGeometry(pbb);
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-      update3DSceneWhenVisible();
+      const typeIds = aircraftTypeIdsForIcaoLetters(letters);
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        const pbb = state.selectedObject.obj;
+        pbb.categoryMode = 'icao';
+        pbb.allowedIcaoCategories = letters;
+        pbb.category = representativeCategoryFromLetters(letters);
+        pbb.allowedAircraftTypes = typeIds;
+        renderAircraftConstraintChoices('standAircraftAccess', typeIds, letters);
+        rebuildPbbBridgeGeometry(pbb);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      } else {
+        renderAircraftConstraintChoices('standAircraftAccess', typeIds, letters);
+      }
     });
   }
   const pbbLengthInputEl = document.getElementById('pbbLength');
@@ -340,31 +367,4 @@
         draw();
         update3DSceneWhenVisible();
       }
-    });
-  }
-  const pbbBoardingHeightEl = document.getElementById('pbbBoardingHeight');
-  if (pbbBoardingHeightEl) {
-    pbbBoardingHeightEl.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        applyPbbBoardingAreaDimsFromInputs(state.selectedObject.obj);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
-    });
-  }
-  const standAircraftAccessEl = document.getElementById('standAircraftAccess');
-  if (standAircraftAccessEl) {
-    standAircraftAccessEl.addEventListener('change', function(ev) {
-      const target = ev.target;
-      if (!target || !target.classList.contains('aircraft-type-check')) return;
-      syncChoiceChipStates(standAircraftAccessEl);
-      if (!state.selectedObject || state.selectedObject.type !== 'pbb') return;
-      const pbbAc = state.selectedObject.obj;
-      applyUnifiedStandConstraintFromPanelToObject(pbbAc, 'standIcaoCategories', 'standAircraftAccess');
-      if (pbbAc.categoryMode === 'icao') renderAircraftConstraintChoices('standAircraftAccess', pbbAc.allowedAircraftTypes);
-      updateObjectInfo();
-      renderObjectList();
-      draw();
     });

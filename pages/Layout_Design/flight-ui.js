@@ -1,3 +1,26 @@
+    }
+    return null;
+  }
+  function hideMarkerTextDraftEditor() {
+    const layer = document.getElementById('marker-text-edit-layer');
+    const input = document.getElementById('markerTextDraftInput');
+    if (layer) {
+      layer.setAttribute('hidden', '');
+      layer.setAttribute('aria-hidden', 'true');
+    }
+    if (input) input.value = '';
+  }
+  function syncMarkerTextDraftInputPosition() {
+    const draft = state.markerTextDraft;
+    const input = document.getElementById('markerTextDraftInput');
+    if (!draft || !draft.active || !input) return;
+    const sc = worldToScreenCanvas(draft.x, draft.y);
+    input.style.left = Math.round(sc[0] + 4) + 'px';
+    input.style.top = Math.round(sc[1] + 4) + 'px';
+  }
+  function showMarkerTextDraftEditor() {
+    const layer = document.getElementById('marker-text-edit-layer');
+    const input = document.getElementById('markerTextDraftInput');
     if (!layer || !input) return;
     layer.removeAttribute('hidden');
     layer.setAttribute('aria-hidden', 'false');
@@ -835,26 +858,3 @@
     if (settingModeSelect.value === 'apronTaxiway' && state.apronLinkDrawing && state.apronLinkTemp) {
       if (state.apronLinkMidpoints && state.apronLinkMidpoints.length) {
         state.apronLinkMidpoints.pop();
-        draw();
-        return true;
-      }
-      state.apronLinkTemp = null;
-      state.apronLinkMidpoints = [];
-      state.apronLinkPointerWorld = null;
-      draw();
-      return true;
-    }
-    if (settingModeSelect.value === 'marker' && state.markerDrawing && getMarkerSubKindFromPanel() === 'island' && state.markerIslandDraft && state.markerIslandDraft.points && state.markerIslandDraft.points.length) {
-      state.markerIslandDraft.points.pop();
-      if (!state.markerIslandDraft.points.length) state.markerIslandDraft = null;
-      state.markerIslandHoverWorld = null;
-      draw();
-      return true;
-    }
-    if (settingModeSelect.value === 'marker' && state.markerDrawing && getMarkerSubKindFromPanel() === 'area' && state.markerAreaDraft && state.markerAreaDraft.points && state.markerAreaDraft.points.length) {
-      state.markerAreaDraft.points.pop();
-      if (!state.markerAreaDraft.points.length) state.markerAreaDraft = null;
-      state.markerAreaHoverWorld = null;
-      draw();
-      return true;
-    }

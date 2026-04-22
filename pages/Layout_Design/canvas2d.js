@@ -1,3 +1,38 @@
+  function getEffectiveRunwayEndBlastPadM(tw) {
+    if (!tw || tw.pathType !== 'runway') return RUNWAY_END_BLAST_PAD_DEFAULT_M;
+    const v = tw.endBlastPadM;
+    return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : RUNWAY_END_BLAST_PAD_DEFAULT_M;
+  }
+
+  function runwayPolylineLengthPx(pts) {
+    if (!pts || pts.length < 2) return 0;
+    let s = 0;
+    for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
+    return s;
+  }
+
+  
+  function runwayApproachThresholdDistAlongM(runwayId, tdDistAlong) {
+    const path = getRunwayPath(runwayId);
+    if (!path || !path.pts || path.pts.length < 2) return 0;
+    const totalLen = runwayPolylineLengthPx(path.pts);
+    const tw = (state.taxiways || []).find(function(t) { return t && t.id === runwayId && t.pathType === 'runway'; });
+    if (!tw) return 0;
+    const startInset = getEffectiveRunwayStartDisplacedThresholdM(tw) + getEffectiveRunwayStartBlastPadM(tw);
+    const endInset = getEffectiveRunwayEndDisplacedThresholdM(tw) + getEffectiveRunwayEndBlastPadM(tw);
+    const isCcw = normalizeRwDirectionValue(getTaxiwayDirection(tw)) === 'counter_clockwise';
+    const lowInset = isCcw ? endInset : startInset;
+    const highInset = isCcw ? startInset : endInset;
+    const dLow = Math.min(Math.max(0, lowInset), totalLen);
+    const dHigh = Math.max(0, Math.min(totalLen, totalLen - highInset));
+    if (!(totalLen > 1e-6)) return dLow;
+    if (tdDistAlong <= totalLen * 0.5) return dLow;
+    return dHigh;
+  }
+
+  function getPolylinePointAndFrameAtDistance(pts, distPx) {
+    if (!pts || pts.length < 2) return null;
+    const total = runwayPolylineLengthPx(pts);
     const d = Math.max(0, Math.min(typeof distPx === 'number' ? distPx : 0, total));
     let acc = 0;
     for (let i = 0; i < pts.length - 1; i++) {
@@ -1673,38 +1708,3 @@
       adj[j].push([i, totalDist]);
       registerDirectedEdge(i, j, totalDist, totalDist, pts.slice().reverse(), apronLinkId, 'apron_link', 'both');
       registerDirectedEdge(j, i, totalDist, totalDist, pts, apronLinkId, 'apron_link', 'both');
-    });
-    function bfsReachable(startIndices) {
-      const out = new Set();
-      const q = startIndices.slice();
-      startIndices.forEach(function(idx) { out.add(idx); });
-      while (q.length) {
-        const u = q.shift();
-        (adj[u] || []).forEach(function(tuple) {
-          const v = tuple[0], w = tuple[1];
-          if (w >= REVERSE_COST) return;
-          if (!out.has(v)) { out.add(v); q.push(v); }
-        });
-      }
-      return out;
-    }
-    function nearestNode(p) {
-      let best = 0, bestD2 = dist2(nodes[0], p);
-      for (let i = 1; i < nodes.length; i++) {
-        const d2 = dist2(nodes[i], p);
-        if (d2 < bestD2) { bestD2 = d2; best = i; }
-      }
-      return best;
-    }
-    const runwayNodeIndices = [];
-    const runwayNodeSeen = new Set();
-    const runways = (state.taxiways || []).filter(function(t) { return t.pathType === 'runway'; });
-    runways.forEach(function(rw) {
-      const r = getRunwayPath(rw.id);
-      if (!r) return;
-      [r.startPx, r.endPx].forEach(function(p) {
-        if (!p) return;
-        const idx = nearestNode(p);
-        if (idx == null || runwayNodeSeen.has(idx)) return;
-        runwayNodeSeen.add(idx);
-        runwayNodeIndices.push(idx);
