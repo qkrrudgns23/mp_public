@@ -16503,6 +16503,97 @@
         selectedAirportIcao = pref ? 'RPLL' : AIRPORT_SEARCH_ROWS[0].icao;
       }
       renderAirportRows();
+      const choiceModal = document.getElementById('airportMapLoadChoiceModal');
+      const choiceBodyEl = document.getElementById('airportMapLoadChoiceBody');
+      const btnRedownload = document.getElementById('btnAirportMapRedownload');
+      const btnUseSaved = document.getElementById('btnAirportMapUseSaved');
+      const btnChoiceCancel = document.getElementById('btnAirportMapChoiceCancel');
+      let pendingAirportChoiceIcao = '';
+      let pendingAirportChoiceResolve = null;
+      function setAirportChoiceModalVisible(on) {
+        if (!choiceModal) return;
+        choiceModal.classList.toggle('is-visible', !!on);
+        choiceModal.setAttribute('aria-hidden', on ? 'false' : 'true');
+      }
+      function finishAirportMapChoice(choice) {
+        setAirportChoiceModalVisible(false);
+        if (pendingAirportChoiceResolve) {
+          const fn = pendingAirportChoiceResolve;
+          pendingAirportChoiceResolve = null;
+          fn(choice);
+        }
+      }
+      function wireAirportChoiceModalOnce() {
+        if (!choiceModal || choiceModal.dataset.wired === '1') return;
+        choiceModal.dataset.wired = '1';
+        const backdrop = choiceModal.querySelector('[data-airport-choice-dismiss]');
+        if (btnRedownload) btnRedownload.addEventListener('click', function() { finishAirportMapChoice('network'); });
+        if (btnUseSaved) btnUseSaved.addEventListener('click', function() { finishAirportMapChoice('saved'); });
+        if (btnChoiceCancel) btnChoiceCancel.addEventListener('click', function() { finishAirportMapChoice(null); });
+        if (backdrop) backdrop.addEventListener('click', function() { finishAirportMapChoice(null); });
+      }
+      wireAirportChoiceModalOnce();
+      function applyAirportMapPayload(j, apiBase) {
+        if (!j || j.ok !== true) {
+          const er = (j && j.error) ? String(j.error) : 'Unknown error';
+          throw new Error(er);
+        }
+        if (msgEl) {
+          const verb = j.fromSavedMapOnly ? 'Used saved ' : 'Saved ';
+          msgEl.textContent = verb + 'data/map_storage/' + (j.file || '') + ' (' + (j.featureCount != null ? j.featureCount : 0) + ' features)';
+          msgEl.style.color = '#9ca3af';
+        }
+        if (j.layoutError) {
+          console.warn('OSM → layout import failed', j.layoutError);
+          if (msgEl) { msgEl.textContent += ' — layout: ' + j.layoutError; }
+        }
+        if (!j.layoutName || j.layoutError) return Promise.resolve(undefined);
+        return fetch(apiBase + '/api/load-layout?name=' + encodeURIComponent(j.layoutName)).then(function(r2) {
+          if (!r2.ok) throw new Error('load-layout HTTP ' + r2.status);
+          return r2.json();
+        }).then(function(layoutObj) {
+          try {
+            state.hasSimulationResult = false;
+            applyLayoutObject(layoutObj);
+            if (typeof resizeCanvas === 'function') resizeCanvas();
+            if (typeof reset2DView === 'function') reset2DView();
+            if (typeof syncPanelFromState === 'function') syncPanelFromState();
+            if (typeof draw === 'function') draw();
+            if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+            if (typeof updateLayoutNameBar === 'function') updateLayoutNameBar(j.layoutName);
+            if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+            if (msgEl) { msgEl.textContent += ' · Loaded layout ' + j.layoutName; }
+          } catch (err) {
+            console.error('applyLayoutObject after airport fetch', err);
+            throw err;
+          }
+        });
+      }
+      function postAirportMapJson(apiBase, path, icao) {
+        return fetch(apiBase + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ icao: icao })
+        })
+          .then(function(r) { return r.json().then(function(j) { return { r: r, j: j }; }); })
+          .then(function(o) {
+            if (!o.r.ok || !o.j || o.j.ok !== true) {
+              const er = (o.j && o.j.error) ? o.j.error : ('HTTP ' + o.r.status);
+              throw new Error(er);
+            }
+            return applyAirportMapPayload(o.j, apiBase);
+          });
+      }
+      function runAirportDownload(icao) {
+        const apiBase = getLayoutApiBase();
+        if (msgEl) { msgEl.textContent = 'Fetching from OpenStreetMap (Overpass)…'; msgEl.style.color = '#9ca3af'; }
+        return postAirportMapJson(apiBase, '/api/fetch-airport-map', icao);
+      }
+      function runAirportProcessStored(icao) {
+        const apiBase = getLayoutApiBase();
+        if (msgEl) { msgEl.textContent = 'Rebuilding layout from saved map…'; msgEl.style.color = '#9ca3af'; }
+        return postAirportMapJson(apiBase, '/api/process-stored-airport-map', icao);
+      }
       if (btnFetch) {
         btnFetch.addEventListener('click', function() {
           const icao = String(selectedAirportIcao || '').trim().toUpperCase();
@@ -16511,54 +16602,33 @@
             return;
           }
           const apiBase = getLayoutApiBase();
-          if (msgEl) { msgEl.textContent = 'Fetching from OpenStreetMap (Overpass)…'; msgEl.style.color = '#9ca3af'; }
           btnFetch.disabled = true;
-          fetch(apiBase + '/api/fetch-airport-map', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ icao: icao })
-          })
-            .then(function(r) { return r.json().then(function(j) { return { r: r, j: j }; }); })
-            .then(function(o) {
-              if (!o.r.ok || !o.j || o.j.ok !== true) {
-                const er = (o.j && o.j.error) ? o.j.error : ('HTTP ' + o.r.status);
-                throw new Error(er);
+          fetch(apiBase + '/api/airport-map-exists?icao=' + encodeURIComponent(icao))
+            .then(function(r) { return r.json().catch(function() { return null; }); })
+            .then(function(check) {
+              if (!check || check.ok !== true) return 'network';
+              if (!check.exists) return 'network';
+              if (!choiceModal || !choiceBodyEl) return 'network';
+              pendingAirportChoiceIcao = icao;
+              choiceBodyEl.innerHTML = ''
+                + '<p>A saved map file already exists for <strong>' + escapeHtml(icao) + '</strong>:</p>'
+                + '<p><code>data/map_storage/' + escapeHtml(check.file || (icao + '_map.json')) + '</code></p>'
+                + '<p>Re-download from the source (overwrites the file), or use the saved map and rebuild the layout only.</p>';
+              return new Promise(function(resolve) {
+                pendingAirportChoiceResolve = resolve;
+                setAirportChoiceModalVisible(true);
+              });
+            })
+            .then(function(choice) {
+              if (choice === null || choice === undefined) {
+                if (msgEl) { msgEl.textContent = 'Cancelled.'; msgEl.style.color = '#9ca3af'; }
+                return undefined;
               }
-              const j = o.j;
-              if (msgEl) {
-                msgEl.textContent = 'Saved data/map_storage/' + (j.file || '') + ' (' + (j.featureCount != null ? j.featureCount : 0) + ' features)';
-                msgEl.style.color = '#9ca3af';
-              }
-              if (j.layoutError) {
-                console.warn('OSM → layout import failed', j.layoutError);
-                if (msgEl) { msgEl.textContent += ' — layout: ' + j.layoutError; }
-              }
-              if (j.layoutName && !j.layoutError) {
-                return fetch(apiBase + '/api/load-layout?name=' + encodeURIComponent(j.layoutName)).then(function(r2) {
-                  if (!r2.ok) throw new Error('load-layout HTTP ' + r2.status);
-                  return r2.json();
-                }).then(function(layoutObj) {
-                  try {
-                    state.hasSimulationResult = false;
-                    applyLayoutObject(layoutObj);
-                    if (typeof resizeCanvas === 'function') resizeCanvas();
-                    if (typeof reset2DView === 'function') reset2DView();
-                    if (typeof syncPanelFromState === 'function') syncPanelFromState();
-                    if (typeof draw === 'function') draw();
-                    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-                    if (typeof updateLayoutNameBar === 'function') updateLayoutNameBar(j.layoutName);
-                    if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-                    if (msgEl) { msgEl.textContent += ' · Loaded layout ' + j.layoutName; }
-                  } catch (err) {
-                    console.error('applyLayoutObject after airport fetch', err);
-                    throw err;
-                  }
-                });
-              }
-              return undefined;
+              if (choice === 'saved') return runAirportProcessStored(icao);
+              return runAirportDownload(icao);
             })
             .catch(function(e) {
-              console.warn('fetch-airport-map failed', e);
+              console.warn('airport map load', e);
               if (msgEl) {
                 msgEl.textContent = (e && e.message) ? String(e.message) : 'Request failed';
                 msgEl.style.color = '#f97316';

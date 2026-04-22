@@ -621,6 +621,18 @@
         <div class="global-update-progress-track"><div id="globalUpdateProgressFill" class="global-update-progress-fill"></div></div>
       </div>
     </div>
+    <div id="airportMapLoadChoiceModal" class="airport-map-choice-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="airportMapLoadChoiceTitle">
+      <div class="airport-map-choice-modal-backdrop" data-airport-choice-dismiss="1" aria-hidden="true"></div>
+      <div class="airport-map-choice-modal-card">
+        <div id="airportMapLoadChoiceTitle" class="airport-map-choice-modal-title">Saved map data found</div>
+        <div id="airportMapLoadChoiceBody" class="airport-map-choice-modal-body"></div>
+        <div class="airport-map-choice-modal-actions">
+          <button type="button" class="small" id="btnAirportMapChoiceCancel">Cancel</button>
+          <button type="button" class="small" id="btnAirportMapUseSaved">Use saved map (rebuild layout only)</button>
+          <button type="button" class="small airport-map-choice-primary" id="btnAirportMapRedownload">Re-download from source</button>
+        </div>
+      </div>
+    </div>
     <aside id="aiAssistantDock" class="ai-assistant-dock" hidden aria-hidden="true" aria-label="AI assistant placeholder">
       <div class="ai-assistant-dock-header">
         <span class="ai-assistant-dock-title">Agent</span>

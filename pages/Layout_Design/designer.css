@@ -233,6 +233,73 @@
       background: linear-gradient(90deg, var(--ui-accent, #7c6af7), #a78bfa);
       transition: width 0.2s ease-out;
     }
+    /* Load Airport Data: existing _map.json choice (designer_body.html) */
+    .airport-map-choice-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 100050;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+      pointer-events: auto;
+    }
+    .airport-map-choice-modal.is-visible { display: flex; }
+    .airport-map-choice-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.55);
+      backdrop-filter: blur(2px);
+    }
+    .airport-map-choice-modal-card {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 420px;
+      padding: 18px 18px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--ui-border-default);
+      background: var(--ui-bg-elevated);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    }
+    .airport-map-choice-modal-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ui-text-primary);
+      margin-bottom: 10px;
+    }
+    .airport-map-choice-modal-body {
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--ui-text-secondary);
+      margin-bottom: 14px;
+    }
+    .airport-map-choice-modal-body p { margin: 0 0 8px 0; }
+    .airport-map-choice-modal-body p:last-child { margin-bottom: 0; }
+    .airport-map-choice-modal-body code {
+      display: inline-block;
+      max-width: 100%;
+      word-break: break-all;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--ui-bg-overlay);
+      font-size: 11px;
+    }
+    .airport-map-choice-modal-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .airport-map-choice-primary {
+      background: var(--ui-accent, #3b82f6) !important;
+      color: #fff !important;
+      border-color: transparent !important;
+    }
+    .airport-map-choice-primary:hover {
+      filter: brightness(1.06);
+    }
     #info-bar { display: none; position: absolute; bottom: 8px; left: 10px; right: 10px; padding: 8px 12px; min-height: 2.2em; border-radius: 8px; background: var(--ui-bg-elevated); border: 1px solid var(--ui-border-subtle); color: var(--ui-text-secondary); font-size: 12px; align-items: center; pointer-events: none; z-index: 5; }
     #right-panel {
       position: absolute;

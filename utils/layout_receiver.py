@@ -4,8 +4,9 @@ Save Layout/load: data/Layout_storage/ Save by name to.
 - POST /api/save-layout: body { "layout": {...}, "name": "optional" } or the entire layout object.
 - GET /api/load-layout?name=xxx: Layout_storage/{name}.json return.
 - GET /api/export-layout-geometry?name=xxx: polylines + points derived from that layout (designer world x/y).
-- POST /api/fetch-airport-map: body { "icao": "RPLL" } → OSM (OpenAirportMap source) → data/map_storage/{ICAO}_map.json
-  and ``pages/Layout_Design/Map/osm_to_layout.py`` → data/Layout_storage/{ICAO}_OSM.json (same keys as default layout).
+- GET /api/airport-map-exists?icao=RPLL → ``airport_map_file_status`` → { ok, exists, file, icao }
+- POST /api/fetch-airport-map: body { "icao": "RPLL" } → download OSM bundle, write ``{ICAO}_map.json``, build ``{ICAO}_OSM.json``.
+- POST /api/process-stored-airport-map: body { "icao": "RPLL" } → read saved ``{ICAO}_map.json`` only, rebuild ``{ICAO}_OSM.json``.
 """
 
 from __future__ import annotations
@@ -93,6 +94,66 @@ def save_airport_map_for_icao(icao_raw: str) -> Dict[str, Any]:
         layout_error = str(e)
     out: Dict[str, Any] = {
         "ok": True,
+        "file": out_name,
+        "path": f"data/map_storage/{out_name}",
+        "featureCount": len(feats),
+        "layoutName": layout_name,
+        "layoutFile": layout_file,
+        "layoutPath": layout_path,
+    }
+    if layout_error is not None:
+        out["layoutError"] = layout_error
+    return out
+
+
+def airport_map_file_status(icao_raw: str) -> Dict[str, Any]:
+    """Whether ``data/map_storage/{ICAO}_map.json`` exists (after ICAO sanitize)."""
+    mod = _airport_overpass_fetch_module()
+    icao = mod.sanitize_icao((icao_raw or "").strip())
+    if not icao:
+        return {"ok": False, "error": "invalid_icao", "exists": False, "icao": "", "file": ""}
+    out_name = f"{icao}_map.json"
+    p = (MAP_STORAGE_DIR / out_name).resolve()
+    if p.parent != MAP_STORAGE_DIR:
+        return {"ok": False, "error": "invalid_path", "exists": False, "icao": icao, "file": out_name}
+    exists = p.is_file()
+    return {"ok": True, "icao": icao, "exists": bool(exists), "file": out_name}
+
+
+def process_stored_airport_map_for_icao(icao_raw: str) -> Dict[str, Any]:
+    """Read existing ``{ICAO}_map.json`` and regenerate ``{ICAO}_OSM.json`` (no network fetch)."""
+    mod = _airport_overpass_fetch_module()
+    icao = mod.sanitize_icao((icao_raw or "").strip())
+    if not icao:
+        raise ValueError("invalid or missing icao (use 3–4 letter/digit ICAO)")
+    out_name = f"{icao}_map.json"
+    out_path = (MAP_STORAGE_DIR / out_name).resolve()
+    if out_path.parent != MAP_STORAGE_DIR:
+        raise ValueError("invalid output path")
+    if not out_path.is_file():
+        raise FileNotFoundError(f"No saved map file: data/map_storage/{out_name}")
+    doc = json.loads(out_path.read_text(encoding="utf-8"))
+    if not isinstance(doc, dict):
+        raise ValueError("saved map file is not a JSON object")
+    gj = doc.get("geojson") if isinstance(doc.get("geojson"), dict) else {}
+    feats = gj.get("features") if isinstance(gj.get("features"), list) else []
+    layout_name = f"{icao}_OSM"
+    layout_file = f"{layout_name}.json"
+    layout_path = f"data/Layout_storage/{layout_file}"
+    layout_error: Optional[str] = None
+    try:
+        ol = _osm_to_layout_module()
+        layout_obj = ol.build_layout_from_map_storage_document(doc, icao)
+        LAYOUT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        layout_disk = (LAYOUT_STORAGE_DIR / layout_file).resolve()
+        if layout_disk.parent != LAYOUT_STORAGE_DIR:
+            raise ValueError("invalid layout output path")
+        layout_disk.write_text(json.dumps(layout_obj, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        layout_error = str(e)
+    out: Dict[str, Any] = {
+        "ok": True,
+        "fromSavedMapOnly": True,
         "file": out_name,
         "path": f"data/map_storage/{out_name}",
         "featureCount": len(feats),
@@ -313,6 +374,23 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                     }
                 ).encode("utf-8")
             )
+            return
+        if req_path == "/api/airport-map-exists":
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                icao_q = (qs.get("icao", [""])[0] or "").strip()
+                payload = airport_map_file_status(icao_q)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps(payload).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e), "exists": False}).encode("utf-8"))
             return
         if req_path == "/api/layout-receiver-health":
             try:
@@ -549,6 +627,25 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 if isinstance(obj, dict):
                     icao_raw = (obj.get("icao") or obj.get("ICAO") or "").strip()
                 result = save_airport_map_for_icao(icao_raw)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode("utf-8"))
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
+        if path == "/api/process-stored-airport-map" or path.startswith("/api/process-stored-airport-map"):
+            try:
+                obj = json.loads(body) if body else {}
+                icao_raw = ""
+                if isinstance(obj, dict):
+                    icao_raw = (obj.get("icao") or obj.get("ICAO") or "").strip()
+                result = process_stored_airport_map_for_icao(icao_raw)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self._send_cors()
