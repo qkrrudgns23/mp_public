@@ -16507,13 +16507,17 @@
       const choiceBodyEl = document.getElementById('airportMapLoadChoiceBody');
       const btnRedownload = document.getElementById('btnAirportMapRedownload');
       const btnUseSaved = document.getElementById('btnAirportMapUseSaved');
-      const btnChoiceCancel = document.getElementById('btnAirportMapChoiceCancel');
       let pendingAirportChoiceIcao = '';
       let pendingAirportChoiceResolve = null;
       function setAirportChoiceModalVisible(on) {
         if (!choiceModal) return;
         choiceModal.classList.toggle('is-visible', !!on);
         choiceModal.setAttribute('aria-hidden', on ? 'false' : 'true');
+        if (on && btnUseSaved) {
+          try {
+            requestAnimationFrame(function() { btnUseSaved.focus(); });
+          } catch (e) {}
+        }
       }
       function finishAirportMapChoice(choice) {
         setAirportChoiceModalVisible(false);
@@ -16526,11 +16530,8 @@
       function wireAirportChoiceModalOnce() {
         if (!choiceModal || choiceModal.dataset.wired === '1') return;
         choiceModal.dataset.wired = '1';
-        const backdrop = choiceModal.querySelector('[data-airport-choice-dismiss]');
         if (btnRedownload) btnRedownload.addEventListener('click', function() { finishAirportMapChoice('network'); });
         if (btnUseSaved) btnUseSaved.addEventListener('click', function() { finishAirportMapChoice('saved'); });
-        if (btnChoiceCancel) btnChoiceCancel.addEventListener('click', function() { finishAirportMapChoice(null); });
-        if (backdrop) backdrop.addEventListener('click', function() { finishAirportMapChoice(null); });
       }
       wireAirportChoiceModalOnce();
       function applyAirportMapPayload(j, apiBase) {

@@ -292,6 +292,15 @@
       gap: 8px;
       justify-content: flex-end;
     }
+    .airport-map-choice-modal-actions-row {
+      flex-wrap: nowrap;
+      justify-content: stretch;
+      gap: 10px;
+    }
+    .airport-map-choice-modal-actions-row > button {
+      flex: 1 1 0;
+      min-width: 0;
+    }
     .airport-map-choice-primary {
       background: var(--ui-accent, #3b82f6) !important;
       color: #fff !important;
