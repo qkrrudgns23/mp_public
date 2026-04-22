@@ -1,3 +1,65 @@
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const tempStandIcaoCategoriesHost = document.getElementById('tempStandIcaoCategories');
+  if (tempStandIcaoCategoriesHost) {
+    tempStandIcaoCategoriesHost.addEventListener('change', function(ev) {
+      const t = ev.target;
+      if (!t || !t.classList.contains('icao-letter-check')) return;
+      let letters = readIcaoCategoriesFromHost('tempStandIcaoCategories');
+      if (!letters.length) {
+        letters = ['C'];
+        applyIcaoCategoriesToHost('tempStandIcaoCategories', letters);
+      }
+      const typeIds = aircraftTypeIdsForIcaoLetters(letters);
+      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+        const st = state.selectedObject.obj;
+        st.categoryMode = 'icao';
+        st.allowedIcaoCategories = letters;
+        st.category = representativeCategoryFromLetters(letters);
+        st.allowedAircraftTypes = typeIds;
+        renderAircraftConstraintChoices('tempStandAircraftAccess', typeIds, letters);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      } else {
+        renderAircraftConstraintChoices('tempStandAircraftAccess', typeIds, letters);
+      }
+    });
+  }
+  const tempStandTerminalAccessEl = document.getElementById('tempStandTerminalAccess');
+  if (tempStandTerminalAccessEl) {
+    tempStandTerminalAccessEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('remote-term-check')) return;
+      syncChoiceChipStates(tempStandTerminalAccessEl);
+      if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
+      const st = state.selectedObject.obj;
+      const checks = tempStandTerminalAccessEl.querySelectorAll('.remote-term-check');
+      const allowed = [];
+      checks.forEach(function(ch) {
+        if (ch.checked) {
+          const id = ch.getAttribute('data-item-id');
+          if (id) allowed.push(id);
+        }
+      });
+      st.allowedTerminals = allowed;
+      if (typeof syncPanelFromState === 'function') syncPanelFromState();
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    });
+  }
+  const tempStandAircraftAccessEl = document.getElementById('tempStandAircraftAccess');
+  if (tempStandAircraftAccessEl) {
+    tempStandAircraftAccessEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('aircraft-type-check')) return;
+      syncChoiceChipStates(tempStandAircraftAccessEl);
+      if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
+      const tstAc = state.selectedObject.obj;
       applyUnifiedStandConstraintFromPanelToObject(tstAc, 'tempStandIcaoCategories', 'tempStandAircraftAccess');
       renderAircraftConstraintChoices('tempStandAircraftAccess', tstAc.allowedAircraftTypes, tstAc.allowedIcaoCategories);
       updateObjectInfo();
@@ -1033,65 +1095,3 @@
     } else return;
     var prevArr = f.arrRunwayId || null;
     var prevDep = f.depRunwayId || (f.token && f.token.depRunwayId) || null;
-    var prevTerm = f.terminalId || (f.token && f.token.terminalId) || null;
-    if (role === 'arr' && val === prevArr) return;
-    if (role === 'dep' && val === prevDep) return;
-    if (role === 'term' && val === prevTerm) return;
-    var prevStand = f.standId || null;
-    if (!f.token) f.token = { nodes: ['runway','taxiway','apron','terminal'], runwayId: null, apronId: null, terminalId: null };
-    if (role === 'arr') {
-      f.arrRunwayId = val;
-      f.token.runwayId = val;
-    } else if (role === 'term') {
-      f.terminalId = val;
-      f.token.terminalId = val;
-      if (f.standId) {
-        var allStands = (st.pbbStands || []).concat(st.remoteStands || []).concat(st.tempStands || []);
-        var stand = allStands.find(function(s) { return s.id === f.standId; });
-        if (stand) {
-          var term = getTerminalForStand(stand);
-          var standTermId = term ? term.id : null;
-          if (!val || !standTermId || val !== standTermId) f.standId = null;
-        }
-      }
-    } else if (role === 'dep') {
-      f.depRunwayId = val;
-      f.token.depRunwayId = val;
-    }
-    syncFlightAssignStripFromFlight(f);
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    var touched = [];
-    if (prevStand) touched.push(prevStand);
-    if (f.standId) touched.push(f.standId);
-    if (typeof renderFlightList === 'function')
-      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [flightId], touchedStandIds: touched });
-  }
-  function commitFlightAssignField(el, st, listEl) {
-    const idVal = el.getAttribute('data-id');
-    const role = el.getAttribute('data-role');
-    commitFlightAssign(role, idVal, el.value, st, listEl);
-  }
-  function commitFlightAssignFromStrip(el, st, listEl) {
-    const sel = state.selectedObject;
-    if (!sel || sel.type !== 'flight' || !sel.id) return;
-    const role = el.getAttribute('data-role');
-    if (!role) return;
-    commitFlightAssign(role, sel.id, el.value, st, listEl);
-  }
-
-  const FLIGHT_SCHED_TABLE_COL_COUNT = 27;
-  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). S-group SLDT/STOT columns removed. */
-  const FLIGHT_SCHED_TD_SLD = 10;
-  const FLIGHT_SCHED_TD_SIBTD = 11;
-  const FLIGHT_SCHED_TD_SOBTD = 12;
-  const FLIGHT_SCHED_TD_STOTD = 13;
-  const FLIGHT_SCHED_TD_ELDT = 14;
-  const FLIGHT_SCHED_TD_EIBT = 15;
-  const FLIGHT_SCHED_TD_EOBT = 16;
-  const FLIGHT_SCHED_TD_ETOT = 17;
-  function ensureFlightAssignStripWired() {
-    if (window.__flightAssignStripWired) return;
-    const wrap = document.getElementById('flightAssignStrip');
-    if (!wrap) return;
-    window.__flightAssignStripWired = true;
-    wrap.querySelectorAll('.flight-assign-strip-select').forEach(function(inp) {

@@ -1,3 +1,4 @@
+    const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };
     const candCorners = getRemoteStandCorners(candidate);
     for (let i = 0; i < (state.tempStands || []).length; i++) {
       const o = state.tempStands[i];
@@ -380,9 +381,7 @@
             kind: 'island',
             id: m.id,
             points: pts,
-            outerWidthM: islandOuterWidthMResolved(m),
-            innerWidthM: islandInnerWidthMResolved(m),
-            pavement: islandMarkerPavementResolved(m)
+            widthM: islandWidthMResolved(m),
           };
         }
         if (m.kind === 'area') {
@@ -1248,6 +1247,14 @@
       btn.style.outline = on ? '2px solid #ffffff' : 'none';
     });
   }
+  /** PAPI bar/lamp size vs original (~30% smaller → scale 0.7). */
+  const PAPI_VISUAL_SCALE = 0.7;
+  /** World units between adjacent PAPI lamp centers (layout coordinates). */
+  const PAPI_LAMP_SPACING_WORLD = 14 * PAPI_VISUAL_SCALE;
+  function papiLampCenterXsWorld(cx) {
+    const sp = PAPI_LAMP_SPACING_WORLD;
+    return [cx - 1.5 * sp, cx - 0.5 * sp, cx + 0.5 * sp, cx + 1.5 * sp];
+  }
   function layoutMarkerHandleHitRadiusWorld() {
     return Math.max(CELL_SIZE * 0.28, 8 / Math.max(state.scale, 0.1));
   }
@@ -1293,8 +1300,20 @@
       return best;
     } else if (mk.kind === 'navaid') {
       const x = Number(mk.x), y = Number(mk.y);
-      if (isFinite(x) && isFinite(y) && dist2(click, [x, y]) <= r2)
-        return { markerId: mk.id, handle: 'navaidCenter' };
+      if (!isFinite(x) || !isFinite(y)) return null;
+      const sub = (mk.subType === 'ils') ? 'ils' : 'papi';
+      if (sub === 'papi') {
+        const xs = papiLampCenterXsWorld(x);
+        for (let pi = 0; pi < 4; pi++) {
+          if (dist2(click, [xs[pi], y]) <= r2) return { markerId: mk.id, handle: 'navaidCenter' };
+        }
+        if (dist2(click, [x, y]) <= r2) return { markerId: mk.id, handle: 'navaidCenter' };
+        const half = 1.5 * PAPI_LAMP_SPACING_WORLD + r;
+        if (Math.abs(click[1] - y) <= r && click[0] >= x - half && click[0] <= x + half)
+          return { markerId: mk.id, handle: 'navaidCenter' };
+        return null;
+      }
+      if (dist2(click, [x, y]) <= r2) return { markerId: mk.id, handle: 'navaidCenter' };
     }
     return null;
   }
@@ -1309,22 +1328,3 @@
     ctx.stroke();
   }
   function layoutPathDraftStrokeStyle() {
-    return 'rgba(148,163,184,0.95)';
-  }
-  function layoutPathDraftLineWidthPx() {
-    return Math.max(1, 1.3 / Math.max(state.scale, 0.1));
-  }
-  function layoutPathDraftDashPattern() {
-    return [5, 5];
-  }
-  /** @param {number[][]} pts Each [x,y] in layout px. Optional hoverXY draws one more segment from last pt. */
-  function strokeLayoutPathDraftPolyline(ctx, pts, hoverXY) {
-    if (!pts || pts.length < 1) return;
-    const hasHover = hoverXY && hoverXY.length >= 2 && isFinite(hoverXY[0]) && isFinite(hoverXY[1]);
-    if (pts.length < 2 && !hasHover) return;
-    ctx.save();
-    ctx.strokeStyle = layoutPathDraftStrokeStyle();
-    ctx.lineWidth = layoutPathDraftLineWidthPx();
-    ctx.setLineDash(layoutPathDraftDashPattern());
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';

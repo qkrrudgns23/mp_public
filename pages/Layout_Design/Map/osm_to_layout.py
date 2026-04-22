@@ -1852,8 +1852,6 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     layout_markers: List[Dict[str, Any]] = []
     if rules["navigationaid_islands"].get("enabled") is True:
         half = float(rules["navigationaid_islands"]["island_square_half_side_m"])
-        ow = float(rules["navigationaid_islands"]["marker_outer_width_m"])
-        iw = float(rules["navigationaid_islands"]["marker_inner_width_m"])
         for px, py in txe_points:
             pts = _round_vertex_list_xy(
                 [
@@ -1869,14 +1867,12 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     "kind": "island",
                     "id": _new_id("txe"),
                     "points": pts,
-                    "outerWidthM": ow,
-                    "innerWidthM": iw,
-                    "pavement": "asphalt",
+                    "widthM": 2.0,
                 }
             )
 
     # Airport outer contour: aeroway=aerodrome outer rings as layoutMarkers kind='island'
-    # (user-facing label "Contour"). Thin outer ring for a perimeter outline look.
+    # (user-facing label "Contour"). Single light-gray stroke with a small default width.
     for ring_pts in aerodrome_outer_rings:
         if len(ring_pts) < 3:
             continue
@@ -1898,9 +1894,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 "kind": "island",
                 "id": _new_id("contour"),
                 "points": pts_q,
-                "outerWidthM": 4.0,
-                "innerWidthM": 0.0,
-                "pavement": "asphalt",
+                "widthM": 2.0,
             }
         )
 

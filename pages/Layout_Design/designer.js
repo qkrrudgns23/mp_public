@@ -1965,13 +1965,14 @@
         return { x: Number(p && p.x), y: Number(p && p.y) };
       }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
       if (points.length < 3) return null;
-      let ow = Number(m.outerWidthM);
-      let iw = Number(m.innerWidthM);
-      if (!isFinite(ow) || ow < 0) ow = LAYOUT_ISLAND_OUTER_WIDTH_DEFAULT_M;
-      else ow = Math.min(500, ow);
-      if (!isFinite(iw) || iw < 0) iw = LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
-      else iw = Math.min(200, iw);
-      return { kind: 'island', id: m.id || id(), points: points, outerWidthM: ow, innerWidthM: iw, pavement: islandMarkerPavementResolved(m) };
+      let w = Number(m.widthM);
+      if (!isFinite(w) || w < 0) {
+        const legacy = Number(m.outerWidthM);
+        w = (isFinite(legacy) && legacy >= 0) ? Math.min(200, legacy) : LAYOUT_ISLAND_WIDTH_DEFAULT_M;
+      } else {
+        w = Math.min(200, w);
+      }
+      return { kind: 'island', id: m.id || id(), points: points, widthM: w };
     }
     if (k === 'area') {
       const rawPts = Array.isArray(m.points) ? m.points : [];
@@ -3950,9 +3951,7 @@
             kind: 'island',
             id: m.id,
             points: pts,
-            outerWidthM: islandOuterWidthMResolved(m),
-            innerWidthM: islandInnerWidthMResolved(m),
-            pavement: islandMarkerPavementResolved(m)
+            widthM: islandWidthMResolved(m),
           };
         }
         if (m.kind === 'area') {
@@ -4818,6 +4817,14 @@
       btn.style.outline = on ? '2px solid #ffffff' : 'none';
     });
   }
+  /** PAPI bar/lamp size vs original (~30% smaller → scale 0.7). */
+  const PAPI_VISUAL_SCALE = 0.7;
+  /** World units between adjacent PAPI lamp centers (layout coordinates). */
+  const PAPI_LAMP_SPACING_WORLD = 14 * PAPI_VISUAL_SCALE;
+  function papiLampCenterXsWorld(cx) {
+    const sp = PAPI_LAMP_SPACING_WORLD;
+    return [cx - 1.5 * sp, cx - 0.5 * sp, cx + 0.5 * sp, cx + 1.5 * sp];
+  }
   function layoutMarkerHandleHitRadiusWorld() {
     return Math.max(CELL_SIZE * 0.28, 8 / Math.max(state.scale, 0.1));
   }
@@ -4863,8 +4870,20 @@
       return best;
     } else if (mk.kind === 'navaid') {
       const x = Number(mk.x), y = Number(mk.y);
-      if (isFinite(x) && isFinite(y) && dist2(click, [x, y]) <= r2)
-        return { markerId: mk.id, handle: 'navaidCenter' };
+      if (!isFinite(x) || !isFinite(y)) return null;
+      const sub = (mk.subType === 'ils') ? 'ils' : 'papi';
+      if (sub === 'papi') {
+        const xs = papiLampCenterXsWorld(x);
+        for (let pi = 0; pi < 4; pi++) {
+          if (dist2(click, [xs[pi], y]) <= r2) return { markerId: mk.id, handle: 'navaidCenter' };
+        }
+        if (dist2(click, [x, y]) <= r2) return { markerId: mk.id, handle: 'navaidCenter' };
+        const half = 1.5 * PAPI_LAMP_SPACING_WORLD + r;
+        if (Math.abs(click[1] - y) <= r && click[0] >= x - half && click[0] <= x + half)
+          return { markerId: mk.id, handle: 'navaidCenter' };
+        return null;
+      }
+      if (dist2(click, [x, y]) <= r2) return { markerId: mk.id, handle: 'navaidCenter' };
     }
     return null;
   }
@@ -5013,34 +5032,79 @@
         const ax = Number(m.x), ay = Number(m.y);
         if (!isFinite(ax) || !isFinite(ay)) continue;
         const tol = Math.max(CELL_SIZE * 0.8, 18 / Math.max(state.scale, 0.12));
-        if (dist2(click, [ax, ay]) <= tol * tol)
+        const tol2 = tol * tol;
+        const sub = (m.subType === 'ils') ? 'ils' : 'papi';
+        if (sub === 'papi') {
+          const xs = papiLampCenterXsWorld(ax);
+          let hitP = false;
+          for (let pi = 0; pi < 4; pi++) {
+            if (dist2(click, [xs[pi], ay]) <= tol2) { hitP = true; break; }
+          }
+          if (!hitP && dist2(click, [ax, ay]) <= tol2) hitP = true;
+          if (!hitP) {
+            const half = 1.5 * PAPI_LAMP_SPACING_WORLD + tol;
+            if (Math.abs(click[1] - ay) <= tol && click[0] >= ax - half && click[0] <= ax + half) hitP = true;
+          }
+          if (hitP) return { type: 'layoutMarker', id: m.id, obj: m };
+        } else if (dist2(click, [ax, ay]) <= tol2) {
           return { type: 'layoutMarker', id: m.id, obj: m };
+        }
       }
     }
     return null;
   }
-  /** Navaid marker: small pill with subType label (PAPI / ILS) at world (m.x, m.y). */
+  /** Navaid: PAPI as four lamps (2 white, 2 red); ILS dot + ILS label at (m.x, m.y). */
   function drawNavaidMarker2D(ctx2, m, selected, interactiveLite) {
     if (!m) return;
     const x = Number(m.x), y = Number(m.y);
     if (!isFinite(x) || !isFinite(y)) return;
     const sub = (m.subType === 'ils') ? 'ils' : 'papi';
-    const label = sub === 'ils' ? 'ILS' : 'PAPI';
     const isIls = sub === 'ils';
-    const fill = selected
-      ? c2dObjectSelectedFill()
-      : (isIls ? 'rgba(56, 189, 248, 0.85)' : 'rgba(250, 204, 21, 0.9)');
-    const stroke = selected
-      ? c2dObjectSelectedStroke()
-      : (isIls ? 'rgba(2, 132, 199, 0.95)' : 'rgba(161, 98, 7, 0.95)');
-    const fg = isIls ? '#0c4a6e' : '#422006';
+    const scaleRef = Math.max(state.scale, 0.1);
     ctx2.save();
-    const r = Math.max(3, 3.6 / Math.max(state.scale, 0.1));
+    if (!isIls) {
+      const lampXs = papiLampCenterXsWorld(x);
+      const rLight = Math.max(2.4 * PAPI_VISUAL_SCALE, 2.9 * PAPI_VISUAL_SCALE / scaleRef);
+      const fills = selected
+        ? ['#ffffff', '#ffffff', '#fca5a5', '#fca5a5']
+        : ['#f8fafc', '#f8fafc', '#ef4444', '#ef4444'];
+      const strokes = selected
+        ? [c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke()]
+        : ['rgba(148,163,184,0.95)', 'rgba(148,163,184,0.95)', 'rgba(127,29,29,0.98)', 'rgba(127,29,29,0.98)'];
+      for (let i = 0; i < 4; i++) {
+        ctx2.beginPath();
+        ctx2.arc(lampXs[i], y, rLight, 0, Math.PI * 2);
+        ctx2.fillStyle = fills[i];
+        ctx2.strokeStyle = strokes[i];
+        ctx2.lineWidth = Math.max(0.35, 0.55 / scaleRef);
+        ctx2.fill();
+        ctx2.stroke();
+      }
+      if (selected) {
+        const pad = 2 * PAPI_VISUAL_SCALE;
+        const x0 = lampXs[0] - rLight - pad;
+        const x1 = lampXs[3] + rLight + pad;
+        const y0 = y - rLight - pad;
+        const y1 = y + rLight + pad;
+        ctx2.strokeStyle = c2dObjectSelectedStroke();
+        ctx2.lineWidth = Math.max(0.55, 0.8 / scaleRef);
+        ctx2.setLineDash([4, 3]);
+        ctx2.strokeRect(x0, y0, x1 - x0, y1 - y0);
+        ctx2.setLineDash([]);
+      }
+      ctx2.restore();
+      return;
+    }
+    const label = 'ILS';
+    const fill = selected ? c2dObjectSelectedFill() : 'rgba(56, 189, 248, 0.85)';
+    const stroke = selected ? c2dObjectSelectedStroke() : 'rgba(2, 132, 199, 0.95)';
+    const fg = '#0c4a6e';
+    const r = Math.max(3, 3.6 / scaleRef);
     ctx2.beginPath();
     ctx2.arc(x, y, r, 0, Math.PI * 2);
     ctx2.fillStyle = fill;
     ctx2.strokeStyle = stroke;
-    ctx2.lineWidth = Math.max(0.4, 0.6 / Math.max(state.scale, 0.1));
+    ctx2.lineWidth = Math.max(0.4, 0.6 / scaleRef);
     ctx2.fill();
     ctx2.stroke();
     if (!interactiveLite) {
@@ -5156,9 +5220,7 @@
             kind: 'island',
             id: id(),
             points: list.map(function(p) { return { x: Number(p.x), y: Number(p.y) }; }),
-            outerWidthM: getMarkerIslandOuterWidthMFromPanel(),
-            innerWidthM: getMarkerIslandInnerWidthMFromPanel(),
-            pavement: getMarkerIslandPavementFromPanel()
+            widthM: getMarkerIslandWidthMFromPanel()
           });
           state.markerIslandDraft = null;
           state.markerIslandHoverWorld = null;
@@ -17307,12 +17369,12 @@
             details: 'Closed polygon · ' + nv + ' vertices (layout m = px)'
           });
         } else if (mk.kind === 'navaid') {
-          const sub = (mk.subType === 'ils') ? 'ILS' : 'PAPI';
+          const isIls = (mk.subType === 'ils');
           items.push({
             type: 'layoutMarker',
             id: mk.id,
-            title: 'Marker | ' + sub,
-            tag: sub,
+            title: isIls ? 'Marker | ILS' : 'Marker | Lights',
+            tag: isIls ? 'ILS' : '4',
             details: 'Navigation aid at (' + Number(mk.x).toFixed(1) + ', ' + Number(mk.y).toFixed(1) + ')'
           });
         } else if (mk.kind === 'area') {
@@ -17411,10 +17473,18 @@
     }
   }
 
+  /** Mirror #object-info into the grid HUD without duplicating id/for (getElementById targets stay in #object-info). */
+  function stripDomIdsFromHtmlForHudMirror(html) {
+    return String(html || '')
+      .replace(/\s+id="[^"]*"/gi, '')
+      .replace(/\s+for="[^"]*"/gi, '');
+  }
+
   function updateFlightGridHud() {
     const el = document.getElementById('flight-grid-hud');
     if (!el) return;
     const sel = state.selectedObject;
+    el.classList.remove('flight-grid-hud--layout-object');
     if (sel && sel.type === 'flight' && sel.obj) {
       const o = sel.obj;
       const fmtE = function(m) {
@@ -17428,6 +17498,17 @@
         '<div class="flight-grid-hud-type">' + escapeHtml(typeLabel) + '</div>' +
         '<div class="flight-grid-hud-e">ELDT ' + escapeHtml(fmtE(o.eldtMin)) + ' · EIBT ' + escapeHtml(fmtE(o.eibtMin)) + '</div>' +
         '<div class="flight-grid-hud-e">EOBT ' + escapeHtml(fmtE(o.eobtMin)) + ' · ETOT ' + escapeHtml(fmtE(o.etotMin)) + '</div>';
+    } else if (sel && sel.obj) {
+      const raw = objectInfoEl && typeof objectInfoEl.innerHTML === 'string' ? objectInfoEl.innerHTML : '';
+      const body = stripDomIdsFromHtmlForHudMirror(raw).trim();
+      if (body) {
+        el.removeAttribute('hidden');
+        el.classList.add('flight-grid-hud--layout-object');
+        el.innerHTML = '<div class="flight-grid-hud-object-body">' + body + '</div>';
+      } else {
+        el.setAttribute('hidden', '');
+        el.innerHTML = '';
+      }
     } else {
       el.setAttribute('hidden', '');
       el.innerHTML = '';
@@ -17708,63 +17789,27 @@
             '<br>From: (' + Number(mk.x1).toFixed(1) + ', ' + Number(mk.y1).toFixed(1) + ') → (' + Number(mk.x2).toFixed(1) + ', ' + Number(mk.y2).toFixed(1) + ')';
         } else if (mk.kind === 'island') {
           const nv = (mk.points && mk.points.length) || 0;
-          const oid = 'layoutMarkerIslandOuterM';
-          const iid = 'layoutMarkerIslandInnerM';
-          const ow = islandOuterWidthMResolved(mk);
-          const iw = islandInnerWidthMResolved(mk);
-          const pav = islandMarkerPavementResolved(mk);
+          const wid = 'layoutMarkerIslandWidthM';
+          const wM = islandWidthMResolved(mk);
           objectInfoEl.innerHTML = '<strong>Marker · Contour</strong><br>Vertices: ' + nv +
-            '<br><label for="' + oid + '">Outer width (m)</label><br>' +
-            '<input type="number" id="' + oid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:4px 0 8px;" min="0" max="500" step="0.5" value="' + ow + '" inputmode="decimal" />' +
-            '<br><label for="' + iid + '">Inner width (m)</label><br>' +
-            '<input type="number" id="' + iid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:4px 0 8px;" min="0" max="200" step="0.5" value="' + iw + '" inputmode="decimal" />' +
-            '<br><span style="font-size:11px;color:#9ca3af;">Pavement</span><br>' +
-            '<div class="marker-island-obj-pav">' +
-            '<label style="display:inline-flex;align-items:center;gap:6px;margin:6px 14px 0 0;font-size:11px;color:#9ca3af;cursor:pointer;"><input type="radio" name="layoutMarkerIslandPavObj" value="asphalt"' + (pav === 'asphalt' ? ' checked' : '') + ' /> Asphalt</label>' +
-            '<label style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#9ca3af;cursor:pointer;"><input type="radio" name="layoutMarkerIslandPavObj" value="cement"' + (pav === 'cement' ? ' checked' : '') + ' /> Cement</label>' +
-            '</div>' +
+            '<br><label for="' + wid + '">Width (m)</label><br>' +
+            '<input type="number" id="' + wid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:4px 0 8px;" min="0" max="' + LAYOUT_ISLAND_WIDTH_MAX_M + '" step="0.5" value="' + wM + '" inputmode="decimal" />' +
             '<br>호: 패널과 동일 토글 — 꼭짓점 선택 후 캔버스에서 드래그해 곡선 적용. Shift로 격자 스냅.' +
             '<br>닫기: 첫 점 근처 클릭(≥3점). 더블클릭으로 변 중간에 점 추가.';
           const markerId = mk.id;
           function bindIslandWidths() {
-            const oEl = document.getElementById(oid);
-            const iEl = document.getElementById(iid);
-            if (!oEl || !iEl) return false;
-            oEl.oninput = function() {
+            const wEl = document.getElementById(wid);
+            if (!wEl) return false;
+            wEl.oninput = function() {
               const so = state.selectedObject;
               if (!so || so.type !== 'layoutMarker' || String(so.id) !== String(markerId)) return;
               const mo = so.obj;
               if (!mo || mo.kind !== 'island') return;
               const v = Number(this.value);
-              mo.outerWidthM = (isFinite(v) && v >= 0) ? Math.min(500, v) : LAYOUT_ISLAND_OUTER_WIDTH_DEFAULT_M;
+              mo.widthM = (isFinite(v) && v >= 0) ? Math.min(LAYOUT_ISLAND_WIDTH_MAX_M, v) : LAYOUT_ISLAND_WIDTH_DEFAULT_M;
               scheduleDraw();
               syncMarkerIslandSidebarWidthsFromSelection();
             };
-            iEl.oninput = function() {
-              const so = state.selectedObject;
-              if (!so || so.type !== 'layoutMarker' || String(so.id) !== String(markerId)) return;
-              const mo = so.obj;
-              if (!mo || mo.kind !== 'island') return;
-              const v = Number(this.value);
-              mo.innerWidthM = (isFinite(v) && v >= 0) ? Math.min(200, v) : LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
-              scheduleDraw();
-              syncMarkerIslandSidebarWidthsFromSelection();
-            };
-            const pWrap = objectInfoEl.querySelector('.marker-island-obj-pav');
-            if (pWrap) {
-              pWrap.querySelectorAll('input[type="radio"]').forEach(function(pInp) {
-                pInp.onchange = function() {
-                  const so = state.selectedObject;
-                  if (!so || so.type !== 'layoutMarker' || String(so.id) !== String(markerId)) return;
-                  const mo = so.obj;
-                  if (!mo || mo.kind !== 'island') return;
-                  const pv = this.value;
-                  mo.pavement = (pv === 'asphalt' || pv === 'cement') ? pv : islandMarkerPavementResolved(mo);
-                  scheduleDraw();
-                  syncMarkerIslandPavementFromSelection();
-                };
-              });
-            }
             return true;
           }
           if (!bindIslandWidths()) setTimeout(bindIslandWidths, 0);
@@ -17799,9 +17844,9 @@
           if (!bindBlazerToggle()) setTimeout(bindBlazerToggle, 0);
         } else if (mk.kind === 'navaid') {
           const sub = (mk.subType === 'ils') ? 'ils' : 'papi';
-          const label = sub === 'ils' ? 'ILS' : 'PAPI';
           const sid = 'layoutMarkerNavaidType';
-          objectInfoEl.innerHTML = '<strong>Marker · ' + label + '</strong>' +
+          const heading = sub === 'ils' ? 'Marker · ILS' : 'Marker';
+          objectInfoEl.innerHTML = '<strong>' + heading + '</strong>' +
             '<br><label for="' + sid + '">Nav aid type</label>' +
             '<br><select id="' + sid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:6px 0;">' +
             '<option value="papi"' + (sub === 'papi' ? ' selected' : '') + '>PAPI</option>' +
@@ -18041,7 +18086,7 @@
     pts.sort(function(a, b) { return a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]; });
     return [pts[0][0], pts[0][1], pts[pts.length - 1][0], pts[pts.length - 1][1]];
   }
-  function drawPolygonDiagonalHatch45M(hatchCtx, points, spacingM, strokeStyle, lineWidthWorld) {
+  function drawPolygonDiagonalHatch45M(hatchCtx, points, spacingM, strokeStyle, lineWidthWorld, strokeGlobalAlpha) {
     if (!hatchCtx || !Array.isArray(points) || points.length < 3 || !isFinite(spacingM) || spacingM <= 0) return;
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     points.forEach(function(p) {
@@ -18057,6 +18102,10 @@
     const cCornerMax = Math.max(rx0 - ry0, rx1 - ry0, rx0 - ry1, rx1 - ry1);
     const step = spacingM * Math.SQRT2;
     hatchCtx.save();
+    if (typeof strokeGlobalAlpha === 'number' && isFinite(strokeGlobalAlpha)) {
+      const ga = Math.max(0, Math.min(1, strokeGlobalAlpha));
+      hatchCtx.globalAlpha = (typeof hatchCtx.globalAlpha === 'number' ? hatchCtx.globalAlpha : 1) * ga;
+    }
     hatchCtx.beginPath();
     hatchCtx.moveTo(points[0][0], points[0][1]);
     for (let i = 1; i < points.length; i++) hatchCtx.lineTo(points[i][0], points[i][1]);
@@ -18150,7 +18199,8 @@
               termPts,
               LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M,
               selected ? c2dObjectSelectedStroke() : buildingTheme.stroke,
-              hairW
+              hairW,
+              0.8
             );
           }
           if (bl) {
@@ -19819,37 +19869,22 @@
       safeDraw();
     });
   }
-  const LAYOUT_ISLAND_OUTER_WIDTH_DEFAULT_M = 20;
-  const LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M = 7;
-  const LAYOUT_ISLAND_NORMAL_STEP_M = 20;
-  const LAYOUT_ISLAND_NORMAL_LEN_M = 4;
-  function islandOuterWidthMResolved(m) {
-    const v = Number(m && m.outerWidthM);
-    if (isFinite(v) && v >= 0) return Math.min(500, v);
-    return LAYOUT_ISLAND_OUTER_WIDTH_DEFAULT_M;
+  const LAYOUT_ISLAND_WIDTH_DEFAULT_M = 2;
+  const LAYOUT_ISLAND_WIDTH_MAX_M = 200;
+  /** Contour (legacy 'island') stroke — bright neon sky cyan. */
+  const LAYOUT_ISLAND_STROKE_CSS = '#22e8ff';
+  function islandWidthMResolved(m) {
+    const v = Number(m && m.widthM);
+    if (isFinite(v) && v >= 0) return Math.min(LAYOUT_ISLAND_WIDTH_MAX_M, v);
+    const legacy = Number(m && m.outerWidthM);
+    if (isFinite(legacy) && legacy >= 0) return Math.min(LAYOUT_ISLAND_WIDTH_MAX_M, legacy);
+    return LAYOUT_ISLAND_WIDTH_DEFAULT_M;
   }
-  function islandInnerWidthMResolved(m) {
-    const v = Number(m && m.innerWidthM);
-    if (isFinite(v) && v >= 0) return Math.min(200, v);
-    return LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
-  }
-  function getMarkerIslandOuterWidthMFromPanel() {
+  function getMarkerIslandWidthMFromPanel() {
     const el = document.getElementById('markerIslandOuterWidthM');
     const v = Number(el && el.value);
-    if (isFinite(v) && v >= 0) return Math.min(500, v);
-    return LAYOUT_ISLAND_OUTER_WIDTH_DEFAULT_M;
-  }
-  function getMarkerIslandInnerWidthMFromPanel() {
-    const el = document.getElementById('markerIslandInnerWidthM');
-    const v = Number(el && el.value);
-    if (isFinite(v) && v >= 0) return Math.min(200, v);
-    return LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
-  }
-  function getMarkerIslandPavementFromPanel() {
-    const el = document.getElementById('markerIslandPavement');
-    const v = el && el.value;
-    if (v === 'asphalt' || v === 'cement') return v;
-    return 'asphalt';
+    if (isFinite(v) && v >= 0) return Math.min(LAYOUT_ISLAND_WIDTH_MAX_M, v);
+    return LAYOUT_ISLAND_WIDTH_DEFAULT_M;
   }
   function syncPathPavementRadiosToValue(pavement) {
     const p = (pavement === 'cement') ? 'cement' : 'asphalt';
@@ -19863,53 +19898,24 @@
     if (v === 'asphalt' || v === 'cement') return v;
     return pathPavementDefaultForPathType(pathType);
   }
-  function syncMarkerIslandPavementFromSelection() {
-    const el = document.getElementById('markerIslandPavement');
-    if (!el) return;
-    const so = state.selectedObject;
-    if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
-    const mode = islandMarkerPavementResolved(so.obj);
-    if (document.activeElement === el) return;
-    el.value = mode;
-  }
   function syncMarkerIslandSidebarWidthsFromSelection() {
     const oEl = document.getElementById('markerIslandOuterWidthM');
-    const iEl = document.getElementById('markerIslandInnerWidthM');
-    if (!oEl || !iEl) return;
+    if (!oEl) return;
     const so = state.selectedObject;
     if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
-    const ow = islandOuterWidthMResolved(so.obj);
-    const iw = islandInnerWidthMResolved(so.obj);
-    if (document.activeElement !== oEl) oEl.value = String(ow);
-    if (document.activeElement !== iEl) iEl.value = String(iw);
-    syncMarkerIslandPavementFromSelection();
+    const w = islandWidthMResolved(so.obj);
+    if (document.activeElement !== oEl) oEl.value = String(w);
   }
   (function setupMarkerIslandPanelWidthApplyToSelection() {
     const oEl = document.getElementById('markerIslandOuterWidthM');
-    const iEl = document.getElementById('markerIslandInnerWidthM');
-    function applyOuterToSelectedIsland() {
+    function applyWidthToSelectedIsland() {
       const so = state.selectedObject;
       if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
       const v = Number(oEl && oEl.value);
-      so.obj.outerWidthM = (isFinite(v) && v >= 0) ? Math.min(500, v) : LAYOUT_ISLAND_OUTER_WIDTH_DEFAULT_M;
+      so.obj.widthM = (isFinite(v) && v >= 0) ? Math.min(LAYOUT_ISLAND_WIDTH_MAX_M, v) : LAYOUT_ISLAND_WIDTH_DEFAULT_M;
       scheduleDraw();
     }
-    function applyInnerToSelectedIsland() {
-      const so = state.selectedObject;
-      if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
-      const v = Number(iEl && iEl.value);
-      so.obj.innerWidthM = (isFinite(v) && v >= 0) ? Math.min(200, v) : LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
-      scheduleDraw();
-    }
-    if (oEl) oEl.addEventListener('input', applyOuterToSelectedIsland);
-    if (iEl) iEl.addEventListener('input', applyInnerToSelectedIsland);
-    const pavEl = document.getElementById('markerIslandPavement');
-    if (pavEl) pavEl.addEventListener('change', function() {
-      const so = state.selectedObject;
-      if (!so || so.type !== 'layoutMarker' || !so.obj || so.obj.kind !== 'island') return;
-      so.obj.pavement = getMarkerIslandPavementFromPanel();
-      scheduleDraw();
-    });
+    if (oEl) oEl.addEventListener('input', applyWidthToSelectedIsland);
   })();
   function layoutIslandWorldPointsForDraw(m) {
     if (!m || m.kind !== 'island' || !Array.isArray(m.points)) return [];
@@ -19966,98 +19972,27 @@
     ctx.closePath();
     ctx.fill('evenodd');
   }
-  function drawLayoutIslandMarkerPavementWorld(ctx, pts, marker) {
-    if (!layerIslandAreaFillEffective()) return;
+  /**
+   * Contour (kind='island'): single bright neon sky stroke; width ``widthM``
+   * (metres, world). No pavement fills, inner ring, or tick marks.
+   */
+  function drawLayoutIslandMarkerLinesWorld(ctx, pts, sel, widthM) {
     const n = pts.length;
     if (n < 3) return;
-    let cx = 0, cy = 0;
-    for (let i = 0; i < n; i++) {
-      cx += pts[i][0];
-      cy += pts[i][1];
-    }
-    cx /= n;
-    cy /= n;
-    const outerW = islandOuterWidthMResolved(marker);
-    const innerW = islandInnerWidthMResolved(marker);
-    const pavedFill = islandMarkerPavementFillCss(marker);
-    const islandInnerBandFill = '#8c8287';
-    const islandGrassFill = '#454d36';
-    ctx.fillStyle = pavedFill;
-    if (outerW > 1e-6) {
-      const O = islandOffsetPolygonCorners(pts, cx, cy, outerW, true);
-      if (O.length >= 3) islandFillRingEvenOdd(ctx, O, pts);
-    }
-    if (innerW > 1e-6) {
-      const I = islandOffsetPolygonCorners(pts, cx, cy, innerW, false);
-      if (I.length >= 3) {
-        ctx.fillStyle = islandInnerBandFill;
-        islandFillRingEvenOdd(ctx, pts, I);
-        ctx.fillStyle = islandGrassFill;
-        ctx.beginPath();
-        ctx.moveTo(I[0][0], I[0][1]);
-        for (let ri = 1; ri < I.length; ri++) ctx.lineTo(I[ri][0], I[ri][1]);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-  }
-  function drawLayoutIslandMarkerLinesWorld(ctx, pts, sel) {
-    const n = pts.length;
-    if (n < 3) return;
-    let cx = 0, cy = 0;
-    for (let i = 0; i < n; i++) {
-      cx += pts[i][0];
-      cy += pts[i][1];
-    }
-    cx /= n;
-    cy /= n;
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < n; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.closePath();
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    const hairIsl = Math.max(1, 1 / Math.max(state.scale, 0.08));
-    ctx.lineWidth = hairIsl;
-    ctx.strokeStyle = '#3a3a3a';
-    ctx.stroke();
-    ctx.lineWidth = 0.25;
-    ctx.strokeStyle = '#fcd410';
+    const wM = Math.max(0.05, Number(widthM) || LAYOUT_ISLAND_WIDTH_DEFAULT_M);
+    ctx.lineWidth = wM;
+    ctx.strokeStyle = LAYOUT_ISLAND_STROKE_CSS;
     ctx.stroke();
     if (sel) {
+      ctx.lineWidth = Math.max(wM * 0.6, 0.3);
       ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 0.25;
       ctx.stroke();
-    }
-    let distAlong = 0;
-    for (let i = 0; i < n; i++) {
-      const p0 = pts[i], p1 = pts[(i + 1) % n];
-      const edgex = p1[0] - p0[0], edgey = p1[1] - p0[1];
-      const edgeLen = Math.hypot(edgex, edgey);
-      if (edgeLen < 1e-6) continue;
-      const nn = islandInwardUnitNormalForDraw(p0, p1, cx, cy);
-      const ux = edgex / edgeLen, uy = edgey / edgeLen;
-      const step = LAYOUT_ISLAND_NORMAL_STEP_M;
-      const firstS = Math.ceil(distAlong / step) * step;
-      for (let sp = firstS; sp < distAlong + edgeLen - 1e-6; sp += step) {
-        const tLoc = sp - distAlong;
-        if (tLoc < -1e-6) continue;
-        const px = p0[0] + ux * tLoc, py = p0[1] + uy * tLoc;
-        const nl = LAYOUT_ISLAND_NORMAL_LEN_M;
-        ctx.beginPath();
-        ctx.moveTo(px, py);
-        ctx.lineTo(px + nn[0] * nl, py + nn[1] * nl);
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        const hairIslN = Math.max(1, 1 / Math.max(state.scale, 0.08));
-        ctx.lineWidth = hairIslN;
-        ctx.strokeStyle = '#3a3a3a';
-        ctx.stroke();
-        ctx.lineWidth = 0.25;
-        ctx.strokeStyle = '#fcd410';
-        ctx.stroke();
-      }
-      distAlong += edgeLen;
     }
   }
   function drawLayoutAreaMarkers2DFloor() {
@@ -20102,29 +20037,10 @@
   }
   function drawLayoutIslandMarkers2DEarly() {
     if (!ctx || !layoutMarkersVisible()) return;
-    const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    if (layerIslandAreaFillEffective()) {
-      (state.layoutMarkers || []).forEach(function(m) {
-        if (!m || m.kind !== 'island' || islandMarkerPavementResolved(m) !== 'cement') return;
-        const pts = layoutIslandWorldPointsForDraw(m);
-        if (pts.length < 3) return;
-        const islandAabb = pointsWorldAabb(pts);
-        if (islandAabb && !aabbIntersectsViewport(vb, islandAabb)) return;
-        drawLayoutIslandMarkerPavementWorld(ctx, pts, m);
-      });
-      (state.layoutMarkers || []).forEach(function(m) {
-        if (!m || m.kind !== 'island' || islandMarkerPavementResolved(m) !== 'asphalt') return;
-        const pts = layoutIslandWorldPointsForDraw(m);
-        if (pts.length < 3) return;
-        const islandAabb = pointsWorldAabb(pts);
-        if (islandAabb && !aabbIntersectsViewport(vb, islandAabb)) return;
-        drawLayoutIslandMarkerPavementWorld(ctx, pts, m);
-      });
-    }
     if (state.markerDrawing && getMarkerSubKindFromPanel() === 'island' && state.markerIslandDraft && state.markerIslandDraft.points && state.markerIslandDraft.points.length) {
       const list = state.markerIslandDraft.points;
       const hw = state.markerIslandHoverWorld;
@@ -20157,7 +20073,7 @@
         const islandAabb = pointsWorldAabb(pts);
         if (islandAabb && !aabbIntersectsViewport(vb, islandAabb)) return;
         const isSel = !!(sel && sel.type === 'layoutMarker' && String(sel.id) === String(m.id));
-        drawLayoutIslandMarkerLinesWorld(ctx, pts, isSel);
+        drawLayoutIslandMarkerLinesWorld(ctx, pts, isSel, islandWidthMResolved(m));
       });
     }
     ctx.restore();

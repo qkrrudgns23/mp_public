@@ -1,3 +1,65 @@
+    if (!f || flightBlockedLikeNoWay(f)) return;
+    const sibt = f.sibtMin_d;
+    const sobt = f.sobtMin_d;
+    if (typeof sibt === 'number' && isFinite(sibt)) {
+      f.sldtMin_d = Math.max(0, sibt - SCHED_SD_SIBT_MINUS_SLD_MIN);
+    }
+    if (typeof sobt === 'number' && isFinite(sobt)) {
+      f.stotMin_d = sobt + SCHED_SD_STOT_PLUS_SOBD_MIN;
+    }
+  }
+
+  function computeScheduledDisplayTimes(flights) {
+    if (!flights || !flights.length) return;
+    flights.forEach(f => {
+      if (flightBlockedLikeNoWay(f)) return;
+      f.vttADelayMin = 0;
+      const tArrMin = f.timeMin != null ? f.timeMin : 0;
+      let dwell = f.dwellMin != null ? f.dwellMin : 0;
+      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+      if (minDwell > dwell) minDwell = dwell;
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      const sldtOrig = scheduledSldtFromSibtMinutes(f, tArrMin);
+      const sobtOrig = tArrMin + dwell;
+      const stotOrig = scheduledStotFromSobtMinutes(f, sobtOrig);
+      f.sldtMin_orig = sldtOrig;
+      f.sibtMin_orig = tArrMin;
+      f.sobtMin_orig = sobtOrig;
+      f.stotMin_orig = stotOrig;
+      f.sibtMin_d = tArrMin;
+      f.sobtMin_d = sobtOrig;
+      applySdDispDeltaFromSibtSobt(f);
+    });
+    const standToFlights = {};
+    flights.forEach(f => {
+      if (flightBlockedLikeNoWay(f) || !f.standId) return;
+      const sid = f.standId;
+      if (!standToFlights[sid]) standToFlights[sid] = [];
+      standToFlights[sid].push(f);
+    });
+    Object.keys(standToFlights).forEach(standId => {
+      const list = standToFlights[standId];
+      list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
+      let prevSOBT = -1e9;
+      list.forEach(f => {
+        const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
+        const overlap = Math.max(0, prevSOBT - sibt0);
+        f.vttADelayMin = overlap;
+        f.sibtMin_d = sibt0 + overlap;
+        const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
+        const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
+        const minSobtByDwell = f.sibtMin_d + minDwell;
+        const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
+        f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
+        applySdDispDeltaFromSibtSobt(f);
+        prevSOBT = f.sobtMin_d;
+      });
+    });
+    flights.forEach(f => {
+      if (!f || flightBlockedLikeNoWay(f) || !f.standId) return;
       const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
       const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
       const sibt = (f.sibtMin_d != null ? f.sibtMin_d
@@ -1096,65 +1158,3 @@
         eobtSec: t0, etotSec: t3,
         depTaxiLineupSec: taxiSecUsed, depTaxiDelaySec: delaySecUsed,
         depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
-        lineupArrivalSec: tAfterTaxi, depRollStartSec: tRollStart,
-        depRotSec: depRotFullSec, depLineupHoldSec: lineupHoldSec,
-        depTaxiDelayAtHolding: validHold,
-        lineupBackM: backClamped,
-      },
-    };
-  }
-  function buildFullAirsideTimelineForFlight(f) {
-    if (!f) return;
-    const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-    if (f.arrDep === 'Dep') {
-      if (f.noWayDep) {
-        f.timeline = null;
-        f.timeline_meta = { error: 'no_path', leg: 'dep' };
-        return;
-      }
-      const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
-      const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
-      const eobtS = eobtMin * 60;
-      const etotS = etotMin * 60;
-      const built = buildDepartureSurfaceTimelineSegments(f, eobtS, etotS);
-      if (!built || !built.timeline || built.timeline.length < 2) {
-        f.timeline = null;
-        f.timeline_meta = { error: 'no_path', leg: 'dep' };
-        return;
-      }
-      f.timeline = built.timeline;
-      f.timeline_meta = Object.assign({ leg: 'dep' }, built.meta || {});
-      return;
-    }
-    const arrPts = getPathForFlight(f);
-    const depPts = getPathForFlightDeparture(f);
-    if (flightBlockedLikeNoWay(f)) {
-      f.timeline = null;
-      f.timeline_meta = { error: (f.arrDep !== 'Dep' && f.arrRetFailed && !f.noWayArr && !f.noWayDep) ? 'arr_ret_failed' : 'no_path' };
-      return;
-    }
-    if (!arrPts || arrPts.length < 2 || !depPts || depPts.length < 2) {
-      f.timeline = null;
-      f.timeline_meta = { error: 'no_path' };
-      return;
-    }
-    const token = f.token || {};
-    const runwayId = f.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || f.arrRunwayId;
-    if (runwayId == null || runwayId === '') {
-      f.timeline = null;
-      f.timeline_meta = { error: 'no_runway' };
-      return;
-    }
-    const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
-    const vTd = Math.max(1, touchdownSpeedMsForTimeline(f));
-    const tdDist = touchdownDistMForTimeline(f);
-    const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
-    const offset = APPROACH_OFFSET_WORLD_M;
-    const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
-    const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
-    const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], eibtMin + (typeof f.dwellMin === 'number' && isFinite(f.dwellMin) ? f.dwellMin : 45));
-    const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
-    const eldtS = eldtMin * 60;
-    const eibtS = eibtMin * 60;
-    const eobtS = eobtMin * 60;
-    const etotS = etotMin * 60;

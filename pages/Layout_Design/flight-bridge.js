@@ -1,3 +1,4 @@
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -447,4 +448,3 @@
     const allowedIcaoCategoriesT = uTs.allowedIcaoCategories;
     const panelAllowedTypesT = uTs.allowedAircraftTypes;
     const angleDeg = 0;
-    const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };

@@ -1,3 +1,65 @@
+      if (!Array.isArray(lk.midVertices)) lk.midVertices = [];
+      lk.midVertices.splice(Math.max(0, hit.insertIndex - 1), 0, pt);
+      state.selectedVertex = { type: 'apronLink', id: lk.id, kind: 'mid', midIndex: Math.max(0, hit.insertIndex - 1) };
+      markApronLinkJunctionOverlayDirty(lk.id);
+      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      return true;
+    }
+    if (sel.type === 'layoutMarker') {
+      const mk = sel.obj;
+      if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !Array.isArray(mk.points) || mk.points.length < 2) return false;
+      const hit = findInsertSegment(mk.points, true, wx, wy);
+      if (!hit) return false;
+      const pt = worldPointToPixel(hit.near[0], hit.near[1], snapToGrid);
+      pushUndo();
+      mk.points.splice(hit.insertIndex, 0, { x: pt[0], y: pt[1] });
+      state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: hit.insertIndex };
+      if (typeof updateObjectInfo === 'function') updateObjectInfo();
+      draw();
+      return true;
+    }
+    return false;
+  }
+
+  function snapWorldPointToTaxiwayPolyline(wx, wy, taxiwayId) {
+    const tw = (state.taxiways || []).find(t => t.id === taxiwayId);
+    if (!tw || !tw.vertices || tw.vertices.length < 2) return null;
+    const click = [wx, wy];
+    let best = null;
+    let bestD2 = Infinity;
+    for (let i = 0; i < tw.vertices.length - 1; i++) {
+      const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+      const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
+      const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+      if (!near) continue;
+      const d2 = dist2(near, click);
+      if (d2 < bestD2) { bestD2 = d2; best = near; }
+    }
+    return best;
+  }
+  function snapWorldPointToLayoutObjectsForMarker(wx, wy) {
+    const click = [wx, wy];
+    let bestD2 = Infinity;
+    let best = null;
+    function considerPoint(pt) {
+      if (!pt || pt.length < 2) return;
+      const d2 = dist2(pt, click);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = [pt[0], pt[1]];
+      }
+    }
+    function considerSeg(p1, p2) {
+      const near = closestPointOnSegment(p1, p2, click);
+      if (!near) return;
+      considerPoint(near);
+    }
+    (state.terminals || []).forEach(function(t) {
+      if (!t || !t.vertices || t.vertices.length < 2) return;
+      const verts = t.vertices;
+      const n = verts.length;
+      const segCount = t.closed ? n : (n - 1);
       for (let i = 0; i < segCount; i++) {
         const j = t.closed ? ((i + 1) % n) : (i + 1);
         considerSeg(cellToPixel(verts[i].col, verts[i].row), cellToPixel(verts[j].col, verts[j].row));
@@ -486,65 +548,3 @@
       state.layoutImageOverlay.topLeftRow = clampLayoutImagePoint(el('gridLayoutImageRow') ? el('gridLayoutImageRow').value : state.layoutImageOverlay.topLeftRow, state.layoutImageOverlay.topLeftRow);
     }
     var t = getCurrentTerminal();
-    if (t) {
-      if (el('terminalName')) {
-        const rawTn = (el('terminalName').value || '').trim();
-        if (rawTn && findDuplicateLayoutName('terminal', t.id, rawTn)) {
-          alertDuplicateLayoutName();
-          el('terminalName').value = t.name || '';
-        } else {
-          t.name = rawTn || t.name;
-        }
-      }
-      if (el('buildingType')) t.buildingType = normalizeBuildingType(el('buildingType').value || t.buildingType);
-      if (el('terminalFloors')) t.floors = Math.max(1, parseInt(el('terminalFloors').value, 10) || 1);
-      if (el('terminalFloorToFloor')) t.floorToFloor = Math.max(0.5, Number(el('terminalFloorToFloor').value) || 4);
-      t.floorHeight = (t.floors || 1) * (t.floorToFloor || 4);
-      if (el('terminalDepartureCapacity')) t.departureCapacity = Math.max(0, parseInt(el('terminalDepartureCapacity').value, 10) || 0);
-      if (el('terminalArrivalCapacity')) t.arrivalCapacity = Math.max(0, parseInt(el('terminalArrivalCapacity').value, 10) || 0);
-    }
-    if (state.selectedObject && state.selectedObject.type === 'pbb') {
-      var pbb = state.selectedObject.obj;
-      if (el('standName')) {
-        const rawSn = (el('standName').value || '').trim();
-        if (rawSn && findDuplicateLayoutName('pbb', pbb.id, rawSn)) {
-          alertDuplicateLayoutName();
-          el('standName').value = pbb.name || '';
-        } else {
-          pbb.name = rawSn;
-        }
-      }
-      applyUnifiedStandConstraintFromPanelToObject(pbb, 'standIcaoCategories', 'standAircraftAccess');
-    }
-    if (state.selectedObject && state.selectedObject.type === 'remote') {
-      var st = state.selectedObject.obj;
-      if (el('remoteName')) {
-        const rawRn = (el('remoteName').value || '').trim();
-        if (rawRn && findDuplicateLayoutName('remote', st.id, rawRn)) {
-          alertDuplicateLayoutName();
-          el('remoteName').value = st.name || '';
-        } else {
-          st.name = rawRn;
-        }
-      }
-      applyUnifiedStandConstraintFromPanelToObject(st, 'remoteIcaoCategories', 'remoteAircraftAccess');
-      const accWrap = document.getElementById('remoteTerminalAccess');
-      if (accWrap) {
-        const checks = accWrap.querySelectorAll('.remote-term-check');
-        const allowed = [];
-        checks.forEach(function(ch) {
-          if (ch.checked) {
-            const id = ch.getAttribute('data-item-id');
-            if (id) allowed.push(id);
-          }
-        });
-        st.allowedTerminals = allowed;
-      }
-    }
-    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-      var tst = state.selectedObject.obj;
-      if (el('tempStandName')) {
-        const rawTn = (el('tempStandName').value || '').trim();
-        if (rawTn && findDuplicateLayoutName('tempStand', tst.id, rawTn)) {
-          alertDuplicateLayoutName();
-          el('tempStandName').value = tst.name || '';

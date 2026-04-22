@@ -1,3 +1,65 @@
+            originalHeightPx: img.naturalHeight || heightM,
+            topLeftCol: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftCol : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol,
+            topLeftRow: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftRow : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow
+          });
+          syncLayoutImageBitmap();
+          syncPanelFromState();
+          draw();
+        };
+        img.onerror = function() {
+          alert('Failed to read the selected layout image.');
+          gridLayoutImageFileEl.value = '';
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  const clearGridLayoutImageBtn = document.getElementById('btnClearGridLayoutImage');
+  if (clearGridLayoutImageBtn) {
+    clearGridLayoutImageBtn.addEventListener('click', function() {
+      if (!state.layoutImageOverlay) return;
+      pushUndo();
+      state.layoutImageOverlay = null;
+      layoutImageBitmap = null;
+      layoutImageBitmapSrc = '';
+      if (gridLayoutImageFileEl) gridLayoutImageFileEl.value = '';
+      syncPanelFromState();
+      draw();
+    });
+  }
+  commitGridLayoutImageNumericChange('gridLayoutImageOpacity', function(input) {
+    state.layoutImageOverlay.opacity = clampLayoutImageOpacity(input.value);
+  });
+  commitGridLayoutImageNumericChange('gridLayoutImageWidthM', function(input) {
+    applyLayoutImageWidthByAspect(input.value);
+  });
+  commitGridLayoutImageNumericChange('gridLayoutImageHeightM', function(input) {
+    applyLayoutImageHeightByAspect(input.value);
+  });
+  commitGridLayoutImageNumericChange('gridLayoutImageCol', function(input) {
+    state.layoutImageOverlay.topLeftCol = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftCol);
+  });
+  commitGridLayoutImageNumericChange('gridLayoutImageRow', function(input) {
+    state.layoutImageOverlay.topLeftRow = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftRow);
+  });
+
+  document.getElementById('terminalName').addEventListener('change', function() {
+    const t = getCurrentTerminal();
+    if (t) {
+      const raw = (this.value || '').trim();
+      if (raw && findDuplicateLayoutName('terminal', t.id, raw)) {
+        alertDuplicateLayoutName();
+        this.value = t.name || '';
+        return;
+      }
+      t.name = raw || t.name;
+      draw();
+      updateObjectInfo();
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    }
+  });
+  const buildingTypeInput = document.getElementById('buildingType');
   if (buildingTypeInput) {
     buildingTypeInput.addEventListener('change', function() {
       const nextType = normalizeBuildingType(this.value || BUILDING_TYPE_DEFAULT);
@@ -321,65 +383,3 @@
         updateObjectInfo();
         renderObjectList();
         draw();
-        update3DSceneWhenVisible();
-      }
-    });
-  }
-  const tempStandIcaoCategoriesHost = document.getElementById('tempStandIcaoCategories');
-  if (tempStandIcaoCategoriesHost) {
-    tempStandIcaoCategoriesHost.addEventListener('change', function(ev) {
-      const t = ev.target;
-      if (!t || !t.classList.contains('icao-letter-check')) return;
-      let letters = readIcaoCategoriesFromHost('tempStandIcaoCategories');
-      if (!letters.length) {
-        letters = ['C'];
-        applyIcaoCategoriesToHost('tempStandIcaoCategories', letters);
-      }
-      const typeIds = aircraftTypeIdsForIcaoLetters(letters);
-      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-        const st = state.selectedObject.obj;
-        st.categoryMode = 'icao';
-        st.allowedIcaoCategories = letters;
-        st.category = representativeCategoryFromLetters(letters);
-        st.allowedAircraftTypes = typeIds;
-        renderAircraftConstraintChoices('tempStandAircraftAccess', typeIds, letters);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      } else {
-        renderAircraftConstraintChoices('tempStandAircraftAccess', typeIds, letters);
-      }
-    });
-  }
-  const tempStandTerminalAccessEl = document.getElementById('tempStandTerminalAccess');
-  if (tempStandTerminalAccessEl) {
-    tempStandTerminalAccessEl.addEventListener('change', function(ev) {
-      const target = ev.target;
-      if (!target || !target.classList.contains('remote-term-check')) return;
-      syncChoiceChipStates(tempStandTerminalAccessEl);
-      if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
-      const st = state.selectedObject.obj;
-      const checks = tempStandTerminalAccessEl.querySelectorAll('.remote-term-check');
-      const allowed = [];
-      checks.forEach(function(ch) {
-        if (ch.checked) {
-          const id = ch.getAttribute('data-item-id');
-          if (id) allowed.push(id);
-        }
-      });
-      st.allowedTerminals = allowed;
-      if (typeof syncPanelFromState === 'function') syncPanelFromState();
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-    });
-  }
-  const tempStandAircraftAccessEl = document.getElementById('tempStandAircraftAccess');
-  if (tempStandAircraftAccessEl) {
-    tempStandAircraftAccessEl.addEventListener('change', function(ev) {
-      const target = ev.target;
-      if (!target || !target.classList.contains('aircraft-type-check')) return;
-      syncChoiceChipStates(tempStandAircraftAccessEl);
-      if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
-      const tstAc = state.selectedObject.obj;

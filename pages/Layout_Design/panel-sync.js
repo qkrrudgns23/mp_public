@@ -1,3 +1,4 @@
+      return null;
     }
     return null;
   }
@@ -627,4 +628,3 @@
       const baseLw = Math.max(0.18, 0.24 / Math.max(state.scale, 0.1));
       ctx.lineWidth = selected ? baseLw * 1.5 : baseLw;
       ctx.strokeStyle = strokeStyle;
-      ctx.stroke();

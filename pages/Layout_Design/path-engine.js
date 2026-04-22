@@ -195,13 +195,14 @@
         return { x: Number(p && p.x), y: Number(p && p.y) };
       }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
       if (points.length < 3) return null;
-      let ow = Number(m.outerWidthM);
-      let iw = Number(m.innerWidthM);
-      if (!isFinite(ow) || ow < 0) ow = LAYOUT_ISLAND_OUTER_WIDTH_DEFAULT_M;
-      else ow = Math.min(500, ow);
-      if (!isFinite(iw) || iw < 0) iw = LAYOUT_ISLAND_INNER_WIDTH_DEFAULT_M;
-      else iw = Math.min(200, iw);
-      return { kind: 'island', id: m.id || id(), points: points, outerWidthM: ow, innerWidthM: iw, pavement: islandMarkerPavementResolved(m) };
+      let w = Number(m.widthM);
+      if (!isFinite(w) || w < 0) {
+        const legacy = Number(m.outerWidthM);
+        w = (isFinite(legacy) && legacy >= 0) ? Math.min(200, legacy) : LAYOUT_ISLAND_WIDTH_DEFAULT_M;
+      } else {
+        w = Math.min(200, w);
+      }
+      return { kind: 'island', id: m.id || id(), points: points, widthM: w };
     }
     if (k === 'area') {
       const rawPts = Array.isArray(m.points) ? m.points : [];
@@ -717,4 +718,3 @@
         const disp = map[kid];
         if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
       }
-      return null;

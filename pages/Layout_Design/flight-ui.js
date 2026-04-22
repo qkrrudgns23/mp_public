@@ -1,3 +1,22 @@
+    return 'rgba(148,163,184,0.95)';
+  }
+  function layoutPathDraftLineWidthPx() {
+    return Math.max(1, 1.3 / Math.max(state.scale, 0.1));
+  }
+  function layoutPathDraftDashPattern() {
+    return [5, 5];
+  }
+  /** @param {number[][]} pts Each [x,y] in layout px. Optional hoverXY draws one more segment from last pt. */
+  function strokeLayoutPathDraftPolyline(ctx, pts, hoverXY) {
+    if (!pts || pts.length < 1) return;
+    const hasHover = hoverXY && hoverXY.length >= 2 && isFinite(hoverXY[0]) && isFinite(hoverXY[1]);
+    if (pts.length < 2 && !hasHover) return;
+    ctx.save();
+    ctx.strokeStyle = layoutPathDraftStrokeStyle();
+    ctx.lineWidth = layoutPathDraftLineWidthPx();
+    ctx.setLineDash(layoutPathDraftDashPattern());
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
@@ -113,34 +132,79 @@
         const ax = Number(m.x), ay = Number(m.y);
         if (!isFinite(ax) || !isFinite(ay)) continue;
         const tol = Math.max(CELL_SIZE * 0.8, 18 / Math.max(state.scale, 0.12));
-        if (dist2(click, [ax, ay]) <= tol * tol)
+        const tol2 = tol * tol;
+        const sub = (m.subType === 'ils') ? 'ils' : 'papi';
+        if (sub === 'papi') {
+          const xs = papiLampCenterXsWorld(ax);
+          let hitP = false;
+          for (let pi = 0; pi < 4; pi++) {
+            if (dist2(click, [xs[pi], ay]) <= tol2) { hitP = true; break; }
+          }
+          if (!hitP && dist2(click, [ax, ay]) <= tol2) hitP = true;
+          if (!hitP) {
+            const half = 1.5 * PAPI_LAMP_SPACING_WORLD + tol;
+            if (Math.abs(click[1] - ay) <= tol && click[0] >= ax - half && click[0] <= ax + half) hitP = true;
+          }
+          if (hitP) return { type: 'layoutMarker', id: m.id, obj: m };
+        } else if (dist2(click, [ax, ay]) <= tol2) {
           return { type: 'layoutMarker', id: m.id, obj: m };
+        }
       }
     }
     return null;
   }
-  /** Navaid marker: small pill with subType label (PAPI / ILS) at world (m.x, m.y). */
+  /** Navaid: PAPI as four lamps (2 white, 2 red); ILS dot + ILS label at (m.x, m.y). */
   function drawNavaidMarker2D(ctx2, m, selected, interactiveLite) {
     if (!m) return;
     const x = Number(m.x), y = Number(m.y);
     if (!isFinite(x) || !isFinite(y)) return;
     const sub = (m.subType === 'ils') ? 'ils' : 'papi';
-    const label = sub === 'ils' ? 'ILS' : 'PAPI';
     const isIls = sub === 'ils';
-    const fill = selected
-      ? c2dObjectSelectedFill()
-      : (isIls ? 'rgba(56, 189, 248, 0.85)' : 'rgba(250, 204, 21, 0.9)');
-    const stroke = selected
-      ? c2dObjectSelectedStroke()
-      : (isIls ? 'rgba(2, 132, 199, 0.95)' : 'rgba(161, 98, 7, 0.95)');
-    const fg = isIls ? '#0c4a6e' : '#422006';
+    const scaleRef = Math.max(state.scale, 0.1);
     ctx2.save();
-    const r = Math.max(3, 3.6 / Math.max(state.scale, 0.1));
+    if (!isIls) {
+      const lampXs = papiLampCenterXsWorld(x);
+      const rLight = Math.max(2.4 * PAPI_VISUAL_SCALE, 2.9 * PAPI_VISUAL_SCALE / scaleRef);
+      const fills = selected
+        ? ['#ffffff', '#ffffff', '#fca5a5', '#fca5a5']
+        : ['#f8fafc', '#f8fafc', '#ef4444', '#ef4444'];
+      const strokes = selected
+        ? [c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke()]
+        : ['rgba(148,163,184,0.95)', 'rgba(148,163,184,0.95)', 'rgba(127,29,29,0.98)', 'rgba(127,29,29,0.98)'];
+      for (let i = 0; i < 4; i++) {
+        ctx2.beginPath();
+        ctx2.arc(lampXs[i], y, rLight, 0, Math.PI * 2);
+        ctx2.fillStyle = fills[i];
+        ctx2.strokeStyle = strokes[i];
+        ctx2.lineWidth = Math.max(0.35, 0.55 / scaleRef);
+        ctx2.fill();
+        ctx2.stroke();
+      }
+      if (selected) {
+        const pad = 2 * PAPI_VISUAL_SCALE;
+        const x0 = lampXs[0] - rLight - pad;
+        const x1 = lampXs[3] + rLight + pad;
+        const y0 = y - rLight - pad;
+        const y1 = y + rLight + pad;
+        ctx2.strokeStyle = c2dObjectSelectedStroke();
+        ctx2.lineWidth = Math.max(0.55, 0.8 / scaleRef);
+        ctx2.setLineDash([4, 3]);
+        ctx2.strokeRect(x0, y0, x1 - x0, y1 - y0);
+        ctx2.setLineDash([]);
+      }
+      ctx2.restore();
+      return;
+    }
+    const label = 'ILS';
+    const fill = selected ? c2dObjectSelectedFill() : 'rgba(56, 189, 248, 0.85)';
+    const stroke = selected ? c2dObjectSelectedStroke() : 'rgba(2, 132, 199, 0.95)';
+    const fg = '#0c4a6e';
+    const r = Math.max(3, 3.6 / scaleRef);
     ctx2.beginPath();
     ctx2.arc(x, y, r, 0, Math.PI * 2);
     ctx2.fillStyle = fill;
     ctx2.strokeStyle = stroke;
-    ctx2.lineWidth = Math.max(0.4, 0.6 / Math.max(state.scale, 0.1));
+    ctx2.lineWidth = Math.max(0.4, 0.6 / scaleRef);
     ctx2.fill();
     ctx2.stroke();
     if (!interactiveLite) {
@@ -256,9 +320,7 @@
             kind: 'island',
             id: id(),
             points: list.map(function(p) { return { x: Number(p.x), y: Number(p.y) }; }),
-            outerWidthM: getMarkerIslandOuterWidthMFromPanel(),
-            innerWidthM: getMarkerIslandInnerWidthMFromPanel(),
-            pavement: getMarkerIslandPavementFromPanel()
+            widthM: getMarkerIslandWidthMFromPanel()
           });
           state.markerIslandDraft = null;
           state.markerIslandHoverWorld = null;
@@ -796,65 +858,3 @@
       if (!hit) return false;
       const pt = worldPointToCellPoint(hit.near[0], hit.near[1], snapToGrid);
       pushUndo();
-      if (!Array.isArray(lk.midVertices)) lk.midVertices = [];
-      lk.midVertices.splice(Math.max(0, hit.insertIndex - 1), 0, pt);
-      state.selectedVertex = { type: 'apronLink', id: lk.id, kind: 'mid', midIndex: Math.max(0, hit.insertIndex - 1) };
-      markApronLinkJunctionOverlayDirty(lk.id);
-      if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-      else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      return true;
-    }
-    if (sel.type === 'layoutMarker') {
-      const mk = sel.obj;
-      if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !Array.isArray(mk.points) || mk.points.length < 2) return false;
-      const hit = findInsertSegment(mk.points, true, wx, wy);
-      if (!hit) return false;
-      const pt = worldPointToPixel(hit.near[0], hit.near[1], snapToGrid);
-      pushUndo();
-      mk.points.splice(hit.insertIndex, 0, { x: pt[0], y: pt[1] });
-      state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: hit.insertIndex };
-      if (typeof updateObjectInfo === 'function') updateObjectInfo();
-      draw();
-      return true;
-    }
-    return false;
-  }
-
-  function snapWorldPointToTaxiwayPolyline(wx, wy, taxiwayId) {
-    const tw = (state.taxiways || []).find(t => t.id === taxiwayId);
-    if (!tw || !tw.vertices || tw.vertices.length < 2) return null;
-    const click = [wx, wy];
-    let best = null;
-    let bestD2 = Infinity;
-    for (let i = 0; i < tw.vertices.length - 1; i++) {
-      const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-      const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
-      const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-      if (!near) continue;
-      const d2 = dist2(near, click);
-      if (d2 < bestD2) { bestD2 = d2; best = near; }
-    }
-    return best;
-  }
-  function snapWorldPointToLayoutObjectsForMarker(wx, wy) {
-    const click = [wx, wy];
-    let bestD2 = Infinity;
-    let best = null;
-    function considerPoint(pt) {
-      if (!pt || pt.length < 2) return;
-      const d2 = dist2(pt, click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = [pt[0], pt[1]];
-      }
-    }
-    function considerSeg(p1, p2) {
-      const near = closestPointOnSegment(p1, p2, click);
-      if (!near) return;
-      considerPoint(near);
-    }
-    (state.terminals || []).forEach(function(t) {
-      if (!t || !t.vertices || t.vertices.length < 2) return;
-      const verts = t.vertices;
-      const n = verts.length;
-      const segCount = t.closed ? n : (n - 1);

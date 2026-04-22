@@ -1,3 +1,65 @@
+        lineupArrivalSec: tAfterTaxi, depRollStartSec: tRollStart,
+        depRotSec: depRotFullSec, depLineupHoldSec: lineupHoldSec,
+        depTaxiDelayAtHolding: validHold,
+        lineupBackM: backClamped,
+      },
+    };
+  }
+  function buildFullAirsideTimelineForFlight(f) {
+    if (!f) return;
+    const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
+    if (f.arrDep === 'Dep') {
+      if (f.noWayDep) {
+        f.timeline = null;
+        f.timeline_meta = { error: 'no_path', leg: 'dep' };
+        return;
+      }
+      const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
+      const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
+      const eobtS = eobtMin * 60;
+      const etotS = etotMin * 60;
+      const built = buildDepartureSurfaceTimelineSegments(f, eobtS, etotS);
+      if (!built || !built.timeline || built.timeline.length < 2) {
+        f.timeline = null;
+        f.timeline_meta = { error: 'no_path', leg: 'dep' };
+        return;
+      }
+      f.timeline = built.timeline;
+      f.timeline_meta = Object.assign({ leg: 'dep' }, built.meta || {});
+      return;
+    }
+    const arrPts = getPathForFlight(f);
+    const depPts = getPathForFlightDeparture(f);
+    if (flightBlockedLikeNoWay(f)) {
+      f.timeline = null;
+      f.timeline_meta = { error: (f.arrDep !== 'Dep' && f.arrRetFailed && !f.noWayArr && !f.noWayDep) ? 'arr_ret_failed' : 'no_path' };
+      return;
+    }
+    if (!arrPts || arrPts.length < 2 || !depPts || depPts.length < 2) {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_path' };
+      return;
+    }
+    const token = f.token || {};
+    const runwayId = f.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || f.arrRunwayId;
+    if (runwayId == null || runwayId === '') {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_runway' };
+      return;
+    }
+    const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
+    const vTd = Math.max(1, touchdownSpeedMsForTimeline(f));
+    const tdDist = touchdownDistMForTimeline(f);
+    const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
+    const offset = APPROACH_OFFSET_WORLD_M;
+    const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
+    const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
+    const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], eibtMin + (typeof f.dwellMin === 'number' && isFinite(f.dwellMin) ? f.dwellMin : 45));
+    const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
+    const eldtS = eldtMin * 60;
+    const eibtS = eibtMin * 60;
+    const eobtS = eobtMin * 60;
+    const etotS = etotMin * 60;
     const tdPt = getRunwayPointAtDistance(runwayId, tdDist);
     if (!tdPt) {
       f.timeline = null;
@@ -1646,65 +1708,3 @@
       const p = pad || 0;
       const ax = a[0], ay = a[1], bx = b[0], by = b[1];
       return {
-        minX: Math.min(ax, bx) - p,
-        maxX: Math.max(ax, bx) + p,
-        minY: Math.min(ay, by) - p,
-        maxY: Math.max(ay, by) + p
-      };
-    }
-    function bboxesOverlap2d(A, B) {
-      if (!A || !B) return true;
-      return !(A.maxX < B.minX || B.maxX < A.minX || A.maxY < B.minY || B.maxY < A.minY);
-    }
-    const orderedPtsCache = new Array(pathList.length);
-    for (let _ci = 0; _ci < pathList.length; _ci++) {
-      orderedPtsCache[_ci] = getOrderedPoints(pathList[_ci]);
-    }
-    const apronNodeStand = [];
-    const minD2 = 1e-6;
-    pathList.forEach(function(obj, objIdx) {
-      if (omitOtherRunwayExits && selectedArrRetId != null && obj && obj.pathType === 'runway_exit' && obj.id !== selectedArrRetId) return;
-      const pts = orderedPtsCache[objIdx];
-      if (!pts || pts.length < 2) return;
-      const junctions = [];
-      for (let seg = 0; seg < pts.length - 1; seg++) {
-        const a = pts[seg], b = pts[seg+1];
-        const segAbBbox = segmentBBoxInflated2d(a, b, 1e-6);
-        for (let oi = 0; oi < pathList.length; oi++) {
-          const other = pathList[oi];
-          if (other.id === obj.id) continue;
-          const otherOrd = orderedPtsCache[oi];
-          if (!otherOrd || otherOrd.length < 2) continue;
-          for (let oseg = 0; oseg < otherOrd.length - 1; oseg++) {
-            const c = otherOrd[oseg], d = otherOrd[oseg+1];
-            if (!bboxesOverlap2d(segAbBbox, segmentBBoxInflated2d(c, d, 1e-6))) continue;
-            const isec = segmentSegmentIntersection(a, b, c, d);
-            if (isec) {
-              const { t } = projectOnSegment(a, b, isec.p);
-              junctions.push({ tAlong: seg + t, p: isec.p });
-            } else {
-              const ov = collinearSegmentOverlapOnAB(a, b, c, d);
-              if (ov) {
-                const ax = a[0], ay = a[1], bx = b[0], by = b[1];
-                const dx = bx - ax, dy = by - ay;
-                const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
-                const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
-                const pr0 = projectOnSegment(a, b, p0);
-                junctions.push({ tAlong: seg + pr0.t, p: pr0.p });
-                if (dist2(p0, p1ov) > SPLIT_TOL_D2) {
-                  const pr1 = projectOnSegment(a, b, p1ov);
-                  junctions.push({ tAlong: seg + pr1.t, p: pr1.p });
-                }
-              } else {
-              [c, d].forEach(function(q, idx) {
-                if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
-                  const { t, p: proj } = projectOnSegment(a, b, q);
-                  if (t >= 0 && t <= 1) junctions.push({ tAlong: seg + t, p: proj });
-                }
-              });
-              }
-            }
-          }
-          otherOrd.forEach(q => {
-            if (!pointOnSegmentStrict(a, b, q)) return;
-            const { t, p: proj } = projectOnSegment(a, b, q);

@@ -1,3 +1,65 @@
+    if (t) {
+      if (el('terminalName')) {
+        const rawTn = (el('terminalName').value || '').trim();
+        if (rawTn && findDuplicateLayoutName('terminal', t.id, rawTn)) {
+          alertDuplicateLayoutName();
+          el('terminalName').value = t.name || '';
+        } else {
+          t.name = rawTn || t.name;
+        }
+      }
+      if (el('buildingType')) t.buildingType = normalizeBuildingType(el('buildingType').value || t.buildingType);
+      if (el('terminalFloors')) t.floors = Math.max(1, parseInt(el('terminalFloors').value, 10) || 1);
+      if (el('terminalFloorToFloor')) t.floorToFloor = Math.max(0.5, Number(el('terminalFloorToFloor').value) || 4);
+      t.floorHeight = (t.floors || 1) * (t.floorToFloor || 4);
+      if (el('terminalDepartureCapacity')) t.departureCapacity = Math.max(0, parseInt(el('terminalDepartureCapacity').value, 10) || 0);
+      if (el('terminalArrivalCapacity')) t.arrivalCapacity = Math.max(0, parseInt(el('terminalArrivalCapacity').value, 10) || 0);
+    }
+    if (state.selectedObject && state.selectedObject.type === 'pbb') {
+      var pbb = state.selectedObject.obj;
+      if (el('standName')) {
+        const rawSn = (el('standName').value || '').trim();
+        if (rawSn && findDuplicateLayoutName('pbb', pbb.id, rawSn)) {
+          alertDuplicateLayoutName();
+          el('standName').value = pbb.name || '';
+        } else {
+          pbb.name = rawSn;
+        }
+      }
+      applyUnifiedStandConstraintFromPanelToObject(pbb, 'standIcaoCategories', 'standAircraftAccess');
+    }
+    if (state.selectedObject && state.selectedObject.type === 'remote') {
+      var st = state.selectedObject.obj;
+      if (el('remoteName')) {
+        const rawRn = (el('remoteName').value || '').trim();
+        if (rawRn && findDuplicateLayoutName('remote', st.id, rawRn)) {
+          alertDuplicateLayoutName();
+          el('remoteName').value = st.name || '';
+        } else {
+          st.name = rawRn;
+        }
+      }
+      applyUnifiedStandConstraintFromPanelToObject(st, 'remoteIcaoCategories', 'remoteAircraftAccess');
+      const accWrap = document.getElementById('remoteTerminalAccess');
+      if (accWrap) {
+        const checks = accWrap.querySelectorAll('.remote-term-check');
+        const allowed = [];
+        checks.forEach(function(ch) {
+          if (ch.checked) {
+            const id = ch.getAttribute('data-item-id');
+            if (id) allowed.push(id);
+          }
+        });
+        st.allowedTerminals = allowed;
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+      var tst = state.selectedObject.obj;
+      if (el('tempStandName')) {
+        const rawTn = (el('tempStandName').value || '').trim();
+        if (rawTn && findDuplicateLayoutName('tempStand', tst.id, rawTn)) {
+          alertDuplicateLayoutName();
+          el('tempStandName').value = tst.name || '';
         } else {
           tst.name = rawTn;
         }
@@ -306,65 +368,3 @@
             widthM: widthM,
             heightM: heightM,
             originalWidthPx: img.naturalWidth || widthM,
-            originalHeightPx: img.naturalHeight || heightM,
-            topLeftCol: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftCol : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol,
-            topLeftRow: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftRow : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow
-          });
-          syncLayoutImageBitmap();
-          syncPanelFromState();
-          draw();
-        };
-        img.onerror = function() {
-          alert('Failed to read the selected layout image.');
-          gridLayoutImageFileEl.value = '';
-        };
-        img.src = dataUrl;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-  const clearGridLayoutImageBtn = document.getElementById('btnClearGridLayoutImage');
-  if (clearGridLayoutImageBtn) {
-    clearGridLayoutImageBtn.addEventListener('click', function() {
-      if (!state.layoutImageOverlay) return;
-      pushUndo();
-      state.layoutImageOverlay = null;
-      layoutImageBitmap = null;
-      layoutImageBitmapSrc = '';
-      if (gridLayoutImageFileEl) gridLayoutImageFileEl.value = '';
-      syncPanelFromState();
-      draw();
-    });
-  }
-  commitGridLayoutImageNumericChange('gridLayoutImageOpacity', function(input) {
-    state.layoutImageOverlay.opacity = clampLayoutImageOpacity(input.value);
-  });
-  commitGridLayoutImageNumericChange('gridLayoutImageWidthM', function(input) {
-    applyLayoutImageWidthByAspect(input.value);
-  });
-  commitGridLayoutImageNumericChange('gridLayoutImageHeightM', function(input) {
-    applyLayoutImageHeightByAspect(input.value);
-  });
-  commitGridLayoutImageNumericChange('gridLayoutImageCol', function(input) {
-    state.layoutImageOverlay.topLeftCol = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftCol);
-  });
-  commitGridLayoutImageNumericChange('gridLayoutImageRow', function(input) {
-    state.layoutImageOverlay.topLeftRow = clampLayoutImagePoint(input.value, state.layoutImageOverlay.topLeftRow);
-  });
-
-  document.getElementById('terminalName').addEventListener('change', function() {
-    const t = getCurrentTerminal();
-    if (t) {
-      const raw = (this.value || '').trim();
-      if (raw && findDuplicateLayoutName('terminal', t.id, raw)) {
-        alertDuplicateLayoutName();
-        this.value = t.name || '';
-        return;
-      }
-      t.name = raw || t.name;
-      draw();
-      updateObjectInfo();
-      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    }
-  });
-  const buildingTypeInput = document.getElementById('buildingType');
