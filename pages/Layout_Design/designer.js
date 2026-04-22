@@ -19900,6 +19900,36 @@
   let _drawRafId = 0;
   /** While panning or shortly after wheel zoom, skip heavy path layers for smoother interaction. */
   let _layoutDetailSuppressUntil = 0;
+  /** Offscreen bitmap: grid → holding points (no sim-time stand fill / flights). Used during sim playback. */
+  let _simPlaybackBgCanvas = null;
+  let _simPlaybackBgSig = '';
+  function ensureSimPlaybackBgCanvasBuffer(w, h) {
+    if (!_simPlaybackBgCanvas) _simPlaybackBgCanvas = document.createElement('canvas');
+    if (_simPlaybackBgCanvas.width !== w || _simPlaybackBgCanvas.height !== h) {
+      _simPlaybackBgCanvas.width = w;
+      _simPlaybackBgCanvas.height = h;
+      _simPlaybackBgSig = '';
+    }
+    return _simPlaybackBgCanvas;
+  }
+  function simPlaybackBackgroundCacheSignature(interactiveLite) {
+    if (!layoutDrawCanvas) return '';
+    const w = layoutDrawCanvas.width, h = layoutDrawCanvas.height;
+    const sel = state.selectedObject;
+    const selKey = sel ? (String(sel.type) + ':' + String(sel.id)) : '';
+    const layers = state.layers || {};
+    const layerKey = Object.keys(layers).sort().map(function(k) { return k + '=' + (layers[k] ? '1' : '0'); }).join('&');
+    return [
+      w, h, dpr, state.panX, state.panY, state.scale,
+      interactiveLite ? '1' : '0',
+      selKey,
+      state.pathPolylineCacheRev | 0,
+      String(state.currentLayoutName || ''),
+      layerKey,
+      state.pathArcDrag ? '1' : '0',
+      layoutViewIsDragging() ? '1' : '0',
+    ].join('|');
+  }
   const LAYOUT_DRAG_LITE_VIEWPORT_WIDTH_THRESHOLD_M = 1200;
   function layoutViewportWidthWorldM() {
     if (!layoutDrawCanvas) return Infinity;
@@ -20464,15 +20494,44 @@
     if (!ctx || !layoutDrawCanvas) return;
     if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
     const interactiveLite = layoutViewSkipsTaxiDetail(drawOpts);
-    drawGrid(interactiveLite);
-    drawLayoutAreaMarkers2DFloor();
-    drawLayoutAreaMarkerOutlines2D();
-    drawLayoutIslandMarkers2DEarly();
-    drawTerminals(interactiveLite);
-    drawTaxiways(interactiveLite);
-    drawLayoutIslandMarkersOverlay2D();
-    drawPathArcPreview();
-    drawHoldingPoints2D(interactiveLite);
+    const simPlaybackSkipHeavyPathOverlays = !!(state.simPlaying && state.hasSimulationResult && !(drawOpts && drawOpts.forceFullLayoutDraw));
+    if (!state.simPlaying) _simPlaybackBgSig = '';
+    function drawSimPlaybackBackgroundLayers() {
+      drawGrid(interactiveLite);
+      drawLayoutAreaMarkers2DFloor();
+      drawLayoutAreaMarkerOutlines2D();
+      drawLayoutIslandMarkers2DEarly();
+      drawTerminals(interactiveLite);
+      drawTaxiways(interactiveLite);
+      drawLayoutIslandMarkersOverlay2D();
+      drawPathArcPreview();
+      drawHoldingPoints2D(interactiveLite);
+    }
+    const simPlaybackBgCache = !!(state.simPlaying && state.hasSimulationResult && !interactiveLite && !(drawOpts && drawOpts.forceFullLayoutDraw));
+    if (simPlaybackBgCache) {
+      const w = layoutDrawCanvas.width, h = layoutDrawCanvas.height;
+      ensureSimPlaybackBgCanvasBuffer(w, h);
+      const sig = simPlaybackBackgroundCacheSignature(interactiveLite);
+      if (sig !== _simPlaybackBgSig) {
+        const ocan = _simPlaybackBgCanvas;
+        const octx = ocan.getContext('2d', { alpha: false });
+        const savedCtx = ctx;
+        ctx = octx;
+        octx.setTransform(1, 0, 0, 1, 0, 0);
+        octx.clearRect(0, 0, w, h);
+        try {
+          drawSimPlaybackBackgroundLayers();
+        } finally {
+          ctx = savedCtx;
+        }
+        _simPlaybackBgSig = sig;
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(_simPlaybackBgCanvas, 0, 0);
+    } else {
+      drawSimPlaybackBackgroundLayers();
+    }
     drawPBBs(interactiveLite);
     drawRemoteStands(interactiveLite);
     drawTempStands(interactiveLite);
@@ -20487,7 +20546,7 @@
         drawDeparturePathHighlight();
       }
     }
-    drawProSimFlightPathEdges();
+    if (!simPlaybackSkipHeavyPathOverlays) drawProSimFlightPathEdges();
     drawApproachPreviewPaths2D();
     if (state.hasSimulationResult && state.flights && state.flights.length) {
       if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
@@ -20497,7 +20556,7 @@
       drawFlights2D();
     }
     if (!interactiveLite) {
-      drawPathJunctions();
+      if (!simPlaybackSkipHeavyPathOverlays) drawPathJunctions();
       drawTaxiwayDanglingEndpointMarks();
       drawQueueTaxiwayLaneMarkers();
     }
