@@ -1,3 +1,175 @@
+    if (!layer || !input) return;
+    layer.removeAttribute('hidden');
+    layer.setAttribute('aria-hidden', 'false');
+    input.value = '';
+    syncMarkerTextDraftInputPosition();
+    setTimeout(function() {
+      try {
+        input.focus();
+      } catch (e) {}
+    }, 0);
+  }
+  function commitMarkerTextDraft() {
+    const d = state.markerTextDraft;
+    if (!d || !d.active) return;
+    const input = document.getElementById('markerTextDraftInput');
+    const text = input ? String(input.value || '').trim().slice(0, 500) : '';
+    const sx = d.x, sy = d.y;
+    state.markerTextDraft = null;
+    hideMarkerTextDraftEditor();
+    if (text) {
+      pushUndo();
+      state.layoutMarkers.push({ kind: 'text', id: id(), x: sx, y: sy, text: text });
+      syncPanelFromState();
+    }
+    scheduleDraw();
+  }
+  function cancelMarkerTextDraftWithoutCommit() {
+    if (!state.markerTextDraft || !state.markerTextDraft.active) return;
+    state.markerTextDraft = null;
+    hideMarkerTextDraftEditor();
+    scheduleDraw();
+  }
+  function handleMarkerPlacement(wx, wy, shiftKey) {
+    const placePx = worldPointToPixel(wx, wy, shiftKey);
+    const sub = getMarkerSubKindFromPanel();
+    const placeUse = sub === 'area' ? markerAreaSnapWorldToPlacementPx(wx, wy, shiftKey) : placePx;
+    const px = placeUse[0], py = placeUse[1];
+    if (sub !== 'text' && state.markerTextDraft && state.markerTextDraft.active) {
+      commitMarkerTextDraft();
+    }
+    if (sub === 'text') {
+      commitMarkerTextDraft();
+      state.markerTextDraft = { x: px, y: py, active: true };
+      showMarkerTextDraftEditor();
+      scheduleDraw();
+      return;
+    }
+    if (sub === 'ruler') {
+      if (!state.markerRulerDraft) {
+        state.markerRulerDraft = { x: px, y: py };
+        state.markerRulerHoverWorld = [px, py];
+      } else {
+        const x1 = state.markerRulerDraft.x, y1 = state.markerRulerDraft.y;
+        state.markerRulerDraft = null;
+        state.markerRulerHoverWorld = null;
+        const dx = px - x1, dy = py - y1;
+        if (dx * dx + dy * dy < 2.25) return;
+        pushUndo();
+        state.layoutMarkers.push({ kind: 'ruler', id: id(), x1: x1, y1: y1, x2: px, y2: py });
+        syncPanelFromState();
+      }
+      return;
+    }
+    if (sub === 'island') {
+      if (!state.markerIslandDraft) state.markerIslandDraft = { points: [] };
+      const draft = state.markerIslandDraft;
+      const list = draft.points;
+      const closeR = CELL_SIZE * TERM_CLOSE_POLY_CF;
+      const closeR2 = closeR * closeR;
+      if (list.length >= 3) {
+        const c0 = list[0];
+        const dx = px - c0.x, dy = py - c0.y;
+        if (dx * dx + dy * dy <= closeR2) {
+          pushUndo();
+          state.layoutMarkers.push({
+            kind: 'island',
+            id: id(),
+            points: list.map(function(p) { return { x: Number(p.x), y: Number(p.y) }; }),
+            outerWidthM: getMarkerIslandOuterWidthMFromPanel(),
+            innerWidthM: getMarkerIslandInnerWidthMFromPanel(),
+            pavement: getMarkerIslandPavementFromPanel()
+          });
+          state.markerIslandDraft = null;
+          state.markerIslandHoverWorld = null;
+          syncPanelFromState();
+          return;
+        }
+      }
+      list.push({ x: px, y: py });
+      state.markerIslandHoverWorld = [px, py];
+      return;
+    }
+    if (sub === 'area') {
+      if (!state.markerAreaDraft) state.markerAreaDraft = { points: [] };
+      const draftA = state.markerAreaDraft;
+      const listA = draftA.points;
+      const closeRa = CELL_SIZE * TERM_CLOSE_POLY_CF;
+      const closeRa2 = closeRa * closeRa;
+      if (listA.length >= 3) {
+        const c0a = listA[0];
+        const dxa = px - c0a.x, dya = py - c0a.y;
+        if (dxa * dxa + dya * dya <= closeRa2) {
+          pushUndo();
+          state.layoutMarkers = normalizeLayoutMarkerAreaZOrder((state.layoutMarkers || []).concat([{
+            kind: 'area',
+            id: id(),
+            points: listA.map(function(p) { return { x: Number(p.x), y: Number(p.y) }; }),
+          }]));
+          state.markerAreaDraft = null;
+          state.markerAreaHoverWorld = null;
+          syncPanelFromState();
+          return;
+        }
+      }
+      listA.push({ x: px, y: py });
+      state.markerAreaHoverWorld = [px, py];
+      return;
+    }
+    if (sub === 'flight') {
+      const snap = snapWorldToMarkerFlightTaxiway(wx, wy);
+      if (!snap) return;
+      pushUndo();
+      state.layoutMarkers.push({
+        kind: 'flight',
+        id: id(),
+        taxiwayId: snap.taxiwayId,
+        segIndex: snap.segIndex,
+        t: snap.t,
+        aircraftType: getMarkerFlightAircraftTypeFromPanel(),
+        blazerEnabled: false,
+        headingReversed: false,
+        blazerColor: MARKER_BLAZER_COLOR_OPTIONS[0],
+        blazerLeftTrail: [],
+        blazerRightTrail: [],
+      });
+      syncPanelFromState();
+    }
+  }
+
+  function hitTest(wx, wy) {
+    const click = [wx, wy];
+    if (layoutMarkersVisible()) {
+      // Marker flights are drawn on top; prioritize marker picking so clicks don't fall through.
+      const mkTopHit = hitTestLayoutMarker(wx, wy, { skipKind: 'area' });
+      if (mkTopHit) return mkTopHit;
+    }
+    const temps = state.tempStands || [];
+    for (let i = temps.length - 1; i >= 0; i--) {
+      const st = temps[i];
+      if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
+        return { type: 'tempStand', id: st.id, obj: st };
+    }
+    for (let i = state.remoteStands.length - 1; i >= 0; i--) {
+      const st = state.remoteStands[i];
+      if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
+        return { type: 'remote', id: st.id, obj: st };
+    }
+    for (let i = state.pbbStands.length - 1; i >= 0; i--) {
+      const pbb = state.pbbStands[i];
+      const corners = getPBBStandCorners(pbb);
+      if (pointInPolygonXY(click, corners))
+        return { type: 'pbb', id: pbb.id, obj: pbb };
+    }
+    for (let i = state.terminals.length - 1; i >= 0; i--) {
+      const t = state.terminals[i];
+      if (t.closed && t.vertices.length >= 3 && pointInPolygon(click, t.vertices))
+        return { type: 'terminal', id: t.id, obj: t };
+    }
+    const hpHit = hitTestHoldingPoint(wx, wy);
+    if (hpHit) return hpHit;
+    const apronLkHit = hitTestApronLink(wx, wy);
+    if (apronLkHit) return apronLkHit;
     if (!state.taxiwayDrawingId) {
       const pathCenterlineHitRadiusWorld = 10 / Math.max(state.scale, 0.08);
       const pathCenterlineHitD2 = pathCenterlineHitRadiusWorld * pathCenterlineHitRadiusWorld;
@@ -686,175 +858,3 @@
       draw();
       return true;
     }
-    return false;
-  }
-
-  function getCurrentTerminal() {
-    if (state.selectedObject && state.selectedObject.type === 'terminal' && state.selectedObject.obj) {
-
-
-      return state.selectedObject.obj;
-    }
-    if (state.currentTerminalId) {
-      const t = state.terminals.find(x => x.id === state.currentTerminalId);
-      if (t) return t;
-    }
-    return state.terminals[0] || null;
-  }
-
-  function polygonAreaM2(vertices) {
-    if (!vertices || vertices.length < 3) return 0;
-    let area = 0;
-    const n = vertices.length;
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n;
-      area += vertices[i].col * vertices[j].row;
-      area -= vertices[j].col * vertices[i].row;
-    }
-    return Math.abs(area) * 0.5 * CELL_SIZE * CELL_SIZE;
-  }
-
-  function syncPanelFromState() {
-    document.getElementById('gridCellSize').value = CELL_SIZE;
-    document.getElementById('gridCols').value = GRID_COLS;
-    document.getElementById('gridRows').value = GRID_ROWS;
-    const gridImageOpacityEl = document.getElementById('gridLayoutImageOpacity');
-    const gridImageWidthEl = document.getElementById('gridLayoutImageWidthM');
-    const gridImageHeightEl = document.getElementById('gridLayoutImageHeightM');
-    const gridImageColEl = document.getElementById('gridLayoutImageCol');
-    const gridImageRowEl = document.getElementById('gridLayoutImageRow');
-    const gridImageMetaEl = document.getElementById('gridLayoutImageMeta');
-    const gridImageClearBtn = document.getElementById('btnClearGridLayoutImage');
-    const gridImageFileEl = document.getElementById('gridLayoutImageFile');
-    const overlay = state.layoutImageOverlay;
-    if (gridImageOpacityEl) gridImageOpacityEl.value = overlay ? String(overlay.opacity) : String(GRID_LAYOUT_IMAGE_DEFAULTS.opacity);
-    if (gridImageWidthEl) gridImageWidthEl.value = overlay ? String(overlay.widthM) : String(GRID_LAYOUT_IMAGE_DEFAULTS.widthM);
-    if (gridImageHeightEl) gridImageHeightEl.value = overlay ? String(overlay.heightM) : String(GRID_LAYOUT_IMAGE_DEFAULTS.heightM);
-    if (gridImageColEl) gridImageColEl.value = overlay ? String(overlay.topLeftCol) : String(GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol);
-    if (gridImageRowEl) gridImageRowEl.value = overlay ? String(overlay.topLeftRow) : String(GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow);
-    if (gridImageMetaEl) gridImageMetaEl.textContent = overlay ? ('Loaded: ' + (overlay.name || 'Layout image')) : 'No file selected.';
-    if (gridImageClearBtn) gridImageClearBtn.disabled = !overlay;
-    if (!overlay && gridImageFileEl) gridImageFileEl.value = '';
-    if (state.terminals.length && (!state.currentTerminalId || !state.terminals.some(t => t.id === state.currentTerminalId)))
-      state.currentTerminalId = state.terminals[0].id;
-    const term = getCurrentTerminal();
-    if (term) {
-      const buildingTypeSel = document.getElementById('buildingType');
-      if (buildingTypeSel) {
-        buildingTypeSel.innerHTML = getBuildingTypeOptionsHtml(term.buildingType);
-        buildingTypeSel.value = normalizeBuildingType(term.buildingType);
-      }
-      document.getElementById('terminalName').value = term.name || getDefaultBuildingNameForType(term.buildingType, term.id);
-      const floors = term.floors != null ? Math.max(1, parseInt(term.floors, 10) || 1) : 1;
-      const f2fRaw = term.floorToFloor != null ? Number(term.floorToFloor) : (term.floorHeight != null ? Number(term.floorHeight) : 4);
-      const f2f = Math.max(0.5, f2fRaw || 4);
-      const totalH = term.floorHeight != null ? Number(term.floorHeight) || (floors * f2f) : (floors * f2f);
-      term.floors = floors;
-      term.floorToFloor = f2f;
-      term.floorHeight = totalH;
-      const floorsInput = document.getElementById('terminalFloors');
-      const f2fInput = document.getElementById('terminalFloorToFloor');
-      const totalInput = document.getElementById('terminalFloorHeight');
-      if (floorsInput) floorsInput.value = floors;
-      if (f2fInput) f2fInput.value = f2f;
-      if (totalInput) totalInput.value = totalH;
-      document.getElementById('terminalDepartureCapacity').value = term.departureCapacity != null ? term.departureCapacity : 0;
-      document.getElementById('terminalArrivalCapacity').value = term.arrivalCapacity != null ? term.arrivalCapacity : 0;
-    }
-    syncDrawToggleButton('btnTerminalDraw', !!state.terminalDrawingId);
-    if (state.selectedObject && state.selectedObject.type === 'pbb') {
-      const pbb = state.selectedObject.obj;
-      const nameInput = document.getElementById('standName');
-      const modeSel = document.getElementById('standCategoryMode');
-      const catSel = document.getElementById('standCategory');
-      const lenInput = document.getElementById('pbbLength');
-      const angleInput = document.getElementById('standAngle');
-      const pbbCountInput = document.getElementById('pbbBridgeCount');
-      if (nameInput) nameInput.value = pbb.name || '';
-      if (modeSel) modeSel.value = getStandCategoryMode(pbb);
-      if (catSel) catSel.value = pbb.category || 'C';
-      if (lenInput) {
-        let arm = Number(pbb.pbbArmLenM);
-        if (!isFinite(arm) || arm <= 0) {
-          const br0 = pbb.pbbBridges && pbb.pbbBridges[0];
-          const p1 = br0 && br0.points && br0.points[1], p2 = br0 && br0.points && br0.points[2];
-          if (p1 && p2) arm = Math.hypot(Number(p2.x) - Number(p1.x), Number(p2.y) - Number(p1.y));
-          else arm = 15;
-        }
-        lenInput.value = String(Math.max(1, Math.round(arm)));
-      }
-      if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
-      if (pbbCountInput) pbbCountInput.value = String(Math.max(1, parseInt(pbb.pbbCount, 10) || 1));
-      const boardingWInput = document.getElementById('pbbBoardingWidth');
-      const boardingHInput = document.getElementById('pbbBoardingHeight');
-      if (boardingWInput) boardingWInput.value = String(getPbbBoardingWidthM(pbb));
-      if (boardingHInput) boardingHInput.value = String(getPbbBoardingHeightM(pbb));
-      syncStandConstraintVisibility('stand', getStandCategoryMode(pbb));
-      renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb));
-    }
-    if (state.selectedObject && state.selectedObject.type === 'remote') {
-      const st = state.selectedObject.obj;
-      const nameInput = document.getElementById('remoteName');
-      const angleInput = document.getElementById('remoteAngle');
-      const modeSel = document.getElementById('remoteCategoryMode');
-      const catSel = document.getElementById('remoteCategory');
-      if (nameInput) nameInput.value = st.name || '';
-      if (angleInput) angleInput.value = String(Math.round(normalizeAngleDeg(st.angleDeg != null ? st.angleDeg : 0)));
-      if (modeSel) modeSel.value = getStandCategoryMode(st);
-      if (catSel) catSel.value = st.category || 'C';
-      syncStandConstraintVisibility('remote', getStandCategoryMode(st));
-      renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st));
-      renderRemoteTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
-    }
-    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-      const st = state.selectedObject.obj;
-      const nameInput = document.getElementById('tempStandName');
-      const angleInput = document.getElementById('tempStandAngle');
-      const modeSel = document.getElementById('tempStandCategoryMode');
-      const catSel = document.getElementById('tempStandCategory');
-      if (nameInput) nameInput.value = st.name || '';
-      if (angleInput) angleInput.value = String(Math.round(normalizeAngleDeg(st.angleDeg != null ? st.angleDeg : 0)));
-      if (modeSel) modeSel.value = getStandCategoryMode(st);
-      if (catSel) catSel.value = st.category || 'C';
-      syncStandConstraintVisibility('tempStand', getStandCategoryMode(st));
-      renderAircraftConstraintChoices('tempStandAircraftAccess', getStandAllowedAircraftTypes(st));
-      renderTempStandTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
-    }
-    if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
-      const hp = state.selectedObject.obj;
-      const nameInput = document.getElementById('holdingPointName');
-      if (nameInput) nameInput.value = hp.name || '';
-    }
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      const nameInput = document.getElementById('taxiwayName');
-      const widthInput = document.getElementById('taxiwayWidth');
-      const maxExitInput = document.getElementById('taxiwayMaxExitVel');
-      const minExitInput = document.getElementById('taxiwayMinExitVel');
-      if (nameInput) nameInput.value = tw.name || '';
-      const widthDefault = tw.pathType === 'runway'
-        ? RUNWAY_PATH_DEFAULT_WIDTH
-        : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-      if (widthInput) widthInput.value = tw.width != null ? tw.width : widthDefault;
-      const avgVelInput = document.getElementById('taxiwayAvgMoveVelocity');
-      if (avgVelInput) avgVelInput.value = (tw.avgMoveVelocity != null ? tw.avgMoveVelocity : 10);
-      syncPathFieldVisibilityForPathType(tw.pathType || 'taxiway');
-      const runwayMinArrInput = document.getElementById('runwayMinArrVelocity');
-      if (runwayMinArrInput) {
-        const mav = (typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0)
-          ? Math.max(1, Math.min(150, tw.minArrVelocity))
-          : 15;
-        runwayMinArrInput.value = mav;
-      }
-      const runwayLineupInputCw = document.getElementById('runwayLineupDistM_CW');
-      const runwayLineupInputCcw = document.getElementById('runwayLineupDistM_CCW');
-      if (tw.pathType === 'runway') {
-        if (runwayLineupInputCw) runwayLineupInputCw.value = String(getRunwayLineupDistMByDirection(tw, 'clockwise'));
-        if (runwayLineupInputCcw) runwayLineupInputCcw.value = String(getRunwayLineupDistMByDirection(tw, 'counter_clockwise'));
-      }
-      const runwayStartDispInput = document.getElementById('runwayStartDisplacedThresholdM');
-      if (runwayStartDispInput && tw.pathType === 'runway') runwayStartDispInput.value = String(getEffectiveRunwayStartDisplacedThresholdM(tw));
-      const runwayStartBlastInput = document.getElementById('runwayStartBlastPadM');
-      if (runwayStartBlastInput && tw.pathType === 'runway') runwayStartBlastInput.value = String(getEffectiveRunwayStartBlastPadM(tw));
-      const runwayEndDispInput = document.getElementById('runwayEndDisplacedThresholdM');
-      if (runwayEndDispInput && tw.pathType === 'runway') runwayEndDispInput.value = String(getEffectiveRunwayEndDisplacedThresholdM(tw));

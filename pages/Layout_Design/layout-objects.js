@@ -1,3 +1,147 @@
+    CONFLICT: _ganttStyle.conflict || '#7f1d1d',
+    SELECTED: _ganttStyle.selected || '#fbbf24',
+  };
+  const _apronAc = _layoutTier.apronAircraft || {};
+  const _acScaleByCat = (_apronAc.scaleByIcaoCategory && typeof _apronAc.scaleByIcaoCategory === 'object') ? _apronAc.scaleByIcaoCategory : {};
+  function apronAircraftScaleForIcao(code) {
+    const c = String(code || '').toUpperCase();
+    const v = Number(_acScaleByCat[c]);
+    if (isFinite(v) && v > 0) return v;
+    const d = Number(_acScaleByCat.default);
+    return (isFinite(d) && d > 0) ? d : 1.0;
+  }
+  const _ac2d = _apronAc.twoD || {};
+  const _acSil = (_ac2d.silhouette && typeof _ac2d.silhouette === 'object') ? _ac2d.silhouette : {};
+  function apron2DGlyphFill() { return _ac2d.fillColor || '#ff2f92'; }
+  function getApronAircraftDetailedSilhouettePoints() {
+    const raw = _ac2d.detailedSilhouettePoints;
+    if (!Array.isArray(raw) || raw.length < 3) return [];
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+      const row = raw[i];
+      if (!Array.isArray(row) || row.length < 2) continue;
+      const x = Number(row[0]);
+      const y = Number(row[1]);
+      if (isFinite(x) && isFinite(y)) out.push([x, y]);
+    }
+    return out.length >= 3 ? out : [];
+  }
+  const _schedAlgo = _algoTier.scheduledTimes || {};
+  const SCHED_DWELL_FLOOR_MIN = (function() {
+    const v = Number(_schedAlgo.dwellFloorMin);
+    return (isFinite(v) && v >= 0) ? v : 20;
+  })();
+  /** Dispatched schedule (d): SLDT(d) = SIBT(d) − this many minutes; STOT(d) = SOBT(d) + SCHED_SD_STOT_PLUS_SOBD_MIN. */
+  const SCHED_SD_SIBT_MINUS_SLD_MIN = 3;
+  const SCHED_SD_STOT_PLUS_SOBD_MIN = 3;
+  const RSEP_MISSING_MATRIX_SEC = (function() {
+    const v = Number(_schedAlgo.rsepMissingMatrixSeparationSec);
+    return (isFinite(v) && v >= 0) ? v : 90;
+  })();
+  const TIME_AXIS_CFG = _algoTier.timeAxis || {};
+  const DOM_OPT_CFG = (_algoTier.domOptimization && typeof _algoTier.domOptimization === 'object') ? _algoTier.domOptimization : {};
+  const DOM_OPT_FLIGHT_VIRT_ENABLE = DOM_OPT_CFG.flightListVirtualScroll !== false;
+  const DOM_OPT_FLIGHT_VIRT_MIN = (function() {
+    const v = Math.floor(Number(DOM_OPT_CFG.flightListVirtualMinRows));
+    return (isFinite(v) && v >= 8) ? v : 48;
+  })();
+  const DOM_OPT_FLIGHT_VIRT_OVERSCAN = (function() {
+    const v = Math.floor(Number(DOM_OPT_CFG.flightListVirtualOverscan));
+    return (isFinite(v) && v >= 0) ? v : 8;
+  })();
+  const DOM_OPT_FLIGHT_VIRT_ROW_H = (function() {
+    const v = Number(DOM_OPT_CFG.flightListVirtualRowHeightPx);
+    return (isFinite(v) && v >= 18) ? v : 28;
+  })();
+  const FLIGHT_SCHED_PAGE_SIZE = (function() {
+    const v = Math.floor(Number(DOM_OPT_CFG.flightSchedulePageSize));
+    if (!isFinite(v) || v < 0) return 20;
+    return v;
+  })();
+  const GANTT_LEGEND_MAX_INTERVALS = (function() {
+    const v = Math.floor(Number(DOM_OPT_CFG.ganttLegendMaxIntervals));
+    if (!isFinite(v) || v < 1) return 100;
+    return v;
+  })();
+  const KPI_ROLLING_TABLE_VISIBLE_ROWS = (function() {
+    const v = Math.floor(Number(DOM_OPT_CFG.kpiRollingTableVisibleRows));
+    if (!isFinite(v) || v < 1) return 24;
+    return v;
+  })();
+  function _taNum(k, def) {
+    const v = Number(TIME_AXIS_CFG[k]);
+    return (isFinite(v) && v >= 0) ? v : def;
+  }
+  const GANTT_PAD_MIN = _taNum('apronGanttPadMin', 20);
+  const RWY_SEP_TIMELINE_PAD_MIN = _taNum('runwaySepTimelinePadMin', 10);
+  const TICK_STEP_SPAN_LE60 = _taNum('tickStepWhenSpanLe60Min', 10);
+  const TICK_STEP_SPAN_LE240 = _taNum('tickStepWhenSpanLe240Min', 30);
+  const TICK_STEP_ELSE = _taNum('tickStepElseMin', 60);
+  const MAX_TICKS_SHOWN = (function() {
+    const v = Math.floor(Number(TIME_AXIS_CFG.maxTicksShown));
+    return (isFinite(v) && v >= 2) ? v : 6;
+  })();
+  const PATH_SEARCH_CFG = _algoTier.pathSearch || {};
+  const TAXIWAY_HEURISTIC_COST = (function() {
+    const v = Number(PATH_SEARCH_CFG.taxiwayHeuristicCost);
+    return (isFinite(v) && v > 0) ? v : 200;
+  })();
+  const _ix = _layoutTier.interaction || {};
+  function _interactionConfigNum(k, def) {
+    const v = Number(_ix[k]);
+    return (isFinite(v) && v >= 0) ? v : def;
+  }
+  function _ixBool(k, def) {
+    const v = _ix[k];
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'number') return v !== 0;
+    if (typeof v === 'string') {
+      const s = v.trim().toLowerCase();
+      if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+      if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+    }
+    return !!def;
+  }
+  const LAYOUT_VERTEX_DOT_SCALE = Math.max(0.25, Math.min(1.5, _interactionConfigNum('layoutVertexDotScale', 0.7)));
+  const LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR = Math.max(0.25, Math.min(1.5, _interactionConfigNum('layoutSelectedVertexRadiusFactor', 0.7)));
+  const GRID_VISIBLE_DEFAULT = _ixBool('showGridDefault', true);
+  const IMAGE_VISIBLE_DEFAULT = _ixBool('showImageDefault', true);
+  const ROAD_WIDTH_VISIBLE_DEFAULT = _ixBool('showRoadWidthDefault', true);
+  const DEFAULT_LAYERS = {
+    grid: GRID_VISIBLE_DEFAULT,
+    image: IMAGE_VISIBLE_DEFAULT,
+    pathLines: true,
+    pathFill: ROAD_WIDTH_VISIBLE_DEFAULT,
+    standLines: true,
+    standFill: true,
+    islandAreaLines: true,
+    islandAreaFill: ROAD_WIDTH_VISIBLE_DEFAULT,
+    buildingLines: true,
+    buildingFill: true,
+    textRuler: false,
+    dummyFlight: false,
+    junction: true
+  };
+  const RW_EXIT_ALLOWED_DEFAULT = normalizeAllowedRunwayDirections(_dc.rwExitAllowedDefaultRaw);
+  function layoutPathVertexRadiusPx(vertexSelected, pathSelected) {
+    if (vertexSelected) return 6 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR;
+    if (pathSelected) return 5 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR;
+    return 4 * LAYOUT_VERTEX_DOT_SCALE;
+  }
+  function layoutTerminalVertexRadiusPx(vertexSelected) {
+    return vertexSelected ? 5.5 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR : 4 * LAYOUT_VERTEX_DOT_SCALE;
+  }
+  const _dragThreshPx = _interactionConfigNum('dragThresholdPx', 4);
+  const DRAG_THRESH = _dragThreshPx > 0 ? Math.max(1, _dragThreshPx) : 4;
+  const FREE_DRAW_STEP_CELL = Math.max(0.001, _interactionConfigNum('freeDrawStepCell', 0.05));
+  const GRID_SNAP_STEP_CELL = Math.max(0.001, _interactionConfigNum('gridSnapStepCell', 0.5));
+  const INSERT_VERTEX_HIT_CF = _interactionConfigNum('insertVertexHitCellFactor', 0.9);
+  const CANVAS_MIN_ZOOM = Math.max(0.01, _interactionConfigNum('canvasMinZoom', 0.05));
+  const CANVAS_MAX_ZOOM = Math.max(CANVAS_MIN_ZOOM, _interactionConfigNum('canvasMaxZoom', 10));
+  const HIT_TERM_VTX_CF = _interactionConfigNum('hitTerminalVertexCellFactor', 0.6) * LAYOUT_VERTEX_DOT_SCALE;
+  const HIT_TW_VTX_CF = _interactionConfigNum('hitTaxiwayVertexCellFactor', 0.6) * LAYOUT_VERTEX_DOT_SCALE;
+  const HIT_TW_SEG_CF = _interactionConfigNum('hitTaxiwayAlongCellFactor', 0.8);
+  const HIT_PBB_END_CF = _interactionConfigNum('hitPbbEndCellFactor', 0.8);
   const TRY_PBB_MAX_EDGE_CF = _interactionConfigNum('tryPlacePbbMaxEdgeCellFactor', 1.0);
   const PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M = 50;
   const FLIGHT_TOOLTIP_CF = _interactionConfigNum('flightTooltipCellFactor', 1.2);
@@ -230,6 +374,12 @@
   }
 
   function id() { return 'id_' + Math.random().toString(36).slice(2, 11); }
+  /** Flight Schedule default: 3 uppercase letters + 5 digits (e.g. ABC12345). */
+  function randomRegNumber() {
+    let letters = '';
+    for (let i = 0; i < 3; i++) letters += String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    return letters + String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+  }
   function escapeHtml(str) {
     return String(str)
       .replace(/&/g, '&amp;')
@@ -294,12 +444,11 @@
     const container = document.getElementById(containerId);
     renderChoiceChipList(container, getAircraftConstraintOptions(), selectedIds, 'aircraft-type-check', containerId);
   }
-  function syncStandConstraintVisibility(prefix, mode) {
-    const normMode = normalizeStandCategoryMode(mode, 'icao');
+  function syncStandConstraintVisibility(prefix) {
     const icaoWrap = document.getElementById(prefix + 'IcaoWrap');
     const aircraftWrap = document.getElementById(prefix + 'AircraftWrap');
-    if (icaoWrap) icaoWrap.style.display = normMode === 'icao' ? 'grid' : 'none';
-    if (aircraftWrap) aircraftWrap.style.display = normMode === 'aircraft' ? 'grid' : 'none';
+    if (icaoWrap) icaoWrap.style.display = 'grid';
+    if (aircraftWrap) aircraftWrap.style.display = 'grid';
   }
 
   const state = {
@@ -679,152 +828,3 @@
       if (btn) btn.disabled = false;
     }
   }
-  function scheduleAfterPaint(fn) {
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() { setTimeout(fn, 0); });
-    });
-  }
-  const DEFAULT_AIRLINE_CODES = (function() {
-    const a = _flightTier.defaultAirlineCodes;
-    return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
-  })();
-  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
-  function pathTypeFromLayoutMode(layoutMode) {
-    if (layoutMode === 'runwayPath') return 'runway';
-    if (layoutMode === 'runwayTaxiway') return 'runway_exit';
-    if (layoutMode === 'taxiway') return 'taxiway';
-    return 'taxiway';
-  }
-
-
-  function layoutModeFromPathType(pt) {
-    if (pt === 'runway') return 'runwayPath';
-    if (pt === 'runway_exit') return 'runwayTaxiway';
-    if (pt === 'apron_taxiway') return 'taxiway';
-    if (pt === 'general_queue_taxiway') return 'taxiway';
-    return 'taxiway';
-  }
-  function isPathLayoutMode(m) {
-    return PATH_LAYOUT_MODES.indexOf(m) >= 0;
-  }
-  function standHasApronTaxiwayLink(standId) {
-    if (standId == null || standId === '') return false;
-    const links = state.apronLinks || [];
-    const tws = state.taxiways || [];
-    for (let i = 0; i < links.length; i++) {
-      const lk = links[i];
-      if (!lk || lk.pbbId !== standId) continue;
-      const tid = lk.taxiwayId;
-      for (let j = 0; j < tws.length; j++) {
-        if (tws[j] && tws[j].id === tid) return true;
-      }
-    }
-    return false;
-  }
-  function ganttESeriesMinutesFromTimelineMeta(f) {
-    const m = f && f.timeline_meta;
-    if (!m || typeof m !== 'object') {
-      return { eldt: NaN, eibt: NaN, eobt: NaN, etot: NaN };
-    }
-    const toMin = function(sec) {
-      const n = sec != null ? Number(sec) : NaN;
-      return (isFinite(n) ? n / 60 : NaN);
-    };
-    return {
-      eldt: toMin(m.eldtSec),
-      eibt: toMin(m.eibtSec),
-      eobt: toMin(m.eobtSec),
-      etot: toMin(m.etotSec),
-    };
-  }
-  function settingModeValueForHit(hit) {
-    if (!hit || !hit.type) return null;
-    if (hit.type === 'terminal') return 'terminal';
-    if (hit.type === 'pbb') return 'pbb';
-    if (hit.type === 'remote') return 'remote';
-    if (hit.type === 'tempStand') return 'tempStand';
-    if (hit.type === 'holdingPoint') return 'holdingPoint';
-    if (hit.type === 'taxiway') return layoutModeFromPathType((hit.obj && hit.obj.pathType) || 'taxiway');
-    if (hit.type === 'apronLink') return 'apronTaxiway';
-    if (hit.type === 'layoutMarker') return 'marker';
-    return null;
-  }
-  function cancelActiveLayoutDrawingState() {
-    state.pbbDrawing = false;
-    state.remoteDrawing = false;
-    state.tempStandDrawing = false;
-    state.holdingPointDrawing = false;
-    state.previewHoldingPoint = null;
-    state.apronLinkDrawing = false;
-    state.apronLinkTemp = null;
-    state.apronLinkMidpoints = [];
-    state.apronLinkPointerWorld = null;
-    state.layoutPathDrawPointer = null;
-    state.previewPbb = null;
-    state.previewRemote = null;
-    state.previewTempStand = null;
-    state.markerDrawing = false;
-    state.markerRulerDraft = null;
-    state.markerRulerHoverWorld = null;
-    state.markerIslandDraft = null;
-    state.markerIslandHoverWorld = null;
-    state.markerAreaDraft = null;
-    state.markerAreaHoverWorld = null;
-    state.markerFlightHoverSnap = null;
-    if (state.markerTextDraft && state.markerTextDraft.active) {
-      state.markerTextDraft = null;
-      hideMarkerTextDraftEditor();
-    }
-    state.dragLayoutMarkerHandle = null;
-    syncDrawToggleButton('btnMarkerDraw', false);
-  }
-  function syncDrawToggleButton(elementId, isDrawing) {
-    const btn = document.getElementById(elementId);
-    if (!btn) return;
-    btn.textContent = isDrawing ? 'Drawing' : 'Draw';
-    btn.classList.toggle('drawing', isDrawing);
-  }
-  function syncLayerPopoverFromState() {
-    const panel = document.getElementById('layerPopoverPanel');
-    if (panel) {
-      panel.querySelectorAll('input[data-layer-key]').forEach(function(inp) {
-        const k = inp.getAttribute('data-layer-key');
-        if (k && typeof state.layers[k] === 'boolean') inp.checked = !!state.layers[k];
-      });
-    }
-    const allOn = LAYER_STATE_KEYS.every(function(k) { return !!state.layers[k]; });
-    const btnAll = document.getElementById('btnLayerPopoverAll');
-    if (btnAll) {
-      btnAll.classList.toggle('active', allOn);
-      btnAll.setAttribute('aria-pressed', allOn ? 'true' : 'false');
-      btnAll.title = allOn ? 'Turn all layers off' : 'Turn all layers on';
-    }
-    if (panel) {
-      panel.querySelectorAll('input[data-layer-section-parent]').forEach(function(parentInp) {
-        const sec = parentInp.getAttribute('data-layer-section-parent');
-        const keys = sec && LAYER_SECTION_KEYS[sec];
-        if (!keys || !keys.length) return;
-        const secAll = keys.every(function(k) { return !!state.layers[k]; });
-        const secSome = keys.some(function(k) { return !!state.layers[k]; });
-        parentInp.checked = secAll;
-        parentInp.indeterminate = !secAll && secSome;
-      });
-    }
-    const btn = document.getElementById('btnLayerPopover');
-    if (btn) {
-      btn.classList.toggle('active', allOn);
-    }
-    const on = !!state.showLayoutMarkers;
-    const t1 = document.getElementById('btnLayoutMarkersToggle');
-    const t2 = document.getElementById('btnGridMarkerOverlayToggle');
-    [t1, t2].forEach(function(el) {
-      if (!el) return;
-      el.classList.toggle('active', on);
-      el.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-  }
-  function setLayerPopoverOpen(open) {
-    const btn = document.getElementById('btnLayerPopover');
-    const panel = document.getElementById('layerPopoverPanel');
-    if (!btn || !panel) return;
-    const o = !!open;

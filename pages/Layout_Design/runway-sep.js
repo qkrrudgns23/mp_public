@@ -1,12 +1,144 @@
-      const nextDeg = normalizeAngleDeg(this.value);
-      this.value = String(Math.round(nextDeg));
-      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-        state.selectedObject.obj.angleDeg = nextDeg;
+  }
+
+  const remoteNameInput = document.getElementById('remoteName');
+  if (remoteNameInput) {
+    remoteNameInput.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'remote') {
+        const st = state.selectedObject.obj;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('remote', st.id, raw)) {
+          alertDuplicateLayoutName();
+          this.value = st.name || '';
+          return;
+        }
+        st.name = raw;
         updateObjectInfo();
         renderObjectList();
         draw();
         update3DSceneWhenVisible();
       }
+    });
+  }
+  const holdingPointNameInput = document.getElementById('holdingPointName');
+  if (holdingPointNameInput) {
+    holdingPointNameInput.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
+        const hp = state.selectedObject.obj;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('holdingPoint', hp.id, raw)) {
+          alertDuplicateLayoutName();
+          this.value = hp.name || '';
+          return;
+        }
+        hp.name = raw;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+      }
+    });
+  }
+  const remoteIcaoCategoriesHost = document.getElementById('remoteIcaoCategories');
+  if (remoteIcaoCategoriesHost) {
+    remoteIcaoCategoriesHost.addEventListener('change', function(ev) {
+      const t = ev.target;
+      if (!t || !t.classList.contains('icao-letter-check')) return;
+      if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
+      const st = state.selectedObject.obj;
+      let letters = readIcaoCategoriesFromHost('remoteIcaoCategories');
+      if (!letters.length) {
+        letters = ['C'];
+        applyIcaoCategoriesToHost('remoteIcaoCategories', letters);
+      }
+      st.categoryMode = 'icao';
+      st.allowedIcaoCategories = letters;
+      st.category = representativeCategoryFromLetters(letters);
+      st.allowedAircraftTypes = aircraftTypeIdsForIcaoLetters(letters);
+      renderAircraftConstraintChoices('remoteAircraftAccess', st.allowedAircraftTypes);
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+      update3DSceneWhenVisible();
+    });
+  }
+
+  const remoteTerminalAccessEl = document.getElementById('remoteTerminalAccess');
+  if (remoteTerminalAccessEl) {
+    remoteTerminalAccessEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('remote-term-check')) return;
+      syncChoiceChipStates(remoteTerminalAccessEl);
+      if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
+      const st = state.selectedObject.obj;
+      const checks = remoteTerminalAccessEl.querySelectorAll('.remote-term-check');
+      const allowed = [];
+      checks.forEach(function(ch) {
+        if (ch.checked) {
+          const id = ch.getAttribute('data-item-id');
+          if (id) allowed.push(id);
+        }
+      });
+      st.allowedTerminals = allowed;
+      if (typeof syncPanelFromState === 'function') syncPanelFromState();
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    });
+  }
+  const remoteAircraftAccessEl = document.getElementById('remoteAircraftAccess');
+  if (remoteAircraftAccessEl) {
+    remoteAircraftAccessEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('aircraft-type-check')) return;
+      syncChoiceChipStates(remoteAircraftAccessEl);
+      if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
+      const stAc = state.selectedObject.obj;
+      applyUnifiedStandConstraintFromPanelToObject(stAc, 'remoteIcaoCategories', 'remoteAircraftAccess');
+      if (stAc.categoryMode === 'icao') renderAircraftConstraintChoices('remoteAircraftAccess', stAc.allowedAircraftTypes);
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    });
+  }
+  const tempStandNameInput = document.getElementById('tempStandName');
+  if (tempStandNameInput) {
+    tempStandNameInput.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+        const st = state.selectedObject.obj;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('tempStand', st.id, raw)) {
+          alertDuplicateLayoutName();
+          this.value = st.name || '';
+          return;
+        }
+        st.name = raw;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const tempStandIcaoCategoriesHost = document.getElementById('tempStandIcaoCategories');
+  if (tempStandIcaoCategoriesHost) {
+    tempStandIcaoCategoriesHost.addEventListener('change', function(ev) {
+      const t = ev.target;
+      if (!t || !t.classList.contains('icao-letter-check')) return;
+      if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
+      const st = state.selectedObject.obj;
+      let letters = readIcaoCategoriesFromHost('tempStandIcaoCategories');
+      if (!letters.length) {
+        letters = ['C'];
+        applyIcaoCategoriesToHost('tempStandIcaoCategories', letters);
+      }
+      st.categoryMode = 'icao';
+      st.allowedIcaoCategories = letters;
+      st.category = representativeCategoryFromLetters(letters);
+      st.allowedAircraftTypes = aircraftTypeIdsForIcaoLetters(letters);
+      renderAircraftConstraintChoices('tempStandAircraftAccess', st.allowedAircraftTypes);
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+      update3DSceneWhenVisible();
     });
   }
   const tempStandTerminalAccessEl = document.getElementById('tempStandTerminalAccess');
@@ -39,7 +171,9 @@
       if (!target || !target.classList.contains('aircraft-type-check')) return;
       syncChoiceChipStates(tempStandAircraftAccessEl);
       if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
-      state.selectedObject.obj.allowedAircraftTypes = readCheckedDataItemIds(tempStandAircraftAccessEl, '.aircraft-type-check');
+      const tstAc = state.selectedObject.obj;
+      applyUnifiedStandConstraintFromPanelToObject(tstAc, 'tempStandIcaoCategories', 'tempStandAircraftAccess');
+      if (tstAc.categoryMode === 'icao') renderAircraftConstraintChoices('tempStandAircraftAccess', tstAc.allowedAircraftTypes);
       updateObjectInfo();
       renderObjectList();
       draw();
@@ -249,137 +383,3 @@
         tw.minArrVelocity = v;
         this.value = v;
         updateObjectInfo();
-        renderObjectList();
-        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-        draw();
-      }
-    });
-  }
-  [
-    ['runwayLineupDistM_CW', 'clockwise'],
-    ['runwayLineupDistM_CCW', 'counter_clockwise']
-  ].forEach(function(item) {
-    const lineupEl = document.getElementById(item[0]);
-    if (!lineupEl) return;
-    lineupEl.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-        const tw = state.selectedObject.obj;
-        if (tw.pathType !== 'runway') return;
-        const val = Number(this.value);
-        const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : 0;
-        if (item[1] === 'clockwise') tw.lineupDistM_CW = v;
-        else tw.lineupDistM_CCW = v;
-        tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
-        this.value = String(v);
-        updateObjectInfo();
-        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-      }
-    });
-  });
-  [
-    ['runwayStartDisplacedThresholdM', 'startDisplacedThresholdM', function(tw) { return getEffectiveRunwayStartDisplacedThresholdM(tw); }],
-    ['runwayStartBlastPadM', 'startBlastPadM', function(tw) { return getEffectiveRunwayStartBlastPadM(tw); }],
-    ['runwayEndDisplacedThresholdM', 'endDisplacedThresholdM', function(tw) { return getEffectiveRunwayEndDisplacedThresholdM(tw); }],
-    ['runwayEndBlastPadM', 'endBlastPadM', function(tw) { return getEffectiveRunwayEndBlastPadM(tw); }]
-  ].forEach(function(item) {
-    const el = document.getElementById(item[0]);
-    if (!el) return;
-    el.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-        const tw = state.selectedObject.obj;
-        if (tw.pathType !== 'runway') return;
-        const val = Number(this.value);
-        const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : item[2](tw);
-        tw[item[1]] = v;
-        this.value = String(v);
-        updateObjectInfo();
-        draw();
-        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-      }
-    });
-  });
-
-  function getMinArrVelocityMpsForRunwayId(runwayId) {
-    if (runwayId == null || runwayId === '') return 15;
-    const list = state.taxiways || [];
-    let tw = list.find(t => t.id === runwayId && t.pathType === 'runway');
-    if (!tw) return 15;
-    const v = tw.minArrVelocity;
-    if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, Math.min(150, v));
-    return 15;
-  }
-  
-  function runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn) {
-    const vf0 = Math.max(1, Math.min(150, vFloorIn));
-    const vf = Math.min(vf0, v0);
-    if (!(a > 0) || distM <= 0) return { vAtRet: v0, tSec: 0 };
-    if (v0 <= vf) return { vAtRet: v0, tSec: distM / Math.max(v0, 1e-6) };
-    const dStop = (v0 * v0 - vf * vf) / (2 * a);
-    if (distM < dStop) {
-      const vEnd = Math.sqrt(Math.max(0, v0 * v0 - 2 * a * distM));
-      return { vAtRet: vEnd, tSec: (v0 - vEnd) / a };
-    }
-    const tDecel = (v0 - vf) / a;
-    const tCruise = (distM - dStop) / vf;
-    return { vAtRet: vf, tSec: tDecel + tCruise };
-  }
-  function parseTimeToMinutes(val) {
-    if (!val) return 0;
-    const s = String(val).trim();
-    if (!s) return 0;
-    const isoDt = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-    if (isoDt) {
-      const h = parseInt(isoDt[4], 10) || 0;
-      const m = parseInt(isoDt[5], 10) || 0;
-      const sec = isoDt[6] ? (parseInt(isoDt[6], 10) || 0) : 0;
-      return Math.max(0, h * 60 + m + sec / 60);
-    }
-    if (s.includes(':')) {
-      const parts = s.split(':');
-      const h = parseInt(parts[0], 10) || 0;
-      const m = parseInt(parts[1], 10) || 0;
-      const sec = (parts.length >= 3) ? (parseInt(parts[2], 10) || 0) : 0;
-      return Math.max(0, h * 60 + m + sec / 60);
-    }
-    const num = parseFloat(s);
-    return isNaN(num) ? 0 : Math.max(0, num);
-  }
-
-  function snapSimTimeSecForSlider(tSec) {
-    const lo = state.simStartSec;
-    const hi = state.simDurationSec;
-    const step = SIM_TIME_SLIDER_SNAP_SEC;
-    const t = Number(tSec);
-    if (!isFinite(t)) return lo;
-    if (!isFinite(lo) || !isFinite(hi) || hi < lo) return t;
-    const clamped = Math.max(lo, Math.min(hi, t));
-    if (!(step > 0)) return clamped;
-    let snapped = lo + Math.round((clamped - lo) / step) * step;
-    if (snapped < lo) snapped = lo;
-    if (snapped > hi) snapped = hi;
-    return snapped;
-  }
-  function updateFlightSimPlaybackLabelsDom() {
-    const label = document.getElementById('flightSimTimeLabel');
-    const t = state.simTimeSec;
-    if (label) label.textContent = formatSecondsToHHMMSS(t);
-  }
-  
-  function minFirstArrivalTouchdownSecAmongFlights() {
-    let minS = Infinity;
-    (state.flights || []).forEach(function(f) {
-      if (!f || f.arrDep === 'Dep') return;
-      if (arrivalAirsideBlocked(f)) return;
-      const w = getFlightAirsideWindowSec(f);
-      if (!w) return;
-      const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], NaN));
-      if (!isFinite(eldtMin)) return;
-      const eldtS = eldtMin * 60;
-      if (eldtS < minS) minS = eldtS;
-    });
-    return (isFinite(minS) && minS < Infinity) ? minS : null;
-  }
-  function recomputeSimDuration() {
-    let minT = Infinity;
-    let maxT = -Infinity;

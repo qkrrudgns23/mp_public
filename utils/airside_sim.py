@@ -3753,15 +3753,15 @@ def _stand_accepts_flight_aircraft(
     information: Dict[str, Any],
 ) -> bool:
     mode = str(stand.get("categoryMode") or "icao").strip().lower()
-    if mode == "aircraft":
-        raw = stand.get("allowedAircraftTypes") or stand.get("allowed_aircraft_types")
-        if not isinstance(raw, list) or len(raw) == 0:
-            return True
+    raw_types = stand.get("allowedAircraftTypes") or stand.get("allowed_aircraft_types")
+    if isinstance(raw_types, list) and len(raw_types) > 0:
         ac = str(fobj.get("aircraftType") or fobj.get("aircraft_type") or "").strip()
         if not ac:
             return False
-        allow = {str(x).strip() for x in raw if str(x).strip()}
+        allow = {str(x).strip() for x in raw_types if str(x).strip()}
         return ac in allow
+    if mode == "aircraft":
+        return False
     scat = str(stand.get("category") or "C").strip().upper()[:1]
     fcat = _flight_default_icao_category(fobj, information)
     order = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6}

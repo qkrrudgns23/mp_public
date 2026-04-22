@@ -373,6 +373,19 @@
     .compact-form > .section-title {
       grid-column: 1 / -1;
     }
+    .icao-multi-checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.65rem;
+      align-items: center;
+    }
+    .icao-letter-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      font-size: 0.88rem;
+      white-space: nowrap;
+    }
     .compact-field label,
     .inline-field label {
       margin-top: 0 !important;
@@ -391,6 +404,67 @@
     .inline-field-stack {
       display: grid;
       row-gap: var(--settings-row-gap, 10px);
+    }
+    .runway-lineup-dist-stack {
+      display: flex;
+      flex-direction: column;
+      gap: var(--settings-row-gap, 10px);
+      grid-column: 1 / -1;
+    }
+    .grid-layout-image-file-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      min-width: 0;
+    }
+    .grid-layout-image-file-pick {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+      margin-top: 0 !important;
+      cursor: pointer;
+    }
+    .compact-field .grid-layout-image-file-row .grid-layout-image-file-input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .grid-layout-image-file-btn {
+      display: inline-block;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: inherit;
+      line-height: 1.2;
+      border-radius: 4px;
+      border: 1px solid var(--ui-border-default);
+      background: var(--ui-bg-control);
+      color: var(--ui-text-primary);
+      transition: var(--ui-transition);
+      user-select: none;
+    }
+    .grid-layout-image-file-pick:hover .grid-layout-image-file-btn {
+      background: var(--ui-bg-overlay);
+    }
+    .grid-layout-image-file-pick:focus-within .grid-layout-image-file-btn {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--ui-accent-muted);
+    }
+    .grid-layout-image-meta {
+      margin-top: 0;
+      font-size: 11px;
+      color: #9ca3af;
+      flex: 1;
+      min-width: 120px;
+      line-height: 1.3;
     }
     #tab-settings .compact-form > .compact-field,
     #tab-settings .compact-form > .inline-field,
@@ -859,7 +933,7 @@
     #api-warning-banner { display: none; background: var(--ui-error-bg); color: var(--ui-error-text); padding: 10px 12px; font-size: 11px; border-radius: 8px; margin-bottom: 12px; line-height: 1.45; border: 1px solid var(--ui-error-border); }
     #api-warning-banner strong { color: var(--ui-text-primary); font-weight: 600; }
     #flight-tooltip { position: absolute; pointer-events: none; padding: 4px 8px; font-size: 11px; border-radius: 6px; background: var(--ui-bg-elevated); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); display: none; z-index: 40; box-shadow: 0 1px 3px rgba(0,0,0,0.4); max-width: 280px; }
-    #remoteTerminalAccess, #runwayExitAllowedDirection, #standAircraftAccess, #remoteAircraftAccess { margin-top: 4px; padding: 8px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-input); font-size: 11px; color: var(--ui-text-primary); max-height: 140px; overflow: auto; }
+    #remoteTerminalAccess, #tempStandTerminalAccess, #runwayExitAllowedDirection, #standAircraftAccess, #remoteAircraftAccess, #tempStandAircraftAccess { margin-top: 4px; padding: 8px; border-radius: 8px; border: 1px solid var(--ui-border-default); background: var(--ui-bg-input); font-size: 11px; color: var(--ui-text-primary); max-height: 140px; overflow: auto; }
     .choice-chip-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
     .choice-chip { display:flex; align-items:center; gap:8px; cursor:pointer; padding:8px 10px; border-radius:10px; border:1px solid #374151; background:linear-gradient(180deg,#1f2937 0%,#111827 100%); color:#e5e7eb; transition:var(--ui-transition); user-select:none; }
     .choice-chip:hover { border-color:#4b5563; filter:brightness(1.05); }

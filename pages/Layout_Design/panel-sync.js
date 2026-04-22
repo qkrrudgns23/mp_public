@@ -1,3 +1,147 @@
+    };
+    undoStack.push(snap);
+    if (undoStack.length > maxUndoLevels) undoStack.shift();
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    const snap = undoStack.pop();
+    state.terminals = snap.terminals;
+    state.pbbStands = snap.pbbStands;
+    state.remoteStands = snap.remoteStands;
+    state.tempStands = snap.tempStands || [];
+    state.holdingPoints = snap.holdingPoints || [];
+    state.taxiways = snap.taxiways;
+    state.apronLinks = snap.apronLinks;
+    state.apronLinkJunctionOverlayDirtyIds = null;
+    state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
+    syncLayoutImageBitmap();
+    state.layoutEdgeNames = snap.layoutEdgeNames || {};
+    state.directionModes = snap.directionModes;
+    state.flights = snap.flights;
+    state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(Array.isArray(snap.layoutMarkers) ? snap.layoutMarkers : []);
+    state.pathArcDrag = null;
+    state.selectedObject = null;
+    state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
+    state.terminalDrawingId = null;
+    state.taxiwayDrawingId = null;
+    state.layoutPathDrawPointer = null;
+    syncPanelFromState();
+    updateObjectInfo();
+    renderObjectList();
+    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+  }
+  function getTaxiwayDirection(tw) {
+    if (!tw) return 'both';
+    if (tw.direction != null) {
+      const d = tw.direction;
+      if (d === 'topToBottom') return 'clockwise';
+      if (d === 'bottomToTop') return 'counter_clockwise';
+      return d || 'both';
+    }
+    if (tw.directionModeId) {
+      const m = state.directionModes.find(d => d.id === tw.directionModeId);
+      if (m && m.direction) return m.direction;
+    }
+    return 'both';
+  }
+  function normalizeRwDirectionValue(dir) {
+    if (dir === 'clockwise' || dir === 'cw') return 'clockwise';
+    if (dir === 'counter_clockwise' || dir === 'ccw') return 'counter_clockwise';
+    return 'both';
+  }
+  function normalizeAllowedRunwayDirections(raw) {
+    const out = [];
+    const src = Array.isArray(raw) ? raw : [];
+    src.forEach(function(v) {
+      const d = normalizeRwDirectionValue(v);
+      if (d === 'clockwise' && out.indexOf('clockwise') < 0) out.push('clockwise');
+      if (d === 'counter_clockwise' && out.indexOf('counter_clockwise') < 0) out.push('counter_clockwise');
+    });
+    return out;
+  }
+  function getTaxiwayAllowedRunwayDirections(tw) {
+    if (!tw || tw.pathType !== 'runway_exit') return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
+    const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
+    if (!arr.length) return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
+    return arr;
+  }
+  function isRunwayExitDirectionAllowed(tw, runwayDir) {
+    const d = normalizeRwDirectionValue(runwayDir);
+    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
+    const allow = getTaxiwayAllowedRunwayDirections(tw);
+    return allow.indexOf(d) >= 0;
+  }
+  function getRunwayExitAllowedDirectionsFromPanel() {
+    const out = [];
+    const container = document.getElementById('runwayExitAllowedDirection');
+    if (!container) return out;
+    container.querySelectorAll('.runway-exit-dir-check').forEach(function(ch) {
+      if (!ch.checked) return;
+      const value = String(ch.getAttribute('data-item-id') || '').trim();
+      if (value === 'clockwise' || value === 'counter_clockwise') out.push(value);
+    });
+    return out;
+  }
+
+  const _rwy = _tiers.runway || {};
+  const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
+  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
+  const RSEP_COLOR_THRESHOLDS = (function() {
+    const arr = _sepUi.inputColorThresholdsSec;
+    if (Array.isArray(arr) && arr.length) {
+      return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
+    }
+    return [90, 120, 150];
+  })();
+  const RSEP_LEGEND_LAB = (_sepUi.legendLabels && typeof _sepUi.legendLabels === 'object') ? _sepUi.legendLabels : {};
+  function rsepLegendFmt(tpl, a0, a1) {
+    let s = String(tpl || '');
+    if (a1 != null && s.indexOf('{1}') >= 0) return s.replace('{0}', String(a0)).replace('{1}', String(a1));
+    return s.replace('{0}', String(a0));
+  }
+  const RSEP_COLOR_STYLES = [
+    { bg: '#0d2018', color: '#68d391', border: '#68d39155' },
+    { bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' },
+    { bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' },
+    { bg: '#280d0d', color: '#fc8181', border: '#fc818155' },
+  ];
+  const _stds = _rwy.standards || {};
+  const RSEP_STD_CATS = {
+    'ICAO': (_stds.ICAO && _stds.ICAO.categories) ? _stds.ICAO.categories : ['J','H','M','L'],
+    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categories) ? _stds['RECAT-EU'].categories : ['A','B','C','D','E','F'],
+  };
+  const RSEP_SEQ_TYPES = Object.assign({ 'ARR→ARR': 'matrix', 'DEP→DEP': 'matrix', 'ARR→DEP': 'lead-1d', 'DEP→ARR': 'trail-1d' }, _sepUi.seqTypes || {});
+  const RSEP_MODE_SEQS = (function() {
+    const def = { ARR: ['ARR→ARR'], DEP: ['DEP→DEP'], MIX: ['ARR→ARR','DEP→DEP','ARR→DEP','DEP→ARR'] };
+    const ms = _sepUi.modeSequences || {};
+    const out = {};
+    ['ARR','DEP','MIX'].forEach(k => {
+      const a = ms[k];
+      out[k] = (Array.isArray(a) && a.length) ? a.slice() : def[k].slice();
+    });
+    return out;
+  })();
+  const RSEP_DEFAULTS = {};
+  ['ICAO','RECAT-EU'].forEach(k => {
+    const s = _stds[k];
+    if (!s) return;
+    RSEP_DEFAULTS[k] = { ...(s.separationDefaults || {}), ROT: s.ROT || {} };
+  });
+  if (!RSEP_DEFAULTS['ICAO'] || !Object.keys(RSEP_DEFAULTS['ICAO']).length) {
+    RSEP_DEFAULTS['ICAO'] = { 'ARR→ARR': { J:{J:90,H:120,M:180,L:240}, H:{J:90,H:90,M:120,L:180}, M:{J:90,H:90,M:90,L:180}, L:{J:90,H:90,M:90,L:90} }, 'DEP→DEP': { J:{J:90,H:120,M:180,L:180}, H:{J:90,H:90,M:120,L:120}, M:{J:90,H:90,M:90,L:90}, L:{J:90,H:90,M:90,L:90} }, 'ARR→DEP': {J:90,H:80,M:65,L:50}, 'DEP→ARR': {J:60,H:60,M:70,L:90}, ROT: {J:70,H:65,M:55,L:40} };
+  }
+  if (!RSEP_DEFAULTS['RECAT-EU'] || !Object.keys(RSEP_DEFAULTS['RECAT-EU']).length) {
+    RSEP_DEFAULTS['RECAT-EU'] = { 'ARR→ARR': { A:{A:80,B:100,C:120,D:140,E:160,F:180}, B:{A:80,B:80,C:100,D:120,E:120,F:140}, C:{A:80,B:80,C:80,D:100,E:100,F:120}, D:{A:80,B:80,C:80,D:80,E:80,F:100}, E:{A:80,B:80,C:80,D:80,E:80,F:100}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'DEP→DEP': { A:{A:80,B:100,C:120,D:120,E:120,F:140}, B:{A:80,B:80,C:100,D:100,E:100,F:120}, C:{A:80,B:80,C:80,D:80,E:80,F:100}, D:{A:80,B:80,C:80,D:80,E:80,F:80}, E:{A:80,B:80,C:80,D:80,E:80,F:80}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'ARR→DEP': {A:80,B:70,C:60,D:55,E:50,F:45}, 'DEP→ARR': {A:55,B:55,C:60,D:65,E:70,F:80}, ROT: {A:65,B:60,C:55,D:50,E:45,F:40} };
+  }
+  const RSEP_STANDARDS = { 'ICAO': { ROT: RSEP_DEFAULTS['ICAO'] && RSEP_DEFAULTS['ICAO'].ROT ? RSEP_DEFAULTS['ICAO'].ROT : {} }, 'RECAT-EU': { ROT: RSEP_DEFAULTS['RECAT-EU'] && RSEP_DEFAULTS['RECAT-EU'].ROT ? RSEP_DEFAULTS['RECAT-EU'].ROT : {} } };
+  const RSEP_CAT_LABELS = {
+    'ICAO': (_stds.ICAO && _stds.ICAO.categoryLabels) ? _stds.ICAO.categoryLabels : { J:'Super', H:'Heavy', M:'Medium', L:'Light' },
+    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categoryLabels) ? _stds['RECAT-EU'].categoryLabels : { A:'Super-Heavy', B:'Upper-Heavy', C:'Lower-Heavy', D:'Medium', E:'Light', F:'Very-Light' },
+  };
+  const RSEP_SEQ_META = _rwy.seqMeta || {
+    'ARR→ARR': { driver: 'Wake of leading arrival aircraft', refPoint: 'Touchdown / final approach point of the leading arrival', input: 'Lead (arrival) × Trail (arrival) matrix input' },
     'DEP→DEP': { driver: 'Wake of leading departure aircraft', refPoint: 'Take-off / runway entry point of the leading departure', input: 'Lead (departure) × Trail (departure) matrix input' },
     'ARR→DEP': { driver: 'Leading aircraft ROT (runway occupancy time)', refPoint: 'Trailing aircraft: time from lineup to gear-off (lineup–gear-off)', input: 'Lead arrival category — 1D separation inputs' },
     'DEP→ARR': { driver: 'Wake / ROT of leading departure', refPoint: 'Runway vacation / ROT end of the leading departure', input: 'Trail (arrival category) 1‑D input' },
@@ -232,6 +376,16 @@
     const cos = Math.cos(angleRad), sin = Math.sin(angleRad);
     return [cx + lx * cos - ly * sin, cy + lx * sin + ly * cos];
   }
+  function standStopbarCenterShiftLocalX(depM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || depM <= 0) return 0;
+    const nc = Number(r.nose_clear);
+    if (!isFinite(nc) || nc <= 0) return 0;
+    const halfD = depM / 2;
+    const xStopOld = -halfD + nc;
+    if (!(xStopOld > -halfD && xStopOld < halfD)) return 0;
+    return -xStopOld;
+  }
   /** Nose (−X) width = nose_width; stop bar at nose_clear from nose edge; 45° flare to full stand width (±halfW), then rectangle to tail (+halfD). */
   function buildStandSafetyPolygonPath(ctx, depM, widM, category) {
     const r = standConfigRowForIcaoCat(category);
@@ -249,19 +403,20 @@
     if (latRun <= eps) return false;
     const xBendEnd = xStop + latRun;
     if (xBendEnd > halfD + eps) return false;
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
     ctx.beginPath();
-    ctx.moveTo(xNose, -noseHalf);
-    ctx.lineTo(xNose, noseHalf);
-    ctx.lineTo(xStop, noseHalf);
-    ctx.lineTo(Math.min(xBendEnd, halfD), halfW);
+    ctx.moveTo(xNose + shiftX, -noseHalf);
+    ctx.lineTo(xNose + shiftX, noseHalf);
+    ctx.lineTo(xStop + shiftX, noseHalf);
+    ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
     if (xBendEnd < halfD - eps) {
-      ctx.lineTo(halfD, halfW);
-      ctx.lineTo(halfD, -halfW);
-      ctx.lineTo(xBendEnd, -halfW);
+      ctx.lineTo(halfD + shiftX, halfW);
+      ctx.lineTo(halfD + shiftX, -halfW);
+      ctx.lineTo(xBendEnd + shiftX, -halfW);
     } else {
-      ctx.lineTo(halfD, -halfW);
+      ctx.lineTo(halfD + shiftX, -halfW);
     }
-    ctx.lineTo(xStop, -noseHalf);
+    ctx.lineTo(xStop + shiftX, -noseHalf);
     ctx.closePath();
     return true;
   }
@@ -281,16 +436,19 @@
     ctx.lineCap = 'butt';
     ctx.lineJoin = 'miter';
     const nc = Number(r.nose_clear), pb = Number(r.pushback);
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
     if (isFinite(nc) && isFinite(pb)) {
-      const xStop = -halfD + nc;
-      const xPush = halfD - pb;
+      const xStop = 0;
+      const xPush = (halfD - pb) + shiftX;
+      const xMin = (-halfD) + shiftX;
+      const xMax = (halfD) + shiftX;
       if (xStop > -halfD + eps && xStop < halfD - eps) {
         ctx.beginPath();
         ctx.moveTo(xStop, -halfW);
         ctx.lineTo(xStop, halfW);
         ctx.stroke();
       }
-      if (xPush < halfD - eps && xPush > -halfD + eps) {
+      if (xPush < xMax - eps && xPush > xMin + eps) {
         ctx.beginPath();
         ctx.moveTo(xPush, -halfW);
         ctx.lineTo(xPush, halfW);
@@ -302,12 +460,12 @@
       const yLim = halfW - g;
       if (yLim > eps && yLim < halfW - eps) {
         ctx.beginPath();
-        ctx.moveTo(-halfD, yLim);
-        ctx.lineTo(halfD, yLim);
+        ctx.moveTo(-halfD + shiftX, yLim);
+        ctx.lineTo(halfD + shiftX, yLim);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(-halfD, -yLim);
-        ctx.lineTo(halfD, -yLim);
+        ctx.moveTo(-halfD + shiftX, -yLim);
+        ctx.lineTo(halfD + shiftX, -yLim);
         ctx.stroke();
       }
     }
@@ -318,8 +476,9 @@
       ctx.fill();
       return;
     }
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
     ctx.beginPath();
-    ctx.rect(-depM / 2, -widM / 2, depM, widM);
+    ctx.rect((-depM / 2) + shiftX, -widM / 2, depM, widM);
     ctx.fill();
   }
   function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
@@ -362,12 +521,8 @@
     return [cxy[0], cxy[1]];
   }
   function getStandAircraftMarkerWorldPxForRemoteLike(st) {
-    const cat = (st && st.category) || 'C';
-    const dep = getStandDepthMeters(cat);
-    const wid = getStandWidthMeters(cat);
-    const lx = standSafetyAircraftCenterLocalXM(dep, wid, cat);
-    const cxy = getRemoteStandCenterPx(st);
-    return standFootprintLocalToWorld(cxy[0], cxy[1], getRemoteStandAngleRad(st), lx, 0);
+    const cxy = getStandConnectionPx(st);
+    return [cxy[0], cxy[1]];
   }
   /** Apron–taxiway UI attach point: PBB = aircraft marker; remote/temp = same local xBendEnd offset as Contact (getStandAircraftMarkerWorldPxFor*). */
   function getStandApronTaxiwayAttachWorldPx(stand) {
@@ -389,6 +544,9 @@
   }
   function getRemoteStandCenterPx(st) {
     if (!st) return [0, 0];
+    if (st.apronSiteX != null && st.apronSiteY != null) {
+      return [Number(st.apronSiteX), Number(st.apronSiteY)];
+    }
     if (typeof st.x === 'number' && isFinite(st.x) && typeof st.y === 'number' && isFinite(st.y)) {
       return [Number(st.x), Number(st.y)];
     }
@@ -409,15 +567,17 @@
   function getRemoteStandCorners(stLike) {
     const [cx, cy] = getRemoteStandCenterPx(stLike);
     const cat = (stLike && stLike.category) || 'C';
-    const halfD = getStandDepthMeters(cat) / 2;
+    const dep = getStandDepthMeters(cat);
+    const halfD = dep / 2;
     const halfW = getStandWidthMeters(cat) / 2;
     const angle = getRemoteStandAngleRad(stLike);
+    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
     const cos = Math.cos(angle), sin = Math.sin(angle);
     return [
-      [cx + (-halfD)*cos - (-halfW)*sin, cy + (-halfD)*sin + (-halfW)*cos],
-      [cx + ( halfD)*cos - (-halfW)*sin, cy + ( halfD)*sin + (-halfW)*cos],
-      [cx + ( halfD)*cos - ( halfW)*sin, cy + ( halfD)*sin + ( halfW)*cos],
-      [cx + (-halfD)*cos - ( halfW)*sin, cy + (-halfD)*sin + ( halfW)*cos]
+      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
+      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
     ];
   }
   function rectsOverlap(a, b) {
@@ -449,15 +609,17 @@
     const center = getStandConnectionPx(pbb);
     const cx = center[0], cy = center[1];
     const cat = pbb.category || 'C';
-    const halfD = getStandDepthMeters(cat) / 2;
+    const dep = getStandDepthMeters(cat);
+    const halfD = dep / 2;
     const halfW = getStandWidthMeters(cat) / 2;
     const angle = getPBBStandAngle(pbb);
+    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
     const cos = Math.cos(angle), sin = Math.sin(angle);
     return [
-      [cx + (-halfD)*cos - (-halfW)*sin, cy + (-halfD)*sin + (-halfW)*cos],
-      [cx + ( halfD)*cos - (-halfW)*sin, cy + ( halfD)*sin + (-halfW)*cos],
-      [cx + ( halfD)*cos - ( halfW)*sin, cy + ( halfD)*sin + ( halfW)*cos],
-      [cx + (-halfD)*cos - ( halfW)*sin, cy + (-halfD)*sin + ( halfW)*cos]
+      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
+      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
     ];
   }
   function pointInPolygonXY(p, verts) {
@@ -466,165 +628,3 @@
     for (let i = 0, j = n - 1; i < n; j = i++) {
       const vi = verts[i], vj = verts[j];
       if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
-    }
-    return inside;
-  }
-  function segIntersect(a1, a2, b1, b2) {
-    const [ax1,ay1]=a1,[ax2,ay2]=a2,[bx1,by1]=b1,[bx2,by2]=b2;
-    const dax = ax2-ax1, day = ay2-ay1, dbx = bx2-bx1, dby = by2-by1;
-    const den = dax*dby - day*dbx;
-    if (Math.abs(den) < 1e-10) return false;
-    const t = ((bx1-ax1)*dby - (by1-ay1)*dbx) / den;
-    const s = ((bx1-ax1)*day - (by1-ay1)*dax) / den;
-    return t >= 0 && t <= 1 && s >= 0 && s <= 1;
-  }
-  function rotatedRectsOverlap(cornersA, cornersB) {
-    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersA[i], cornersB)) return true;
-    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersB[i], cornersA)) return true;
-    for (let i = 0; i < 4; i++) {
-      const a1 = cornersA[i], a2 = cornersA[(i+1)%4];
-      for (let j = 0; j < 4; j++) {
-        if (segIntersect(a1, a2, cornersB[j], cornersB[(j+1)%4])) return true;
-      }
-    }
-    return false;
-  }
-  function distPointToSegment(px, py, ax, ay, bx, by) {
-    const vx = bx - ax, vy = by - ay;
-    const wx = px - ax, wy = py - ay;
-    const c1 = vx * wx + vy * wy;
-    if (c1 <= 0) return Math.hypot(px - ax, py - ay);
-    const c2 = vx * vx + vy * vy;
-    if (c2 <= c1) return Math.hypot(px - bx, py - by);
-    const t = c1 / c2;
-    const projx = ax + t * vx, projy = ay + t * vy;
-    return Math.hypot(px - projx, py - projy);
-  }
-  function minDistanceConvexQuads(quadA, quadB) {
-    if (rotatedRectsOverlap(quadA, quadB)) return 0;
-    let minD = Infinity;
-    for (let i = 0; i < 4; i++) {
-      const p = quadA[i];
-      for (let j = 0; j < 4; j++) {
-        const q1 = quadB[j], q2 = quadB[(j + 1) % 4];
-        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
-      }
-    }
-    for (let i = 0; i < 4; i++) {
-      const p = quadB[i];
-      for (let j = 0; j < 4; j++) {
-        const q1 = quadA[j], q2 = quadA[(j + 1) % 4];
-        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
-      }
-    }
-    return minD;
-  }
-  function standFootprintsTooClose(cornersA, catA, cornersB, catB) {
-    const need = getStandSpacingMeters(catA, catB);
-    if (need <= 0) return rotatedRectsOverlap(cornersA, cornersB);
-    return minDistanceConvexQuads(cornersA, cornersB) < need;
-  }
-  function buildStandSafetyPolygonLocalPoints(depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return null;
-    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
-    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return null;
-    const halfD = depM / 2, halfW = widM / 2;
-    const noseHalf = nw / 2;
-    const eps = 0.08;
-    if (noseHalf >= halfW - eps) return null;
-    const xNose = -halfD;
-    const xStop = -halfD + nc;
-    if (xStop <= xNose + eps || xStop >= halfD - eps) return null;
-    const latRun = halfW - noseHalf;
-    if (latRun <= eps) return null;
-    const xBendEnd = xStop + latRun;
-    if (xBendEnd > halfD + eps) return null;
-    const pts = [];
-    pts.push([xNose, -noseHalf]);
-    pts.push([xNose, noseHalf]);
-    pts.push([xStop, noseHalf]);
-    pts.push([Math.min(xBendEnd, halfD), halfW]);
-    if (xBendEnd < halfD - eps) {
-      pts.push([halfD, halfW]);
-      pts.push([halfD, -halfW]);
-      pts.push([xBendEnd, -halfW]);
-    } else {
-      pts.push([halfD, -halfW]);
-    }
-    pts.push([xStop, -noseHalf]);
-    return pts;
-  }
-  function standOuterContourWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
-    const polyLocal = buildStandSafetyPolygonLocalPoints(depM, widM, category);
-    if (polyLocal && polyLocal.length >= 3) {
-      return polyLocal.map(function(p) { return standFootprintLocalToWorld(cx, cy, angleRad, p[0], p[1]); });
-    }
-    return [
-      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, -widM / 2),
-      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, -widM / 2),
-      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, widM / 2),
-      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, widM / 2),
-    ];
-  }
-  function standGapSegmentsWorldForSpec(cx, cy, angleRad, depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return [];
-    const g = Number(r.gap), ws = Number(r.wingspan);
-    const halfD = depM / 2, halfW = widM / 2;
-    const eps = 0.12;
-    if (!(isFinite(g) && g > eps && isFinite(ws) && ws > 0)) return [];
-    const yLim = halfW - g;
-    if (!(yLim > eps && yLim < halfW - eps)) return [];
-    const a0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, yLim);
-    const a1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, yLim);
-    const b0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, -yLim);
-    const b1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, -yLim);
-    return [[a0, a1], [b0, b1]];
-  }
-  function standGapSegmentsIntersectOuterPolygon(gapSegs, polygon) {
-    if (!Array.isArray(gapSegs) || !gapSegs.length || !Array.isArray(polygon) || polygon.length < 2) return false;
-    for (let i = 0; i < gapSegs.length; i++) {
-      const seg = gapSegs[i];
-      if (!seg || seg.length < 2) continue;
-      const g0 = seg[0], g1 = seg[1];
-      for (let j = 0; j < polygon.length; j++) {
-        const p0 = polygon[j], p1 = polygon[(j + 1) % polygon.length];
-        if (segIntersect(g0, g1, p0, p1)) return true;
-      }
-    }
-    return false;
-  }
-  function standGapLineHitsExistingOuterContours(candidateCenter, candidateAngleRad, candidateCategory) {
-    const depC = getStandDepthMeters(candidateCategory || 'C');
-    const widC = getStandWidthMeters(candidateCategory || 'C');
-    const gapSegs = standGapSegmentsWorldForSpec(candidateCenter[0], candidateCenter[1], candidateAngleRad, depC, widC, candidateCategory || 'C');
-    if (!gapSegs.length) return false;
-    function hitWithPolygon(poly) { return standGapSegmentsIntersectOuterPolygon(gapSegs, poly); }
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      const o = state.remoteStands[i];
-      const oc = getRemoteStandCenterPx(o);
-      const oa = getRemoteStandAngleRad(o);
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    const temps = state.tempStands || [];
-    for (let i = 0; i < temps.length; i++) {
-      const o = temps[i];
-      const oc = getRemoteStandCenterPx(o);
-      const oa = getRemoteStandAngleRad(o);
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      const o = state.pbbStands[i];
-      const oc = getStandConnectionPx(o);
-      const oa = getPBBStandAngle(o);
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    return false;
-  }

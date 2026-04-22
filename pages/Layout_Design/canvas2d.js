@@ -1,3 +1,179 @@
+    const d = Math.max(0, Math.min(typeof distPx === 'number' ? distPx : 0, total));
+    let acc = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      const segLen = pathDist(p1, p2);
+      if (!(segLen > 1e-6)) continue;
+      if (acc + segLen >= d - 1e-6) {
+        const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+        const ux = (p2[0] - p1[0]) / segLen;
+        const uy = (p2[1] - p1[1]) / segLen;
+        return {
+          point: [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t],
+          tangent: [ux, uy],
+          normal: [-uy, ux]
+        };
+      }
+      acc += segLen;
+    }
+    const last = pts[pts.length - 1], prev = pts[pts.length - 2];
+    const segLen = pathDist(prev, last);
+    if (!(segLen > 1e-6)) return null;
+    const ux = (last[0] - prev[0]) / segLen;
+    const uy = (last[1] - prev[1]) / segLen;
+    return { point: [last[0], last[1]], tangent: [ux, uy], normal: [-uy, ux] };
+  }
+
+  function drawRunwayDecorations(tw, pts, widthPx, opts) {
+    if (!tw || tw.pathType !== 'runway') return;
+    if (!pts || pts.length < 2) return;
+    const baseOnly = !!(opts && opts.baseOnly);
+    const markingsOnly = !!(opts && opts.markingsOnly);
+    const totalLen = runwayPolylineLengthPx(pts);
+    const runwayWidth = Math.max(24, Number(widthPx) || RUNWAY_PATH_DEFAULT_WIDTH);
+    if (totalLen < Math.max(220, runwayWidth * 3)) return;
+    const startDisp = getEffectiveRunwayStartDisplacedThresholdM(tw);
+    const startBlast = getEffectiveRunwayStartBlastPadM(tw);
+    const endDisp = getEffectiveRunwayEndDisplacedThresholdM(tw);
+    const endBlast = getEffectiveRunwayEndBlastPadM(tw);
+    const lowFrame = getPolylinePointAndFrameAtDistance(pts, 0);
+    const highFrame = getPolylinePointAndFrameAtDistance(pts, totalLen);
+    if (!lowFrame || !highFrame) return;
+    const isCcw = normalizeRwDirectionValue(getTaxiwayDirection(tw)) === 'counter_clockwise';
+    const startFrame = isCcw ? highFrame : lowFrame;
+    const endFrame = isCcw ? lowFrame : highFrame;
+    const startSegSign = isCcw ? 1 : -1;
+    const endSegSign = isCcw ? -1 : 1;
+    const startArrowPos = isCcw ? 1 : -1;
+    const startArrowDir = isCcw ? -1 : 1;
+    const endArrowPos = isCcw ? -1 : 1;
+    const endArrowDir = isCcw ? 1 : -1;
+
+    function drawRectWithFrame(frame, alongOffsetPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle, strokeStyle, lineWidth) {
+      if (!frame) return;
+      const cx = frame.point[0] + frame.tangent[0] * alongOffsetPx + frame.normal[0] * lateralOffsetPx;
+      const cy = frame.point[1] + frame.tangent[1] * alongOffsetPx + frame.normal[1] * lateralOffsetPx;
+      const hx = frame.tangent[0] * alongLenPx * 0.5;
+      const hy = frame.tangent[1] * alongLenPx * 0.5;
+      const wx = frame.normal[0] * acrossLenPx * 0.5;
+      const wy = frame.normal[1] * acrossLenPx * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - hx - wx, cy - hy - wy);
+      ctx.lineTo(cx + hx - wx, cy + hy - wy);
+      ctx.lineTo(cx + hx + wx, cy + hy + wy);
+      ctx.lineTo(cx - hx + wx, cy - hy + wy);
+      ctx.closePath();
+      if (fillStyle) {
+        ctx.fillStyle = fillStyle;
+        ctx.fill();
+      }
+      if (strokeStyle && lineWidth > 0) {
+        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = strokeStyle;
+        ctx.stroke();
+      }
+    }
+
+    function drawRectAtDistance(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle) {
+      const frame = getPolylinePointAndFrameAtDistance(pts, distPx);
+      if (!frame) return;
+      drawRectWithFrame(frame, 0, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle, null, 0);
+    }
+
+    function drawRectAtBothEnds(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle) {
+      if (!(distPx > 0) || distPx >= totalLen - 1) return;
+      drawRectAtDistance(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle);
+      drawRectAtDistance(totalLen - distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle);
+    }
+
+    function drawSymmetricPairAtBothEnds(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle) {
+      drawRectAtBothEnds(distPx, lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle);
+      if (Math.abs(lateralOffsetPx) > 1e-6) {
+        drawRectAtBothEnds(distPx, -lateralOffsetPx, alongLenPx, acrossLenPx, fillStyle);
+      }
+    }
+
+    ctx.save();
+    const rwDecoOpaque = !!state.layers.pathFill;
+    const rwPaveAsphalt = c2dRoadWidthBandRunwayAsphaltColor();
+    function rwO(c) { return rwDecoOpaque ? c2dCssColorToOpaque(c) : c; }
+    const thresholdColor = rwO(c2dRunwayThresholdColor());
+    const displacedArrowFill = rwDecoOpaque ? c2dCssColorToOpaque(c2dRunwayMarkingColor()) : thresholdColor;
+    const touchdownColor = rwO(c2dRunwayTouchdownColor());
+    const aimingPointColor = rwO(c2dRunwayAimingPointColor());
+    const extensionFill = rwDecoOpaque ? rwPaveAsphalt : rwO(c2dRunwayExtensionFill());
+    const extensionOutline = c2dRunwayOutline();
+    const blastChevronColor = rwDecoOpaque ? c2dCssColorToOpaque(c2dRunwayBlastChevronColor()) : rwO(c2dRunwayBlastChevronColor());
+
+    function drawExtensionSegment(frame, directionSign, innerOffsetPx, segLenPx) {
+      if (!(segLenPx > 0)) return;
+      drawRectWithFrame(
+        frame,
+        directionSign * (innerOffsetPx + segLenPx * 0.5),
+        0,
+        segLenPx,
+        runwayWidth,
+        extensionFill,
+        extensionOutline,
+        1.2
+      );
+    }
+
+    function drawDisplacedThresholdArrows(frame, positionSign, arrowDirectionSign, innerOffsetPx, segLenPx) {
+      if (!(segLenPx > 0)) return;
+      const count = Math.max(2, Math.min(8, Math.round(segLenPx / 30)));
+      const arrowSpan = Math.min(Math.max(segLenPx * 0.22, runwayWidth * 0.42), segLenPx * 0.42);
+      const usableLen = Math.max(0, segLenPx - arrowSpan);
+      const shaftHalf = Math.max(3, runwayWidth * 0.055);
+      const headLen = Math.min(Math.max(16, arrowSpan * 0.32), arrowSpan * 0.48);
+      ctx.fillStyle = displacedArrowFill;
+      for (let i = 0; i < count; i++) {
+        const along = innerOffsetPx + (arrowSpan * 0.5) + (usableLen * (i + 0.5) / count);
+        const framePoint = [frame.point[0] + frame.tangent[0] * positionSign * along, frame.point[1] + frame.tangent[1] * positionSign * along];
+        const tipX = framePoint[0] + frame.tangent[0] * arrowDirectionSign * (arrowSpan * 0.5);
+        const tipY = framePoint[1] + frame.tangent[1] * arrowDirectionSign * (arrowSpan * 0.5);
+        const tailX = framePoint[0] - frame.tangent[0] * arrowDirectionSign * (arrowSpan * 0.5);
+        const tailY = framePoint[1] - frame.tangent[1] * arrowDirectionSign * (arrowSpan * 0.5);
+        const neckX = tipX - frame.tangent[0] * arrowDirectionSign * headLen;
+        const neckY = tipY - frame.tangent[1] * arrowDirectionSign * headLen;
+        const halfWidth = Math.max(7, runwayWidth * 0.13);
+        ctx.beginPath();
+        ctx.moveTo(tailX - frame.normal[0] * shaftHalf, tailY - frame.normal[1] * shaftHalf);
+        ctx.lineTo(neckX - frame.normal[0] * shaftHalf, neckY - frame.normal[1] * shaftHalf);
+        ctx.lineTo(neckX - frame.normal[0] * halfWidth, neckY - frame.normal[1] * halfWidth);
+        ctx.lineTo(tipX, tipY);
+        ctx.lineTo(neckX + frame.normal[0] * halfWidth, neckY + frame.normal[1] * halfWidth);
+        ctx.lineTo(neckX + frame.normal[0] * shaftHalf, neckY + frame.normal[1] * shaftHalf);
+        ctx.lineTo(tailX + frame.normal[0] * shaftHalf, tailY + frame.normal[1] * shaftHalf);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    function drawBlastPadChevrons(frame, positionSign, innerOffsetPx, segLenPx) {
+      if (!(segLenPx > 0)) return;
+      const count = Math.max(2, Math.min(7, Math.round(segLenPx / 35)));
+      const sideReach = Math.max(12, runwayWidth * 0.46);
+      const chevronDepth = Math.max(14, sideReach / Math.tan(Math.PI / 3));
+      const usableLen = Math.max(0, segLenPx - chevronDepth);
+      ctx.save();
+      ctx.lineWidth = Math.max(3, runwayWidth * 0.075);
+      ctx.lineCap = 'square';
+      ctx.lineJoin = 'miter';
+      ctx.strokeStyle = blastChevronColor;
+      for (let i = 0; i < count; i++) {
+        const along = innerOffsetPx + (chevronDepth * 0.5) + (usableLen * (i + 0.5) / count);
+        const apexX = frame.point[0] + frame.tangent[0] * positionSign * along;
+        const apexY = frame.point[1] + frame.tangent[1] * positionSign * along;
+        const outerAlong = along + chevronDepth;
+        const leftX = frame.point[0] + frame.tangent[0] * positionSign * outerAlong + frame.normal[0] * sideReach;
+        const leftY = frame.point[1] + frame.tangent[1] * positionSign * outerAlong + frame.normal[1] * sideReach;
+        const rightX = frame.point[0] + frame.tangent[0] * positionSign * outerAlong - frame.normal[0] * sideReach;
+        const rightY = frame.point[1] + frame.tangent[1] * positionSign * outerAlong - frame.normal[1] * sideReach;
+        ctx.beginPath();
+        ctx.moveTo(leftX, leftY);
+        ctx.lineTo(apexX, apexY);
+        ctx.lineTo(rightX, rightY);
         ctx.stroke();
       }
       ctx.restore();
@@ -1532,179 +1708,3 @@
         if (idx == null || runwayNodeSeen.has(idx)) return;
         runwayNodeSeen.add(idx);
         runwayNodeIndices.push(idx);
-      });
-    });
-    const runwayReachable = runwayNodeIndices.length ? bfsReachable(runwayNodeIndices) : new Set();
-    const standReachable = standNodeIndices.length ? bfsReachable(standNodeIndices) : new Set();
-    const connected = new Set();
-    runwayReachable.forEach(function(i) { if (standReachable.has(i)) connected.add(i); });
-    const validJunctionsForDraw = junctionPts.filter(function(p) {
-      const i = findNodeIndexWithinMergeRadius(p);
-      return i != null && adj[i] && adj[i].length >= 2;
-    });
-    const connectedJunctionsForDraw = validJunctionsForDraw.filter(function(p) {
-      const i = findNodeIndexWithinMergeRadius(p);
-      return i != null && connected.has(i);
-    });
-    const disconnectedValidJunctionsForDraw = validJunctionsForDraw.filter(function(p) {
-      const i = findNodeIndexWithinMergeRadius(p);
-      return i != null && !connected.has(i);
-    });
-    const connectedJunctionsMerged = mergeNearbyPathPointsForDraw(connectedJunctionsForDraw, PATH_JUNCTION_MERGE_RADIUS_PX);
-    return {
-      nodes,
-      edges,
-      adj,
-      edgeMap,
-      getOrAdd,
-      runwayNodeIndicesById,
-      junctions: connectedJunctionsMerged,
-      validJunctions: validJunctionsForDraw,
-      disconnectedValidJunctions: disconnectedValidJunctionsForDraw,
-      connectedJunctions: connectedJunctionsMerged,
-      standIdToNodeIndex
-    };
-  }
-
-  function serializePathGraphForSim(g) {
-    if (!g || !g.nodes || !g.edges) return null;
-    const runwayById = {};
-    Object.keys(g.runwayNodeIndicesById || {}).forEach(function(k) {
-      const setv = g.runwayNodeIndicesById[k];
-      runwayById[k] = setv ? Array.from(setv) : [];
-    });
-    const standMap = {};
-    Object.keys(g.standIdToNodeIndex || {}).forEach(function(k) {
-      standMap[String(k)] = g.standIdToNodeIndex[k];
-    });
-    return {
-      nodes: g.nodes.map(function(p) { return [+p[0], +p[1]]; }),
-      edges: g.edges.map(function(e) {
-        return {
-          from: e.from,
-          to: e.to,
-          dist: e.dist,
-          rawDist: e.rawDist != null ? e.rawDist : e.dist,
-          pts: (e.pts || []).map(function(p) { return [+p[0], +p[1]]; }),
-          linkId: e.linkId != null ? String(e.linkId) : '',
-          pathType: e.pathType != null ? String(e.pathType) : 'taxiway',
-          pathDir: e.pathDir != null ? String(e.pathDir) : 'both'
-        };
-      }),
-      standIdToNodeIndex: standMap,
-      runwayNodeIndicesById: runwayById
-    };
-  }
-
-  function buildSimPathGraphExport() {
-    if (!state.taxiways || !state.taxiways.length) return null;
-    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && !state.pathGraphAllowHeavySimExport) return null;
-    try {
-      return {
-        version: 1,
-        reverseCost: REVERSE_COST,
-        mergeRadiusPx: PATH_JUNCTION_MERGE_RADIUS_PX,
-        clockwise: {
-          standard: serializePathGraphForSim(buildPathGraph(null, 'clockwise')),
-          pureGroundExcludeRunway: serializePathGraphForSim(
-            buildPathGraph(null, 'clockwise', { pureGroundExcludeRunway: true })
-          )
-        },
-        counter_clockwise: {
-          standard: serializePathGraphForSim(buildPathGraph(null, 'counter_clockwise')),
-          pureGroundExcludeRunway: serializePathGraphForSim(
-            buildPathGraph(null, 'counter_clockwise', { pureGroundExcludeRunway: true })
-          )
-        }
-      };
-    } catch (err) {
-      console.error('buildSimPathGraphExport failed', err);
-      return null;
-    }
-  }
-
-  function rebuildDerivedGraphEdges() {
-    state.derivedGraphEdges = [];
-    if (!state.taxiways || !state.taxiways.length) return;
-    const graphSig = computeTaxiwaysGraphSig();
-    let g = null;
-    if (state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === graphSig) {
-      g = state.pathGraphCache;
-    } else if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
-      return;
-    } else {
-      try {
-        g = buildPathGraph(null);
-      } catch (err) {
-        console.error('rebuildDerivedGraphEdges: buildPathGraph failed', err);
-        return;
-      }
-    }
-    if (!g || !g.edges || !g.nodes) return;
-    const seen = new Set();
-    const raw = [];
-    g.edges.forEach(function(e) {
-      if (e.dist >= REVERSE_COST || e.dist < 1e-6) return;
-      const a = e.from, b = e.to;
-      const lo = a < b ? a : b, hi = a < b ? b : a;
-      const k = lo + ':' + hi;
-      if (seen.has(k)) return;
-      seen.add(k);
-      const p0 = g.nodes[a], p1 = g.nodes[b];
-      if (!p0 || !p1) return;
-      raw.push({
-        x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
-        pts: Array.isArray(e.pts) ? e.pts.map(function(p) { return [p[0], p[1]]; }) : [[p0[0], p0[1]], [p1[0], p1[1]]],
-        dist: e.rawDist != null ? e.rawDist : e.dist,
-        fromIdx: a, toIdx: b
-      });
-    });
-    raw.sort(function(u, v) {
-      if (u.fromIdx !== v.fromIdx) return u.fromIdx - v.fromIdx;
-      return u.toIdx - v.toIdx;
-    });
-    const maxN = Math.min(raw.length, 999);
-    const nextEdgeNames = {};
-    const usedEdgeNames = new Set();
-    for (let i = 0; i < maxN; i++) {
-      const label = String(i + 1).padStart(3, '0');
-      const r = raw[i];
-      const edgeId = 'layout-edge-' + label;
-      const preferredName = (state.layoutEdgeNames && state.layoutEdgeNames[edgeId]) || ('Edge ' + label);
-      const finalName = uniqueNameAgainstSet(preferredName, usedEdgeNames);
-      usedEdgeNames.add(finalName);
-      nextEdgeNames[edgeId] = finalName;
-      state.derivedGraphEdges.push({
-        id: edgeId,
-        label: label,
-        name: finalName,
-        x1: r.x1, y1: r.y1, x2: r.x2, y2: r.y2,
-        pts: r.pts,
-        dist: r.dist,
-        fromIdx: r.fromIdx,
-        toIdx: r.toIdx
-      });
-    }
-    state.layoutEdgeNames = nextEdgeNames;
-    if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {
-      const sid = state.selectedObject.id;
-      const fresh = (state.derivedGraphEdges || []).find(function(e) { return e.id === sid; });
-      if (fresh) state.selectedObject.obj = fresh;
-      else state.selectedObject = null;
-    }
-  }
-
-  function hitTestLayoutGraphEdge(wx, wy) {
-    if (!state.derivedGraphEdges || !state.derivedGraphEdges.length) return null;
-    const click = [wx, wy];
-    const tol = CELL_SIZE * 0.4;
-    const tol2 = tol * tol;
-    let best = null, bestD2 = tol2;
-    state.derivedGraphEdges.forEach(function(ed) {
-      const pts = (ed.pts && ed.pts.length >= 2) ? ed.pts : [[ed.x1, ed.y1], [ed.x2, ed.y2]];
-      for (let i = 0; i < pts.length - 1; i++) {
-        const near = closestPointOnSegment(pts[i], pts[i + 1], click);
-        if (!near) continue;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2) { bestD2 = d2; best = ed; }
-      }

@@ -155,8 +155,13 @@
           </div>
           <div class="compact-field wide">
             <label>Upload Layout file</label>
-            <input type="file" id="gridLayoutImageFile" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" />
-            <div id="gridLayoutImageMeta" style="margin-top:6px;font-size:11px;color:#9ca3af;">No file selected.</div>
+            <div class="grid-layout-image-file-row">
+              <label class="grid-layout-image-file-pick">
+                <input type="file" id="gridLayoutImageFile" class="grid-layout-image-file-input" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" aria-label="Choose layout image file" />
+                <span class="grid-layout-image-file-btn">Choose file</span>
+              </label>
+              <div id="gridLayoutImageMeta" class="grid-layout-image-meta">No file selected</div>
+            </div>
           </div>
           <div class="compact-field">
             <label>Opacity</label>
@@ -212,21 +217,18 @@
             <label>Name</label>
             <input type="text" id="standName" placeholder="Optional — auto C### if empty" />
           </div>
-          <div class="compact-field">
-            <label>Category Basis</label>
-            <select id="standCategoryMode">
-              <option value="icao" selected>ICAO</option>
-              <option value="aircraft">Aircraft Type</option>
-            </select>
-          </div>
-          <div class="compact-field" id="standIcaoWrap">
+          <div class="compact-field wide" id="standIcaoWrap">
             <label>ICAO Category</label>
-            <select id="standCategory">
-              <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
-              <option value="D">D</option><option value="E">E</option><option value="F">F</option>
-            </select>
+            <div id="standIcaoCategories" class="icao-multi-checks" role="group" aria-label="ICAO wake categories">
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="A"/> A</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="B"/> B</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="C" checked/> C</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="D"/> D</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="E"/> E</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="F"/> F</label>
+            </div>
           </div>
-          <div class="inline-field wide" id="standAircraftWrap" style="display:none;">
+          <div class="inline-field wide" id="standAircraftWrap">
             <label>Aircraft Types</label>
             <div id="standAircraftAccess"></div>
           </div>
@@ -238,20 +240,18 @@
             <label>Angle (deg)</label>
             <input type="number" id="standAngle" min="-180" max="180" step="1" value="0" />
           </div>
-          <div class="compact-field wide">
-            <label>Boarding Area</label>
-            <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-              <span style="font-size:11px; color:#9ca3af;">W (m)</span>
-              <input type="number" id="pbbBoardingWidth" min="0.5" max="500" step="0.5" value="5" style="width:5rem;" aria-label="Boarding area width meters" />
-              <span style="font-size:11px; color:#9ca3af;">H (m)</span>
-              <input type="number" id="pbbBoardingHeight" min="0.5" max="500" step="0.5" value="15" style="width:5rem;" aria-label="Boarding area height meters" />
-            </div>
+          <div class="compact-field">
+            <label>Boarding Area Width(m)</label>
+            <input type="number" id="pbbBoardingWidth" min="0.5" max="500" step="0.5" value="5" aria-label="Boarding area width meters" />
+          </div>
+          <div class="compact-field">
+            <label>Boarding Area Height(m)</label>
+            <input type="number" id="pbbBoardingHeight" min="0.5" max="500" step="0.5" value="15" aria-label="Boarding area height meters" />
           </div>
           <div class="compact-field">
             <label>PBB Count</label>
             <input type="number" id="pbbBridgeCount" min="1" max="8" step="1" value="1" />
           </div>
-          <p class="choice-help">Contact stand: boarding zone (W×H) sits flush on the terminal face and extends outward along the building normal; stand / apron reference is 50 m out on that same normal. New stands get angle aligned to the normal. White strokes = boarding outline and PBB arms.</p>
           <button class="small draw-toggle-btn" id="btnPbbDraw">Draw</button>
         </div>
         <div id="settings-remote" class="settings-pane compact-form" style="display:none;">
@@ -259,23 +259,16 @@
             <label>Name</label>
             <input type="text" id="remoteName" placeholder="Optional — auto R### if empty" />
           </div>
-          <div class="compact-field">
-            <label>Angle (deg)</label>
-            <input type="number" id="remoteAngle" min="-180" max="180" step="1" value="0" />
-          </div>
-          <div class="compact-field">
-            <label>Category Basis</label>
-            <select id="remoteCategoryMode">
-              <option value="icao" selected>ICAO</option>
-              <option value="aircraft">Aircraft Type</option>
-            </select>
-          </div>
-          <div class="compact-field" id="remoteIcaoWrap">
+          <div class="compact-field wide" id="remoteIcaoWrap">
             <label>ICAO Category</label>
-            <select id="remoteCategory">
-              <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
-              <option value="D">D</option><option value="E">E</option><option value="F">F</option>
-            </select>
+            <div id="remoteIcaoCategories" class="icao-multi-checks" role="group" aria-label="ICAO wake categories">
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="A"/> A</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="B"/> B</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="C" checked/> C</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="D"/> D</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="E"/> E</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="F"/> F</label>
+            </div>
           </div>
           <div class="inline-field wide" id="remoteAircraftWrap" style="display:none;">
             <label>Aircraft Types</label>
@@ -294,34 +287,27 @@
             <label>Name</label>
             <input type="text" id="tempStandName" placeholder="Optional — auto T### if empty" />
           </div>
-          <div class="compact-field">
-            <label>Angle (deg)</label>
-            <input type="number" id="tempStandAngle" min="-180" max="180" step="1" value="0" />
-          </div>
-          <div class="compact-field">
-            <label>Category Basis</label>
-            <select id="tempStandCategoryMode">
-              <option value="icao" selected>ICAO</option>
-              <option value="aircraft">Aircraft Type</option>
-            </select>
-          </div>
-          <div class="compact-field" id="tempStandIcaoWrap">
+          <div class="compact-field wide" id="tempStandIcaoWrap">
             <label>ICAO Category</label>
-            <select id="tempStandCategory">
-              <option value="A">A</option><option value="B">B</option><option value="C" selected>C</option>
-              <option value="D">D</option><option value="E">E</option><option value="F">F</option>
-            </select>
+            <div id="tempStandIcaoCategories" class="icao-multi-checks" role="group" aria-label="ICAO wake categories">
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="A"/> A</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="B"/> B</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="C" checked/> C</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="D"/> D</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="E"/> E</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="F"/> F</label>
+            </div>
           </div>
-          <div class="inline-field wide" id="tempStandAircraftWrap" style="display:none;">
+          <div class="inline-field wide" id="tempStandAircraftWrap">
             <label>Aircraft Types</label>
             <div id="tempStandAircraftAccess"></div>
           </div>
           <div class="inline-field wide">
             <label>Available buildings</label>
             <div id="tempStandTerminalAccess">
+              <!-- Building checkboxes are rendered dynamically -->
             </div>
           </div>
-          <p class="choice-help">Place on taxiway centerline only (taxiway / runway taxiway / RET / queue path). No apron taxiway link. Cyan ring = taxiway junction (junctionX/Y in saved layout / sim_input).</p>
           <button class="small draw-toggle-btn" id="btnTempStandDraw">Draw</button>
         </div>
         <div id="settings-holdingPoint" class="settings-pane compact-form" style="display:none;">
@@ -351,17 +337,14 @@
             <label>Min Arr Velocity (m/s)</label>
             <input type="number" id="runwayMinArrVelocity" min="1" max="150" value="__UI_RW_MIN_ARR__" step="1" />
           </div>
-          <div id="runwayLineupDistWrap" class="inline-field wide" style="display:none;">
-            <label>Line up Point (m)</label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-              <div>
-                <label style="font-size:10px;color:#9ca3af;">CW from Start</label>
-                <input type="number" id="runwayLineupDistM_CW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
-              </div>
-              <div>
-                <label style="font-size:10px;color:#9ca3af;">CCW from End</label>
-                <input type="number" id="runwayLineupDistM_CCW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
-              </div>
+          <div id="runwayLineupDistWrap" class="runway-lineup-dist-stack" style="display:none;">
+            <div class="compact-field wide">
+              <label>Lineup Point_CW (m)</label>
+              <input type="number" id="runwayLineupDistM_CW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
+            </div>
+            <div class="compact-field wide">
+              <label>Lineup Point_CCW (m)</label>
+              <input type="number" id="runwayLineupDistM_CCW" min="0" max="500000" value="__UI_RW_LINEUP__" step="1" />
             </div>
           </div>
           <div id="runwayStartDisplacedThresholdWrap" class="inline-field wide" style="display:none;">
@@ -426,7 +409,6 @@
             <input type="text" id="apronLinkName" placeholder="Optional — auto Apron Taxiway # if empty" />
           </div>
           <button class="small draw-toggle-btn" id="btnApronLinkDraw">Draw</button>
-          <p style="font-size:10px;color:#9ca3af;margin:8px 0 0;line-height:1.45;">Click a stand or taxiway to start, then place corners freely. Hold Shift to snap to the grid. Turn off Draw and click the line to select. Drag yellow handles to move corners or the taxiway end (snaps to path). Double-click a segment to add a point. Backspace/Delete removes the selected midpoint.</p>
         </div>
         <div id="settings-marker" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">

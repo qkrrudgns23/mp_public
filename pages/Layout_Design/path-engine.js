@@ -1,3 +1,146 @@
+      }
+    }
+    else if (type === 'apronLink') {
+      state.apronLinks = state.apronLinks.filter(lk => lk.id !== id);
+      if (state.apronLinkJunctionOverlayDirtyIds) delete state.apronLinkJunctionOverlayDirtyIds[String(id)];
+    }
+    else if (type === 'flight') {
+      state.flights = state.flights.filter(f => f.id !== id);
+      bumpRwySepSnapshotStaleGen();
+      state.rwySepPanelDirty = true;
+    }
+    else if (type === 'layoutMarker') state.layoutMarkers = (state.layoutMarkers || []).filter(function(m) { return m && m.id !== id; });
+    else if (type === 'layoutEdge') {}
+    if (removedTaxiway) {
+      if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.pathGraphCacheValid && state.pathGraphCache && !state.pathGraphCache.__junctionStale) {
+        stripPathGraphCacheJunctionsNearTaxiwayWorld(removedTaxiway);
+      }
+      const shouldResampleRet = (removedTaxiway.pathType === 'runway' || removedTaxiway.pathType === 'runway_exit');
+      if (removedTaxiway.pathType === 'runway_exit') {
+        (state.flights || []).forEach(function(f) {
+          if (!f || f.sampledArrRet !== id) return;
+          f.sampledArrRet = null;
+          f.arrRetFailed = false;
+          f.arrRotSec = null;
+          f.arrRetDistM = null;
+          f.arrVRetInMs = null;
+          f.arrVRetOutMs = null;
+          f.__schedRetRotRev = null;
+          f.__schedVttArrRev = null;
+          f.__schedVttArrMin = null;
+          f.noWayArr = false;
+          delete f._noWayArrDetail;
+        });
+      }
+      if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
+      if (shouldResampleRet && typeof renderFlightList === 'function') renderFlightList(false, true);
+    }
+  }
+  function syncPathFieldVisibilityForPathType(pt) {
+    const taxiwayAvgWrap = document.getElementById('taxiwayAvgVelocityWrap');
+    const runwayMinArrWrap = document.getElementById('runwayMinArrVelocityWrap');
+    const runwayLineupWrap = document.getElementById('runwayLineupDistWrap');
+    const runwayStartDispWrap = document.getElementById('runwayStartDisplacedThresholdWrap');
+    const runwayStartBlastWrap = document.getElementById('runwayStartBlastPadWrap');
+    const runwayEndDispWrap = document.getElementById('runwayEndDisplacedThresholdWrap');
+    const runwayEndBlastWrap = document.getElementById('runwayEndBlastPadWrap');
+    const maxExitWrap = document.getElementById('runwayMaxExitVelWrap');
+    const minExitWrap = document.getElementById('runwayMinExitVelWrap');
+    const rwDirWrap = document.getElementById('runwayExitAllowedDirectionWrap');
+    const taxiwayTypeWrap = document.getElementById('taxiwayTypeWrap');
+    if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway' || pt === 'apron_taxiway' || pt === 'general_queue_taxiway') ? 'grid' : 'none';
+    if (taxiwayTypeWrap) taxiwayTypeWrap.style.display = (pt === 'taxiway' || pt === 'general_queue_taxiway') ? 'grid' : 'none';
+    if (runwayMinArrWrap) runwayMinArrWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+    if (runwayLineupWrap) runwayLineupWrap.style.display = (pt === 'runway') ? 'flex' : 'none';
+    if (runwayStartDispWrap) runwayStartDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+    if (runwayStartBlastWrap) runwayStartBlastWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+    if (runwayEndDispWrap) runwayEndDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+    if (runwayEndBlastWrap) runwayEndBlastWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+    if (maxExitWrap) maxExitWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
+    if (minExitWrap) minExitWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
+    if (rwDirWrap) rwDirWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
+    refreshTaxiwayDirectionModeSelect(pt);
+  }
+  function refreshTaxiwayDirectionModeSelect(pathType) {
+    const sel = document.getElementById('taxiwayDirectionMode');
+    if (!sel) return;
+    const cur = String(sel.value || '').trim();
+    const htmlTwo = '<option value="clockwise">CW</option><option value="counter_clockwise">CCW</option>';
+    const htmlThree = htmlTwo + '<option value="both">Both</option>';
+    sel.innerHTML = (pathType === 'runway') ? htmlTwo : htmlThree;
+    if (pathType === 'runway') {
+      if (cur === 'clockwise' || cur === 'counter_clockwise') sel.value = cur;
+      else sel.value = 'clockwise';
+    } else {
+      if (cur === 'clockwise' || cur === 'counter_clockwise' || cur === 'both') sel.value = cur;
+      else sel.value = 'both';
+    }
+  }
+  function _layoutCellSizeForPersistLoad() {
+    return (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
+  }
+  function layoutVerticesPersistToCellsLoad(vertices) {
+    const cs = _layoutCellSizeForPersistLoad();
+    if (!Array.isArray(vertices)) return [];
+    return vertices.map(function(v) {
+      if (!v || typeof v !== 'object') return { col: 0, row: 0 };
+      const x = Number(v.x), y = Number(v.y);
+      if (isFinite(x) && isFinite(y)) return { col: x / cs, row: y / cs };
+      return { col: Number(v.col) || 0, row: Number(v.row) || 0 };
+    });
+  }
+  function layoutPointPersistToCellLoad(pt) {
+    if (!pt || typeof pt !== 'object') return null;
+    const cs = _layoutCellSizeForPersistLoad();
+    const x = Number(pt.x), y = Number(pt.y);
+    if (isFinite(x) && isFinite(y)) return { col: x / cs, row: y / cs };
+    if (pt.col != null || pt.row != null) return { col: Number(pt.col) || 0, row: Number(pt.row) || 0 };
+    return null;
+  }
+  function normalizeTaxiwayVerticesFromPersistLoad(tw) {
+    const o = tw;
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o.vertices)) o.vertices = layoutVerticesPersistToCellsLoad(o.vertices);
+    if (o.start_point) {
+      const sp = layoutPointPersistToCellLoad(o.start_point);
+      if (sp) o.start_point = sp;
+    }
+    if (o.end_point) {
+      const ep = layoutPointPersistToCellLoad(o.end_point);
+      if (ep) o.end_point = ep;
+    }
+  }
+  function mergeTaxiwaysFromLayoutObject(obj) {
+    if (!obj || typeof obj !== 'object') return [];
+    const newSchema = Object.prototype.hasOwnProperty.call(obj, 'runwayPaths') ||
+      Object.prototype.hasOwnProperty.call(obj, 'runwayTaxiways');
+    if (newSchema) {
+      const out = [];
+      (obj.runwayPaths || []).forEach(function(tw) {
+        const o = Object.assign({}, tw);
+        o.pathType = 'runway';
+        normalizeTaxiwayVerticesFromPersistLoad(o);
+        out.push(o);
+      });
+      (obj.runwayTaxiways || []).forEach(function(tw) {
+        const o = Object.assign({}, tw);
+        o.pathType = 'runway_exit';
+        delete o.rwySepConfig;
+        normalizeTaxiwayVerticesFromPersistLoad(o);
+        out.push(o);
+      });
+      (obj.taxiways || []).forEach(function(tw) {
+        const o = Object.assign({}, tw);
+        if (o.pathType !== 'runway' && o.pathType !== 'runway_exit' && o.pathType !== 'apron_taxiway' && o.pathType !== 'general_queue_taxiway') o.pathType = 'taxiway';
+        if (o.pathType !== 'runway') delete o.rwySepConfig;
+        normalizeTaxiwayVerticesFromPersistLoad(o);
+        out.push(o);
+      });
+      out.forEach(normalizeTaxiwayWidthInPlace);
+      out.forEach(normalizePathPavementInPlace);
+      return out;
+    }
+    if (Array.isArray(obj.taxiways)) {
       const sliced = obj.taxiways.slice();
       sliced.forEach(function(tw) {
         normalizeTaxiwayVerticesFromPersistLoad(tw);
@@ -201,6 +344,7 @@
         delete f.etotMin_orig;
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
+        if (!String(f.reg || '').trim()) f.reg = randomRegNumber();
       });
     } else {
       state.flights = [];
@@ -574,147 +718,3 @@
       directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
       flights: cloneFlightsWithoutPathPolylineCache(state.flights),
       layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))
-    };
-    undoStack.push(snap);
-    if (undoStack.length > maxUndoLevels) undoStack.shift();
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-  }
-  function undo() {
-    if (!undoStack.length) return;
-    const snap = undoStack.pop();
-    state.terminals = snap.terminals;
-    state.pbbStands = snap.pbbStands;
-    state.remoteStands = snap.remoteStands;
-    state.tempStands = snap.tempStands || [];
-    state.holdingPoints = snap.holdingPoints || [];
-    state.taxiways = snap.taxiways;
-    state.apronLinks = snap.apronLinks;
-    state.apronLinkJunctionOverlayDirtyIds = null;
-    state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
-    syncLayoutImageBitmap();
-    state.layoutEdgeNames = snap.layoutEdgeNames || {};
-    state.directionModes = snap.directionModes;
-    state.flights = snap.flights;
-    state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(Array.isArray(snap.layoutMarkers) ? snap.layoutMarkers : []);
-    state.pathArcDrag = null;
-    state.selectedObject = null;
-    state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
-    state.terminalDrawingId = null;
-    state.taxiwayDrawingId = null;
-    state.layoutPathDrawPointer = null;
-    syncPanelFromState();
-    updateObjectInfo();
-    renderObjectList();
-    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-  }
-  function getTaxiwayDirection(tw) {
-    if (!tw) return 'both';
-    if (tw.direction != null) {
-      const d = tw.direction;
-      if (d === 'topToBottom') return 'clockwise';
-      if (d === 'bottomToTop') return 'counter_clockwise';
-      return d || 'both';
-    }
-    if (tw.directionModeId) {
-      const m = state.directionModes.find(d => d.id === tw.directionModeId);
-      if (m && m.direction) return m.direction;
-    }
-    return 'both';
-  }
-  function normalizeRwDirectionValue(dir) {
-    if (dir === 'clockwise' || dir === 'cw') return 'clockwise';
-    if (dir === 'counter_clockwise' || dir === 'ccw') return 'counter_clockwise';
-    return 'both';
-  }
-  function normalizeAllowedRunwayDirections(raw) {
-    const out = [];
-    const src = Array.isArray(raw) ? raw : [];
-    src.forEach(function(v) {
-      const d = normalizeRwDirectionValue(v);
-      if (d === 'clockwise' && out.indexOf('clockwise') < 0) out.push('clockwise');
-      if (d === 'counter_clockwise' && out.indexOf('counter_clockwise') < 0) out.push('counter_clockwise');
-    });
-    return out;
-  }
-  function getTaxiwayAllowedRunwayDirections(tw) {
-    if (!tw || tw.pathType !== 'runway_exit') return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
-    const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
-    if (!arr.length) return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
-    return arr;
-  }
-  function isRunwayExitDirectionAllowed(tw, runwayDir) {
-    const d = normalizeRwDirectionValue(runwayDir);
-    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
-    const allow = getTaxiwayAllowedRunwayDirections(tw);
-    return allow.indexOf(d) >= 0;
-  }
-  function getRunwayExitAllowedDirectionsFromPanel() {
-    const out = [];
-    const container = document.getElementById('runwayExitAllowedDirection');
-    if (!container) return out;
-    container.querySelectorAll('.runway-exit-dir-check').forEach(function(ch) {
-      if (!ch.checked) return;
-      const value = String(ch.getAttribute('data-item-id') || '').trim();
-      if (value === 'clockwise' || value === 'counter_clockwise') out.push(value);
-    });
-    return out;
-  }
-
-  const _rwy = _tiers.runway || {};
-  const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
-  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
-  const RSEP_COLOR_THRESHOLDS = (function() {
-    const arr = _sepUi.inputColorThresholdsSec;
-    if (Array.isArray(arr) && arr.length) {
-      return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
-    }
-    return [90, 120, 150];
-  })();
-  const RSEP_LEGEND_LAB = (_sepUi.legendLabels && typeof _sepUi.legendLabels === 'object') ? _sepUi.legendLabels : {};
-  function rsepLegendFmt(tpl, a0, a1) {
-    let s = String(tpl || '');
-    if (a1 != null && s.indexOf('{1}') >= 0) return s.replace('{0}', String(a0)).replace('{1}', String(a1));
-    return s.replace('{0}', String(a0));
-  }
-  const RSEP_COLOR_STYLES = [
-    { bg: '#0d2018', color: '#68d391', border: '#68d39155' },
-    { bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' },
-    { bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' },
-    { bg: '#280d0d', color: '#fc8181', border: '#fc818155' },
-  ];
-  const _stds = _rwy.standards || {};
-  const RSEP_STD_CATS = {
-    'ICAO': (_stds.ICAO && _stds.ICAO.categories) ? _stds.ICAO.categories : ['J','H','M','L'],
-    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categories) ? _stds['RECAT-EU'].categories : ['A','B','C','D','E','F'],
-  };
-  const RSEP_SEQ_TYPES = Object.assign({ 'ARR→ARR': 'matrix', 'DEP→DEP': 'matrix', 'ARR→DEP': 'lead-1d', 'DEP→ARR': 'trail-1d' }, _sepUi.seqTypes || {});
-  const RSEP_MODE_SEQS = (function() {
-    const def = { ARR: ['ARR→ARR'], DEP: ['DEP→DEP'], MIX: ['ARR→ARR','DEP→DEP','ARR→DEP','DEP→ARR'] };
-    const ms = _sepUi.modeSequences || {};
-    const out = {};
-    ['ARR','DEP','MIX'].forEach(k => {
-      const a = ms[k];
-      out[k] = (Array.isArray(a) && a.length) ? a.slice() : def[k].slice();
-    });
-    return out;
-  })();
-  const RSEP_DEFAULTS = {};
-  ['ICAO','RECAT-EU'].forEach(k => {
-    const s = _stds[k];
-    if (!s) return;
-    RSEP_DEFAULTS[k] = { ...(s.separationDefaults || {}), ROT: s.ROT || {} };
-  });
-  if (!RSEP_DEFAULTS['ICAO'] || !Object.keys(RSEP_DEFAULTS['ICAO']).length) {
-    RSEP_DEFAULTS['ICAO'] = { 'ARR→ARR': { J:{J:90,H:120,M:180,L:240}, H:{J:90,H:90,M:120,L:180}, M:{J:90,H:90,M:90,L:180}, L:{J:90,H:90,M:90,L:90} }, 'DEP→DEP': { J:{J:90,H:120,M:180,L:180}, H:{J:90,H:90,M:120,L:120}, M:{J:90,H:90,M:90,L:90}, L:{J:90,H:90,M:90,L:90} }, 'ARR→DEP': {J:90,H:80,M:65,L:50}, 'DEP→ARR': {J:60,H:60,M:70,L:90}, ROT: {J:70,H:65,M:55,L:40} };
-  }
-  if (!RSEP_DEFAULTS['RECAT-EU'] || !Object.keys(RSEP_DEFAULTS['RECAT-EU']).length) {
-    RSEP_DEFAULTS['RECAT-EU'] = { 'ARR→ARR': { A:{A:80,B:100,C:120,D:140,E:160,F:180}, B:{A:80,B:80,C:100,D:120,E:120,F:140}, C:{A:80,B:80,C:80,D:100,E:100,F:120}, D:{A:80,B:80,C:80,D:80,E:80,F:100}, E:{A:80,B:80,C:80,D:80,E:80,F:100}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'DEP→DEP': { A:{A:80,B:100,C:120,D:120,E:120,F:140}, B:{A:80,B:80,C:100,D:100,E:100,F:120}, C:{A:80,B:80,C:80,D:80,E:80,F:100}, D:{A:80,B:80,C:80,D:80,E:80,F:80}, E:{A:80,B:80,C:80,D:80,E:80,F:80}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'ARR→DEP': {A:80,B:70,C:60,D:55,E:50,F:45}, 'DEP→ARR': {A:55,B:55,C:60,D:65,E:70,F:80}, ROT: {A:65,B:60,C:55,D:50,E:45,F:40} };
-  }
-  const RSEP_STANDARDS = { 'ICAO': { ROT: RSEP_DEFAULTS['ICAO'] && RSEP_DEFAULTS['ICAO'].ROT ? RSEP_DEFAULTS['ICAO'].ROT : {} }, 'RECAT-EU': { ROT: RSEP_DEFAULTS['RECAT-EU'] && RSEP_DEFAULTS['RECAT-EU'].ROT ? RSEP_DEFAULTS['RECAT-EU'].ROT : {} } };
-  const RSEP_CAT_LABELS = {
-    'ICAO': (_stds.ICAO && _stds.ICAO.categoryLabels) ? _stds.ICAO.categoryLabels : { J:'Super', H:'Heavy', M:'Medium', L:'Light' },
-    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categoryLabels) ? _stds['RECAT-EU'].categoryLabels : { A:'Super-Heavy', B:'Upper-Heavy', C:'Lower-Heavy', D:'Medium', E:'Light', F:'Very-Light' },
-  };
-  const RSEP_SEQ_META = _rwy.seqMeta || {
-    'ARR→ARR': { driver: 'Wake of leading arrival aircraft', refPoint: 'Touchdown / final approach point of the leading arrival', input: 'Lead (arrival) × Trail (arrival) matrix input' },

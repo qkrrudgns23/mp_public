@@ -1,3 +1,165 @@
+    }
+    return inside;
+  }
+  function segIntersect(a1, a2, b1, b2) {
+    const [ax1,ay1]=a1,[ax2,ay2]=a2,[bx1,by1]=b1,[bx2,by2]=b2;
+    const dax = ax2-ax1, day = ay2-ay1, dbx = bx2-bx1, dby = by2-by1;
+    const den = dax*dby - day*dbx;
+    if (Math.abs(den) < 1e-10) return false;
+    const t = ((bx1-ax1)*dby - (by1-ay1)*dbx) / den;
+    const s = ((bx1-ax1)*day - (by1-ay1)*dax) / den;
+    return t >= 0 && t <= 1 && s >= 0 && s <= 1;
+  }
+  function rotatedRectsOverlap(cornersA, cornersB) {
+    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersA[i], cornersB)) return true;
+    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersB[i], cornersA)) return true;
+    for (let i = 0; i < 4; i++) {
+      const a1 = cornersA[i], a2 = cornersA[(i+1)%4];
+      for (let j = 0; j < 4; j++) {
+        if (segIntersect(a1, a2, cornersB[j], cornersB[(j+1)%4])) return true;
+      }
+    }
+    return false;
+  }
+  function distPointToSegment(px, py, ax, ay, bx, by) {
+    const vx = bx - ax, vy = by - ay;
+    const wx = px - ax, wy = py - ay;
+    const c1 = vx * wx + vy * wy;
+    if (c1 <= 0) return Math.hypot(px - ax, py - ay);
+    const c2 = vx * vx + vy * vy;
+    if (c2 <= c1) return Math.hypot(px - bx, py - by);
+    const t = c1 / c2;
+    const projx = ax + t * vx, projy = ay + t * vy;
+    return Math.hypot(px - projx, py - projy);
+  }
+  function minDistanceConvexQuads(quadA, quadB) {
+    if (rotatedRectsOverlap(quadA, quadB)) return 0;
+    let minD = Infinity;
+    for (let i = 0; i < 4; i++) {
+      const p = quadA[i];
+      for (let j = 0; j < 4; j++) {
+        const q1 = quadB[j], q2 = quadB[(j + 1) % 4];
+        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
+      }
+    }
+    for (let i = 0; i < 4; i++) {
+      const p = quadB[i];
+      for (let j = 0; j < 4; j++) {
+        const q1 = quadA[j], q2 = quadA[(j + 1) % 4];
+        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
+      }
+    }
+    return minD;
+  }
+  function standFootprintsTooClose(cornersA, catA, cornersB, catB) {
+    const need = getStandSpacingMeters(catA, catB);
+    if (need <= 0) return rotatedRectsOverlap(cornersA, cornersB);
+    return minDistanceConvexQuads(cornersA, cornersB) < need;
+  }
+  function buildStandSafetyPolygonLocalPoints(depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return null;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return null;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const eps = 0.08;
+    if (noseHalf >= halfW - eps) return null;
+    const xNose = -halfD;
+    const xStop = -halfD + nc;
+    if (xStop <= xNose + eps || xStop >= halfD - eps) return null;
+    const latRun = halfW - noseHalf;
+    if (latRun <= eps) return null;
+    const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return null;
+    const pts = [];
+    pts.push([xNose, -noseHalf]);
+    pts.push([xNose, noseHalf]);
+    pts.push([xStop, noseHalf]);
+    pts.push([Math.min(xBendEnd, halfD), halfW]);
+    if (xBendEnd < halfD - eps) {
+      pts.push([halfD, halfW]);
+      pts.push([halfD, -halfW]);
+      pts.push([xBendEnd, -halfW]);
+    } else {
+      pts.push([halfD, -halfW]);
+    }
+    pts.push([xStop, -noseHalf]);
+    return pts;
+  }
+  function standOuterContourWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
+    const polyLocal = buildStandSafetyPolygonLocalPoints(depM, widM, category);
+    if (polyLocal && polyLocal.length >= 3) {
+      return polyLocal.map(function(p) { return standFootprintLocalToWorld(cx, cy, angleRad, p[0], p[1]); });
+    }
+    return [
+      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, -widM / 2),
+      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, -widM / 2),
+      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, widM / 2),
+      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, widM / 2),
+    ];
+  }
+  function standGapSegmentsWorldForSpec(cx, cy, angleRad, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return [];
+    const g = Number(r.gap), ws = Number(r.wingspan);
+    const halfD = depM / 2, halfW = widM / 2;
+    const eps = 0.12;
+    if (!(isFinite(g) && g > eps && isFinite(ws) && ws > 0)) return [];
+    const yLim = halfW - g;
+    if (!(yLim > eps && yLim < halfW - eps)) return [];
+    const a0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, yLim);
+    const a1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, yLim);
+    const b0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, -yLim);
+    const b1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, -yLim);
+    return [[a0, a1], [b0, b1]];
+  }
+  function standGapSegmentsIntersectOuterPolygon(gapSegs, polygon) {
+    if (!Array.isArray(gapSegs) || !gapSegs.length || !Array.isArray(polygon) || polygon.length < 2) return false;
+    for (let i = 0; i < gapSegs.length; i++) {
+      const seg = gapSegs[i];
+      if (!seg || seg.length < 2) continue;
+      const g0 = seg[0], g1 = seg[1];
+      for (let j = 0; j < polygon.length; j++) {
+        const p0 = polygon[j], p1 = polygon[(j + 1) % polygon.length];
+        if (segIntersect(g0, g1, p0, p1)) return true;
+      }
+    }
+    return false;
+  }
+  function standGapLineHitsExistingOuterContours(candidateCenter, candidateAngleRad, candidateCategory) {
+    const depC = getStandDepthMeters(candidateCategory || 'C');
+    const widC = getStandWidthMeters(candidateCategory || 'C');
+    const gapSegs = standGapSegmentsWorldForSpec(candidateCenter[0], candidateCenter[1], candidateAngleRad, depC, widC, candidateCategory || 'C');
+    if (!gapSegs.length) return false;
+    function hitWithPolygon(poly) { return standGapSegmentsIntersectOuterPolygon(gapSegs, poly); }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const o = state.remoteStands[i];
+      const oc = getRemoteStandCenterPx(o);
+      const oa = getRemoteStandAngleRad(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    const temps = state.tempStands || [];
+    for (let i = 0; i < temps.length; i++) {
+      const o = temps[i];
+      const oc = getRemoteStandCenterPx(o);
+      const oa = getRemoteStandAngleRad(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const o = state.pbbStands[i];
+      const oc = getStandConnectionPx(o);
+      const oa = getPBBStandAngle(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    return false;
+  }
   function pbbStandOverlapsTerminal(pbb) {
     const corners = getPBBStandCorners(pbb);
     for (let t = 0; t < state.terminals.length; t++) {
@@ -66,8 +228,11 @@
     const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
     const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
     if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
-    const categoryMode = normalizeStandCategoryMode(document.getElementById('standCategoryMode') ? document.getElementById('standCategoryMode').value : (_pbbTier.defaultCategoryMode || 'icao'), 'icao');
-    const category = document.getElementById('standCategory').value || 'C';
+    const uPbb = readUnifiedNewStandConstraintFromPanel('standIcaoCategories', 'standAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uPbb.categoryMode;
+    const category = uPbb.category;
+    const allowedIcaoCategories = uPbb.allowedIcaoCategories;
+    const panelAllowedTypes = uPbb.allowedAircraftTypes;
     const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
     const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
@@ -106,7 +271,8 @@
       category: newPbb.category,
       terminalContactSetbackM: offM,
       categoryMode: categoryMode,
-      allowedAircraftTypes: readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check'),
+      allowedIcaoCategories: allowedIcaoCategories,
+      allowedAircraftTypes: panelAllowedTypes,
       pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
       angleDeg: standAngleDeg,
       apronSiteX: newPbb.apronSiteX,
@@ -123,10 +289,12 @@
     if (!isFinite(wx) || !isFinite(wy)) return false;
     const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
     if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) return false;
-    const categoryMode = normalizeStandCategoryMode(document.getElementById('remoteCategoryMode') ? document.getElementById('remoteCategoryMode').value : (_remoteTier.defaultCategoryMode || 'icao'), 'icao');
-    const category = document.getElementById('remoteCategory').value || 'C';
-    const angleInput = document.getElementById('remoteAngle');
-    const angleDeg = normalizeAngleDeg(angleInput ? angleInput.value : 0);
+    const uRm = readUnifiedNewStandConstraintFromPanel('remoteIcaoCategories', 'remoteAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uRm.categoryMode;
+    const category = uRm.category;
+    const allowedIcaoCategoriesR = uRm.allowedIcaoCategories;
+    const panelAllowedTypesR = uRm.allowedAircraftTypes;
+    const angleDeg = 0;
     const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
     const candCorners = getRemoteStandCorners(candidate);
     for (let i = 0; i < state.remoteStands.length; i++) {
@@ -156,7 +324,8 @@
       name: baseName,
       angleDeg,
       categoryMode: categoryMode,
-      allowedAircraftTypes: readCheckedDataItemIds('remoteAircraftAccess', '.aircraft-type-check'),
+      allowedIcaoCategories: allowedIcaoCategoriesR,
+      allowedAircraftTypes: panelAllowedTypesR,
       allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
     }));
     return true;
@@ -165,10 +334,12 @@
     const snap = snapTempStandOnTaxiwayCenterlines(wx, wy);
     if (!snap) return false;
     const sx = snap.x, sy = snap.y;
-    const categoryMode = normalizeStandCategoryMode(document.getElementById('tempStandCategoryMode') ? document.getElementById('tempStandCategoryMode').value : (_remoteTier.defaultCategoryMode || 'icao'), 'icao');
-    const category = document.getElementById('tempStandCategory') ? document.getElementById('tempStandCategory').value || 'C' : 'C';
-    const angleInput = document.getElementById('tempStandAngle');
-    const angleDeg = normalizeAngleDeg(angleInput ? angleInput.value : 0);
+    const uTs = readUnifiedNewStandConstraintFromPanel('tempStandIcaoCategories', 'tempStandAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uTs.categoryMode;
+    const category = uTs.category;
+    const allowedIcaoCategoriesT = uTs.allowedIcaoCategories;
+    const panelAllowedTypesT = uTs.allowedAircraftTypes;
+    const angleDeg = 0;
     const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };
     const candCorners = getRemoteStandCorners(candidate);
     for (let i = 0; i < (state.tempStands || []).length; i++) {
@@ -200,7 +371,8 @@
       name: baseName,
       angleDeg,
       categoryMode: categoryMode,
-      allowedAircraftTypes: readCheckedDataItemIds('tempStandAircraftAccess', '.aircraft-type-check'),
+      allowedIcaoCategories: allowedIcaoCategoriesT,
+      allowedAircraftTypes: panelAllowedTypesT,
       allowedTerminals: Array.from((document.getElementById('tempStandTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
     }));
     return true;
@@ -276,175 +448,3 @@
   }
 
   function _polylineLengthPxForLineup(pts) {
-    if (!pts || pts.length < 2) return 0;
-    let s = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i], p2 = pts[i + 1];
-      s += Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
-    }
-    return s;
-  }
-  function _pointOnPolylineAtDistPxForLineup(pts, distPx) {
-    if (!pts || pts.length < 2) return null;
-    const total = _polylineLengthPxForLineup(pts);
-    const d = Math.max(0, Math.min(typeof distPx === 'number' ? distPx : 0, total));
-    let acc = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i], p2 = pts[i + 1];
-      const segLen = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
-      if (!(segLen > 1e-6)) continue;
-      if (acc + segLen >= d - 1e-6) {
-        const t = Math.max(0, Math.min(1, (d - acc) / segLen));
-        return [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
-      }
-      acc += segLen;
-    }
-    const last = pts[pts.length - 1];
-    return [last[0], last[1]];
-  }
-  /** Ordered runway polyline in layout px (matches getRunwayPath / departure graphPath). */
-  function _persistRunwayPolylinePtsPx(tw) {
-    if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) return null;
-    return tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
-  }
-
-  function serializeTaxiwayWithEndpoints(tw) {
-    const copy = Object.assign({}, tw);
-    if (Array.isArray(tw.vertices)) {
-      copy.vertices = persistVerticesCellsToXY(tw.vertices.slice());
-    }
-    delete copy.start_point;
-    delete copy.end_point;
-    if (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) {
-      copy.avgMoveVelocity = tw.avgMoveVelocity;
-    }
-    if (tw.pathType === 'runway' && typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0) {
-      copy.minArrVelocity = Math.max(1, Math.min(150, tw.minArrVelocity));
-    }
-    if (tw.pathType === 'runway') {
-      const lCw = getRunwayLineupDistMByDirection(tw, 'clockwise');
-      const lCcw = getRunwayLineupDistMByDirection(tw, 'counter_clockwise');
-      copy.lineupDistM_CW = lCw;
-      copy.lineupDistM_CCW = lCcw;
-      copy.lineupDistM = getEffectiveRunwayLineupDistM(tw);
-      if (typeof tw.startDisplacedThresholdM === 'number' && isFinite(tw.startDisplacedThresholdM) && tw.startDisplacedThresholdM >= 0) copy.startDisplacedThresholdM = tw.startDisplacedThresholdM;
-      else delete copy.startDisplacedThresholdM;
-      if (typeof tw.startBlastPadM === 'number' && isFinite(tw.startBlastPadM) && tw.startBlastPadM >= 0) copy.startBlastPadM = tw.startBlastPadM;
-      else delete copy.startBlastPadM;
-      if (typeof tw.endDisplacedThresholdM === 'number' && isFinite(tw.endDisplacedThresholdM) && tw.endDisplacedThresholdM >= 0) copy.endDisplacedThresholdM = tw.endDisplacedThresholdM;
-      else delete copy.endDisplacedThresholdM;
-      if (typeof tw.endBlastPadM === 'number' && isFinite(tw.endBlastPadM) && tw.endBlastPadM >= 0) copy.endBlastPadM = tw.endBlastPadM;
-      else delete copy.endBlastPadM;
-      const rwPts = _persistRunwayPolylinePtsPx(tw);
-      if (rwPts && rwPts.length >= 2) {
-        const lenPx = _polylineLengthPxForLineup(rwPts);
-        const dPx = getEffectiveRunwayLineupDistFromStartM(tw, lenPx);
-        const lp = _pointOnPolylineAtDistPxForLineup(rwPts, dPx);
-        if (lp) copy.lineup_point = { x: lp[0], y: lp[1] };
-        else delete copy.lineup_point;
-      } else {
-        delete copy.lineup_point;
-      }
-      delete copy.dep_point;
-      delete copy.depPointPos;
-    }
-    if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
-    else delete copy.rwySepConfig;
-    return copy;
-  }
-  function partitionTaxiwaysForPersist(list) {
-    const runwayPaths = [];
-    const runwayTaxiways = [];
-    const taxiways = [];
-    (list || []).forEach(function(tw) {
-      const ser = serializeTaxiwayWithEndpoints(tw);
-      const pt = tw.pathType || 'taxiway';
-      delete ser.pathType;
-      if (pt === 'runway') runwayPaths.push(ser);
-      else if (pt === 'runway_exit') runwayTaxiways.push(ser);
-      else {
-        taxiways.push(ser);
-      }
-    });
-    return { runwayPaths: runwayPaths, runwayTaxiways: runwayTaxiways, taxiways: taxiways };
-  }
-  function serializeCurrentLayout() {
-    function pathJunctionsToNetworkJunctions(pts) {
-      const out = [];
-      (pts || []).forEach(function(p) {
-        if (!p) return;
-        if (Array.isArray(p) && p.length >= 2) {
-          out.push({ x: p[0], y: p[1] });
-        } else if (typeof p.x === 'number' && typeof p.y === 'number') {
-          out.push({ x: p.x, y: p.y });
-        }
-      });
-      return out;
-    }
-    let networkJunctions = pathJunctionsToNetworkJunctions(state.pathGraphJunctions);
-    if (!networkJunctions.length && typeof buildPathGraph === 'function') {
-      try {
-        let gj = null;
-        const sig = computeTaxiwaysGraphSig();
-        if (state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === sig) {
-          gj = state.pathGraphCache;
-        } else if (!PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
-          gj = buildPathGraph(null);
-        }
-        if (gj) {
-          const cj = (gj && (gj.connectedJunctions || gj.junctions)) || [];
-          networkJunctions = pathJunctionsToNetworkJunctions(cj);
-        }
-      } catch (e) { /* ignore */ }
-    }
-    let edgeExport = [];
-    if (typeof rebuildDerivedGraphEdges === 'function') {
-      try {
-        rebuildDerivedGraphEdges();
-        edgeExport = (state.derivedGraphEdges || []).map(function(ed) {
-          return { id: ed.id, label: ed.label, name: ed.name, fromIdx: ed.fromIdx, toIdx: ed.toIdx };
-        });
-      } catch (e2) { edgeExport = []; }
-    }
-    return {
-      grid: {
-        cols: GRID_COLS,
-        rows: GRID_ROWS,
-        cellSize: CELL_SIZE,
-        showGrid: !!state.showGrid,
-        showImage: !!state.showImage,
-        showRoadWidth: !!state.showRoadWidth,
-        showLayoutMarkers: !!state.showLayoutMarkers,
-        layers: Object.assign({}, state.layers),
-        layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
-      },
-      networkJunctions: networkJunctions,
-      Edge: edgeExport,
-      terminals: makeUniqueNamedCopy(state.terminals, 'name').map(function(t) {
-        const o = Object.assign({}, t);
-        if (Array.isArray(o.vertices)) o.vertices = persistVerticesCellsToXY(o.vertices);
-        return o;
-      }),
-      pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
-      remoteStands: state.remoteStands.slice(),
-      tempStands: (state.tempStands || []).slice(),
-      holdingPoints: (state.holdingPoints || []).slice(),
-      ...(function() {
-        const p = partitionTaxiwaysForPersist(state.taxiways);
-        return { runwayPaths: p.runwayPaths, runwayTaxiways: p.runwayTaxiways, taxiways: p.taxiways };
-      })(),
-      apronLinks: (state.apronLinks || []).map(function(lk) {
-        const o = Object.assign({}, lk);
-        if (Array.isArray(o.midVertices)) o.midVertices = persistVerticesCellsToXY(o.midVertices);
-        return o;
-      }),
-      directionModes: state.directionModes.slice(),
-      flights: state.flights.map(function(f) {
-        const copy = {};
-        const simFlightKeys = [
-          'id',
-          'reg',
-          'airlineCode',
-          'flightNumber',
-          'aircraftType',
-          'code',

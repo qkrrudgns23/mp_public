@@ -1,3 +1,175 @@
+    if (!pts || pts.length < 2) return 0;
+    let s = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      s += Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+    }
+    return s;
+  }
+  function _pointOnPolylineAtDistPxForLineup(pts, distPx) {
+    if (!pts || pts.length < 2) return null;
+    const total = _polylineLengthPxForLineup(pts);
+    const d = Math.max(0, Math.min(typeof distPx === 'number' ? distPx : 0, total));
+    let acc = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      const segLen = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+      if (!(segLen > 1e-6)) continue;
+      if (acc + segLen >= d - 1e-6) {
+        const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+        return [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
+      }
+      acc += segLen;
+    }
+    const last = pts[pts.length - 1];
+    return [last[0], last[1]];
+  }
+  /** Ordered runway polyline in layout px (matches getRunwayPath / departure graphPath). */
+  function _persistRunwayPolylinePtsPx(tw) {
+    if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) return null;
+    return tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+  }
+
+  function serializeTaxiwayWithEndpoints(tw) {
+    const copy = Object.assign({}, tw);
+    if (Array.isArray(tw.vertices)) {
+      copy.vertices = persistVerticesCellsToXY(tw.vertices.slice());
+    }
+    delete copy.start_point;
+    delete copy.end_point;
+    if (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) {
+      copy.avgMoveVelocity = tw.avgMoveVelocity;
+    }
+    if (tw.pathType === 'runway' && typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0) {
+      copy.minArrVelocity = Math.max(1, Math.min(150, tw.minArrVelocity));
+    }
+    if (tw.pathType === 'runway') {
+      const lCw = getRunwayLineupDistMByDirection(tw, 'clockwise');
+      const lCcw = getRunwayLineupDistMByDirection(tw, 'counter_clockwise');
+      copy.lineupDistM_CW = lCw;
+      copy.lineupDistM_CCW = lCcw;
+      copy.lineupDistM = getEffectiveRunwayLineupDistM(tw);
+      if (typeof tw.startDisplacedThresholdM === 'number' && isFinite(tw.startDisplacedThresholdM) && tw.startDisplacedThresholdM >= 0) copy.startDisplacedThresholdM = tw.startDisplacedThresholdM;
+      else delete copy.startDisplacedThresholdM;
+      if (typeof tw.startBlastPadM === 'number' && isFinite(tw.startBlastPadM) && tw.startBlastPadM >= 0) copy.startBlastPadM = tw.startBlastPadM;
+      else delete copy.startBlastPadM;
+      if (typeof tw.endDisplacedThresholdM === 'number' && isFinite(tw.endDisplacedThresholdM) && tw.endDisplacedThresholdM >= 0) copy.endDisplacedThresholdM = tw.endDisplacedThresholdM;
+      else delete copy.endDisplacedThresholdM;
+      if (typeof tw.endBlastPadM === 'number' && isFinite(tw.endBlastPadM) && tw.endBlastPadM >= 0) copy.endBlastPadM = tw.endBlastPadM;
+      else delete copy.endBlastPadM;
+      const rwPts = _persistRunwayPolylinePtsPx(tw);
+      if (rwPts && rwPts.length >= 2) {
+        const lenPx = _polylineLengthPxForLineup(rwPts);
+        const dPx = getEffectiveRunwayLineupDistFromStartM(tw, lenPx);
+        const lp = _pointOnPolylineAtDistPxForLineup(rwPts, dPx);
+        if (lp) copy.lineup_point = { x: lp[0], y: lp[1] };
+        else delete copy.lineup_point;
+      } else {
+        delete copy.lineup_point;
+      }
+      delete copy.dep_point;
+      delete copy.depPointPos;
+    }
+    if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
+    else delete copy.rwySepConfig;
+    return copy;
+  }
+  function partitionTaxiwaysForPersist(list) {
+    const runwayPaths = [];
+    const runwayTaxiways = [];
+    const taxiways = [];
+    (list || []).forEach(function(tw) {
+      const ser = serializeTaxiwayWithEndpoints(tw);
+      const pt = tw.pathType || 'taxiway';
+      delete ser.pathType;
+      if (pt === 'runway') runwayPaths.push(ser);
+      else if (pt === 'runway_exit') runwayTaxiways.push(ser);
+      else {
+        taxiways.push(ser);
+      }
+    });
+    return { runwayPaths: runwayPaths, runwayTaxiways: runwayTaxiways, taxiways: taxiways };
+  }
+  function serializeCurrentLayout() {
+    function pathJunctionsToNetworkJunctions(pts) {
+      const out = [];
+      (pts || []).forEach(function(p) {
+        if (!p) return;
+        if (Array.isArray(p) && p.length >= 2) {
+          out.push({ x: p[0], y: p[1] });
+        } else if (typeof p.x === 'number' && typeof p.y === 'number') {
+          out.push({ x: p.x, y: p.y });
+        }
+      });
+      return out;
+    }
+    let networkJunctions = pathJunctionsToNetworkJunctions(state.pathGraphJunctions);
+    if (!networkJunctions.length && typeof buildPathGraph === 'function') {
+      try {
+        let gj = null;
+        const sig = computeTaxiwaysGraphSig();
+        if (state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === sig) {
+          gj = state.pathGraphCache;
+        } else if (!PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+          gj = buildPathGraph(null);
+        }
+        if (gj) {
+          const cj = (gj && (gj.connectedJunctions || gj.junctions)) || [];
+          networkJunctions = pathJunctionsToNetworkJunctions(cj);
+        }
+      } catch (e) { /* ignore */ }
+    }
+    let edgeExport = [];
+    if (typeof rebuildDerivedGraphEdges === 'function') {
+      try {
+        rebuildDerivedGraphEdges();
+        edgeExport = (state.derivedGraphEdges || []).map(function(ed) {
+          return { id: ed.id, label: ed.label, name: ed.name, fromIdx: ed.fromIdx, toIdx: ed.toIdx };
+        });
+      } catch (e2) { edgeExport = []; }
+    }
+    return {
+      grid: {
+        cols: GRID_COLS,
+        rows: GRID_ROWS,
+        cellSize: CELL_SIZE,
+        showGrid: !!state.showGrid,
+        showImage: !!state.showImage,
+        showRoadWidth: !!state.showRoadWidth,
+        showLayoutMarkers: !!state.showLayoutMarkers,
+        layers: Object.assign({}, state.layers),
+        layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
+      },
+      networkJunctions: networkJunctions,
+      Edge: edgeExport,
+      terminals: makeUniqueNamedCopy(state.terminals, 'name').map(function(t) {
+        const o = Object.assign({}, t);
+        if (Array.isArray(o.vertices)) o.vertices = persistVerticesCellsToXY(o.vertices);
+        return o;
+      }),
+      pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
+      remoteStands: state.remoteStands.slice(),
+      tempStands: (state.tempStands || []).slice(),
+      holdingPoints: (state.holdingPoints || []).slice(),
+      ...(function() {
+        const p = partitionTaxiwaysForPersist(state.taxiways);
+        return { runwayPaths: p.runwayPaths, runwayTaxiways: p.runwayTaxiways, taxiways: p.taxiways };
+      })(),
+      apronLinks: (state.apronLinks || []).map(function(lk) {
+        const o = Object.assign({}, lk);
+        if (Array.isArray(o.midVertices)) o.midVertices = persistVerticesCellsToXY(o.midVertices);
+        return o;
+      }),
+      directionModes: state.directionModes.slice(),
+      flights: state.flights.map(function(f) {
+        const copy = {};
+        const simFlightKeys = [
+          'id',
+          'reg',
+          'airlineCode',
+          'flightNumber',
+          'aircraftType',
+          'code',
           'timeMin',
           'sibtDate',
           'dwellMin',
@@ -1156,175 +1328,3 @@
   function showMarkerTextDraftEditor() {
     const layer = document.getElementById('marker-text-edit-layer');
     const input = document.getElementById('markerTextDraftInput');
-    if (!layer || !input) return;
-    layer.removeAttribute('hidden');
-    layer.setAttribute('aria-hidden', 'false');
-    input.value = '';
-    syncMarkerTextDraftInputPosition();
-    setTimeout(function() {
-      try {
-        input.focus();
-      } catch (e) {}
-    }, 0);
-  }
-  function commitMarkerTextDraft() {
-    const d = state.markerTextDraft;
-    if (!d || !d.active) return;
-    const input = document.getElementById('markerTextDraftInput');
-    const text = input ? String(input.value || '').trim().slice(0, 500) : '';
-    const sx = d.x, sy = d.y;
-    state.markerTextDraft = null;
-    hideMarkerTextDraftEditor();
-    if (text) {
-      pushUndo();
-      state.layoutMarkers.push({ kind: 'text', id: id(), x: sx, y: sy, text: text });
-      syncPanelFromState();
-    }
-    scheduleDraw();
-  }
-  function cancelMarkerTextDraftWithoutCommit() {
-    if (!state.markerTextDraft || !state.markerTextDraft.active) return;
-    state.markerTextDraft = null;
-    hideMarkerTextDraftEditor();
-    scheduleDraw();
-  }
-  function handleMarkerPlacement(wx, wy, shiftKey) {
-    const placePx = worldPointToPixel(wx, wy, shiftKey);
-    const sub = getMarkerSubKindFromPanel();
-    const placeUse = sub === 'area' ? markerAreaSnapWorldToPlacementPx(wx, wy, shiftKey) : placePx;
-    const px = placeUse[0], py = placeUse[1];
-    if (sub !== 'text' && state.markerTextDraft && state.markerTextDraft.active) {
-      commitMarkerTextDraft();
-    }
-    if (sub === 'text') {
-      commitMarkerTextDraft();
-      state.markerTextDraft = { x: px, y: py, active: true };
-      showMarkerTextDraftEditor();
-      scheduleDraw();
-      return;
-    }
-    if (sub === 'ruler') {
-      if (!state.markerRulerDraft) {
-        state.markerRulerDraft = { x: px, y: py };
-        state.markerRulerHoverWorld = [px, py];
-      } else {
-        const x1 = state.markerRulerDraft.x, y1 = state.markerRulerDraft.y;
-        state.markerRulerDraft = null;
-        state.markerRulerHoverWorld = null;
-        const dx = px - x1, dy = py - y1;
-        if (dx * dx + dy * dy < 2.25) return;
-        pushUndo();
-        state.layoutMarkers.push({ kind: 'ruler', id: id(), x1: x1, y1: y1, x2: px, y2: py });
-        syncPanelFromState();
-      }
-      return;
-    }
-    if (sub === 'island') {
-      if (!state.markerIslandDraft) state.markerIslandDraft = { points: [] };
-      const draft = state.markerIslandDraft;
-      const list = draft.points;
-      const closeR = CELL_SIZE * TERM_CLOSE_POLY_CF;
-      const closeR2 = closeR * closeR;
-      if (list.length >= 3) {
-        const c0 = list[0];
-        const dx = px - c0.x, dy = py - c0.y;
-        if (dx * dx + dy * dy <= closeR2) {
-          pushUndo();
-          state.layoutMarkers.push({
-            kind: 'island',
-            id: id(),
-            points: list.map(function(p) { return { x: Number(p.x), y: Number(p.y) }; }),
-            outerWidthM: getMarkerIslandOuterWidthMFromPanel(),
-            innerWidthM: getMarkerIslandInnerWidthMFromPanel(),
-            pavement: getMarkerIslandPavementFromPanel()
-          });
-          state.markerIslandDraft = null;
-          state.markerIslandHoverWorld = null;
-          syncPanelFromState();
-          return;
-        }
-      }
-      list.push({ x: px, y: py });
-      state.markerIslandHoverWorld = [px, py];
-      return;
-    }
-    if (sub === 'area') {
-      if (!state.markerAreaDraft) state.markerAreaDraft = { points: [] };
-      const draftA = state.markerAreaDraft;
-      const listA = draftA.points;
-      const closeRa = CELL_SIZE * TERM_CLOSE_POLY_CF;
-      const closeRa2 = closeRa * closeRa;
-      if (listA.length >= 3) {
-        const c0a = listA[0];
-        const dxa = px - c0a.x, dya = py - c0a.y;
-        if (dxa * dxa + dya * dya <= closeRa2) {
-          pushUndo();
-          state.layoutMarkers = normalizeLayoutMarkerAreaZOrder((state.layoutMarkers || []).concat([{
-            kind: 'area',
-            id: id(),
-            points: listA.map(function(p) { return { x: Number(p.x), y: Number(p.y) }; }),
-          }]));
-          state.markerAreaDraft = null;
-          state.markerAreaHoverWorld = null;
-          syncPanelFromState();
-          return;
-        }
-      }
-      listA.push({ x: px, y: py });
-      state.markerAreaHoverWorld = [px, py];
-      return;
-    }
-    if (sub === 'flight') {
-      const snap = snapWorldToMarkerFlightTaxiway(wx, wy);
-      if (!snap) return;
-      pushUndo();
-      state.layoutMarkers.push({
-        kind: 'flight',
-        id: id(),
-        taxiwayId: snap.taxiwayId,
-        segIndex: snap.segIndex,
-        t: snap.t,
-        aircraftType: getMarkerFlightAircraftTypeFromPanel(),
-        blazerEnabled: false,
-        headingReversed: false,
-        blazerColor: MARKER_BLAZER_COLOR_OPTIONS[0],
-        blazerLeftTrail: [],
-        blazerRightTrail: [],
-      });
-      syncPanelFromState();
-    }
-  }
-
-  function hitTest(wx, wy) {
-    const click = [wx, wy];
-    if (layoutMarkersVisible()) {
-      // Marker flights are drawn on top; prioritize marker picking so clicks don't fall through.
-      const mkTopHit = hitTestLayoutMarker(wx, wy, { skipKind: 'area' });
-      if (mkTopHit) return mkTopHit;
-    }
-    const temps = state.tempStands || [];
-    for (let i = temps.length - 1; i >= 0; i--) {
-      const st = temps[i];
-      if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
-        return { type: 'tempStand', id: st.id, obj: st };
-    }
-    for (let i = state.remoteStands.length - 1; i >= 0; i--) {
-      const st = state.remoteStands[i];
-      if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
-        return { type: 'remote', id: st.id, obj: st };
-    }
-    for (let i = state.pbbStands.length - 1; i >= 0; i--) {
-      const pbb = state.pbbStands[i];
-      const corners = getPBBStandCorners(pbb);
-      if (pointInPolygonXY(click, corners))
-        return { type: 'pbb', id: pbb.id, obj: pbb };
-    }
-    for (let i = state.terminals.length - 1; i >= 0; i--) {
-      const t = state.terminals[i];
-      if (t.closed && t.vertices.length >= 3 && pointInPolygon(click, t.vertices))
-        return { type: 'terminal', id: t.id, obj: t };
-    }
-    const hpHit = hitTestHoldingPoint(wx, wy);
-    if (hpHit) return hpHit;
-    const apronLkHit = hitTestApronLink(wx, wy);
-    if (apronLkHit) return apronLkHit;

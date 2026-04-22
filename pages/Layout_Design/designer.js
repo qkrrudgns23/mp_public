@@ -65,6 +65,131 @@
   const _layoutTier = _tiers.layout || {};
   const _pbbTier = _layoutTier.pbb || {};
   const _remoteTier = _layoutTier.remote || {};
+  const AIRCRAFT_TYPES = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers && INFORMATION.tiers.aircraft && Array.isArray(INFORMATION.tiers.aircraft.types)) ? INFORMATION.tiers.aircraft.types : [];
+  const AIRCRAFT_BY_ID = {};
+  AIRCRAFT_TYPES.forEach(function(a) {
+    const id = String(a.id || a.name || '').trim();
+    if (id) AIRCRAFT_BY_ID[id] = a;
+  });
+  function getAircraftInfoByType(typeId) {
+    return AIRCRAFT_BY_ID[typeId] || null;
+  }
+  function getCodeForAircraft(typeId) {
+    const a = getAircraftInfoByType(typeId);
+    if (a && a.icao != null) return String(a.icao).trim().toUpperCase()[0] || 'C';
+    return 'C';
+  }
+  const ICAO_LETTERS_ORDER = ['A', 'B', 'C', 'D', 'E', 'F'];
+  function normalizeAllowedIcaoCategories(raw) {
+    const hit = {};
+    (Array.isArray(raw) ? raw : []).forEach(function(x) {
+      const c = String(x || '').trim().toUpperCase()[0];
+      if (ICAO_LETTERS_ORDER.indexOf(c) >= 0) hit[c] = true;
+    });
+    return ICAO_LETTERS_ORDER.filter(function(c) { return hit[c]; });
+  }
+  function representativeCategoryFromLetters(letters) {
+    const order = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6 };
+    let best = 'C', bi = 0;
+    normalizeAllowedIcaoCategories(letters).forEach(function(c) {
+      const o = order[c] || 0;
+      if (o > bi) { bi = o; best = c; }
+    });
+    return best;
+  }
+  function representativeCategoryFromAllowedTypes(typeIds) {
+    const order = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6 };
+    let best = 'C', bi = 0;
+    (Array.isArray(typeIds) ? typeIds : []).forEach(function(tid) {
+      const c = getCodeForAircraft(tid);
+      const o = order[c] || 0;
+      if (o > bi) { bi = o; best = c; }
+    });
+    return best;
+  }
+  function aircraftTypeIdsForIcaoLetters(letters) {
+    const set = {};
+    normalizeAllowedIcaoCategories(letters).forEach(function(c) { set[c] = true; });
+    if (!Object.keys(set).length) return [];
+    const out = [];
+    AIRCRAFT_TYPES.forEach(function(a) {
+      const id = String(a.id || a.name || '').trim();
+      if (!id) return;
+      const ic = String(a.icao || 'C').trim().toUpperCase()[0];
+      if (set[ic] && out.indexOf(id) < 0) out.push(id);
+    });
+    return out;
+  }
+  function readIcaoCategoriesFromHost(hostId) {
+    const host = typeof hostId === 'string' ? document.getElementById(hostId) : hostId;
+    if (!host) return [];
+    const sel = [];
+    host.querySelectorAll('input[type="checkbox"].icao-letter-check').forEach(function(cb) {
+      if (cb.checked) sel.push(cb.value);
+    });
+    return normalizeAllowedIcaoCategories(sel);
+  }
+  function applyIcaoCategoriesToHost(hostId, letters) {
+    const host = typeof hostId === 'string' ? document.getElementById(hostId) : hostId;
+    if (!host) return;
+    const set = {};
+    normalizeAllowedIcaoCategories(letters).forEach(function(c) { set[c] = true; });
+    host.querySelectorAll('input[type="checkbox"].icao-letter-check').forEach(function(cb) {
+      cb.checked = !!set[cb.value];
+    });
+  }
+  function normalizeStandCategoryMode(rawMode, fallbackMode) {
+    const mode = String(rawMode || fallbackMode || 'icao').trim().toLowerCase();
+    return mode === 'aircraft' ? 'aircraft' : 'icao';
+  }
+  function standAllowedTypesMatchIcaoExpansion(panelTypes, letters) {
+    const exp = aircraftTypeIdsForIcaoLetters(normalizeAllowedIcaoCategories(letters));
+    const a = normalizeAllowedAircraftTypes(panelTypes).slice().sort().join('\0');
+    const b = exp.slice().sort().join('\0');
+    return a === b;
+  }
+  function deriveCategoryModeFromUnifiedStandPanel(panelTypes, allowedIcaoCategories) {
+    const letters = normalizeAllowedIcaoCategories(allowedIcaoCategories);
+    const pt = normalizeAllowedAircraftTypes(panelTypes);
+    if (!pt.length || standAllowedTypesMatchIcaoExpansion(pt, letters)) return 'icao';
+    return 'aircraft';
+  }
+  function readUnifiedNewStandConstraintFromPanel(icaoHostId, aircraftAccessId, defaultLettersIfEmpty) {
+    let allowedIcaoCategories = readIcaoCategoriesFromHost(icaoHostId);
+    if (!allowedIcaoCategories.length) allowedIcaoCategories = defaultLettersIfEmpty.slice();
+    const expanded = aircraftTypeIdsForIcaoLetters(allowedIcaoCategories);
+    let panelTypes = readCheckedDataItemIds(aircraftAccessId, '.aircraft-type-check');
+    const categoryMode = deriveCategoryModeFromUnifiedStandPanel(panelTypes, allowedIcaoCategories);
+    const allowedAircraftTypes = (!panelTypes.length || categoryMode === 'icao') ? expanded : panelTypes;
+    const category = (categoryMode === 'aircraft' && panelTypes.length)
+      ? representativeCategoryFromAllowedTypes(panelTypes)
+      : representativeCategoryFromLetters(allowedIcaoCategories);
+    return { allowedIcaoCategories: allowedIcaoCategories, allowedAircraftTypes: allowedAircraftTypes, categoryMode: categoryMode, category: category };
+  }
+  function applyUnifiedStandConstraintFromPanelToObject(stand, icaoHostId, aircraftAccessId) {
+    let letters = readIcaoCategoriesFromHost(icaoHostId);
+    if (!letters.length) letters = ['C'];
+    stand.allowedIcaoCategories = letters;
+    const expanded = aircraftTypeIdsForIcaoLetters(letters);
+    let panelTypes = readCheckedDataItemIds(aircraftAccessId, '.aircraft-type-check');
+    stand.categoryMode = deriveCategoryModeFromUnifiedStandPanel(panelTypes, letters);
+    if (!panelTypes.length || stand.categoryMode === 'icao') {
+      stand.allowedAircraftTypes = expanded;
+      stand.category = representativeCategoryFromLetters(letters);
+    } else {
+      stand.allowedAircraftTypes = panelTypes;
+      stand.category = panelTypes.length ? representativeCategoryFromAllowedTypes(panelTypes) : representativeCategoryFromLetters(letters);
+    }
+  }
+  function panelRepresentativeCategoryForNewStand(which) {
+    const hostId = which === 'pbb' ? 'standIcaoCategories' : (which === 'remote' ? 'remoteIcaoCategories' : 'tempStandIcaoCategories');
+    const accId = which === 'pbb' ? 'standAircraftAccess' : (which === 'remote' ? 'remoteAircraftAccess' : 'tempStandAircraftAccess');
+    let letters = readIcaoCategoriesFromHost(hostId);
+    if (!letters.length) letters = ['C'];
+    const types = readCheckedDataItemIds(accId, '.aircraft-type-check');
+    if (types.length && !standAllowedTypesMatchIcaoExpansion(types, letters)) return representativeCategoryFromAllowedTypes(types);
+    return representativeCategoryFromLetters(letters);
+  }
   const _taxiwayTier = _layoutTier.taxiway || {};
   const _runwayPathTier = _layoutTier.runwayPath || {};
   const _runwayExitTier = _layoutTier.runwayExit || {};
@@ -939,12 +1064,11 @@
     const container = document.getElementById(containerId);
     renderChoiceChipList(container, getAircraftConstraintOptions(), selectedIds, 'aircraft-type-check', containerId);
   }
-  function syncStandConstraintVisibility(prefix, mode) {
-    const normMode = normalizeStandCategoryMode(mode, 'icao');
+  function syncStandConstraintVisibility(prefix) {
     const icaoWrap = document.getElementById(prefix + 'IcaoWrap');
     const aircraftWrap = document.getElementById(prefix + 'AircraftWrap');
-    if (icaoWrap) icaoWrap.style.display = normMode === 'icao' ? 'grid' : 'none';
-    if (aircraftWrap) aircraftWrap.style.display = normMode === 'aircraft' ? 'grid' : 'none';
+    if (icaoWrap) icaoWrap.style.display = 'grid';
+    if (aircraftWrap) aircraftWrap.style.display = 'grid';
   }
 
   const state = {
@@ -1503,17 +1627,11 @@
   }
   function applyLayoutImageWidthByAspect(widthM) {
     if (!state.layoutImageOverlay) return;
-    const nextWidth = clampLayoutImageSize(widthM, state.layoutImageOverlay.widthM);
-    const aspect = getLayoutImageAspectRatio(state.layoutImageOverlay);
-    state.layoutImageOverlay.widthM = nextWidth;
-    state.layoutImageOverlay.heightM = clampLayoutImageSize(nextWidth * aspect, state.layoutImageOverlay.heightM);
+    state.layoutImageOverlay.widthM = clampLayoutImageSize(widthM, state.layoutImageOverlay.widthM);
   }
   function applyLayoutImageHeightByAspect(heightM) {
     if (!state.layoutImageOverlay) return;
-    const nextHeight = clampLayoutImageSize(heightM, state.layoutImageOverlay.heightM);
-    const aspect = getLayoutImageAspectRatio(state.layoutImageOverlay);
-    state.layoutImageOverlay.heightM = nextHeight;
-    state.layoutImageOverlay.widthM = clampLayoutImageSize(nextHeight / Math.max(aspect, 1e-9), state.layoutImageOverlay.widthM);
+    state.layoutImageOverlay.heightM = clampLayoutImageSize(heightM, state.layoutImageOverlay.heightM);
   }
   function normalizeLayoutImageOverlay(raw) {
     if (!raw || typeof raw !== 'object' || !raw.dataUrl) return null;
@@ -1703,7 +1821,7 @@
     if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway' || pt === 'apron_taxiway' || pt === 'general_queue_taxiway') ? 'grid' : 'none';
     if (taxiwayTypeWrap) taxiwayTypeWrap.style.display = (pt === 'taxiway' || pt === 'general_queue_taxiway') ? 'grid' : 'none';
     if (runwayMinArrWrap) runwayMinArrWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
-    if (runwayLineupWrap) runwayLineupWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
+    if (runwayLineupWrap) runwayLineupWrap.style.display = (pt === 'runway') ? 'flex' : 'none';
     if (runwayStartDispWrap) runwayStartDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
     if (runwayStartBlastWrap) runwayStartBlastWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
     if (runwayEndDispWrap) runwayEndDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
@@ -3230,8 +3348,11 @@
     const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
     const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
     if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
-    const categoryMode = normalizeStandCategoryMode(document.getElementById('standCategoryMode') ? document.getElementById('standCategoryMode').value : (_pbbTier.defaultCategoryMode || 'icao'), 'icao');
-    const category = document.getElementById('standCategory').value || 'C';
+    const uPbb = readUnifiedNewStandConstraintFromPanel('standIcaoCategories', 'standAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uPbb.categoryMode;
+    const category = uPbb.category;
+    const allowedIcaoCategories = uPbb.allowedIcaoCategories;
+    const panelAllowedTypes = uPbb.allowedAircraftTypes;
     const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
     const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
@@ -3270,7 +3391,8 @@
       category: newPbb.category,
       terminalContactSetbackM: offM,
       categoryMode: categoryMode,
-      allowedAircraftTypes: readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check'),
+      allowedIcaoCategories: allowedIcaoCategories,
+      allowedAircraftTypes: panelAllowedTypes,
       pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
       angleDeg: standAngleDeg,
       apronSiteX: newPbb.apronSiteX,
@@ -3287,10 +3409,12 @@
     if (!isFinite(wx) || !isFinite(wy)) return false;
     const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
     if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) return false;
-    const categoryMode = normalizeStandCategoryMode(document.getElementById('remoteCategoryMode') ? document.getElementById('remoteCategoryMode').value : (_remoteTier.defaultCategoryMode || 'icao'), 'icao');
-    const category = document.getElementById('remoteCategory').value || 'C';
-    const angleInput = document.getElementById('remoteAngle');
-    const angleDeg = normalizeAngleDeg(angleInput ? angleInput.value : 0);
+    const uRm = readUnifiedNewStandConstraintFromPanel('remoteIcaoCategories', 'remoteAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uRm.categoryMode;
+    const category = uRm.category;
+    const allowedIcaoCategoriesR = uRm.allowedIcaoCategories;
+    const panelAllowedTypesR = uRm.allowedAircraftTypes;
+    const angleDeg = 0;
     const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
     const candCorners = getRemoteStandCorners(candidate);
     for (let i = 0; i < state.remoteStands.length; i++) {
@@ -3320,7 +3444,8 @@
       name: baseName,
       angleDeg,
       categoryMode: categoryMode,
-      allowedAircraftTypes: readCheckedDataItemIds('remoteAircraftAccess', '.aircraft-type-check'),
+      allowedIcaoCategories: allowedIcaoCategoriesR,
+      allowedAircraftTypes: panelAllowedTypesR,
       allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
     }));
     return true;
@@ -3329,10 +3454,12 @@
     const snap = snapTempStandOnTaxiwayCenterlines(wx, wy);
     if (!snap) return false;
     const sx = snap.x, sy = snap.y;
-    const categoryMode = normalizeStandCategoryMode(document.getElementById('tempStandCategoryMode') ? document.getElementById('tempStandCategoryMode').value : (_remoteTier.defaultCategoryMode || 'icao'), 'icao');
-    const category = document.getElementById('tempStandCategory') ? document.getElementById('tempStandCategory').value || 'C' : 'C';
-    const angleInput = document.getElementById('tempStandAngle');
-    const angleDeg = normalizeAngleDeg(angleInput ? angleInput.value : 0);
+    const uTs = readUnifiedNewStandConstraintFromPanel('tempStandIcaoCategories', 'tempStandAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uTs.categoryMode;
+    const category = uTs.category;
+    const allowedIcaoCategoriesT = uTs.allowedIcaoCategories;
+    const panelAllowedTypesT = uTs.allowedAircraftTypes;
+    const angleDeg = 0;
     const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };
     const candCorners = getRemoteStandCorners(candidate);
     for (let i = 0; i < (state.tempStands || []).length; i++) {
@@ -3364,7 +3491,8 @@
       name: baseName,
       angleDeg,
       categoryMode: categoryMode,
-      allowedAircraftTypes: readCheckedDataItemIds('tempStandAircraftAccess', '.aircraft-type-check'),
+      allowedIcaoCategories: allowedIcaoCategoriesT,
+      allowedAircraftTypes: panelAllowedTypesT,
       allowedTerminals: Array.from((document.getElementById('tempStandTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
     }));
     return true;
@@ -5676,7 +5804,7 @@
     if (gridImageHeightEl) gridImageHeightEl.value = overlay ? String(overlay.heightM) : String(GRID_LAYOUT_IMAGE_DEFAULTS.heightM);
     if (gridImageColEl) gridImageColEl.value = overlay ? String(overlay.topLeftCol) : String(GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol);
     if (gridImageRowEl) gridImageRowEl.value = overlay ? String(overlay.topLeftRow) : String(GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow);
-    if (gridImageMetaEl) gridImageMetaEl.textContent = overlay ? ('Loaded: ' + (overlay.name || 'Layout image')) : 'No file selected.';
+    if (gridImageMetaEl) gridImageMetaEl.textContent = overlay ? ('Loaded : ' + (overlay.name || 'Layout image')) : 'No file selected';
     if (gridImageClearBtn) gridImageClearBtn.disabled = !overlay;
     if (!overlay && gridImageFileEl) gridImageFileEl.value = '';
     if (state.currentTerminalId && !state.terminals.some(t => t.id === state.currentTerminalId))
@@ -5709,14 +5837,11 @@
     if (state.selectedObject && state.selectedObject.type === 'pbb') {
       const pbb = state.selectedObject.obj;
       const nameInput = document.getElementById('standName');
-      const modeSel = document.getElementById('standCategoryMode');
-      const catSel = document.getElementById('standCategory');
       const lenInput = document.getElementById('pbbLength');
       const angleInput = document.getElementById('standAngle');
       const pbbCountInput = document.getElementById('pbbBridgeCount');
       if (nameInput) nameInput.value = pbb.name || '';
-      if (modeSel) modeSel.value = getStandCategoryMode(pbb);
-      if (catSel) catSel.value = pbb.category || 'C';
+      applyIcaoCategoriesToHost('standIcaoCategories', normalizeAllowedIcaoCategories(pbb.allowedIcaoCategories));
       if (lenInput) {
         let arm = Number(pbb.pbbArmLenM);
         if (!isFinite(arm) || arm <= 0) {
@@ -5733,34 +5858,24 @@
       const boardingHInput = document.getElementById('pbbBoardingHeight');
       if (boardingWInput) boardingWInput.value = String(getPbbBoardingWidthM(pbb));
       if (boardingHInput) boardingHInput.value = String(getPbbBoardingHeightM(pbb));
-      syncStandConstraintVisibility('stand', getStandCategoryMode(pbb));
+      syncStandConstraintVisibility('stand');
       renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb));
     }
     if (state.selectedObject && state.selectedObject.type === 'remote') {
       const st = state.selectedObject.obj;
       const nameInput = document.getElementById('remoteName');
-      const angleInput = document.getElementById('remoteAngle');
-      const modeSel = document.getElementById('remoteCategoryMode');
-      const catSel = document.getElementById('remoteCategory');
       if (nameInput) nameInput.value = st.name || '';
-      if (angleInput) angleInput.value = String(Math.round(normalizeAngleDeg(st.angleDeg != null ? st.angleDeg : 0)));
-      if (modeSel) modeSel.value = getStandCategoryMode(st);
-      if (catSel) catSel.value = st.category || 'C';
-      syncStandConstraintVisibility('remote', getStandCategoryMode(st));
+      applyIcaoCategoriesToHost('remoteIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
+      syncStandConstraintVisibility('remote');
       renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st));
       renderRemoteTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
     }
     if (state.selectedObject && state.selectedObject.type === 'tempStand') {
       const st = state.selectedObject.obj;
       const nameInput = document.getElementById('tempStandName');
-      const angleInput = document.getElementById('tempStandAngle');
-      const modeSel = document.getElementById('tempStandCategoryMode');
-      const catSel = document.getElementById('tempStandCategory');
       if (nameInput) nameInput.value = st.name || '';
-      if (angleInput) angleInput.value = String(Math.round(normalizeAngleDeg(st.angleDeg != null ? st.angleDeg : 0)));
-      if (modeSel) modeSel.value = getStandCategoryMode(st);
-      if (catSel) catSel.value = st.category || 'C';
-      syncStandConstraintVisibility('tempStand', getStandCategoryMode(st));
+      applyIcaoCategoriesToHost('tempStandIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
+      syncStandConstraintVisibility('tempStand');
       renderAircraftConstraintChoices('tempStandAircraftAccess', getStandAllowedAircraftTypes(st));
       renderTempStandTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
     }
@@ -5882,26 +5997,32 @@
         const terminalNameInput = document.getElementById('terminalName');
         if (terminalNameInput && rm === 'terminal') terminalNameInput.value = getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, null);
       }
-      const standModeSel = document.getElementById('standCategoryMode');
-      if (standModeSel) standModeSel.value = normalizeStandCategoryMode(_pbbTier.defaultCategoryMode, 'icao');
-      syncStandConstraintVisibility('stand', standModeSel ? standModeSel.value : 'icao');
-      renderAircraftConstraintChoices('standAircraftAccess', []);
-      const remoteModeSel = document.getElementById('remoteCategoryMode');
-      if (remoteModeSel) remoteModeSel.value = normalizeStandCategoryMode(_remoteTier.defaultCategoryMode, 'icao');
-      syncStandConstraintVisibility('remote', remoteModeSel ? remoteModeSel.value : 'icao');
-      renderAircraftConstraintChoices('remoteAircraftAccess', []);
-      renderRemoteTerminalAccessChoices([]);
-      const tempModeSel = document.getElementById('tempStandCategoryMode');
-      if (tempModeSel) tempModeSel.value = normalizeStandCategoryMode(_remoteTier.defaultCategoryMode, 'icao');
-      syncStandConstraintVisibility('tempStand', tempModeSel ? tempModeSel.value : 'icao');
-      renderAircraftConstraintChoices('tempStandAircraftAccess', []);
-      renderTempStandTerminalAccessChoices([]);
+      const skipStandPanelIdleReset = state.selectedObject && (
+        state.selectedObject.type === 'pbb' ||
+        state.selectedObject.type === 'remote' ||
+        state.selectedObject.type === 'tempStand'
+      );
+      if (!skipStandPanelIdleReset) {
+        applyIcaoCategoriesToHost('standIcaoCategories', ['C']);
+        syncStandConstraintVisibility('stand');
+        renderAircraftConstraintChoices('standAircraftAccess', aircraftTypeIdsForIcaoLetters(['C']));
+        applyIcaoCategoriesToHost('remoteIcaoCategories', ['C']);
+        syncStandConstraintVisibility('remote');
+        renderAircraftConstraintChoices('remoteAircraftAccess', aircraftTypeIdsForIcaoLetters(['C']));
+        renderRemoteTerminalAccessChoices([]);
+        applyIcaoCategoriesToHost('tempStandIcaoCategories', ['C']);
+        syncStandConstraintVisibility('tempStand');
+        renderAircraftConstraintChoices('tempStandAircraftAccess', aircraftTypeIdsForIcaoLetters(['C']));
+        renderTempStandTerminalAccessChoices([]);
+      }
       const tempStandNameInput = document.getElementById('tempStandName');
       if (tempStandNameInput && rm === 'tempStand' && !(state.selectedObject && state.selectedObject.type === 'tempStand')) tempStandNameInput.value = '';
       const standNameInputIdle = document.getElementById('standName');
       if (standNameInputIdle && rm === 'pbb' && !(state.selectedObject && state.selectedObject.type === 'pbb')) standNameInputIdle.value = '';
       const remoteNameInputIdle = document.getElementById('remoteName');
       if (remoteNameInputIdle && rm === 'remote' && !(state.selectedObject && state.selectedObject.type === 'remote')) remoteNameInputIdle.value = '';
+      const taxiwayNameInputIdle = document.getElementById('taxiwayName');
+      if (taxiwayNameInputIdle && isPathLayoutMode(rm) && !(state.selectedObject && state.selectedObject.type === 'taxiway')) taxiwayNameInputIdle.value = '';
       const apronLinkNameInput = document.getElementById('apronLinkName');
       if (apronLinkNameInput && rm === 'apronTaxiway') apronLinkNameInput.value = '';
       const edgeNameInput = document.getElementById('edgeName');
@@ -5960,9 +6081,7 @@
           pbb.name = rawSn;
         }
       }
-      pbb.categoryMode = normalizeStandCategoryMode(el('standCategoryMode') ? el('standCategoryMode').value : pbb.categoryMode, _pbbTier.defaultCategoryMode || 'icao');
-      if (el('standCategory')) pbb.category = el('standCategory').value || 'C';
-      pbb.allowedAircraftTypes = readCheckedDataItemIds('standAircraftAccess', '.aircraft-type-check');
+      applyUnifiedStandConstraintFromPanelToObject(pbb, 'standIcaoCategories', 'standAircraftAccess');
     }
     if (state.selectedObject && state.selectedObject.type === 'remote') {
       var st = state.selectedObject.obj;
@@ -5975,9 +6094,7 @@
           st.name = rawRn;
         }
       }
-      st.categoryMode = normalizeStandCategoryMode(el('remoteCategoryMode') ? el('remoteCategoryMode').value : st.categoryMode, _remoteTier.defaultCategoryMode || 'icao');
-      if (el('remoteCategory')) st.category = el('remoteCategory').value || 'C';
-      st.allowedAircraftTypes = readCheckedDataItemIds('remoteAircraftAccess', '.aircraft-type-check');
+      applyUnifiedStandConstraintFromPanelToObject(st, 'remoteIcaoCategories', 'remoteAircraftAccess');
       const accWrap = document.getElementById('remoteTerminalAccess');
       if (accWrap) {
         const checks = accWrap.querySelectorAll('.remote-term-check');
@@ -6002,9 +6119,7 @@
           tst.name = rawTn;
         }
       }
-      tst.categoryMode = normalizeStandCategoryMode(el('tempStandCategoryMode') ? el('tempStandCategoryMode').value : tst.categoryMode, _remoteTier.defaultCategoryMode || 'icao');
-      if (el('tempStandCategory')) tst.category = el('tempStandCategory').value || 'C';
-      tst.allowedAircraftTypes = readCheckedDataItemIds('tempStandAircraftAccess', '.aircraft-type-check');
+      applyUnifiedStandConstraintFromPanelToObject(tst, 'tempStandIcaoCategories', 'tempStandAircraftAccess');
       const tempAccWrap = document.getElementById('tempStandTerminalAccess');
       if (tempAccWrap) {
         const checks = tempAccWrap.querySelectorAll('.remote-term-check');
@@ -6141,7 +6256,7 @@
       syncPathFieldVisibilityForPathType(pt);
       if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
         const nameInput = document.getElementById('taxiwayName');
-        if (nameInput) nameInput.value = getDefaultPathName(pt);
+        if (nameInput) nameInput.value = '';
         const widthInput = document.getElementById('taxiwayWidth');
         if (widthInput) {
           widthInput.value = pt === 'runway'
@@ -6438,27 +6553,28 @@
       draw();
     }
   });
-  document.getElementById('standCategory').addEventListener('change', function() {
-    const val = this.value || 'C';
-    if (state.selectedObject && state.selectedObject.type === 'pbb') {
-      state.selectedObject.obj.category = val;
-      rebuildPbbBridgeGeometry(state.selectedObject.obj);
+  const standIcaoCategoriesHost = document.getElementById('standIcaoCategories');
+  if (standIcaoCategoriesHost) {
+    standIcaoCategoriesHost.addEventListener('change', function(ev) {
+      const t = ev.target;
+      if (!t || !t.classList.contains('icao-letter-check')) return;
+      if (!state.selectedObject || state.selectedObject.type !== 'pbb') return;
+      const pbb = state.selectedObject.obj;
+      let letters = readIcaoCategoriesFromHost('standIcaoCategories');
+      if (!letters.length) {
+        letters = ['C'];
+        applyIcaoCategoriesToHost('standIcaoCategories', letters);
+      }
+      pbb.categoryMode = 'icao';
+      pbb.allowedIcaoCategories = letters;
+      pbb.category = representativeCategoryFromLetters(letters);
+      pbb.allowedAircraftTypes = aircraftTypeIdsForIcaoLetters(letters);
+      renderAircraftConstraintChoices('standAircraftAccess', pbb.allowedAircraftTypes);
+      rebuildPbbBridgeGeometry(pbb);
       updateObjectInfo();
       renderObjectList();
       draw();
       update3DSceneWhenVisible();
-    }
-  });
-  const standCategoryModeEl = document.getElementById('standCategoryMode');
-  if (standCategoryModeEl) {
-    standCategoryModeEl.addEventListener('change', function() {
-      syncStandConstraintVisibility('stand', this.value);
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        state.selectedObject.obj.categoryMode = normalizeStandCategoryMode(this.value, _pbbTier.defaultCategoryMode || 'icao');
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-      }
     });
   }
   const pbbLengthInputEl = document.getElementById('pbbLength');
@@ -6555,7 +6671,9 @@
       if (!target || !target.classList.contains('aircraft-type-check')) return;
       syncChoiceChipStates(standAircraftAccessEl);
       if (!state.selectedObject || state.selectedObject.type !== 'pbb') return;
-      state.selectedObject.obj.allowedAircraftTypes = readCheckedDataItemIds(standAircraftAccessEl, '.aircraft-type-check');
+      const pbbAc = state.selectedObject.obj;
+      applyUnifiedStandConstraintFromPanelToObject(pbbAc, 'standIcaoCategories', 'standAircraftAccess');
+      if (pbbAc.categoryMode === 'icao') renderAircraftConstraintChoices('standAircraftAccess', pbbAc.allowedAircraftTypes);
       updateObjectInfo();
       renderObjectList();
       draw();
@@ -6599,43 +6717,27 @@
       }
     });
   }
-  const remoteCategorySelect = document.getElementById('remoteCategory');
-  if (remoteCategorySelect) {
-    remoteCategorySelect.addEventListener('change', function() {
-      const val = this.value || 'C';
-      if (state.selectedObject && state.selectedObject.type === 'remote') {
-        state.selectedObject.obj.category = val;
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
+  const remoteIcaoCategoriesHost = document.getElementById('remoteIcaoCategories');
+  if (remoteIcaoCategoriesHost) {
+    remoteIcaoCategoriesHost.addEventListener('change', function(ev) {
+      const t = ev.target;
+      if (!t || !t.classList.contains('icao-letter-check')) return;
+      if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
+      const st = state.selectedObject.obj;
+      let letters = readIcaoCategoriesFromHost('remoteIcaoCategories');
+      if (!letters.length) {
+        letters = ['C'];
+        applyIcaoCategoriesToHost('remoteIcaoCategories', letters);
       }
-    });
-  }
-  const remoteCategoryModeEl = document.getElementById('remoteCategoryMode');
-  if (remoteCategoryModeEl) {
-    remoteCategoryModeEl.addEventListener('change', function() {
-      syncStandConstraintVisibility('remote', this.value);
-      if (state.selectedObject && state.selectedObject.type === 'remote') {
-        state.selectedObject.obj.categoryMode = normalizeStandCategoryMode(this.value, _remoteTier.defaultCategoryMode || 'icao');
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-      }
-    });
-  }
-  const remoteAngleInput = document.getElementById('remoteAngle');
-  if (remoteAngleInput) {
-    remoteAngleInput.addEventListener('change', function() {
-      const nextDeg = normalizeAngleDeg(this.value);
-      this.value = String(Math.round(nextDeg));
-      if (state.selectedObject && state.selectedObject.type === 'remote') {
-        state.selectedObject.obj.angleDeg = nextDeg;
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
+      st.categoryMode = 'icao';
+      st.allowedIcaoCategories = letters;
+      st.category = representativeCategoryFromLetters(letters);
+      st.allowedAircraftTypes = aircraftTypeIdsForIcaoLetters(letters);
+      renderAircraftConstraintChoices('remoteAircraftAccess', st.allowedAircraftTypes);
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+      update3DSceneWhenVisible();
     });
   }
 
@@ -6669,7 +6771,9 @@
       if (!target || !target.classList.contains('aircraft-type-check')) return;
       syncChoiceChipStates(remoteAircraftAccessEl);
       if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
-      state.selectedObject.obj.allowedAircraftTypes = readCheckedDataItemIds(remoteAircraftAccessEl, '.aircraft-type-check');
+      const stAc = state.selectedObject.obj;
+      applyUnifiedStandConstraintFromPanelToObject(stAc, 'remoteIcaoCategories', 'remoteAircraftAccess');
+      if (stAc.categoryMode === 'icao') renderAircraftConstraintChoices('remoteAircraftAccess', stAc.allowedAircraftTypes);
       updateObjectInfo();
       renderObjectList();
       draw();
@@ -6694,43 +6798,27 @@
       }
     });
   }
-  const tempStandCategorySelect = document.getElementById('tempStandCategory');
-  if (tempStandCategorySelect) {
-    tempStandCategorySelect.addEventListener('change', function() {
-      const val = this.value || 'C';
-      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-        state.selectedObject.obj.category = val;
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
+  const tempStandIcaoCategoriesHost = document.getElementById('tempStandIcaoCategories');
+  if (tempStandIcaoCategoriesHost) {
+    tempStandIcaoCategoriesHost.addEventListener('change', function(ev) {
+      const t = ev.target;
+      if (!t || !t.classList.contains('icao-letter-check')) return;
+      if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
+      const st = state.selectedObject.obj;
+      let letters = readIcaoCategoriesFromHost('tempStandIcaoCategories');
+      if (!letters.length) {
+        letters = ['C'];
+        applyIcaoCategoriesToHost('tempStandIcaoCategories', letters);
       }
-    });
-  }
-  const tempStandCategoryModeEl = document.getElementById('tempStandCategoryMode');
-  if (tempStandCategoryModeEl) {
-    tempStandCategoryModeEl.addEventListener('change', function() {
-      syncStandConstraintVisibility('tempStand', this.value);
-      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-        state.selectedObject.obj.categoryMode = normalizeStandCategoryMode(this.value, _remoteTier.defaultCategoryMode || 'icao');
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-      }
-    });
-  }
-  const tempStandAngleInput = document.getElementById('tempStandAngle');
-  if (tempStandAngleInput) {
-    tempStandAngleInput.addEventListener('change', function() {
-      const nextDeg = normalizeAngleDeg(this.value);
-      this.value = String(Math.round(nextDeg));
-      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-        state.selectedObject.obj.angleDeg = nextDeg;
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
+      st.categoryMode = 'icao';
+      st.allowedIcaoCategories = letters;
+      st.category = representativeCategoryFromLetters(letters);
+      st.allowedAircraftTypes = aircraftTypeIdsForIcaoLetters(letters);
+      renderAircraftConstraintChoices('tempStandAircraftAccess', st.allowedAircraftTypes);
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+      update3DSceneWhenVisible();
     });
   }
   const tempStandTerminalAccessEl = document.getElementById('tempStandTerminalAccess');
@@ -6763,7 +6851,9 @@
       if (!target || !target.classList.contains('aircraft-type-check')) return;
       syncChoiceChipStates(tempStandAircraftAccessEl);
       if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
-      state.selectedObject.obj.allowedAircraftTypes = readCheckedDataItemIds(tempStandAircraftAccessEl, '.aircraft-type-check');
+      const tstAc = state.selectedObject.obj;
+      applyUnifiedStandConstraintFromPanelToObject(tstAc, 'tempStandIcaoCategories', 'tempStandAircraftAccess');
+      if (tstAc.categoryMode === 'icao') renderAircraftConstraintChoices('tempStandAircraftAccess', tstAc.allowedAircraftTypes);
       updateObjectInfo();
       renderObjectList();
       draw();
@@ -7293,27 +7383,34 @@
     return nearest;
   }
 
+  function allStandsForFlightAssignment() {
+    return (state.pbbStands || []).concat(state.remoteStands || []).concat(state.tempStands || []);
+  }
+
   function flightCanUseStand(f, stand) {
     if (!stand) return true;
     const mode = getStandCategoryMode(stand);
-    if (mode === 'aircraft') {
-      const allowedTypes = getStandAllowedAircraftTypes(stand);
+    const allowedTypes = getStandAllowedAircraftTypes(stand);
+    if (allowedTypes.length) {
       const flightType = String(f.aircraftType || '').trim();
-      if (!allowedTypes.length || !flightType || allowedTypes.indexOf(flightType) < 0) return false;
+      if (!flightType || allowedTypes.indexOf(flightType) < 0) return false;
+    } else if (mode === 'aircraft') {
+      return false;
     } else {
       const order = { A:1,B:2,C:3,D:4,E:5,F:6 };
-      const fCode = (f.code || 'C').toUpperCase();
-      const sCat = (stand.category || 'F').toUpperCase();
+      const fCode = String(f.code || 'C').toUpperCase()[0];
+      const sCat = String(stand.category || 'F').toUpperCase()[0];
       const fc = order[fCode] || 99;
       const sc = order[sCat] || 0;
       if (fc > sc) return false;
     }
     const ft = (f.terminalId || (f.token && f.token.terminalId)) || null;
     if (!ft) return true;
-    const isRemote = (state.remoteStands || []).some(function(r) { return r.id === stand.id; });
-    if (isRemote) {
+    const isRemoteLike = (state.remoteStands || []).some(function(r) { return r.id === stand.id; })
+      || (state.tempStands || []).some(function(r) { return r.id === stand.id; });
+    if (isRemoteLike) {
       const allowed = Array.isArray(stand.allowedTerminals) ? stand.allowedTerminals : [];
-      if (allowed.length) return allowed.includes(ft);
+      if (allowed.length) return allowed.indexOf(ft) >= 0;
     }
     const term = getTerminalForStand(stand);
     const standTermId = term ? term.id : null;
@@ -7324,7 +7421,7 @@
   function assignStandToFlight(f, standId) {
     if (!f) return false;
     if (standId) {
-      const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
+      const allStands = allStandsForFlightAssignment();
       const stand = allStands.find(function(s) { return s.id === standId; });
       if (!flightCanUseStand(f, stand)) {
         alert("Stand constraints or selected building do not match this aircraft, so it cannot be assigned.");
@@ -7357,7 +7454,12 @@
     const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
     allStands.forEach(stand => {
       if (flight && !flightCanUseStand(flight, stand)) return;
-      if (!flight && code && getStandCategoryMode(stand) === 'icao' && stand.category && stand.category !== code) return;
+      if (!flight && code && getStandCategoryMode(stand) === 'icao') {
+        const c = String(code || '').toUpperCase()[0];
+        const letters = normalizeAllowedIcaoCategories(stand.allowedIcaoCategories);
+        if (letters.length && letters.indexOf(c) < 0) return;
+        if (!letters.length && stand.category && String(stand.category).toUpperCase()[0] !== c) return;
+      }
       const hasLink = state.apronLinks.some(lk => lk.pbbId === stand.id);
       if (!hasLink) return;
       list.push(stand);
@@ -7372,7 +7474,7 @@
   }
 
   function resolveStand(flight) {
-    const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
+    const allStands = allStandsForFlightAssignment();
     if (flight.standId) {
       return allStands.find(s => s.id === flight.standId) || null;
     }
@@ -7798,7 +7900,7 @@
       f.terminalId = val;
       f.token.terminalId = val;
       if (f.standId) {
-        var allStands = (st.pbbStands || []).concat(st.remoteStands || []);
+        var allStands = (st.pbbStands || []).concat(st.remoteStands || []).concat(st.tempStands || []);
         var stand = allStands.find(function(s) { return s.id === f.standId; });
         if (stand) {
           var term = getTerminalForStand(stand);
@@ -8889,7 +8991,7 @@
       return;
     }
     const flights = state.flights.slice();
-    const stands = (state.pbbStands || []).concat(state.remoteStands || []);
+    const stands = allStandsForFlightAssignment();
     if (!flights.length) {
       state.allocGanttWindowStartMin = null;
       ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
@@ -9486,7 +9588,7 @@
   var _allocGanttPreviewLastKey = '';
   function _allocGanttDragStandPreviewAllowed(f, standId) {
     if (!standId) return true;
-    var allStands = (state.pbbStands || []).concat(state.remoteStands || []);
+    var allStands = allStandsForFlightAssignment();
     var stand = allStands.find(function(s) { return s.id === standId; });
     if (!stand) return false;
     return typeof flightCanUseStand === 'function' ? flightCanUseStand(f, stand) : true;
@@ -9740,22 +9842,23 @@
       const tt = termsForLabel.find(function(t) { return t.id === id; });
       return tt ? tt.name : (id || 'Building');
     }
-    const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
+    const allStands = allStandsForFlightAssignment();
     (state.flights || []).forEach(function(f) {
       if (!f || !f.standId) return;
       const stand = allStands.find(function(s) { return s.id === f.standId; });
       if (!stand) return;
-      const isRemote = (state.remoteStands || []).some(function(r) { return r.id === stand.id; });
-      if (!isRemote) return;
+      const isRemoteOrTemp = (state.remoteStands || []).some(function(r) { return r.id === stand.id; })
+        || (state.tempStands || []).some(function(r) { return r.id === stand.id; });
+      if (!isRemoteOrTemp) return;
       const termId = (f.token && f.token.terminalId) || null;
       if (!termId) return;
       const allowed = Array.isArray(stand.allowedTerminals) ? stand.allowedTerminals : [];
       if (allowed.length && !allowed.includes(termId)) {
         const flightLabel = f.id || f.flightNo || f.reg || '';
-        const standLabel = stand.name || 'Remote';
+        const standLabel = stand.name || 'Stand';
         const termLabel = termNameById(termId);
         const allowedLabel = allowed.map(termNameById).join(', ');
-        msgs.push('Flight ' + (flightLabel || '') + ' building setting(' + termLabel + ') does not match Remote stand ' + standLabel + ' available building settings (' + allowedLabel + ').');
+        msgs.push('Flight ' + (flightLabel || '') + ' building setting(' + termLabel + ') does not match stand ' + standLabel + ' available building settings (' + allowedLabel + ').');
       }
     });
     return msgs;
@@ -9906,7 +10009,7 @@
   }
 
   function kpiStandLabelById(standId) {
-    const stands = (state.pbbStands || []).concat(state.remoteStands || []);
+    const stands = allStandsForFlightAssignment();
     const stand = stands.find(function(s) { return s && s.id === standId; });
     return stand ? ((stand.name && stand.name.trim()) || stand.id || 'Stand') : 'Unassigned';
   }
@@ -14910,16 +15013,6 @@
     window.requestAnimationFrame(tick);
   }
 
-  const AIRCRAFT_TYPES = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers && INFORMATION.tiers.aircraft && Array.isArray(INFORMATION.tiers.aircraft.types)) ? INFORMATION.tiers.aircraft.types : [];
-  const AIRCRAFT_BY_ID = {};
-  AIRCRAFT_TYPES.forEach(a => { AIRCRAFT_BY_ID[a.id || a.name] = a; });
-  function getAircraftInfoByType(typeId) {
-    return AIRCRAFT_BY_ID[typeId] || null;
-  }
-  function getCodeForAircraft(typeId) {
-    const a = getAircraftInfoByType(typeId);
-    return (a && a.icao) ? a.icao : 'C';
-  }
   function populateAircraftSelect(sel) {
     if (!sel) return;
     const opts = AIRCRAFT_TYPES.map(a => '<option value="' + escapeHtml(String(a.id || a.name || '')) + '">' + escapeHtml(a.name || a.id || '') + '</option>').join('');
@@ -14940,10 +15033,6 @@
       return { id: id, label: label || id };
     }).filter(function(item) { return !!item.id; });
   }
-  function normalizeStandCategoryMode(rawMode, fallbackMode) {
-    const mode = String(rawMode || fallbackMode || 'icao').trim().toLowerCase();
-    return mode === 'aircraft' ? 'aircraft' : 'icao';
-  }
   function normalizeAllowedAircraftTypes(rawList) {
     const valid = new Set(getAircraftConstraintOptions().map(function(item) { return item.id; }));
     const out = [];
@@ -14956,11 +15045,40 @@
   }
   function getStandCategoryMode(stand) {
     const isRemote = !!(stand && stand.x != null && stand.y != null && stand.x1 == null && stand.y1 == null);
-    const fallback = isRemote ? (_remoteTier.defaultCategoryMode || 'icao') : (_pbbTier.defaultCategoryMode || 'icao');
+    const fallback = isRemote ? (_remoteTier.defaultCategoryMode || 'aircraft') : (_pbbTier.defaultCategoryMode || 'aircraft');
     return normalizeStandCategoryMode(stand && stand.categoryMode, fallback);
   }
   function getStandAllowedAircraftTypes(stand) {
     return normalizeAllowedAircraftTypes(stand && stand.allowedAircraftTypes);
+  }
+  function ensureStandIcaoAndTypesCoherent(stand, defaultCategoryModeFallback) {
+    if (!stand || typeof stand !== 'object') return;
+    let letters = normalizeAllowedIcaoCategories(stand.allowedIcaoCategories);
+    if (!letters.length) {
+      const one = String(stand.category || 'C').trim().toUpperCase()[0] || 'C';
+      const idx = ICAO_LETTERS_ORDER.indexOf(one);
+      if (idx >= 0) letters = ICAO_LETTERS_ORDER.slice(0, idx + 1);
+      else letters = ['C'];
+    }
+    stand.allowedIcaoCategories = letters;
+    const expanded = aircraftTypeIdsForIcaoLetters(letters);
+    let types = normalizeAllowedAircraftTypes(stand.allowedAircraftTypes);
+    if (!types.length) {
+      stand.categoryMode = 'icao';
+      stand.allowedAircraftTypes = expanded;
+      stand.category = representativeCategoryFromLetters(letters);
+      return;
+    }
+    stand.categoryMode = deriveCategoryModeFromUnifiedStandPanel(types, letters);
+    if (stand.categoryMode === 'icao') {
+      stand.allowedAircraftTypes = expanded;
+      stand.category = representativeCategoryFromLetters(letters);
+    } else {
+      stand.allowedAircraftTypes = types;
+      if (types.length) stand.category = representativeCategoryFromAllowedTypes(types);
+      else if (!stand.category) stand.category = 'C';
+    }
+    stand.categoryMode = normalizeStandCategoryMode(stand.categoryMode, defaultCategoryModeFallback);
   }
   function getPbbLengthMeters(pbb) {
     const x1 = Number(pbb && pbb.x1), y1 = Number(pbb && pbb.y1);
@@ -14975,6 +15093,12 @@
   function getPbbAngleDeg(pbb) {
     if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg);
     return normalizeAngleDeg(getPBBStandAngle(pbb) * 180 / Math.PI);
+  }
+  function getContactStandAttachedBuildingLabel(pbb) {
+    const a = getPbbAnchorPx(pbb);
+    const proj = getClosestTerminalEdgePoint(a[0], a[1]);
+    if (proj && proj.term) return (proj.term.name || '').trim() || 'Building';
+    return '—';
   }
   function getStandConnectionPx(stand) {
     if (!stand) return [0, 0];
@@ -15149,8 +15273,6 @@
   }
   function normalizePbbStandObject(rawPbb) {
     const pbb = Object.assign({}, rawPbb || {});
-    pbb.categoryMode = getStandCategoryMode(pbb);
-    pbb.allowedAircraftTypes = getStandAllowedAircraftTypes(pbb);
     pbb.pbbCount = Math.max(1, Math.min(8, parseInt(pbb.pbbCount != null ? pbb.pbbCount : (_pbbTier.defaultBridgeCount || 1), 10) || 1));
     pbb.boardingWidthM = (pbb.boardingWidthM != null && isFinite(Number(pbb.boardingWidthM)) && Number(pbb.boardingWidthM) > 0)
       ? Number(pbb.boardingWidthM) : 5;
@@ -15174,13 +15296,15 @@
       }
       rebuildPbbBridgeGeometry(pbb);
     }
+    ensureStandIcaoAndTypesCoherent(pbb, _pbbTier.defaultCategoryMode || 'aircraft');
+    pbb.allowedAircraftTypes = normalizeAllowedAircraftTypes(pbb.allowedAircraftTypes);
     return pbb;
   }
   function normalizeRemoteStandObject(rawStand) {
     const stand = Object.assign({}, rawStand || {});
-    stand.categoryMode = getStandCategoryMode(stand);
-    stand.allowedAircraftTypes = getStandAllowedAircraftTypes(stand);
     stand.angleDeg = normalizeAngleDeg(stand.angleDeg != null ? stand.angleDeg : 0);
+    ensureStandIcaoAndTypesCoherent(stand, _remoteTier.defaultCategoryMode || 'aircraft');
+    stand.allowedAircraftTypes = normalizeAllowedAircraftTypes(stand.allowedAircraftTypes);
     return stand;
   }
   function normalizeTempStandObject(rawStand) {
@@ -16324,7 +16448,7 @@
     }
     const nameInputEl = document.getElementById('taxiwayName');
     const defaultPathName = getDefaultPathName(pathType);
-    if (hadSelection && nameInputEl) nameInputEl.value = defaultPathName;
+    if (hadSelection && nameInputEl) nameInputEl.value = '';
     const rawName = nameInputEl ? nameInputEl.value.trim() : '';
     const nameBase = rawName || defaultPathName;
     const inputWidth = Number(document.getElementById('taxiwayWidth').value);
@@ -16694,12 +16818,21 @@
         if (seen['pbb_' + pbb.id]) return;
         seen['pbb_' + pbb.id] = true;
         const baseName = (pbb.name && pbb.name.trim()) ? pbb.name.trim() : ('Contact Stand ' + (idx + 1));
+        const conn = getStandConnectionPx(pbb);
+        const pcol = conn[0] / CELL_SIZE;
+        const prow = conn[1] / CELL_SIZE;
+        const bLabel = getContactStandAttachedBuildingLabel(pbb);
         items.push({
           type: 'pbb',
           id: pbb.id,
           title: uniqueTitle('Contact Stand | ' + baseName),
           tag: 'Category ' + (pbb.category || 'C'),
-          details: 'Edge cell: (' + pbb.edgeCol + ',' + pbb.edgeRow + ')'
+          details:
+            'Category: ' + (pbb.category || '—') +
+            '<br>Position: (' + pcol.toFixed(1) + ',' + prow.toFixed(1) + ')' +
+            '<br>Angle: ' + getPbbAngleDeg(pbb).toFixed(0) + '°' +
+            '<br>Building: ' + bLabel +
+            '<br>Edge cell: (' + pbb.edgeCol + ',' + pbb.edgeRow + ')'
         });
       });
     } else if (mode === 'remote') {
@@ -17173,7 +17306,19 @@
           '<br>Total floor area: ' + totalArea.toFixed(1) + ' m²' +
           '<br>Departure capacity: ' + dep + '<br>Arrival capacity: ' + arr;
       } else if (state.selectedObject.type === 'pbb') {
-        objectInfoEl.innerHTML = '<strong>Contact Stand</strong><br>Name: ' + (o.name || '—') + '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) + '<br>PBB count: ' + Math.max(1, parseInt(o.pbbCount, 10) || 1) + '<br>Edge cell: (' + o.edgeCol + ',' + o.edgeRow + ')';
+        const pConn = getStandConnectionPx(o);
+        const pCell = [pConn[0] / CELL_SIZE, pConn[1] / CELL_SIZE];
+        const pbbBuilding = getContactStandAttachedBuildingLabel(o);
+        objectInfoEl.innerHTML =
+          '<strong>Contact Stand</strong>' +
+          '<br>Name: ' + (o.name || '—') +
+          '<br>Constraint: ' + (getStandCategoryMode(o) === 'aircraft' ? 'Aircraft Type' : ('ICAO ' + (o.category || '—'))) +
+          '<br>Category: ' + (o.category || '—') +
+          '<br>Cell: (' + pCell[0].toFixed(1) + ',' + pCell[1].toFixed(1) + ')' +
+          '<br>Angle: ' + getPbbAngleDeg(o).toFixed(0) + '°' +
+          '<br>Building: ' + pbbBuilding +
+          '<br>PBB count: ' + Math.max(1, parseInt(o.pbbCount, 10) || 1) +
+          '<br>Edge cell: (' + o.edgeCol + ',' + o.edgeRow + ')';
       } else if (state.selectedObject.type === 'remote') {
         let allowedLabel = 'All (by proximity)';
         if (Array.isArray(o.allowedTerminals) && o.allowedTerminals.length) {
@@ -17725,7 +17870,7 @@
             }
             if (term.closed) ctx.closePath();
             ctx.stroke();
-            if (!interactiveLite && term.closed && term.vertices.length > 0) {
+            if (!interactiveLite && term.closed && term.vertices.length > 0 && normalizeBuildingType(term.buildingType) !== 'hanger') {
               let cx = 0, cy = 0;
               term.vertices.forEach(v => {
                 const [px, py] = cellToPixel(v.col, v.row);
@@ -19271,10 +19416,10 @@
     const mode = settingModeSelect.value;
     if (mode === 'remote' && state.previewRemote) {
       const cx = Number(state.previewRemote.x), cy = Number(state.previewRemote.y);
-      const category = document.getElementById('remoteCategory').value || 'C';
+      const category = panelRepresentativeCategoryForNewStand('remote');
       const depPr = getStandDepthMeters(category);
       const widPr = getStandWidthMeters(category);
-      const angle = normalizeAngleDeg(document.getElementById('remoteAngle') ? document.getElementById('remoteAngle').value : 0) * Math.PI / 180;
+      const angle = 0;
       const overlap = state.previewRemote.overlap;
       ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.25)';
       ctx.save();
@@ -19288,10 +19433,10 @@
     }
     if (mode === 'tempStand' && state.previewTempStand) {
       const cx = Number(state.previewTempStand.x), cy = Number(state.previewTempStand.y);
-      const category = document.getElementById('tempStandCategory') ? document.getElementById('tempStandCategory').value || 'C' : 'C';
+      const category = panelRepresentativeCategoryForNewStand('tempStand');
       const depPt = getStandDepthMeters(category);
       const widPt = getStandWidthMeters(category);
-      const angle = normalizeAngleDeg(document.getElementById('tempStandAngle') ? document.getElementById('tempStandAngle').value : 0) * Math.PI / 180;
+      const angle = 0;
       const overlap = state.previewTempStand.overlap;
       ctx.fillStyle = overlap ? 'rgba(239,68,68,0.35)' : 'rgba(167,139,250,0.28)';
       ctx.save();
@@ -19342,7 +19487,7 @@
         ctx.font = '10px system-ui';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(state.previewPbb.category || document.getElementById('standCategory').value || 'C', 0, 0);
+        ctx.fillText(state.previewPbb.category || panelRepresentativeCategoryForNewStand('pbb'), 0, 0);
       }
       ctx.restore();
     }
@@ -20761,8 +20906,6 @@
           const nextDeg = normalizeAngleDeg(Math.atan2(wy - center[1], wx - center[0]) * 180 / Math.PI);
           if (Math.abs(nextDeg - (Number(st.angleDeg) || 0)) < 1e-4) return;
           st.angleDeg = nextDeg;
-          const angleInput = document.getElementById('remoteAngle');
-          if (angleInput) angleInput.value = String(Math.round(nextDeg));
           scheduleDraw(); drewThisMove = true;
         }
       } else if (state.dragStandRotation.type === 'tempStand') {
@@ -20772,8 +20915,6 @@
           const nextDeg = normalizeAngleDeg(Math.atan2(wy - center[1], wx - center[0]) * 180 / Math.PI);
           if (Math.abs(nextDeg - (Number(st.angleDeg) || 0)) < 1e-4) return;
           st.angleDeg = nextDeg;
-          const angleInput = document.getElementById('tempStandAngle');
-          if (angleInput) angleInput.value = String(Math.round(nextDeg));
           scheduleDraw(); drewThisMove = true;
         }
       }
@@ -20937,8 +21078,8 @@
         scheduleDraw(); drewThisMove = true;
       }
     } else if (!state.isPanning && !state.dragVertex && mode === 'remote' && state.remoteDrawing) {
-      const category = document.getElementById('remoteCategory').value || 'C';
-      const angleDeg = normalizeAngleDeg(document.getElementById('remoteAngle') ? document.getElementById('remoteAngle').value : 0);
+      const category = panelRepresentativeCategoryForNewStand('remote');
+      const angleDeg = 0;
       const candidate = { x: snappedPx[0], y: snappedPx[1], category, angleDeg };
       const candCorners = getRemoteStandCorners(candidate);
       let overlap = false;
@@ -20977,8 +21118,8 @@
           scheduleDraw(); drewThisMove = true;
         }
       } else {
-        const category = document.getElementById('tempStandCategory') ? document.getElementById('tempStandCategory').value || 'C' : 'C';
-        const angleDeg = normalizeAngleDeg(document.getElementById('tempStandAngle') ? document.getElementById('tempStandAngle').value : 0);
+        const category = panelRepresentativeCategoryForNewStand('tempStand');
+        const angleDeg = 0;
         const candidate = { x: snap.x, y: snap.y, category, angleDeg };
         const candCorners = getRemoteStandCorners(candidate);
         let overlap = false;
@@ -21038,7 +21179,7 @@
         const len = Math.hypot(nx,ny) || 1; nx /= len; ny /= len;
         const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
         if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
-        const category = document.getElementById('standCategory').value || 'C';
+        const category = panelRepresentativeCategoryForNewStand('pbb');
         const bhEl = document.getElementById('pbbBoardingHeight');
         const previewBh = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
         const wallX = ex, wallY = ey;

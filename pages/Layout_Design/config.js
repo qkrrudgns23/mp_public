@@ -15,11 +15,30 @@
   const GRID_MINOR_LINE_WIDTH = _dc.gridMinorLineWidth;
   const GRID_MAJOR_LINE_RGB = _dc.gridMajorLineRgb;
   const GRID_MINOR_LINE_RGB = _dc.gridMinorLineRgb;
+  const AIRPORTS_CATALOG = Array.isArray(_dc.airportsCatalog) ? _dc.airportsCatalog : [];
   const GRID_DRAW_VIEWPORT_MARGIN_CELLS = _dc.gridDrawViewportMarginCells;
   const GRID_MINOR_GRID_MIN_SCALE = _dc.gridMinorGridMinScale;
   let GRID_COLS = _dc.gridCols;
   let GRID_ROWS = _dc.gridRows;
   let CELL_SIZE = _dc.cellSize;
+  function normalizeAirportCatalogRows(rows) {
+    const out = [];
+    (rows || []).forEach(function(r) {
+      if (!r || typeof r !== 'object') return;
+      const icao = String(r.icao || '').trim().toUpperCase();
+      if (!icao) return;
+      out.push({
+        icao: icao,
+        iata: String(r.iata || '').trim().toUpperCase(),
+        name: String(r.name || '').trim(),
+        country: String(r.country || '').trim(),
+        city: String(r.city || '').trim()
+      });
+    });
+    return out;
+  }
+  const AIRPORT_SEARCH_ROWS = normalizeAirportCatalogRows(AIRPORTS_CATALOG);
+
   const DEFAULT_SIBT_DATE = (function() {
     const s = (_dc.defaultFlightServiceDate != null) ? String(_dc.defaultFlightServiceDate).trim() : '';
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
@@ -46,6 +65,131 @@
   const _layoutTier = _tiers.layout || {};
   const _pbbTier = _layoutTier.pbb || {};
   const _remoteTier = _layoutTier.remote || {};
+  const AIRCRAFT_TYPES = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers && INFORMATION.tiers.aircraft && Array.isArray(INFORMATION.tiers.aircraft.types)) ? INFORMATION.tiers.aircraft.types : [];
+  const AIRCRAFT_BY_ID = {};
+  AIRCRAFT_TYPES.forEach(function(a) {
+    const id = String(a.id || a.name || '').trim();
+    if (id) AIRCRAFT_BY_ID[id] = a;
+  });
+  function getAircraftInfoByType(typeId) {
+    return AIRCRAFT_BY_ID[typeId] || null;
+  }
+  function getCodeForAircraft(typeId) {
+    const a = getAircraftInfoByType(typeId);
+    if (a && a.icao != null) return String(a.icao).trim().toUpperCase()[0] || 'C';
+    return 'C';
+  }
+  const ICAO_LETTERS_ORDER = ['A', 'B', 'C', 'D', 'E', 'F'];
+  function normalizeAllowedIcaoCategories(raw) {
+    const hit = {};
+    (Array.isArray(raw) ? raw : []).forEach(function(x) {
+      const c = String(x || '').trim().toUpperCase()[0];
+      if (ICAO_LETTERS_ORDER.indexOf(c) >= 0) hit[c] = true;
+    });
+    return ICAO_LETTERS_ORDER.filter(function(c) { return hit[c]; });
+  }
+  function representativeCategoryFromLetters(letters) {
+    const order = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6 };
+    let best = 'C', bi = 0;
+    normalizeAllowedIcaoCategories(letters).forEach(function(c) {
+      const o = order[c] || 0;
+      if (o > bi) { bi = o; best = c; }
+    });
+    return best;
+  }
+  function representativeCategoryFromAllowedTypes(typeIds) {
+    const order = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6 };
+    let best = 'C', bi = 0;
+    (Array.isArray(typeIds) ? typeIds : []).forEach(function(tid) {
+      const c = getCodeForAircraft(tid);
+      const o = order[c] || 0;
+      if (o > bi) { bi = o; best = c; }
+    });
+    return best;
+  }
+  function aircraftTypeIdsForIcaoLetters(letters) {
+    const set = {};
+    normalizeAllowedIcaoCategories(letters).forEach(function(c) { set[c] = true; });
+    if (!Object.keys(set).length) return [];
+    const out = [];
+    AIRCRAFT_TYPES.forEach(function(a) {
+      const id = String(a.id || a.name || '').trim();
+      if (!id) return;
+      const ic = String(a.icao || 'C').trim().toUpperCase()[0];
+      if (set[ic] && out.indexOf(id) < 0) out.push(id);
+    });
+    return out;
+  }
+  function readIcaoCategoriesFromHost(hostId) {
+    const host = typeof hostId === 'string' ? document.getElementById(hostId) : hostId;
+    if (!host) return [];
+    const sel = [];
+    host.querySelectorAll('input[type="checkbox"].icao-letter-check').forEach(function(cb) {
+      if (cb.checked) sel.push(cb.value);
+    });
+    return normalizeAllowedIcaoCategories(sel);
+  }
+  function applyIcaoCategoriesToHost(hostId, letters) {
+    const host = typeof hostId === 'string' ? document.getElementById(hostId) : hostId;
+    if (!host) return;
+    const set = {};
+    normalizeAllowedIcaoCategories(letters).forEach(function(c) { set[c] = true; });
+    host.querySelectorAll('input[type="checkbox"].icao-letter-check').forEach(function(cb) {
+      cb.checked = !!set[cb.value];
+    });
+  }
+  function normalizeStandCategoryMode(rawMode, fallbackMode) {
+    const mode = String(rawMode || fallbackMode || 'icao').trim().toLowerCase();
+    return mode === 'aircraft' ? 'aircraft' : 'icao';
+  }
+  function standAllowedTypesMatchIcaoExpansion(panelTypes, letters) {
+    const exp = aircraftTypeIdsForIcaoLetters(normalizeAllowedIcaoCategories(letters));
+    const a = normalizeAllowedAircraftTypes(panelTypes).slice().sort().join('\0');
+    const b = exp.slice().sort().join('\0');
+    return a === b;
+  }
+  function deriveCategoryModeFromUnifiedStandPanel(panelTypes, allowedIcaoCategories) {
+    const letters = normalizeAllowedIcaoCategories(allowedIcaoCategories);
+    const pt = normalizeAllowedAircraftTypes(panelTypes);
+    if (!pt.length || standAllowedTypesMatchIcaoExpansion(pt, letters)) return 'icao';
+    return 'aircraft';
+  }
+  function readUnifiedNewStandConstraintFromPanel(icaoHostId, aircraftAccessId, defaultLettersIfEmpty) {
+    let allowedIcaoCategories = readIcaoCategoriesFromHost(icaoHostId);
+    if (!allowedIcaoCategories.length) allowedIcaoCategories = defaultLettersIfEmpty.slice();
+    const expanded = aircraftTypeIdsForIcaoLetters(allowedIcaoCategories);
+    let panelTypes = readCheckedDataItemIds(aircraftAccessId, '.aircraft-type-check');
+    const categoryMode = deriveCategoryModeFromUnifiedStandPanel(panelTypes, allowedIcaoCategories);
+    const allowedAircraftTypes = (!panelTypes.length || categoryMode === 'icao') ? expanded : panelTypes;
+    const category = (categoryMode === 'aircraft' && panelTypes.length)
+      ? representativeCategoryFromAllowedTypes(panelTypes)
+      : representativeCategoryFromLetters(allowedIcaoCategories);
+    return { allowedIcaoCategories: allowedIcaoCategories, allowedAircraftTypes: allowedAircraftTypes, categoryMode: categoryMode, category: category };
+  }
+  function applyUnifiedStandConstraintFromPanelToObject(stand, icaoHostId, aircraftAccessId) {
+    let letters = readIcaoCategoriesFromHost(icaoHostId);
+    if (!letters.length) letters = ['C'];
+    stand.allowedIcaoCategories = letters;
+    const expanded = aircraftTypeIdsForIcaoLetters(letters);
+    let panelTypes = readCheckedDataItemIds(aircraftAccessId, '.aircraft-type-check');
+    stand.categoryMode = deriveCategoryModeFromUnifiedStandPanel(panelTypes, letters);
+    if (!panelTypes.length || stand.categoryMode === 'icao') {
+      stand.allowedAircraftTypes = expanded;
+      stand.category = representativeCategoryFromLetters(letters);
+    } else {
+      stand.allowedAircraftTypes = panelTypes;
+      stand.category = panelTypes.length ? representativeCategoryFromAllowedTypes(panelTypes) : representativeCategoryFromLetters(letters);
+    }
+  }
+  function panelRepresentativeCategoryForNewStand(which) {
+    const hostId = which === 'pbb' ? 'standIcaoCategories' : (which === 'remote' ? 'remoteIcaoCategories' : 'tempStandIcaoCategories');
+    const accId = which === 'pbb' ? 'standAircraftAccess' : (which === 'remote' ? 'remoteAircraftAccess' : 'tempStandAircraftAccess');
+    let letters = readIcaoCategoriesFromHost(hostId);
+    if (!letters.length) letters = ['C'];
+    const types = readCheckedDataItemIds(accId, '.aircraft-type-check');
+    if (types.length && !standAllowedTypesMatchIcaoExpansion(types, letters)) return representativeCategoryFromAllowedTypes(types);
+    return representativeCategoryFromLetters(letters);
+  }
   const _taxiwayTier = _layoutTier.taxiway || {};
   const _runwayPathTier = _layoutTier.runwayPath || {};
   const _runwayExitTier = _layoutTier.runwayExit || {};
@@ -184,147 +328,3 @@
   function c2dRoadWidthBandRunwayAsphaltColor() {
     return '#363636';
   }
-  function pathPavementDefaultForPathType(pathType) {
-    const pt = pathType || 'taxiway';
-    if (pt === 'runway' || pt === 'runway_exit') return 'asphalt';
-    return 'cement';
-  }
-  function pathPavementResolvedForTaxiway(tw) {
-    if (!tw || typeof tw !== 'object') return 'cement';
-    const v = tw.pavement;
-    if (v === 'asphalt' || v === 'cement') return v;
-    return pathPavementDefaultForPathType(tw.pathType);
-  }
-  function c2dRoadWidthBandForPavement(pavement) {
-    return pavement === 'cement' ? c2dRoadWidthBandTaxiwaySurfaceColor() : c2dRoadWidthBandRunwayAsphaltColor();
-  }
-  function normalizePathPavementInPlace(tw) {
-    if (!tw || typeof tw !== 'object') return;
-    const v = tw.pavement;
-    if (v === 'asphalt' || v === 'cement') return;
-    tw.pavement = pathPavementDefaultForPathType(tw.pathType);
-  }
-  function islandMarkerPavementResolved(m) {
-    if (!m || typeof m !== 'object') return 'asphalt';
-    const pv = m.pavement;
-    if (pv === 'asphalt' || pv === 'cement') return pv;
-    const op = m.outerPavement;
-    if (op === 'taxiway') return 'cement';
-    if (op === 'runway') return 'asphalt';
-    return 'asphalt';
-  }
-  function islandMarkerPavementFillCss(m) {
-    return c2dRoadWidthBandForPavement(islandMarkerPavementResolved(m));
-  }
-  /** Selected road-width band only: ~1% darker than theme stroke/fill. */
-  const ROAD_WIDTH_SURFACE_RGB_MUL = 0.99;
-  function c2dObjectSelectedGlowBlur() {
-    const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
-    return (isFinite(n) && n >= 0) ? n : 22;
-  }
-  function c2dFlightSelectedRingStroke() { return _canvas2dStyle.flightSelectedRingStroke || '#facc15'; }
-  function c2dFlightSelectedRingGlow() { return _canvas2dStyle.flightSelectedRingGlow || 'rgba(250, 204, 21, 0.55)'; }
-  function c2dFlightSelectedRingGlowBlur() {
-    const n = Number(_canvas2dStyle.flightSelectedRingGlowBlur);
-    return (isFinite(n) && n >= 0) ? n : 18;
-  }
-  function c2dSimPreTouchdownHaloStroke() { return _canvas2dStyle.simPreTouchdownHaloStroke || 'rgba(239, 68, 68, 0.92)'; }
-  function c2dSimPreTouchdownHaloFill() { return _canvas2dStyle.simPreTouchdownHaloFill || 'rgba(239, 68, 68, 0.18)'; }
-  function c2dSimPreTouchdownHaloBlur() {
-    const n = Number(_canvas2dStyle.simPreTouchdownHaloBlur);
-    return (isFinite(n) && n >= 0) ? n : 14;
-  }
-  function c2dSimFlightTrailStroke() { return _canvas2dStyle.simFlightTrailStroke || 'rgba(255, 47, 146, 0.97)'; }
-  function c2dSimFlightTrailStrokeEnd() { return _canvas2dStyle.simFlightTrailStrokeEnd || 'rgba(255, 47, 146, 0)'; }
-  function c2dSimFlightTrailLineWidth() {
-    const n = Number(_canvas2dStyle.simFlightTrailLineWidth);
-    return (isFinite(n) && n > 0) ? n : 3.5;
-  }
-  function c2dApproachPreviewWidthM() {
-    const n = Number(_canvas2dStyle.approachPreviewWidthM);
-    return (isFinite(n) && n > 0) ? n : 30;
-  }
-  function c2dApproachPreviewStroke() {
-    return _canvas2dStyle.approachPreviewStroke || 'rgba(255, 255, 255, 0.01)';
-  }
-  function c2dHoldingPointDiameterM() {
-    const n = Number(_canvas2dStyle.holdingPointDiameterM);
-    return (isFinite(n) && n > 0) ? n : 15;
-  }
-  function normalizeHoldingPointKind(raw) {
-    return raw === 'runway_holding' ? 'runway_holding' : 'intermediate';
-  }
-  function pathTypeToHpKind(pathType) {
-    return pathType === 'runway_exit' ? 'runway_holding' : 'intermediate';
-  }
-  function holdingPointKindDisplayLabel(kind) {
-    return normalizeHoldingPointKind(kind) === 'runway_holding' ? 'Runway Holding Position' : 'Intermediate Holding Position';
-  }
-  function c2dHoldingPointFillForKind(kind) {
-    const k = normalizeHoldingPointKind(kind);
-    if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayFill || 'rgba(239, 68, 68, 0.5)';
-    return _canvas2dStyle.holdingPointIntermediateFill || 'rgba(249, 115, 22, 0.5)';
-  }
-  function c2dHoldingPointStrokeForKind(kind) {
-    const k = normalizeHoldingPointKind(kind);
-    if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayStroke || 'rgba(220, 38, 38, 0.78)';
-    return _canvas2dStyle.holdingPointIntermediateStroke || 'rgba(234, 88, 12, 0.75)';
-  }
-  function c2dHoldingPointPreviewFillForPathType(pathType) {
-    const k = pathTypeToHpKind(pathType || 'taxiway');
-    if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayPreviewFill || 'rgba(239, 68, 68, 0.28)';
-    return _canvas2dStyle.holdingPointIntermediatePreviewFill || 'rgba(249, 115, 22, 0.28)';
-  }
-  function c2dHoldingPointPreviewStrokeForPathType(pathType) {
-    const k = pathTypeToHpKind(pathType || 'taxiway');
-    if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayStroke || 'rgba(220, 38, 38, 0.78)';
-    return _canvas2dStyle.holdingPointIntermediateStroke || 'rgba(234, 88, 12, 0.75)';
-  }
-  function c2dHoldingPointMarkingYellow() {
-    return _canvas2dStyle.holdingPointMarkingYellow || '#facc15';
-  }
-  function c2dHoldingPointMarkingLineWidthWorld() {
-    const n = Number(_canvas2dStyle.holdingPointMarkingLineWidthWorld);
-    return (isFinite(n) && n > 0) ? n : 0.28;
-  }
-  function holdingPointMarkingDoubleLineGapM(lineW) {
-    const n = Number(_canvas2dStyle.holdingPointMarkingDoubleLineGapM);
-    const lw = Number(lineW);
-    const baseLw = (isFinite(lw) && lw > 0) ? lw : c2dHoldingPointMarkingLineWidthWorld();
-    return (isFinite(n) && n > 0) ? n : Math.max(0.28, baseLw * 1.2);
-  }
-  function taxiwayWorldWidthMForHolding(tw) {
-    if (!tw) return TAXIWAY_DEFAULT_WIDTH;
-    const typ = tw.pathType || 'taxiway';
-    const base = typ === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (typ === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-    return clampTaxiwayWidthM(typ, tw.width, base);
-  }
-  function holdingPointBarHalfLengthMFromPathWidth(pathWidthM) {
-    const w = Number(pathWidthM);
-    if (isFinite(w) && w > 0) return w * 0.5;
-    return Math.max(3, c2dHoldingPointDiameterM() * 0.5);
-  }
-  function holdingPointPerpFromTangent(ux, uy) {
-    return { px: -uy, py: ux };
-  }
-  function distPointToSegmentSq(x, y, ax, ay, bx, by) {
-    const abx = bx - ax, aby = by - ay;
-    const apx = x - ax, apy = y - ay;
-    const abLenSq = abx * abx + aby * aby;
-    if (abLenSq < 1e-12) return apx * apx + apy * apy;
-    let t = (apx * abx + apy * aby) / abLenSq;
-    t = Math.max(0, Math.min(1, t));
-    const qx = ax + t * abx, qy = ay + t * aby;
-    const dx = x - qx, dy = y - qy;
-    return dx * dx + dy * dy;
-  }
-  function findHoldingPointPathGeometry(hp) {
-    const pt = [hp.x, hp.y];
-    const wantRunway = normalizeHoldingPointKind(hp.hpKind) === 'runway_holding';
-    const maxD2 = Math.pow(Math.max(CELL_SIZE * 6, 55), 2);
-    let bestD2 = Infinity;
-    let ux = 1, uy = 0;
-    let bestTw = null;
-    (state.taxiways || []).forEach(function(tw) {
-      const typ = tw.pathType || 'taxiway';
-      if (wantRunway) {

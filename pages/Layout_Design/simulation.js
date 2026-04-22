@@ -1,3 +1,137 @@
+        renderObjectList();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        draw();
+      }
+    });
+  }
+  [
+    ['runwayLineupDistM_CW', 'clockwise'],
+    ['runwayLineupDistM_CCW', 'counter_clockwise']
+  ].forEach(function(item) {
+    const lineupEl = document.getElementById(item[0]);
+    if (!lineupEl) return;
+    lineupEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        if (tw.pathType !== 'runway') return;
+        const val = Number(this.value);
+        const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : 0;
+        if (item[1] === 'clockwise') tw.lineupDistM_CW = v;
+        else tw.lineupDistM_CCW = v;
+        tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
+        this.value = String(v);
+        updateObjectInfo();
+        if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+        else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+      }
+    });
+  });
+  [
+    ['runwayStartDisplacedThresholdM', 'startDisplacedThresholdM', function(tw) { return getEffectiveRunwayStartDisplacedThresholdM(tw); }],
+    ['runwayStartBlastPadM', 'startBlastPadM', function(tw) { return getEffectiveRunwayStartBlastPadM(tw); }],
+    ['runwayEndDisplacedThresholdM', 'endDisplacedThresholdM', function(tw) { return getEffectiveRunwayEndDisplacedThresholdM(tw); }],
+    ['runwayEndBlastPadM', 'endBlastPadM', function(tw) { return getEffectiveRunwayEndBlastPadM(tw); }]
+  ].forEach(function(item) {
+    const el = document.getElementById(item[0]);
+    if (!el) return;
+    el.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+        const tw = state.selectedObject.obj;
+        if (tw.pathType !== 'runway') return;
+        const val = Number(this.value);
+        const v = (typeof val === 'number' && isFinite(val) && val >= 0) ? val : item[2](tw);
+        tw[item[1]] = v;
+        this.value = String(v);
+        updateObjectInfo();
+        draw();
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      }
+    });
+  });
+
+  function getMinArrVelocityMpsForRunwayId(runwayId) {
+    if (runwayId == null || runwayId === '') return 15;
+    const list = state.taxiways || [];
+    let tw = list.find(t => t.id === runwayId && t.pathType === 'runway');
+    if (!tw) return 15;
+    const v = tw.minArrVelocity;
+    if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, Math.min(150, v));
+    return 15;
+  }
+  
+  function runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn) {
+    const vf0 = Math.max(1, Math.min(150, vFloorIn));
+    const vf = Math.min(vf0, v0);
+    if (!(a > 0) || distM <= 0) return { vAtRet: v0, tSec: 0 };
+    if (v0 <= vf) return { vAtRet: v0, tSec: distM / Math.max(v0, 1e-6) };
+    const dStop = (v0 * v0 - vf * vf) / (2 * a);
+    if (distM < dStop) {
+      const vEnd = Math.sqrt(Math.max(0, v0 * v0 - 2 * a * distM));
+      return { vAtRet: vEnd, tSec: (v0 - vEnd) / a };
+    }
+    const tDecel = (v0 - vf) / a;
+    const tCruise = (distM - dStop) / vf;
+    return { vAtRet: vf, tSec: tDecel + tCruise };
+  }
+  function parseTimeToMinutes(val) {
+    if (!val) return 0;
+    const s = String(val).trim();
+    if (!s) return 0;
+    const isoDt = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (isoDt) {
+      const h = parseInt(isoDt[4], 10) || 0;
+      const m = parseInt(isoDt[5], 10) || 0;
+      const sec = isoDt[6] ? (parseInt(isoDt[6], 10) || 0) : 0;
+      return Math.max(0, h * 60 + m + sec / 60);
+    }
+    if (s.includes(':')) {
+      const parts = s.split(':');
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      const sec = (parts.length >= 3) ? (parseInt(parts[2], 10) || 0) : 0;
+      return Math.max(0, h * 60 + m + sec / 60);
+    }
+    const num = parseFloat(s);
+    return isNaN(num) ? 0 : Math.max(0, num);
+  }
+
+  function snapSimTimeSecForSlider(tSec) {
+    const lo = state.simStartSec;
+    const hi = state.simDurationSec;
+    const step = SIM_TIME_SLIDER_SNAP_SEC;
+    const t = Number(tSec);
+    if (!isFinite(t)) return lo;
+    if (!isFinite(lo) || !isFinite(hi) || hi < lo) return t;
+    const clamped = Math.max(lo, Math.min(hi, t));
+    if (!(step > 0)) return clamped;
+    let snapped = lo + Math.round((clamped - lo) / step) * step;
+    if (snapped < lo) snapped = lo;
+    if (snapped > hi) snapped = hi;
+    return snapped;
+  }
+  function updateFlightSimPlaybackLabelsDom() {
+    const label = document.getElementById('flightSimTimeLabel');
+    const t = state.simTimeSec;
+    if (label) label.textContent = formatSecondsToHHMMSS(t);
+  }
+  
+  function minFirstArrivalTouchdownSecAmongFlights() {
+    let minS = Infinity;
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.arrDep === 'Dep') return;
+      if (arrivalAirsideBlocked(f)) return;
+      const w = getFlightAirsideWindowSec(f);
+      if (!w) return;
+      const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], NaN));
+      if (!isFinite(eldtMin)) return;
+      const eldtS = eldtMin * 60;
+      if (eldtS < minS) minS = eldtS;
+    });
+    return (isFinite(minS) && minS < Infinity) ? minS : null;
+  }
+  function recomputeSimDuration() {
+    let minT = Infinity;
+    let maxT = -Infinity;
     (state.flights || []).forEach(function(f) {
       if (!f) return;
       const w = getFlightAirsideWindowSec(f);
@@ -184,27 +318,34 @@
     return nearest;
   }
 
+  function allStandsForFlightAssignment() {
+    return (state.pbbStands || []).concat(state.remoteStands || []).concat(state.tempStands || []);
+  }
+
   function flightCanUseStand(f, stand) {
     if (!stand) return true;
     const mode = getStandCategoryMode(stand);
-    if (mode === 'aircraft') {
-      const allowedTypes = getStandAllowedAircraftTypes(stand);
+    const allowedTypes = getStandAllowedAircraftTypes(stand);
+    if (allowedTypes.length) {
       const flightType = String(f.aircraftType || '').trim();
-      if (!allowedTypes.length || !flightType || allowedTypes.indexOf(flightType) < 0) return false;
+      if (!flightType || allowedTypes.indexOf(flightType) < 0) return false;
+    } else if (mode === 'aircraft') {
+      return false;
     } else {
       const order = { A:1,B:2,C:3,D:4,E:5,F:6 };
-      const fCode = (f.code || 'C').toUpperCase();
-      const sCat = (stand.category || 'F').toUpperCase();
+      const fCode = String(f.code || 'C').toUpperCase()[0];
+      const sCat = String(stand.category || 'F').toUpperCase()[0];
       const fc = order[fCode] || 99;
       const sc = order[sCat] || 0;
       if (fc > sc) return false;
     }
     const ft = (f.terminalId || (f.token && f.token.terminalId)) || null;
     if (!ft) return true;
-    const isRemote = (state.remoteStands || []).some(function(r) { return r.id === stand.id; });
-    if (isRemote) {
+    const isRemoteLike = (state.remoteStands || []).some(function(r) { return r.id === stand.id; })
+      || (state.tempStands || []).some(function(r) { return r.id === stand.id; });
+    if (isRemoteLike) {
       const allowed = Array.isArray(stand.allowedTerminals) ? stand.allowedTerminals : [];
-      if (allowed.length) return allowed.includes(ft);
+      if (allowed.length) return allowed.indexOf(ft) >= 0;
     }
     const term = getTerminalForStand(stand);
     const standTermId = term ? term.id : null;
@@ -215,7 +356,7 @@
   function assignStandToFlight(f, standId) {
     if (!f) return false;
     if (standId) {
-      const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
+      const allStands = allStandsForFlightAssignment();
       const stand = allStands.find(function(s) { return s.id === standId; });
       if (!flightCanUseStand(f, stand)) {
         alert("Stand constraints or selected building do not match this aircraft, so it cannot be assigned.");
@@ -248,7 +389,12 @@
     const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
     allStands.forEach(stand => {
       if (flight && !flightCanUseStand(flight, stand)) return;
-      if (!flight && code && getStandCategoryMode(stand) === 'icao' && stand.category && stand.category !== code) return;
+      if (!flight && code && getStandCategoryMode(stand) === 'icao') {
+        const c = String(code || '').toUpperCase()[0];
+        const letters = normalizeAllowedIcaoCategories(stand.allowedIcaoCategories);
+        if (letters.length && letters.indexOf(c) < 0) return;
+        if (!letters.length && stand.category && String(stand.category).toUpperCase()[0] !== c) return;
+      }
       const hasLink = state.apronLinks.some(lk => lk.pbbId === stand.id);
       if (!hasLink) return;
       list.push(stand);
@@ -263,7 +409,7 @@
   }
 
   function resolveStand(flight) {
-    const allStands = (state.pbbStands || []).concat(state.remoteStands || []);
+    const allStands = allStandsForFlightAssignment();
     if (flight.standId) {
       return allStands.find(s => s.id === flight.standId) || null;
     }
@@ -689,7 +835,7 @@
       f.terminalId = val;
       f.token.terminalId = val;
       if (f.standId) {
-        var allStands = (st.pbbStands || []).concat(st.remoteStands || []);
+        var allStands = (st.pbbStands || []).concat(st.remoteStands || []).concat(st.tempStands || []);
         var stand = allStands.find(function(s) { return s.id === f.standId; });
         if (stand) {
           var term = getTerminalForStand(stand);
@@ -949,149 +1095,3 @@
     if (f.sampledArrRet != null && !isValidSampledArrRetForFlight(f, retStatsAll)) {
       f.sampledArrRet = null;
       f.arrRetFailed = false;
-      f.arrDecelMs2 = null;
-    }
-    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
-    const cfg = mutRotCfgEntryForType(configByType, f);
-    if (!cfg || !retStatsAll || !retStatsAll.length || arrRunwayId == null) {
-      f.__schedRetRotRev = rev;
-      return;
-    }
-    const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
-    const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
-    const tdMin = cfg.tdMu * 0.85;
-    const tdMax = cfg.tdMu * 1.15;
-    const dTd = clamp(tdSample, Math.max(0, tdMin), Math.max(0, tdMax));
-    const vSample = sampleNormal(cfg.vMu, cfg.vSigma);
-    const vMin = cfg.vMu * 0.85;
-    const vMax = cfg.vMu * 1.15;
-    const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
-    const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
-    const aMin = Math.max(0.1, cfg.aMu * 0.85);
-    const aMax = Math.min(6,   cfg.aMu * 1.15);
-    const aDec = clamp(aSample, aMin, aMax);
-    const arrDir = resolveArrivalRunwayDirForRetGate(f);
-    const candidates = retStatsAll.filter(function(r) {
-      if (!(r && r.runway && r.runway.id === arrRunwayId && r.exit)) return false;
-      if (arrDir === 'clockwise' || arrDir === 'counter_clockwise') {
-        return isRunwayExitDirectionAllowed(r.exit, arrDir);
-      }
-      return true;
-    });
-    if (!candidates.length) {
-      f.arrDecelMs2 = null;
-      f.__schedRetRotRev = rev;
-      return;
-    }
-    let chosen = null;
-    candidates.forEach(r => {
-      if (chosen) return;
-      const distFromTd = Math.max(0, r.distM - dTd);
-      const vAt = runwayArrSpeedAndTimeToRet(v0, aDec, distFromTd, minArrVelRwy).vAtRet;
-      if (vAt <= r.maxExitVelocity) { chosen = r; }
-    });
-    if (chosen) {
-      f.sampledArrRet = chosen.exit && chosen.exit.id || null;
-      f.arrRetFailed = false;
-      const MAX_DECEL_MS2 = 15;
-      const distFromTdChosen = Math.max(0, chosen.distM - dTd);
-      const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
-      const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
-      const vAtChosen = rtRunway.vAtRet;
-      const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
-        ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
-        : 15;
-      f.arrRunwayIdUsed = arrRunwayId;
-      f.arrTdDistM = dTd;
-      f.arrRetDistM = chosen.distM;
-      f.arrVTdMs = v0;
-      f.arrVRetInMs = vAtChosen;
-      f.arrVRetOutMs = minExitVel;
-      f.arrDecelMs2 = aDecRot;
-    } else {
-      f.sampledArrRet = null;
-      f.arrRetFailed = true;
-      f.arrDecelMs2 = null;
-    }
-    f.__schedRetRotRev = rev;
-  }
-  function ensureArrRetRotSampled(flights, forceResampleRet) {
-    if (!Array.isArray(flights) || !flights.length) return [];
-    const configByType = {};
-    flights.forEach(f => { mutRotCfgEntryForType(configByType, f); });
-    const retStatsAll = getScheduleRetStatsAll();
-    flights.forEach(function(f) {
-      sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, !!forceResampleRet);
-    });
-    return retStatsAll;
-  }
-
-  function _flightListEmptyHtml(message) {
-    return '<div style="font-size:11px;color:#9ca3af;">' + message + '</div>';
-  }
-
-  function _renderEmptyFlightListState(listEl, cfgEl) {
-    state.flightSchedulePage = 0;
-    const pgr = document.getElementById('flightSchedulePager');
-    if (pgr) pgr.style.display = 'none';
-    _flightListTeardownVirtual(listEl);
-    listEl.innerHTML = _flightListEmptyHtml('No flights yet.');
-    if (cfgEl) cfgEl.innerHTML = _flightListEmptyHtml('No flights yet.');
-    const ganttEl = document.getElementById('allocationGantt');
-    if (ganttEl) ganttEl.innerHTML = _flightListEmptyHtml('No flights for Gantt.');
-    if (typeof ensureFlightAssignStripWired === 'function') ensureFlightAssignStripWired();
-    if (typeof syncFlightAssignStrip === 'function') syncFlightAssignStrip();
-  }
-  function _updateFlightSchedulePagerUI(totalCount) {
-    const pager = document.getElementById('flightSchedulePager');
-    if (!pager) return;
-    const size = FLIGHT_SCHED_PAGE_SIZE;
-    if (!size || size <= 0) {
-      pager.style.display = 'none';
-      return;
-    }
-    pager.style.display = 'flex';
-    const maxPage = Math.max(0, Math.ceil(totalCount / size) - 1);
-    if (state.flightSchedulePage > maxPage) state.flightSchedulePage = maxPage;
-    if (state.flightSchedulePage < 0) state.flightSchedulePage = 0;
-    const start = state.flightSchedulePage * size;
-    const end = Math.min(totalCount, start + size);
-    const pageNum = maxPage + 1;
-    const cur = state.flightSchedulePage + 1;
-    const tEl = document.getElementById('flightSchedulePagerTotal');
-    const rEl = document.getElementById('flightSchedulePagerRange');
-    if (tEl) tEl.textContent = String(totalCount);
-    if (rEl) rEl.textContent = totalCount ? (String(start + 1) + '–' + String(end) + ' · p ' + String(cur) + '/' + String(pageNum)) : '0–0 · p 0/0';
-    const bPrev = document.getElementById('btnFlightSchedPrev');
-    const bNext = document.getElementById('btnFlightSchedNext');
-    if (bPrev) bPrev.disabled = state.flightSchedulePage <= 0;
-    if (bNext) bNext.disabled = state.flightSchedulePage >= maxPage;
-  }
-
-  /** Same predicate as Arrival Configuration "Failed" row (flight-ui _renderFlightConfigTable failedCounts). */
-  function isFlightArrRetFailedInConfigTable(f, retStatsAll) {
-    if (!f) return false;
-    if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
-    return f.sampledArrRet === null || typeof f.sampledArrRet === 'undefined';
-  }
-  function arrivalConfigColumnKeyForFlight(f) {
-    if (!f) return '';
-    const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-    return f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
-  }
-  function isFlightCountedInArrivalConfigFailedRow(f, retStats) {
-    return isFlightArrRetFailedInConfigTable(f, retStats) && !!arrivalConfigColumnKeyForFlight(f);
-  }
-
-  function flightScheduleMinutesForRow(f) {
-    const tArrMin = f.timeMin != null ? f.timeMin : 0;
-    const dwell = f.dwellMin != null ? f.dwellMin : 0;
-    const tDepMin = tArrMin + dwell;
-    const schedDepRotMin = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
-    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin));
-    const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
-    const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + schedDepRotMin);
-    return {
-      sibt: tArrMin,
-      sobt: tDepMin,
