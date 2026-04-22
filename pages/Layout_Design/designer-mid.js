@@ -1,3 +1,97 @@
+      inp.addEventListener('change', function(ev) {
+        const listEl = document.getElementById('flightList');
+        const el = ev.target;
+        commitFlightAssignFromStrip(el, state, listEl);
+      });
+    });
+  }
+
+  function _flightListPaintVirtualSlice(listEl) {
+    const vs = listEl._flightVirtState;
+    if (!vs) return;
+    const tbody = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"] tbody');
+    if (!tbody) return;
+    const flightsSorted = vs.flightsSorted;
+    const retStatsAll = vs.retStatsAll;
+    const total = flightsSorted.length;
+    const rowH = vs.rowH;
+    const overscan = vs.overscan;
+    const scrollTop = listEl.scrollTop || 0;
+    const vh = listEl.clientHeight || 418;
+    const start = Math.max(0, Math.floor(scrollTop / rowH) - overscan);
+    const rowCount = Math.ceil(vh / rowH) + overscan * 2 + 2;
+    const end = Math.min(total, start + rowCount);
+    const topPad = start * rowH;
+    const botPad = Math.max(0, (total - end) * rowH);
+    const parts = [];
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + topPad + 'px\"><td colspan=\"' + FLIGHT_SCHED_TABLE_COL_COUNT + '\"></td></tr>');
+    for (let i = start; i < end; i++) {
+      parts.push(_buildFlightListRowHtml(flightsSorted[i], retStatsAll));
+    }
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"' + FLIGHT_SCHED_TABLE_COL_COUNT + '\"></td></tr>');
+    tbody.innerHTML = parts.join('');
+    _flightListWireEvents(listEl, state);
+  }
+  function _flightListTeardownVirtual(listEl) {
+    listEl._flightVirtState = null;
+  }
+  function _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow) {
+    const prevScroll = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]') ? (listEl.scrollTop || 0) : 0;
+    listEl._flightVirtState = {
+      flightsSorted: flightsSorted,
+      retStatsAll: retStatsAll,
+      rowH: DOM_OPT_FLIGHT_VIRT_ROW_H,
+      overscan: DOM_OPT_FLIGHT_VIRT_OVERSCAN,
+      raf: null
+    };
+    listEl.innerHTML = headerRow + '</tbody></table>';
+    const tbl = listEl.querySelector('.flight-schedule-table');
+    if (tbl) tbl.setAttribute('data-virtual-table', '1');
+    _flightListPaintVirtualSlice(listEl);
+    if (prevScroll > 0) listEl.scrollTop = prevScroll;
+    if (!listEl._flightVirtScrollBound) {
+      listEl._flightVirtScrollBound = true;
+      listEl.addEventListener('scroll', function() {
+        const vs = listEl._flightVirtState;
+        if (!vs || !listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]')) return;
+        if (vs.raf) cancelAnimationFrame(vs.raf);
+        vs.raf = requestAnimationFrame(function() {
+          vs.raf = null;
+          _flightListPaintVirtualSlice(listEl);
+        });
+      });
+    }
+  }
+
+  function bumpVttArrCacheRev() {
+    state.vttArrCacheRev = (state.vttArrCacheRev | 0) + 1;
+    bumpRwySepSnapshotStaleGen();
+  }
+  function getBaseVttArrMinutes(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  function getArrRotMinutes(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  function getBaseVttDepMinutes(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  
+  function getBaseVttDepMinutesToLineup(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  
+  function getDepBlockOutMin(f) {
+    const taxi = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
+    const rollBundleSec = (typeof computeDepRollAndLineupOnlySec === 'function')
+      ? computeDepRollAndLineupOnlySec(f)
+      : (DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2));
+    return taxi + rollBundleSec / 60;
+  }
   
   function getNormalizedStandDwellBounds(f) {
     let dwell = f.dwellMin != null ? f.dwellMin : 0;
@@ -2598,97 +2692,3 @@
     });
     flights.forEach(f => {
       if (!f || flightBlockedLikeNoWay(f) || !f.standId) return;
-      const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
-      const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-      const sibt = (f.sibtMin_d != null ? f.sibtMin_d
-                   : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
-      const minSobtByDwell = sibt + minDwell;
-      const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
-      if (sobtCurrent < minSobtByDwell) {
-        f.sobtMin_d = minSobtByDwell;
-        applySdDispDeltaFromSibtSobt(f);
-      }
-    });
-    flights.forEach(f => {
-      if (flightBlockedLikeNoWay(f)) return;
-      f.sldtMin = f.sldtMin_d;
-      f.stotMin = f.stotMin_d;
-      f.sobtMin = f.sobtMin_d;
-    });
-  }
-
-  function computeScheduledDisplayTimesIncremental(allFlights, dirtyFlightIds, touchedStandIds) {
-    if (!allFlights || !allFlights.length) return;
-    const dirty = (dirtyFlightIds instanceof Set) ? dirtyFlightIds : new Set(dirtyFlightIds || []);
-    const touchedStands = (touchedStandIds instanceof Set) ? touchedStandIds : new Set(touchedStandIds || []);
-    const standsToRecompute = new Set();
-    touchedStands.forEach(function(sid) { if (sid != null && sid !== '') standsToRecompute.add(sid); });
-    const needStep1 = new Set();
-    dirty.forEach(function(id) { if (id != null && id !== '') needStep1.add(id); });
-    allFlights.forEach(function(f) {
-      if (!f || flightBlockedLikeNoWay(f)) return;
-      if (f.standId && standsToRecompute.has(f.standId)) needStep1.add(f.id);
-    });
-    allFlights.forEach(function(f) {
-      if (!f || !needStep1.has(f.id)) return;
-      if (flightBlockedLikeNoWay(f)) return;
-      f.vttADelayMin = 0;
-      const tArrMin = f.timeMin != null ? f.timeMin : 0;
-      let dwell = f.dwellMin != null ? f.dwellMin : 0;
-      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
-      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
-      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
-      if (minDwell > dwell) minDwell = dwell;
-      f.dwellMin = dwell;
-      f.minDwellMin = minDwell;
-      const sldtOrig = scheduledSldtFromSibtMinutes(f, tArrMin);
-      const sobtOrig = tArrMin + dwell;
-      const stotOrig = scheduledStotFromSobtMinutes(f, sobtOrig);
-      f.sldtMin_orig = sldtOrig;
-      f.sibtMin_orig = tArrMin;
-      f.sobtMin_orig = sobtOrig;
-      f.stotMin_orig = stotOrig;
-      f.sibtMin_d = tArrMin;
-      f.sobtMin_d = sobtOrig;
-      applySdDispDeltaFromSibtSobt(f);
-    });
-    standsToRecompute.forEach(function(standId) {
-      const list = allFlights.filter(function(f) {
-        return f && !flightBlockedLikeNoWay(f) && f.standId === standId;
-      });
-      list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
-      let prevSOBT = -1e9;
-      list.forEach(function(f) {
-        const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
-        const overlap = Math.max(0, prevSOBT - sibt0);
-        f.vttADelayMin = overlap;
-        f.sibtMin_d = sibt0 + overlap;
-        const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
-        const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-        const minSobtByDwell = f.sibtMin_d + minDwell;
-        const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
-        f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-        applySdDispDeltaFromSibtSobt(f);
-        prevSOBT = f.sobtMin_d;
-      });
-    });
-    allFlights.forEach(function(f) {
-      if (!f || flightBlockedLikeNoWay(f) || !f.standId) return;
-      if (!standsToRecompute.has(f.standId)) return;
-      const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
-      const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-      const sibt = (f.sibtMin_d != null ? f.sibtMin_d : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
-      const minSobtByDwell = sibt + minDwell;
-      const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
-      if (sobtCurrent < minSobtByDwell) {
-        f.sobtMin_d = minSobtByDwell;
-        applySdDispDeltaFromSibtSobt(f);
-      }
-    });
-    allFlights.forEach(function(f) {
-      if (!f || flightBlockedLikeNoWay(f)) return;
-      const onTouched = f.standId && standsToRecompute.has(f.standId);
-      if (!needStep1.has(f.id) && !onTouched) return;
-      f.sldtMin = f.sldtMin_d;
-      f.stotMin = f.stotMin_d;
-      f.sobtMin = f.sobtMin_d;

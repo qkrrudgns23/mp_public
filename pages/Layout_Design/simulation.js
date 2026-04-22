@@ -1,3 +1,97 @@
+      applyUnifiedStandConstraintFromPanelToObject(tstAc, 'tempStandIcaoCategories', 'tempStandAircraftAccess');
+      renderAircraftConstraintChoices('tempStandAircraftAccess', tstAc.allowedAircraftTypes, tstAc.allowedIcaoCategories);
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    });
+  }
+
+  document.getElementById('taxiwayName').addEventListener('change', function() {
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const tw = state.selectedObject.obj;
+      const raw = (this.value || '').trim();
+      if (raw && findDuplicateLayoutName('taxiway', tw.id, raw)) {
+        alertDuplicateLayoutName();
+        this.value = tw.name || '';
+        return;
+      }
+      tw.name = raw;
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    }
+  });
+  const apronLinkNameInputEl = document.getElementById('apronLinkName');
+  if (apronLinkNameInputEl) {
+    apronLinkNameInputEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'apronLink') {
+        const lk = state.selectedObject.obj;
+        const rawTrim = (this.value || '').trim();
+        const candidate = rawTrim || getApronLinkDefaultName(lk.id);
+        if (findDuplicateLayoutName('apronLink', lk.id, candidate)) {
+          alertDuplicateLayoutName();
+          this.value = getApronLinkDisplayName(lk);
+          return;
+        }
+        lk.name = rawTrim;
+        this.value = getApronLinkDisplayName(lk);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+      }
+    });
+  }
+  const edgeNameInputEl = document.getElementById('edgeName');
+  if (edgeNameInputEl) {
+    edgeNameInputEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {
+        const ed = state.selectedObject.obj;
+        const rawTrim = (this.value || '').trim();
+        const candidate = rawTrim || getLayoutEdgeDefaultName(ed);
+        if (findDuplicateLayoutName('layoutEdge', ed.id, candidate)) {
+          alertDuplicateLayoutName();
+          this.value = getLayoutEdgeDisplayName(ed);
+          return;
+        }
+        state.layoutEdgeNames[ed.id] = candidate;
+        ed.name = candidate;
+        this.value = candidate;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+      }
+    });
+  }
+  document.getElementById('taxiwayWidth').addEventListener('change', function() {
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const tw = state.selectedObject.obj;
+      const baseWidth = tw.pathType === 'runway'
+        ? RUNWAY_PATH_DEFAULT_WIDTH
+        : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+      const val = Number(this.value);
+      tw.width = clampTaxiwayWidthM(tw.pathType || 'taxiway', val, baseWidth);
+      this.value = tw.width;
+      updateObjectInfo();
+      draw();
+      update3DSceneWhenVisible();
+    }
+  });
+  const pathPavementSel = document.getElementById('pathPavement');
+  if (pathPavementSel) pathPavementSel.addEventListener('change', function() {
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const tw = state.selectedObject.obj;
+      tw.pavement = getPathPavementFromPanelForPathType(tw.pathType || 'taxiway');
+      updateObjectInfo();
+      draw();
+      update3DSceneWhenVisible();
+    }
+  });
+  const avgVelInputEl = document.getElementById('taxiwayAvgMoveVelocity');
+  if (avgVelInputEl) avgVelInputEl.addEventListener('change', function() {
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const tw = state.selectedObject.obj;
+      const val = Number(this.value);
+      const v =
         (typeof val === 'number' && isFinite(val) && val > 0)
           ? Math.max(1, Math.min(50, val))
           : 10;
@@ -1001,97 +1095,3 @@
     if (!wrap) return;
     window.__flightAssignStripWired = true;
     wrap.querySelectorAll('.flight-assign-strip-select').forEach(function(inp) {
-      inp.addEventListener('change', function(ev) {
-        const listEl = document.getElementById('flightList');
-        const el = ev.target;
-        commitFlightAssignFromStrip(el, state, listEl);
-      });
-    });
-  }
-
-  function _flightListPaintVirtualSlice(listEl) {
-    const vs = listEl._flightVirtState;
-    if (!vs) return;
-    const tbody = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"] tbody');
-    if (!tbody) return;
-    const flightsSorted = vs.flightsSorted;
-    const retStatsAll = vs.retStatsAll;
-    const total = flightsSorted.length;
-    const rowH = vs.rowH;
-    const overscan = vs.overscan;
-    const scrollTop = listEl.scrollTop || 0;
-    const vh = listEl.clientHeight || 418;
-    const start = Math.max(0, Math.floor(scrollTop / rowH) - overscan);
-    const rowCount = Math.ceil(vh / rowH) + overscan * 2 + 2;
-    const end = Math.min(total, start + rowCount);
-    const topPad = start * rowH;
-    const botPad = Math.max(0, (total - end) * rowH);
-    const parts = [];
-    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + topPad + 'px\"><td colspan=\"' + FLIGHT_SCHED_TABLE_COL_COUNT + '\"></td></tr>');
-    for (let i = start; i < end; i++) {
-      parts.push(_buildFlightListRowHtml(flightsSorted[i], retStatsAll));
-    }
-    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"' + FLIGHT_SCHED_TABLE_COL_COUNT + '\"></td></tr>');
-    tbody.innerHTML = parts.join('');
-    _flightListWireEvents(listEl, state);
-  }
-  function _flightListTeardownVirtual(listEl) {
-    listEl._flightVirtState = null;
-  }
-  function _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow) {
-    const prevScroll = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]') ? (listEl.scrollTop || 0) : 0;
-    listEl._flightVirtState = {
-      flightsSorted: flightsSorted,
-      retStatsAll: retStatsAll,
-      rowH: DOM_OPT_FLIGHT_VIRT_ROW_H,
-      overscan: DOM_OPT_FLIGHT_VIRT_OVERSCAN,
-      raf: null
-    };
-    listEl.innerHTML = headerRow + '</tbody></table>';
-    const tbl = listEl.querySelector('.flight-schedule-table');
-    if (tbl) tbl.setAttribute('data-virtual-table', '1');
-    _flightListPaintVirtualSlice(listEl);
-    if (prevScroll > 0) listEl.scrollTop = prevScroll;
-    if (!listEl._flightVirtScrollBound) {
-      listEl._flightVirtScrollBound = true;
-      listEl.addEventListener('scroll', function() {
-        const vs = listEl._flightVirtState;
-        if (!vs || !listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]')) return;
-        if (vs.raf) cancelAnimationFrame(vs.raf);
-        vs.raf = requestAnimationFrame(function() {
-          vs.raf = null;
-          _flightListPaintVirtualSlice(listEl);
-        });
-      });
-    }
-  }
-
-  function bumpVttArrCacheRev() {
-    state.vttArrCacheRev = (state.vttArrCacheRev | 0) + 1;
-    bumpRwySepSnapshotStaleGen();
-  }
-  function getBaseVttArrMinutes(f) {
-    if (!f) return 0;
-    return 0;
-  }
-  function getArrRotMinutes(f) {
-    if (!f) return 0;
-    return 0;
-  }
-  function getBaseVttDepMinutes(f) {
-    if (!f) return 0;
-    return 0;
-  }
-  
-  function getBaseVttDepMinutesToLineup(f) {
-    if (!f) return 0;
-    return 0;
-  }
-  
-  function getDepBlockOutMin(f) {
-    const taxi = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
-    const rollBundleSec = (typeof computeDepRollAndLineupOnlySec === 'function')
-      ? computeDepRollAndLineupOnlySec(f)
-      : (DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2));
-    return taxi + rollBundleSec / 60;
-  }

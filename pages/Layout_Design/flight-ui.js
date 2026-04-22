@@ -1,3 +1,38 @@
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    if (hasHover) ctx.lineTo(hoverXY[0], hoverXY[1]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+  function drawLayoutPathDraftVertexDots(ctx, pts, hoverXY) {
+    if (!pts) return;
+    for (let i = 0; i < pts.length; i++) {
+      layoutMarkerDrawEndpointDot(ctx, pts[i][0], pts[i][1], false);
+    }
+    if (hoverXY && hoverXY.length >= 2 && isFinite(hoverXY[0]) && isFinite(hoverXY[1])) {
+      layoutMarkerDrawEndpointDot(ctx, hoverXY[0], hoverXY[1], false);
+    }
+  }
+  function strokeLayoutPathDraftCloseHintArc(ctx, cx, cy, r) {
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(56,189,248,0.9)';
+    ctx.lineWidth = Math.max(1, 1.2 / Math.max(state.scale, 0.1));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+  function layoutMarkerTextHitRect(m) {
+    const hx = Number(m.x), hy = Number(m.y);
+    if (!isFinite(hx) || !isFinite(hy)) return null;
+    const fs = Math.max(10, 12 / Math.max(state.scale, 0.12));
+    const txt = String(m.text || '');
+    let tw = Math.max(CELL_SIZE * 0.35, txt.length * fs * 0.45) + 8;
+    if (ctx) {
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
@@ -74,9 +109,54 @@
           if (pr.t < 0 || pr.t > 1) continue;
           if (dist2(pr.p, click) <= tol2) return { type: 'layoutMarker', id: m.id, obj: m };
         }
+      } else if (m.kind === 'navaid') {
+        const ax = Number(m.x), ay = Number(m.y);
+        if (!isFinite(ax) || !isFinite(ay)) continue;
+        const tol = Math.max(CELL_SIZE * 0.8, 18 / Math.max(state.scale, 0.12));
+        if (dist2(click, [ax, ay]) <= tol * tol)
+          return { type: 'layoutMarker', id: m.id, obj: m };
       }
     }
     return null;
+  }
+  /** Navaid marker: small pill with subType label (PAPI / ILS) at world (m.x, m.y). */
+  function drawNavaidMarker2D(ctx2, m, selected, interactiveLite) {
+    if (!m) return;
+    const x = Number(m.x), y = Number(m.y);
+    if (!isFinite(x) || !isFinite(y)) return;
+    const sub = (m.subType === 'ils') ? 'ils' : 'papi';
+    const label = sub === 'ils' ? 'ILS' : 'PAPI';
+    const isIls = sub === 'ils';
+    const fill = selected
+      ? c2dObjectSelectedFill()
+      : (isIls ? 'rgba(56, 189, 248, 0.85)' : 'rgba(250, 204, 21, 0.9)');
+    const stroke = selected
+      ? c2dObjectSelectedStroke()
+      : (isIls ? 'rgba(2, 132, 199, 0.95)' : 'rgba(161, 98, 7, 0.95)');
+    const fg = isIls ? '#0c4a6e' : '#422006';
+    ctx2.save();
+    const r = Math.max(3, 3.6 / Math.max(state.scale, 0.1));
+    ctx2.beginPath();
+    ctx2.arc(x, y, r, 0, Math.PI * 2);
+    ctx2.fillStyle = fill;
+    ctx2.strokeStyle = stroke;
+    ctx2.lineWidth = Math.max(0.4, 0.6 / Math.max(state.scale, 0.1));
+    ctx2.fill();
+    ctx2.stroke();
+    if (!interactiveLite) {
+      const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
+      ctx2.font = '700 ' + fs + 'px system-ui,sans-serif';
+      ctx2.textAlign = 'left';
+      ctx2.textBaseline = 'middle';
+      ctx2.lineWidth = 2.4;
+      ctx2.strokeStyle = 'rgba(15,23,42,0.85)';
+      ctx2.fillStyle = fg;
+      const lx = x + r + 3;
+      const ly = y;
+      ctx2.strokeText(label, lx, ly);
+      ctx2.fillText(label, lx, ly);
+    }
+    ctx2.restore();
   }
   function hideMarkerTextDraftEditor() {
     const layer = document.getElementById('marker-text-edit-layer');
@@ -234,6 +314,19 @@
         blazerRightTrail: [],
       });
       syncPanelFromState();
+      return;
+    }
+    if (sub === 'navaid') {
+      pushUndo();
+      state.layoutMarkers.push({
+        kind: 'navaid',
+        id: id(),
+        subType: getMarkerNavaidTypeFromPanel(),
+        x: px,
+        y: py,
+      });
+      syncPanelFromState();
+      return;
     }
   }
 
@@ -765,96 +858,3 @@
       const verts = t.vertices;
       const n = verts.length;
       const segCount = t.closed ? n : (n - 1);
-      for (let i = 0; i < segCount; i++) {
-        const j = t.closed ? ((i + 1) % n) : (i + 1);
-        considerSeg(cellToPixel(verts[i].col, verts[i].row), cellToPixel(verts[j].col, verts[j].row));
-      }
-    });
-    (state.taxiways || []).forEach(function(tw) {
-      if (!tw) return;
-      const poly = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
-      if (!poly || poly.length < 2) return;
-      for (let i = 0; i < poly.length - 1; i++) considerSeg(poly[i], poly[i + 1]);
-    });
-    (state.holdingPoints || []).forEach(function(hp) {
-      if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return;
-      considerPoint([hp.x, hp.y]);
-    });
-    (state.apronLinks || []).forEach(function(lk) {
-      const poly = typeof getApronLinkPolylineWorldPts === 'function' ? getApronLinkPolylineWorldPts(lk) : null;
-      if (!poly || poly.length < 2) return;
-      for (let i = 0; i < poly.length - 1; i++) considerSeg(poly[i], poly[i + 1]);
-    });
-    (state.pbbStands || []).forEach(function(pbb) {
-      const corners = typeof getPBBStandCorners === 'function' ? getPBBStandCorners(pbb) : null;
-      if (!corners || corners.length < 2) return;
-      const m = corners.length;
-      for (let i = 0; i < m; i++) considerSeg(corners[i], corners[(i + 1) % m]);
-    });
-    (state.remoteStands || []).forEach(function(st) {
-      const corners = typeof getRemoteStandCorners === 'function' ? getRemoteStandCorners(st) : null;
-      if (!corners || corners.length < 2) return;
-      const m = corners.length;
-      for (let i = 0; i < m; i++) considerSeg(corners[i], corners[(i + 1) % m]);
-    });
-    (state.tempStands || []).forEach(function(st) {
-      const corners = typeof getRemoteStandCorners === 'function' ? getRemoteStandCorners(st) : null;
-      if (!corners || corners.length < 2) return;
-      const m = corners.length;
-      for (let i = 0; i < m; i++) considerSeg(corners[i], corners[(i + 1) % m]);
-    });
-    return best == null ? null : { pt: best, d2: bestD2 };
-  }
-  function markerAreaSnapWorldToPlacementPx(wx, wy, snapToGrid) {
-    const click = [wx, wy];
-    const gridPx = worldPointToPixel(wx, wy, snapToGrid);
-    const maxD2 = Math.pow(CELL_SIZE * HIT_TW_SEG_CF, 2);
-    const pack = snapWorldPointToLayoutObjectsForMarker(wx, wy);
-    if (pack && pack.d2 <= maxD2 && pack.d2 <= dist2(gridPx, click)) return pack.pt;
-    return gridPx;
-  }
-
-  function hitTestApronLinkVertex(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'apronLink') return null;
-    const lk = state.selectedObject.obj;
-    if (!lk || lk.id !== state.selectedObject.id) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    const tx = Number(lk.tx), ty = Number(lk.ty);
-    if (isFinite(tx) && isFinite(ty)) {
-      const d2 = dist2([tx, ty], click);
-      if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'taxiway' }; }
-    }
-    (lk.midVertices || []).forEach((v, idx) => {
-      const px = v && isFinite(Number(v.x)) && isFinite(Number(v.y))
-        ? [Number(v.x), Number(v.y)]
-        : cellToPixel(Number(v.col), Number(v.row));
-      const d2 = dist2(px, click);
-      if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'mid', midIndex: idx }; }
-    });
-    return best;
-  }
-
-  function isSelectedVertex(type, objectId, index) {
-    const sv = state.selectedVertex;
-    return !!(sv && sv.type === type && sv.id === objectId && sv.index === index);
-  }
-
-  function removeSelectedVertex() {
-    const sv = state.selectedVertex;
-    if (!sv) return false;
-    if (sv.type === 'terminal') {
-      const term = state.terminals.find(t => t.id === sv.id);
-      if (!term || !Array.isArray(term.vertices) || sv.index < 0 || sv.index >= term.vertices.length) return false;
-      if (term.closed && term.vertices.length <= 3) return false;
-      pushUndo();
-      term.vertices.splice(sv.index, 1);
-      if (term.vertices.length < 3) term.closed = false;
-      state.selectedVertex = null;
-      if (state.currentTerminalId === term.id) syncPanelFromState();
-      updateObjectInfo();
-      draw();
-      return true;
-    }

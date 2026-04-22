@@ -415,23 +415,31 @@
         <div id="settings-marker" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">
             <span class="compact-label-like" id="markerToolTabsLabel">Tool</span>
-            <div class="marker-tool-tabs" role="tablist" aria-labelledby="markerToolTabsLabel">
+            <div class="marker-tool-tabs marker-tool-tabs-grid" role="tablist" aria-labelledby="markerToolTabsLabel">
+              <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="navaid" aria-selected="false">Navigation aid</button>
+              <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="flight" aria-selected="false">Flight</button>
               <button type="button" class="marker-tool-tab active" role="tab" data-marker-sub="text" aria-selected="true">Text</button>
               <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="ruler" aria-selected="false">Ruler</button>
-              <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="island" aria-selected="false">Island</button>
+              <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="island" aria-selected="false">Contour</button>
               <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="area" aria-selected="false">Area</button>
-              <button type="button" class="marker-tool-tab" role="tab" data-marker-sub="flight" aria-selected="false">Flight</button>
             </div>
+          </div>
+          <div id="markerNavaidRow" class="compact-field wide" hidden>
+            <label for="markerNavaidType">Nav aid type</label>
+            <select id="markerNavaidType">
+              <option value="papi">PAPI</option>
+              <option value="ils">ILS</option>
+            </select>
           </div>
           <div id="markerFlightAircraftRow" class="compact-field wide" hidden>
             <label for="markerFlightAircraftType">Aircraft type</label>
             <select id="markerFlightAircraftType"></select>
           </div>
           <div id="markerIslandWidthRow" class="compact-field wide" hidden>
-            <label for="markerIslandOuterWidthM">Island outer width (m)</label>
-            <input type="number" id="markerIslandOuterWidthM" min="0" max="500" step="0.5" value="20" inputmode="decimal" aria-label="Island outer paved width in meters" />
-            <label for="markerIslandInnerWidthM">Island inner width (m)</label>
-            <input type="number" id="markerIslandInnerWidthM" min="0" max="200" step="0.5" value="7" inputmode="decimal" aria-label="Island inner paved width in meters" />
+            <label for="markerIslandOuterWidthM">Contour outer width (m)</label>
+            <input type="number" id="markerIslandOuterWidthM" min="0" max="500" step="0.5" value="20" inputmode="decimal" aria-label="Contour outer paved width in meters" />
+            <label for="markerIslandInnerWidthM">Contour inner width (m)</label>
+            <input type="number" id="markerIslandInnerWidthM" min="0" max="200" step="0.5" value="7" inputmode="decimal" aria-label="Contour inner paved width in meters" />
             <label for="markerIslandPavement">Pavement</label>
             <select id="markerIslandPavement">
               <option value="asphalt">Asphalt</option>

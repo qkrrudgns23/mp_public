@@ -1,3 +1,96 @@
+      for (let i = 0; i < segCount; i++) {
+        const j = t.closed ? ((i + 1) % n) : (i + 1);
+        considerSeg(cellToPixel(verts[i].col, verts[i].row), cellToPixel(verts[j].col, verts[j].row));
+      }
+    });
+    (state.taxiways || []).forEach(function(tw) {
+      if (!tw) return;
+      const poly = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
+      if (!poly || poly.length < 2) return;
+      for (let i = 0; i < poly.length - 1; i++) considerSeg(poly[i], poly[i + 1]);
+    });
+    (state.holdingPoints || []).forEach(function(hp) {
+      if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return;
+      considerPoint([hp.x, hp.y]);
+    });
+    (state.apronLinks || []).forEach(function(lk) {
+      const poly = typeof getApronLinkPolylineWorldPts === 'function' ? getApronLinkPolylineWorldPts(lk) : null;
+      if (!poly || poly.length < 2) return;
+      for (let i = 0; i < poly.length - 1; i++) considerSeg(poly[i], poly[i + 1]);
+    });
+    (state.pbbStands || []).forEach(function(pbb) {
+      const corners = typeof getPBBStandCorners === 'function' ? getPBBStandCorners(pbb) : null;
+      if (!corners || corners.length < 2) return;
+      const m = corners.length;
+      for (let i = 0; i < m; i++) considerSeg(corners[i], corners[(i + 1) % m]);
+    });
+    (state.remoteStands || []).forEach(function(st) {
+      const corners = typeof getRemoteStandCorners === 'function' ? getRemoteStandCorners(st) : null;
+      if (!corners || corners.length < 2) return;
+      const m = corners.length;
+      for (let i = 0; i < m; i++) considerSeg(corners[i], corners[(i + 1) % m]);
+    });
+    (state.tempStands || []).forEach(function(st) {
+      const corners = typeof getRemoteStandCorners === 'function' ? getRemoteStandCorners(st) : null;
+      if (!corners || corners.length < 2) return;
+      const m = corners.length;
+      for (let i = 0; i < m; i++) considerSeg(corners[i], corners[(i + 1) % m]);
+    });
+    return best == null ? null : { pt: best, d2: bestD2 };
+  }
+  function markerAreaSnapWorldToPlacementPx(wx, wy, snapToGrid) {
+    const click = [wx, wy];
+    const gridPx = worldPointToPixel(wx, wy, snapToGrid);
+    const maxD2 = Math.pow(CELL_SIZE * HIT_TW_SEG_CF, 2);
+    const pack = snapWorldPointToLayoutObjectsForMarker(wx, wy);
+    if (pack && pack.d2 <= maxD2 && pack.d2 <= dist2(gridPx, click)) return pack.pt;
+    return gridPx;
+  }
+
+  function hitTestApronLinkVertex(wx, wy) {
+    if (!state.selectedObject || state.selectedObject.type !== 'apronLink') return null;
+    const lk = state.selectedObject.obj;
+    if (!lk || lk.id !== state.selectedObject.id) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    const tx = Number(lk.tx), ty = Number(lk.ty);
+    if (isFinite(tx) && isFinite(ty)) {
+      const d2 = dist2([tx, ty], click);
+      if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'taxiway' }; }
+    }
+    (lk.midVertices || []).forEach((v, idx) => {
+      const px = v && isFinite(Number(v.x)) && isFinite(Number(v.y))
+        ? [Number(v.x), Number(v.y)]
+        : cellToPixel(Number(v.col), Number(v.row));
+      const d2 = dist2(px, click);
+      if (d2 < bestD2) { bestD2 = d2; best = { linkId: lk.id, kind: 'mid', midIndex: idx }; }
+    });
+    return best;
+  }
+
+  function isSelectedVertex(type, objectId, index) {
+    const sv = state.selectedVertex;
+    return !!(sv && sv.type === type && sv.id === objectId && sv.index === index);
+  }
+
+  function removeSelectedVertex() {
+    const sv = state.selectedVertex;
+    if (!sv) return false;
+    if (sv.type === 'terminal') {
+      const term = state.terminals.find(t => t.id === sv.id);
+      if (!term || !Array.isArray(term.vertices) || sv.index < 0 || sv.index >= term.vertices.length) return false;
+      if (term.closed && term.vertices.length <= 3) return false;
+      pushUndo();
+      term.vertices.splice(sv.index, 1);
+      if (term.vertices.length < 3) term.closed = false;
+      state.selectedVertex = null;
+      if (state.currentTerminalId === term.id) syncPanelFromState();
+      updateObjectInfo();
+      draw();
+      return true;
+    }
     if (sv.type === 'taxiway') {
       const tw = state.taxiways.find(t => t.id === sv.id);
       if (!tw || !Array.isArray(tw.vertices) || sv.index < 0 || sv.index >= tw.vertices.length) return false;
@@ -455,96 +548,3 @@
         if (rawTn && findDuplicateLayoutName('tempStand', tst.id, rawTn)) {
           alertDuplicateLayoutName();
           el('tempStandName').value = tst.name || '';
-        } else {
-          tst.name = rawTn;
-        }
-      }
-      applyUnifiedStandConstraintFromPanelToObject(tst, 'tempStandIcaoCategories', 'tempStandAircraftAccess');
-      const tempAccWrap = document.getElementById('tempStandTerminalAccess');
-      if (tempAccWrap) {
-        const checks = tempAccWrap.querySelectorAll('.remote-term-check');
-        const allowed = [];
-        checks.forEach(function(ch) {
-          if (ch.checked) {
-            const id = ch.getAttribute('data-item-id');
-            if (id) allowed.push(id);
-          }
-        });
-        tst.allowedTerminals = allowed;
-      }
-    }
-    if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
-      var hpo = state.selectedObject.obj;
-      if (el('holdingPointName')) {
-        const rawHp = (el('holdingPointName').value || '').trim();
-        if (rawHp && findDuplicateLayoutName('holdingPoint', hpo.id, rawHp)) {
-          alertDuplicateLayoutName();
-          el('holdingPointName').value = hpo.name || '';
-        } else {
-          hpo.name = rawHp;
-        }
-      }
-    }
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      var tw = state.selectedObject.obj;
-      if (el('taxiwayName')) {
-        const rawTw = (el('taxiwayName').value || '').trim();
-        if (rawTw && findDuplicateLayoutName('taxiway', tw.id, rawTw)) {
-          alertDuplicateLayoutName();
-          el('taxiwayName').value = tw.name || '';
-        } else {
-          tw.name = rawTw;
-        }
-      }
-      if (el('taxiwayWidth')) {
-        const pathType = tw.pathType || 'taxiway';
-        const fb = pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-        tw.width = clampTaxiwayWidthM(pathType, el('taxiwayWidth').value, fb);
-      }
-      if (document.getElementById('pathPavement')) {
-        tw.pavement = getPathPavementFromPanelForPathType(tw.pathType || 'taxiway');
-      }
-      if (el('taxiwayMaxExitVel')) {
-        const mv = Number(el('taxiwayMaxExitVel').value);
-        if (tw.pathType === 'runway_exit') tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
-        else delete tw.maxExitVelocity;
-      }
-      if (el('taxiwayMinExitVel') && tw.pathType === 'runway_exit') {
-        const mv2 = Number(el('taxiwayMinExitVel').value);
-        let v = isFinite(mv2) && mv2 > 0 ? mv2 : 15;
-        if (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && v > tw.maxExitVelocity) v = tw.maxExitVelocity;
-        tw.minExitVelocity = v;
-        tw.allowedRwDirections = getRunwayExitAllowedDirectionsFromPanel();
-      } else if (tw.pathType !== 'runway_exit') {
-        delete tw.minExitVelocity;
-        delete tw.allowedRwDirections;
-      }
-      if (el('taxiwayDirectionMode')) {
-        let dirVal = el('taxiwayDirectionMode').value || '';
-        if (tw.pathType === 'runway') {
-          runwayReverseVerticesIfDirectionChanged(tw, dirVal);
-          tw.direction = (dirVal === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
-        } else tw.direction = dirVal || 'both';
-      }
-      if (el('taxiwayPathTypeKind')) {
-        const ptCur = tw.pathType || 'taxiway';
-        if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
-          const kind = String(el('taxiwayPathTypeKind').value || 'normal');
-          tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
-        }
-      }
-      if (el('taxiwayAvgMoveVelocity')) {
-        var v = Number(el('taxiwayAvgMoveVelocity').value);
-        tw.avgMoveVelocity = (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
-      }
-      if (el('runwayMinArrVelocity')) {
-        const mav = Number(el('runwayMinArrVelocity').value);
-        if (tw.pathType === 'runway') {
-          tw.minArrVelocity = (typeof mav === 'number' && isFinite(mav) && mav > 0) ? Math.max(1, Math.min(150, mav)) : 15;
-        } else {
-          delete tw.minArrVelocity;
-        }
-      }
-      if (tw.pathType === 'runway') {
-        const cwEl = el('runwayLineupDistM_CW');
-        const ccwEl = el('runwayLineupDistM_CCW');

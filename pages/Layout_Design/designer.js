@@ -2002,6 +2002,13 @@
         blazerRightTrail: rightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); })
       };
     }
+    if (k === 'navaid') {
+      const x = Number(m.x), y = Number(m.y);
+      if (!isFinite(x) || !isFinite(y)) return null;
+      const subRaw = String(m.subType || m.sub || 'papi').trim().toLowerCase();
+      const sub = subRaw === 'ils' ? 'ils' : 'papi';
+      return { kind: 'navaid', id: m.id || id(), subType: sub, x: x, y: y };
+    }
     return null;
   }
   function isLayoutPolygonMarkerKind(kind) {
@@ -3971,6 +3978,9 @@
             blazerRightTrail: Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : []
           };
         }
+        if (m.kind === 'navaid') {
+          return { kind: 'navaid', id: m.id, subType: (m.subType === 'ils') ? 'ils' : 'papi', x: Number(m.x), y: Number(m.y) };
+        }
         return null;
       }).filter(Boolean),
       simPathGraph: buildSimPathGraphExport()
@@ -4552,7 +4562,19 @@
   function getMarkerSubKindFromPanel() {
     const tab = document.querySelector('.marker-tool-tab[aria-selected="true"]');
     const v = tab && tab.getAttribute('data-marker-sub');
-    return v === 'ruler' || v === 'flight' || v === 'island' || v === 'area' ? v : 'text';
+    return v === 'ruler' || v === 'flight' || v === 'island' || v === 'area' || v === 'navaid' ? v : 'text';
+  }
+  function getMarkerNavaidTypeFromPanel() {
+    const sel = document.getElementById('markerNavaidType');
+    const v = String(sel && sel.value || '').trim().toLowerCase();
+    return v === 'ils' ? 'ils' : 'papi';
+  }
+  function syncMarkerNavaidRowVisibility() {
+    const row = document.getElementById('markerNavaidRow');
+    if (!row) return;
+    const show = getMarkerSubKindFromPanel() === 'navaid';
+    row.hidden = !show;
+    row.style.display = show ? '' : 'none';
   }
   function getMarkerFlightAircraftTypeFromPanel() {
     const sel = document.getElementById('markerFlightAircraftType');
@@ -4588,7 +4610,8 @@
     row.style.display = show ? '' : 'none';
   }
   function setMarkerSubKindTab(sub) {
-    const next = sub === 'ruler' || sub === 'flight' || sub === 'island' || sub === 'area' ? sub : 'text';
+    const allowed = { ruler: 1, flight: 1, island: 1, area: 1, navaid: 1 };
+    const next = allowed[sub] ? sub : 'text';
     document.querySelectorAll('.marker-tool-tab').forEach(function(btn) {
       const on = (btn.getAttribute('data-marker-sub') || '') === next;
       btn.classList.toggle('active', on);
@@ -4596,13 +4619,21 @@
     });
     syncMarkerFlightAircraftRowVisibility();
     syncMarkerIslandWidthRowVisibility();
+    syncMarkerNavaidRowVisibility();
   }
   function syncMarkerSubKindTabFromSelectedLayoutMarker() {
     const sel = state.selectedObject;
     if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return;
     const kind = String(sel.obj.kind || '').trim();
-    if (kind !== 'text' && kind !== 'ruler' && kind !== 'island' && kind !== 'area' && kind !== 'flight') return;
+    if (kind !== 'text' && kind !== 'ruler' && kind !== 'island' && kind !== 'area' && kind !== 'flight' && kind !== 'navaid') return;
     setMarkerSubKindTab(kind);
+    if (kind === 'navaid') {
+      const sel2 = document.getElementById('markerNavaidType');
+      if (sel2) {
+        const sub = (sel.obj.subType === 'ils') ? 'ils' : 'papi';
+        sel2.value = sub;
+      }
+    }
   }
   function isMarkerFlightAllowedPathType(pt) {
     return pt === 'runway' || pt === 'runway_exit' || pt === 'taxiway' || pt === 'general_queue_taxiway';
@@ -4830,6 +4861,10 @@
         }
       }
       return best;
+    } else if (mk.kind === 'navaid') {
+      const x = Number(mk.x), y = Number(mk.y);
+      if (isFinite(x) && isFinite(y) && dist2(click, [x, y]) <= r2)
+        return { markerId: mk.id, handle: 'navaidCenter' };
     }
     return null;
   }
@@ -4974,9 +5009,54 @@
           if (pr.t < 0 || pr.t > 1) continue;
           if (dist2(pr.p, click) <= tol2) return { type: 'layoutMarker', id: m.id, obj: m };
         }
+      } else if (m.kind === 'navaid') {
+        const ax = Number(m.x), ay = Number(m.y);
+        if (!isFinite(ax) || !isFinite(ay)) continue;
+        const tol = Math.max(CELL_SIZE * 0.8, 18 / Math.max(state.scale, 0.12));
+        if (dist2(click, [ax, ay]) <= tol * tol)
+          return { type: 'layoutMarker', id: m.id, obj: m };
       }
     }
     return null;
+  }
+  /** Navaid marker: small pill with subType label (PAPI / ILS) at world (m.x, m.y). */
+  function drawNavaidMarker2D(ctx2, m, selected, interactiveLite) {
+    if (!m) return;
+    const x = Number(m.x), y = Number(m.y);
+    if (!isFinite(x) || !isFinite(y)) return;
+    const sub = (m.subType === 'ils') ? 'ils' : 'papi';
+    const label = sub === 'ils' ? 'ILS' : 'PAPI';
+    const isIls = sub === 'ils';
+    const fill = selected
+      ? c2dObjectSelectedFill()
+      : (isIls ? 'rgba(56, 189, 248, 0.85)' : 'rgba(250, 204, 21, 0.9)');
+    const stroke = selected
+      ? c2dObjectSelectedStroke()
+      : (isIls ? 'rgba(2, 132, 199, 0.95)' : 'rgba(161, 98, 7, 0.95)');
+    const fg = isIls ? '#0c4a6e' : '#422006';
+    ctx2.save();
+    const r = Math.max(3, 3.6 / Math.max(state.scale, 0.1));
+    ctx2.beginPath();
+    ctx2.arc(x, y, r, 0, Math.PI * 2);
+    ctx2.fillStyle = fill;
+    ctx2.strokeStyle = stroke;
+    ctx2.lineWidth = Math.max(0.4, 0.6 / Math.max(state.scale, 0.1));
+    ctx2.fill();
+    ctx2.stroke();
+    if (!interactiveLite) {
+      const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
+      ctx2.font = '700 ' + fs + 'px system-ui,sans-serif';
+      ctx2.textAlign = 'left';
+      ctx2.textBaseline = 'middle';
+      ctx2.lineWidth = 2.4;
+      ctx2.strokeStyle = 'rgba(15,23,42,0.85)';
+      ctx2.fillStyle = fg;
+      const lx = x + r + 3;
+      const ly = y;
+      ctx2.strokeText(label, lx, ly);
+      ctx2.fillText(label, lx, ly);
+    }
+    ctx2.restore();
   }
   function hideMarkerTextDraftEditor() {
     const layer = document.getElementById('marker-text-edit-layer');
@@ -5134,6 +5214,19 @@
         blazerRightTrail: [],
       });
       syncPanelFromState();
+      return;
+    }
+    if (sub === 'navaid') {
+      pushUndo();
+      state.layoutMarkers.push({
+        kind: 'navaid',
+        id: id(),
+        subType: getMarkerNavaidTypeFromPanel(),
+        x: px,
+        y: py,
+      });
+      syncPanelFromState();
+      return;
     }
   }
 
@@ -6350,6 +6443,7 @@
     if (mode === 'marker') {
       syncMarkerFlightAircraftRowVisibility();
       syncMarkerIslandWidthRowVisibility();
+      syncMarkerNavaidRowVisibility();
     }
     if (isPathLayoutMode(mode)) {
       const pt = pathTypeFromLayoutMode(mode);
@@ -16775,6 +16869,19 @@
   setMarkerSubKindTab('text');
   syncMarkerFlightAircraftRowVisibility();
   syncMarkerIslandWidthRowVisibility();
+  syncMarkerNavaidRowVisibility();
+  (function _wireMarkerNavaidTypeSelect() {
+    const sel = document.getElementById('markerNavaidType');
+    if (!sel) return;
+    sel.addEventListener('change', function() {
+      const so = state.selectedObject;
+      if (so && so.type === 'layoutMarker' && so.obj && so.obj.kind === 'navaid') {
+        so.obj.subType = getMarkerNavaidTypeFromPanel();
+        if (typeof updateObjectInfo === 'function') updateObjectInfo();
+        scheduleDraw();
+      }
+    });
+  })();
 
   (function setupRightPanelDragResize() {
     if (!panel || !panelToggle) return;
@@ -17195,9 +17302,18 @@
           items.push({
             type: 'layoutMarker',
             id: mk.id,
-            title: 'Marker | Island',
+            title: 'Marker | Contour',
             tag: nv + ' vtx',
             details: 'Closed polygon · ' + nv + ' vertices (layout m = px)'
+          });
+        } else if (mk.kind === 'navaid') {
+          const sub = (mk.subType === 'ils') ? 'ILS' : 'PAPI';
+          items.push({
+            type: 'layoutMarker',
+            id: mk.id,
+            title: 'Marker | ' + sub,
+            tag: sub,
+            details: 'Navigation aid at (' + Number(mk.x).toFixed(1) + ', ' + Number(mk.y).toFixed(1) + ')'
           });
         } else if (mk.kind === 'area') {
           const nv = (mk.points && mk.points.length) || 0;
@@ -17597,7 +17713,7 @@
           const ow = islandOuterWidthMResolved(mk);
           const iw = islandInnerWidthMResolved(mk);
           const pav = islandMarkerPavementResolved(mk);
-          objectInfoEl.innerHTML = '<strong>Marker · Island</strong><br>Vertices: ' + nv +
+          objectInfoEl.innerHTML = '<strong>Marker · Contour</strong><br>Vertices: ' + nv +
             '<br><label for="' + oid + '">Outer width (m)</label><br>' +
             '<input type="number" id="' + oid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:4px 0 8px;" min="0" max="500" step="0.5" value="' + ow + '" inputmode="decimal" />' +
             '<br><label for="' + iid + '">Inner width (m)</label><br>' +
@@ -17681,6 +17797,31 @@
             return true;
           }
           if (!bindBlazerToggle()) setTimeout(bindBlazerToggle, 0);
+        } else if (mk.kind === 'navaid') {
+          const sub = (mk.subType === 'ils') ? 'ils' : 'papi';
+          const label = sub === 'ils' ? 'ILS' : 'PAPI';
+          const sid = 'layoutMarkerNavaidType';
+          objectInfoEl.innerHTML = '<strong>Marker · ' + label + '</strong>' +
+            '<br><label for="' + sid + '">Nav aid type</label>' +
+            '<br><select id="' + sid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:6px 0;">' +
+            '<option value="papi"' + (sub === 'papi' ? ' selected' : '') + '>PAPI</option>' +
+            '<option value="ils"' + (sub === 'ils' ? ' selected' : '') + '>ILS</option>' +
+            '</select>' +
+            '<br>Position: (' + Number(mk.x).toFixed(1) + ', ' + Number(mk.y).toFixed(1) + ')';
+          const markerId = mk.id;
+          const sEl = document.getElementById(sid);
+          if (sEl) sEl.onchange = function() {
+            const so = state.selectedObject;
+            if (!so || so.type !== 'layoutMarker' || String(so.id) !== String(markerId)) return;
+            const mo = so.obj;
+            if (!mo || mo.kind !== 'navaid') return;
+            mo.subType = this.value === 'ils' ? 'ils' : 'papi';
+            const panelSel = document.getElementById('markerNavaidType');
+            if (panelSel) panelSel.value = mo.subType;
+            scheduleDraw();
+            updateObjectInfo();
+            if (typeof renderObjectList === 'function') renderObjectList();
+          };
         } else {
           objectInfoEl.innerHTML = '<strong>Marker</strong>';
         }
@@ -20095,7 +20236,7 @@
     (state.layoutMarkers || []).forEach(function(m) {
       if (!m) return;
       if (!markerTool) {
-        if ((m.kind === 'text' || m.kind === 'ruler') && !state.layers.textRuler) return;
+        if ((m.kind === 'text' || m.kind === 'ruler' || m.kind === 'navaid') && !state.layers.textRuler) return;
         if (m.kind === 'flight' && !state.layers.dummyFlight) return;
       }
       if (!(state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id)) {
@@ -20245,6 +20386,8 @@
           const vSel = !!(sv && sv.type === 'layoutMarkerHandle' && sv.handle === 'islandVertex' && String(sv.id) === String(m.id) && sv.vertexIndex === vi);
           layoutMarkerDrawEndpointDot(ctx, pts[vi][0], pts[vi][1], vSel);
         }
+      } else if (m.kind === 'navaid') {
+        drawNavaidMarker2D(ctx, m, sel, interactiveLite);
       }
     });
     if (state.markerDrawing && state.markerRulerDraft && getMarkerSubKindFromPanel() === 'ruler' && state.markerRulerHoverWorld && (markerTool || state.layers.textRuler)) {
@@ -21183,6 +21326,9 @@
               appendMarkerFlightBlazerTrail(mk);
             }
           }
+        } else if (h.handle === 'navaidCenter') {
+          mk.x = px[0];
+          mk.y = px[1];
         }
         if (state.selectedObject && state.selectedObject.type === 'layoutMarker' && String(state.selectedObject.id) === String(h.markerId))
           state.selectedObject.obj = mk;

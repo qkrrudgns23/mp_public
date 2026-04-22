@@ -1076,6 +1076,9 @@
     .marker-subkind-opt input { cursor:pointer; }
     .compact-label-like { display:block; font-size:11px; color:#9ca3af; margin-bottom:0; font-weight:600; letter-spacing:0.02em; }
     .marker-tool-tabs { display:flex; gap:4px; flex-wrap:wrap; margin-top:0; }
+    .marker-tool-tabs.marker-tool-tabs-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:4px; }
+    .marker-tool-tabs-grid .marker-tool-tab[data-marker-sub="navaid"] { grid-column: span 2; }
+    .marker-tool-tabs-grid .marker-tool-tab[data-marker-sub="flight"] { grid-column: span 2; }
     .marker-tool-tab { flex:1 1 0; min-width:0; padding:6px 8px; font-size:11px; font-weight:600; border-radius:6px; border:1px solid var(--ui-border-default); background:var(--ui-bg-control); color:var(--ui-text-secondary); cursor:pointer; transition:var(--ui-transition); }
     .marker-island-pavement-choice-gr { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:4px; }
     .marker-island-pavement-choice { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--ui-text-secondary); cursor:pointer; user-select:none; }

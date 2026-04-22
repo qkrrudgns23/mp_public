@@ -1,3 +1,97 @@
+  if (buildingTypeInput) {
+    buildingTypeInput.addEventListener('change', function() {
+      const nextType = normalizeBuildingType(this.value || BUILDING_TYPE_DEFAULT);
+      const t = getCurrentTerminal();
+      const nameInput = document.getElementById('terminalName');
+
+
+      const nextDefaultName = getDefaultBuildingNameForType(nextType, t ? t.id : null);
+      if (t) {
+        t.buildingType = nextType;
+        if (findDuplicateLayoutName('terminal', t.id, nextDefaultName)) {
+          alertDuplicateLayoutName();
+          if (nameInput) nameInput.value = t.name || '';
+        } else {
+          t.name = nextDefaultName;
+          if (nameInput) nameInput.value = nextDefaultName;
+        }
+      } else if (nameInput) {
+        nameInput.value = nextDefaultName;
+      }
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+      update3DSceneWhenVisible();
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    });
+  }
+  function recomputeTerminalFloorHeight() {
+    const t = getCurrentTerminal();
+    if (!t) return;
+    const floorsInput = document.getElementById('terminalFloors');
+    const f2fInput = document.getElementById('terminalFloorToFloor');
+    const totalInput = document.getElementById('terminalFloorHeight');
+    let floors = floorsInput ? parseInt(floorsInput.value, 10) : t.floors;
+    let f2f = f2fInput ? Number(f2fInput.value) : t.floorToFloor;
+    floors = Math.max(1, floors || 1);
+    f2f = Math.max(0.5, f2f || 4);
+    const totalH = floors * f2f;
+    t.floors = floors;
+    t.floorToFloor = f2f;
+    t.floorHeight = totalH;
+    if (floorsInput) floorsInput.value = floors;
+    if (f2fInput) f2fInput.value = f2f;
+    if (totalInput) totalInput.value = totalH;
+    draw();
+    updateObjectInfo();
+    update3DSceneWhenVisible();
+  }
+  document.getElementById('terminalFloors').addEventListener('change', recomputeTerminalFloorHeight);
+  document.getElementById('terminalFloorToFloor').addEventListener('change', recomputeTerminalFloorHeight);
+  document.getElementById('terminalDepartureCapacity').addEventListener('change', function() {
+    const t = getCurrentTerminal();
+    if (t) { t.departureCapacity = Math.max(0, parseInt(this.value, 10) || 0); updateObjectInfo(); }
+  });
+  document.getElementById('terminalArrivalCapacity').addEventListener('change', function() {
+    const t = getCurrentTerminal();
+    if (t) { t.arrivalCapacity = Math.max(0, parseInt(this.value, 10) || 0); updateObjectInfo(); }
+  });
+
+  document.getElementById('standName').addEventListener('change', function() {
+    if (state.selectedObject && state.selectedObject.type === 'pbb') {
+      const pbb = state.selectedObject.obj;
+      const raw = (this.value || '').trim();
+      if (raw && findDuplicateLayoutName('pbb', pbb.id, raw)) {
+        alertDuplicateLayoutName();
+        this.value = pbb.name || '';
+        return;
+      }
+      pbb.name = raw;
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    }
+  });
+  const standIcaoCategoriesHost = document.getElementById('standIcaoCategories');
+  if (standIcaoCategoriesHost) {
+    standIcaoCategoriesHost.addEventListener('change', function(ev) {
+      const t = ev.target;
+      if (!t || !t.classList.contains('icao-letter-check')) return;
+      let letters = readIcaoCategoriesFromHost('standIcaoCategories');
+      if (!letters.length) {
+        letters = ['C'];
+        applyIcaoCategoriesToHost('standIcaoCategories', letters);
+      }
+      const typeIds = aircraftTypeIdsForIcaoLetters(letters);
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        const pbb = state.selectedObject.obj;
+        pbb.categoryMode = 'icao';
+        pbb.allowedIcaoCategories = letters;
+        pbb.category = representativeCategoryFromLetters(letters);
+        pbb.allowedAircraftTypes = typeIds;
+        renderAircraftConstraintChoices('standAircraftAccess', typeIds, letters);
+        rebuildPbbBridgeGeometry(pbb);
+        updateObjectInfo();
         renderObjectList();
         draw();
         update3DSceneWhenVisible();
@@ -289,97 +383,3 @@
       syncChoiceChipStates(tempStandAircraftAccessEl);
       if (!state.selectedObject || state.selectedObject.type !== 'tempStand') return;
       const tstAc = state.selectedObject.obj;
-      applyUnifiedStandConstraintFromPanelToObject(tstAc, 'tempStandIcaoCategories', 'tempStandAircraftAccess');
-      renderAircraftConstraintChoices('tempStandAircraftAccess', tstAc.allowedAircraftTypes, tstAc.allowedIcaoCategories);
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-    });
-  }
-
-  document.getElementById('taxiwayName').addEventListener('change', function() {
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      const raw = (this.value || '').trim();
-      if (raw && findDuplicateLayoutName('taxiway', tw.id, raw)) {
-        alertDuplicateLayoutName();
-        this.value = tw.name || '';
-        return;
-      }
-      tw.name = raw;
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-    }
-  });
-  const apronLinkNameInputEl = document.getElementById('apronLinkName');
-  if (apronLinkNameInputEl) {
-    apronLinkNameInputEl.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'apronLink') {
-        const lk = state.selectedObject.obj;
-        const rawTrim = (this.value || '').trim();
-        const candidate = rawTrim || getApronLinkDefaultName(lk.id);
-        if (findDuplicateLayoutName('apronLink', lk.id, candidate)) {
-          alertDuplicateLayoutName();
-          this.value = getApronLinkDisplayName(lk);
-          return;
-        }
-        lk.name = rawTrim;
-        this.value = getApronLinkDisplayName(lk);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-      }
-    });
-  }
-  const edgeNameInputEl = document.getElementById('edgeName');
-  if (edgeNameInputEl) {
-    edgeNameInputEl.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {
-        const ed = state.selectedObject.obj;
-        const rawTrim = (this.value || '').trim();
-        const candidate = rawTrim || getLayoutEdgeDefaultName(ed);
-        if (findDuplicateLayoutName('layoutEdge', ed.id, candidate)) {
-          alertDuplicateLayoutName();
-          this.value = getLayoutEdgeDisplayName(ed);
-          return;
-        }
-        state.layoutEdgeNames[ed.id] = candidate;
-        ed.name = candidate;
-        this.value = candidate;
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-      }
-    });
-  }
-  document.getElementById('taxiwayWidth').addEventListener('change', function() {
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      const baseWidth = tw.pathType === 'runway'
-        ? RUNWAY_PATH_DEFAULT_WIDTH
-        : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-      const val = Number(this.value);
-      tw.width = clampTaxiwayWidthM(tw.pathType || 'taxiway', val, baseWidth);
-      this.value = tw.width;
-      updateObjectInfo();
-      draw();
-      update3DSceneWhenVisible();
-    }
-  });
-  const pathPavementSel = document.getElementById('pathPavement');
-  if (pathPavementSel) pathPavementSel.addEventListener('change', function() {
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      tw.pavement = getPathPavementFromPanelForPathType(tw.pathType || 'taxiway');
-      updateObjectInfo();
-      draw();
-      update3DSceneWhenVisible();
-    }
-  });
-  const avgVelInputEl = document.getElementById('taxiwayAvgMoveVelocity');
-  if (avgVelInputEl) avgVelInputEl.addEventListener('change', function() {
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      const val = Number(this.value);
-      const v =

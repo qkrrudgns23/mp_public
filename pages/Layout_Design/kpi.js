@@ -1,3 +1,96 @@
+        } else {
+          tst.name = rawTn;
+        }
+      }
+      applyUnifiedStandConstraintFromPanelToObject(tst, 'tempStandIcaoCategories', 'tempStandAircraftAccess');
+      const tempAccWrap = document.getElementById('tempStandTerminalAccess');
+      if (tempAccWrap) {
+        const checks = tempAccWrap.querySelectorAll('.remote-term-check');
+        const allowed = [];
+        checks.forEach(function(ch) {
+          if (ch.checked) {
+            const id = ch.getAttribute('data-item-id');
+            if (id) allowed.push(id);
+          }
+        });
+        tst.allowedTerminals = allowed;
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
+      var hpo = state.selectedObject.obj;
+      if (el('holdingPointName')) {
+        const rawHp = (el('holdingPointName').value || '').trim();
+        if (rawHp && findDuplicateLayoutName('holdingPoint', hpo.id, rawHp)) {
+          alertDuplicateLayoutName();
+          el('holdingPointName').value = hpo.name || '';
+        } else {
+          hpo.name = rawHp;
+        }
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      var tw = state.selectedObject.obj;
+      if (el('taxiwayName')) {
+        const rawTw = (el('taxiwayName').value || '').trim();
+        if (rawTw && findDuplicateLayoutName('taxiway', tw.id, rawTw)) {
+          alertDuplicateLayoutName();
+          el('taxiwayName').value = tw.name || '';
+        } else {
+          tw.name = rawTw;
+        }
+      }
+      if (el('taxiwayWidth')) {
+        const pathType = tw.pathType || 'taxiway';
+        const fb = pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+        tw.width = clampTaxiwayWidthM(pathType, el('taxiwayWidth').value, fb);
+      }
+      if (document.getElementById('pathPavement')) {
+        tw.pavement = getPathPavementFromPanelForPathType(tw.pathType || 'taxiway');
+      }
+      if (el('taxiwayMaxExitVel')) {
+        const mv = Number(el('taxiwayMaxExitVel').value);
+        if (tw.pathType === 'runway_exit') tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
+        else delete tw.maxExitVelocity;
+      }
+      if (el('taxiwayMinExitVel') && tw.pathType === 'runway_exit') {
+        const mv2 = Number(el('taxiwayMinExitVel').value);
+        let v = isFinite(mv2) && mv2 > 0 ? mv2 : 15;
+        if (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && v > tw.maxExitVelocity) v = tw.maxExitVelocity;
+        tw.minExitVelocity = v;
+        tw.allowedRwDirections = getRunwayExitAllowedDirectionsFromPanel();
+      } else if (tw.pathType !== 'runway_exit') {
+        delete tw.minExitVelocity;
+        delete tw.allowedRwDirections;
+      }
+      if (el('taxiwayDirectionMode')) {
+        let dirVal = el('taxiwayDirectionMode').value || '';
+        if (tw.pathType === 'runway') {
+          runwayReverseVerticesIfDirectionChanged(tw, dirVal);
+          tw.direction = (dirVal === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+        } else tw.direction = dirVal || 'both';
+      }
+      if (el('taxiwayPathTypeKind')) {
+        const ptCur = tw.pathType || 'taxiway';
+        if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
+          const kind = String(el('taxiwayPathTypeKind').value || 'normal');
+          tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+        }
+      }
+      if (el('taxiwayAvgMoveVelocity')) {
+        var v = Number(el('taxiwayAvgMoveVelocity').value);
+        tw.avgMoveVelocity = (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
+      }
+      if (el('runwayMinArrVelocity')) {
+        const mav = Number(el('runwayMinArrVelocity').value);
+        if (tw.pathType === 'runway') {
+          tw.minArrVelocity = (typeof mav === 'number' && isFinite(mav) && mav > 0) ? Math.max(1, Math.min(150, mav)) : 15;
+        } else {
+          delete tw.minArrVelocity;
+        }
+      }
+      if (tw.pathType === 'runway') {
+        const cwEl = el('runwayLineupDistM_CW');
+        const ccwEl = el('runwayLineupDistM_CCW');
         const lxCw = cwEl ? Number(cwEl.value) : NaN;
         const lxCcw = ccwEl ? Number(ccwEl.value) : NaN;
         tw.lineupDistM_CW = (typeof lxCw === 'number' && isFinite(lxCw) && lxCw >= 0) ? lxCw : 0;
@@ -40,6 +133,7 @@
     if (mode === 'marker') {
       syncMarkerFlightAircraftRowVisibility();
       syncMarkerIslandWidthRowVisibility();
+      syncMarkerNavaidRowVisibility();
     }
     if (isPathLayoutMode(mode)) {
       const pt = pathTypeFromLayoutMode(mode);
@@ -274,97 +368,3 @@
     }
   });
   const buildingTypeInput = document.getElementById('buildingType');
-  if (buildingTypeInput) {
-    buildingTypeInput.addEventListener('change', function() {
-      const nextType = normalizeBuildingType(this.value || BUILDING_TYPE_DEFAULT);
-      const t = getCurrentTerminal();
-      const nameInput = document.getElementById('terminalName');
-
-
-      const nextDefaultName = getDefaultBuildingNameForType(nextType, t ? t.id : null);
-      if (t) {
-        t.buildingType = nextType;
-        if (findDuplicateLayoutName('terminal', t.id, nextDefaultName)) {
-          alertDuplicateLayoutName();
-          if (nameInput) nameInput.value = t.name || '';
-        } else {
-          t.name = nextDefaultName;
-          if (nameInput) nameInput.value = nextDefaultName;
-        }
-      } else if (nameInput) {
-        nameInput.value = nextDefaultName;
-      }
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-      update3DSceneWhenVisible();
-      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    });
-  }
-  function recomputeTerminalFloorHeight() {
-    const t = getCurrentTerminal();
-    if (!t) return;
-    const floorsInput = document.getElementById('terminalFloors');
-    const f2fInput = document.getElementById('terminalFloorToFloor');
-    const totalInput = document.getElementById('terminalFloorHeight');
-    let floors = floorsInput ? parseInt(floorsInput.value, 10) : t.floors;
-    let f2f = f2fInput ? Number(f2fInput.value) : t.floorToFloor;
-    floors = Math.max(1, floors || 1);
-    f2f = Math.max(0.5, f2f || 4);
-    const totalH = floors * f2f;
-    t.floors = floors;
-    t.floorToFloor = f2f;
-    t.floorHeight = totalH;
-    if (floorsInput) floorsInput.value = floors;
-    if (f2fInput) f2fInput.value = f2f;
-    if (totalInput) totalInput.value = totalH;
-    draw();
-    updateObjectInfo();
-    update3DSceneWhenVisible();
-  }
-  document.getElementById('terminalFloors').addEventListener('change', recomputeTerminalFloorHeight);
-  document.getElementById('terminalFloorToFloor').addEventListener('change', recomputeTerminalFloorHeight);
-  document.getElementById('terminalDepartureCapacity').addEventListener('change', function() {
-    const t = getCurrentTerminal();
-    if (t) { t.departureCapacity = Math.max(0, parseInt(this.value, 10) || 0); updateObjectInfo(); }
-  });
-  document.getElementById('terminalArrivalCapacity').addEventListener('change', function() {
-    const t = getCurrentTerminal();
-    if (t) { t.arrivalCapacity = Math.max(0, parseInt(this.value, 10) || 0); updateObjectInfo(); }
-  });
-
-  document.getElementById('standName').addEventListener('change', function() {
-    if (state.selectedObject && state.selectedObject.type === 'pbb') {
-      const pbb = state.selectedObject.obj;
-      const raw = (this.value || '').trim();
-      if (raw && findDuplicateLayoutName('pbb', pbb.id, raw)) {
-        alertDuplicateLayoutName();
-        this.value = pbb.name || '';
-        return;
-      }
-      pbb.name = raw;
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-    }
-  });
-  const standIcaoCategoriesHost = document.getElementById('standIcaoCategories');
-  if (standIcaoCategoriesHost) {
-    standIcaoCategoriesHost.addEventListener('change', function(ev) {
-      const t = ev.target;
-      if (!t || !t.classList.contains('icao-letter-check')) return;
-      let letters = readIcaoCategoriesFromHost('standIcaoCategories');
-      if (!letters.length) {
-        letters = ['C'];
-        applyIcaoCategoriesToHost('standIcaoCategories', letters);
-      }
-      const typeIds = aircraftTypeIdsForIcaoLetters(letters);
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        const pbb = state.selectedObject.obj;
-        pbb.categoryMode = 'icao';
-        pbb.allowedIcaoCategories = letters;
-        pbb.category = representativeCategoryFromLetters(letters);
-        pbb.allowedAircraftTypes = typeIds;
-        renderAircraftConstraintChoices('standAircraftAccess', typeIds, letters);
-        rebuildPbbBridgeGeometry(pbb);
-        updateObjectInfo();

@@ -1213,6 +1213,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     runway_holding_xy: List[Tuple[float, float]] = []
     gates: List[Tuple[float, float, Dict[str, str], str]] = []  # x,y,tags,feat_key
     txe_points: List[Tuple[float, float]] = []
+    aerodrome_outer_rings: List[List[Dict[str, float]]] = []
+    navaid_points: List[Tuple[float, float, str]] = []  # x, y, subType ('papi'|'ils')
 
     for feat in feats:
         props = feat.get("properties")
@@ -1271,6 +1273,48 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     px_raw, py_raw = _project_lonlat(float(coords[0]), float(coords[1]), lon0, lat0, r_earth)
                     px, py = _layout_xy_from_raw(px_raw, py_raw, x_off, y_off, y_span_m)
                     txe_points.append((px, py))
+
+        # PAPI / ILS navigationaid points → layoutMarkers kind='navaid'.
+        if aw == "navigationaid" and geom.get("type") == "Point":
+            nav_val = str(tags.get("navigationaid", "")).lower()
+            navaid_sub = None
+            if "papi" in nav_val or "vasi" in nav_val:
+                navaid_sub = "papi"
+            elif "ils" in nav_val or "loc" in nav_val or "gp" in nav_val or "lo" in nav_val:
+                navaid_sub = "ils"
+            if navaid_sub:
+                coords_np = geom.get("coordinates")
+                if isinstance(coords_np, (list, tuple)) and len(coords_np) >= 2:
+                    npx_raw, npy_raw = _project_lonlat(float(coords_np[0]), float(coords_np[1]), lon0, lat0, r_earth)
+                    npx, npy = _layout_xy_from_raw(npx_raw, npy_raw, x_off, y_off, y_span_m)
+                    navaid_points.append((float(npx), float(npy), navaid_sub))
+
+        # aeroway=aerodrome polygon/multipolygon → airport outer contour (layoutMarker island).
+        if aw == "aerodrome":
+            rings_raw: List[List[Tuple[float, float]]] = []
+            gt = geom.get("type")
+            gcoords = geom.get("coordinates")
+            if gt == "Polygon" and isinstance(gcoords, list) and gcoords:
+                ring = gcoords[0]
+                if isinstance(ring, list):
+                    rings_raw.append([(float(c[0]), float(c[1])) for c in ring if isinstance(c, (list, tuple)) and len(c) >= 2])
+            elif gt == "MultiPolygon" and isinstance(gcoords, list):
+                for poly_m in gcoords:
+                    if not isinstance(poly_m, list) or not poly_m:
+                        continue
+                    ring = poly_m[0]
+                    if isinstance(ring, list):
+                        rings_raw.append([(float(c[0]), float(c[1])) for c in ring if isinstance(c, (list, tuple)) and len(c) >= 2])
+            for ring_lonlat in rings_raw:
+                if len(ring_lonlat) < 3:
+                    continue
+                pts_xy: List[Dict[str, float]] = []
+                for lon_a, lat_a in ring_lonlat:
+                    ax_raw, ay_raw = _project_lonlat(float(lon_a), float(lat_a), lon0, lat0, r_earth)
+                    ax, ay = _layout_xy_from_raw(ax_raw, ay_raw, x_off, y_off, y_span_m)
+                    pts_xy.append({"x": float(ax), "y": float(ay)})
+                if len(pts_xy) >= 3:
+                    aerodrome_outer_rings.append(pts_xy)
 
     # Some source bundles keep holding_position or gate nodes only under osm.elements
     # (not geojson.features). Pull them in as a fallback so holdingPoints / stand-naming
@@ -1830,6 +1874,47 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                     "pavement": "asphalt",
                 }
             )
+
+    # Airport outer contour: aeroway=aerodrome outer rings as layoutMarkers kind='island'
+    # (user-facing label "Contour"). Thin outer ring for a perimeter outline look.
+    for ring_pts in aerodrome_outer_rings:
+        if len(ring_pts) < 3:
+            continue
+        # OSM rings typically repeat the first vertex at the end; drop it to avoid a zero edge.
+        pts_raw = list(ring_pts)
+        if len(pts_raw) >= 2:
+            p0 = pts_raw[0]
+            pn = pts_raw[-1]
+            try:
+                if abs(float(p0["x"]) - float(pn["x"])) < 1e-6 and abs(float(p0["y"]) - float(pn["y"])) < 1e-6:
+                    pts_raw = pts_raw[:-1]
+            except (KeyError, TypeError, ValueError):
+                pass
+        if len(pts_raw) < 3:
+            continue
+        pts_q = _round_vertex_list_xy(pts_raw, pos_pl)
+        layout_markers.append(
+            {
+                "kind": "island",
+                "id": _new_id("contour"),
+                "points": pts_q,
+                "outerWidthM": 4.0,
+                "innerWidthM": 0.0,
+                "pavement": "asphalt",
+            }
+        )
+
+    # PAPI / ILS markers from aeroway=navigationaid points.
+    for npx, npy, nsub in navaid_points:
+        layout_markers.append(
+            {
+                "kind": "navaid",
+                "id": _new_id("nav"),
+                "subType": nsub,
+                "x": _quantize_m(npx, pos_pl),
+                "y": _quantize_m(npy, pos_pl),
+            }
+        )
 
     terminals_out: List[Dict[str, Any]] = []
     t_idx = 0

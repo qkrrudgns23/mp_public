@@ -1,3 +1,10 @@
+    const candCorners = getRemoteStandCorners(candidate);
+    for (let i = 0; i < (state.tempStands || []).length; i++) {
+      const o = state.tempStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
+    }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const o = state.remoteStands[i];
       if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
     for (let i = 0; i < state.pbbStands.length; i++) {
@@ -400,6 +407,9 @@
             blazerLeftTrail: Array.isArray(m.blazerLeftTrail) ? m.blazerLeftTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : [],
             blazerRightTrail: Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : []
           };
+        }
+        if (m.kind === 'navaid') {
+          return { kind: 'navaid', id: m.id, subType: (m.subType === 'ils') ? 'ils' : 'papi', x: Number(m.x), y: Number(m.y) };
         }
         return null;
       }).filter(Boolean),
@@ -982,7 +992,19 @@
   function getMarkerSubKindFromPanel() {
     const tab = document.querySelector('.marker-tool-tab[aria-selected="true"]');
     const v = tab && tab.getAttribute('data-marker-sub');
-    return v === 'ruler' || v === 'flight' || v === 'island' || v === 'area' ? v : 'text';
+    return v === 'ruler' || v === 'flight' || v === 'island' || v === 'area' || v === 'navaid' ? v : 'text';
+  }
+  function getMarkerNavaidTypeFromPanel() {
+    const sel = document.getElementById('markerNavaidType');
+    const v = String(sel && sel.value || '').trim().toLowerCase();
+    return v === 'ils' ? 'ils' : 'papi';
+  }
+  function syncMarkerNavaidRowVisibility() {
+    const row = document.getElementById('markerNavaidRow');
+    if (!row) return;
+    const show = getMarkerSubKindFromPanel() === 'navaid';
+    row.hidden = !show;
+    row.style.display = show ? '' : 'none';
   }
   function getMarkerFlightAircraftTypeFromPanel() {
     const sel = document.getElementById('markerFlightAircraftType');
@@ -1018,7 +1040,8 @@
     row.style.display = show ? '' : 'none';
   }
   function setMarkerSubKindTab(sub) {
-    const next = sub === 'ruler' || sub === 'flight' || sub === 'island' || sub === 'area' ? sub : 'text';
+    const allowed = { ruler: 1, flight: 1, island: 1, area: 1, navaid: 1 };
+    const next = allowed[sub] ? sub : 'text';
     document.querySelectorAll('.marker-tool-tab').forEach(function(btn) {
       const on = (btn.getAttribute('data-marker-sub') || '') === next;
       btn.classList.toggle('active', on);
@@ -1026,13 +1049,21 @@
     });
     syncMarkerFlightAircraftRowVisibility();
     syncMarkerIslandWidthRowVisibility();
+    syncMarkerNavaidRowVisibility();
   }
   function syncMarkerSubKindTabFromSelectedLayoutMarker() {
     const sel = state.selectedObject;
     if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return;
     const kind = String(sel.obj.kind || '').trim();
-    if (kind !== 'text' && kind !== 'ruler' && kind !== 'island' && kind !== 'area' && kind !== 'flight') return;
+    if (kind !== 'text' && kind !== 'ruler' && kind !== 'island' && kind !== 'area' && kind !== 'flight' && kind !== 'navaid') return;
     setMarkerSubKindTab(kind);
+    if (kind === 'navaid') {
+      const sel2 = document.getElementById('markerNavaidType');
+      if (sel2) {
+        const sub = (sel.obj.subType === 'ils') ? 'ils' : 'papi';
+        sel2.value = sub;
+      }
+    }
   }
   function isMarkerFlightAllowedPathType(pt) {
     return pt === 'runway' || pt === 'runway_exit' || pt === 'taxiway' || pt === 'general_queue_taxiway';
@@ -1260,6 +1291,10 @@
         }
       }
       return best;
+    } else if (mk.kind === 'navaid') {
+      const x = Number(mk.x), y = Number(mk.y);
+      if (isFinite(x) && isFinite(y) && dist2(click, [x, y]) <= r2)
+        return { markerId: mk.id, handle: 'navaidCenter' };
     }
     return null;
   }
@@ -1293,38 +1328,3 @@
     ctx.setLineDash(layoutPathDraftDashPattern());
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-    if (hasHover) ctx.lineTo(hoverXY[0], hoverXY[1]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
-  function drawLayoutPathDraftVertexDots(ctx, pts, hoverXY) {
-    if (!pts) return;
-    for (let i = 0; i < pts.length; i++) {
-      layoutMarkerDrawEndpointDot(ctx, pts[i][0], pts[i][1], false);
-    }
-    if (hoverXY && hoverXY.length >= 2 && isFinite(hoverXY[0]) && isFinite(hoverXY[1])) {
-      layoutMarkerDrawEndpointDot(ctx, hoverXY[0], hoverXY[1], false);
-    }
-  }
-  function strokeLayoutPathDraftCloseHintArc(ctx, cx, cy, r) {
-    ctx.save();
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(56,189,248,0.9)';
-    ctx.lineWidth = Math.max(1, 1.2 / Math.max(state.scale, 0.1));
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
-  function layoutMarkerTextHitRect(m) {
-    const hx = Number(m.x), hy = Number(m.y);
-    if (!isFinite(hx) || !isFinite(hy)) return null;
-    const fs = Math.max(10, 12 / Math.max(state.scale, 0.12));
-    const txt = String(m.text || '');
-    let tw = Math.max(CELL_SIZE * 0.35, txt.length * fs * 0.45) + 8;
-    if (ctx) {

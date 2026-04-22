@@ -1,3 +1,97 @@
+    const tdPt = getRunwayPointAtDistance(runwayId, tdDist);
+    if (!tdPt) {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_td' };
+      return;
+    }
+    const builtAppr = buildArrivalApproachPolylinePts(runwayId, rwDir, anchorDist, offset, tdPt);
+    const pack = builtAppr.pack;
+    const apprPts = builtAppr.apprPts;
+    if (!apprPts || apprPts.length < 2) {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_appr' };
+      return;
+    }
+    const rawApprDur = polylineRawDurationSegmentVelocities(apprPts, function() { return vTd; });
+    const t0 = eldtS - rawApprDur;
+    const airTl = polylineTimelineBySegmentSpeeds(apprPts, t0, eldtS, function() { return vTd; });
+    const rotS = (typeof f.arrRotSec === 'number' && isFinite(f.arrRotSec)) ? Math.max(0, f.arrRotSec) : 0;
+    const vttDelayS = (typeof f.vttADelayMin === 'number' && isFinite(f.vttADelayMin) ? f.vttADelayMin : 0) * 60;
+    const tAfterRot = eldtS + rotS;
+    const runwayEndT = Math.min(tAfterRot, eibtS);
+    let tTaxiStart = Math.min(tAfterRot + vttDelayS, eibtS);
+    if (tTaxiStart < runwayEndT) tTaxiStart = runwayEndT;
+
+
+    const taxiInPts = trimPolylineFromNearPoint(arrPts, tdPt);
+    let taxiInTl;
+    if (runwayEndT > eldtS + 1e-3) {
+      taxiInTl = buildRunwayAndRetTimelineInWindow(f, runwayId, taxiInPts, eldtS, runwayEndT);
+    } else {
+      taxiInTl = [{ t: eldtS, x: tdPt[0], y: tdPt[1] }];
+    }
+    if (tTaxiStart > runwayEndT + 1e-3 && taxiInTl && taxiInTl.length) {
+      const lastRw = taxiInTl[taxiInTl.length - 1];
+      taxiInTl = mergeTimelineSegments(taxiInTl, [
+        { t: runwayEndT, x: lastRw.x, y: lastRw.y },
+        { t: tTaxiStart, x: lastRw.x, y: lastRw.y },
+      ]);
+    }
+    const apronTl = buildApronTaxiTimelineAfterRet(f, runwayId, taxiInPts, tTaxiStart, eibtS);
+    taxiInTl = mergeTimelineSegments(taxiInTl, apronTl);
+    const standPt = taxiInPts.length ? taxiInPts[taxiInPts.length - 1] : arrPts[arrPts.length - 1];
+    const sx = standPt[0], sy = standPt[1];
+    const dwellTl = [{ t: eibtS, x: sx, y: sy }, { t: eobtS, x: sx, y: sy }];
+    const builtDep = buildDepartureSurfaceTimelineSegments(f, eobtS, etotS);
+    if (!builtDep || !builtDep.timeline || builtDep.timeline.length < 2) {
+      f.timeline = null;
+      f.timeline_meta = { error: 'no_path', leg: 'dep_tail' };
+      return;
+    }
+    const depTl = builtDep.timeline;
+    let timeline = mergeTimelineSegments(airTl, taxiInTl);
+    timeline = mergeTimelineSegments(timeline, dwellTl);
+    timeline = mergeTimelineSegments(timeline, depTl);
+    f.timeline = timeline;
+    f.timeline_meta = Object.assign({
+      tApproachStart: t0,
+      eldtSec: eldtS,
+      eibtSec: eibtS,
+      eobtSec: eobtS,
+      etotSec: etotS,
+      approachOffset: offset,
+      approachStraightFinalM: APPROACH_STRAIGHT_FINAL_M,
+      approachPathLenM: (pack && typeof pack.pathLen === 'number') ? pack.pathLen : null,
+      touchdownSpeedMs: vTd,
+    }, builtDep.meta || {});
+  }
+  let _lazyTimelineLastEvictSimSec = NaN;
+  function clearAllFlightTimelines(opts) {
+    const keepDes = opts && opts.keepDesResultTimelines === true;
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f) continue;
+      if (keepDes && f.timeline_meta && f.timeline_meta.playbackSource === 'des_result') continue;
+      f.timeline = null;
+      delete f.timeline_meta;
+      if (!keepDes) {
+        delete f.proSimEdgeList;
+        delete f.edge_list;
+      }
+    }
+    _lazyTimelineLastEvictSimSec = NaN;
+  }
+  function prepareLazyTimelinesForCurrentSim(tSec) {
+    const flights = state.flights || [];
+    const pad = simAirsideLazyPadSec();
+    const tEvictKey = Number(tSec);
+    if (!isFinite(tEvictKey) || tEvictKey !== _lazyTimelineLastEvictSimSec) {
+      if (isFinite(tEvictKey)) _lazyTimelineLastEvictSimSec = tEvictKey;
+      for (let i = 0; i < flights.length; i++) {
+        const f = flights[i];
+        if (!f) continue;
+        if (flightBlockedLikeNoWay(f)) continue;
         if (!f.timeline || !f.timeline.length) continue;
         const meta = f.timeline_meta;
         if (meta && meta.playbackSource === 'des_result') continue;
@@ -1614,97 +1708,3 @@
           otherOrd.forEach(q => {
             if (!pointOnSegmentStrict(a, b, q)) return;
             const { t, p: proj } = projectOnSegment(a, b, q);
-            junctions.push({ tAlong: seg + t, p: proj });
-          });
-        }
-        const isRunway = obj.pathType === 'runway';
-        if (!isRunway) {
-          (state.apronLinks || []).forEach(lk => {
-            if (lk.taxiwayId !== obj.id || lk.tx == null || lk.ty == null) return;
-            const linkPt = [Number(lk.tx), Number(lk.ty)];
-            const { t, p } = projectOnSegment(a, b, linkPt);
-            if (t >= 0 && t <= 1 && dist2(p, linkPt) <= SPLIT_TOL_D2) {
-              junctions.push({ tAlong: seg + t, p });
-              const pbb = findStandById(lk.pbbId);
-              if (pbb) {
-                const standPt = getStandApronTaxiwayAttachWorldPx(pbb);
-                const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) { return cellToPixel(Number(v.col), Number(v.row)); });
-                const chain = [standPt].concat(mids).concat([p]);
-                apronNodeStand.push({ nodeP: p, standPt, standId: lk.pbbId, chain, linkId: lk.id || 'apron_link' });
-              }
-            }
-          });
-        }
-        {
-          const ptHp = obj.pathType;
-          if (ptHp === 'runway_exit' || ptHp === 'taxiway' || ptHp === 'apron_taxiway' || ptHp === 'general_queue_taxiway') {
-            const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
-            const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
-            (state.holdingPoints || []).forEach(function(hp) {
-              if (!hp) return;
-              const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
-              if (ptHp === 'runway_exit') {
-                if (k !== 'runway_holding') return;
-              } else {
-                if (k !== 'intermediate') return;
-              }
-              if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
-              const pr = projectOnSegment(a, b, [hp.x, hp.y]);
-              if (pr.t >= 0 && pr.t <= 1 && dist2(pr.p, [hp.x, hp.y]) <= hpTolD2) {
-                junctions.push({ tAlong: seg + pr.t, p: pr.p });
-              }
-            });
-          }
-        }
-        {
-          const ptTs = obj.pathType;
-          if (
-            ptTs === 'runway_exit' ||
-            ptTs === 'taxiway' ||
-            ptTs === 'apron_taxiway' ||
-            ptTs === 'runway_taxiway' ||
-            ptTs === 'general_queue_taxiway'
-          ) {
-            (state.tempStands || []).forEach(function(st) {
-              if (!st) return;
-              const corners = getRemoteStandCorners(st);
-              if (!corners || corners.length < 4) return;
-              for (let ei = 0; ei < 4; ei++) {
-                const c = corners[ei], d = corners[(ei + 1) % 4];
-                const isec = segmentSegmentIntersection(a, b, c, d);
-                if (isec) {
-                  const pr = projectOnSegment(a, b, isec.p);
-                  if (pr.t >= 0 && pr.t <= 1) junctions.push({ tAlong: seg + pr.t, p: pr.p });
-                } else {
-                  const ov = collinearSegmentOverlapOnAB(a, b, c, d);
-                  if (ov) {
-                    const ax = a[0], ay = a[1], bx = b[0], by = b[1];
-                    const dx = bx - ax, dy = by - ay;
-                    const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
-                    const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
-                    const pr0 = projectOnSegment(a, b, p0);
-                    junctions.push({ tAlong: seg + pr0.t, p: pr0.p });
-                    if (dist2(p0, p1ov) > SPLIT_TOL_D2) {
-                      const pr1 = projectOnSegment(a, b, p1ov);
-                      junctions.push({ tAlong: seg + pr1.t, p: pr1.p });
-                    }
-                  } else {
-                    [c, d].forEach(function(q) {
-                      if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
-                        const prq = projectOnSegment(a, b, q);
-                        if (prq.t >= 0 && prq.t <= 1) junctions.push({ tAlong: seg + prq.t, p: prq.p });
-                      }
-                    });
-                  }
-                }
-              }
-            });
-          }
-        }
-      }
-      if (obj.pathType === 'general_queue_taxiway') {
-        queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
-          junctions.push(qj);
-        });
-      }
-      if (obj.pathType === 'runway') {

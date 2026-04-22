@@ -1,3 +1,97 @@
+            junctions.push({ tAlong: seg + t, p: proj });
+          });
+        }
+        const isRunway = obj.pathType === 'runway';
+        if (!isRunway) {
+          (state.apronLinks || []).forEach(lk => {
+            if (lk.taxiwayId !== obj.id || lk.tx == null || lk.ty == null) return;
+            const linkPt = [Number(lk.tx), Number(lk.ty)];
+            const { t, p } = projectOnSegment(a, b, linkPt);
+            if (t >= 0 && t <= 1 && dist2(p, linkPt) <= SPLIT_TOL_D2) {
+              junctions.push({ tAlong: seg + t, p });
+              const pbb = findStandById(lk.pbbId);
+              if (pbb) {
+                const standPt = getStandApronTaxiwayAttachWorldPx(pbb);
+                const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) { return cellToPixel(Number(v.col), Number(v.row)); });
+                const chain = [standPt].concat(mids).concat([p]);
+                apronNodeStand.push({ nodeP: p, standPt, standId: lk.pbbId, chain, linkId: lk.id || 'apron_link' });
+              }
+            }
+          });
+        }
+        {
+          const ptHp = obj.pathType;
+          if (ptHp === 'runway_exit' || ptHp === 'taxiway' || ptHp === 'apron_taxiway' || ptHp === 'general_queue_taxiway') {
+            const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+            const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
+            (state.holdingPoints || []).forEach(function(hp) {
+              if (!hp) return;
+              const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
+              if (ptHp === 'runway_exit') {
+                if (k !== 'runway_holding') return;
+              } else {
+                if (k !== 'intermediate') return;
+              }
+              if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
+              const pr = projectOnSegment(a, b, [hp.x, hp.y]);
+              if (pr.t >= 0 && pr.t <= 1 && dist2(pr.p, [hp.x, hp.y]) <= hpTolD2) {
+                junctions.push({ tAlong: seg + pr.t, p: pr.p });
+              }
+            });
+          }
+        }
+        {
+          const ptTs = obj.pathType;
+          if (
+            ptTs === 'runway_exit' ||
+            ptTs === 'taxiway' ||
+            ptTs === 'apron_taxiway' ||
+            ptTs === 'runway_taxiway' ||
+            ptTs === 'general_queue_taxiway'
+          ) {
+            (state.tempStands || []).forEach(function(st) {
+              if (!st) return;
+              const corners = getRemoteStandCorners(st);
+              if (!corners || corners.length < 4) return;
+              for (let ei = 0; ei < 4; ei++) {
+                const c = corners[ei], d = corners[(ei + 1) % 4];
+                const isec = segmentSegmentIntersection(a, b, c, d);
+                if (isec) {
+                  const pr = projectOnSegment(a, b, isec.p);
+                  if (pr.t >= 0 && pr.t <= 1) junctions.push({ tAlong: seg + pr.t, p: pr.p });
+                } else {
+                  const ov = collinearSegmentOverlapOnAB(a, b, c, d);
+                  if (ov) {
+                    const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+                    const dx = bx - ax, dy = by - ay;
+                    const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
+                    const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
+                    const pr0 = projectOnSegment(a, b, p0);
+                    junctions.push({ tAlong: seg + pr0.t, p: pr0.p });
+                    if (dist2(p0, p1ov) > SPLIT_TOL_D2) {
+                      const pr1 = projectOnSegment(a, b, p1ov);
+                      junctions.push({ tAlong: seg + pr1.t, p: pr1.p });
+                    }
+                  } else {
+                    [c, d].forEach(function(q) {
+                      if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                        const prq = projectOnSegment(a, b, q);
+                        if (prq.t >= 0 && prq.t <= 1) junctions.push({ tAlong: seg + prq.t, p: prq.p });
+                      }
+                    });
+                  }
+                }
+              }
+            });
+          }
+        }
+      }
+      if (obj.pathType === 'general_queue_taxiway') {
+        queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
+          junctions.push(qj);
+        });
+      }
+      if (obj.pathType === 'runway') {
         const ldm = getEffectiveRunwayLineupDistM(obj);
         const rpath = getRunwayPath(obj.id);
         if (rpath && rpath.pts && rpath.pts.length >= 2 && ldm > 1e-6) {
@@ -3049,6 +3143,19 @@
   setMarkerSubKindTab('text');
   syncMarkerFlightAircraftRowVisibility();
   syncMarkerIslandWidthRowVisibility();
+  syncMarkerNavaidRowVisibility();
+  (function _wireMarkerNavaidTypeSelect() {
+    const sel = document.getElementById('markerNavaidType');
+    if (!sel) return;
+    sel.addEventListener('change', function() {
+      const so = state.selectedObject;
+      if (so && so.type === 'layoutMarker' && so.obj && so.obj.kind === 'navaid') {
+        so.obj.subType = getMarkerNavaidTypeFromPanel();
+        if (typeof updateObjectInfo === 'function') updateObjectInfo();
+        scheduleDraw();
+      }
+    });
+  })();
 
   (function setupRightPanelDragResize() {
     if (!panel || !panelToggle) return;
@@ -3469,9 +3576,18 @@
           items.push({
             type: 'layoutMarker',
             id: mk.id,
-            title: 'Marker | Island',
+            title: 'Marker | Contour',
             tag: nv + ' vtx',
             details: 'Closed polygon · ' + nv + ' vertices (layout m = px)'
+          });
+        } else if (mk.kind === 'navaid') {
+          const sub = (mk.subType === 'ils') ? 'ILS' : 'PAPI';
+          items.push({
+            type: 'layoutMarker',
+            id: mk.id,
+            title: 'Marker | ' + sub,
+            tag: sub,
+            details: 'Navigation aid at (' + Number(mk.x).toFixed(1) + ', ' + Number(mk.y).toFixed(1) + ')'
           });
         } else if (mk.kind === 'area') {
           const nv = (mk.points && mk.points.length) || 0;
@@ -3871,7 +3987,7 @@
           const ow = islandOuterWidthMResolved(mk);
           const iw = islandInnerWidthMResolved(mk);
           const pav = islandMarkerPavementResolved(mk);
-          objectInfoEl.innerHTML = '<strong>Marker · Island</strong><br>Vertices: ' + nv +
+          objectInfoEl.innerHTML = '<strong>Marker · Contour</strong><br>Vertices: ' + nv +
             '<br><label for="' + oid + '">Outer width (m)</label><br>' +
             '<input type="number" id="' + oid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:4px 0 8px;" min="0" max="500" step="0.5" value="' + ow + '" inputmode="decimal" />' +
             '<br><label for="' + iid + '">Inner width (m)</label><br>' +
@@ -3955,6 +4071,31 @@
             return true;
           }
           if (!bindBlazerToggle()) setTimeout(bindBlazerToggle, 0);
+        } else if (mk.kind === 'navaid') {
+          const sub = (mk.subType === 'ils') ? 'ils' : 'papi';
+          const label = sub === 'ils' ? 'ILS' : 'PAPI';
+          const sid = 'layoutMarkerNavaidType';
+          objectInfoEl.innerHTML = '<strong>Marker · ' + label + '</strong>' +
+            '<br><label for="' + sid + '">Nav aid type</label>' +
+            '<br><select id="' + sid + '" class="object-info-text-input" style="width:100%;box-sizing:border-box;margin:6px 0;">' +
+            '<option value="papi"' + (sub === 'papi' ? ' selected' : '') + '>PAPI</option>' +
+            '<option value="ils"' + (sub === 'ils' ? ' selected' : '') + '>ILS</option>' +
+            '</select>' +
+            '<br>Position: (' + Number(mk.x).toFixed(1) + ', ' + Number(mk.y).toFixed(1) + ')';
+          const markerId = mk.id;
+          const sEl = document.getElementById(sid);
+          if (sEl) sEl.onchange = function() {
+            const so = state.selectedObject;
+            if (!so || so.type !== 'layoutMarker' || String(so.id) !== String(markerId)) return;
+            const mo = so.obj;
+            if (!mo || mo.kind !== 'navaid') return;
+            mo.subType = this.value === 'ils' ? 'ils' : 'papi';
+            const panelSel = document.getElementById('markerNavaidType');
+            if (panelSel) panelSel.value = mo.subType;
+            scheduleDraw();
+            updateObjectInfo();
+            if (typeof renderObjectList === 'function') renderObjectList();
+          };
         } else {
           objectInfoEl.innerHTML = '<strong>Marker</strong>';
         }
@@ -6369,7 +6510,7 @@
     (state.layoutMarkers || []).forEach(function(m) {
       if (!m) return;
       if (!markerTool) {
-        if ((m.kind === 'text' || m.kind === 'ruler') && !state.layers.textRuler) return;
+        if ((m.kind === 'text' || m.kind === 'ruler' || m.kind === 'navaid') && !state.layers.textRuler) return;
         if (m.kind === 'flight' && !state.layers.dummyFlight) return;
       }
       if (!(state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id)) {
@@ -6519,6 +6660,8 @@
           const vSel = !!(sv && sv.type === 'layoutMarkerHandle' && sv.handle === 'islandVertex' && String(sv.id) === String(m.id) && sv.vertexIndex === vi);
           layoutMarkerDrawEndpointDot(ctx, pts[vi][0], pts[vi][1], vSel);
         }
+      } else if (m.kind === 'navaid') {
+        drawNavaidMarker2D(ctx, m, sel, interactiveLite);
       }
     });
     if (state.markerDrawing && state.markerRulerDraft && getMarkerSubKindFromPanel() === 'ruler' && state.markerRulerHoverWorld && (markerTool || state.layers.textRuler)) {
@@ -7457,6 +7600,9 @@
               appendMarkerFlightBlazerTrail(mk);
             }
           }
+        } else if (h.handle === 'navaidCenter') {
+          mk.x = px[0];
+          mk.y = px[1];
         }
         if (state.selectedObject && state.selectedObject.type === 'layoutMarker' && String(state.selectedObject.id) === String(h.markerId))
           state.selectedObject.obj = mk;

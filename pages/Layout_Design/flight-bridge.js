@@ -1,3 +1,10 @@
+    }
+    ctx.restore();
+  }
+  /** Apron–taxiway UI attach point: PBB = aircraft marker; remote/temp = same local xBendEnd offset as Contact (getStandAircraftMarkerWorldPxFor*). */
+  function getStandApronTaxiwayAttachWorldPx(stand) {
+    if (!stand) return [0, 0];
+    const isPbb = (state.pbbStands || []).some(function(s) { return s && s.id === stand.id; });
     if (isPbb) return getStandConnectionPx(stand);
     return getStandAircraftMarkerWorldPxForRemoteLike(stand);
   }
@@ -441,10 +448,3 @@
     const panelAllowedTypesT = uTs.allowedAircraftTypes;
     const angleDeg = 0;
     const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };
-    const candCorners = getRemoteStandCorners(candidate);
-    for (let i = 0; i < (state.tempStands || []).length; i++) {
-      const o = state.tempStands[i];
-      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
-    }
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      const o = state.remoteStands[i];

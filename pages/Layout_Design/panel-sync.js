@@ -1,3 +1,10 @@
+    }
+    return null;
+  }
+  function alertDuplicateLayoutName() {
+    alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
+  }
+  function ensureDefaultDirectionModes() {
     if (state.directionModes.length === 0) {
       state.directionModes = [
         { id: id(), name: 'Mode A', direction: 'clockwise' },
@@ -508,7 +515,7 @@
   function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
     if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
     ctx.save();
-    ctx.strokeStyle = 'rgba(220,38,38,0.92)';
+    ctx.strokeStyle = c2dStandSafetyStroke();
     const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
     ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
     ctx.setLineDash([]);
@@ -621,10 +628,3 @@
       ctx.lineWidth = selected ? baseLw * 1.5 : baseLw;
       ctx.strokeStyle = strokeStyle;
       ctx.stroke();
-    }
-    ctx.restore();
-  }
-  /** Apron–taxiway UI attach point: PBB = aircraft marker; remote/temp = same local xBendEnd offset as Contact (getStandAircraftMarkerWorldPxFor*). */
-  function getStandApronTaxiwayAttachWorldPx(stand) {
-    if (!stand) return [0, 0];
-    const isPbb = (state.pbbStands || []).some(function(s) { return s && s.id === stand.id; });

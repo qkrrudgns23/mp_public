@@ -232,6 +232,13 @@
         blazerRightTrail: rightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); })
       };
     }
+    if (k === 'navaid') {
+      const x = Number(m.x), y = Number(m.y);
+      if (!isFinite(x) || !isFinite(y)) return null;
+      const subRaw = String(m.subType || m.sub || 'papi').trim().toLowerCase();
+      const sub = subRaw === 'ils' ? 'ils' : 'papi';
+      return { kind: 'navaid', id: m.id || id(), subType: sub, x: x, y: y };
+    }
     return null;
   }
   function isLayoutPolygonMarkerKind(kind) {
@@ -711,10 +718,3 @@
         if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
       }
       return null;
-    }
-    return null;
-  }
-  function alertDuplicateLayoutName() {
-    alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
-  }
-  function ensureDefaultDirectionModes() {
