@@ -5008,6 +5008,7 @@
         if (!pts || pts.length < 3) continue;
         const poly = pts.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
         if (poly.length < 3) continue;
+        const contourLineOnly = m.kind === 'island' && m.id != null && String(m.id).indexOf('contour-') === 0;
         const er = layoutMarkerHandleHitRadiusWorld() * 1.1;
         const er2 = er * er;
         let nearVertex = false;
@@ -5018,7 +5019,7 @@
           }
         }
         if (nearVertex) return { type: 'layoutMarker', id: m.id, obj: m };
-        if (pointInPolygonXY(click, poly)) return { type: 'layoutMarker', id: m.id, obj: m };
+        if (!contourLineOnly && pointInPolygonXY(click, poly)) return { type: 'layoutMarker', id: m.id, obj: m };
         const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
         const tol2 = tol * tol;
         const nn = poly.length;

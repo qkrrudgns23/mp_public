@@ -51,7 +51,7 @@ OSM_TO_LAYOUT_RULES: Dict[str, Any] = {
         "pbb_wall_length_m": 22.0,
         "pbb_bridge_stub_m": 28.0,
         "pbb_default_pbb_count": 1,
-        "gate_name_match_m": 80.0,
+        "gate_name_match_m": 60.0,
     },
     "taxiways": {
         "default_width_m": 23.0,
@@ -135,26 +135,6 @@ def _safe_name(s: str, fallback: str) -> str:
     return t if t else fallback
 
 
-def _extract_gate_ref_number(tags: Dict[str, str]) -> Optional[int]:
-    """Pull the first integer from the gate's ``ref``/``name`` tags (OSM gate number)."""
-    if not isinstance(tags, dict):
-        return None
-    for key in ("ref", "name"):
-        raw = tags.get(key)
-        if raw is None:
-            continue
-        m = re.search(r"\d+", str(raw))
-        if not m:
-            continue
-        try:
-            n = int(m.group(0))
-        except (TypeError, ValueError):
-            continue
-        if n >= 0:
-            return n
-    return None
-
-
 def _layout_linestrings_from_taxiway_dicts(rows: List[Dict[str, Any]]) -> List[LineString]:
     out: List[LineString] = []
     for tw in rows:
@@ -223,97 +203,160 @@ def _flip_parking_wall_for_terminal_outward(
     return nx, ny, math.degrees(math.atan2(ny, nx))
 
 
-def _assign_stand_names_by_nearest_gate(
+def _osm_stand_ref_from_tags(tags: Dict[str, Any]) -> str:
+    """Prefer ``ref``, then ``name``; strip all whitespace (OSM spacing quirks)."""
+    if not isinstance(tags, dict):
+        return ""
+    for key in ("ref", "name"):
+        raw = tags.get(key)
+        if raw is None:
+            continue
+        s = re.sub(r"\s+", "", str(raw).strip())
+        if s:
+            return s
+    return ""
+
+
+def _two_letter_stand_fallback_code(seq_index: int) -> str:
+    """AA, AB, …, ZZ (676 codes); then ``ZZ_1``, ``ZZ_2``, … for overflow."""
+    n = max(0, int(seq_index))
+    if n < 676:
+        hi, lo = n // 26, n % 26
+        return chr(65 + hi) + chr(65 + lo)
+    return f"ZZ_{n - 675}"
+
+
+def _assign_osm_stand_names_from_ref_candidates(
     stands: List[Dict[str, Any]],
-    gates: Sequence[Tuple[float, float, Dict[str, str], str]],
-    prefix: str,
+    ref_candidates: Sequence[Tuple[float, float, str]],
     max_search_m: float,
     get_xy,
+    *,
+    remote: bool,
 ) -> None:
-    """Rename stands in place using the closest OSM gate ref.
+    """Rename from nearest gate / parking_position ref (within ``max_search_m``).
 
-    - Matched (within ``max_search_m``): ``{prefix}{ref:03d}``; duplicates get ``_A/_B`` suffixes.
-    - Unmatched: ``{prefix}_AA``, ``{prefix}_AB`` … (two-letter sequence onward).
+    Contact: use ref as-is (spaces removed). Duplicate refs → ``base_1``, ``base_2``, …
+    No ref in range: ``AA`` … ``ZZ`` then ``ZZ_n``.
+
+    Remote: ``[R]`` + same rules on the suffix (e.g. ``[R]198R``, ``[R]198R_1``).
     """
     if not stands:
         return
     thresh = float(max_search_m) if max_search_m and max_search_m > 0 else 0.0
-    gate_list = [g for g in (gates or []) if isinstance(g, tuple) and len(g) >= 3]
+    cands = [(float(x), float(y), str(lab)) for x, y, lab in (ref_candidates or []) if lab]
 
-    numbered_bases: List[Optional[str]] = []
+    matched_base: List[Optional[str]] = []
     unmatched_idx: List[int] = []
     for i, s in enumerate(stands):
         if not isinstance(s, dict):
-            numbered_bases.append(None)
+            matched_base.append(None)
             continue
         try:
             px, py = get_xy(s)
             px = float(px)
             py = float(py)
         except (TypeError, ValueError):
-            numbered_bases.append(None)
+            matched_base.append(None)
             unmatched_idx.append(i)
             continue
-        best_num: Optional[int] = None
-        best_d = thresh if thresh > 0 else 1e30
-        for gx, gy, gtags, _fid in gate_list:
+        best_lab: Optional[str] = None
+        best_d = float("inf")
+        for cx, cy, lab in cands:
             try:
-                d = math.hypot(float(gx) - px, float(gy) - py)
+                d = math.hypot(float(cx) - px, float(cy) - py)
             except (TypeError, ValueError):
                 continue
             if thresh > 0 and d > thresh:
                 continue
-            if d >= best_d and best_num is not None:
-                continue
-            n = _extract_gate_ref_number(gtags)
-            if n is None:
-                continue
-            best_num = int(n)
-            best_d = d
-        if best_num is None:
-            numbered_bases.append(None)
+            if d < best_d - 1e-9 or (
+                abs(d - best_d) <= 1e-9 and lab and (best_lab is None or lab < best_lab)
+            ):
+                best_d = d
+                best_lab = lab
+        if not best_lab:
+            matched_base.append(None)
             unmatched_idx.append(i)
         else:
-            numbered_bases.append(f"{prefix}{best_num:03d}")
+            matched_base.append(best_lab)
 
-    from collections import Counter
+    from collections import defaultdict
 
-    base_counts = Counter(b for b in numbered_bases if b)
-    base_seq: Dict[str, int] = {}
-    for i, base in enumerate(numbered_bases):
-        if base is None:
+    groups: Dict[str, List[int]] = defaultdict(list)
+    for i, base in enumerate(matched_base):
+        if base:
+            groups[base].append(i)
+
+    for base, idxs in groups.items():
+        idxs_sorted = sorted(idxs)
+        if len(idxs_sorted) > 1:
+            for k, si in enumerate(idxs_sorted):
+                inner = f"{base}_{k + 1}"
+                if not isinstance(stands[si], dict):
+                    continue
+                stands[si]["name"] = f"[R]{inner}" if remote else inner
             continue
-        s = stands[i]
-        if base_counts.get(base, 0) <= 1:
-            s["name"] = base
-            continue
-        k = base_seq.get(base, 0)
-        base_seq[base] = k + 1
-        s["name"] = f"{base}_{_alpha_suffix(k)}"
+        si = idxs_sorted[0]
+        if isinstance(stands[si], dict):
+            stands[si]["name"] = f"[R]{base}" if remote else base
 
-    for k, i in enumerate(unmatched_idx):
-        stands[i]["name"] = f"{prefix}_{_alpha_suffix(26 + k)}"
+    u = 0
+    for si in sorted(unmatched_idx):
+        if not isinstance(stands[si], dict):
+            continue
+        code = _two_letter_stand_fallback_code(u)
+        u += 1
+        stands[si]["name"] = f"[R]{code}" if remote else code
+
+
+def _build_stand_ref_candidates(
+    gates: Sequence[Tuple[float, float, Dict[str, str], str]],
+    parking_lines: Sequence[Tuple[LineString, Dict[str, Any]]],
+    parking_position_nodes_xy: Sequence[Tuple[float, float, str]],
+) -> List[Tuple[float, float, str]]:
+    """Layout-XY points with OSM ref labels for stand naming (gate + parking lines + OSM nodes)."""
+    out: List[Tuple[float, float, str]] = []
+    for g in gates or ():
+        if not isinstance(g, tuple) or len(g) < 3:
+            continue
+        gx, gy, gtags = float(g[0]), float(g[1]), g[2]
+        lab = _osm_stand_ref_from_tags(gtags if isinstance(gtags, dict) else {})
+        if lab:
+            out.append((gx, gy, lab))
+    for pln, ptags in parking_lines or ():
+        if pln is None or pln.is_empty or len(pln.coords) < 2:
+            continue
+        lab = _osm_stand_ref_from_tags(ptags if isinstance(ptags, dict) else {})
+        if not lab:
+            continue
+        for x, y in pln.coords:
+            out.append((float(x), float(y), lab))
+    for row in parking_position_nodes_xy or ():
+        if not isinstance(row, tuple) or len(row) < 3:
+            continue
+        out.append((float(row[0]), float(row[1]), str(row[2])))
+    return out
 
 
 def _normalize_osm_stand_names_inplace(
     pbb_stands: List[Dict[str, Any]],
     remote_stands: List[Dict[str, Any]],
-    gates: Sequence[Tuple[float, float, Dict[str, str], str]],
+    ref_candidates: Sequence[Tuple[float, float, str]],
     max_search_m: float,
 ) -> None:
-    _assign_stand_names_by_nearest_gate(
+    _assign_osm_stand_names_from_ref_candidates(
         pbb_stands,
-        gates,
-        "G",
+        ref_candidates,
         max_search_m,
         lambda s: (s.get("apronSiteX", 0.0), s.get("apronSiteY", 0.0)),
+        remote=False,
     )
-    _assign_stand_names_by_nearest_gate(
+    _assign_osm_stand_names_from_ref_candidates(
         remote_stands,
-        gates,
-        "R",
+        ref_candidates,
         max_search_m,
         lambda s: (s.get("x", 0.0), s.get("y", 0.0)),
+        remote=True,
     )
 
 
@@ -1320,6 +1363,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     # (not geojson.features). Pull them in as a fallback so holdingPoints / stand-naming
     # stay stable across data shapes.
     seen_gate_ids = {str(g[3]) for g in gates if len(g) >= 4}
+    parking_position_node_refs: List[Tuple[float, float, str]] = []
     osm_obj = doc.get("osm")
     if isinstance(osm_obj, dict):
         elems = osm_obj.get("elements")
@@ -1345,6 +1389,19 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                             gates.append((float(gx), float(gy), etags, eid or _new_id("gate")))
                             if eid:
                                 seen_gate_ids.add(eid)
+                # parking_position as node (not always in GeoJSON features) → ref naming candidates.
+                if str(etags.get("aeroway", "")).strip().lower() == "parking_position" and el.get("type") == "node":
+                    lat_p = el.get("lat")
+                    lon_p = el.get("lon")
+                    if isinstance(lat_p, (int, float)) and isinstance(lon_p, (int, float)):
+                        pn_lab = _osm_stand_ref_from_tags(etags)
+                        if pn_lab:
+                            prx_raw, pry_raw = _project_lonlat(float(lon_p), float(lat_p), lon0, lat0, r_earth)
+                            prx, pry = _layout_xy_from_raw(prx_raw, pry_raw, x_off, y_off, y_span_m)
+                            parking_position_node_refs.append((float(prx), float(pry), pn_lab))
+                            # Micro stub so nearest-point logic behaves like a short LineString.
+                            eps_m = 0.35
+                            parking_position_node_refs.append((float(prx) + eps_m, float(pry), pn_lab))
                 if not _is_holding_position_feature(etags):
                     continue
                 lat = el.get("lat")
@@ -1390,7 +1447,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
     cat = str(rules["stands"]["default_category"])
     mode = str(rules["stands"]["default_category_mode"])
     parking_tol_m = 1.5
-    contact_thresh_m = 80.0
+    contact_thresh_m = 60.0
     for pi, (pln, ptags) in enumerate(parking_lines):
         if pln is None or pln.is_empty or len(pln.coords) < 2:
             continue
@@ -1945,7 +2002,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         )
 
     # Enforce stand type rule on final terminal contours:
-    # inside 80 m -> contact stand, 80 m+ -> remote stand.
+    # inside 60 m -> contact stand, 60 m+ -> remote stand.
     if terminals_out and remote_stands:
         term_polys_out: List[Polygon] = []
         for t in terminals_out:
@@ -2041,8 +2098,9 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
 
     _reorient_stands_toward_apron_links(pbb_stands, remote_stands, apron_links, wall_len)
 
-    gate_name_match_m = float(rules["stands"].get("gate_name_match_m", 80.0))
-    _normalize_osm_stand_names_inplace(pbb_stands, remote_stands, gates, gate_name_match_m)
+    gate_name_match_m = float(rules["stands"].get("gate_name_match_m", 60.0))
+    ref_candidates = _build_stand_ref_candidates(gates, parking_lines, parking_position_node_refs)
+    _normalize_osm_stand_names_inplace(pbb_stands, remote_stands, ref_candidates, gate_name_match_m)
     _sync_apron_link_names_after_stand_rename(apron_links, pbb_stands, remote_stands)
 
     grid_layers = {
