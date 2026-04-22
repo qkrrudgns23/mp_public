@@ -1,3 +1,4 @@
+    if (isPbb) return getStandConnectionPx(stand);
     return getStandAircraftMarkerWorldPxForRemoteLike(stand);
   }
   function getStandBoundsRect(cx, cy, sizeM) {
@@ -447,4 +448,3 @@
     }
     for (let i = 0; i < state.remoteStands.length; i++) {
       const o = state.remoteStands[i];
-      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;

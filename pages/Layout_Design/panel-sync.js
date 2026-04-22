@@ -1,3 +1,4 @@
+    if (state.directionModes.length === 0) {
       state.directionModes = [
         { id: id(), name: 'Mode A', direction: 'clockwise' },
         { id: id(), name: 'Mode B', direction: 'counter_clockwise' },
@@ -453,7 +454,7 @@
     if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
       ctx.clip();
     }
-    ctx.strokeStyle = 'rgba(220,38,38,0.92)';
+    ctx.strokeStyle = c2dStandSafetyStroke();
     ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
     ctx.setLineDash([2, 2.5]);
     ctx.lineCap = 'butt';
@@ -627,4 +628,3 @@
   function getStandApronTaxiwayAttachWorldPx(stand) {
     if (!stand) return [0, 0];
     const isPbb = (state.pbbStands || []).some(function(s) { return s && s.id === stand.id; });
-    if (isPbb) return getStandConnectionPx(stand);

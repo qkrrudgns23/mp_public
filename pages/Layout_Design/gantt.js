@@ -1,3 +1,4 @@
+    if (sv.type === 'taxiway') {
       const tw = state.taxiways.find(t => t.id === sv.id);
       if (!tw || !Array.isArray(tw.vertices) || sv.index < 0 || sv.index >= tw.vertices.length) return false;
       if (tw.vertices.length <= 2) return false;
@@ -547,4 +548,3 @@
       if (tw.pathType === 'runway') {
         const cwEl = el('runwayLineupDistM_CW');
         const ccwEl = el('runwayLineupDistM_CCW');
-        const lxCw = cwEl ? Number(cwEl.value) : NaN;

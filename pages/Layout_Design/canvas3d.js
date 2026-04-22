@@ -1,3 +1,4 @@
+        const ldm = getEffectiveRunwayLineupDistM(obj);
         const rpath = getRunwayPath(obj.id);
         if (rpath && rpath.pts && rpath.pts.length >= 2 && ldm > 1e-6) {
           let total = 0;

@@ -1,3 +1,4 @@
+        if (!f.timeline || !f.timeline.length) continue;
         const meta = f.timeline_meta;
         if (meta && meta.playbackSource === 'des_result') continue;
         const w = getFlightAirsideWindowSec(f);
@@ -1707,4 +1708,3 @@
         });
       }
       if (obj.pathType === 'runway') {
-        const ldm = getEffectiveRunwayLineupDistM(obj);

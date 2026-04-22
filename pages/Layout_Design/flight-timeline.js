@@ -1,3 +1,4 @@
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
     for (let i = 0; i < state.pbbStands.length; i++) {
       const o = state.pbbStands[i];
@@ -1327,4 +1328,3 @@
     const txt = String(m.text || '');
     let tw = Math.max(CELL_SIZE * 0.35, txt.length * fs * 0.45) + 8;
     if (ctx) {
-      ctx.save();

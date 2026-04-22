@@ -1,3 +1,4 @@
+  }
   function c2dPathDrawStartLabelFontPx() {
     const n = Number(_canvas2dStyle.pathDrawStartLabelFontPx);
     const base = (isFinite(n) && n >= 6) ? n : 8;
@@ -827,4 +828,3 @@
       invalidatePathGraphCache(false);
     } else {
       invalidatePathGraphCache(true);
-    }

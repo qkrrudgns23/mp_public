@@ -1,3 +1,4 @@
+  
   function getNormalizedStandDwellBounds(f) {
     let dwell = f.dwellMin != null ? f.dwellMin : 0;
     let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
@@ -2691,4 +2692,3 @@
       f.sldtMin = f.sldtMin_d;
       f.stotMin = f.stotMin_d;
       f.sobtMin = f.sobtMin_d;
-    });

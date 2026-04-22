@@ -1,3 +1,4 @@
+        const lxCw = cwEl ? Number(cwEl.value) : NaN;
         const lxCcw = ccwEl ? Number(ccwEl.value) : NaN;
         tw.lineupDistM_CW = (typeof lxCw === 'number' && isFinite(lxCw) && lxCw >= 0) ? lxCw : 0;
         tw.lineupDistM_CCW = (typeof lxCcw === 'number' && isFinite(lxCcw) && lxCcw >= 0) ? lxCcw : 0;
@@ -367,4 +368,3 @@
         renderAircraftConstraintChoices('standAircraftAccess', typeIds, letters);
         rebuildPbbBridgeGeometry(pbb);
         updateObjectInfo();
-        renderObjectList();

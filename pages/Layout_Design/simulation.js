@@ -1,3 +1,4 @@
+        (typeof val === 'number' && isFinite(val) && val > 0)
           ? Math.max(1, Math.min(50, val))
           : 10;
       tw.avgMoveVelocity = v;
@@ -1094,4 +1095,3 @@
       : (DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2));
     return taxi + rollBundleSec / 60;
   }
-  

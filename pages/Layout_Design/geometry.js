@@ -1,3 +1,4 @@
+    }
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     if (typeof draw === 'function') draw();
     if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
@@ -317,4 +318,3 @@
     if (typ === 'terminal') return state.terminals.find(t => t.id === idr);
     if (typ === 'pbb') return state.pbbStands.find(p => p.id === idr);
     if (typ === 'remote') return state.remoteStands.find(r => r.id === idr);
-    if (typ === 'tempStand') return (state.tempStands || []).find(function(s) { return s.id === idr; });

@@ -1308,7 +1308,7 @@
       },
       "gridView": {
         "description": "2D/3D workspace: grid/canvas fill color",
-        "background": "#0c0c0f",
+        "background": "#000000",
         "majorLineOpacity": 0.45,
         "minorLineOpacity": 0.3
       },
@@ -1367,23 +1367,23 @@
       },
       "canvas2d": {
         "pathDepartureStroke": "#000000",
-        "runwayStroke": "#6d6a61",
-        "runwayFill": "#7b796d",
+        "runwayStroke": "#636056",
+        "runwayFill": "#716f63",
         "runwayOutline": "#d1d5db",
         "runwayMarkingColor": "#f8fafc",
         "runwayThresholdColor": "#f8fafc",
         "runwayCenterlineColor": "#f8fafc",
         "runwayTouchdownColor": "#f8fafc",
         "runwayAimingPointColor": "#f8fafc",
-        "runwayExtensionFill": "#6d6a61",
+        "runwayExtensionFill": "#636056",
         "runwayBlastChevronColor": "#facc15",
         "runwayPathWidthOffAlpha": 0.3,
         "runwayBandStrokeOpaque": "#222222",
         "runwayBandStrokeDim": "#141414",
-        "taxiwayPavementStroke": "#827f76",
-        "taxiwayPavementFill": "#908e82",
-        "runwayTaxiwayCenterlineStroke": "#ca8a04",
-        "taxiwayCenterlineStroke": "#fcd410",
+        "taxiwayPavementStroke": "#78756c",
+        "taxiwayPavementFill": "#868478",
+        "runwayTaxiwayCenterlineStroke": "#e0a80b",
+        "taxiwayCenterlineStroke": "#ffe91a",
         "pathArrivalArrowStroke": "rgba(252, 165, 165, 0.9)",
         "approachPreviewWidthM": 30,
         "approachPreviewStroke": "rgba(255, 255, 255, 0.01)",
@@ -1471,7 +1471,8 @@
         "simFlightTrailStrokeEnd": "rgba(255, 47, 146, 0)",
         "simFlightTrailLineWidth": 3.5,
         "simStandOccupiedFill": "rgba(239, 68, 68, 0.32)",
-        "simStandOccupiedStroke": "rgba(220, 38, 38, 0.95)"
+        "simStandOccupiedStroke": "rgba(220, 38, 38, 0.95)",
+        "standSafetyStroke": "rgba(255, 30, 80, 0.95)"
       }
     },
     "algorithm": {

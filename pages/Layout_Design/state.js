@@ -278,6 +278,7 @@
   }
   function c2dSimStandOccupiedFill() { return _canvas2dStyle.simStandOccupiedFill || 'rgba(239, 68, 68, 0.32)'; }
   function c2dSimStandOccupiedStroke() { return _canvas2dStyle.simStandOccupiedStroke || 'rgba(220, 38, 38, 0.95)'; }
+  function c2dStandSafetyStroke() { return _canvas2dStyle.standSafetyStroke || 'rgba(255, 45, 110, 0.95)'; }
   function c2dPathDrawStartMarkerRadiusPx() {
     const n = Number(_canvas2dStyle.pathDrawStartMarkerRadiusPx);
     const base = (isFinite(n) && n > 0) ? n : 3.5;
@@ -287,4 +288,3 @@
     const n = Number(_canvas2dStyle.pathDrawStartMarkerStrokePx);
     const base = (isFinite(n) && n > 0) ? n : 1;
     return Math.max(0.5, base * LAYOUT_VERTEX_DOT_SCALE);
-  }

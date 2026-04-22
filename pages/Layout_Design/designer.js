@@ -608,6 +608,7 @@
   }
   function c2dSimStandOccupiedFill() { return _canvas2dStyle.simStandOccupiedFill || 'rgba(239, 68, 68, 0.32)'; }
   function c2dSimStandOccupiedStroke() { return _canvas2dStyle.simStandOccupiedStroke || 'rgba(220, 38, 38, 0.95)'; }
+  function c2dStandSafetyStroke() { return _canvas2dStyle.standSafetyStroke || 'rgba(255, 45, 110, 0.95)'; }
   function c2dPathDrawStartMarkerRadiusPx() {
     const n = Number(_canvas2dStyle.pathDrawStartMarkerRadiusPx);
     const base = (isFinite(n) && n > 0) ? n : 3.5;
@@ -2943,7 +2944,7 @@
     if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
       ctx.clip();
     }
-    ctx.strokeStyle = 'rgba(220,38,38,0.92)';
+    ctx.strokeStyle = c2dStandSafetyStroke();
     ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
     ctx.setLineDash([2, 2.5]);
     ctx.lineCap = 'butt';
@@ -2997,7 +2998,7 @@
   function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
     if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
     ctx.save();
-    ctx.strokeStyle = 'rgba(220,38,38,0.92)';
+    ctx.strokeStyle = c2dStandSafetyStroke();
     const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
     ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
     ctx.setLineDash([]);

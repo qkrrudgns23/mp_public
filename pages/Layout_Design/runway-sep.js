@@ -1,3 +1,4 @@
+        renderObjectList();
         draw();
         update3DSceneWhenVisible();
       } else {
@@ -382,4 +383,3 @@
       const tw = state.selectedObject.obj;
       const val = Number(this.value);
       const v =
-        (typeof val === 'number' && isFinite(val) && val > 0)

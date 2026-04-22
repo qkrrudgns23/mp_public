@@ -1,3 +1,4 @@
+      ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
       tw = Math.max(tw, ctx.measureText(txt).width + 8);
@@ -857,4 +858,3 @@
       draw();
       return true;
     }
-    if (sv.type === 'taxiway') {

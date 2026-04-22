@@ -1,3 +1,4 @@
+    });
   }
 
   function rsepGetSec(val) {
@@ -1157,4 +1158,3 @@
         const f = flights[i];
         if (!f) continue;
         if (flightBlockedLikeNoWay(f)) continue;
-        if (!f.timeline || !f.timeline.length) continue;

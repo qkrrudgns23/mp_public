@@ -1,3 +1,4 @@
+    if (typ === 'tempStand') return (state.tempStands || []).find(function(s) { return s.id === idr; });
     if (typ === 'holdingPoint') return (state.holdingPoints || []).find(h => h.id === idr);
     if (typ === 'taxiway') return state.taxiways.find(tw => tw.id === idr);
     if (typ === 'apronLink') return state.apronLinks.find(lk => lk.id === idr);
@@ -717,4 +718,3 @@
     alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
   }
   function ensureDefaultDirectionModes() {
-    if (state.directionModes.length === 0) {

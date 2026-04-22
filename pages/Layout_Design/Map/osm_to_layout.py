@@ -317,6 +317,107 @@ def _normalize_osm_stand_names_inplace(
     )
 
 
+def _reorient_stands_toward_apron_links(
+    pbb_stands: List[Dict[str, Any]],
+    remote_stands: List[Dict[str, Any]],
+    apron_links: List[Dict[str, Any]],
+    wall_len_m: float,
+) -> None:
+    """Flip ``angleDeg`` so the stand's local +X (tail) points toward its apron
+    taxiway, not the terminal. ``parking_position`` lines in OSM can be authored
+    in either direction, and the original `_parking_edge_into_apron_origin_unit_deg`
+    logic sometimes captures the wrong sense. ApronLinks already encode the
+    stand↔taxiway direction reliably, so we use them to re-align each stand.
+
+    For PBB stands, also rebuild ``x1/y1/x2/y2`` so the wall axis keeps the
+    designer's convention: ``(x1,y1) → apronSite`` lies along the new +X.
+    """
+    def _apron_link_stand_dir(apron_site_xy, al):
+        sx, sy = apron_site_xy
+        mids_raw = al.get("midVertices")
+        pts: List[Tuple[float, float]] = []
+        if isinstance(mids_raw, list):
+            for v in mids_raw:
+                if not isinstance(v, dict):
+                    continue
+                try:
+                    pts.append((float(v.get("x", 0.0)), float(v.get("y", 0.0))))
+                except (TypeError, ValueError):
+                    continue
+        try:
+            tx = float(al.get("tx", 0.0))
+            ty = float(al.get("ty", 0.0))
+            pts.append((tx, ty))
+        except (TypeError, ValueError):
+            pass
+        # Prefer the earliest mid vertex off the stand (within ~8m tolerance);
+        # fall back to the taxiway end if none exists.
+        for px, py in pts:
+            dx = px - sx
+            dy = py - sy
+            mag = math.hypot(dx, dy)
+            if mag < 1e-3:
+                continue
+            return (dx / mag, dy / mag)
+        return None
+
+    links_by_stand: Dict[str, List[Dict[str, Any]]] = {}
+    for al in apron_links or []:
+        if not isinstance(al, dict):
+            continue
+        pid = str(al.get("pbbId") or "").strip()
+        if not pid:
+            continue
+        links_by_stand.setdefault(pid, []).append(al)
+
+    wall_len = float(wall_len_m) if wall_len_m and wall_len_m > 0 else 22.0
+
+    for pbb in pbb_stands or []:
+        if not isinstance(pbb, dict):
+            continue
+        sid = str(pbb.get("id") or "")
+        als = links_by_stand.get(sid) or []
+        if not als:
+            continue
+        try:
+            sx = float(pbb.get("apronSiteX", 0.0))
+            sy = float(pbb.get("apronSiteY", 0.0))
+        except (TypeError, ValueError):
+            continue
+        dir_xy = _apron_link_stand_dir((sx, sy), als[0])
+        if dir_xy is None:
+            continue
+        nx, ny = dir_xy
+        ang = math.degrees(math.atan2(ny, nx))
+        pbb["angleDeg"] = ang
+        pbx1 = sx - nx * wall_len * 0.3
+        pby1 = sy - ny * wall_len * 0.3
+        pbx2 = pbx1 + nx * wall_len
+        pby2 = pby1 + ny * wall_len
+        pbb["x1"] = round(pbx1, 2)
+        pbb["y1"] = round(pby1, 2)
+        pbb["x2"] = round(pbx2, 2)
+        pbb["y2"] = round(pby2, 2)
+
+    for rs in remote_stands or []:
+        if not isinstance(rs, dict):
+            continue
+        sid = str(rs.get("id") or "")
+        als = links_by_stand.get(sid) or []
+        if not als:
+            continue
+        try:
+            sx = float(rs.get("x", 0.0))
+            sy = float(rs.get("y", 0.0))
+        except (TypeError, ValueError):
+            continue
+        dir_xy = _apron_link_stand_dir((sx, sy), als[0])
+        if dir_xy is None:
+            continue
+        nx, ny = dir_xy
+        rs["angleDeg"] = round(math.degrees(math.atan2(ny, nx)), 2)
+
+
 def _sync_apron_link_names_after_stand_rename(
     apron_links: List[Dict[str, Any]],
     pbb_stands: List[Dict[str, Any]],
@@ -1858,6 +1959,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 repl = remote_id_to_promoted_pbb_id.get(pid)
                 if repl:
                     al["pbbId"] = repl
+
+    _reorient_stands_toward_apron_links(pbb_stands, remote_stands, apron_links, wall_len)
 
     gate_name_match_m = float(rules["stands"].get("gate_name_match_m", 80.0))
     _normalize_osm_stand_names_inplace(pbb_stands, remote_stands, gates, gate_name_match_m)
