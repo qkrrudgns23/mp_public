@@ -465,7 +465,6 @@
     if (hideBtn) hideBtn.setAttribute('aria-expanded', 'true');
   }
   function syncSimulationPlaybackAfterTimelines() {
-    state.hasSimulationResult = (state.flights || []).length > 0;
     if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (!state.hasSimulationResult) return;
     const simSliderAfter = document.getElementById('flightSimSlider');

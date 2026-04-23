@@ -1442,7 +1442,21 @@
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
+  function markProSimSyncStaleFromSchedule() {
+    state.globalUpdateFresh = false;
+    state.simPlaying = false;
+    state.simSliderScrubbing = false;
+    if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+    const dot = document.getElementById('globalUpdateSyncDot');
+    if (dot) {
+      dot.classList.remove('fresh');
+      dot.classList.add('stale');
+      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim으로 재동기화 (완료 시 결과 자동 반영)');
+    }
+    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+  }
   function redrawLayoutAfterEdit() {
+    if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
     // Full reset rebuilds junctions in draw(); manual-sync mode keeps last graph for display until Update / Pro Sim.
     if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
       invalidatePathGraphCache(false);
@@ -5350,7 +5364,6 @@
   function hitTestSimFlightAtWorld(wx, wy) {
     if (!state.hasSimulationResult || !state.flights || !state.flights.length) return null;
     const tSec = state.simTimeSec;
-    if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
     let best = null;
     let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
     const flights = state.flights;
@@ -7531,7 +7544,6 @@
     if (hideBtn) hideBtn.setAttribute('aria-expanded', 'true');
   }
   function syncSimulationPlaybackAfterTimelines() {
-    state.hasSimulationResult = (state.flights || []).length > 0;
     if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (!state.hasSimulationResult) return;
     const simSliderAfter = document.getElementById('flightSimSlider');
@@ -8356,22 +8368,67 @@
 
   var __schedRetStatsBatchActive = false;
   var __schedRetStatsCached = null;
+  var __schedRetExitDistSig = '';
+  var __schedRetExitDistMemo = null;
+  function scheduleRetExitDistLayoutSig() {
+    const tws = state.taxiways || [];
+    const parts = [];
+    for (let i = 0; i < tws.length; i++) {
+      const t = tws[i];
+      if (!t || (t.pathType !== 'runway' && t.pathType !== 'runway_exit')) continue;
+      parts.push(String(t.id) + '\x1e' + String(t.pathType) + '\x1e' + JSON.stringify(t.vertices || []));
+    }
+    parts.sort();
+    return parts.join('\x1f');
+  }
+  function bumpScheduleRetExitDistCache() {
+    __schedRetExitDistSig = '';
+    __schedRetExitDistMemo = null;
+  }
   function beginScheduleRetStatsBatch() {
     __schedRetStatsBatchActive = true;
     __schedRetStatsCached = null;
   }
   function endScheduleRetStatsBatch() {
     __schedRetStatsBatchActive = false;
+    if (__schedRetStatsCached != null) {
+      const sig = scheduleRetExitDistLayoutSig();
+      __schedRetExitDistSig = sig;
+      __schedRetExitDistMemo = __schedRetStatsCached;
+    }
     __schedRetStatsCached = null;
   }
   function getScheduleRetStatsAll() {
     if (__schedRetStatsBatchActive) {
       if (__schedRetStatsCached === null) {
+        // #region agent log
+        var _t0b = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+        // #endregion
         __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+        // #region agent log
+        if (typeof fetch === 'function') { var _d = (typeof performance !== 'undefined' && performance.now) ? (performance.now() - _t0b) : 0; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'ret-path', location: 'designer.js:getScheduleRetStatsAll', message: 'batch computeRunwayExitDistances', data: { hypothesisId: 'H1', branch: 'batch', durationMs: Math.round(_d * 100) / 100, ms: _d }, timestamp: Date.now() }) }).catch(function() {}); }
+        // #endregion
       }
       return __schedRetStatsCached;
     }
-    return typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+    const sig = scheduleRetExitDistLayoutSig();
+    if (sig === __schedRetExitDistSig && __schedRetExitDistMemo && Array.isArray(__schedRetExitDistMemo)) {
+      // #region agent log
+      if (typeof fetch === 'function') { window.__retSchedDbg = window.__retSchedDbg || { hit: 0, miss: 0 }; window.__retSchedDbg.hit = (window.__retSchedDbg.hit + 1) | 0; if (window.__retSchedDbg.hit <= 5 || (window.__retSchedDbg.hit % 15) === 0) { fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'ret-path', location: 'designer.js:getScheduleRetStatsAll', message: 'layoutSig cache HIT', data: { hypothesisId: 'H1', hitN: window.__retSchedDbg.hit, sigBytes: (sig && sig.length) | 0 }, timestamp: Date.now() }) }).catch(function() {}); } }
+      // #endregion
+      return __schedRetExitDistMemo;
+    }
+    // #region agent log
+    var _t0m = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+    if (typeof fetch === 'function') { window.__retSchedDbg = window.__retSchedDbg || { hit: 0, miss: 0 }; window.__retSchedDbg.miss = (window.__retSchedDbg.miss + 1) | 0; }
+    // #endregion
+    const res = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+    // #region agent log
+    if (typeof fetch === 'function') { var _dm = (typeof performance !== 'undefined' && performance.now) ? (performance.now() - _t0m) : 0; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'ret-path', location: 'designer.js:getScheduleRetStatsAll', message: 'layoutSig cache MISS compute', data: { hypothesisId: 'H1', missN: window.__retSchedDbg.miss, durationMs: Math.round(_dm * 100) / 100, sigBytes: (sig && sig.length) | 0 }, timestamp: Date.now() }) }).catch(function() {}); }
+    // #endregion
+    __schedRetExitDistSig = sig;
+    __schedRetExitDistMemo = res;
+    return res;
   }
 
   function warmFlightPathsForSchedule(flights) {
@@ -8761,19 +8818,22 @@
     if (!skipGanttRefresh && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
   }
   function _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl) {
+    // #region agent log
+    if (typeof fetch === 'function') { var _dlen = (dirtySet && (typeof dirtySet.size === 'number')) ? dirtySet.size : -1; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'flight-list', location: 'designer.js:_renderFlightListAfterPathEnsure', message: 'after path ensure', data: { hypothesisId: 'H2', schedFull: !!schedFull, forceResampleRet: !!forceResampleRet, nFl: (flightsSorted && flightsSorted.length) | 0, dirtyN: _dlen }, timestamp: Date.now() }) }).catch(function() {}); }
+    // #endregion
     if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
     let retStatsAll = [];
     if (schedFull) {
       retStatsAll = (typeof ensureArrRetRotSampled === 'function')
         ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
-        : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
+        : (typeof getScheduleRetStatsAll === 'function' ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []));
     } else {
       const dirtyFlights = flightsSorted.filter(function(f) { return dirtySet.has(f.id); });
       const dirtyForRet = dirtyFlights.filter(function(f) { return f; });
       if (dirtyForRet.length && typeof ensureArrRetRotSampled === 'function')
         retStatsAll = ensureArrRetRotSampled(dirtyForRet, false);
       else
-        retStatsAll = (typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : [];
+        retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
     }
     _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, null);
   }
@@ -8791,10 +8851,16 @@
     if (scheduleOpts && scheduleOpts.pageTurnOnly === true && FLIGHT_SCHED_PAGE_SIZE > 0) {
       const flightsSorted = state.flights.slice();
       flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
-      const retStatsAll = (typeof getScheduleRetStatsAll === 'function')
-        ? getScheduleRetStatsAll()
-        : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
-      _renderFlightListDomAndSchedule(flightsSorted, false, new Set(), new Set(), listEl, cfgEl, retStatsAll, { skipGanttRefresh: true });
+      beginScheduleRetStatsBatch();
+      var retStatsAll2 = [];
+      try {
+        retStatsAll2 = (typeof getScheduleRetStatsAll === 'function')
+          ? getScheduleRetStatsAll()
+          : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
+        _renderFlightListDomAndSchedule(flightsSorted, false, new Set(), new Set(), listEl, cfgEl, retStatsAll2, { skipGanttRefresh: true });
+      } finally {
+        endScheduleRetStatsBatch();
+      }
       if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
       if (cb) cb();
       return;
@@ -8816,7 +8882,12 @@
     const flightsSorted = state.flights.slice();
     flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
     function runTail() {
-      _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl);
+      beginScheduleRetStatsBatch();
+      try {
+        _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl);
+      } finally {
+        endScheduleRetStatsBatch();
+      }
       if (cb) cb();
     }
     runTail();
@@ -8986,7 +9057,9 @@
         ).join('') +
       '</tr>'
     );
-    const retStats = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+    const retStats = (typeof getScheduleRetStatsAll === 'function')
+      ? getScheduleRetStatsAll()
+      : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
     if (retStats && retStats.length) {
       rows.push(
         '<tr>' +
@@ -10093,7 +10166,7 @@
     });
   }
 
-  function validateNetworkForFlights() {
+  function validateNetworkInfrastructureOnly() {
     const msgs = [];
     const hasRunwayPath = state.taxiways && state.taxiways.some(tw => tw.pathType === 'runway');
     if (!hasRunwayPath) msgs.push('RunwayThere is no.');
@@ -10108,6 +10181,10 @@
       )
     );
     if (!stands.length || !hasApronLink) msgs.push('Apron(PBB)class TaxiwayAt least one link is required to connect.');
+    return msgs;
+  }
+  function validateNetworkForFlights() {
+    const msgs = validateNetworkInfrastructureOnly();
     const termsForLabel = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) { return {
       id: t.id,
       name: (t.name || '').trim() || 'Building'
@@ -15946,12 +16023,6 @@
     }
     if (addBtn) {
       addBtn.addEventListener('click', function() {
-        const networkErrors = validateNetworkForFlights();
-        if (networkErrors.length) {
-          updateFlightError(networkErrors);
-          alert('Flightcannot be created:\\n' + networkErrors.join('\\n'));
-          return;
-        }
         const airlineCodeElLocal = document.getElementById('flightAirlineCode');
         const flightNumberElLocal = document.getElementById('flightFlightNumber');
         if (state.selectedObject && state.selectedObject.type === 'flight') {
@@ -16014,9 +16085,8 @@
           }
         };
         state.flights.push(f);
-        if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
-        else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        if (state.hasSimulationResult && typeof recomputeSimDuration === 'function') recomputeSimDuration();
+        if (typeof markProSimSyncStaleFromSchedule === 'function') markProSimSyncStaleFromSchedule();
         var addTouched = f.standId ? [f.standId] : [];
         renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: addTouched });
         const nextDef = getDefaultSibtMinutes();
@@ -20547,10 +20617,6 @@
       }
     }
     if (!simPlaybackSkipHeavyPathOverlays) drawProSimFlightPathEdges();
-    drawApproachPreviewPaths2D();
-    if (state.hasSimulationResult && state.flights && state.flights.length) {
-      if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
-    }
     if (!interactiveLite) {
       drawHoldingQueueGhostFlights2D();
       drawFlights2D();
@@ -21018,7 +21084,6 @@
         let bestFlight = null;
         let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
         const tSec = state.simTimeSec;
-        if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
         state.flights.forEach(f => {
           const pose = getFlightPoseAtTimeForDraw(f, tSec);
           if (!pose || f.reg == null || !String(f.reg).trim()) return;

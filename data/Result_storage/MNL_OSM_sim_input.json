@@ -13554,7 +13554,33 @@
       "y2": 682.9107493958263,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -44.90593910069129,
       "apronSiteX": 590.02,
@@ -13582,6 +13608,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13593,7 +13624,33 @@
       "y2": 655.2890322958744,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -44.99432173181057,
       "apronSiteX": 562.63,
@@ -13621,6 +13678,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13632,7 +13694,33 @@
       "y2": 628.2318131399077,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -46.35232435987724,
       "apronSiteX": 536.09,
@@ -13660,6 +13748,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13671,7 +13764,33 @@
       "y2": 704.1133982822016,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -1.3931186961776052,
       "apronSiteX": 620.18,
@@ -13699,6 +13818,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13710,7 +13834,33 @@
       "y2": 714.8739226902237,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -2.4358729026929447,
       "apronSiteX": 614.63,
@@ -13738,6 +13888,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13749,7 +13904,33 @@
       "y2": 711.1345347218697,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -28.571552134562506,
       "apronSiteX": 617.88,
@@ -13777,6 +13958,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13788,7 +13974,33 @@
       "y2": 608.1357645128081,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -45.89374953972199,
       "apronSiteX": 506.61,
@@ -13816,6 +14028,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13827,7 +14044,33 @@
       "y2": 1513.9434984272677,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -73.17710492303975,
       "apronSiteX": 2115.61,
@@ -13855,6 +14098,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13866,7 +14114,33 @@
       "y2": 1597.4533982822018,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -66.7656993390548,
       "apronSiteX": 2202.21,
@@ -13894,6 +14168,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13905,7 +14184,33 @@
       "y2": 1532.456601717798,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -46.252493882980545,
       "apronSiteX": 2077.61,
@@ -13933,6 +14238,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13944,7 +14254,33 @@
       "y2": 1615.456601717798,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -44.2823514514245,
       "apronSiteX": 2168.08,
@@ -13972,6 +14308,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -13983,7 +14324,33 @@
       "y2": 1576.8453823212633,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -46.90291022463507,
       "apronSiteX": 2144.96,
@@ -14011,6 +14378,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14022,7 +14394,33 @@
       "y2": 1661.476601717798,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -44.50740417204601,
       "apronSiteX": 2233.66,
@@ -14050,6 +14448,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14061,7 +14464,33 @@
       "y2": 1689.801100197812,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.78584242081791,
       "apronSiteX": 2141.69,
@@ -14089,6 +14518,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14100,7 +14534,33 @@
       "y2": 1638.6150220142008,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 135.23979021678224,
       "apronSiteX": 2090.43,
@@ -14128,6 +14588,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14139,7 +14604,33 @@
       "y2": 1586.8798727899411,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 135.35781479044243,
       "apronSiteX": 2038.98,
@@ -14167,6 +14658,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14178,7 +14674,33 @@
       "y2": 1529.370038425047,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.63462494608393,
       "apronSiteX": 1987.25,
@@ -14206,6 +14728,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14217,7 +14744,33 @@
       "y2": 1477.659564292581,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.60056861103794,
       "apronSiteX": 1935.78,
@@ -14245,6 +14798,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14256,7 +14814,33 @@
       "y2": 1425.9056457394618,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.60724134009106,
       "apronSiteX": 1879.4,
@@ -14284,6 +14868,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14295,7 +14884,33 @@
       "y2": 1375.9335386902187,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.60023896744744,
       "apronSiteX": 1827.57,
@@ -14323,6 +14938,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14334,7 +14954,33 @@
       "y2": 1323.5488392770387,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.6064620674742,
       "apronSiteX": 1775.89,
@@ -14362,6 +15008,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14373,7 +15024,33 @@
       "y2": 1272.4045011085523,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.60955946307098,
       "apronSiteX": 1725.11,
@@ -14401,6 +15078,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14412,7 +15094,33 @@
       "y2": 1194.023490292859,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.60624349653756,
       "apronSiteX": 1673.27,
@@ -14440,6 +15148,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14451,7 +15164,33 @@
       "y2": 1099.614046635252,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 133.83933092009798,
       "apronSiteX": 1576.98,
@@ -14479,6 +15218,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14490,7 +15234,33 @@
       "y2": 1151.55562531745,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.60362776147267,
       "apronSiteX": 1629.2,
@@ -14518,6 +15288,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14529,7 +15304,33 @@
       "y2": 1049.222094871036,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.60380172145344,
       "apronSiteX": 1526.06,
@@ -14557,6 +15358,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14568,7 +15374,33 @@
       "y2": 977.1413633037043,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.2809813559587,
       "apronSiteX": 1473.97,
@@ -14596,6 +15428,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14607,7 +15444,33 @@
       "y2": 972.8110567408216,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 134.4858515837909,
       "apronSiteX": 1422.14,
@@ -14635,6 +15498,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14646,7 +15514,33 @@
       "y2": 2919.8358865062564,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 92.41817286554438,
       "apronSiteX": 1094.69,
@@ -14674,6 +15568,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14685,7 +15584,33 @@
       "y2": 2949.958415093915,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 38.20938771827417,
       "apronSiteX": 910.28,
@@ -14713,6 +15638,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14724,7 +15654,33 @@
       "y2": 2897.9347789723925,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 101.91683861082028,
       "apronSiteX": 1029.15,
@@ -14752,6 +15708,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14763,7 +15724,33 @@
       "y2": 3030.105702602882,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 39.55492015441468,
       "apronSiteX": 881.09,
@@ -14791,6 +15778,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14802,7 +15794,33 @@
       "y2": 2964.1436277866724,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -150.58097847047824,
       "apronSiteX": 855.8,
@@ -14830,6 +15848,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14841,7 +15864,33 @@
       "y2": 2973.8981956196003,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -178.58770421904092,
       "apronSiteX": 815.18,
@@ -14869,6 +15918,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14880,7 +15934,33 @@
       "y2": 3058.569880720908,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 110.11548971111154,
       "apronSiteX": 852.91,
@@ -14908,6 +15988,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14919,7 +16004,33 @@
       "y2": 3035.9425700545817,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 139.87182050913302,
       "apronSiteX": 811.43,
@@ -14947,6 +16058,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14958,7 +16074,33 @@
       "y2": 2840.9353824169107,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -29.155930695769346,
       "apronSiteX": 1119.85,
@@ -14986,6 +16128,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -14997,7 +16144,33 @@
       "y2": 2823.330016622623,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -66.22908511534963,
       "apronSiteX": 1079.95,
@@ -15025,6 +16198,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15036,7 +16214,33 @@
       "y2": 2849.734859474504,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -77.98989482482727,
       "apronSiteX": 1006.77,
@@ -15064,6 +16268,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15075,7 +16284,33 @@
       "y2": 2830.1945339462827,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -69.67899500199793,
       "apronSiteX": 939.62,
@@ -15103,6 +16338,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15114,7 +16354,33 @@
       "y2": 2887.048576056103,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 8.69272375264891,
       "apronSiteX": 1129.09,
@@ -15142,6 +16408,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15153,7 +16424,33 @@
       "y2": 2408.921725107039,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -19.023404608747164,
       "apronSiteX": 1922.85,
@@ -15181,6 +16478,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15192,7 +16494,33 @@
       "y2": 2338.1251743592643,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -39.779774545543475,
       "apronSiteX": 1882.09,
@@ -15220,6 +16548,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15231,7 +16564,33 @@
       "y2": 2301.673619524345,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -51.32134704156655,
       "apronSiteX": 1845.52,
@@ -15259,6 +16618,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15270,7 +16634,33 @@
       "y2": 2258.5726806648045,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -55.85807807650598,
       "apronSiteX": 1794.79,
@@ -15298,6 +16688,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15309,7 +16704,33 @@
       "y2": 2212.143349223421,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -55.86591684811783,
       "apronSiteX": 1757.94,
@@ -15337,6 +16758,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15348,7 +16774,33 @@
       "y2": 2394.8133765487846,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 44.95002846896351,
       "apronSiteX": 1950.31,
@@ -15376,6 +16828,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15387,7 +16844,33 @@
       "y2": 2420.1189171394926,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 59.99640425943358,
       "apronSiteX": 1901.81,
@@ -15415,6 +16898,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15426,7 +16914,33 @@
       "y2": 2430.723055332029,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 59.98644083490731,
       "apronSiteX": 1855.06,
@@ -15454,6 +16968,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15465,7 +16984,33 @@
       "y2": 2458.158344446285,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 60.363456715293935,
       "apronSiteX": 1822.98,
@@ -15493,6 +17038,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15504,7 +17054,33 @@
       "y2": 2475.4086259349506,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 60.8880923948935,
       "apronSiteX": 1788.14,
@@ -15532,6 +17108,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15543,7 +17124,33 @@
       "y2": 2526.772335411489,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 60.989988776048946,
       "apronSiteX": 1757.28,
@@ -15571,6 +17178,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15582,7 +17194,33 @@
       "y2": 2546.2058796177125,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 61.24894626434704,
       "apronSiteX": 1721.08,
@@ -15610,6 +17248,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15621,7 +17264,33 @@
       "y2": 2535.5091873347974,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": 59.55746470235607,
       "apronSiteX": 1668.62,
@@ -15649,6 +17318,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15660,7 +17334,33 @@
       "y2": 608.1357645128081,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -45.814315967452465,
       "apronSiteX": 481.97,
@@ -15688,6 +17388,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     },
     {
@@ -15699,7 +17404,33 @@
       "y2": 2881.3938548560272,
       "category": "C",
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
       "pbbCount": 1,
       "angleDeg": -160.70027948685282,
       "apronSiteX": 874.87,
@@ -15727,6 +17458,11 @@
             }
           ]
         }
+      ],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
       ]
     }
   ],
@@ -15739,8 +17475,39 @@
       "category": "C",
       "angleDeg": -119.57,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-1d2a0ef5dc36",
@@ -15750,8 +17517,39 @@
       "category": "C",
       "angleDeg": 134.52,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-c6f186d58272",
@@ -15761,8 +17559,39 @@
       "category": "C",
       "angleDeg": 98.84,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-77eaff46d621",
@@ -15772,8 +17601,39 @@
       "category": "C",
       "angleDeg": -3.01,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-e33d8f8d50b8",
@@ -15783,8 +17643,39 @@
       "category": "C",
       "angleDeg": 60.12,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-27447fe45193",
@@ -15794,8 +17685,39 @@
       "category": "C",
       "angleDeg": -32.07,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-88d4c8b5215d",
@@ -15805,8 +17727,39 @@
       "category": "C",
       "angleDeg": 60.44,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-c12aa7dabd35",
@@ -15816,8 +17769,39 @@
       "category": "C",
       "angleDeg": -43.18,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-c9653cae0f66",
@@ -15827,8 +17811,39 @@
       "category": "C",
       "angleDeg": -45.71,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-b2aa89f9507b",
@@ -15838,8 +17853,39 @@
       "category": "C",
       "angleDeg": -42.95,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-12b113ab73b1",
@@ -15849,8 +17895,39 @@
       "category": "C",
       "angleDeg": -2.1,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-84fe56a65057",
@@ -15860,8 +17937,39 @@
       "category": "C",
       "angleDeg": 133.38,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-9f6ee798bcb1",
@@ -15871,8 +17979,39 @@
       "category": "C",
       "angleDeg": 135.22,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-404cb129dd39",
@@ -15882,8 +18021,39 @@
       "category": "C",
       "angleDeg": 135,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-083bf62171b2",
@@ -15893,8 +18063,39 @@
       "category": "C",
       "angleDeg": -2.54,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-c43817f7bc24",
@@ -15904,8 +18105,39 @@
       "category": "C",
       "angleDeg": 134.42,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-eb353037d0f9",
@@ -15915,8 +18147,39 @@
       "category": "C",
       "angleDeg": 134.44,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-a78f8207a444",
@@ -15926,8 +18189,39 @@
       "category": "C",
       "angleDeg": 134.43,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-927e20f19d02",
@@ -15937,8 +18231,39 @@
       "category": "C",
       "angleDeg": 135,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-150be61ef85a",
@@ -15948,8 +18273,39 @@
       "category": "C",
       "angleDeg": 134.43,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-b85d46f66f20",
@@ -15959,8 +18315,39 @@
       "category": "C",
       "angleDeg": 132.98,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-100f2d6b6535",
@@ -15970,8 +18357,39 @@
       "category": "C",
       "angleDeg": 134.48,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-8f69ec1a3990",
@@ -15981,8 +18399,39 @@
       "category": "C",
       "angleDeg": -120.06,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-bc981770030e",
@@ -15992,8 +18441,39 @@
       "category": "C",
       "angleDeg": -119.88,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-55cb7198c237",
@@ -16003,8 +18483,39 @@
       "category": "C",
       "angleDeg": 59.97,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-d51090994d2a",
@@ -16014,8 +18525,39 @@
       "category": "C",
       "angleDeg": 4.82,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-2397784035fe",
@@ -16025,8 +18567,39 @@
       "category": "C",
       "angleDeg": 5.1,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-1eecadf4f0e2",
@@ -16036,8 +18609,39 @@
       "category": "C",
       "angleDeg": 4.51,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-ce30b72bf6bb",
@@ -16047,8 +18651,39 @@
       "category": "C",
       "angleDeg": 4.54,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-d687ab4c84cc",
@@ -16058,8 +18693,39 @@
       "category": "C",
       "angleDeg": -29.59,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-05dc48f5ca4b",
@@ -16069,8 +18735,39 @@
       "category": "C",
       "angleDeg": 61.1,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-65b15429793b",
@@ -16080,8 +18777,39 @@
       "category": "C",
       "angleDeg": 60.88,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-f1b905760b14",
@@ -16091,8 +18819,39 @@
       "category": "C",
       "angleDeg": 60.59,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-7efe1d249d3d",
@@ -16102,8 +18861,39 @@
       "category": "C",
       "angleDeg": 61.59,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-4fe9d76230f0",
@@ -16113,8 +18903,39 @@
       "category": "C",
       "angleDeg": 60.78,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-147735a13ca1",
@@ -16124,8 +18945,39 @@
       "category": "C",
       "angleDeg": 60.24,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-284005b68f81",
@@ -16135,8 +18987,39 @@
       "category": "C",
       "angleDeg": 59.27,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-32e3ff5fb56c",
@@ -16146,8 +19029,39 @@
       "category": "C",
       "angleDeg": 60.33,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-96a4fbd840fa",
@@ -16157,8 +19071,39 @@
       "category": "C",
       "angleDeg": 105.42,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-e4d734c4eaf5",
@@ -16168,8 +19113,39 @@
       "category": "C",
       "angleDeg": 60.72,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-75bb5204301f",
@@ -16179,8 +19155,39 @@
       "category": "C",
       "angleDeg": 75.09,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-38b04a5a1ec5",
@@ -16190,8 +19197,39 @@
       "category": "C",
       "angleDeg": 148.11,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-01d2a1fec2fd",
@@ -16201,8 +19239,39 @@
       "category": "C",
       "angleDeg": 148,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-13d6e2041541",
@@ -16212,8 +19281,39 @@
       "category": "C",
       "angleDeg": 57.03,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-95287858c78e",
@@ -16223,8 +19323,39 @@
       "category": "C",
       "angleDeg": 143.64,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-24c7ff256dc7",
@@ -16234,8 +19365,39 @@
       "category": "C",
       "angleDeg": 106.83,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-976715692e8a",
@@ -16245,8 +19407,39 @@
       "category": "C",
       "angleDeg": 52,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-392140375ef6",
@@ -16256,8 +19449,39 @@
       "category": "C",
       "angleDeg": -119.27,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-73fedab1605d",
@@ -16267,8 +19491,39 @@
       "category": "C",
       "angleDeg": 53.43,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-4729ae7032cd",
@@ -16278,8 +19533,39 @@
       "category": "C",
       "angleDeg": -75.61,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-fc27de3a6850",
@@ -16289,8 +19575,39 @@
       "category": "C",
       "angleDeg": -167.63,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-034f45d6360a",
@@ -16300,8 +19617,39 @@
       "category": "C",
       "angleDeg": 142.34,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-bec6e6426862",
@@ -16311,8 +19659,39 @@
       "category": "C",
       "angleDeg": -166.86,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-1900a4b12b18",
@@ -16322,8 +19701,39 @@
       "category": "C",
       "angleDeg": -179.66,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-fd8857335da5",
@@ -16333,8 +19743,39 @@
       "category": "C",
       "angleDeg": -31.94,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-eedc09b9b5f5",
@@ -16344,8 +19785,39 @@
       "category": "C",
       "angleDeg": -30.27,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-10b823734877",
@@ -16355,8 +19827,39 @@
       "category": "C",
       "angleDeg": -43.82,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-597efda9b0b4",
@@ -16366,8 +19869,39 @@
       "category": "C",
       "angleDeg": -43.49,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-0e36f47f60e7",
@@ -16377,8 +19911,39 @@
       "category": "C",
       "angleDeg": 65.34,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-b24fae47cb29",
@@ -16388,8 +19953,39 @@
       "category": "C",
       "angleDeg": -42.66,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-2023fa30b201",
@@ -16399,8 +19995,39 @@
       "category": "C",
       "angleDeg": 9.06,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-3e25adc7763b",
@@ -16410,8 +20037,39 @@
       "category": "C",
       "angleDeg": -75.92,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-771d81d5d31a",
@@ -16421,8 +20079,39 @@
       "category": "C",
       "angleDeg": -0.28,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-4c5f6a897f00",
@@ -16432,8 +20121,39 @@
       "category": "C",
       "angleDeg": -45.47,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-b5fc84e2161a",
@@ -16443,8 +20163,39 @@
       "category": "C",
       "angleDeg": 9.4,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     },
     {
       "id": "remote-409efd0b8763",
@@ -16454,8 +20205,39 @@
       "category": "C",
       "angleDeg": -42.97,
       "categoryMode": "icao",
-      "allowedAircraftTypes": [],
-      "allowedTerminals": []
+      "allowedAircraftTypes": [
+        "A321",
+        "A320",
+        "A319",
+        "A318",
+        "A220",
+        "B757",
+        "B737",
+        "B737MAX",
+        "B717",
+        "E190",
+        "E175",
+        "E170",
+        "E195",
+        "CRJ900",
+        "CRJ700",
+        "CRJ200",
+        "ATR72",
+        "ATR42",
+        "DHC8",
+        "MD90",
+        "MD80",
+        "TU204",
+        "SSJ100",
+        "C919",
+        "ARJ21"
+      ],
+      "allowedTerminals": [],
+      "allowedIcaoCategories": [
+        "A",
+        "B",
+        "C"
+      ]
     }
   ],
   "tempStands": [],
@@ -39128,9 +42910,9 @@
       "sibtMin_d": 420,
       "sobtMin_d": 480,
       "stotMin_d": 483,
-      "arrTdDistM": 357.2802352116397,
-      "arrVTdMs": 73.92561539645352,
-      "arrDecelMs2": 1.5570816340319937,
+      "arrTdDistM": 359.3363970757038,
+      "arrVTdMs": 73.30214245053227,
+      "arrDecelMs2": 1.458144639782594,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "rwy-1ea07258fb27",
@@ -39176,9 +42958,9 @@
       "sibtMin_d": 420,
       "sobtMin_d": 480,
       "stotMin_d": 483,
-      "arrTdDistM": 405.22066368102037,
-      "arrVTdMs": 62.236233830447965,
-      "arrDecelMs2": 1.36,
+      "arrTdDistM": 420.975450434928,
+      "arrVTdMs": 72.48417199950285,
+      "arrDecelMs2": 1.8399999999999999,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "rwy-1ea07258fb27",
@@ -39224,9 +43006,9 @@
       "sibtMin_d": 420,
       "sobtMin_d": 480,
       "stotMin_d": 483,
-      "arrTdDistM": 342.51524021534345,
-      "arrVTdMs": 65.4946769037095,
-      "arrDecelMs2": 1.653273158540472,
+      "arrTdDistM": 391.51880563500407,
+      "arrVTdMs": 58.82725212959127,
+      "arrDecelMs2": 1.712084837138229,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "rwy-1ea07258fb27",
@@ -39272,9 +43054,9 @@
       "sibtMin_d": 420,
       "sobtMin_d": 480,
       "stotMin_d": 483,
-      "arrTdDistM": 383.7175393763239,
+      "arrTdDistM": 395.84852508968453,
       "arrVTdMs": 57.8,
-      "arrDecelMs2": 1.6028296923689938,
+      "arrDecelMs2": 1.8399999999999999,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "rwy-1ea07258fb27",
@@ -39320,20 +43102,20 @@
       "sibtMin_d": 420,
       "sobtMin_d": 480,
       "stotMin_d": 483,
-      "arrTdDistM": 432.8032825242562,
-      "arrVTdMs": 62.49714550106485,
-      "arrDecelMs2": 1.8399999999999999,
+      "arrTdDistM": 411.4826708596925,
+      "arrVTdMs": 69.15560124980608,
+      "arrDecelMs2": 1.7894490567107806,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "rwy-1ea07258fb27",
-        "ExitTaxiwayId": "tw-89c89cacd182",
+        "ExitTaxiwayId": "tw-f2d85f0d9323",
         "apronId": "pbb-39bbf1255ab4",
         "terminalId": null,
         "depRunwayId": "rwy-1ea07258fb27"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3_CW",
+        "ExitTaxiwayId": "RTX4_CW",
         "apronId": "G107",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -39368,9 +43150,9 @@
       "sibtMin_d": 420,
       "sobtMin_d": 480,
       "stotMin_d": 483,
-      "arrTdDistM": 373.50846692142323,
-      "arrVTdMs": 70.77036700779574,
-      "arrDecelMs2": 1.5739095234385465,
+      "arrTdDistM": 395.91885390804595,
+      "arrVTdMs": 74.7801244657377,
+      "arrDecelMs2": 1.6664641650527454,
       "arrDep": "Arr",
       "token": {
         "arrRunwayId": "rwy-1ea07258fb27",
@@ -39383,54 +43165,6 @@
         "arrRunwayId": "RW1",
         "ExitTaxiwayId": "RTX4_CW",
         "apronId": "PARK-159",
-        "terminalId": null,
-        "depRunwayId": "RW1"
-      },
-      "sibtDateTime": "2026-03-31 07:00:00",
-      "sobtDateTime": "2026-03-31 08:00:00",
-      "sldtDateTime_d": "2026-03-31 06:57:00",
-      "sibtDateTime_d": "2026-03-31 07:00:00",
-      "sobtDateTime_d": "2026-03-31 08:00:00",
-      "stotDateTime_d": "2026-03-31 08:03:00"
-    },
-    {
-      "id": "id_56g5h2ra5",
-      "reg": "R7",
-      "airlineCode": "DL",
-      "flightNumber": "DL3663",
-      "aircraftType": "A320",
-      "code": "C",
-      "timeMin": 420,
-      "sibtDate": "2026-03-31",
-      "dwellMin": 60,
-      "minDwellMin": 20,
-      "noWayArr": false,
-      "noWayDep": false,
-      "arrRetFailed": false,
-      "serviceDate": "2026-03-31",
-      "sldtMin_orig": 420,
-      "sibtMin_orig": 420,
-      "sobtMin_orig": 480,
-      "stotMin_orig": 480.3333333333333,
-      "sldtMin_d": 417,
-      "sibtMin_d": 420,
-      "sobtMin_d": 480,
-      "stotMin_d": 483,
-      "arrTdDistM": 421.33406517387857,
-      "arrVTdMs": 69.25331982422759,
-      "arrDecelMs2": 1.5826258910812738,
-      "arrDep": "Arr",
-      "token": {
-        "arrRunwayId": "rwy-1ea07258fb27",
-        "ExitTaxiwayId": "tw-f2d85f0d9323",
-        "apronId": "pbb-67ac12e1914c",
-        "terminalId": null,
-        "depRunwayId": "rwy-1ea07258fb27"
-      },
-      "token_name": {
-        "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX4_CW",
-        "apronId": "8",
         "terminalId": null,
         "depRunwayId": "RW1"
       },
