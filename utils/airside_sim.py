@@ -141,6 +141,14 @@ REVERSE_PENALTY_COST = 1_000_000.0
 REROUTE_YIELD_EDGE_PENALTY = REVERSE_PENALTY_COST
 REROUTE_MIN_OLD_PATH_M = 50.0
 NODE_OCCUPANCY_RADIUS_M = 12.0
+# Departure hold gate distance (m, along-path). On a ``runway_taxiway`` / ``runway_exit`` segment
+# leading to a runway, if the departure runway is busy and the remaining along-path distance to
+# the runway entry is within this buffer, the agent holds here. Keeps the stop point at a
+# predictable distance from the runway regardless of polyline vertex density / graph node spacing
+# along the approach lane. Tuned to ~100 m of path so the physical (perpendicular) distance from
+# the runway polyline at the hold position is on the order of standard runway-holding offsets
+# (roughly 50 m for typical rapid-exit taxiway angles).
+DEP_RUNWAY_HOLD_BUFFER_M = 100.0
 
 # Cleared at the start of each ``run_simulation``; keyed by layout object id + path-search params.
 _PATH_GRAPH_BUILD_CACHE: Dict[Tuple[int, str, float, float, float, float, bool], PathGraph] = {}
@@ -5231,6 +5239,38 @@ def _agents_on_edge(eid: str, agents: List[Flight]) -> List[Flight]:
     return [ag for ag in agents if ag.edge_ids and str(ag.edge_ids[0]) == eid]
 
 
+_RUNWAY_APPROACH_PT = frozenset({"runway_taxiway", "runway_exit"})
+
+
+def _dep_runway_entry_remaining_m(agent: Flight, ppm: float) -> Optional[float]:
+    """Remaining distance (m) from the agent's current position to the first upcoming
+    ``runway`` micro-segment on the queued path. Returns ``None`` if no ``runway``
+    segment is upcoming among the remaining queued segments.
+
+    Uses per-segment endpoints and progress along the current segment so the value is
+    independent of how finely the approach polyline is subdivided (vertex / graph-node
+    density on the ``runway_taxiway`` / ``runway_exit``).
+    """
+    if not agent.segment_endpoints or not agent.segment_path_types:
+        return None
+    n = len(agent.segment_endpoints)
+    if n == 0 or len(agent.segment_path_types) != n:
+        return None
+    ppm_s = max(float(ppm), 1e-9)
+    total_px = 0.0
+    for i in range(n):
+        pt = str(agent.segment_path_types[i] or "").strip()
+        if pt == "runway":
+            return float(total_px) / ppm_s
+        p0, p1 = agent.segment_endpoints[i]
+        seg_len = math.hypot(float(p1[0]) - float(p0[0]), float(p1[1]) - float(p0[1]))
+        if i == 0:
+            total_px += max(0.0, seg_len - float(agent.edge_s_along_px))
+        else:
+            total_px += seg_len
+    return None
+
+
 def _agent_current_runway_id(
     ag: Flight, control_state: SimulationControlState
 ) -> Optional[str]:
@@ -5451,6 +5491,37 @@ def can_reserve_path(
                 ou_d = _resource_use_count(rr_dep.occupied_by, rr_dep.reserved_by, aid)
                 if ou_d >= max(1, int(rr_dep.capacity)):
                     return False, f"runway_dep_busy:{dep_rwy}"
+        # Distance-based runway hold gate on the approach path (``runway_taxiway`` or
+        # ``runway_exit``): when the departure runway is busy and the upcoming runway
+        # entry is within ``DEP_RUNWAY_HOLD_BUFFER_M``, hold here. Keeps the stop
+        # distance predictable regardless of polyline vertex / graph node density
+        # along the approach lane. Covers Dep_taxi too (existing phase-boundary check
+        # only fires on Holding_lineup / Lineup_departure, whose first micro-segment
+        # can snap very close to the runway when the approach lane has many vertices).
+        if (
+            idx == 0
+            and dep_rwy
+            and ph0 in (PHASE_DEP_TAXI, PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE)
+            and pt0 in _RUNWAY_APPROACH_PT
+        ):
+            rem_m = _dep_runway_entry_remaining_m(agent, ppm)
+            if rem_m is not None and rem_m <= float(DEP_RUNWAY_HOLD_BUFFER_M):
+                rr_dep_b = control_state.runway_resources.get(dep_rwy)
+                if rr_dep_b is not None and not rr_dep_b.forced_open:
+                    if _runway_rot_reservation_blocked(
+                        t_abs,
+                        dep_rwy,
+                        aid,
+                        agents,
+                        float(runway_release_lag_sec),
+                        control_state=control_state,
+                    ):
+                        return False, f"runway_rot_busy:{dep_rwy}"
+                    ou_d_b = _resource_use_count(
+                        rr_dep_b.occupied_by, rr_dep_b.reserved_by, aid
+                    )
+                    if ou_d_b >= max(1, int(rr_dep_b.capacity)):
+                        return False, f"runway_dep_busy:{dep_rwy}"
         if er.runway_id:
             rwid = str(er.runway_id)
             rr = control_state.runway_resources.get(rwid)

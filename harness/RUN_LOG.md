@@ -1,5 +1,33 @@
 ## Run Notes (최근 실행 결과 요약)
 
+### RUN 20260423T0903Z dep-runway-hold-buffer
+- **RUN_ID**: 20260423T0903Z
+- **command**:
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/MNL_OSM_sim_input.json --output data/Result_storage/MNL_OSM_sim_result.json`
+  - `python -m harness.run --input data/Result_storage/default_layout_sim_input.json --output data/Result_storage/default_layout_sim_result.json`
+- **result**: PASS (all runs), PASS run+validate
+- **problem**: 활주로 용량이 찼을 때 RTX/RET(runway_taxiway / runway_exit)에서 정차하는 위치가 접근로의 폴리라인 꺾임점 개수(=graph 노드 밀도)에 좌우됨. 꺾임점 多 → `runway_holding` 노드가 활주로에 가까이 스냅되어, 출발기가 활주로에 너무 근접한 지점에서 `Holding_lineup` → `runway_occupied` WAIT에 빠짐.
+- **change**: `utils/airside_sim.py`
+  - 신규 상수 `DEP_RUNWAY_HOLD_BUFFER_M = 100.0` (along-path 거리, m)
+  - 신규 helper `_dep_runway_entry_remaining_m(agent, ppm)` — 현재 micro-segment 진행 + 앞쪽 미끝 세그먼트들을 합쳐, 경로상 다음 `runway` 세그먼트까지 남은 m 거리 계산 (폴리라인 정점 밀도 무관).
+  - `can_reserve_path` 내 `idx == 0` 블록에 **거리 기반 departure-runway hold 게이트** 추가: `ph0 ∈ {Dep_taxi, Holding_lineup, Lineup_departure}` 이고 `pt0 ∈ {runway_taxiway, runway_exit}` 일 때, `rem_m ≤ DEP_RUNWAY_HOLD_BUFFER_M` 이면 기존 dep_rwy 검사(`runway_rot_busy` / `runway_dep_busy`)를 조기 수행 → WAIT.
+- **evidence** (MNL_OSM, id_26ltg5sfz 이륙 중 `rwy-1ea07258fb27`를 점유한 시간대):
+  - `id_2njdlcz0j` 최초 hold 물리거리: **44.39 m → 63.46 m**
+  - `id_fvwl7ufoo` : **35.67 m → 61.44 m**
+  - `id_56g5h2ra5` : **33.71 m → 73.75 m**
+  - `id_hmt0zdqsd` : (이전 `edge_capacity`로 129.55 m에서 먼저 대기) → `runway_dep_busy`로 58.61 m에서 대기
+  - `max simultaneous on runway: 1; ticks with >1: 0` (warp-fix와 동일 invariant 유지)
+  - 접근로 WAIT reason 분포: `[runway_dep_busy(161), temp_stand_busy(79), edge_capacity(44)]` (기존 `runway_occupied`가 더 이르고 깔끔한 `runway_dep_busy`로 대체)
+  - 결정론 검사: 동일 입력 2회 실행 SHA256 일치 (`620b499fb7c6bb11`)
+  - 회귀: `default_layout_sim_input.json` `PASS run+validate`
+- **note**: `DEP_RUNWAY_HOLD_BUFFER_M`는 along-path 기준 100 m. MNL_OSM의 RET(runway_exit)가 활주로 코너에 접근하는 기하에서는 경로 대비 수직 물리 거리가 약 0.5× 비율(예: path 87 m ↔ physical 43 m, path 47 m ↔ physical 24 m)이라 path-100 m ≈ physical-50 m 수준의 holding offset을 확보.
+- **next**: RPLL 등 다른 레이아웃에서도 동일 효과 회귀 확인 요청 시 추가 검증.
+
+---
+
+
+
 ### Format
 - **RUN_ID**: UTC timestamp + short tag
 - **command**: 실행 커맨드
