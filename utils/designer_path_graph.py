@@ -7,7 +7,7 @@ from __future__ import annotations
 import heapq
 import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 Point = Tuple[float, float]
 
@@ -414,11 +414,17 @@ def path_dijkstra(
     *,
     penalized_arcs: Optional[set[Tuple[int, int]]] = None,
     penalty_add: float = 0.0,
+    apron_transit_extra: float = 0.0,
+    apron_allowed_link_ids: Optional[Set[str]] = None,
 ) -> Optional[List[int]]:
     """designer.js pathDijkstra (lazy heap; skip stale).
 
     When ``penalized_arcs`` and ``penalty_add > 0``, add ``penalty_add`` to the weight of each
     directed arc in ``penalized_arcs`` (matches airside_sim edge-penalty without mutating ``g``).
+
+    When ``apron_transit_extra > 0`` and ``apron_allowed_link_ids`` is set, add that cost to
+    every ``apron_link`` arc whose ``link_id`` is **not** in the allowed set (arrival taxi should
+    use the taxiway network and only the assigned stand's apron link for the final connect).
     """
     n = len(g.nodes)
     if start_idx is None or end_idx is None or n == 0:
@@ -427,43 +433,33 @@ def path_dijkstra(
         return None
     use_pen = bool(penalized_arcs) and float(penalty_add) > 0.0
     p_add = float(penalty_add)
+    ap_x = max(0.0, float(apron_transit_extra))
+    ap_ids = apron_allowed_link_ids
+    use_ap = ap_x > 0.0 and ap_ids is not None
     dist = [math.inf] * n
     prev: List[Optional[int]] = [None] * n
     dist[start_idx] = 0.0
     heap: List[Tuple[float, int]] = [(0.0, start_idx)]
-    if not use_pen:
-        while heap:
-            d, u = heapq.heappop(heap)
-            if d > dist[u]:
-                continue
-            if u == end_idx:
-                break
-            for v, w in g.adj[u]:
-                nd = d + w
-                if nd < dist[v]:
-                    dist[v] = nd
-                    prev[v] = u
-                    heapq.heappush(heap, (nd, v))
-    else:
-        while heap:
-            d, u = heapq.heappop(heap)
-            if d > dist[u]:
-                continue
-            if u == end_idx:
-                break
-            for v, w_stored in g.adj[u]:
-                rec = g.edge_map.get(f"{u}:{v}")
-                if rec is None:
-                    w = float(w_stored)
-                else:
-                    w = float(rec.cost)
-                    if (u, v) in penalized_arcs:
-                        w += p_add
-                nd = d + w
-                if nd < dist[v]:
-                    dist[v] = nd
-                    prev[v] = u
-                    heapq.heappush(heap, (nd, v))
+    while heap:
+        d, u = heapq.heappop(heap)
+        if d > dist[u]:
+            continue
+        if u == end_idx:
+            break
+        for v, w_stored in g.adj[u]:
+            rec = g.edge_map.get(f"{u}:{v}")
+            w = float(w_stored) if rec is None else float(rec.cost)
+            if use_pen and penalized_arcs and (u, v) in penalized_arcs:
+                w += p_add
+            if use_ap and rec is not None and str(rec.path_type or "") == "apron_link":
+                lid = str(rec.link_id or "").strip()
+                if lid and lid not in ap_ids:
+                    w += ap_x
+            nd = d + w
+            if nd < dist[v]:
+                dist[v] = nd
+                prev[v] = u
+                heapq.heappush(heap, (nd, v))
     if dist[end_idx] == math.inf or dist[end_idx] >= g.reverse_cost:
         return None
     path: List[int] = []

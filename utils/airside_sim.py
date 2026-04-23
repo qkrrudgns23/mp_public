@@ -38,7 +38,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from utils.designer_path_graph import (
     DirectedEdgeRecord,
@@ -755,6 +755,24 @@ def resolve_route_endpoint_index(
     return None
 
 
+def _apron_link_ids_for_assigned_stand(layout: Dict[str, Any], flight: Dict[str, Any]) -> Set[str]:
+    """Layout ``apronLinks[].id`` for the stand assigned to ``flight`` (contact/remote/temp)."""
+    token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
+    sid = flight.get("standId") or token.get("apronId")
+    if sid is None or str(sid).strip() == "":
+        return set()
+    out: Set[str] = set()
+    for al in layout.get("apronLinks") or []:
+        if not isinstance(al, dict):
+            continue
+        if str(al.get("pbbId") or "") != str(sid):
+            continue
+        lid = str(al.get("id") or "").strip()
+        if lid:
+            out.add(lid)
+    return out
+
+
 def flight_route(
     g: PathGraph,
     layout: Dict[str, Any],
@@ -765,6 +783,8 @@ def flight_route(
     *,
     penalized_arcs: Optional[set[Tuple[int, int]]] = None,
     penalty_add: float = 0.0,
+    apron_transit_extra: float = 0.0,
+    apron_allowed_link_ids: Optional[Set[str]] = None,
 ) -> Tuple[List[str], float, Optional[List[int]]]:
     """
     Shortest path on ``g`` between two endpoints.
@@ -785,6 +805,8 @@ def flight_route(
         end_idx,
         penalized_arcs=penalized_arcs,
         penalty_add=penalty_add,
+        apron_transit_extra=apron_transit_extra,
+        apron_allowed_link_ids=apron_allowed_link_ids,
     )
     if not path or len(path) < 2:
         return [], float("inf"), None
@@ -843,6 +865,8 @@ def _flight_route_impl(
     penalized_layout_edges: Optional[set[str]] = None,
     penalty_add: float = 0.0,
     accept_reverse_penalty_path: bool = False,
+    apron_transit_extra: float = 0.0,
+    apron_allowed_link_ids: Optional[Set[str]] = None,
 ) -> Tuple[List[str], bool, Optional[List[int]], Optional[PathGraph]]:
     """Same graph build and routing as airside_sim_rev3 ``_flight_route``; returns path for geometry."""
     g = _cached_path_graph_for_direction(
@@ -872,6 +896,8 @@ def _flight_route_impl(
         end,
         penalized_arcs=p_arcs,
         penalty_add=p_add,
+        apron_transit_extra=apron_transit_extra,
+        apron_allowed_link_ids=apron_allowed_link_ids,
     )
     if path is None or len(path) < 2:
         return [], False, None, g
@@ -2342,6 +2368,14 @@ def prepare_flight_path(
         )
         sx, sy, ex, ey = float(leg[0]), float(leg[1]), float(leg[2]), float(leg[3])
         rw_leg = _flight_rw_dir_for_leg(flight, leg_i, layout)
+        ap_ids = (
+            _apron_link_ids_for_assigned_stand(layout, flight)
+            if str(phase) == PHASE_ARR_TAXI
+            else set()
+        )
+        ap_extra = 0.0
+        if ap_ids and str(phase) == PHASE_ARR_TAXI:
+            ap_extra = min(float(reverse_cost) * 0.04, 80_000.0)
         edges, dv, path, g = _flight_route_impl(
             layout,
             cell_size,
@@ -2353,6 +2387,8 @@ def prepare_flight_path(
             rw_leg,
             RouteEndpoint(token_pixel_xy=(sx, sy)),
             RouteEndpoint(token_pixel_xy=(ex, ey)),
+            apron_transit_extra=ap_extra,
+            apron_allowed_link_ids=ap_ids if ap_ids else None,
         )
         if dv:
             logical_edge_list = []

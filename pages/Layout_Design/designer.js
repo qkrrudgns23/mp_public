@@ -7922,7 +7922,10 @@
         const x = a.x + (b.x - a.x) * u;
         const y = a.y + (b.y - a.y) * u;
         const h = headingForInterval(i);
-        const mfB = b.motionForward !== false;
+        const dist2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y);
+        // Stationary / dwell: use start keyframe motion (matches export); do not use end keyframe
+        // (e.g. next sample is pushback with motionForward false — would flip silhouette while parked).
+        const mfB = (dist2 < motionChordEps2) ? (a.motionForward !== false) : (b.motionForward !== false);
         let rdx = h.dx, rdy = h.dy;
         if (mfB === false) {
           const len = Math.hypot(rdx, rdy) || 1;
