@@ -1820,10 +1820,10 @@
     else if (type === 'layoutMarker') state.layoutMarkers = (state.layoutMarkers || []).filter(function(m) { return m && m.id !== id; });
     else if (type === 'layoutEdge') {}
     if (removedTaxiway) {
+      if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
       if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.pathGraphCacheValid && state.pathGraphCache && !state.pathGraphCache.__junctionStale) {
         stripPathGraphCacheJunctionsNearTaxiwayWorld(removedTaxiway);
       }
-      const shouldResampleRet = (removedTaxiway.pathType === 'runway' || removedTaxiway.pathType === 'runway_exit');
       if (removedTaxiway.pathType === 'runway_exit') {
         (state.flights || []).forEach(function(f) {
           if (!f || f.sampledArrRet !== id) return;
@@ -1841,7 +1841,6 @@
         });
       }
       if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
-      if (shouldResampleRet && typeof renderFlightList === 'function') renderFlightList(false, true);
     }
   }
   function syncPathFieldVisibilityForPathType(pt) {
@@ -2317,7 +2316,7 @@
     if (typeof resizeCanvas === 'function') resizeCanvas();
     if (typeof reset2DView === 'function') reset2DView();
     if (typeof syncPanelFromState === 'function') syncPanelFromState();
-    if (typeof renderFlightList === 'function') renderFlightList(false, false);
+    if (typeof triggerArrivalConfigResampleFromLayoutEdit === 'function') triggerArrivalConfigResampleFromLayoutEdit();
     if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
     if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
     if (typeof draw === 'function') draw();
@@ -7286,8 +7285,9 @@
   }
   const runwayExitAllowedDirectionEl = document.getElementById('runwayExitAllowedDirection');
   function triggerArrivalConfigResampleFromLayoutEdit() {
+    if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
+    if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
     if (typeof renderFlightList === 'function') renderFlightList(false, true);
-    else if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
   }
   if (runwayExitAllowedDirectionEl) {
     runwayExitAllowedDirectionEl.addEventListener('change', function(ev) {
@@ -7303,13 +7303,11 @@
         if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
         else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
         else draw();
-        triggerArrivalConfigResampleFromLayoutEdit();
       });
   }
-  document.getElementById('taxiwayDirectionMode').addEventListener('change', function() {
+    document.getElementById('taxiwayDirectionMode').addEventListener('change', function() {
     if (state.selectedObject && state.selectedObject.type === 'taxiway') {
       const tw = state.selectedObject.obj;
-      const shouldResampleRet = !!(tw && (tw.pathType === 'runway' || tw.pathType === 'runway_exit'));
       const v = this.value || '';
       if (tw.pathType === 'runway') {
         runwayReverseVerticesIfDirectionChanged(tw, v);
@@ -7319,7 +7317,6 @@
       if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
       draw();
       update3DSceneWhenVisible();
-      if (shouldResampleRet) triggerArrivalConfigResampleFromLayoutEdit();
     }
   });
   const taxiwayPathTypeKindEl = document.getElementById('taxiwayPathTypeKind');
@@ -16864,7 +16861,6 @@
     if (state.taxiwayDrawingId) {
       const tw = state.taxiways.find(x => x.id === state.taxiwayDrawingId);
       if (tw && tw.vertices.length >= 2) {
-        const shouldResampleRet = (tw.pathType === 'runway' || tw.pathType === 'runway_exit');
         if (taxiwayOverlapsAnyTerminal(tw)) {
           alert('this TaxiwayIs TerminalIt overlaps with . Please draw a different path.');
           pushUndo();
@@ -16883,7 +16879,6 @@
         syncPanelFromState();
         if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
         else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-        if (shouldResampleRet) triggerArrivalConfigResampleFromLayoutEdit();
       }
       return;
     }
@@ -16983,7 +16978,6 @@
     syncPanelFromState();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
     else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-    if (pathType === 'runway' || pathType === 'runway_exit') triggerArrivalConfigResampleFromLayoutEdit();
   });
   const btnPbbDrawEl = document.getElementById('btnPbbDraw');
   if (btnPbbDrawEl) btnPbbDrawEl.addEventListener('click', function() {
@@ -21997,9 +21991,6 @@
                 }
                 if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
                 else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-                if ((tw.pathType === 'runway' || tw.pathType === 'runway_exit') && tw.vertices.length >= 2) {
-                  triggerArrivalConfigResampleFromLayoutEdit();
-                }
               }
             }
           }
@@ -22183,7 +22174,7 @@
       if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
       if (typeof renderObjectList === 'function') renderObjectList();
       if (typeof updateObjectInfo === 'function') updateObjectInfo();
-      if (typeof renderFlightList === 'function') renderFlightList(false, true);
+      if (typeof triggerArrivalConfigResampleFromLayoutEdit === 'function') triggerArrivalConfigResampleFromLayoutEdit();
       if (typeof draw === 'function') draw();
       if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
     });
