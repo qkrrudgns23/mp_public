@@ -85,7 +85,7 @@ _EXTRACT_LEG_PHASES: Tuple[str, ...] = (
 )
 SIM_MAX_TIME_SEC = 200_000.0
 # After max scheduled STOT (Sd / ``stotMin_d``), advance sim time only this much (absolute seconds).
-STOT_POST_BUFFER_SEC = 1_000.0
+STOT_POST_BUFFER_SEC = 3_600.0
 
 _LOG = logging.getLogger(__name__)
 
