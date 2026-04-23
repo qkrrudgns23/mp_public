@@ -224,6 +224,29 @@
   const APPROACH_STRAIGHT_FINAL_M = Math.max(0, Number(_algoSimTier.approachStraightFinalM) || 3000);
   const AIRCRAFT_WINGSPAN_M = Math.max(1, Number(_algoSimTier.aircraftWingspanM) || 40);
   const AIRCRAFT_FUSELAGE_LENGTH_M = Math.max(1, Number(_algoSimTier.aircraftFuselageLengthM) || 50);
+  function getSimAircraftWorldDimsM(flight) {
+    const ac = flight && flight.aircraftType ? getAircraftInfoByType(String(flight.aircraftType).trim()) : null;
+    const lenR = ac && Number(ac.length_m);
+    const wingR = ac && Number(ac.wingspan_m);
+    const lenM = (isFinite(lenR) && lenR > 0) ? lenR : AIRCRAFT_FUSELAGE_LENGTH_M;
+    const wingM = (isFinite(wingR) && wingR > 0) ? wingR : AIRCRAFT_WINGSPAN_M;
+    return { lenM, wingM };
+  }
+  function detailedSilhouetteAxisSpans(silhouette2D) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < silhouette2D.length; i++) {
+      const p = silhouette2D[i];
+      if (!Array.isArray(p) || p.length < 2) continue;
+      const x = Number(p[0]), y = Number(p[1]);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) return { spanX: 1, spanY: 1 };
+    return { spanX: Math.max(1e-9, maxX - minX), spanY: Math.max(1e-9, maxY - minY) };
+  }
   const FLIGHT_TRAIL_LENGTH_M = Math.max(0, Number(_algoSimTier.trailLengthM) || 300);
   const PRE_TOUCHDOWN_HALO_ENABLED = (_algoSimTier.preTouchdownHaloEnabled !== false);
   const PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC = Math.max(0, Number(_algoSimTier.playbackLeadBeforeFirstTouchdownSec) || 0);
@@ -232,6 +255,24 @@
   const _junctionMergeRadiusRaw = Number(_pathSearchTier.junctionMergeRadiusPx);
   const PATH_JUNCTION_MERGE_RADIUS_PX = (isFinite(_junctionMergeRadiusRaw) && _junctionMergeRadiusRaw >= 0) ? _junctionMergeRadiusRaw : 7;
   const _styleTier = _tiers.style || {};
+  const _flightVizStyle = (_styleTier.flightVisualization && typeof _styleTier.flightVisualization === 'object') ? _styleTier.flightVisualization : {};
+  const FLIGHT_SIM_VIZ_DEFAULT_PALETTE = ['#a78bfa', '#22d3ee', '#4ade80', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#fb7185', '#c084fc'];
+  function flightSimVizPaletteList() {
+    const p = _flightVizStyle.palette;
+    if (Array.isArray(p) && p.length) {
+      const out = [];
+      for (let i = 0; i < p.length; i++) {
+        const c = String(p[i] || '').trim();
+        if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c)) out.push(c);
+      }
+      if (out.length) return out;
+    }
+    return FLIGHT_SIM_VIZ_DEFAULT_PALETTE.slice();
+  }
+  function flightSimVizOverflowGray() {
+    const g = _flightVizStyle.overflowGray;
+    return (typeof g === 'string' && g.trim()) ? g.trim() : '#9ca3af';
+  }
   const _ganttStyle = _styleTier.gantt || {};
   const GANTT_VISIBLE_WINDOW_MIN = Math.max(60, Number(_ganttStyle.visibleWindowMin) || 1440);
   const GANTT_PAN_STEP_MIN = Math.max(15, Number(_ganttStyle.panStepMin) || 360);
@@ -1189,6 +1230,8 @@
     dragLayoutMarkerHandle: null,
     pathArcModeOn: false,
     pathArcDrag: null,
+    /** Pro Sim 2D: all | airline | icao | intdom | building */
+    flightColorMode: 'all',
   };
   const LAYER_STATE_KEYS = [
     'grid', 'image', 'pathLines', 'pathFill', 'standLines', 'standFill',
@@ -1657,8 +1700,17 @@
     if (!btn || !panel) return;
     const o = !!open;
     btn.setAttribute('aria-expanded', o ? 'true' : 'false');
-    if (o) panel.removeAttribute('hidden');
-    else panel.setAttribute('hidden', '');
+    if (o) {
+      panel.removeAttribute('hidden');
+      const cp = document.getElementById('colorPopoverPanel');
+      const cb = document.getElementById('btnColorPopover');
+      if (cp && cb && !cp.hasAttribute('hidden')) {
+        cp.setAttribute('hidden', '');
+        cb.setAttribute('aria-expanded', 'false');
+      }
+    } else {
+      panel.setAttribute('hidden', '');
+    }
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -2181,6 +2233,10 @@
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
         if (!String(f.reg || '').trim()) f.reg = randomRegNumber();
+        {
+          const idRaw = String(f.intDom || '').trim();
+          f.intDom = (idRaw.toLowerCase() === 'dom') ? 'Dom' : 'Int';
+        }
       });
     } else {
       state.flights = [];
@@ -8127,6 +8183,7 @@
     if (role === 'arr') el.value = resolveArrivalRunwayIdForFlight(f) || '';
     else if (role === 'term') el.value = f.terminalId || (f.token && f.token.terminalId) || '';
     else if (role === 'dep') el.value = f.depRunwayId || (f.token && f.token.depRunwayId) || '';
+    else if (role === 'intdom') el.value = (f && String(f.intDom || '').trim().toLowerCase() === 'dom') ? 'Dom' : 'Int';
   }
   function getRunwayDisplayLabelById(rwId) {
     if (rwId == null || rwId === '') return '—';
@@ -8140,14 +8197,56 @@
     const t = terms.find(function(x) { return x.id === termId; });
     return t ? ((t.name || '').trim() || 'Building') : '—';
   }
+  function flightColorGroupKeyForSim(f, mode) {
+    if (mode === 'all') return '*';
+    if (mode === 'airline') return 'a:' + (String(f.airlineCode || '').trim() || '—');
+    if (mode === 'icao') {
+      const c0 = (typeof getCodeForAircraft === 'function') ? String(getCodeForAircraft(f.aircraftType) || 'C').trim().toUpperCase()[0] : 'C';
+      return 'i:' + (c0 || 'C');
+    }
+    if (mode === 'intdom') {
+      return 'd:' + ((String(f.intDom || '').trim().toLowerCase() === 'dom') ? 'Dom' : 'Int');
+    }
+    if (mode === 'building') {
+      const tid = f.terminalId || (f.token && f.token.terminalId) || '';
+      return 'b:' + (tid ? getTerminalDisplayLabelById(tid) : '—');
+    }
+    return '*';
+  }
+  function buildFlightSim2DColorKeyIndexMap() {
+    const mode = state.flightColorMode || 'all';
+    if (mode === 'all') return new Map([['*', 0]]);
+    const flights = state.flights || [];
+    const keys = new Set();
+    for (let i = 0; i < flights.length; i++) {
+      if (!flights[i]) continue;
+      keys.add(flightColorGroupKeyForSim(flights[i], mode));
+    }
+    const sorted = Array.from(keys).sort();
+    const m = new Map();
+    for (let j = 0; j < sorted.length; j++) m.set(sorted[j], j);
+    return m;
+  }
+  function resolveFlightSim2DGlyphFillRgba(f, isDeadlockGhost, keyIdxMap, pal, overflow, mode) {
+    if (isDeadlockGhost) return 'rgba(148, 163, 184, 0.45)';
+    if (mode === 'all') return apron2DGlyphFill();
+    const k = flightColorGroupKeyForSim(f, mode);
+    const idx = keyIdxMap.get(k);
+    if (idx == null || idx >= 10) return overflow;
+    return pal[idx] || overflow;
+  }
   function syncFlightAssignStripFromFlight(f) {
     const arrEl = document.getElementById('flightAssignStripArr');
     const termEl = document.getElementById('flightAssignStripTerm');
     const depEl = document.getElementById('flightAssignStripDep');
+    const intDomEl = document.getElementById('flightAssignStripIntDom');
     if (arrEl) {
       const sid = f ? (resolveArrivalRunwayIdForFlight(f) || '') : '';
       arrEl.innerHTML = buildRunwayOptionsHtml(sid);
       arrEl.value = sid;
+    }
+    if (intDomEl) {
+      intDomEl.value = (f && String(f.intDom || '').trim().toLowerCase() === 'dom') ? 'Dom' : 'Int';
     }
     if (termEl) {
       const tid = f ? (f.terminalId || (f.token && f.token.terminalId) || '') : '';
@@ -8164,11 +8263,12 @@
     const arrEl = document.getElementById('flightAssignStripArr');
     const termEl = document.getElementById('flightAssignStripTerm');
     const depEl = document.getElementById('flightAssignStripDep');
+    const intDomEl = document.getElementById('flightAssignStripIntDom');
     const sel = state.selectedObject;
     const hasFlight = sel && sel.type === 'flight' && sel.id;
     const f = hasFlight ? state.flights.find(function(x) { return x.id === sel.id; }) : null;
     const dis = !f;
-    [arrEl, termEl, depEl].forEach(function(el) {
+    [arrEl, termEl, depEl, intDomEl].forEach(function(el) {
       if (el) el.disabled = dis;
     });
     if (!f) {
@@ -8181,6 +8281,18 @@
     const f = st.flights.find(function(x) { return x.id === flightId; });
     if (!f) return;
     const raw = rawValue;
+    if (role === 'intdom') {
+      const next = (String(raw || '').trim().toLowerCase() === 'dom') ? 'Dom' : 'Int';
+      const prev = (String(f.intDom || '').trim().toLowerCase() === 'dom') ? 'Dom' : 'Int';
+      if (next === prev) return;
+      f.intDom = next;
+      syncFlightAssignStripFromFlight(f);
+      if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      if (typeof draw === 'function') draw();
+      if (typeof renderFlightList === 'function')
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [flightId], touchedStandIds: f.standId ? [f.standId] : [] });
+      return;
+    }
     var val = null;
     if (role === 'arr' || role === 'dep') {
       const r = resolveRunwayIdFromInput(raw);
@@ -8245,7 +8357,7 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  const FLIGHT_SCHED_TABLE_COL_COUNT = 27;
+  const FLIGHT_SCHED_TABLE_COL_COUNT = 28;
   /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). S-group SLDT/STOT columns removed. */
   const FLIGHT_SCHED_TD_SLD = 10;
   const FLIGHT_SCHED_TD_SIBTD = 11;
@@ -8700,6 +8812,7 @@
         '<th class="flight-th-mixed">ATT(dep)</th>' +
         '<th>Aircraft Type</th>' +
         '<th class="flight-th-mixed">Code(ICAO)</th>' +
+        '<th>Int/Dom</th>' +
         '<th class="flight-td-del"></th>' +
       '</tr></thead>' +
       '<tbody>';
@@ -8757,6 +8870,7 @@
     const depRwRead = escapeHtml(getRunwayDisplayLabelById(depRunwayId));
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
+    const intDomVal = (String(f.intDom || '').trim().toLowerCase() === 'dom') ? 'Dom' : 'Int';
     return '' +
       '<tr class="flight-data-row obj-item" data-id="' + f.id + '">' +
         '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + '</td>' +
@@ -8785,6 +8899,7 @@
         '<td class="flight-td-time">' + attDepCell + '</td>' +
         '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
         '<td>' + escapeHtml(codeIcao) + '</td>' +
+        '<td class="flight-td-readonly" title="Edit in Int/Dom above when flight is selected">' + escapeHtml(intDomVal) + '</td>' +
         '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
       '</tr>';
   }
@@ -15259,6 +15374,10 @@
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     const tSecDraw = state.simTimeSec;
+    const fcMode = state.flightColorMode || 'all';
+    const fcPal = flightSimVizPaletteList();
+    const fcOver = flightSimVizOverflowGray();
+    const fcKeyIdx = buildFlightSim2DColorKeyIndexMap();
     state.flights.forEach(f => {
       if (flightBlockedLikeNoWay(f)) return;
       const pose = getFlightPoseAtTimeForDraw(f, tSecDraw);
@@ -15276,20 +15395,23 @@
       const lY = isFinite(silLY) ? silLY : -0.35;
       const useDetailSil = _ac2d.useDetailedSilhouette === true;
       const silhouette2D = getApronAircraftDetailedSilhouettePoints();
+      const dimsM = getSimAircraftWorldDimsM(f);
+      const lenM = dimsM.lenM, wingM = dimsM.wingM;
       let scaleX, scaleY, sizeRef;
       if (useDetailSil && silhouette2D.length >= 3) {
-        scaleX = 40;
-        scaleY = 40;
-        sizeRef = 0.5 * Math.hypot(40, 40);
+        const sp = detailedSilhouetteAxisSpans(silhouette2D);
+        scaleX = lenM / sp.spanX;
+        scaleY = wingM / sp.spanY;
+        sizeRef = 0.5 * Math.hypot(lenM, wingM);
       } else {
         const xs = [nX, wRx, tX];
         const minXn = Math.min(xs[0], xs[1], xs[2]);
         const maxXn = Math.max(xs[0], xs[1], xs[2]);
         const lenNorm = Math.max(1e-9, maxXn - minXn);
         const wingNorm = Math.max(1e-9, uY + lY);
-        scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
-        scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
-        sizeRef = 0.5 * Math.hypot(AIRCRAFT_FUSELAGE_LENGTH_M, AIRCRAFT_WINGSPAN_M);
+        scaleX = lenM / lenNorm;
+        scaleY = wingM / wingNorm;
+        sizeRef = 0.5 * Math.hypot(lenM, wingM);
       }
       const outW = Number(_ac2d.outlineWidth);
       const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
@@ -15349,7 +15471,7 @@
       const ang = Math.atan2(ny, nx);
       ctx.rotate(ang);
       const isDeadlockGhost = pose.deadlockGhost === true;
-      ctx.fillStyle = isDeadlockGhost ? 'rgba(148, 163, 184, 0.45)' : apron2DGlyphFill();
+      ctx.fillStyle = resolveFlightSim2DGlyphFillRgba(f, isDeadlockGhost, fcKeyIdx, fcPal, fcOver, fcMode);
       ctx.beginPath();
       if (useDetailSil) {
         ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
@@ -16113,6 +16235,8 @@
         const arrDep = 'Arr';
         const runwayOptions = getRunwayOptions();
         const defaultRunwayId = runwayOptions.length ? (runwayOptions[0].id || null) : null;
+        const defIntDomEl = document.getElementById('flightDefaultIntDom');
+        const intDomNew = (defIntDomEl && String(defIntDomEl.value || '').toLowerCase() === 'dom') ? 'Dom' : 'Int';
         const f = {
           id: id(),
           arrDep,
@@ -16124,6 +16248,7 @@
           reg,
           airlineCode,
           flightNumber,
+          intDom: intDomNew,
           dwellMin,
           minDwellMin,
           arrRunwayId: defaultRunwayId,
@@ -19794,22 +19919,13 @@
     const lY = isFinite(silLY) ? silLY : -0.35;
     const useDetailSil = _ac2d.useDetailedSilhouette === true;
     const silhouette2D = getApronAircraftDetailedSilhouettePoints();
-    let scaleX, scaleY;
-    if (useDetailSil && silhouette2D.length >= 3) {
-      scaleX = 40;
-      scaleY = 40;
-    } else {
-      const xs = [nX, wRx, tX];
-      const minXn = Math.min(xs[0], xs[1], xs[2]);
-      const maxXn = Math.max(xs[0], xs[1], xs[2]);
-      const lenNorm = Math.max(1e-9, maxXn - minXn);
-      const wingNorm = Math.max(1e-9, uY + lY);
-      scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
-      scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
-    }
     const outW = Number(_ac2d.outlineWidth);
     const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
     const outlineColor = _ac2d.outlineColor || '';
+    const fcModeG = state.flightColorMode || 'all';
+    const fcPalG = flightSimVizPaletteList();
+    const fcOverG = flightSimVizOverflowGray();
+    const fcKeyIdxG = buildFlightSim2DColorKeyIndexMap();
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -19820,6 +19936,22 @@
       if (waitN < 2) return;
       const f = firstFlightWaitingAtHoldingPoint2D(hp, tSecDraw);
       if (!f) return;
+      const dimsMG = getSimAircraftWorldDimsM(f);
+      const lenMG = dimsMG.lenM, wingMG = dimsMG.wingM;
+      let scaleX, scaleY;
+      if (useDetailSil && silhouette2D.length >= 3) {
+        const sp = detailedSilhouetteAxisSpans(silhouette2D);
+        scaleX = lenMG / sp.spanX;
+        scaleY = wingMG / sp.spanY;
+      } else {
+        const xs = [nX, wRx, tX];
+        const minXn = Math.min(xs[0], xs[1], xs[2]);
+        const maxXn = Math.max(xs[0], xs[1], xs[2]);
+        const lenNorm = Math.max(1e-9, maxXn - minXn);
+        const wingNorm = Math.max(1e-9, uY + lY);
+        scaleX = lenMG / lenNorm;
+        scaleY = wingMG / wingNorm;
+      }
       const pts = graphPathDeparture(f, { onlyToLineup: true });
       if (!pts || pts.length < 2) return;
       const cum = cumulativeDistAlongPolylineToPoint(pts, [hp.x, hp.y]);
@@ -19835,7 +19967,7 @@
         ctx.save();
         ctx.translate(pt[0], pt[1]);
         ctx.rotate(Math.atan2(ny, nx));
-        ctx.fillStyle = apron2DGlyphFill();
+        ctx.fillStyle = resolveFlightSim2DGlyphFillRgba(f, false, fcKeyIdxG, fcPalG, fcOverG, fcModeG);
         ctx.beginPath();
         if (useDetailSil) {
           ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
@@ -22190,6 +22322,40 @@
       if (!layerPopoverWrap || layerPopoverPanel.hasAttribute('hidden')) return;
       if (layerPopoverWrap.contains(ev.target)) return;
       setLayerPopoverOpen(false);
+    });
+  }
+  const colorPopoverBtn = document.getElementById('btnColorPopover');
+  const colorPopoverPanel = document.getElementById('colorPopoverPanel');
+  const colorPopoverWrap = document.getElementById('colorPopoverWrap');
+  const flightSimColorModeSel = document.getElementById('flightSimColorMode');
+  function setColorPopoverOpen(open) {
+    if (!colorPopoverPanel || !colorPopoverBtn) return;
+    if (open) {
+      colorPopoverPanel.removeAttribute('hidden');
+      colorPopoverBtn.setAttribute('aria-expanded', 'true');
+    } else {
+      colorPopoverPanel.setAttribute('hidden', '');
+      colorPopoverBtn.setAttribute('aria-expanded', 'false');
+    }
+  }
+  if (flightSimColorModeSel) {
+    flightSimColorModeSel.value = state.flightColorMode || 'all';
+    flightSimColorModeSel.addEventListener('change', function() {
+      state.flightColorMode = String(this.value || 'all');
+      if (typeof draw === 'function') draw();
+    });
+  }
+  if (colorPopoverBtn && colorPopoverPanel) {
+    colorPopoverBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      const open = colorPopoverPanel.hasAttribute('hidden');
+      if (open && layerPopoverPanel && !layerPopoverPanel.hasAttribute('hidden')) setLayerPopoverOpen(false);
+      setColorPopoverOpen(open);
+    });
+    document.addEventListener('click', function(ev) {
+      if (!colorPopoverWrap || colorPopoverPanel.hasAttribute('hidden')) return;
+      if (colorPopoverWrap.contains(ev.target)) return;
+      setColorPopoverOpen(false);
     });
   }
   const aiAssistantDock = document.getElementById('aiAssistantDock');

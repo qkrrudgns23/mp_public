@@ -1360,6 +1360,22 @@
         "colRot": "#ffffff",
         "arrRetFailedText": "#f87171"
       },
+      "flightVisualization": {
+        "description": "Pro Sim 2D aircraft fill: 10 distinct colors by group order, 11+ groups use overflowGray. Palette[0] is the default blazer accent.",
+        "palette": [
+          "#a78bfa",
+          "#22d3ee",
+          "#4ade80",
+          "#f59e0b",
+          "#f43f5e",
+          "#8b5cf6",
+          "#06b6d4",
+          "#84cc16",
+          "#fb7185",
+          "#c084fc"
+        ],
+        "overflowGray": "#9ca3af"
+      },
       "rwySepTimeline": {
         "lineS": "#38bdf8",
         "lineE": "#fb923c",
@@ -1526,7 +1542,7 @@
         "defaultApronStandCapacity": 1,
         "standArrivalStopRadiusM": 22,
         "standStoppedVelocityMaxMs": 0.12,
-        "deadlockResolveStopCount": 15
+        "deadlockResolveStopCount": 3
       }
     }
   }

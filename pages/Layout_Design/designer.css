@@ -73,6 +73,37 @@
       gap: 2px;
       pointer-events: auto;
     }
+    #view-toggle .color-popover-panel {
+      min-width: 220px;
+      max-width: min(280px, 90vw);
+      padding: 10px 12px;
+      gap: 8px;
+    }
+    #view-toggle .color-popover-heading {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ui-text-primary);
+      margin: 0 0 2px 0;
+    }
+    #view-toggle .color-popover-label {
+      font-size: 10px;
+      color: var(--ui-text-secondary);
+    }
+    #view-toggle .color-popover-select {
+      width: 100%;
+      font-size: 11px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--ui-border-default);
+      background: var(--ui-bg-input);
+      color: var(--ui-text-primary);
+    }
+    #view-toggle .color-popover-hint {
+      font-size: 10px;
+      color: var(--ui-text-muted);
+      line-height: 1.4;
+      margin: 0;
+    }
     #view-toggle .layer-popover-panel[hidden] { display: none !important; }
     #view-toggle .layer-popover-all-btn {
       width: 100%;

@@ -1394,7 +1394,6 @@
 
   function drawFlights2D() {
     if (!state.hasSimulationResult || !state.flights.length) return;
-    if (state.isPanning) return;
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -6823,10 +6822,8 @@
     if (state.hasSimulationResult && state.flights && state.flights.length) {
       if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
     }
-    if (!interactiveLite) {
-      drawHoldingQueueGhostFlights2D();
-      drawFlights2D();
-    }
+    drawHoldingQueueGhostFlights2D();
+    drawFlights2D();
     if (!interactiveLite) {
       if (!simPlaybackSkipHeavyPathOverlays) drawPathJunctions();
       drawTaxiwayDanglingEndpointMarks();

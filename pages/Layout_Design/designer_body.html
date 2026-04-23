@@ -63,6 +63,21 @@
                 </div>
               </div>
             </div>
+            <div class="layer-popover-wrap" id="colorPopoverWrap">
+              <button type="button" class="tool-btn" id="btnColorPopover" aria-expanded="false" aria-haspopup="true" aria-controls="colorPopoverPanel" title="Pro Sim flight colors (grouping)">Color</button>
+              <div id="colorPopoverPanel" class="layer-popover-panel color-popover-panel" role="menu" aria-label="Flight colors" hidden>
+                <div class="color-popover-heading">Flight (Pro Sim 2D)</div>
+                <label class="color-popover-label" for="flightSimColorMode">Group by</label>
+                <select id="flightSimColorMode" class="color-popover-select" title="How to color aircraft on the grid during playback">
+                  <option value="all">All (single accent)</option>
+                  <option value="airline">By airline</option>
+                  <option value="icao">By ICAO category</option>
+                  <option value="intdom">By Int / Dom</option>
+                  <option value="building">By building</option>
+                </select>
+                <p class="color-popover-hint">All: single default aircraft color (hot pink). Other modes: palette in Information → style → flightVisualization (10 colors; 11+ groups gray).</p>
+              </div>
+            </div>
             <button type="button" class="tool-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle layout AI assistant (placeholder UI)">AI mode</button>
             <span class="global-update-wrap">
               <span id="designerPageUpdateSyncDot" class="global-update-sync-dot stale" title="레이아웃/객체가 변경됨 — Update로 경로 그래프·뷰 동기화" role="status" aria-label="Designer Update sync status"></span>
@@ -155,6 +170,13 @@
           <div class="compact-field">
             <label>Rows</label>
             <input type="number" id="gridRows" min="__UI_G_MIN_DIM__" max="__UI_G_MAX_DIM__" value="__GRID_ROWS__" />
+          </div>
+          <div class="compact-field">
+            <label for="flightDefaultIntDom">New flight Int/Dom</label>
+            <select id="flightDefaultIntDom" title="Default Int or Dom for newly added flights">
+              <option value="Int" selected>Int</option>
+              <option value="Dom">Dom</option>
+            </select>
           </div>
           <div class="compact-field wide">
             <label>Upload Layout file</label>
@@ -498,11 +520,18 @@
               <label>Min dwell (min)</label>
               <input type="number" id="flightMinDwell" min="0" max="__UI_FLIGHT_DWELL_MAX__" value="__UI_FLIGHT_MIN_DWELL__" step="__UI_FLIGHT_DWELL_STEP__" title="In case of delayed arrival EOBT = EIBT + Min Dwell Adjust to (0Not applicable to this side)" />
             </div>
-            <div id="flightAssignStrip" class="flight-assign-strip-wrap" aria-label="Arrival runway, building, departure runway for selected flight">
+            <div id="flightAssignStrip" class="flight-assign-strip-wrap" aria-label="Arrival runway, Int/Dom, building, departure runway for selected flight">
               <div class="flight-assign-strip-row">
                 <div class="compact-field">
                   <label for="flightAssignStripArr">Arr Rw</label>
                   <select id="flightAssignStripArr" class="flight-assign-select flight-assign-strip-select" data-role="arr" disabled title="Select a flight row first"></select>
+                </div>
+                <div class="compact-field">
+                  <label for="flightAssignStripIntDom">Int/Dom</label>
+                  <select id="flightAssignStripIntDom" class="flight-assign-select flight-assign-strip-select" data-role="intdom" disabled title="Select a flight row first">
+                    <option value="Int">Int</option>
+                    <option value="Dom">Dom</option>
+                  </select>
                 </div>
                 <div class="compact-field">
                   <label for="flightAssignStripDep">Dep Rw</label>

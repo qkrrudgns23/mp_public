@@ -377,6 +377,10 @@
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
         if (!String(f.reg || '').trim()) f.reg = randomRegNumber();
+        {
+          const idRaw = String(f.intDom || '').trim();
+          f.intDom = (idRaw.toLowerCase() === 'dom') ? 'Dom' : 'Int';
+        }
       });
     } else {
       state.flights = [];

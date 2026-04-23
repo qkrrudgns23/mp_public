@@ -1,5 +1,26 @@
 ## Run Notes (최근 실행 결과 요약)
 
+### RUN 20260424T0400Z temp-stand-passthrough + arr-temp-splice-snap
+- **RUN_ID**: 20260424T0400Z
+- **command**:
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/default_layout_sim_input.json --output data/Result_storage/_validation_sim_result.json`
+  - `python -m harness.run --input data/Result_storage/MNL_OSM_sim_input.json --output data/Result_storage/_validation_mnl_result.json`
+- **result**: PASS run+validate (default_layout, MNL_OSM)
+- **problem A (R7 미도달)**: default_layout에서 R7이 C012가 바쁠 때 temp stand T001로 우회해야 하지만 T001 도달 전 T002의 graph node(70) 통과 구간에서 `temp_stand_busy:T002`로 고착. 원인은 `_agent_occupies_temp_stand_slot`가 `temp_stand_id`만 세팅돼도 `sr_t.occupied_by`를 채워 — 아직 물리적으로 도착하지 않은 R8의 T002 claim이 동일 택시웨이의 incident edge(layout-edge-098/099)를 통과 트래픽까지 차단. T001(node 68)은 T002(node 70)보다 택시웨이상 하류이므로 R7이 T001로 가려면 node 70을 지나야 함 → 영구 고착.
+- **problem B (RTX 뚜둑거림)**: Landing → `Arr_taxi_occupied`(PHASE_ARR_TAXI_TEMP) 전환 틱에서 속도가 `v=16.03 → 1.73` 로 급락하고 위치가 ~3 px 역행. 원인은 `_try_splice_temp_stand_arrival_detour`가 temp_prep을 만들 때 `snap_exact_start_xy=False` 이어서 Dijkstra 시작 노드(폴리라인 상 이전 그래프 노드)가 `start_xy`(Landing 마지막 끝점 = Arr_taxi 첫 시작점)와 불일치. 결과적으로 temp_prep 첫 micro-segment가 Landing 마지막 micro-segment와 **같은 구간을 중복 표현**하며, edge 전환 시 `_snap_agent_to_first_segment`가 기체를 그 세그먼트의 앞쪽으로 끌어당겨 역행·속도 리셋이 발생.
+- **change**: `utils/airside_sim.py`
+  - `_agent_occupies_temp_stand_slot`: `awaiting_apron_from_temp=True` 일 때만 `tid` 반환하도록 제한. 픽 중복 방지는 `_temp_stand_has_other_claimant_or_occupant`의 `ag2.temp_stand_id` 스캔으로 이미 유지. `can_reserve_path`의 `temp_stand_busy` 차단은 실제 주기 상태일 때만 발동 → 통과 트래픽 허용.
+  - `_try_splice_temp_stand_arrival_detour`: `_build_prep_xy_to_xy_phase(..., snap_exact_start_xy=True, snap_exact_end_xy=True, ...)` 로 호출해 temp_prep 첫 micro-segment의 `p0`를 `start_xy`로 정확히 스냅 → Landing–ArrTaxi_Temp 이음새의 중복 구간·역행·속도 리셋 제거.
+- **evidence** (default_layout, R7=id_gedp95dvr, R8=id_kpc2h0amv):
+  - **A 확인**: 수정 후 R7 T001 최단거리 **0.00 px** (이전: 121 px에서 stuck). R7 phase sequence `Landing → Arr_taxi_occupied(temp) → (parked) → Arr_taxi` 로 정상 진행. R8 도 T002 도달 → EIBT **None → 03/31 01:29:56** 획득.
+  - **B 확인**: R7 `Landing→Arr_taxi_occupied` 전환 속도 `1.73 → 14.98` m/s, 위치 역행 제거 (t=4070→4072: `(2855.6, 2993.9) → (2877.2, 2973.1)` 정방향). R8 동일 구간도 `12.23 → 14.98`.
+  - **회귀 없음**: R1/R2/R3 EIBT 불변 (00:21:18, 00:18:32, 00:24:48), MNL_OSM PASS run+validate.
+  - **결정성**: 동일 입력 2회 실행 R7 positions SHA-256 일치 (`2008bb7346c694ab`).
+- **note**: default_layout sim 종료는 여전히 DEADLOCK_CAP에서 중단 (무관한 Dep_taxi 혼잡으로 R1/R2/R3 가 다른 이유로 ghost 됨) — 본 이슈와 별개.
+
+---
+
 ### RUN 20260423T0903Z dep-runway-hold-buffer
 - **RUN_ID**: 20260423T0903Z
 - **command**:

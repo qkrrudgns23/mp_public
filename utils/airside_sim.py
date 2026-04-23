@@ -4311,6 +4311,7 @@ def _try_splice_temp_stand_arrival_detour(
         reverse_cost,
         merge_r,
         taxiway_h,
+        snap_exact_start_xy=True,
         snap_exact_end_xy=True,
         control_state=control_state,
     )
@@ -4560,9 +4561,18 @@ def _agent_occupies_temp_stand_slot(
     st0 = control_state.agent_states.get(ag.id)
     if st0 is not None and _agent_deadlock_ghost_at_time(st0, float(t_abs)):
         return None
-    # Reserve from splice (``temp_stand_id`` set) through temp wait/inject — not only
-    # while ``PHASE_ARR_TAXI_TEMP`` is the active edge, so other flights cannot pick the
-    # same temp during LANDING before the temp leg starts.
+    # Physical occupancy only: agent must be PARKED at the temp stand
+    # (``awaiting_apron_from_temp`` flips True at temp-leg finish). Pre-arrival
+    # claim exclusion for _pick_temp_stand_for_arrival_detour is already enforced
+    # by _temp_stand_has_other_claimant_or_occupant via ``ag2.temp_stand_id`` scan,
+    # so occupied_by does not need to double-guard the claim. Reporting claim-time
+    # occupancy here would also trigger ``temp_stand_busy`` in can_reserve_path for
+    # pass-through traffic on taxiway edges incident to the temp stand's graph node,
+    # blocking downstream flights from reaching other temp stands on the same
+    # corridor (e.g., a later flight routed to T001 stuck behind T002 once T002's
+    # claimant has set ``temp_stand_id`` but has not yet arrived).
+    if not ag.awaiting_apron_from_temp:
+        return None
     return tid
 
 
