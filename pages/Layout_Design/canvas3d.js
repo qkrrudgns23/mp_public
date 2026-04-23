@@ -1,3 +1,224 @@
+
+  /** World-space polyline for apron link in progress (matches drawApronTaxiwayLinks draft). */
+  function getApronLinkDrawingDraftWorldPts() {
+    if (!state.apronLinkDrawing || !state.apronLinkTemp) return null;
+    const t = state.apronLinkTemp;
+    const ptsPx = [];
+    if (t.kind === 'pbb' || t.kind === 'remote') {
+      const st = findStandById(t.standId);
+      if (st) ptsPx.push(getStandApronTaxiwayAttachWorldPx(st));
+    } else if (t.kind === 'taxiway') {
+      if (isFinite(Number(t.x)) && isFinite(Number(t.y))) ptsPx.push([Number(t.x), Number(t.y)]);
+    }
+    (state.apronLinkMidpoints || []).forEach(function(c) {
+      if (c && isFinite(Number(c.x)) && isFinite(Number(c.y))) ptsPx.push([Number(c.x), Number(c.y)]);
+      else ptsPx.push(cellToPixel(Number(c.col), Number(c.row)));
+    });
+    const hoverApron = (state.apronLinkPointerWorld && state.apronLinkPointerWorld.length >= 2 &&
+      isFinite(state.apronLinkPointerWorld[0]) && isFinite(state.apronLinkPointerWorld[1]))
+      ? state.apronLinkPointerWorld
+      : null;
+    if (ptsPx.length < 1) return null;
+    if (ptsPx.length < 2 && !hoverApron) return null;
+    const full = hoverApron ? ptsPx.concat([hoverApron]) : ptsPx.slice();
+    return dedupePathPoints(full);
+  }
+
+  /** Junction world points where an open polyline crosses taxiway centerlines (same geometry as in-progress taxiway overlay). */
+  function collectPathJunctionWorldPointsForOpenPolyline(polyPts, pathList) {
+    if (!polyPts || polyPts.length < 2 || !pathList || !pathList.length) return [];
+    const junctions = [];
+    const segPad = CELL_SIZE * 32;
+    for (let seg = 0; seg < polyPts.length - 1; seg++) {
+      const a = polyPts[seg], b = polyPts[seg + 1];
+      const segBox = segmentWorldAabbPadded(a, b, segPad);
+      pathList.forEach(function(other) {
+        if (!other) return;
+        const otherBox = taxiwayWorldAabb(other);
+        if (otherBox && !aabbWorldIntersects2D(segBox, otherBox)) return;
+        const otherOrd = getOrderedPoints(other);
+        if (!otherOrd || otherOrd.length < 2) return;
+        for (let oseg = 0; oseg < otherOrd.length - 1; oseg++) {
+          const c = otherOrd[oseg], d = otherOrd[oseg + 1];
+          const isec = segmentSegmentIntersection(a, b, c, d);
+          if (isec) {
+            const pr = projectOnSegment(a, b, isec.p);
+            junctions.push({ tAlong: seg + pr.t, p: pr.p });
+          } else {
+            const ov = collinearSegmentOverlapOnAB(a, b, c, d);
+            if (ov) {
+              const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+              const dx = bx - ax, dy = by - ay;
+              const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
+              const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
+              const pr0 = projectOnSegment(a, b, p0);
+              junctions.push({ tAlong: seg + pr0.t, p: pr0.p });
+              if (dist2(p0, p1ov) > SPLIT_TOL_D2) {
+                const pr1 = projectOnSegment(a, b, p1ov);
+                junctions.push({ tAlong: seg + pr1.t, p: pr1.p });
+              }
+            } else {
+              [c, d].forEach(function(q) {
+                if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                  const prq = projectOnSegment(a, b, q);
+                  if (prq.t >= 0 && prq.t <= 1) junctions.push({ tAlong: seg + prq.t, p: prq.p });
+                }
+              });
+            }
+          }
+        }
+        otherOrd.forEach(function(q) {
+          if (!pointOnSegmentStrict(a, b, q)) return;
+          const prq = projectOnSegment(a, b, q);
+          junctions.push({ tAlong: seg + prq.t, p: prq.p });
+        });
+      });
+      {
+        const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+        const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
+        (state.holdingPoints || []).forEach(function(hp) {
+          if (!hp) return;
+          const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
+          if (k !== 'intermediate') return;
+          if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
+          const prh = projectOnSegment(a, b, [hp.x, hp.y]);
+          if (prh.t >= 0 && prh.t <= 1 && dist2(prh.p, [hp.x, hp.y]) <= hpTolD2) {
+            junctions.push({ tAlong: seg + prh.t, p: prh.p });
+          }
+        });
+      }
+      (state.tempStands || []).forEach(function(st) {
+        if (!st) return;
+        const corners = getRemoteStandCorners(st);
+        if (!corners || corners.length < 4) return;
+        for (let ei = 0; ei < 4; ei++) {
+          const c = corners[ei], d = corners[(ei + 1) % 4];
+          const isec2 = segmentSegmentIntersection(a, b, c, d);
+          if (isec2) {
+            const pr2 = projectOnSegment(a, b, isec2.p);
+            if (pr2.t >= 0 && pr2.t <= 1) junctions.push({ tAlong: seg + pr2.t, p: pr2.p });
+          } else {
+            const ov2 = collinearSegmentOverlapOnAB(a, b, c, d);
+            if (ov2) {
+              const ax2 = a[0], ay2 = a[1], bx2 = b[0], by2 = b[1];
+              const dx2 = bx2 - ax2, dy2 = by2 - ay2;
+              const p0b = [ax2 + ov2.t0 * dx2, ay2 + ov2.t0 * dy2];
+              const p1b = [ax2 + ov2.t1 * dx2, ay2 + ov2.t1 * dy2];
+              const pr0b = projectOnSegment(a, b, p0b);
+              junctions.push({ tAlong: seg + pr0b.t, p: pr0b.p });
+              if (dist2(p0b, p1b) > SPLIT_TOL_D2) {
+                const pr1b = projectOnSegment(a, b, p1b);
+                junctions.push({ tAlong: seg + pr1b.t, p: pr1b.p });
+              }
+            } else {
+              [c, d].forEach(function(q) {
+                if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                  const prq2 = projectOnSegment(a, b, q);
+                  if (prq2.t >= 0 && prq2.t <= 1) junctions.push({ tAlong: seg + prq2.t, p: prq2.p });
+                }
+              });
+            }
+          }
+        }
+      });
+    }
+    const raw = [];
+    for (let ji = 0; ji < junctions.length; ji++) {
+      const j = junctions[ji];
+      const p = j && j.p;
+      if (p && isFinite(p[0]) && isFinite(p[1])) raw.push(p);
+    }
+    return mergeNearbyPathPointsForDraw(raw, PATH_JUNCTION_MERGE_RADIUS_PX);
+  }
+
+  function buildPathGraph(selectedArrRetId, runwayDirectionForExit, pathGraphOpts) {
+    const opts = pathGraphOpts && typeof pathGraphOpts === 'object' ? pathGraphOpts : {};
+    const pureGroundExcludeRunway = !!opts.pureGroundExcludeRunway;
+    /** When true with selectedArrRetId: drop other runway_exit polylines (runway→chosen RET leg only). Full taxi/crossing needs all RETs. */
+    const omitOtherRunwayExits = !!opts.omitOtherRunwayExits;
+    const nodes = [], keyToIdx = {}, edges = [], adj = [], junctionPts = [], junctionKeys = {}, edgeMap = {};
+    const nodeBucket = {};
+    const mergeRM = PATH_JUNCTION_MERGE_RADIUS_PX;
+    function nodeBucketKeyForPoint(p) {
+      return Math.floor(p[0] / mergeRM) + ',' + Math.floor(p[1] / mergeRM);
+    }
+    function findNodeIndexWithinMergeRadius(p) {
+      const bx = Math.floor(p[0] / mergeRM);
+      const by = Math.floor(p[1] / mergeRM);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const list = nodeBucket[(bx + dx) + ',' + (by + dy)];
+          if (!list) continue;
+          for (let t = 0; t < list.length; t++) {
+            const idx = list[t];
+            if (pathDist(nodes[idx], p) <= mergeRM) return idx;
+          }
+        }
+      }
+      return null;
+    }
+    const runwayNodeIndicesById = {};
+    function addJunction(p) {
+      const k = pathPointKey(p);
+      if (junctionKeys[k]) return;
+      junctionKeys[k] = true;
+      junctionPts.push(p);
+    }
+    function getOrAdd(p) {
+      const found = findNodeIndexWithinMergeRadius(p);
+      if (found != null) return found;
+      const idx = nodes.length;
+      nodes.push([p[0], p[1]]);
+      const k = pathPointKey(p);
+      keyToIdx[k] = idx;
+      adj[idx] = [];
+      const bkey = nodeBucketKeyForPoint(p);
+      if (!nodeBucket[bkey]) nodeBucket[bkey] = [];
+      nodeBucket[bkey].push(idx);
+      return idx;
+    }
+    function registerDirectedEdge(fromIdx, toIdx, cost, rawDist, pts, linkId, pathType, pathDir) {
+      const edge = {
+        from: fromIdx,
+        to: toIdx,
+        dist: cost,
+        rawDist: rawDist,
+        pts: dedupePathPoints(pts),
+        linkId: linkId != null ? String(linkId) : '',
+        pathType: pathType != null ? String(pathType) : 'taxiway',
+        pathDir: pathDir != null ? String(pathDir) : 'both'
+      };
+      edges.push(edge);
+      edgeMap[fromIdx + ':' + toIdx] = edge;
+    }
+    function addEdgeWithDirection(pFrom, pTo, dir, cost, rawDist, ptsForward, linkId, pathType) {
+      const i = getOrAdd(pFrom), j = getOrAdd(pTo);
+      if (i === j || cost < 1e-6) return;
+      const forwardPts = dedupePathPoints(ptsForward && ptsForward.length ? ptsForward : [pFrom, pTo]);
+      const reversePts = forwardPts.slice().reverse();
+      const lid = linkId != null ? String(linkId) : '';
+      const pt = pathType != null ? String(pathType) : 'taxiway';
+      registerDirectedEdge(i, j, cost, rawDist, forwardPts, lid, pt, dir);
+      if (dir === 'both') {
+        adj[i].push([j, cost]);
+        adj[j].push([i, cost]);
+        registerDirectedEdge(j, i, cost, rawDist, reversePts, lid, pt, dir);
+      } else if (dir === 'counter_clockwise') {
+        adj[j].push([i, cost]);
+        adj[i].push([j, REVERSE_COST]);
+        registerDirectedEdge(i, j, REVERSE_COST, rawDist, forwardPts, lid, pt, dir);
+      } else {
+        adj[i].push([j, cost]);
+        adj[j].push([i, REVERSE_COST]);
+        registerDirectedEdge(j, i, REVERSE_COST, rawDist, reversePts, lid, pt, dir);
+      }
+    }
+
+    const pathList = state.taxiways || [];
+    function segmentBBoxInflated2d(a, b, pad) {
+      const p = pad || 0;
+      const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+      return {
         minX: Math.min(ax, bx) - p,
         maxX: Math.max(ax, bx) + p,
         minY: Math.min(ay, by) - p,
@@ -1400,6 +1621,10 @@
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
     const tSecDraw = state.simTimeSec;
+    const fcMode = state.flightColorMode || 'all';
+    const fcPal = flightSimVizPaletteList();
+    const fcOver = flightSimVizOverflowGray();
+    const fcKeyIdx = buildFlightSim2DColorKeyIndexMap();
     state.flights.forEach(f => {
       if (flightBlockedLikeNoWay(f)) return;
       const pose = getFlightPoseAtTimeForDraw(f, tSecDraw);
@@ -1417,20 +1642,23 @@
       const lY = isFinite(silLY) ? silLY : -0.35;
       const useDetailSil = _ac2d.useDetailedSilhouette === true;
       const silhouette2D = getApronAircraftDetailedSilhouettePoints();
+      const dimsM = getSimAircraftWorldDimsM(f);
+      const lenM = dimsM.lenM, wingM = dimsM.wingM;
       let scaleX, scaleY, sizeRef;
       if (useDetailSil && silhouette2D.length >= 3) {
-        scaleX = 40;
-        scaleY = 40;
-        sizeRef = 0.5 * Math.hypot(40, 40);
+        const sp = detailedSilhouetteAxisSpans(silhouette2D);
+        scaleX = lenM / sp.spanX;
+        scaleY = wingM / sp.spanY;
+        sizeRef = 0.5 * Math.hypot(lenM, wingM);
       } else {
         const xs = [nX, wRx, tX];
         const minXn = Math.min(xs[0], xs[1], xs[2]);
         const maxXn = Math.max(xs[0], xs[1], xs[2]);
         const lenNorm = Math.max(1e-9, maxXn - minXn);
         const wingNorm = Math.max(1e-9, uY + lY);
-        scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
-        scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
-        sizeRef = 0.5 * Math.hypot(AIRCRAFT_FUSELAGE_LENGTH_M, AIRCRAFT_WINGSPAN_M);
+        scaleX = lenM / lenNorm;
+        scaleY = wingM / wingNorm;
+        sizeRef = 0.5 * Math.hypot(lenM, wingM);
       }
       const outW = Number(_ac2d.outlineWidth);
       const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
@@ -1490,7 +1718,7 @@
       const ang = Math.atan2(ny, nx);
       ctx.rotate(ang);
       const isDeadlockGhost = pose.deadlockGhost === true;
-      ctx.fillStyle = isDeadlockGhost ? 'rgba(148, 163, 184, 0.45)' : apron2DGlyphFill();
+      ctx.fillStyle = resolveFlightSim2DGlyphFillRgba(f, isDeadlockGhost, fcKeyIdx, fcPal, fcOver, fcMode);
       ctx.beginPath();
       if (useDetailSil) {
         ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
@@ -2044,8 +2272,11 @@
           failProSim('Layout API가 설정되지 않았습니다. run_app.py로 서버를 띄운 뒤 다시 시도하세요.');
           return;
         }
+        if (!state.designerPageUpdateFresh) {
+          failProSim('먼저 Update로 경로 그래프·뷰를 동기화하세요.');
+          return;
+        }
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-        if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines();
         const playDockBtnEl = document.getElementById('btnShowPlayDock');
         if (playDockBtnEl) playDockBtnEl.disabled = true;
         try {
@@ -2057,8 +2288,18 @@
         }
         const layoutName = (state.currentLayoutName && String(state.currentLayoutName).trim()) || INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout';
         let layoutPayload;
+        let didProSimPathGraphSync = false;
         try {
-          if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
+          const graphSig = (typeof computeTaxiwaysGraphSig === 'function') ? computeTaxiwaysGraphSig() : '';
+          const g = state.pathGraphCache;
+          const needPathSync = !state.pathGraphCacheValid || !g
+            || !!(g && g.__junctionStale)
+            || (state.pathGraphCacheSig && state.pathGraphCacheSig !== graphSig);
+          if (needPathSync && typeof applyPathGraphSyncNow === 'function') {
+            applyPathGraphSyncNow();
+            didProSimPathGraphSync = true;
+          }
+          if (didProSimPathGraphSync && typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
           state.pathGraphAllowHeavySimExport = true;
           layoutPayload = serializeCurrentLayout();
         } catch (e1) {
@@ -2218,12 +2459,6 @@
     }
     if (addBtn) {
       addBtn.addEventListener('click', function() {
-        const networkErrors = validateNetworkForFlights();
-        if (networkErrors.length) {
-          updateFlightError(networkErrors);
-          alert('Flightcannot be created:\\n' + networkErrors.join('\\n'));
-          return;
-        }
         const airlineCodeElLocal = document.getElementById('flightAirlineCode');
         const flightNumberElLocal = document.getElementById('flightFlightNumber');
         if (state.selectedObject && state.selectedObject.type === 'flight') {
@@ -2260,6 +2495,8 @@
         const arrDep = 'Arr';
         const runwayOptions = getRunwayOptions();
         const defaultRunwayId = runwayOptions.length ? (runwayOptions[0].id || null) : null;
+        const defIntDomEl = document.getElementById('flightDefaultIntDom');
+        const intDomNew = (defIntDomEl && String(defIntDomEl.value || '').toLowerCase() === 'dom') ? 'Dom' : 'Int';
         const f = {
           id: id(),
           arrDep,
@@ -2271,6 +2508,7 @@
           reg,
           airlineCode,
           flightNumber,
+          intDom: intDomNew,
           dwellMin,
           minDwellMin,
           arrRunwayId: defaultRunwayId,
@@ -2286,9 +2524,8 @@
           }
         };
         state.flights.push(f);
-        if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
-        else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        if (state.hasSimulationResult && typeof recomputeSimDuration === 'function') recomputeSimDuration();
+        if (typeof markProSimSyncStaleFromSchedule === 'function') markProSimSyncStaleFromSchedule();
         var addTouched = f.standId ? [f.standId] : [];
         renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: addTouched });
         const nextDef = getDefaultSibtMinutes();
@@ -3066,7 +3303,6 @@
     if (state.taxiwayDrawingId) {
       const tw = state.taxiways.find(x => x.id === state.taxiwayDrawingId);
       if (tw && tw.vertices.length >= 2) {
-        const shouldResampleRet = (tw.pathType === 'runway' || tw.pathType === 'runway_exit');
         if (taxiwayOverlapsAnyTerminal(tw)) {
           alert('this TaxiwayIs TerminalIt overlaps with . Please draw a different path.');
           pushUndo();
@@ -3085,7 +3321,6 @@
         syncPanelFromState();
         if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
         else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-        if (shouldResampleRet) triggerArrivalConfigResampleFromLayoutEdit();
       }
       return;
     }
@@ -3185,7 +3420,6 @@
     syncPanelFromState();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
     else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-    if (pathType === 'runway' || pathType === 'runway_exit') triggerArrivalConfigResampleFromLayoutEdit();
   });
   const btnPbbDrawEl = document.getElementById('btnPbbDraw');
   if (btnPbbDrawEl) btnPbbDrawEl.addEventListener('click', function() {
@@ -5945,22 +6179,13 @@
     const lY = isFinite(silLY) ? silLY : -0.35;
     const useDetailSil = _ac2d.useDetailedSilhouette === true;
     const silhouette2D = getApronAircraftDetailedSilhouettePoints();
-    let scaleX, scaleY;
-    if (useDetailSil && silhouette2D.length >= 3) {
-      scaleX = 40;
-      scaleY = 40;
-    } else {
-      const xs = [nX, wRx, tX];
-      const minXn = Math.min(xs[0], xs[1], xs[2]);
-      const maxXn = Math.max(xs[0], xs[1], xs[2]);
-      const lenNorm = Math.max(1e-9, maxXn - minXn);
-      const wingNorm = Math.max(1e-9, uY + lY);
-      scaleX = AIRCRAFT_FUSELAGE_LENGTH_M / lenNorm;
-      scaleY = AIRCRAFT_WINGSPAN_M / wingNorm;
-    }
     const outW = Number(_ac2d.outlineWidth);
     const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
     const outlineColor = _ac2d.outlineColor || '';
+    const fcModeG = state.flightColorMode || 'all';
+    const fcPalG = flightSimVizPaletteList();
+    const fcOverG = flightSimVizOverflowGray();
+    const fcKeyIdxG = buildFlightSim2DColorKeyIndexMap();
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -5971,6 +6196,22 @@
       if (waitN < 2) return;
       const f = firstFlightWaitingAtHoldingPoint2D(hp, tSecDraw);
       if (!f) return;
+      const dimsMG = getSimAircraftWorldDimsM(f);
+      const lenMG = dimsMG.lenM, wingMG = dimsMG.wingM;
+      let scaleX, scaleY;
+      if (useDetailSil && silhouette2D.length >= 3) {
+        const sp = detailedSilhouetteAxisSpans(silhouette2D);
+        scaleX = lenMG / sp.spanX;
+        scaleY = wingMG / sp.spanY;
+      } else {
+        const xs = [nX, wRx, tX];
+        const minXn = Math.min(xs[0], xs[1], xs[2]);
+        const maxXn = Math.max(xs[0], xs[1], xs[2]);
+        const lenNorm = Math.max(1e-9, maxXn - minXn);
+        const wingNorm = Math.max(1e-9, uY + lY);
+        scaleX = lenMG / lenNorm;
+        scaleY = wingMG / wingNorm;
+      }
       const pts = graphPathDeparture(f, { onlyToLineup: true });
       if (!pts || pts.length < 2) return;
       const cum = cumulativeDistAlongPolylineToPoint(pts, [hp.x, hp.y]);
@@ -5986,7 +6227,7 @@
         ctx.save();
         ctx.translate(pt[0], pt[1]);
         ctx.rotate(Math.atan2(ny, nx));
-        ctx.fillStyle = apron2DGlyphFill();
+        ctx.fillStyle = resolveFlightSim2DGlyphFillRgba(f, false, fcKeyIdxG, fcPalG, fcOverG, fcModeG);
         ctx.beginPath();
         if (useDetailSil) {
           ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
@@ -6172,6 +6413,7 @@
   let _drawRafId = 0;
   /** While panning or shortly after wheel zoom, skip heavy path layers for smoother interaction. */
   let _layoutDetailSuppressUntil = 0;
+  /** Offscreen bitmap: grid → holding points (no sim-time stand fill / flights). Used during sim playback. */
   let _simPlaybackBgCanvas = null;
   let _simPlaybackBgSig = '';
   function ensureSimPlaybackBgCanvasBuffer(w, h) {
@@ -6766,6 +7008,7 @@
     if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
     const interactiveLite = layoutViewSkipsTaxiDetail(drawOpts);
     const simPlaybackSkipHeavyPathOverlays = !!(state.simPlaying && state.hasSimulationResult && !(drawOpts && drawOpts.forceFullLayoutDraw));
+    const skipPathGeometryOverlays = !!(drawOpts && drawOpts.skipPathGeometryOverlays);
     if (!state.simPlaying) _simPlaybackBgSig = '';
     function drawSimPlaybackBackgroundLayers() {
       drawGrid(interactiveLite);
@@ -6817,17 +7060,15 @@
         drawDeparturePathHighlight();
       }
     }
-    if (!simPlaybackSkipHeavyPathOverlays) drawProSimFlightPathEdges();
-    drawApproachPreviewPaths2D();
-    if (state.hasSimulationResult && state.flights && state.flights.length) {
-      if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(state.simTimeSec);
-    }
+    if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawProSimFlightPathEdges();
     drawHoldingQueueGhostFlights2D();
     drawFlights2D();
     if (!interactiveLite) {
-      if (!simPlaybackSkipHeavyPathOverlays) drawPathJunctions();
-      drawTaxiwayDanglingEndpointMarks();
-      drawQueueTaxiwayLaneMarkers();
+      if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawPathJunctions();
+      if (!skipPathGeometryOverlays) {
+        drawTaxiwayDanglingEndpointMarks();
+        drawQueueTaxiwayLaneMarkers();
+      }
     }
     drawLayoutMarkers2D(interactiveLite);
     syncMarkerTextDraftInputPosition();
@@ -7287,7 +7528,6 @@
         let bestFlight = null;
         let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
         const tSec = state.simTimeSec;
-        if (typeof prepareLazyTimelinesForCurrentSim === 'function') prepareLazyTimelinesForCurrentSim(tSec);
         state.flights.forEach(f => {
           const pose = getFlightPoseAtTimeForDraw(f, tSec);
           if (!pose || f.reg == null || !String(f.reg).trim()) return;
@@ -8201,9 +8441,6 @@
                 }
                 if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
                 else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-                if ((tw.pathType === 'runway' || tw.pathType === 'runway_exit') && tw.vertices.length >= 2) {
-                  triggerArrivalConfigResampleFromLayoutEdit();
-                }
               }
             }
           }
@@ -8347,6 +8584,40 @@
       setLayerPopoverOpen(false);
     });
   }
+  const colorPopoverBtn = document.getElementById('btnColorPopover');
+  const colorPopoverPanel = document.getElementById('colorPopoverPanel');
+  const colorPopoverWrap = document.getElementById('colorPopoverWrap');
+  const flightSimColorModeSel = document.getElementById('flightSimColorMode');
+  function setColorPopoverOpen(open) {
+    if (!colorPopoverPanel || !colorPopoverBtn) return;
+    if (open) {
+      colorPopoverPanel.removeAttribute('hidden');
+      colorPopoverBtn.setAttribute('aria-expanded', 'true');
+    } else {
+      colorPopoverPanel.setAttribute('hidden', '');
+      colorPopoverBtn.setAttribute('aria-expanded', 'false');
+    }
+  }
+  if (flightSimColorModeSel) {
+    flightSimColorModeSel.value = state.flightColorMode || 'all';
+    flightSimColorModeSel.addEventListener('change', function() {
+      state.flightColorMode = String(this.value || 'all');
+      if (typeof draw === 'function') draw();
+    });
+  }
+  if (colorPopoverBtn && colorPopoverPanel) {
+    colorPopoverBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      const open = colorPopoverPanel.hasAttribute('hidden');
+      if (open && layerPopoverPanel && !layerPopoverPanel.hasAttribute('hidden')) setLayerPopoverOpen(false);
+      setColorPopoverOpen(open);
+    });
+    document.addEventListener('click', function(ev) {
+      if (!colorPopoverWrap || colorPopoverPanel.hasAttribute('hidden')) return;
+      if (colorPopoverWrap.contains(ev.target)) return;
+      setColorPopoverOpen(false);
+    });
+  }
   const aiAssistantDock = document.getElementById('aiAssistantDock');
   const btnAiAssistantDockClose = document.getElementById('btnAiAssistantDockClose');
   const aiModeToggleEls = document.querySelectorAll('[data-ai-mode-toggle]');
@@ -8387,11 +8658,13 @@
       if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
       if (typeof renderObjectList === 'function') renderObjectList();
       if (typeof updateObjectInfo === 'function') updateObjectInfo();
-      if (typeof renderFlightList === 'function') renderFlightList(false, true);
+      if (typeof triggerArrivalConfigResampleFromLayoutEdit === 'function') triggerArrivalConfigResampleFromLayoutEdit();
       if (typeof draw === 'function') draw();
       if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+      if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
     });
   }
+  if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   class Grid3DMapper {
     constructor(cols, rows, cellSize) {
       this.cols = cols;

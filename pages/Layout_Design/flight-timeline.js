@@ -1,3 +1,108 @@
+    const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
+    const standAngleDeg = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
+    const bwEl = document.getElementById('pbbBoardingWidth');
+    const bhEl = document.getElementById('pbbBoardingHeight');
+    const boardingW = Math.max(0.5, Number(bwEl && bwEl.value) || 5);
+    const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
+    const wallX = ex, wallY = ey;
+    const bxOut = wallX + nx * boardingH, byOut = wallY + ny * boardingH;
+    const cfgRow = standConfigRowForIcaoCat(category);
+    const noseClear = cfgRow ? Number(cfgRow.nose_clear) : NaN;
+    const offM = (Number.isFinite(noseClear) && noseClear > 0)
+      ? noseClear
+      : PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
+    const newPbb = {
+      x1: wallX, y1: wallY, x2: bxOut, y2: byOut, category,
+      angleDeg: standAngleDeg,
+      apronSiteX: wallX + nx * offM,
+      apronSiteY: wallY + ny * offM,
+      terminalContactSetbackM: offM,
+      boardingWidthM: boardingW,
+      boardingHeightM: boardingH
+    };
+    if (pbbStandOverlapsExisting(newPbb)) return false;
+    const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
+    if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
+      alertDuplicateLayoutName();
+      return false;
+    }
+    pushUndo();
+    state.pbbStands.push(normalizePbbStandObject({
+      id: id(),
+      name: pbbNameCandidate,
+      x1: wallX, y1: wallY, x2: bxOut, y2: byOut,
+      category: newPbb.category,
+      terminalContactSetbackM: offM,
+      categoryMode: categoryMode,
+      allowedIcaoCategories: allowedIcaoCategories,
+      allowedAircraftTypes: panelAllowedTypes,
+      pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
+      angleDeg: standAngleDeg,
+      apronSiteX: newPbb.apronSiteX,
+      apronSiteY: newPbb.apronSiteY,
+      boardingWidthM: boardingW,
+      boardingHeightM: boardingH,
+      pbbArmLenM: armLen,
+      edgeCol: bestEdge.col,
+      edgeRow: bestEdge.row
+    }));
+    return true;
+  }
+  function tryPlaceRemoteAt(wx, wy) {
+    if (!isFinite(wx) || !isFinite(wy)) return false;
+    const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
+    if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) return false;
+    const uRm = readUnifiedNewStandConstraintFromPanel('remoteIcaoCategories', 'remoteAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uRm.categoryMode;
+    const category = uRm.category;
+    const allowedIcaoCategoriesR = uRm.allowedIcaoCategories;
+    const panelAllowedTypesR = uRm.allowedAircraftTypes;
+    const angleDeg = 0;
+    const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
+    const candCorners = getRemoteStandCorners(candidate);
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const o = state.remoteStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const o = state.pbbStands[i];
+      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
+    }
+    for (let i = 0; i < (state.tempStands || []).length; i++) {
+      const o = state.tempStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
+    }
+    if (standGapLineHitsExistingOuterContours([Number(wx), Number(wy)], angleDeg * Math.PI / 180, category)) return false;
+    const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
+    if (findDuplicateLayoutName('remote', null, baseName)) {
+      alertDuplicateLayoutName();
+      return false;
+    }
+    pushUndo();
+    state.remoteStands.push(normalizeRemoteStandObject({
+      id: id(),
+      x: Number(wx),
+      y: Number(wy),
+      category,
+      name: baseName,
+      angleDeg,
+      categoryMode: categoryMode,
+      allowedIcaoCategories: allowedIcaoCategoriesR,
+      allowedAircraftTypes: panelAllowedTypesR,
+      allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
+    }));
+    return true;
+  }
+  function tryPlaceTempStandAt(wx, wy) {
+    const snap = snapTempStandOnTaxiwayCenterlines(wx, wy);
+    if (!snap) return false;
+    const sx = snap.x, sy = snap.y;
+    const uTs = readUnifiedNewStandConstraintFromPanel('tempStandIcaoCategories', 'tempStandAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uTs.categoryMode;
+    const category = uTs.category;
+    const allowedIcaoCategoriesT = uTs.allowedIcaoCategories;
+    const panelAllowedTypesT = uTs.allowedAircraftTypes;
+    const angleDeg = 0;
     const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };
     const candCorners = getRemoteStandCorners(candidate);
     for (let i = 0; i < (state.tempStands || []).length; i++) {
@@ -1223,108 +1328,3 @@
     ensureMarkerFlightBlazerState(mk);
     const b = markerFlightBoundsWorld(mk);
     if (!b) {
-      markerFlightBlazerOverlayBtn.style.display = 'none';
-      markerFlightHeadingOverlayBtn.style.display = 'none';
-      markerFlightBlazerPaletteWrap.style.display = 'none';
-      return;
-    }
-    const sc = worldToScreenCanvas(b.minX, b.minY);
-    const left = Math.max(6, sc[0] - 8);
-    const top = Math.max(6, sc[1] - 32);
-    markerFlightBlazerOverlayBtn.textContent = 'Blazer: ' + (mk.blazerEnabled ? 'ON' : 'OFF');
-    markerFlightBlazerOverlayBtn.style.left = left.toFixed(1) + 'px';
-    markerFlightBlazerOverlayBtn.style.top = top.toFixed(1) + 'px';
-    markerFlightBlazerOverlayBtn.style.display = 'inline-block';
-    markerFlightHeadingOverlayBtn.textContent = 'Heading: ' + (mk.headingReversed ? 'REV' : 'FWD');
-    markerFlightHeadingOverlayBtn.style.left = (left + 94).toFixed(1) + 'px';
-    markerFlightHeadingOverlayBtn.style.top = top.toFixed(1) + 'px';
-    markerFlightHeadingOverlayBtn.style.display = 'inline-block';
-    markerFlightBlazerPaletteWrap.style.left = left.toFixed(1) + 'px';
-    markerFlightBlazerPaletteWrap.style.top = (top + 34).toFixed(1) + 'px';
-    markerFlightBlazerPaletteWrap.style.display = 'flex';
-    markerFlightBlazerPaletteWrap.querySelectorAll('button[data-blazer-color]').forEach(function(btn) {
-      const on = String(btn.getAttribute('data-blazer-color') || '') === String(mk.blazerColor || '');
-      btn.style.outline = on ? '2px solid #ffffff' : 'none';
-    });
-  }
-  /** PAPI bar/lamp size vs original (~30% smaller → scale 0.7). */
-  const PAPI_VISUAL_SCALE = 0.7;
-  /** World units between adjacent PAPI lamp centers (layout coordinates). */
-  const PAPI_LAMP_SPACING_WORLD = 14 * PAPI_VISUAL_SCALE;
-  function papiLampCenterXsWorld(cx) {
-    const sp = PAPI_LAMP_SPACING_WORLD;
-    return [cx - 1.5 * sp, cx - 0.5 * sp, cx + 0.5 * sp, cx + 1.5 * sp];
-  }
-  function layoutMarkerHandleHitRadiusWorld() {
-    return Math.max(CELL_SIZE * 0.28, 8 / Math.max(state.scale, 0.1));
-  }
-  function hitTestLayoutMarkerHandle(wx, wy) {
-    if (!layoutMarkersVisible() || state.markerDrawing) return null;
-    const sel = state.selectedObject;
-    if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return null;
-    const mk = sel.obj;
-    if (!mk || String(mk.id) !== String(sel.id)) return null;
-    const click = [wx, wy];
-    const r = layoutMarkerHandleHitRadiusWorld();
-    const r2 = r * r;
-    if (mk.kind === 'text') {
-      const x = Number(mk.x), y = Number(mk.y);
-      if (isFinite(x) && isFinite(y) && dist2(click, [x, y]) <= r2)
-        return { markerId: mk.id, handle: 'textAnchor' };
-    } else if (mk.kind === 'ruler') {
-      const x1 = Number(mk.x1), y1 = Number(mk.y1), x2 = Number(mk.x2), y2 = Number(mk.y2);
-      if (![x1, y1, x2, y2].every(isFinite)) return null;
-      const dA = dist2(click, [x1, y1]);
-      const dB = dist2(click, [x2, y2]);
-      if (dA <= r2 && dB <= r2) return { markerId: mk.id, handle: dA <= dB ? 'rulerA' : 'rulerB' };
-      if (dA <= r2) return { markerId: mk.id, handle: 'rulerA' };
-      if (dB <= r2) return { markerId: mk.id, handle: 'rulerB' };
-    } else if (mk.kind === 'flight') {
-      const pose = resolveMarkerFlightPose(mk);
-      if (!pose) return null;
-      if (dist2(click, [pose.x, pose.y]) <= r2) return { markerId: mk.id, handle: 'flightCenter' };
-    } else if (mk.kind === 'island' || mk.kind === 'area') {
-      const pts = mk.points;
-      if (!pts || !pts.length) return null;
-      let best = null;
-      let bestD2 = r2;
-      for (let vi = 0; vi < pts.length; vi++) {
-        const x = Number(pts[vi].x), y = Number(pts[vi].y);
-        if (!isFinite(x) || !isFinite(y)) continue;
-        const d2 = dist2(click, [x, y]);
-        if (d2 <= bestD2) {
-          bestD2 = d2;
-          best = { markerId: mk.id, handle: 'islandVertex', vertexIndex: vi };
-        }
-      }
-      return best;
-    } else if (mk.kind === 'navaid') {
-      const x = Number(mk.x), y = Number(mk.y);
-      if (!isFinite(x) || !isFinite(y)) return null;
-      const sub = (mk.subType === 'ils') ? 'ils' : 'papi';
-      if (sub === 'papi') {
-        const xs = papiLampCenterXsWorld(x);
-        for (let pi = 0; pi < 4; pi++) {
-          if (dist2(click, [xs[pi], y]) <= r2) return { markerId: mk.id, handle: 'navaidCenter' };
-        }
-        if (dist2(click, [x, y]) <= r2) return { markerId: mk.id, handle: 'navaidCenter' };
-        const half = 1.5 * PAPI_LAMP_SPACING_WORLD + r;
-        if (Math.abs(click[1] - y) <= r && click[0] >= x - half && click[0] <= x + half)
-          return { markerId: mk.id, handle: 'navaidCenter' };
-        return null;
-      }
-      if (dist2(click, [x, y]) <= r2) return { markerId: mk.id, handle: 'navaidCenter' };
-    }
-    return null;
-  }
-  function layoutMarkerDrawEndpointDot(ctx, wx, wy, selected) {
-    const rad = Math.max(3.5 / Math.max(state.scale, 0.08), CELL_SIZE * 0.11);
-    ctx.beginPath();
-    ctx.arc(wx, wy, rad, 0, Math.PI * 2);
-    ctx.fillStyle = selected ? '#fbbf24' : '#94a3b8';
-    ctx.fill();
-    ctx.strokeStyle = selected ? '#fffbeb' : 'rgba(15,23,42,0.95)';
-    ctx.lineWidth = Math.max(1, 1.35 / Math.max(state.scale, 0.08));
-    ctx.stroke();
-  }
-  function layoutPathDraftStrokeStyle() {

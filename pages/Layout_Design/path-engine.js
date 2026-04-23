@@ -1,3 +1,105 @@
+      dataUrl: String(raw.dataUrl || ''),
+      opacity: clampLayoutImageOpacity(raw.opacity),
+      widthM: widthM,
+      heightM: heightM,
+      originalWidthPx: originalWidthPx,
+      originalHeightPx: originalHeightPx,
+      topLeftCol: clampLayoutImagePoint(raw.topLeftCol, GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol),
+      topLeftRow: clampLayoutImagePoint(raw.topLeftRow, GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow)
+    };
+  }
+  function syncLayoutImageBitmap() {
+    const overlay = state.layoutImageOverlay;
+    if (!overlay || !overlay.dataUrl) {
+      layoutImageBitmap = null;
+      layoutImageBitmapSrc = '';
+      return;
+    }
+    if (layoutImageBitmap && layoutImageBitmapSrc === overlay.dataUrl) return;
+    layoutImageBitmap = null;
+    layoutImageBitmapSrc = '';
+    const img = new Image();
+    const src = overlay.dataUrl;
+    img.onload = function() {
+      if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
+      layoutImageBitmap = img;
+      layoutImageBitmapSrc = src;
+      invalidateGridUnderlay();
+      safeDraw();
+    };
+    img.onerror = function() {
+      if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
+      layoutImageBitmap = null;
+      layoutImageBitmapSrc = '';
+      invalidateGridUnderlay();
+      safeDraw();
+    };
+    img.src = src;
+  }
+  function toggleLayoutDrawMode(flagKey, previewKey, tempKey) {
+    state.selectedObject = null;
+    if (state[flagKey]) {
+      state[flagKey] = false;
+      if (previewKey) state[previewKey] = null;
+      if (tempKey) state[tempKey] = null;
+      if (flagKey === 'apronLinkDrawing') {
+        state.apronLinkMidpoints = [];
+        state.apronLinkPointerWorld = null;
+      }
+    } else {
+      state[flagKey] = true;
+      if (previewKey) state[previewKey] = null;
+      if (tempKey) state[tempKey] = null;
+      if (flagKey === 'apronLinkDrawing') {
+        state.apronLinkMidpoints = [];
+        state.apronLinkPointerWorld = null;
+      }
+    }
+    syncPanelFromState();
+    draw();
+  }
+  function layoutDrawModePreventsBackgroundObjectPick() {
+    return !!(state.pbbDrawing || state.remoteDrawing || state.tempStandDrawing || state.holdingPointDrawing ||
+      state.apronLinkDrawing || state.terminalDrawingId || state.taxiwayDrawingId || state.markerDrawing);
+  }
+  function handlePbbOrRemoteMouseUp2D(mode, wx, wy) {
+    if (mode === 'pbb' && state.pbbDrawing) {
+      if (tryPlacePbbAt(wx, wy)) { syncPanelFromState(); draw(); }
+      return true;
+    }
+    if (mode === 'remote' && state.remoteDrawing) {
+      const prev = state.previewRemote;
+      if (prev && !prev.overlap && tryPlaceRemoteAt(prev.x, prev.y)) { syncPanelFromState(); draw(); }
+      return true;
+    }
+    if (mode === 'tempStand' && state.tempStandDrawing) {
+      const prev = state.previewTempStand;
+      if (prev && !prev.overlap && tryPlaceTempStandAt(prev.x, prev.y)) { syncPanelFromState(); draw(); }
+      return true;
+    }
+    if (mode === 'holdingPoint' && state.holdingPointDrawing) {
+      const prev = state.previewHoldingPoint;
+      if (prev && tryPlaceHoldingPointAt(prev.x, prev.y, prev.pathType || 'taxiway')) { syncPanelFromState(); draw(); }
+      return true;
+    }
+    return false;
+  }
+  function tryCommitStandPlacement3D(mode, wx, wy, col, row) {
+    if (mode === 'pbb' && state.pbbDrawing) {
+      if (tryPlacePbbAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
+      return;
+    }
+    if (mode === 'remote' && state.remoteDrawing) {
+      if (tryPlaceRemoteAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
+    }
+    if (mode === 'tempStand' && state.tempStandDrawing) {
+      if (tryPlaceTempStandAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
+    }
+  }
+  function findLayoutObjectByListType(typ, idr) {
+    if (typ === 'terminal') return state.terminals.find(t => t.id === idr);
+    if (typ === 'pbb') return state.pbbStands.find(p => p.id === idr);
+    if (typ === 'remote') return state.remoteStands.find(r => r.id === idr);
     if (typ === 'tempStand') return (state.tempStands || []).find(function(s) { return s.id === idr; });
     if (typ === 'holdingPoint') return (state.holdingPoints || []).find(h => h.id === idr);
     if (typ === 'taxiway') return state.taxiways.find(tw => tw.id === idr);
@@ -36,10 +138,10 @@
     else if (type === 'layoutMarker') state.layoutMarkers = (state.layoutMarkers || []).filter(function(m) { return m && m.id !== id; });
     else if (type === 'layoutEdge') {}
     if (removedTaxiway) {
+      if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
       if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.pathGraphCacheValid && state.pathGraphCache && !state.pathGraphCache.__junctionStale) {
         stripPathGraphCacheJunctionsNearTaxiwayWorld(removedTaxiway);
       }
-      const shouldResampleRet = (removedTaxiway.pathType === 'runway' || removedTaxiway.pathType === 'runway_exit');
       if (removedTaxiway.pathType === 'runway_exit') {
         (state.flights || []).forEach(function(f) {
           if (!f || f.sampledArrRet !== id) return;
@@ -57,7 +159,6 @@
         });
       }
       if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
-      if (shouldResampleRet && typeof renderFlightList === 'function') renderFlightList(false, true);
     }
   }
   function syncPathFieldVisibilityForPathType(pt) {
@@ -617,108 +718,3 @@
   }
   function getLayoutEdgeDefaultName(edge) {
     if (!edge) return 'Edge';
-    return 'Edge ' + (edge.label || '001');
-  }
-  function getLayoutEdgeDisplayName(edge) {
-    if (!edge) return 'Edge';
-    return (edge.name && String(edge.name).trim()) || getLayoutEdgeDefaultName(edge);
-  }
-  function ensureUniqueLayoutEdgeName(rawName, currentId, fallbackEdge) {
-    const fallbackBase = getLayoutEdgeDefaultName(fallbackEdge || { label: '001' });
-    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
-    const used = new Set(Object.keys(state.layoutEdgeNames || {})
-      .filter(function(id) { return id !== currentId; })
-      .map(function(id) { return state.layoutEdgeNames[id]; })
-      .filter(Boolean));
-    return uniqueNameAgainstSet(baseName, used);
-  }
-  function normalizeLayoutNameKey(name) {
-    return String(name || '').trim().toLowerCase();
-  }
-  function findDuplicateLayoutName(objectKind, excludeId, proposedRaw) {
-    const key = normalizeLayoutNameKey(proposedRaw);
-    if (!key) return null;
-    const ex = excludeId == null || excludeId === '' ? null : String(excludeId);
-    function isOther(oid) {
-      if (ex === null) return true;
-      return String(oid) !== ex;
-    }
-    if (objectKind === 'terminal') {
-      const arr = state.terminals || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'terminal', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'pbb') {
-      const arr = state.pbbStands || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'pbb', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'remote') {
-      const arr = state.remoteStands || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'remote', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'tempStand') {
-      const arr = state.tempStands || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'tempStand', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'holdingPoint') {
-      const arr = state.holdingPoints || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'holdingPoint', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'taxiway') {
-      const arr = state.taxiways || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'taxiway', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'apronLink') {
-      const arr = state.apronLinks || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = getApronLinkDisplayName(o);
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'apronLink', existing: disp };
-      }
-      return null;
-    }
-    if (objectKind === 'layoutEdge') {
-      const map = state.layoutEdgeNames || {};
-      const edgeIds = Object.keys(map);
-      for (let ki = 0; ki < edgeIds.length; ki++) {
-        const kid = edgeIds[ki];
-        if (!isOther(kid)) continue;
-        const disp = map[kid];
-        if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
-      }

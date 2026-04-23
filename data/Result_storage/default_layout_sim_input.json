@@ -9842,9 +9842,257 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 360.6570973070715,
-      "arrVTdMs": 74.82196249837345,
-      "arrDecelMs2": 1.7408061879556234,
+      "arrTdDistM": 369.9290067640882,
+      "arrVTdMs": 70.76270491405134,
+      "arrDecelMs2": 1.7833283375754547,
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 68.97511183168764,
+          "acceleration_ms2": -1.4401493810600376
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 52.09741203167078,
+          "acceleration_ms2": -1.4401493810600376
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 42.565128978155784,
+          "acceleration_ms2": -1.4401493810600376
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 34.30923686045546,
+          "acceleration_ms2": -1.4401493810600376
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.4401493810600376
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-079",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-199",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-198",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-197",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-196",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-195",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-194",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-193",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-088",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-087",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-087",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-084",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
         "ExitTaxiwayId": "id_3jvb8zivh",
@@ -9888,20 +10136,340 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 474.5711944159957,
-      "arrVTdMs": 74.77736290823013,
-      "arrDecelMs2": 0.85,
+      "arrTdDistM": 503.86954379641077,
+      "arrVTdMs": 79.90183987042018,
+      "arrDecelMs2": 1.0849589985182038,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 66.24890882123644,
+          "acceleration_ms2": -1.4539359324515482
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 48.22790159161224,
+          "acceleration_ms2": -1.4539359324515482
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 37.615716898079384,
+          "acceleration_ms2": -1.4539359324515482
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 27.824450112217782,
+          "acceleration_ms2": -1.4539359324515482
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.4539359324515482
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-079",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-199",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-198",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-197",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-196",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-195",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-194",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-193",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-088",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-131",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-129",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-127",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-128",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-128",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-127",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-129",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-131",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-084",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_8ah2xknsh",
+        "ExitTaxiwayId": "id_holzos55b",
         "apronId": "id_dt2n7wpnl",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX7",
+        "ExitTaxiwayId": "RTX6",
         "apronId": "C014",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -9935,20 +10503,364 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 393.5874813274367,
-      "arrVTdMs": 72.78611351138497,
-      "arrDecelMs2": 1.5649352589926226,
+      "arrTdDistM": 380.49210370018295,
+      "arrVTdMs": 75.19542402040544,
+      "arrDecelMs2": 1.4024703861007568,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 64.5911160648382,
+          "acceleration_ms2": -1.5232122494213942
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 44.84115061269767,
+          "acceleration_ms2": -1.5232122494213942
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 32.50129531574146,
+          "acceleration_ms2": -1.5232122494213942
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 19.62300549624765,
+          "acceleration_ms2": -1.5232122494213942
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.5232122494213942
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-079",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-199",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-198",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-197",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-196",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-195",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-194",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-193",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-088",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-131",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-129",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-127",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-125",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-123",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-124",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-124",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-123",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-125",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-127",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-129",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-131",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-084",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_3jvb8zivh",
+        "ExitTaxiwayId": "id_6jclwcmft",
         "apronId": "id_wcwzkq5ty",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX4",
+        "ExitTaxiwayId": "RTX200",
         "apronId": "C015",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -9982,20 +10894,262 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 459.99999999999994,
-      "arrVTdMs": 75.99630195384711,
-      "arrDecelMs2": 1.7409653711612925,
+      "arrTdDistM": 396.5377860363892,
+      "arrVTdMs": 78.19999999999999,
+      "arrDecelMs2": 1.625108004874036,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 71.59694735787494,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 50.15326249873513,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 36.9116023070296,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 23.485906198018107,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-079",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-199",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-198",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-197",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-196",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-195",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-194",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-193",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-093",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-091",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-088",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-084",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_3jvb8zivh",
+        "ExitTaxiwayId": "id_6jclwcmft",
         "apronId": "id_arkq0wlw2",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX4",
+        "ExitTaxiwayId": "RTX200",
         "apronId": "C009",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -10029,10 +11183,366 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 420.3236692189188,
-      "arrVTdMs": 66.0937786966864,
-      "arrDecelMs2": 1.501710251782157,
+      "arrTdDistM": 382.7637341100984,
+      "arrVTdMs": 78.19999999999999,
+      "arrDecelMs2": 1.8399999999999999,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 74.0295001763069,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 53.56858934725218,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 41.43320419976979,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 30.09703997621051,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.8399999999999999
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-079",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-199",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-198",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-197",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-196",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-195",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-194",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-193",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-088",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-131",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-129",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-127",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-125",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-123",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-121",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-122",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-122",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-121",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-123",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-125",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-127",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-129",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-131",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-084",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
         "ExitTaxiwayId": "id_3jvb8zivh",
@@ -10076,10 +11586,348 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 451.0874686469216,
-      "arrVTdMs": 70.61280628862177,
-      "arrDecelMs2": 1.7001038070557821,
+      "arrTdDistM": 370.93279583287585,
+      "arrVTdMs": 57.8,
+      "arrDecelMs2": 1.4614619348480833,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 74.6872951177901,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 60.40273315058043,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 52.88061078573911,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 46.87231537534872,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Landing",
+          "start_velocity_ms": 36.019483339757215,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-011",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-011",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-063",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-201",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-200",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-183",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-049",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-047",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-018",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-046",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-045",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-080",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-199",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-198",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-197",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-196",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-195",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-194",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-193",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-088",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-134",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-134",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-084",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
         "ExitTaxiwayId": "id_3jvb8zivh",
@@ -10123,20 +11971,310 @@
       "sibtMin_d": 70.16666666666667,
       "sobtMin_d": 90.16666666666667,
       "stotMin_d": 93.16666666666667,
-      "arrTdDistM": 417.11982473627194,
-      "arrVTdMs": 65.33519112885266,
-      "arrDecelMs2": 1.7761014046767678,
+      "arrTdDistM": 416.9038819163131,
+      "arrVTdMs": 58.146763968518826,
+      "arrDecelMs2": 1.8399999999999999,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 73.34203582346564,
+          "acceleration_ms2": -1.753410486538811
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 53.76934826367588,
+          "acceleration_ms2": -1.753410486538811
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 42.33808679531424,
+          "acceleration_ms2": -1.753410486538811
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 31.934222309955317,
+          "acceleration_ms2": -1.753410486538811
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.753410486538811
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-079",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-199",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-207",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-111",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-105",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-099",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-098",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-097",
+          "phase": "Arr_taxi_occupied",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-095",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-088",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-134",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-134",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-133",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-084",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_3jvb8zivh",
+        "ExitTaxiwayId": "id_ufl92zcn3",
         "apronId": "id_k9jkud2gs",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX4",
+        "ExitTaxiwayId": "RTX3_Right",
         "apronId": "C012",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -10170,10 +12308,216 @@
       "sibtMin_d": 70.16666666666667,
       "sobtMin_d": 130.16666666666669,
       "stotMin_d": 133.16666666666669,
-      "arrTdDistM": 340,
-      "arrVTdMs": 57.8,
-      "arrDecelMs2": 1.3791151080231951,
+      "arrTdDistM": 449.8728434508157,
+      "arrVTdMs": 67.64233107713693,
+      "arrDecelMs2": 1.36,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 58.86714985838352,
+          "acceleration_ms2": -1.6454195526000892
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 33.62525976468189,
+          "acceleration_ms2": -1.6454195526000892
+        },
+        {
+          "edge_id": "layout-edge-007",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.6454195526000892
+        },
+        {
+          "edge_id": "layout-edge-073",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-074",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-196",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-195",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-194",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-193",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-088",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-089",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-089",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-084",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
         "ExitTaxiwayId": "id_3jvb8zivh",
@@ -10218,20 +12562,322 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 459.99999999999994,
-      "arrVTdMs": 73.58764352038929,
-      "arrDecelMs2": 1.4362973265797538,
+      "arrTdDistM": 417.49810951459864,
+      "arrVTdMs": 57.8,
+      "arrDecelMs2": 1.5343808733831095,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 63.03446101394525,
+          "acceleration_ms2": -1.5906757624124708
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 41.42868469636578,
+          "acceleration_ms2": -1.5906757624124708
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 26.826682816355333,
+          "acceleration_ms2": -1.5906757624124708
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.5906757624124708
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.5906757624124708
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-043",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-116",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-117",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-060",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-022",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-062",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-179",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-180",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-180",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-179",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-062",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-022",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-060",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-114",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-112",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-110",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-105",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-120",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-118",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-139",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-071",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-191",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-190",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-037",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_6jclwcmft",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_yvp2u2h3e",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX200",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C015 (2)",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -10266,20 +12912,454 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 340,
-      "arrVTdMs": 73.02085642753757,
-      "arrDecelMs2": 1.4872378571910356,
+      "arrTdDistM": 355.6650504490842,
+      "arrVTdMs": 60.68962419434603,
+      "arrDecelMs2": 1.8283450406087318,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 70.79298782476232,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 55.51527037856613,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 47.22090713040042,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 40.379066628529515,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 27.034390194863313,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 25.29556344671106,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 21.799539545418725,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-043",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-116",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-117",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-060",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-022",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-061",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-188",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-168",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-165",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-163",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-161",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-159",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-157",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-155",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-153",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-151",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-149",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-147",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-148",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-148",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-147",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-149",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-151",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-153",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-155",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-157",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-159",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-161",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-163",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-165",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-168",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-188",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-061",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-022",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-060",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-114",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-112",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-110",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-105",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-120",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-118",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-139",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-071",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-191",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-190",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-037",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_3jvb8zivh",
+        "ExitTaxiwayId": "id_ufl92zcn3",
         "apronId": "id_kb8hcopit",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX4",
+        "ExitTaxiwayId": "RTX3_Right",
         "apronId": "C026",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -10314,20 +13394,394 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 423.33916843982166,
-      "arrVTdMs": 78.19999999999999,
-      "arrDecelMs2": 1.36,
+      "arrTdDistM": 363.29377295058197,
+      "arrVTdMs": 63.45876034422263,
+      "arrDecelMs2": 1.4975184101963122,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 65.84650371009374,
+          "acceleration_ms2": -1.6136813903805989
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 45.233969995284,
+          "acceleration_ms2": -1.6136813903805989
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 32.17192049852523,
+          "acceleration_ms2": -1.6136813903805989
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 17.996981082281913,
+          "acceleration_ms2": -1.6136813903805989
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -1.6136813903805989
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-043",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-116",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-117",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-060",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-022",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-061",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-188",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-168",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-165",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-163",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-161",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-159",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-157",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-158",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-158",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-157",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-159",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-161",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-163",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-165",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-168",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-188",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-061",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-022",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-060",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-114",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-112",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-110",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-108",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-106",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-105",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-104",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-102",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-100",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-120",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-118",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-083",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-139",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-071",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-191",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-190",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-037",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_6jclwcmft",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_364blrjh4",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX200",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C023",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -10362,10 +13816,282 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 340,
-      "arrVTdMs": 75.1554395399103,
-      "arrDecelMs2": 1.6483705645539446,
+      "arrTdDistM": 353.5323593989808,
+      "arrVTdMs": 72.22465005845262,
+      "arrDecelMs2": 1.7218609728747305,
       "arrDep": "Arr",
+      "edge_list": [
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Landing",
+          "start_velocity_ms": 67.12650829417082,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Landing",
+          "start_velocity_ms": 50.75693288424488,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Landing",
+          "start_velocity_ms": 41.52270536499686,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Landing",
+          "start_velocity_ms": 33.53788920611528,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Landing",
+          "start_velocity_ms": 15.005973604486972,
+          "acceleration_ms2": -1.36
+        },
+        {
+          "edge_id": "layout-edge-081",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-044",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-079",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 15,
+          "acceleration_ms2": -0.5
+        },
+        {
+          "edge_id": "layout-edge-199",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-198",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-197",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-075",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-196",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-195",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-077",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-194",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-193",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-119",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-192",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-096",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-094",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-092",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-090",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-088",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-086",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-085",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-136",
+          "phase": "Arr_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-136",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-135",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-137",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-084",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-036",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-038",
+          "phase": "Dep_taxi",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-039",
+          "phase": "Holding_lineup",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 0
+        },
+        {
+          "edge_id": "layout-edge-001",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 10,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-002",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 39.03631997048752,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-004",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 66.04264651814094,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-006",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 74.93173720116155,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-008",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 80.5987283837778,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-009",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 88.42574302602269,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-010",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 102.36994702857203,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-012",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 111.87719445326938,
+          "acceleration_ms2": 2
+        },
+        {
+          "edge_id": "layout-edge-014",
+          "phase": "Lineup_departure",
+          "start_velocity_ms": 117.74769357800007,
+          "acceleration_ms2": 2
+        }
+      ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
         "ExitTaxiwayId": "id_3jvb8zivh",

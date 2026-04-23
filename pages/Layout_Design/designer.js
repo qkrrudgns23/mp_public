@@ -1508,6 +1508,7 @@
       dot.classList.add('stale');
       dot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
     }
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   function markDesignerPageUpdateFresh() {
     state.designerPageUpdateFresh = true;
@@ -1516,6 +1517,19 @@
       dot.classList.remove('stale');
       dot.classList.add('fresh');
       dot.setAttribute('title', 'Update 기준으로 경로·뷰가 최신입니다');
+    }
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  }
+  /** Pro Sim is allowed only when Update sync is fresh (green). */
+  function syncProSimButtonFromDesignerPageState() {
+    const btn = document.getElementById('btnGlobalUpdate');
+    if (!btn) return;
+    const allow = !!state.designerPageUpdateFresh;
+    btn.disabled = !allow;
+    if (!allow) {
+      btn.setAttribute('title', '먼저 Update로 경로 그래프·뷰를 동기화(초록)한 뒤 Pro Sim을 실행하세요.');
+    } else {
+      btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
     }
   }
   function redrawLayoutAfterEdit() {
@@ -1547,7 +1561,8 @@
       ov.classList.remove('is-visible');
       ov.setAttribute('aria-hidden', 'true');
       if (fill) fill.style.width = '0%';
-      if (btn) btn.disabled = false;
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+      else if (btn) btn.disabled = false;
     }
   }
   function scheduleAfterPaint(fn) {
@@ -2393,7 +2408,7 @@
     if (typeof resizeCanvas === 'function') resizeCanvas();
     if (typeof reset2DView === 'function') reset2DView();
     if (typeof syncPanelFromState === 'function') syncPanelFromState();
-    if (typeof triggerArrivalConfigResampleFromLayoutEdit === 'function') triggerArrivalConfigResampleFromLayoutEdit();
+    if (typeof renderFlightList === 'function') renderFlightList(false, false);
     if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
     if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
     if (typeof draw === 'function') draw();
@@ -9339,6 +9354,14 @@
     const perFlightBody = flightsSorted.map(function(f) {
       const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
       const typeLabel = ac ? (ac.name || ac.id || f.aircraftType || '—') : (f.aircraftType || '—');
+      const arrRetFailed = isFlightCountedInArrivalConfigFailedRow(f, retStats);
+      let retDisp = '—';
+      if (arrRetFailed) retDisp = 'Failed';
+      else if (f.sampledArrRet != null && retStats && retStats.length) {
+        const retInfo = retStats.find(r => r.exit && r.exit.id === f.sampledArrRet);
+        retDisp = retInfo ? (retInfo.name || 'RET') : 'RET';
+      }
+      const retCellInner = arrRetFailed ? 'Failed' : escapeHtml(retDisp);
       return '' +
         '<tr>' +
           '<td>' + escapeHtml(f.reg || '—') + '</td>' +
@@ -9347,6 +9370,7 @@
           '<td>' + escapeHtml(String(typeLabel)) + '</td>' +
           '<td style="text-align:right;font-variant-numeric:tabular-nums;">' + _fmtFlightPhysVal(f.arrVTdMs) + '</td>' +
           '<td style="text-align:right;font-variant-numeric:tabular-nums;">' + _fmtFlightPhysVal(f.arrDecelMs2) + '</td>' +
+          '<td class="flight-td-arr-ret' + (arrRetFailed ? ' flight-td-arr-ret-failed' : '') + '" style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">' + retCellInner + '</td>' +
         '</tr>';
     }).join('');
     const perFlightBlock = '' +
@@ -9363,6 +9387,7 @@
             '<th>Aircraft type</th>' +
             '<th style="text-align:right;">VTD (m/s)</th>' +
             '<th style="text-align:right;">Decel (m/s²)</th>' +
+            '<th style="text-align:right;">Arr RET</th>' +
           '</tr></thead>' +
           '<tbody>' + perFlightBody + '</tbody>' +
         '</table>' +
@@ -16025,8 +16050,11 @@
           failProSim('Layout API가 설정되지 않았습니다. run_app.py로 서버를 띄운 뒤 다시 시도하세요.');
           return;
         }
+        if (!state.designerPageUpdateFresh) {
+          failProSim('먼저 Update로 경로 그래프·뷰를 동기화하세요.');
+          return;
+        }
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-        if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines();
         const playDockBtnEl = document.getElementById('btnShowPlayDock');
         if (playDockBtnEl) playDockBtnEl.disabled = true;
         try {
@@ -16038,8 +16066,18 @@
         }
         const layoutName = (state.currentLayoutName && String(state.currentLayoutName).trim()) || INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout';
         let layoutPayload;
+        let didProSimPathGraphSync = false;
         try {
-          if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
+          const graphSig = (typeof computeTaxiwaysGraphSig === 'function') ? computeTaxiwaysGraphSig() : '';
+          const g = state.pathGraphCache;
+          const needPathSync = !state.pathGraphCacheValid || !g
+            || !!(g && g.__junctionStale)
+            || (state.pathGraphCacheSig && state.pathGraphCacheSig !== graphSig);
+          if (needPathSync && typeof applyPathGraphSyncNow === 'function') {
+            applyPathGraphSyncNow();
+            didProSimPathGraphSync = true;
+          }
+          if (didProSimPathGraphSync && typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
           state.pathGraphAllowHeavySimExport = true;
           layoutPayload = serializeCurrentLayout();
         } catch (e1) {
@@ -22404,6 +22442,7 @@
       if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
     });
   }
+  if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   class Grid3DMapper {
     constructor(cols, rows, cellSize) {
       this.cols = cols;

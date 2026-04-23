@@ -224,6 +224,29 @@
   const APPROACH_STRAIGHT_FINAL_M = Math.max(0, Number(_algoSimTier.approachStraightFinalM) || 3000);
   const AIRCRAFT_WINGSPAN_M = Math.max(1, Number(_algoSimTier.aircraftWingspanM) || 40);
   const AIRCRAFT_FUSELAGE_LENGTH_M = Math.max(1, Number(_algoSimTier.aircraftFuselageLengthM) || 50);
+  function getSimAircraftWorldDimsM(flight) {
+    const ac = flight && flight.aircraftType ? getAircraftInfoByType(String(flight.aircraftType).trim()) : null;
+    const lenR = ac && Number(ac.length_m);
+    const wingR = ac && Number(ac.wingspan_m);
+    const lenM = (isFinite(lenR) && lenR > 0) ? lenR : AIRCRAFT_FUSELAGE_LENGTH_M;
+    const wingM = (isFinite(wingR) && wingR > 0) ? wingR : AIRCRAFT_WINGSPAN_M;
+    return { lenM, wingM };
+  }
+  function detailedSilhouetteAxisSpans(silhouette2D) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < silhouette2D.length; i++) {
+      const p = silhouette2D[i];
+      if (!Array.isArray(p) || p.length < 2) continue;
+      const x = Number(p[0]), y = Number(p[1]);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) return { spanX: 1, spanY: 1 };
+    return { spanX: Math.max(1e-9, maxX - minX), spanY: Math.max(1e-9, maxY - minY) };
+  }
   const FLIGHT_TRAIL_LENGTH_M = Math.max(0, Number(_algoSimTier.trailLengthM) || 300);
   const PRE_TOUCHDOWN_HALO_ENABLED = (_algoSimTier.preTouchdownHaloEnabled !== false);
   const PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC = Math.max(0, Number(_algoSimTier.playbackLeadBeforeFirstTouchdownSec) || 0);
@@ -232,6 +255,24 @@
   const _junctionMergeRadiusRaw = Number(_pathSearchTier.junctionMergeRadiusPx);
   const PATH_JUNCTION_MERGE_RADIUS_PX = (isFinite(_junctionMergeRadiusRaw) && _junctionMergeRadiusRaw >= 0) ? _junctionMergeRadiusRaw : 7;
   const _styleTier = _tiers.style || {};
+  const _flightVizStyle = (_styleTier.flightVisualization && typeof _styleTier.flightVisualization === 'object') ? _styleTier.flightVisualization : {};
+  const FLIGHT_SIM_VIZ_DEFAULT_PALETTE = ['#a78bfa', '#22d3ee', '#4ade80', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#fb7185', '#c084fc'];
+  function flightSimVizPaletteList() {
+    const p = _flightVizStyle.palette;
+    if (Array.isArray(p) && p.length) {
+      const out = [];
+      for (let i = 0; i < p.length; i++) {
+        const c = String(p[i] || '').trim();
+        if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(c)) out.push(c);
+      }
+      if (out.length) return out;
+    }
+    return FLIGHT_SIM_VIZ_DEFAULT_PALETTE.slice();
+  }
+  function flightSimVizOverflowGray() {
+    const g = _flightVizStyle.overflowGray;
+    return (typeof g === 'string' && g.trim()) ? g.trim() : '#9ca3af';
+  }
   const _ganttStyle = _styleTier.gantt || {};
   const GANTT_VISIBLE_WINDOW_MIN = Math.max(60, Number(_ganttStyle.visibleWindowMin) || 1440);
   const GANTT_PAN_STEP_MIN = Math.max(15, Number(_ganttStyle.panStepMin) || 360);
@@ -287,44 +328,3 @@
   function c2dRunwayBlastChevronColor() { return _canvas2dStyle.runwayBlastChevronColor || '#facc15'; }
   /** Strip alpha from rgba for solid road surface when showRoadWidth is on. */
   function c2dCssColorToOpaque(css) {
-    const s = String(css || '').trim();
-    const ra = s.match(/^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/i);
-    if (ra) return 'rgb(' + ra[1] + ',' + ra[2] + ',' + ra[3] + ')';
-    return s;
-  }
-  const C2D_COLOR_SHADE_STEP_MUL = 0.88;
-  function c2dParseCssRgbTriplet(css) {
-    const s = String(css || '').trim();
-    let m = s.match(/^#([0-9a-f]{3})$/i);
-    if (m) {
-      const h = m[1];
-      return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)];
-    }
-    m = s.match(/^#([0-9a-f]{6})$/i);
-    if (m) {
-      const h = m[1];
-      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-    }
-    m = s.match(/^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-    if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
-    return null;
-  }
-  function c2dCssColorLightenSteps(css, steps) {
-    const opaque = c2dCssColorToOpaque(css);
-    const t = c2dParseCssRgbTriplet(opaque);
-    const n = Number(steps);
-    if (!t || !(n > 0)) return opaque;
-    const f = Math.pow(1 / C2D_COLOR_SHADE_STEP_MUL, n);
-    const r = Math.max(0, Math.min(255, Math.round(t[0] * f)));
-    const g = Math.max(0, Math.min(255, Math.round(t[1] * f)));
-    const b = Math.max(0, Math.min(255, Math.round(t[2] * f)));
-    return 'rgb(' + r + ',' + g + ',' + b + ')';
-  }
-  /** Multiply RGB channels (e.g. 0.99 ≈ 1% darker). Expects opaque-ish CSS; alpha stripped first. */
-  function c2dCssColorRgbChannelScale(css, mul) {
-    const opaque = c2dCssColorToOpaque(css);
-    const t = c2dParseCssRgbTriplet(opaque);
-    const f = Number(mul);
-    if (!t || !isFinite(f)) return opaque;
-    const r = Math.max(0, Math.min(255, Math.round(t[0] * f)));
-    const g = Math.max(0, Math.min(255, Math.round(t[1] * f)));

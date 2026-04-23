@@ -1,3 +1,108 @@
+      ctx.shadowColor = c2dObjectSelectedGlow();
+      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  /** Local +X from stand box center to end of 45° flare (full-width main body); 0 if nose geometry unused. */
+  function standSafetyAircraftCenterLocalXM(depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return 0;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return 0;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const eps = 0.08;
+    if (noseHalf >= halfW - eps) return 0;
+    const xNose = -halfD;
+    const xStop = -halfD + nc;
+    if (xStop <= xNose + eps || xStop >= halfD - eps) return 0;
+    const latRun = halfW - noseHalf;
+    if (latRun <= eps) return 0;
+    const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return 0;
+    return xBendEnd;
+  }
+  function getStandAircraftMarkerWorldPxForPbb(pbb) {
+    const cxy = getStandConnectionPx(pbb);
+    return [cxy[0], cxy[1]];
+  }
+  function getStandAircraftMarkerWorldPxForRemoteLike(st) {
+    const cxy = getStandConnectionPx(st);
+    return [cxy[0], cxy[1]];
+  }
+  const APRON_SITE_MARKER_WIDTH_M = 5;
+  const APRON_SITE_MARKER_HEIGHT_M = 1;
+  function _ensureLayoutToastStack() {
+    let stack = document.getElementById('layout-toast-stack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.id = 'layout-toast-stack';
+      stack.className = 'layout-toast-stack';
+      document.body.appendChild(stack);
+    }
+    return stack;
+  }
+  function _formatToastTimestamp(d) {
+    const pad = function(n) { return String(n).padStart(2, '0'); };
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  function showLayoutSavedToast(layoutName, kind, subText) {
+    const stack = _ensureLayoutToastStack();
+    const el = document.createElement('div');
+    const variant = kind === 'error' ? 'is-error' : 'is-success';
+    el.className = 'layout-toast ' + variant;
+    const title = document.createElement('div');
+    title.className = 'layout-toast-title';
+    const ts = _formatToastTimestamp(new Date());
+    const name = String(layoutName || '').trim() || 'layout';
+    if (kind === 'error') {
+      title.textContent = ts + ' · save failed · ' + name;
+    } else {
+      title.textContent = ts + ' · saved · ' + name;
+    }
+    el.appendChild(title);
+    if (subText) {
+      const sub = document.createElement('div');
+      sub.className = 'layout-toast-sub';
+      sub.textContent = String(subText);
+      el.appendChild(sub);
+    }
+    stack.appendChild(el);
+    requestAnimationFrame(function() { el.classList.add('is-visible'); });
+    const lifeMs = kind === 'error' ? 4200 : 2600;
+    setTimeout(function() {
+      el.classList.remove('is-visible');
+      setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
+    }, lifeMs);
+  }
+  /**
+   * Render apron site anchor as a 5m × 1m rectangle. Long side (5m) is aligned
+   * with the stand's stopbar direction (local Y = perpendicular to the stand
+   * depth axis), so it matches the dashed stopbar line drawn near the nose.
+   * ``standAngleRad`` is the stand's depth-axis angle (same as ctx.rotate used
+   * when drawing the stand footprint). When omitted, the 5m side falls back to
+   * world horizontal.
+   */
+  function drawApronSiteMarker(ctx, cx, cy, fillStyle, strokeStyle, selected, standAngleRad) {
+    const w = APRON_SITE_MARKER_WIDTH_M;
+    const h = APRON_SITE_MARKER_HEIGHT_M;
+    const angle = (typeof standAngleRad === 'number' && isFinite(standAngleRad))
+      ? standAngleRad + Math.PI / 2
+      : 0;
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (angle) ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.rect(-w / 2, -h / 2, w, h);
+    if (fillStyle) {
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+    }
+    if (strokeStyle) {
+      const baseLw = Math.max(0.18, 0.24 / Math.max(state.scale, 0.1));
+      ctx.lineWidth = selected ? baseLw * 1.5 : baseLw;
+      ctx.strokeStyle = strokeStyle;
       ctx.stroke();
     }
     ctx.restore();
@@ -343,108 +448,3 @@
     const panelAllowedTypes = uPbb.allowedAircraftTypes;
     const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
-    const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-    const standAngleDeg = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
-    const bwEl = document.getElementById('pbbBoardingWidth');
-    const bhEl = document.getElementById('pbbBoardingHeight');
-    const boardingW = Math.max(0.5, Number(bwEl && bwEl.value) || 5);
-    const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
-    const wallX = ex, wallY = ey;
-    const bxOut = wallX + nx * boardingH, byOut = wallY + ny * boardingH;
-    const cfgRow = standConfigRowForIcaoCat(category);
-    const noseClear = cfgRow ? Number(cfgRow.nose_clear) : NaN;
-    const offM = (Number.isFinite(noseClear) && noseClear > 0)
-      ? noseClear
-      : PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
-    const newPbb = {
-      x1: wallX, y1: wallY, x2: bxOut, y2: byOut, category,
-      angleDeg: standAngleDeg,
-      apronSiteX: wallX + nx * offM,
-      apronSiteY: wallY + ny * offM,
-      terminalContactSetbackM: offM,
-      boardingWidthM: boardingW,
-      boardingHeightM: boardingH
-    };
-    if (pbbStandOverlapsExisting(newPbb)) return false;
-    const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
-    if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
-      alertDuplicateLayoutName();
-      return false;
-    }
-    pushUndo();
-    state.pbbStands.push(normalizePbbStandObject({
-      id: id(),
-      name: pbbNameCandidate,
-      x1: wallX, y1: wallY, x2: bxOut, y2: byOut,
-      category: newPbb.category,
-      terminalContactSetbackM: offM,
-      categoryMode: categoryMode,
-      allowedIcaoCategories: allowedIcaoCategories,
-      allowedAircraftTypes: panelAllowedTypes,
-      pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
-      angleDeg: standAngleDeg,
-      apronSiteX: newPbb.apronSiteX,
-      apronSiteY: newPbb.apronSiteY,
-      boardingWidthM: boardingW,
-      boardingHeightM: boardingH,
-      pbbArmLenM: armLen,
-      edgeCol: bestEdge.col,
-      edgeRow: bestEdge.row
-    }));
-    return true;
-  }
-  function tryPlaceRemoteAt(wx, wy) {
-    if (!isFinite(wx) || !isFinite(wy)) return false;
-    const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
-    if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) return false;
-    const uRm = readUnifiedNewStandConstraintFromPanel('remoteIcaoCategories', 'remoteAircraftAccess', ['A', 'B', 'C']);
-    const categoryMode = uRm.categoryMode;
-    const category = uRm.category;
-    const allowedIcaoCategoriesR = uRm.allowedIcaoCategories;
-    const panelAllowedTypesR = uRm.allowedAircraftTypes;
-    const angleDeg = 0;
-    const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
-    const candCorners = getRemoteStandCorners(candidate);
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      const o = state.remoteStands[i];
-      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
-    }
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      const o = state.pbbStands[i];
-      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
-    }
-    for (let i = 0; i < (state.tempStands || []).length; i++) {
-      const o = state.tempStands[i];
-      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
-    }
-    if (standGapLineHitsExistingOuterContours([Number(wx), Number(wy)], angleDeg * Math.PI / 180, category)) return false;
-    const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
-    if (findDuplicateLayoutName('remote', null, baseName)) {
-      alertDuplicateLayoutName();
-      return false;
-    }
-    pushUndo();
-    state.remoteStands.push(normalizeRemoteStandObject({
-      id: id(),
-      x: Number(wx),
-      y: Number(wy),
-      category,
-      name: baseName,
-      angleDeg,
-      categoryMode: categoryMode,
-      allowedIcaoCategories: allowedIcaoCategoriesR,
-      allowedAircraftTypes: panelAllowedTypesR,
-      allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
-    }));
-    return true;
-  }
-  function tryPlaceTempStandAt(wx, wy) {
-    const snap = snapTempStandOnTaxiwayCenterlines(wx, wy);
-    if (!snap) return false;
-    const sx = snap.x, sy = snap.y;
-    const uTs = readUnifiedNewStandConstraintFromPanel('tempStandIcaoCategories', 'tempStandAircraftAccess', ['A', 'B', 'C']);
-    const categoryMode = uTs.categoryMode;
-    const category = uTs.category;
-    const allowedIcaoCategoriesT = uTs.allowedIcaoCategories;
-    const panelAllowedTypesT = uTs.allowedAircraftTypes;
-    const angleDeg = 0;

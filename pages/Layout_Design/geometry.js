@@ -1,5 +1,97 @@
+    return { removed: removed, changed: changed };
+  }
+  function cloneFlightsWithoutPathPolylineCache(flights) {
+    return (flights || []).map(function(f) {
+      const raw = JSON.parse(JSON.stringify(f));
+      delete raw.cachedArrPathPts;
+      delete raw.cachedDepPathPts;
+      delete raw._pathPolylineCacheRev;
+      delete raw._pathPolylineArrRetKey;
+      return raw;
+    });
+  }
+  function markGlobalUpdateStale() {
+    state.globalUpdateFresh = false;
+    state.simPlaying = false;
+    state.simSliderScrubbing = false;
+    if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+    bumpPathPolylineCacheRev();
+    state.rwySepPanelDirty = true;
+    bumpRwySepSnapshotStaleGen();
+    if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines({ keepDesResultTimelines: true });
+    const dot = document.getElementById('globalUpdateSyncDot');
+    if (dot) {
+      dot.classList.remove('fresh');
+      dot.classList.add('stale');
+      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim으로 재동기화 (완료 시 결과 자동 반영)');
+    }
+    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+  }
+  function markGlobalUpdateFresh() {
+    state.globalUpdateFresh = true;
+    const dot = document.getElementById('globalUpdateSyncDot');
+    if (dot) {
+      dot.classList.remove('stale');
+      dot.classList.add('fresh');
+      dot.setAttribute('title', 'All views match the last Pro Sim run');
+    }
+    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+  }
+  function markProSimSyncStaleFromSchedule() {
+    state.globalUpdateFresh = false;
+    state.simPlaying = false;
+    state.simSliderScrubbing = false;
+    if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+    const dot = document.getElementById('globalUpdateSyncDot');
+    if (dot) {
+      dot.classList.remove('fresh');
+      dot.classList.add('stale');
+      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim으로 재동기화 (완료 시 결과 자동 반영)');
+    }
+    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+  }
+  function markDesignerPageUpdateStale() {
+    state.designerPageUpdateFresh = false;
+    const dot = document.getElementById('designerPageUpdateSyncDot');
+    if (dot) {
+      dot.classList.remove('fresh');
+      dot.classList.add('stale');
+      dot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
+    }
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  }
+  function markDesignerPageUpdateFresh() {
+    state.designerPageUpdateFresh = true;
+    const dot = document.getElementById('designerPageUpdateSyncDot');
+    if (dot) {
+      dot.classList.remove('stale');
+      dot.classList.add('fresh');
+      dot.setAttribute('title', 'Update 기준으로 경로·뷰가 최신입니다');
+    }
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  }
+  /** Pro Sim is allowed only when Update sync is fresh (green). */
+  function syncProSimButtonFromDesignerPageState() {
+    const btn = document.getElementById('btnGlobalUpdate');
+    if (!btn) return;
+    const allow = !!state.designerPageUpdateFresh;
+    btn.disabled = !allow;
+    if (!allow) {
+      btn.setAttribute('title', '먼저 Update로 경로 그래프·뷰를 동기화(초록)한 뒤 Pro Sim을 실행하세요.');
+    } else {
+      btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
+    }
+  }
+  function redrawLayoutAfterEdit() {
+    if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
+    // Full reset rebuilds junctions in draw(); manual-sync mode keeps last graph for display until Update / Pro Sim.
+    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+      invalidatePathGraphCache(false);
+    } else {
+      invalidatePathGraphCache(true);
     }
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof markDesignerPageUpdateStale === 'function') markDesignerPageUpdateStale();
     if (typeof draw === 'function') draw();
     if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
   }
@@ -19,7 +111,8 @@
       ov.classList.remove('is-visible');
       ov.setAttribute('aria-hidden', 'true');
       if (fill) fill.style.width = '0%';
-      if (btn) btn.disabled = false;
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+      else if (btn) btn.disabled = false;
     }
   }
   function scheduleAfterPaint(fn) {
@@ -172,8 +265,17 @@
     if (!btn || !panel) return;
     const o = !!open;
     btn.setAttribute('aria-expanded', o ? 'true' : 'false');
-    if (o) panel.removeAttribute('hidden');
-    else panel.setAttribute('hidden', '');
+    if (o) {
+      panel.removeAttribute('hidden');
+      const cp = document.getElementById('colorPopoverPanel');
+      const cb = document.getElementById('btnColorPopover');
+      if (cp && cb && !cp.hasAttribute('hidden')) {
+        cp.setAttribute('hidden', '');
+        cb.setAttribute('aria-expanded', 'false');
+      }
+    } else {
+      panel.setAttribute('hidden', '');
+    }
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -216,105 +318,3 @@
     return {
       name: String(raw.name || 'Layout image'),
       type: String(raw.type || 'image/png'),
-      dataUrl: String(raw.dataUrl || ''),
-      opacity: clampLayoutImageOpacity(raw.opacity),
-      widthM: widthM,
-      heightM: heightM,
-      originalWidthPx: originalWidthPx,
-      originalHeightPx: originalHeightPx,
-      topLeftCol: clampLayoutImagePoint(raw.topLeftCol, GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol),
-      topLeftRow: clampLayoutImagePoint(raw.topLeftRow, GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow)
-    };
-  }
-  function syncLayoutImageBitmap() {
-    const overlay = state.layoutImageOverlay;
-    if (!overlay || !overlay.dataUrl) {
-      layoutImageBitmap = null;
-      layoutImageBitmapSrc = '';
-      return;
-    }
-    if (layoutImageBitmap && layoutImageBitmapSrc === overlay.dataUrl) return;
-    layoutImageBitmap = null;
-    layoutImageBitmapSrc = '';
-    const img = new Image();
-    const src = overlay.dataUrl;
-    img.onload = function() {
-      if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
-      layoutImageBitmap = img;
-      layoutImageBitmapSrc = src;
-      invalidateGridUnderlay();
-      safeDraw();
-    };
-    img.onerror = function() {
-      if (!state.layoutImageOverlay || state.layoutImageOverlay.dataUrl !== src) return;
-      layoutImageBitmap = null;
-      layoutImageBitmapSrc = '';
-      invalidateGridUnderlay();
-      safeDraw();
-    };
-    img.src = src;
-  }
-  function toggleLayoutDrawMode(flagKey, previewKey, tempKey) {
-    state.selectedObject = null;
-    if (state[flagKey]) {
-      state[flagKey] = false;
-      if (previewKey) state[previewKey] = null;
-      if (tempKey) state[tempKey] = null;
-      if (flagKey === 'apronLinkDrawing') {
-        state.apronLinkMidpoints = [];
-        state.apronLinkPointerWorld = null;
-      }
-    } else {
-      state[flagKey] = true;
-      if (previewKey) state[previewKey] = null;
-      if (tempKey) state[tempKey] = null;
-      if (flagKey === 'apronLinkDrawing') {
-        state.apronLinkMidpoints = [];
-        state.apronLinkPointerWorld = null;
-      }
-    }
-    syncPanelFromState();
-    draw();
-  }
-  function layoutDrawModePreventsBackgroundObjectPick() {
-    return !!(state.pbbDrawing || state.remoteDrawing || state.tempStandDrawing || state.holdingPointDrawing ||
-      state.apronLinkDrawing || state.terminalDrawingId || state.taxiwayDrawingId || state.markerDrawing);
-  }
-  function handlePbbOrRemoteMouseUp2D(mode, wx, wy) {
-    if (mode === 'pbb' && state.pbbDrawing) {
-      if (tryPlacePbbAt(wx, wy)) { syncPanelFromState(); draw(); }
-      return true;
-    }
-    if (mode === 'remote' && state.remoteDrawing) {
-      const prev = state.previewRemote;
-      if (prev && !prev.overlap && tryPlaceRemoteAt(prev.x, prev.y)) { syncPanelFromState(); draw(); }
-      return true;
-    }
-    if (mode === 'tempStand' && state.tempStandDrawing) {
-      const prev = state.previewTempStand;
-      if (prev && !prev.overlap && tryPlaceTempStandAt(prev.x, prev.y)) { syncPanelFromState(); draw(); }
-      return true;
-    }
-    if (mode === 'holdingPoint' && state.holdingPointDrawing) {
-      const prev = state.previewHoldingPoint;
-      if (prev && tryPlaceHoldingPointAt(prev.x, prev.y, prev.pathType || 'taxiway')) { syncPanelFromState(); draw(); }
-      return true;
-    }
-    return false;
-  }
-  function tryCommitStandPlacement3D(mode, wx, wy, col, row) {
-    if (mode === 'pbb' && state.pbbDrawing) {
-      if (tryPlacePbbAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
-      return;
-    }
-    if (mode === 'remote' && state.remoteDrawing) {
-      if (tryPlaceRemoteAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
-    }
-    if (mode === 'tempStand' && state.tempStandDrawing) {
-      if (tryPlaceTempStandAt(wx, wy)) { syncPanelFromState(); updateObjectInfo(); update3DScene(); }
-    }
-  }
-  function findLayoutObjectByListType(typ, idr) {
-    if (typ === 'terminal') return state.terminals.find(t => t.id === idr);
-    if (typ === 'pbb') return state.pbbStands.find(p => p.id === idr);
-    if (typ === 'remote') return state.remoteStands.find(r => r.id === idr);

@@ -1,3 +1,44 @@
+    const s = String(css || '').trim();
+    const ra = s.match(/^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/i);
+    if (ra) return 'rgb(' + ra[1] + ',' + ra[2] + ',' + ra[3] + ')';
+    return s;
+  }
+  const C2D_COLOR_SHADE_STEP_MUL = 0.88;
+  function c2dParseCssRgbTriplet(css) {
+    const s = String(css || '').trim();
+    let m = s.match(/^#([0-9a-f]{3})$/i);
+    if (m) {
+      const h = m[1];
+      return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)];
+    }
+    m = s.match(/^#([0-9a-f]{6})$/i);
+    if (m) {
+      const h = m[1];
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+    m = s.match(/^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+    return null;
+  }
+  function c2dCssColorLightenSteps(css, steps) {
+    const opaque = c2dCssColorToOpaque(css);
+    const t = c2dParseCssRgbTriplet(opaque);
+    const n = Number(steps);
+    if (!t || !(n > 0)) return opaque;
+    const f = Math.pow(1 / C2D_COLOR_SHADE_STEP_MUL, n);
+    const r = Math.max(0, Math.min(255, Math.round(t[0] * f)));
+    const g = Math.max(0, Math.min(255, Math.round(t[1] * f)));
+    const b = Math.max(0, Math.min(255, Math.round(t[2] * f)));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+  /** Multiply RGB channels (e.g. 0.99 ≈ 1% darker). Expects opaque-ish CSS; alpha stripped first. */
+  function c2dCssColorRgbChannelScale(css, mul) {
+    const opaque = c2dCssColorToOpaque(css);
+    const t = c2dParseCssRgbTriplet(opaque);
+    const f = Number(mul);
+    if (!t || !isFinite(f)) return opaque;
+    const r = Math.max(0, Math.min(255, Math.round(t[0] * f)));
+    const g = Math.max(0, Math.min(255, Math.round(t[1] * f)));
     const b = Math.max(0, Math.min(255, Math.round(t[2] * f)));
     return 'rgb(' + r + ',' + g + ',' + b + ')';
   }
@@ -247,44 +288,3 @@
       ctx.setLineDash([]);
       strokeBarAtOffset(-pairHalf);
       strokeBarAtOffset(pairHalf);
-      const R = closestPointOnAnyRunwayCenterlineWorld(cx, cy);
-      const rx = R ? R[0] : cx + g.ux * (CELL_SIZE * 40);
-      const ry = R ? R[1] : cy + g.uy * (CELL_SIZE * 40);
-      const midM = [cx - g.ux * pairHalf, cy - g.uy * pairHalf];
-      const midP = [cx + g.ux * pairHalf, cy + g.uy * pairHalf];
-      const ofsR = dist2(midM, [rx, ry]) <= dist2(midP, [rx, ry]) ? -pairHalf : pairHalf;
-      const pathW = Number(g.pathWidthM);
-      const toothLen = Math.max(0.75, (isFinite(pathW) && pathW > 0 ? pathW : 12) * 0.24) * 0.25;
-      const toothSpacing = Math.max(0.55, pathSpanM * 0.065);
-      const toothLw = Math.max(lw, lw * 1.12);
-      ctx.save();
-      ctx.lineWidth = toothLw;
-      for (let s = -halfLen + toothSpacing * 0.5; s <= halfLen - toothSpacing * 0.25; s += toothSpacing) {
-        const bx = cx + px * s + g.ux * ofsR;
-        const by = cy + py * s + g.uy * ofsR;
-        const mx = cx + px * s;
-        const my = cy + py * s;
-        const vx = rx - mx;
-        const vy = ry - my;
-        const signT = (g.ux * vx + g.uy * vy) >= 0 ? 1 : -1;
-        ctx.beginPath();
-        ctx.moveTo(bx, by);
-        ctx.lineTo(bx + g.ux * signT * toothLen, by + g.uy * signT * toothLen);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-    ctx.shadowBlur = 0;
-  }
-  function c2dSimStandOccupiedFill() { return _canvas2dStyle.simStandOccupiedFill || 'rgba(239, 68, 68, 0.32)'; }
-  function c2dSimStandOccupiedStroke() { return _canvas2dStyle.simStandOccupiedStroke || 'rgba(220, 38, 38, 0.95)'; }
-  function c2dStandSafetyStroke() { return _canvas2dStyle.standSafetyStroke || 'rgba(255, 45, 110, 0.95)'; }
-  function c2dPathDrawStartMarkerRadiusPx() {
-    const n = Number(_canvas2dStyle.pathDrawStartMarkerRadiusPx);
-    const base = (isFinite(n) && n > 0) ? n : 3.5;
-    return base * LAYOUT_VERTEX_DOT_SCALE;
-  }
-  function c2dPathDrawStartMarkerStrokePx() {
-    const n = Number(_canvas2dStyle.pathDrawStartMarkerStrokePx);
-    const base = (isFinite(n) && n > 0) ? n : 1;
-    return Math.max(0.5, base * LAYOUT_VERTEX_DOT_SCALE);

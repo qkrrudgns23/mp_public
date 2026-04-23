@@ -1,3 +1,108 @@
+    return 'Edge ' + (edge.label || '001');
+  }
+  function getLayoutEdgeDisplayName(edge) {
+    if (!edge) return 'Edge';
+    return (edge.name && String(edge.name).trim()) || getLayoutEdgeDefaultName(edge);
+  }
+  function ensureUniqueLayoutEdgeName(rawName, currentId, fallbackEdge) {
+    const fallbackBase = getLayoutEdgeDefaultName(fallbackEdge || { label: '001' });
+    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
+    const used = new Set(Object.keys(state.layoutEdgeNames || {})
+      .filter(function(id) { return id !== currentId; })
+      .map(function(id) { return state.layoutEdgeNames[id]; })
+      .filter(Boolean));
+    return uniqueNameAgainstSet(baseName, used);
+  }
+  function normalizeLayoutNameKey(name) {
+    return String(name || '').trim().toLowerCase();
+  }
+  function findDuplicateLayoutName(objectKind, excludeId, proposedRaw) {
+    const key = normalizeLayoutNameKey(proposedRaw);
+    if (!key) return null;
+    const ex = excludeId == null || excludeId === '' ? null : String(excludeId);
+    function isOther(oid) {
+      if (ex === null) return true;
+      return String(oid) !== ex;
+    }
+    if (objectKind === 'terminal') {
+      const arr = state.terminals || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'terminal', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'pbb') {
+      const arr = state.pbbStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'pbb', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'remote') {
+      const arr = state.remoteStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'remote', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'tempStand') {
+      const arr = state.tempStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'tempStand', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'holdingPoint') {
+      const arr = state.holdingPoints || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'holdingPoint', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'taxiway') {
+      const arr = state.taxiways || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'taxiway', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'apronLink') {
+      const arr = state.apronLinks || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = getApronLinkDisplayName(o);
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'apronLink', existing: disp };
+      }
+      return null;
+    }
+    if (objectKind === 'layoutEdge') {
+      const map = state.layoutEdgeNames || {};
+      const edgeIds = Object.keys(map);
+      for (let ki = 0; ki < edgeIds.length; ki++) {
+        const kid = edgeIds[ki];
+        if (!isOther(kid)) continue;
+        const disp = map[kid];
+        if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
+      }
       return null;
     }
     return null;
@@ -523,108 +628,3 @@
     ctx.lineJoin = 'miter';
     ctx.lineCap = 'butt';
     if (selected) {
-      ctx.shadowColor = c2dObjectSelectedGlow();
-      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-  /** Local +X from stand box center to end of 45° flare (full-width main body); 0 if nose geometry unused. */
-  function standSafetyAircraftCenterLocalXM(depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return 0;
-    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
-    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return 0;
-    const halfD = depM / 2, halfW = widM / 2;
-    const noseHalf = nw / 2;
-    const eps = 0.08;
-    if (noseHalf >= halfW - eps) return 0;
-    const xNose = -halfD;
-    const xStop = -halfD + nc;
-    if (xStop <= xNose + eps || xStop >= halfD - eps) return 0;
-    const latRun = halfW - noseHalf;
-    if (latRun <= eps) return 0;
-    const xBendEnd = xStop + latRun;
-    if (xBendEnd > halfD + eps) return 0;
-    return xBendEnd;
-  }
-  function getStandAircraftMarkerWorldPxForPbb(pbb) {
-    const cxy = getStandConnectionPx(pbb);
-    return [cxy[0], cxy[1]];
-  }
-  function getStandAircraftMarkerWorldPxForRemoteLike(st) {
-    const cxy = getStandConnectionPx(st);
-    return [cxy[0], cxy[1]];
-  }
-  const APRON_SITE_MARKER_WIDTH_M = 5;
-  const APRON_SITE_MARKER_HEIGHT_M = 1;
-  function _ensureLayoutToastStack() {
-    let stack = document.getElementById('layout-toast-stack');
-    if (!stack) {
-      stack = document.createElement('div');
-      stack.id = 'layout-toast-stack';
-      stack.className = 'layout-toast-stack';
-      document.body.appendChild(stack);
-    }
-    return stack;
-  }
-  function _formatToastTimestamp(d) {
-    const pad = function(n) { return String(n).padStart(2, '0'); };
-    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-  }
-  function showLayoutSavedToast(layoutName, kind, subText) {
-    const stack = _ensureLayoutToastStack();
-    const el = document.createElement('div');
-    const variant = kind === 'error' ? 'is-error' : 'is-success';
-    el.className = 'layout-toast ' + variant;
-    const title = document.createElement('div');
-    title.className = 'layout-toast-title';
-    const ts = _formatToastTimestamp(new Date());
-    const name = String(layoutName || '').trim() || 'layout';
-    if (kind === 'error') {
-      title.textContent = ts + ' · save failed · ' + name;
-    } else {
-      title.textContent = ts + ' · saved · ' + name;
-    }
-    el.appendChild(title);
-    if (subText) {
-      const sub = document.createElement('div');
-      sub.className = 'layout-toast-sub';
-      sub.textContent = String(subText);
-      el.appendChild(sub);
-    }
-    stack.appendChild(el);
-    requestAnimationFrame(function() { el.classList.add('is-visible'); });
-    const lifeMs = kind === 'error' ? 4200 : 2600;
-    setTimeout(function() {
-      el.classList.remove('is-visible');
-      setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
-    }, lifeMs);
-  }
-  /**
-   * Render apron site anchor as a 5m × 1m rectangle. Long side (5m) is aligned
-   * with the stand's stopbar direction (local Y = perpendicular to the stand
-   * depth axis), so it matches the dashed stopbar line drawn near the nose.
-   * ``standAngleRad`` is the stand's depth-axis angle (same as ctx.rotate used
-   * when drawing the stand footprint). When omitted, the 5m side falls back to
-   * world horizontal.
-   */
-  function drawApronSiteMarker(ctx, cx, cy, fillStyle, strokeStyle, selected, standAngleRad) {
-    const w = APRON_SITE_MARKER_WIDTH_M;
-    const h = APRON_SITE_MARKER_HEIGHT_M;
-    const angle = (typeof standAngleRad === 'number' && isFinite(standAngleRad))
-      ? standAngleRad + Math.PI / 2
-      : 0;
-    ctx.save();
-    ctx.translate(cx, cy);
-    if (angle) ctx.rotate(angle);
-    ctx.beginPath();
-    ctx.rect(-w / 2, -h / 2, w, h);
-    if (fillStyle) {
-      ctx.fillStyle = fillStyle;
-      ctx.fill();
-    }
-    if (strokeStyle) {
-      const baseLw = Math.max(0.18, 0.24 / Math.max(state.scale, 0.1));
-      ctx.lineWidth = selected ? baseLw * 1.5 : baseLw;
-      ctx.strokeStyle = strokeStyle;

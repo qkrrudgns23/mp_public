@@ -1,3 +1,108 @@
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const holdingPointNameInput = document.getElementById('holdingPointName');
+  if (holdingPointNameInput) {
+    holdingPointNameInput.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
+        const hp = state.selectedObject.obj;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('holdingPoint', hp.id, raw)) {
+          alertDuplicateLayoutName();
+          this.value = hp.name || '';
+          return;
+        }
+        hp.name = raw;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+      }
+    });
+  }
+  const remoteIcaoCategoriesHost = document.getElementById('remoteIcaoCategories');
+  if (remoteIcaoCategoriesHost) {
+    remoteIcaoCategoriesHost.addEventListener('change', function(ev) {
+      const t = ev.target;
+      if (!t || !t.classList.contains('icao-letter-check')) return;
+      let letters = readIcaoCategoriesFromHost('remoteIcaoCategories');
+      if (!letters.length) {
+        letters = ['C'];
+        applyIcaoCategoriesToHost('remoteIcaoCategories', letters);
+      }
+      const typeIds = aircraftTypeIdsForIcaoLetters(letters);
+      if (state.selectedObject && state.selectedObject.type === 'remote') {
+        const st = state.selectedObject.obj;
+        st.categoryMode = 'icao';
+        st.allowedIcaoCategories = letters;
+        st.category = representativeCategoryFromLetters(letters);
+        st.allowedAircraftTypes = typeIds;
+        renderAircraftConstraintChoices('remoteAircraftAccess', typeIds, letters);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      } else {
+        renderAircraftConstraintChoices('remoteAircraftAccess', typeIds, letters);
+      }
+    });
+  }
+
+  const remoteTerminalAccessEl = document.getElementById('remoteTerminalAccess');
+  if (remoteTerminalAccessEl) {
+    remoteTerminalAccessEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('remote-term-check')) return;
+      syncChoiceChipStates(remoteTerminalAccessEl);
+      if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
+      const st = state.selectedObject.obj;
+      const checks = remoteTerminalAccessEl.querySelectorAll('.remote-term-check');
+      const allowed = [];
+      checks.forEach(function(ch) {
+        if (ch.checked) {
+          const id = ch.getAttribute('data-item-id');
+          if (id) allowed.push(id);
+        }
+      });
+      st.allowedTerminals = allowed;
+      if (typeof syncPanelFromState === 'function') syncPanelFromState();
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    });
+  }
+  const remoteAircraftAccessEl = document.getElementById('remoteAircraftAccess');
+  if (remoteAircraftAccessEl) {
+    remoteAircraftAccessEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('aircraft-type-check')) return;
+      syncChoiceChipStates(remoteAircraftAccessEl);
+      if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
+      const stAc = state.selectedObject.obj;
+      applyUnifiedStandConstraintFromPanelToObject(stAc, 'remoteIcaoCategories', 'remoteAircraftAccess');
+      renderAircraftConstraintChoices('remoteAircraftAccess', stAc.allowedAircraftTypes, stAc.allowedIcaoCategories);
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    });
+  }
+  const tempStandNameInput = document.getElementById('tempStandName');
+  if (tempStandNameInput) {
+    tempStandNameInput.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+        const st = state.selectedObject.obj;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('tempStand', st.id, raw)) {
+          alertDuplicateLayoutName();
+          this.value = st.name || '';
+          return;
+        }
+        st.name = raw;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
         update3DSceneWhenVisible();
       }
     });
@@ -207,8 +312,9 @@
   }
   const runwayExitAllowedDirectionEl = document.getElementById('runwayExitAllowedDirection');
   function triggerArrivalConfigResampleFromLayoutEdit() {
+    if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
+    if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
     if (typeof renderFlightList === 'function') renderFlightList(false, true);
-    else if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
   }
   if (runwayExitAllowedDirectionEl) {
     runwayExitAllowedDirectionEl.addEventListener('change', function(ev) {
@@ -224,13 +330,11 @@
         if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
         else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths();
         else draw();
-        triggerArrivalConfigResampleFromLayoutEdit();
       });
   }
-  document.getElementById('taxiwayDirectionMode').addEventListener('change', function() {
+    document.getElementById('taxiwayDirectionMode').addEventListener('change', function() {
     if (state.selectedObject && state.selectedObject.type === 'taxiway') {
       const tw = state.selectedObject.obj;
-      const shouldResampleRet = !!(tw && (tw.pathType === 'runway' || tw.pathType === 'runway_exit'));
       const v = this.value || '';
       if (tw.pathType === 'runway') {
         runwayReverseVerticesIfDirectionChanged(tw, v);
@@ -240,7 +344,6 @@
       if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
       draw();
       update3DSceneWhenVisible();
-      if (shouldResampleRet) triggerArrivalConfigResampleFromLayoutEdit();
     }
   });
   const taxiwayPathTypeKindEl = document.getElementById('taxiwayPathTypeKind');
@@ -650,9 +753,14 @@
     const touchedSt = [];
     if (prevStandForSched) touchedSt.push(prevStandForSched);
     if (standId) touchedSt.push(standId);
-    if (typeof renderFlightList === 'function')
-      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touchedSt });
-    if (typeof draw === 'function') draw();
+    if (typeof renderFlightList === 'function') {
+      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touchedSt, skipGanttRefresh: true });
+    }
+    if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+    if (typeof draw === 'function') {
+      // Stand-only change: skip path graph / pro-sim / junction overlays (saves a large 2D pass; geometry unchanged).
+      draw({ skipPathGeometryOverlays: true });
+    }
     return true;
   }
 
@@ -821,6 +929,8 @@
         const y = a.y + (b.y - a.y) * u;
         const h = headingForInterval(i);
         const dist2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y);
+        // Stationary / dwell: use start keyframe motion (matches export); do not use end keyframe
+        // (e.g. next sample is pushback with motionForward false — would flip silhouette while parked).
         const mfB = (dist2 < motionChordEps2) ? (a.motionForward !== false) : (b.motionForward !== false);
         let rdx = h.dx, rdy = h.dy;
         if (mfB === false) {
@@ -985,113 +1095,3 @@
       terms.forEach(function(o) {
         const sel = selectedId && o.id === selectedId ? ' selected' : '';
         opts.push('<option value=\"' + String(o.id || '').replace(/\"/g, '&quot;') + '\"' + sel + '>' +
-          escapeHtml(o.name || o.id || 'Building') + '</option>');
-      });
-    }
-    return opts.join('');
-  }
-  function resolveRunwayIdFromInput(raw) {
-    const v = (raw || '').trim();
-    if (!v) return null;
-    const list = getRunwayOptions();
-    for (let i = 0; i < list.length; i++) {
-      if (list[i].id === v) return v;
-    }
-    const vl = v.toLowerCase();
-    for (let i = 0; i < list.length; i++) {
-      if (String(list[i].name || '').trim().toLowerCase() === vl) return list[i].id;
-    }
-    return undefined;
-  }
-  function resolveTerminalIdFromInput(raw) {
-    const v = (raw || '').trim();
-    if (!v) return null;
-    const terms = makeUniqueNamedCopy(state.terminals || [], 'name');
-    for (let i = 0; i < terms.length; i++) {
-      const t = terms[i];
-      if (t.id === v) return v;
-    }
-    const vl = v.toLowerCase();
-    for (let i = 0; i < terms.length; i++) {
-      const t = terms[i];
-      if (String(t.name || '').trim().toLowerCase() === vl) return t.id;
-    }
-    return undefined;
-  }
-  function syncFlightAssignInputDisplay(el, f) {
-    const role = el.getAttribute('data-role');
-    if (role === 'arr') el.value = resolveArrivalRunwayIdForFlight(f) || '';
-    else if (role === 'term') el.value = f.terminalId || (f.token && f.token.terminalId) || '';
-    else if (role === 'dep') el.value = f.depRunwayId || (f.token && f.token.depRunwayId) || '';
-  }
-  function getRunwayDisplayLabelById(rwId) {
-    if (rwId == null || rwId === '') return '—';
-    const list = getRunwayOptions();
-    const o = list.find(function(x) { return x.id === rwId; });
-    return o ? (o.name || o.id || 'Runway') : '—';
-  }
-  function getTerminalDisplayLabelById(termId) {
-    if (termId == null || termId === '') return '—';
-    const terms = makeUniqueNamedCopy(state.terminals || [], 'name');
-    const t = terms.find(function(x) { return x.id === termId; });
-    return t ? ((t.name || '').trim() || 'Building') : '—';
-  }
-  function syncFlightAssignStripFromFlight(f) {
-    const arrEl = document.getElementById('flightAssignStripArr');
-    const termEl = document.getElementById('flightAssignStripTerm');
-    const depEl = document.getElementById('flightAssignStripDep');
-    if (arrEl) {
-      const sid = f ? (resolveArrivalRunwayIdForFlight(f) || '') : '';
-      arrEl.innerHTML = buildRunwayOptionsHtml(sid);
-      arrEl.value = sid;
-    }
-    if (termEl) {
-      const tid = f ? (f.terminalId || (f.token && f.token.terminalId) || '') : '';
-      termEl.innerHTML = buildTerminalOptionsHtml(tid);
-      termEl.value = tid;
-    }
-    if (depEl) {
-      const did = f ? (f.depRunwayId || (f.token && f.token.depRunwayId) || '') : '';
-      depEl.innerHTML = buildRunwayOptionsHtml(did);
-      depEl.value = did;
-    }
-  }
-  function syncFlightAssignStrip() {
-    const arrEl = document.getElementById('flightAssignStripArr');
-    const termEl = document.getElementById('flightAssignStripTerm');
-    const depEl = document.getElementById('flightAssignStripDep');
-    const sel = state.selectedObject;
-    const hasFlight = sel && sel.type === 'flight' && sel.id;
-    const f = hasFlight ? state.flights.find(function(x) { return x.id === sel.id; }) : null;
-    const dis = !f;
-    [arrEl, termEl, depEl].forEach(function(el) {
-      if (el) el.disabled = dis;
-    });
-    if (!f) {
-      syncFlightAssignStripFromFlight(null);
-      return;
-    }
-    syncFlightAssignStripFromFlight(f);
-  }
-  function commitFlightAssign(role, flightId, rawValue, st, listEl) {
-    const f = st.flights.find(function(x) { return x.id === flightId; });
-    if (!f) return;
-    const raw = rawValue;
-    var val = null;
-    if (role === 'arr' || role === 'dep') {
-      const r = resolveRunwayIdFromInput(raw);
-      if ((raw || '').trim() && r === undefined) {
-        syncFlightAssignStripFromFlight(f);
-        return;
-      }
-      val = r === undefined ? null : r;
-    } else if (role === 'term') {
-      const r = resolveTerminalIdFromInput(raw);
-      if ((raw || '').trim() && r === undefined) {
-        syncFlightAssignStripFromFlight(f);
-        return;
-      }
-      val = r === undefined ? null : r;
-    } else return;
-    var prevArr = f.arrRunwayId || null;
-    var prevDep = f.depRunwayId || (f.token && f.token.depRunwayId) || null;

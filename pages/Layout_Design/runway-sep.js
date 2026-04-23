@@ -1,3 +1,108 @@
+      }
+    }
+    if (tabId === 'allocation' && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+    if (tabId === 'rwysep') {
+      const rwyPanel = document.getElementById('rwySepPanel');
+      if (
+        state.rwySepPanelDirty === false &&
+        rwyPanel &&
+        document.getElementById('rwysep-standard') &&
+        typeof drawRwySeparationTimeline === 'function'
+      ) {
+        drawRwySeparationTimeline(rwyPanel);
+      } else if (typeof renderRunwaySeparation === 'function') {
+        renderRunwaySeparation();
+      }
+    }
+  }
+  document.querySelectorAll('.right-panel-tab').forEach(btn => {
+    btn.addEventListener('click', function() { switchToTab(this.getAttribute('data-tab')); });
+  });
+
+  ['chkShowSPoints', 'chkShowEBar', 'chkShowEPoints', 'chkShowSBars'].forEach(function(chkId) {
+    const el = document.getElementById(chkId);
+    if (el) el.addEventListener('change', function() {
+      if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+    });
+  });
+
+  document.getElementById('gridCellSize').addEventListener('change', function() { CELL_SIZE = Math.max(5, Number(this.value) || 5); invalidateGridUnderlay(); draw(); });
+  document.getElementById('gridCols').addEventListener('change', function() { GRID_COLS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); invalidateGridUnderlay(); draw(); });
+  document.getElementById('gridRows').addEventListener('change', function() { GRID_ROWS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); invalidateGridUnderlay(); draw(); });
+  function commitGridLayoutImageNumericChange(inputId, applyFn) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.addEventListener('change', function() {
+      if (!state.layoutImageOverlay) {
+        syncPanelFromState();
+        return;
+      }
+      const before = JSON.stringify(state.layoutImageOverlay);
+      const snapshot = JSON.parse(before);
+      applyFn(this);
+      const after = JSON.stringify(state.layoutImageOverlay);
+      if (before === after) {
+        syncPanelFromState();
+        invalidateGridUnderlay();
+        draw();
+        return;
+      }
+      undoStack.push({
+        terminals: JSON.parse(JSON.stringify(state.terminals || [])),
+        pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
+        remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+        tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
+        holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
+        taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
+        apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
+        layoutImageOverlay: snapshot,
+        layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
+        directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
+        flights: cloneFlightsWithoutPathPolylineCache(state.flights),
+        layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))
+      });
+      if (undoStack.length > maxUndoLevels) undoStack.shift();
+      syncPanelFromState();
+      invalidateGridUnderlay();
+      draw();
+    });
+  }
+  const gridLayoutImageFileEl = document.getElementById('gridLayoutImageFile');
+  if (gridLayoutImageFileEl) {
+    gridLayoutImageFileEl.addEventListener('change', function() {
+      const file = this.files && this.files[0];
+      if (!file) return;
+      const fileType = String(file.type || '').toLowerCase();
+      const fileName = String(file.name || 'Layout image');
+      const accepted = fileType === 'image/png' || fileType === 'image/jpeg' || fileType === 'image/svg+xml' ||
+        /\.(png|jpe?g|svg)$/i.test(fileName);
+      if (!accepted) {
+        alert('Only PNG, JPG, JPEG, and SVG files are supported.');
+        this.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const dataUrl = ev && ev.target ? String(ev.target.result || '') : '';
+        if (!dataUrl) return;
+        const img = new Image();
+        img.onload = function() {
+          const widthM = state.layoutImageOverlay ? clampLayoutImageSize(state.layoutImageOverlay.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM) : GRID_LAYOUT_IMAGE_DEFAULTS.widthM;
+          const aspect = (img.naturalWidth > 0 && img.naturalHeight > 0)
+            ? (img.naturalHeight / img.naturalWidth)
+            : (GRID_LAYOUT_IMAGE_DEFAULTS.heightM / Math.max(GRID_LAYOUT_IMAGE_DEFAULTS.widthM, 1e-9));
+          const heightM = state.layoutImageOverlay
+            ? clampLayoutImageSize(state.layoutImageOverlay.heightM, Math.max(1, widthM * aspect))
+            : Math.max(1, widthM * aspect);
+          pushUndo();
+          state.layoutImageOverlay = normalizeLayoutImageOverlay({
+            name: fileName,
+            type: fileType || 'image/png',
+            dataUrl: dataUrl,
+            opacity: state.layoutImageOverlay ? state.layoutImageOverlay.opacity : GRID_LAYOUT_IMAGE_DEFAULTS.opacity,
+            widthM: widthM,
+            heightM: heightM,
+            originalWidthPx: img.naturalWidth || widthM,
             originalHeightPx: img.naturalHeight || heightM,
             topLeftCol: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftCol : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol,
             topLeftRow: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftRow : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow
@@ -278,108 +383,3 @@
         }
         st.name = raw;
         updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
-    });
-  }
-  const holdingPointNameInput = document.getElementById('holdingPointName');
-  if (holdingPointNameInput) {
-    holdingPointNameInput.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
-        const hp = state.selectedObject.obj;
-        const raw = (this.value || '').trim();
-        if (raw && findDuplicateLayoutName('holdingPoint', hp.id, raw)) {
-          alertDuplicateLayoutName();
-          this.value = hp.name || '';
-          return;
-        }
-        hp.name = raw;
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-      }
-    });
-  }
-  const remoteIcaoCategoriesHost = document.getElementById('remoteIcaoCategories');
-  if (remoteIcaoCategoriesHost) {
-    remoteIcaoCategoriesHost.addEventListener('change', function(ev) {
-      const t = ev.target;
-      if (!t || !t.classList.contains('icao-letter-check')) return;
-      let letters = readIcaoCategoriesFromHost('remoteIcaoCategories');
-      if (!letters.length) {
-        letters = ['C'];
-        applyIcaoCategoriesToHost('remoteIcaoCategories', letters);
-      }
-      const typeIds = aircraftTypeIdsForIcaoLetters(letters);
-      if (state.selectedObject && state.selectedObject.type === 'remote') {
-        const st = state.selectedObject.obj;
-        st.categoryMode = 'icao';
-        st.allowedIcaoCategories = letters;
-        st.category = representativeCategoryFromLetters(letters);
-        st.allowedAircraftTypes = typeIds;
-        renderAircraftConstraintChoices('remoteAircraftAccess', typeIds, letters);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      } else {
-        renderAircraftConstraintChoices('remoteAircraftAccess', typeIds, letters);
-      }
-    });
-  }
-
-  const remoteTerminalAccessEl = document.getElementById('remoteTerminalAccess');
-  if (remoteTerminalAccessEl) {
-    remoteTerminalAccessEl.addEventListener('change', function(ev) {
-      const target = ev.target;
-      if (!target || !target.classList.contains('remote-term-check')) return;
-      syncChoiceChipStates(remoteTerminalAccessEl);
-      if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
-      const st = state.selectedObject.obj;
-      const checks = remoteTerminalAccessEl.querySelectorAll('.remote-term-check');
-      const allowed = [];
-      checks.forEach(function(ch) {
-        if (ch.checked) {
-          const id = ch.getAttribute('data-item-id');
-          if (id) allowed.push(id);
-        }
-      });
-      st.allowedTerminals = allowed;
-      if (typeof syncPanelFromState === 'function') syncPanelFromState();
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-    });
-  }
-  const remoteAircraftAccessEl = document.getElementById('remoteAircraftAccess');
-  if (remoteAircraftAccessEl) {
-    remoteAircraftAccessEl.addEventListener('change', function(ev) {
-      const target = ev.target;
-      if (!target || !target.classList.contains('aircraft-type-check')) return;
-      syncChoiceChipStates(remoteAircraftAccessEl);
-      if (!state.selectedObject || state.selectedObject.type !== 'remote') return;
-      const stAc = state.selectedObject.obj;
-      applyUnifiedStandConstraintFromPanelToObject(stAc, 'remoteIcaoCategories', 'remoteAircraftAccess');
-      renderAircraftConstraintChoices('remoteAircraftAccess', stAc.allowedAircraftTypes, stAc.allowedIcaoCategories);
-      updateObjectInfo();
-      renderObjectList();
-      draw();
-    });
-  }
-  const tempStandNameInput = document.getElementById('tempStandName');
-  if (tempStandNameInput) {
-    tempStandNameInput.addEventListener('change', function() {
-      if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-        const st = state.selectedObject.obj;
-        const raw = (this.value || '').trim();
-        if (raw && findDuplicateLayoutName('tempStand', st.id, raw)) {
-          alertDuplicateLayoutName();
-          this.value = st.name || '';
-          return;
-        }
-        st.name = raw;
-        updateObjectInfo();
-        renderObjectList();
-        draw();

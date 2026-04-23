@@ -1,3 +1,44 @@
+      const R = closestPointOnAnyRunwayCenterlineWorld(cx, cy);
+      const rx = R ? R[0] : cx + g.ux * (CELL_SIZE * 40);
+      const ry = R ? R[1] : cy + g.uy * (CELL_SIZE * 40);
+      const midM = [cx - g.ux * pairHalf, cy - g.uy * pairHalf];
+      const midP = [cx + g.ux * pairHalf, cy + g.uy * pairHalf];
+      const ofsR = dist2(midM, [rx, ry]) <= dist2(midP, [rx, ry]) ? -pairHalf : pairHalf;
+      const pathW = Number(g.pathWidthM);
+      const toothLen = Math.max(0.75, (isFinite(pathW) && pathW > 0 ? pathW : 12) * 0.24) * 0.25;
+      const toothSpacing = Math.max(0.55, pathSpanM * 0.065);
+      const toothLw = Math.max(lw, lw * 1.12);
+      ctx.save();
+      ctx.lineWidth = toothLw;
+      for (let s = -halfLen + toothSpacing * 0.5; s <= halfLen - toothSpacing * 0.25; s += toothSpacing) {
+        const bx = cx + px * s + g.ux * ofsR;
+        const by = cy + py * s + g.uy * ofsR;
+        const mx = cx + px * s;
+        const my = cy + py * s;
+        const vx = rx - mx;
+        const vy = ry - my;
+        const signT = (g.ux * vx + g.uy * vy) >= 0 ? 1 : -1;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + g.ux * signT * toothLen, by + g.uy * signT * toothLen);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.shadowBlur = 0;
+  }
+  function c2dSimStandOccupiedFill() { return _canvas2dStyle.simStandOccupiedFill || 'rgba(239, 68, 68, 0.32)'; }
+  function c2dSimStandOccupiedStroke() { return _canvas2dStyle.simStandOccupiedStroke || 'rgba(220, 38, 38, 0.95)'; }
+  function c2dStandSafetyStroke() { return _canvas2dStyle.standSafetyStroke || 'rgba(255, 45, 110, 0.95)'; }
+  function c2dPathDrawStartMarkerRadiusPx() {
+    const n = Number(_canvas2dStyle.pathDrawStartMarkerRadiusPx);
+    const base = (isFinite(n) && n > 0) ? n : 3.5;
+    return base * LAYOUT_VERTEX_DOT_SCALE;
+  }
+  function c2dPathDrawStartMarkerStrokePx() {
+    const n = Number(_canvas2dStyle.pathDrawStartMarkerStrokePx);
+    const base = (isFinite(n) && n > 0) ? n : 1;
+    return Math.max(0.5, base * LAYOUT_VERTEX_DOT_SCALE);
   }
   function c2dPathDrawStartLabelFontPx() {
     const n = Number(_canvas2dStyle.pathDrawStartLabelFontPx);
@@ -537,6 +578,8 @@
     vttArrCacheRev: 0,
     derivedGraphEdges: [],
     globalUpdateFresh: false,
+    /** Path graph / views match last Designer 'Update' (applyPathGraphSyncNow), not Pro Sim. */
+    designerPageUpdateFresh: false,
     activeRwySepId: null,
     activeRwySepSubtab: 'noname',
     rwySepPanelDirty: true,
@@ -567,6 +610,8 @@
     dragLayoutMarkerHandle: null,
     pathArcModeOn: false,
     pathArcDrag: null,
+    /** Pro Sim 2D: all | airline | icao | intdom | building */
+    flightColorMode: 'all',
   };
   const LAYER_STATE_KEYS = [
     'grid', 'image', 'pathLines', 'pathFill', 'standLines', 'standFill',
@@ -783,48 +828,3 @@
       if (!(id in o)) changed.push(id);
       else if (o[id] !== n[id]) changed.push(id);
     });
-    return { removed: removed, changed: changed };
-  }
-  function cloneFlightsWithoutPathPolylineCache(flights) {
-    return (flights || []).map(function(f) {
-      const raw = JSON.parse(JSON.stringify(f));
-      delete raw.cachedArrPathPts;
-      delete raw.cachedDepPathPts;
-      delete raw._pathPolylineCacheRev;
-      delete raw._pathPolylineArrRetKey;
-      return raw;
-    });
-  }
-  function markGlobalUpdateStale() {
-    state.globalUpdateFresh = false;
-    state.simPlaying = false;
-    state.simSliderScrubbing = false;
-    if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
-    bumpPathPolylineCacheRev();
-    state.rwySepPanelDirty = true;
-    bumpRwySepSnapshotStaleGen();
-    if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines({ keepDesResultTimelines: true });
-    const dot = document.getElementById('globalUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('fresh');
-      dot.classList.add('stale');
-      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim으로 재동기화 (완료 시 결과 자동 반영)');
-    }
-    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
-  }
-  function markGlobalUpdateFresh() {
-    state.globalUpdateFresh = true;
-    const dot = document.getElementById('globalUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('stale');
-      dot.classList.add('fresh');
-      dot.setAttribute('title', 'All views match the last Pro Sim run');
-    }
-    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
-  }
-  function redrawLayoutAfterEdit() {
-    // Full reset rebuilds junctions in draw(); manual-sync mode keeps last graph for display until Update / Pro Sim.
-    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
-      invalidatePathGraphCache(false);
-    } else {
-      invalidatePathGraphCache(true);
