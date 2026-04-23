@@ -9580,12 +9580,14 @@
         const widthPct = Math.max(2, ((tEnd - tStart) / displaySpan) * 100 * zoom);
         const regSafe = escapeHtml(f.reg || '');
         const codeSafe = escapeHtml((f.code || '').toUpperCase());
-        const dwellVal = (t1 != null && t0 != null) ? Math.max(0, t1 - t0) : (f.dwellMin != null ? f.dwellMin : 0);
-        const dwellLabel = dwellVal ? (Math.round(dwellVal * 10) / 10 + 'm') : '';
-        let meta = '';
-        if (codeSafe && dwellLabel) meta = codeSafe + ' · ' + dwellLabel;
-        else if (codeSafe) meta = codeSafe;
-        else meta = dwellLabel;
+        const typeSafe = escapeHtml(String(f.aircraftType || '').trim());
+        const codeHtml = codeSafe ? ('<span class="alloc-flight-code">' + codeSafe + '</span>') : '';
+        const typeHtml = typeSafe
+          ? ((codeSafe ? '<span class="alloc-flight-type-sep"> · </span>' : '') + '<span class="alloc-flight-type">' + typeSafe + '</span>')
+          : '';
+        const metaHtml = (codeHtml || typeHtml)
+          ? ('<div class="alloc-flight-meta">' + codeHtml + typeHtml + '</div>')
+          : '';
         const conflictClass = (conflictMap[f.id] || flightBlockedLikeNoWay(f)) ? ' conflict' : '';
         const selectedClass = (state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id) ? ' alloc-flight-selected' : '';
         const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
@@ -9639,7 +9641,7 @@
             'style="left:' + leftPct + '%;width:' + widthPct + '%;min-width:4px;"' +
             ' title="' + barTitle + '">' +
             '<div class="alloc-flight-reg">' + regSafe + '</div>' +
-            '<div class="alloc-flight-meta">' + meta + '</div>' +
+            metaHtml +
             ovlpBadgeHtml +
           '</div>';
       }).join('');
@@ -9734,13 +9736,15 @@
         if (!lk || !lk.pbbId) continue;
         const pbb = (state.pbbStands || []).find(function(p) { return p && p.id === lk.pbbId; });
         const rem = (state.remoteStands || []).find(function(r) { return r && r.id === lk.pbbId; });
-        const st = pbb || rem;
+        const tmp = (state.tempStands || []).find(function(r) { return r && r.id === lk.pbbId; });
+        const st = pbb || rem || tmp;
         if (!st) continue;
         const t = getTerminalForStand(st);
         if (t && t.id != null) s.add(String(t.id));
       }
       return s;
     })();
+    const pbbStandIdSet = new Set((state.pbbStands || []).map(function(p) { return p && p.id; }).filter(Boolean));
     const ganttTermByStand = new Map();
     stands.forEach(function(s) {
       const term = getTerminalForStand(s);
@@ -9748,9 +9752,10 @@
         ganttTermByStand.set(s.id, null);
         return;
       }
+      const hasPbb = pbbStandIdSet.has(s.id);
       ganttTermByStand.set(
         s.id,
-        terminalIdsWithApronLink.has(String(term.id)) ? term : null
+        (hasPbb || terminalIdsWithApronLink.has(String(term.id))) ? term : null
       );
     });
     const grouped = {};
@@ -9777,53 +9782,50 @@
       }
       grouped[key].stands.push(s);
     });
-    const remoteIdSet = new Set((state.remoteStands || []).map(r => r.id));
+    const remoteIdSet = new Set(
+      (state.remoteStands || []).map(r => r.id)
+        .concat((state.tempStands || []).map(r => r.id))
+    );
     const allRemoteStands = [];
     order.forEach(key => {
       const group = grouped[key];
       if (!group) return;
       const term = group.term;
-      const headerLabel = term
-        ? (termLabelById[term.id] || term.name || 'Building')
-        : 'No Building';
-      const headerEsc = escapeHtml(headerLabel);
-      const headerLong = headerLabel.length > 26;
-      const headerTitleAttr = headerLong ? ' title="' + headerEsc + '"' : '';
-      const headerInner = headerLong
-        ? '<span style="display:block;max-width:168px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + headerEsc + '</span>'
-        : headerEsc;
-      labelRows.push(
-        '<div class="alloc-terminal-header" data-collapsed="0"' + headerTitleAttr + '>' +
-          '<span class="alloc-section-toggle-icon">▼</span>' +
-          headerInner +
-        '</div>'
-      );
-      trackRows.push('<div class="alloc-row" data-stand-id="">' +
-        '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:24px;"></div>' +
-      '</div>');
       const contactStands = [];
       const remoteStandsInTerm = [];
       group.stands.forEach(s => {
         if (remoteIdSet.has(s.id)) remoteStandsInTerm.push(s);
-
-
         else contactStands.push(s);
       });
+      if (remoteStandsInTerm.length) {
+        remoteStandsInTerm.forEach(s => allRemoteStands.push(s));
+      }
+      if (!contactStands.length) return;
+      const headerLabel = term
+        ? (termLabelById[term.id] || term.name || 'Building')
+        : 'No Building';
+      const headerEsc = escapeHtml(headerLabel);
+      labelRows.push(
+        '<div class="alloc-terminal-header" data-collapsed="0" title="' + headerEsc + '">' +
+          '<span class="alloc-section-toggle-icon">▼</span>' +
+          '<span class="alloc-terminal-header-text">' + headerEsc + '</span>' +
+        '</div>'
+      );
+      trackRows.push('<div class="alloc-row" data-stand-id="">' +
+        '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:20px;"></div>' +
+      '</div>');
       contactStands.forEach(s => {
         const label = (s.name || '') + ' (' + (s.category || '') + ')';
         const row = buildRowHtml(label, s.id);
         labelRows.push(row.labelHtml);
         trackRows.push(row.trackHtml);
       });
-      if (remoteStandsInTerm.length) {
-        remoteStandsInTerm.forEach(s => allRemoteStands.push(s));
-      }
     });
     if (allRemoteStands.length) {
       labelRows.push('<div class="alloc-gantt-section-spacer" aria-hidden="true"></div>');
       trackRows.push(
         '<div class="alloc-row" data-stand-id="">' +
-          '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:8px;min-height:8px;"></div>' +
+          '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:4px;min-height:4px;"></div>' +
         '</div>'
       );
       labelRows.push(
@@ -9834,7 +9836,7 @@
       );
       trackRows.push(
         '<div class="alloc-row" data-stand-id="">' +
-          '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:20px;min-height:20px;"></div>' +
+          '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:18px;min-height:18px;"></div>' +
         '</div>'
       );
       allRemoteStands.forEach(s => {
@@ -15251,7 +15253,6 @@
 
   function drawFlights2D() {
     if (!state.hasSimulationResult || !state.flights.length) return;
-    if (state.isPanning) return;
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -20668,10 +20669,8 @@
       }
     }
     if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawProSimFlightPathEdges();
-    if (!interactiveLite) {
-      drawHoldingQueueGhostFlights2D();
-      drawFlights2D();
-    }
+    drawHoldingQueueGhostFlights2D();
+    drawFlights2D();
     if (!interactiveLite) {
       if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawPathJunctions();
       if (!skipPathGeometryOverlays) {
