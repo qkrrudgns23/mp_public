@@ -3090,6 +3090,17 @@ def _flight_path_has_lineup_departure(prep: PreparedFlightPath) -> bool:
     return any(str(p) == PHASE_LINEUP_DEPARTURE for p in prep.segment_phases)
 
 
+def _agent_path_includes_landing(agent: Flight) -> bool:
+    """True if this agent's route includes a Landing phase (arrival roll / decel on runway)."""
+    for row in agent.edge_ids_finished or []:
+        if isinstance(row, dict) and str(row.get("phase", "")) == PHASE_LANDING:
+            return True
+    for ph in agent.edge_phases or []:
+        if str(ph) == PHASE_LANDING:
+            return True
+    return False
+
+
 def _departure_leg_durations_sec_for_schedule(
     prep: PreparedFlightPath,
 ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
@@ -7305,11 +7316,15 @@ def run_simulation(
         )
         _refresh_touchdown_motion_cache(control_state, agents, rw_release_lag)
         for ag in agents:
+            # Always record history (even before touchdown / during runway-separation hold).
+            # Skipping rows here used to create multi‑second gaps in `positions` while
+            # `control_halt` still froze the aircraft — the UI then linearly interpolated
+            # across a straight chord (slow→fast, corner aliasing). Same x,y, v≈0 samples
+            # over the hold yield stable playback; touchdown motion still only starts after
+            # `td_h` in `apply_movement_controls` above.
             td_h = _arr_touchdown_motion_abs_sec(
                 ag, agents, rw_release_lag, control_state=control_state
             )
-            if td_h is not None and current_time_abs <= float(td_h) + 1e-9:
-                continue
             _try_stamp_actual_apron_inblocks_from_stand_position(
                 ag,
                 layout,
@@ -7541,6 +7556,23 @@ def run_simulation(
             if len(row) > 14 and row[14] is not None:
                 _pos["runwayId"] = str(row[14])
             _plist.append(_pos)
+        # Playback: do not export positions before actual touchdown motion (same clock as
+        # schedule TOUCHDOWN_MOTION / _compute_arr_touchdown_motion_abs_sec). Sim internal
+        # state and ag.history are unchanged; only the JSON `positions` list is trimmed.
+        td_playback = _arr_touchdown_motion_abs_sec(
+            ag, agents, rw_release_lag, control_state=control_state
+        )
+        if (
+            _agent_path_includes_landing(ag)
+            and td_playback is not None
+            and math.isfinite(float(td_playback))
+        ):
+            td0 = float(td_playback)
+            _plist = [
+                p
+                for p in _plist
+                if float(p.get("t", 0.0)) + 1e-9 >= td0
+            ]
         positions[ag.id] = _plist
 
     schedule_list: List[Dict[str, Any]] = []
