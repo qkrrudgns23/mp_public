@@ -126,7 +126,7 @@ HEAVY_DECISION_INTERVAL_SEC = 15
 LIGHT_RESERVATION_RETRY_INTERVAL_SEC = 1.0
 DEADLOCK_THRESHOLD_SEC = 300.0
 DEADLOCK_FORCE_MOVE_DURATION_SEC = 60.0
-DEADLOCK_RESOLVE_STOP_COUNT = 10
+DEADLOCK_RESOLVE_STOP_COUNT = 3
 STAGNATION_PROGRESS_EPS_M = 2.0
 # After pushback from a stand, block other arrivals to that stand for this many seconds.
 STAND_POST_PUSHBACK_CLEARANCE_DELAY_SEC = 60.0
@@ -6245,7 +6245,17 @@ def _try_reroute_agent_off_path_block(
 ) -> bool:
     if not agent.edge_phases or not agent.edge_ids:
         return False
-    if str(agent.edge_phases[0]) == PHASE_LANDING:
+    # Once the aircraft is on the lineup path (RTX → lineup → runway takeoff),
+    # the remaining route is fixed and it is only waiting for the runway to clear.
+    # Rerouting from a mid-polyline RTX position can pick a `nearest_path_node`
+    # that lies on the runway itself (not on the RTX graph edge), which then
+    # teleports the agent onto the runway via segment snap. Skip reroute in
+    # these phases so the aircraft stays on its RTX polyline to the lineup point.
+    if str(agent.edge_phases[0]) in (
+        PHASE_LANDING,
+        PHASE_HOLDING_LINEUP,
+        PHASE_LINEUP_DEPARTURE,
+    ):
         return False
     st = control_state.agent_states.get(agent.id)
     if st is None or _agent_deadlock_ghost_at_time(st, float(sim_time)):

@@ -9,6 +9,7 @@
 - **터미널 검증 의무(예외 없음)**: 어떤 수정이든 반영 후 반드시 내가 터미널에서 실행(`smoke` + `run`/필요시 `validate`)하고 결과를 확인한다.
 
 ### Known Pitfalls (현재까지)
+- **RET/RTX `linkId`는 tw\***: `simPathGraph`의 `runway_exit` / `runway_taxiway`는 `linkId`가 `tw-*`인 경우가 많다. `RunwayResource` 키를 `rec.link_id`로만 쓰면 `rwy-*`와 따로 떨어져 동시 라인업(다른 엣지)이 capacity=1을 우회할 수 있다. `runwayPaths`와의 접점( `_arr_ret_runway_junction_xy` )으로 물리 활주로 id에 합친다.
 - **하네스 스크립트 구문 오류**: 문자열 이스케이프/따옴표 실수로 `SyntaxError`가 나면, 실행 전 단계에서 smoke가 잡도록 한다.
 - **미해결 상태 종료 금지**: 핵심 재현 지표가 unchanged/악화면 루프를 종료하지 않는다. 최소 1개 핵심 지표 개선을 확인할 때까지 재실행한다.
 - **temp incident 맵 공백 리스크**: temp stand ID가 그래프 stand map에 없을 수 있으므로, 좌표 기반 최근접 노드 fallback 없이는 temp 점유 회피 로직이 무효화된다.
@@ -24,4 +25,5 @@
 - **경로그래프 캐시 + 페널티**: `_flight_route_impl`에서 그래프를 매번 재구성하면 reroute/다중 레그에서 비용이 폭증한다. 레이아웃 객체 단위로 캐시하고, 레이아웃 엣지 페널티는 그래프 변형 대신 Dijkstra 가중치에만 반영한다. 페널티 없는 경우에는 `adj`에 저장된 가중치 루프를 유지해 미세 성능 회귀를 막는다.
 - **시뮬레이션 시작 시 캐시 초기화**: 프로세스 내 다른 입력/레이아웃과 섞이지 않도록 `run_simulation` 진입 시 path graph 캐시를 비운다.
 - **터치다운 시각 캐시는 이동 단계와 분리**: `_compute_arr_touchdown_motion_abs_sec`는 전 기체 상태에 의존한다. 틱 초반(점유 갱신·예약·정체 프로브)에는 캐시를 쓰되, `apply_movement_controls`의 **이동 루프**에서는 기체별 순차 이동/중간 reroute로 `exit_runway_abs_sec` 등이 바뀔 수 있으므로 매 기체마다 재계산한다.
+- **Lineup 단계 reroute 금지**: RTX·lineup·takeoff 구간은 경로가 이미 고정이고 대체 경로가 없다. 이 단계에서 reroute를 돌리면 `build_reroute_path_from_xy → _flight_route_impl`의 `g.nearest_path_node()`가 RTX 폴리라인 중간 위치를 활주로 위 노드로 스냅할 수 있어(RTX 그래프 엣지는 두 끝 노드만 갖고 있고 그 사이 위치는 runway 쪽 노드가 더 가까워짐), 새 경로가 `runway` 엣지로 잡히고 segment 직선 스냅으로 인해 기체가 활주로 위로 **워프**한다. Landing과 동일하게 `PHASE_HOLDING_LINEUP` / `PHASE_LINEUP_DEPARTURE`에서는 reroute를 차단한다. 이는 활주로 동시 점유(capacity≥2) 회귀의 직접 원인이었다.
 

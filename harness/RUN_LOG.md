@@ -256,3 +256,39 @@
   - second rerun verifier: `bad []`
 - **next**: 동적 stand 배정이 많은 다른 입력에서도 동일 fallback이 잘 동작하는지 샘플 회귀 검증
 
+---
+
+### RUN 20260423T — MNL RET·RTX → physical runway resource
+- **command**: `python -m harness.smoke` → `python -m harness.run --input data/Result_storage/MNL_OSM_sim_input.json --output data/Result_storage/_MNL_OSM_sim_result_fix2.json`
+- **result**: PASS run+validate
+- **root cause / fix**:
+  - `runway_exit` / `runway_taxiway` graph `linkId`가 `tw-*`일 때 `RunwayResource` 키를 tw로 잡아 활주로(`rwy-*`)과 분리 → 동일 시각 다중 라인업(예: 001+003) 동시 점유.
+  - `_physical_runway_id_for_graph_link` + `build_resource_model`에서 tw를 `_arr_ret_runway_junction_xy`로 `runwayPaths` id에 합침. `RUNWAY_LINK_PATH_TYPES`는 phase·재진입·우선순위 분기용으로 유지.
+- **evidence (샘플 스크립트)**: old `MNL_OSM_sim_result` 동시 Hold on 키 엣지(001/002/003/105) max **3**; fix2 결과(full t) max **1**.
+
+---
+
+### RUN 20260423T0900 — MNL Holding_lineup reroute warp guard
+- **command**:
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/MNL_OSM_sim_input.json --output data/Result_storage/MNL_OSM_sim_result.json`
+  - `python -m harness.run --input data/Result_storage/default_layout_sim_input.json --output data/Result_storage/_default_fix_warp.json`
+- **result**: PASS run+validate (MNL + default_layout)
+- **builder change**:
+  - `_try_reroute_agent_off_path_block()`에서 `PHASE_HOLDING_LINEUP` / `PHASE_LINEUP_DEPARTURE`를 `PHASE_LANDING`과 동일하게 reroute 차단 대상에 포함.
+- **root cause**:
+  - R7(`id_56g5h2ra5`)가 `t=29100`에 RTX `layout-edge-003` 위 (392.74, 3667.23)에서 활주로 점유 해제를 기다리다가 `total_wait_sec`가 임계치를 넘어 `t=29134`에 non-aggressive reroute 발동.
+  - `build_reroute_path_from_xy → _flight_route_impl`이 `RouteEndpoint(token_pixel_xy=start_xy)`를 `g.nearest_path_node()`로 스냅하면서 RTX 폴리라인 중간에 있는 (392.74, 3667.23)의 최근접 그래프 노드로 **활주로** 위의 node 0(389.56, 3707.93, 40.82px)이 선택됨(RTX의 두 끝 노드 node 1 / node 71은 각각 51.53 / 64.91px로 더 멀었음).
+  - 그 결과 새 경로 = `node 0 → node 1` = `layout-edge-001`(runway)이 되고, 에이전트 위치가 segment 직선 위로 스냅되어 (409.53, 3696.46)로 **워프**. 이 탓에 R2가 이륙 중인 활주로에 R7이 동시에 점유해 occupancy가 2~5까지 치솟음.
+  - Lineup 계열 단계는 경로가 이미 `RTX → lineup → runway takeoff`로 고정이며, 다른 대체 경로가 없고 단지 활주로가 비기를 기다리는 상태이므로 reroute가 필요 없음. Landing과 같은 선상에서 차단하는 것이 최소 변경.
+- **reviewer check**:
+  - `Information.json` 변경 없음
+  - I/O 계약 유지(`PASS run+validate` 양쪽 입력)
+  - `default_layout_sim_result.json` 골든과 결과 완전 일치(회귀 없음)
+  - MNL 2회 독립 실행 결과 JSON 완전 동일(결정성 유지)
+- **evidence**:
+  - R7 trajectory (fix): `t=29100` WAIT@edge-003(392.74, 3667.23) → `t=29144` PROCEED@edge-003(411.91, 3672.94) → `t=29148` edge-002(449.72, 3673.38)로 자연스럽게 진입. 워프 소실.
+  - 동시 runway 점유: 전체 시뮬레이션에서 old `max=5`, overlap 샘플 **289** → fix `max=1`, overlap 샘플 **0**.
+  - MNL `deadlock_resolve_event_count = 0`.
+- **next**: RTX·lineup 구간에 걸린 다른 기체 시나리오에서도 동일 가드가 과도하게 이동을 묶지 않는지 샘플 회귀 검증.
+
