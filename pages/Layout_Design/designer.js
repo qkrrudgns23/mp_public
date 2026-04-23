@@ -1157,6 +1157,8 @@
     vttArrCacheRev: 0,
     derivedGraphEdges: [],
     globalUpdateFresh: false,
+    /** Path graph / views match last Designer 'Update' (applyPathGraphSyncNow), not Pro Sim. */
+    designerPageUpdateFresh: false,
     activeRwySepId: null,
     activeRwySepSubtab: 'noname',
     rwySepPanelDirty: true,
@@ -1455,6 +1457,24 @@
     }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
+  function markDesignerPageUpdateStale() {
+    state.designerPageUpdateFresh = false;
+    const dot = document.getElementById('designerPageUpdateSyncDot');
+    if (dot) {
+      dot.classList.remove('fresh');
+      dot.classList.add('stale');
+      dot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
+    }
+  }
+  function markDesignerPageUpdateFresh() {
+    state.designerPageUpdateFresh = true;
+    const dot = document.getElementById('designerPageUpdateSyncDot');
+    if (dot) {
+      dot.classList.remove('stale');
+      dot.classList.add('fresh');
+      dot.setAttribute('title', 'Update 기준으로 경로·뷰가 최신입니다');
+    }
+  }
   function redrawLayoutAfterEdit() {
     if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
     // Full reset rebuilds junctions in draw(); manual-sync mode keeps last graph for display until Update / Pro Sim.
@@ -1464,6 +1484,7 @@
       invalidatePathGraphCache(true);
     }
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof markDesignerPageUpdateStale === 'function') markDesignerPageUpdateStale();
     if (typeof draw === 'function') draw();
     if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
   }
@@ -7726,9 +7747,14 @@
     const touchedSt = [];
     if (prevStandForSched) touchedSt.push(prevStandForSched);
     if (standId) touchedSt.push(standId);
-    if (typeof renderFlightList === 'function')
-      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touchedSt });
-    if (typeof draw === 'function') draw();
+    if (typeof renderFlightList === 'function') {
+      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touchedSt, skipGanttRefresh: true });
+    }
+    if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+    if (typeof draw === 'function') {
+      // Stand-only change: skip path graph / pro-sim / junction overlays (saves a large 2D pass; geometry unchanged).
+      draw({ skipPathGeometryOverlays: true });
+    }
     return true;
   }
 
@@ -8814,7 +8840,7 @@
     if (typeof syncFlightAssignStrip === 'function') syncFlightAssignStrip();
     if (!skipGanttRefresh && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
   }
-  function _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl) {
+  function _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl, scheduleOpts) {
     // #region agent log
     if (typeof fetch === 'function') { var _dlen = (dirtySet && (typeof dirtySet.size === 'number')) ? dirtySet.size : -1; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'flight-list', location: 'designer.js:_renderFlightListAfterPathEnsure', message: 'after path ensure', data: { hypothesisId: 'H2', schedFull: !!schedFull, forceResampleRet: !!forceResampleRet, nFl: (flightsSorted && flightsSorted.length) | 0, dirtyN: _dlen }, timestamp: Date.now() }) }).catch(function() {}); }
     // #endregion
@@ -8832,7 +8858,8 @@
       else
         retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
     }
-    _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, null);
+    const domOpt = (scheduleOpts && scheduleOpts.skipGanttRefresh) ? { skipGanttRefresh: true } : null;
+    _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, domOpt);
   }
 
   function renderFlightList(skipAutoAllocate, forceResampleRet, scheduleOpts, onDone) {
@@ -8881,7 +8908,7 @@
     function runTail() {
       beginScheduleRetStatsBatch();
       try {
-        _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl);
+        _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl, scheduleOpts);
       } finally {
         endScheduleRetStatsBatch();
       }
@@ -9352,10 +9379,15 @@
     const domScheduleOk = schedTable && schedTable.getAttribute('data-virtual-table') !== '1';
     if (domScheduleOk) {
       const rows = Array.from(schedTable.querySelectorAll('tbody tr.flight-data-row'));
+      const flightById = new Map();
+      for (let fi = 0; fi < flights.length; fi++) {
+        const ff = flights[fi];
+        if (ff && ff.id != null) flightById.set(String(ff.id), ff);
+      }
       rows.forEach(row => {
         const id = row.getAttribute('data-id');
         if (!id) return;
-        const f = flights.find(ff => ff.id === id);
+        const f = flightById.get(String(id));
         if (!f) return;
         const tds = Array.from(row.querySelectorAll('td'));
         if (tds.length <= FLIGHT_SCHED_TD_ETOT) return;
@@ -9470,6 +9502,22 @@
       arr.push(allocTrackMarkerHtml(cls, allocLeftPct(t)));
     }
 
+    /** O(flights) — avoid per-row intervals.filter (was O(stands * flights) per gantt pass). */
+    const intervalsByStandKey = (function() {
+      const o = { __unassigned: [] };
+      for (let gi = 0; gi < intervals.length; gi++) {
+        const it = intervals[gi];
+        const raw = it.f && it.f.standId;
+        if (raw == null || raw === '') o.__unassigned.push(it);
+        else {
+          const sid = String(raw);
+          if (!o[sid]) o[sid] = [];
+          o[sid].push(it);
+        }
+      }
+      return o;
+    })();
+
     function buildRowHtml(label, standId) {
       const showSPointsEl = document.getElementById('chkShowSPoints');
       const showSPoints = !showSPointsEl || showSPointsEl.checked;
@@ -9485,11 +9533,9 @@
       const showSDots = showSPoints;
       const showSdDots = showSPoints;
       const showEDots = showEPoints;
-      const rowFlights = intervals.filter(it => {
-        const f = it.f;
-        const sid = (f.standId || null);
-        return (standId == null) ? !sid : sid === standId;
-      });
+      const rowFlights = (standId == null)
+        ? (intervalsByStandKey.__unassigned || [])
+        : (intervalsByStandKey[String(standId)] || []);
       const conflictMap = {};
       for (let i = 0; i < rowFlights.length; i++) {
         for (let j = i + 1; j < rowFlights.length; j++) {
@@ -9677,9 +9723,8 @@
     const terminalCopies = makeUniqueNamedCopy(state.terminals || [], 'name');
     const termLabelById = {};
     terminalCopies.forEach(t => { termLabelById[t.id] = (t.name || '').trim() || 'Building'; });
-    function terminalHasApronLink(term) {
-      if (!term || !term.id) return false;
-      const tid = String(term.id);
+    const terminalIdsWithApronLink = (function() {
+      const s = new Set();
       const links = state.apronLinks || [];
       for (let i = 0; i < links.length; i++) {
         const lk = links[i];
@@ -9689,22 +9734,27 @@
         const st = pbb || rem;
         if (!st) continue;
         const t = getTerminalForStand(st);
-        if (t && String(t.id) === tid) return true;
+        if (t && t.id != null) s.add(String(t.id));
       }
-      return false;
-    }
-    /** Building for Gantt row grouping: omit buildings with zero apron links (e.g. Hangar-22 with no ATX). */
-    function ganttAllocBuildingForStand(stand) {
-      const term = getTerminalForStand(stand);
-      if (!term) return null;
-      if (!terminalHasApronLink(term)) return null;
-      return term;
-    }
+      return s;
+    })();
+    const ganttTermByStand = new Map();
+    stands.forEach(function(s) {
+      const term = getTerminalForStand(s);
+      if (!term) {
+        ganttTermByStand.set(s.id, null);
+        return;
+      }
+      ganttTermByStand.set(
+        s.id,
+        terminalIdsWithApronLink.has(String(term.id)) ? term : null
+      );
+    });
     const grouped = {};
     const order = [];
     const sortedStands = stands.slice().sort((a, b) => {
-      const ta = ganttAllocBuildingForStand(a);
-      const tb = ganttAllocBuildingForStand(b);
+      const ta = ganttTermByStand.get(a.id);
+      const tb = ganttTermByStand.get(b.id);
       const la = ta ? (termLabelById[ta.id] || ta.name || '') : '';
       const lb = tb ? (termLabelById[tb.id] || tb.name || '') : '';
       if (la < lb) return -1;
@@ -9716,7 +9766,7 @@
       return 0;
     });
     sortedStands.forEach(s => {
-      const term = ganttAllocBuildingForStand(s);
+      const term = ganttTermByStand.get(s.id);
       const key = term ? term.id : '__no_terminal__';
       if (!grouped[key]) {
         grouped[key] = { term, stands: [] };
@@ -9958,8 +10008,10 @@
       var touched = [];
       if (ctx.prevStandId) touched.push(ctx.prevStandId);
       if (sid) touched.push(sid);
-      if (typeof renderFlightList === 'function')
-        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctx.flightId], touchedStandIds: touched });
+      if (typeof renderFlightList === 'function') {
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctx.flightId], touchedStandIds: touched, skipGanttRefresh: true });
+      }
+      if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
     }, 70);
   }
   if (!document._allocGanttGlobalDragEndBound) {
@@ -9992,8 +10044,9 @@
         var touched = [];
         if (prevSt) touched.push(prevSt);
         if (f.standId) touched.push(f.standId);
-        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctxFid], touchedStandIds: touched });
+        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctxFid], touchedStandIds: touched, skipGanttRefresh: true });
       }
+      if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
     });
   }
 
@@ -20559,6 +20612,7 @@
     if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
     const interactiveLite = layoutViewSkipsTaxiDetail(drawOpts);
     const simPlaybackSkipHeavyPathOverlays = !!(state.simPlaying && state.hasSimulationResult && !(drawOpts && drawOpts.forceFullLayoutDraw));
+    const skipPathGeometryOverlays = !!(drawOpts && drawOpts.skipPathGeometryOverlays);
     if (!state.simPlaying) _simPlaybackBgSig = '';
     function drawSimPlaybackBackgroundLayers() {
       drawGrid(interactiveLite);
@@ -20610,15 +20664,17 @@
         drawDeparturePathHighlight();
       }
     }
-    if (!simPlaybackSkipHeavyPathOverlays) drawProSimFlightPathEdges();
+    if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawProSimFlightPathEdges();
     if (!interactiveLite) {
       drawHoldingQueueGhostFlights2D();
       drawFlights2D();
     }
     if (!interactiveLite) {
-      if (!simPlaybackSkipHeavyPathOverlays) drawPathJunctions();
-      drawTaxiwayDanglingEndpointMarks();
-      drawQueueTaxiwayLaneMarkers();
+      if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawPathJunctions();
+      if (!skipPathGeometryOverlays) {
+        drawTaxiwayDanglingEndpointMarks();
+        drawQueueTaxiwayLaneMarkers();
+      }
     }
     drawLayoutMarkers2D(interactiveLite);
     syncMarkerTextDraftInputPosition();
@@ -22177,6 +22233,7 @@
       if (typeof triggerArrivalConfigResampleFromLayoutEdit === 'function') triggerArrivalConfigResampleFromLayoutEdit();
       if (typeof draw === 'function') draw();
       if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+      if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
     });
   }
   class Grid3DMapper {

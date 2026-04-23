@@ -64,7 +64,10 @@
               </div>
             </div>
             <button type="button" class="tool-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle layout AI assistant (placeholder UI)">AI mode</button>
-            <button type="button" class="tool-btn" id="btnDesignerPageUpdate" title="Re-apply settings, refresh views, and sync path graph / junction data (heavy work runs here, not while panning or zooming)">Update</button>
+            <span class="global-update-wrap">
+              <span id="designerPageUpdateSyncDot" class="global-update-sync-dot stale" title="레이아웃/객체가 변경됨 — Update로 경로 그래프·뷰 동기화" role="status" aria-label="Designer Update sync status"></span>
+              <button type="button" class="tool-btn" id="btnDesignerPageUpdate" title="Re-apply settings, refresh views, and sync path graph / junction data (heavy work runs here, not while panning or zooming)">Update</button>
+            </span>
             <span class="global-update-wrap">
               <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Pro Sim loads the latest sim JSON into the designer when it finishes" role="status" aria-label="Pro Sim sync status"></span>
               <button class="tool-btn" id="btnGlobalUpdate" title="Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage">Pro Sim</button>
