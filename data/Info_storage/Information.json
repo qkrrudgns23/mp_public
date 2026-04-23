@@ -1320,7 +1320,7 @@
         "panelToggleColor": "#ffffff",
         "panelToggleBorder": "rgba(255,255,255,0.28)",
         "panelWidthHalf": "26vw",
-        "panelWidthFull": "19vw",
+        "panelWidthFull": "21vw",
         "panelResizeCollapsedPx": 44,
         "panelResizeCollapseBelowPx": 96,
         "panelResizeMinExpandedPx": 220,

@@ -131,7 +131,7 @@ STAGNATION_PROGRESS_EPS_M = 2.0
 # After pushback from a stand, block other arrivals to that stand for this many seconds.
 STAND_POST_PUSHBACK_CLEARANCE_DELAY_SEC = 60.0
 # After destination apron becomes free, temp-stand arrivals wait this long before taxi-in.
-TEMP_TO_APRON_HOLD_SEC = 120.0
+TEMP_TO_APRON_HOLD_SEC = 420.0  # 7 minutes
 # Evaluate arrival temp-stand detour only near touchdown (ELDT - lead .. ELDT).
 ARR_TEMP_DETOUR_DECISION_LEAD_SEC = 120.0
 REROUTE_WAIT_THRESHOLD_SEC = 60.0
