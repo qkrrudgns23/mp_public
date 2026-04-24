@@ -5940,7 +5940,7 @@
             syncPanelFromState();
             updateObjectInfo();
           } else {
-            objectInfoEl.textContent = 'Select an object on the grid or from the list.';
+            objectInfoEl.textContent = '';
           }
           draw();
         });
@@ -6033,7 +6033,7 @@
             '<br>Dwell (Arr only): ' + (o.dwellMin || 0) + ' min';
         }
       } else
-        objectInfoEl.textContent = 'Select an object on the grid or from the list.';
+        objectInfoEl.textContent = '';
       renderObjectList();
     }
 

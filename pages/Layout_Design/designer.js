@@ -18001,7 +18001,7 @@
           updateObjectInfo();
         } else {
           objectInfoEl.className = 'object-info-panel is-empty';
-          objectInfoEl.textContent = 'Select an object on the grid or from the list.';
+          objectInfoEl.textContent = '';
         }
         draw();
       });
@@ -18012,7 +18012,7 @@
     }
   }
 
-  /** Flight selection: compact schedule readout on the grid. Layout objects use #object-info in the Objects panel only (no duplicate HUD). */
+  /** Flight selection: compact schedule readout on the grid. Layout objects use #object-info in the floating left panel only (no duplicate HUD). */
   function updateFlightGridHud() {
     const el = document.getElementById('flight-grid-hud');
     if (!el) return;
@@ -18431,7 +18431,7 @@
       }
     } else {
       objectInfoEl.className = 'object-info-panel is-empty';
-      objectInfoEl.textContent = 'Select an object on the grid or from the list.';
+      objectInfoEl.textContent = '';
     }
     syncMarkerIslandSidebarWidthsFromSelection();
     updateFlightGridHud();

@@ -34,6 +34,7 @@
                     </label>
                     <label class="layer-popover-mono-label" title="Monotone: unify line colors (bright gray)">
                       <input type="checkbox" data-layer-mono="lines" aria-label="Lines mono" />
+                      <span class="layer-popover-mono-text">mono</span>
                     </label>
                   </div>
                   <div class="layer-popover-group-items">
@@ -51,6 +52,7 @@
                     </label>
                     <label class="layer-popover-mono-label" title="Monotone: unify fills to dark asphalt">
                       <input type="checkbox" data-layer-mono="fill" aria-label="Fill mono" />
+                      <span class="layer-popover-mono-text">mono</span>
                     </label>
                   </div>
                   <div class="layer-popover-group-items">
@@ -68,6 +70,7 @@
                     </label>
                     <label class="layer-popover-mono-label" title="Monotone: unify Text, Dummy flight, Junction to white">
                       <input type="checkbox" data-layer-mono="etc" aria-label="ETC mono" />
+                      <span class="layer-popover-mono-text">mono</span>
                     </label>
                   </div>
                   <div class="layer-popover-group-items">
@@ -130,6 +133,9 @@
         <button type="button" class="path-arc-hud-toggle" id="btnPathArcToggle" aria-pressed="false">호: OFF</button>
         <div id="pathArcHudHint" class="path-arc-hud-hint" hidden>드래그해 곡률 조절 · 놓으면 적용</div>
       </div>
+      <aside id="object-info-dock" class="object-info-dock" aria-label="Object details">
+        <div id="object-info" class="object-info-panel is-empty"></div>
+      </aside>
       <div id="cursor-pixel-readout" class="cursor-pixel-readout" aria-live="polite" title="Layout coordinates (px) under cursor">—</div>
     </div>
     <div id="info-bar">
@@ -485,7 +491,6 @@
         <div class="section-title">Objects</div>
         <div class="layout-objects-pane">
           <div id="object-list" class="obj-list"></div>
-          <div id="object-info" class="object-info-panel is-empty">Select an object on the grid or from the list.</div>
         </div>
         </div>
 
