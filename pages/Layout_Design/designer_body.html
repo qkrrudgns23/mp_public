@@ -27,34 +27,49 @@
                   </label>
                 </div>
                 <div class="layer-popover-group">
-                  <label class="layer-popover-section-parent">
-                    <input type="checkbox" data-layer-section-parent="lines" aria-label="Lines: toggle all line layers" />
-                    <span class="layer-popover-section-parent-text">Lines</span>
-                  </label>
+                  <div class="layer-popover-group-header">
+                    <label class="layer-popover-section-parent">
+                      <input type="checkbox" data-layer-section-parent="lines" aria-label="Lines: toggle all line layers" />
+                      <span class="layer-popover-section-parent-text">Lines</span>
+                    </label>
+                    <label class="layer-popover-mono-label" title="Monotone: unify line colors (bright gray)">
+                      <input type="checkbox" data-layer-mono="lines" aria-label="Lines mono" />
+                    </label>
+                  </div>
                   <div class="layer-popover-group-items">
                     <label class="layer-popover-row"><input type="checkbox" data-layer-key="pathLines" /> Path</label>
                     <label class="layer-popover-row"><input type="checkbox" data-layer-key="standLines" /> Stand</label>
-                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="islandAreaLines" /> Island &amp; area</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="islandAreaLines" /> Contour &amp; Area</label>
                     <label class="layer-popover-row"><input type="checkbox" data-layer-key="buildingLines" /> Building</label>
                   </div>
                 </div>
                 <div class="layer-popover-group">
-                  <label class="layer-popover-section-parent">
-                    <input type="checkbox" data-layer-section-parent="fill" aria-label="Fill: toggle all fill layers" />
-                    <span class="layer-popover-section-parent-text">Fill</span>
-                  </label>
+                  <div class="layer-popover-group-header">
+                    <label class="layer-popover-section-parent">
+                      <input type="checkbox" data-layer-section-parent="fill" aria-label="Fill: toggle all fill layers" />
+                      <span class="layer-popover-section-parent-text">Fill</span>
+                    </label>
+                    <label class="layer-popover-mono-label" title="Monotone: unify fills to dark asphalt">
+                      <input type="checkbox" data-layer-mono="fill" aria-label="Fill mono" />
+                    </label>
+                  </div>
                   <div class="layer-popover-group-items">
                     <label class="layer-popover-row"><input type="checkbox" data-layer-key="pathFill" /> Path</label>
                     <label class="layer-popover-row"><input type="checkbox" data-layer-key="standFill" /> Stand</label>
-                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="islandAreaFill" /> Island &amp; area</label>
+                    <label class="layer-popover-row"><input type="checkbox" data-layer-key="islandAreaFill" /> Contour &amp; Area</label>
                     <label class="layer-popover-row"><input type="checkbox" data-layer-key="buildingFill" /> Building</label>
                   </div>
                 </div>
                 <div class="layer-popover-group">
-                  <label class="layer-popover-section-parent">
-                    <input type="checkbox" data-layer-section-parent="etc" aria-label="ETC: toggle text, dummy flight, junction" />
-                    <span class="layer-popover-section-parent-text">ETC</span>
-                  </label>
+                  <div class="layer-popover-group-header">
+                    <label class="layer-popover-section-parent">
+                      <input type="checkbox" data-layer-section-parent="etc" aria-label="ETC: toggle text, dummy flight, junction" />
+                      <span class="layer-popover-section-parent-text">ETC</span>
+                    </label>
+                    <label class="layer-popover-mono-label" title="Monotone: unify Text, Dummy flight, Junction to white">
+                      <input type="checkbox" data-layer-mono="etc" aria-label="ETC mono" />
+                    </label>
+                  </div>
                   <div class="layer-popover-group-items">
                     <label class="layer-popover-row"><input type="checkbox" data-layer-key="textRuler" /> Text &amp; ruler</label>
                     <label class="layer-popover-row"><input type="checkbox" data-layer-key="dummyFlight" /> Dummy flight</label>
@@ -64,18 +79,18 @@
               </div>
             </div>
             <div class="layer-popover-wrap" id="colorPopoverWrap">
-              <button type="button" class="tool-btn" id="btnColorPopover" aria-expanded="false" aria-haspopup="true" aria-controls="colorPopoverPanel" title="Pro Sim flight colors (grouping)">Color</button>
-              <div id="colorPopoverPanel" class="layer-popover-panel color-popover-panel" role="menu" aria-label="Flight colors" hidden>
-                <div class="color-popover-heading">Flight (Pro Sim 2D)</div>
-                <label class="color-popover-label" for="flightSimColorMode">Group by</label>
-                <select id="flightSimColorMode" class="color-popover-select" title="How to color aircraft on the grid during playback">
-                  <option value="all">All (single accent)</option>
-                  <option value="airline">By airline</option>
-                  <option value="icao">By ICAO category</option>
-                  <option value="intdom">By Int / Dom</option>
-                  <option value="building">By building</option>
-                </select>
-                <p class="color-popover-hint">All: single default aircraft color (hot pink). Other modes: palette in Information → style → flightVisualization (10 colors; 11+ groups gray).</p>
+              <button type="button" class="tool-btn" id="btnColorPopover" aria-expanded="false" aria-haspopup="true" aria-controls="colorPopoverPanel" title="Flight">Color</button>
+              <div id="colorPopoverPanel" class="layer-popover-panel color-popover-panel" role="menu" aria-label="Flight" hidden>
+                <div class="color-popover-flight-row">
+                  <label for="flightSimColorMode" class="color-popover-flight-label">Flight</label>
+                  <select id="flightSimColorMode" class="color-popover-select">
+                    <option value="all">All (single accent)</option>
+                    <option value="airline">By airline</option>
+                    <option value="icao">By ICAO category</option>
+                    <option value="intdom">By Int / Dom</option>
+                    <option value="building">By building</option>
+                  </select>
+                </div>
               </div>
             </div>
             <button type="button" class="tool-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle layout AI assistant (placeholder UI)">AI mode</button>
@@ -470,7 +485,7 @@
         <div class="section-title">Objects</div>
         <div class="layout-objects-pane">
           <div id="object-list" class="obj-list"></div>
-          <div id="object-info">Select an object on the grid or from the list.</div>
+          <div id="object-info" class="object-info-panel is-empty">Select an object on the grid or from the list.</div>
         </div>
         </div>
 

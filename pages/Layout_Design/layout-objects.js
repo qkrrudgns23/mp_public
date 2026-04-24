@@ -179,6 +179,7 @@
     dummyFlight: false,
     junction: true
   };
+  const DEFAULT_LAYER_MONO = { lines: false, fill: false, etc: false };
   const RW_EXIT_ALLOWED_DEFAULT = normalizeAllowedRunwayDirections(_dc.rwExitAllowedDefaultRaw);
   function layoutPathVertexRadiusPx(vertexSelected, pathSelected) {
     if (vertexSelected) return 6 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR;
@@ -234,7 +235,7 @@
   const layoutModeTabs = document.getElementById('layoutModeTabs');
   const panel = document.getElementById('right-panel');
   const panelToggle = document.getElementById('panel-toggle');
-  const MARKER_BLAZER_COLOR_OPTIONS = ['#a78bfa', '#22d3ee', '#4ade80', '#f59e0b', '#f43f5e'];
+  const MARKER_BLAZER_COLOR_OPTIONS = ['#ff1493', '#39ff14', '#00f5ff', '#ff6600', '#ffffff'];
   const markerFlightBlazerOverlayBtn = document.createElement('button');
   const markerFlightHeadingOverlayBtn = document.createElement('button');
   const markerFlightBlazerPaletteWrap = document.createElement('div');
@@ -612,6 +613,7 @@
     pathArcDrag: null,
     /** Pro Sim 2D: all | airline | icao | intdom | building */
     flightColorMode: 'all',
+    layerMono: Object.assign({}, DEFAULT_LAYER_MONO),
   };
   const LAYER_STATE_KEYS = [
     'grid', 'image', 'pathLines', 'pathFill', 'standLines', 'standFill',
@@ -622,6 +624,7 @@
     fill: ['pathFill', 'standFill', 'islandAreaFill', 'buildingFill'],
     etc: ['textRuler', 'dummyFlight', 'junction']
   };
+  const LAYER_MONO_KEYS = ['lines', 'fill', 'etc'];
   function syncLegacyViewFlagsFromLayers() {
     state.showGrid = !!state.layers.grid;
     state.showImage = !!state.layers.image;
@@ -635,8 +638,16 @@
       if (typeof raw[k] === 'boolean') state.layers[k] = raw[k];
     }
   }
+  function mergeLayerMonoFromObject(raw) {
+    if (!raw || typeof raw !== 'object') return;
+    for (let i = 0; i < LAYER_MONO_KEYS.length; i++) {
+      const k = LAYER_MONO_KEYS[i];
+      if (typeof raw[k] === 'boolean') state.layerMono[k] = raw[k];
+    }
+  }
   function hydrateLayersFromGridObject(grid, root) {
     state.layers = Object.assign({}, DEFAULT_LAYERS);
+    state.layerMono = Object.assign({}, DEFAULT_LAYER_MONO);
     const g = grid && typeof grid === 'object' ? grid : {};
     const r = root && typeof root === 'object' ? root : {};
     if (g.layers && typeof g.layers === 'object') {
@@ -655,6 +666,7 @@
         state.layers.dummyFlight = g.showLayoutMarkers;
       }
     }
+    if (g.layerMono && typeof g.layerMono === 'object') mergeLayerMonoFromObject(g.layerMono);
     syncLegacyViewFlagsFromLayers();
   }
   syncLegacyViewFlagsFromLayers();

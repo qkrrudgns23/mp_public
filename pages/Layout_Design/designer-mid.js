@@ -367,10 +367,14 @@
     for (let i = 0; i < tws.length; i++) {
       const t = tws[i];
       if (!t || (t.pathType !== 'runway' && t.pathType !== 'runway_exit')) continue;
-      parts.push(String(t.id) + '\x1e' + String(t.pathType) + '\x1e' + JSON.stringify(t.vertices || []));
+      let line = String(t.id) + '\x1e' + String(t.pathType) + '\x1e' + JSON.stringify(t.vertices || []);
+      if (t.pathType === 'runway' && typeof getTaxiwayDirection === 'function') {
+        line += '\x1e' + String(getTaxiwayDirection(t));
+      }
+      parts.push(line);
     }
     parts.sort();
-    return parts.join('\x1f');
+    return parts.join('\x1f') + '\x1e' + 'retEgressGeomV1';
   }
   function bumpScheduleRetExitDistCache() {
     __schedRetExitDistSig = '';

@@ -1664,6 +1664,10 @@
       const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
       const outlineColor = _ac2d.outlineColor || '';
       const isFlightSel = state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id;
+      const isDeadlockGhost = pose.deadlockGhost === true;
+      const glyphFillCss = resolveFlightSim2DGlyphFillRgba(f, isDeadlockGhost, fcKeyIdx, fcPal, fcOver, fcMode);
+      const trailGrad = simFlightTrailGradientFromFillCss(glyphFillCss);
+      const preTdHalo = simPreTouchdownHaloFromFillCss(glyphFillCss);
       if (FLIGHT_TRAIL_LENGTH_M > 0 && !isFlightTrailHiddenAtSimTime(f, tSecDraw)) {
         const trailPts = getFlightTrailPolylineBackward(f, tSecDraw, FLIGHT_TRAIL_LENGTH_M);
         if (trailPts.length >= 2) {
@@ -1671,8 +1675,8 @@
           const x0 = trailPts[0][0], y0 = trailPts[0][1];
           const x1 = trailPts[trailPts.length - 1][0], y1 = trailPts[trailPts.length - 1][1];
           const g = ctx.createLinearGradient(x0, y0, x1, y1);
-          const cFar = c2dSimFlightTrailStrokeEnd();
-          const cNearAc = c2dSimFlightTrailStroke();
+          const cFar = trailGrad.far;
+          const cNearAc = trailGrad.near;
           g.addColorStop(0, cFar);
           g.addColorStop(0.42, cNearAc);
           g.addColorStop(1, cNearAc);
@@ -1693,11 +1697,11 @@
         ctx.save();
         ctx.beginPath();
         ctx.arc(x, y, rH, 0, Math.PI * 2);
-        ctx.fillStyle = c2dSimPreTouchdownHaloFill();
+        ctx.fillStyle = preTdHalo.fill;
         ctx.fill();
-        ctx.strokeStyle = c2dSimPreTouchdownHaloStroke();
+        ctx.strokeStyle = preTdHalo.stroke;
         ctx.lineWidth = 2;
-        ctx.shadowColor = c2dSimPreTouchdownHaloStroke();
+        ctx.shadowColor = preTdHalo.shadow;
         ctx.shadowBlur = c2dSimPreTouchdownHaloBlur();
         ctx.stroke();
         ctx.restore();
@@ -1717,8 +1721,7 @@
       ctx.translate(x, y);
       const ang = Math.atan2(ny, nx);
       ctx.rotate(ang);
-      const isDeadlockGhost = pose.deadlockGhost === true;
-      ctx.fillStyle = resolveFlightSim2DGlyphFillRgba(f, isDeadlockGhost, fcKeyIdx, fcPal, fcOver, fcMode);
+      ctx.fillStyle = glyphFillCss;
       ctx.beginPath();
       if (useDetailSil) {
         ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
@@ -4040,6 +4043,7 @@
           syncPanelFromState();
           updateObjectInfo();
         } else {
+          objectInfoEl.className = 'object-info-panel is-empty';
           objectInfoEl.textContent = 'Select an object on the grid or from the list.';
         }
         draw();
@@ -4051,13 +4055,7 @@
     }
   }
 
-  /** Mirror #object-info into the grid HUD without duplicating id/for (getElementById targets stay in #object-info). */
-  function stripDomIdsFromHtmlForHudMirror(html) {
-    return String(html || '')
-      .replace(/\s+id="[^"]*"/gi, '')
-      .replace(/\s+for="[^"]*"/gi, '');
-  }
-
+  /** Flight selection: compact schedule readout on the grid. Layout objects use #object-info in the Objects panel only (no duplicate HUD). */
   function updateFlightGridHud() {
     const el = document.getElementById('flight-grid-hud');
     if (!el) return;
@@ -4076,17 +4074,6 @@
         '<div class="flight-grid-hud-type">' + escapeHtml(typeLabel) + '</div>' +
         '<div class="flight-grid-hud-e">ELDT ' + escapeHtml(fmtE(o.eldtMin)) + ' · EIBT ' + escapeHtml(fmtE(o.eibtMin)) + '</div>' +
         '<div class="flight-grid-hud-e">EOBT ' + escapeHtml(fmtE(o.eobtMin)) + ' · ETOT ' + escapeHtml(fmtE(o.etotMin)) + '</div>';
-    } else if (sel && sel.obj) {
-      const raw = objectInfoEl && typeof objectInfoEl.innerHTML === 'string' ? objectInfoEl.innerHTML : '';
-      const body = stripDomIdsFromHtmlForHudMirror(raw).trim();
-      if (body) {
-        el.removeAttribute('hidden');
-        el.classList.add('flight-grid-hud--layout-object');
-        el.innerHTML = '<div class="flight-grid-hud-object-body">' + body + '</div>';
-      } else {
-        el.setAttribute('hidden', '');
-        el.innerHTML = '';
-      }
     } else {
       el.setAttribute('hidden', '');
       el.innerHTML = '';
@@ -4216,6 +4203,7 @@
 
   function updateObjectInfo() {
     if (state.selectedObject) {
+      objectInfoEl.className = 'object-info-panel has-selection';
       const o = state.selectedObject.obj;
       if (state.selectedObject.type === 'terminal') {
         const areaM2 = o.vertices && o.vertices.length >= 3 ? polygonAreaM2(o.vertices) : 0;
@@ -4484,8 +4472,10 @@
           '<br>Airline Code: ' + (o.airlineCode || '—') + ' &nbsp; Flight Number: ' + (o.flightNumber || '—') +
           '<br>Dwell (Arr only): ' + (o.dwellMin || 0) + ' min';
       }
-    } else
+    } else {
+      objectInfoEl.className = 'object-info-panel is-empty';
       objectInfoEl.textContent = 'Select an object on the grid or from the list.';
+    }
     syncMarkerIslandSidebarWidthsFromSelection();
     updateFlightGridHud();
     updatePathArcHud();

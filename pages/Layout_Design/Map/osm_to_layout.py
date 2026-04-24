@@ -1986,6 +1986,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
         t_idx += 1
         tid = _new_id("term")
         fallback_name = f"Hangar-{t_idx}" if aw == "hangar" else f"Terminal-{t_idx}"
+        _dep_cap = 0 if aw == "hangar" else 100
+        _arr_cap = 0 if aw == "hangar" else 100
         terminals_out.append(
             {
                 "id": tid,
@@ -1995,8 +1997,8 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 "floors": 1,
                 "floorToFloor": 5,
                 "floorHeight": 5,
-                "departureCapacity": 100,
-                "arrivalCapacity": 100,
+                "departureCapacity": _dep_cap,
+                "arrivalCapacity": _arr_cap,
                 "buildingType": _building_type_from_aeroway(aw),
             }
         )

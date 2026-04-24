@@ -1196,6 +1196,78 @@
     return out;
   }
 
+  /**
+   * Centerline-based egress: the first RET edge that leaves the strip must not aim opposite the operational
+   * roll direction (E·F << 0), and must not continue straight along the runway (|E×F|≈0, E·F>0) with no turn-off.
+   */
+  function isRunwayExitEgressGeomOkForCenterline(rVerts, ev, rwOpDir) {
+    const dOp = normalizeRwDirectionValue(rwOpDir);
+    if (dOp !== 'clockwise' && dOp !== 'counter_clockwise') return true;
+    if (!rVerts || rVerts.length < 2 || !ev || ev.length < 2) return true;
+    const n = ev.length;
+    function minDistSqToPolyline(q) {
+      let best = Infinity;
+      for (let i = 0; i < rVerts.length - 1; i++) {
+        const pr = projectOnSegment(rVerts[i], rVerts[i + 1], q);
+        const d2 = dist2(q, pr.p);
+        if (d2 < best) best = d2;
+      }
+      return best;
+    }
+    const d2s = [];
+    for (let i = 0; i < n; i++) d2s.push(minDistSqToPolyline(ev[i]));
+    let i0 = 0;
+    for (let i = 1; i < n; i++) {
+      if (d2s[i] < d2s[i0] - 1e-9) i0 = i;
+    }
+    const neigh = [];
+    if (i0 > 0) neigh.push(i0 - 1);
+    if (i0 < n - 1) neigh.push(i0 + 1);
+    if (!neigh.length) return true;
+    let jPick = neigh[0];
+    let dPick = d2s[jPick];
+    for (let k = 1; k < neigh.length; k++) {
+      const j = neigh[k];
+      if (d2s[j] > dPick + 1e-9) { dPick = d2s[j]; jPick = j; }
+    }
+    if (d2s[jPick] < d2s[i0] + 1e-4) {
+      dPick = -Infinity;
+      for (let k = 0; k < neigh.length; k++) {
+        const j = neigh[k];
+        if (d2s[j] > d2s[i0] + 0.01 && d2s[j] > dPick) { dPick = d2s[j]; jPick = j; }
+      }
+    }
+    if (d2s[jPick] < d2s[i0] + 1e-4) return true;
+    const a = ev[i0], b = ev[jPick];
+    const ex = b[0] - a[0], ey = b[1] - a[1];
+    const eLen = Math.sqrt(ex * ex + ey * ey);
+    if (eLen < 1e-9) return true;
+    const eux = ex / eLen, euy = ey / eLen;
+    const attach = a;
+    let fUx = 0, fUy = 0, bestA = Infinity, got = false;
+    for (let i = 0; i < rVerts.length - 1; i++) {
+      const p0 = rVerts[i], p1 = rVerts[i + 1];
+      const pr = projectOnSegment(p0, p1, attach);
+      const d2a = dist2(attach, pr.p);
+      if (d2a < bestA - 1e-9) {
+        bestA = d2a;
+        const sl = pathDist(p0, p1);
+        if (sl < 1e-9) { got = false; continue; }
+        fUx = (p1[0] - p0[0]) / sl;
+        fUy = (p1[1] - p0[1]) / sl;
+        got = true;
+      }
+    }
+    if (!got) return true;
+    const sign = dOp === 'counter_clockwise' ? -1 : 1;
+    const fx = sign * fUx, fy = sign * fUy;
+    const dotE = eux * fx + euy * fy;
+    const crossE = eux * fy - euy * fx;
+    if (dotE < -0.15) return false;
+    if (Math.abs(crossE) < 0.08 && dotE > 0.65) return false;
+    return true;
+  }
+
   function computeRunwayExitDistances() {
     const taxiways = state.taxiways || [];
     const runways = taxiways.filter(t => t.pathType === 'runway' && Array.isArray(t.vertices) && t.vertices.length >= 2);
@@ -1273,6 +1345,10 @@
               !isRunwayExitDirectionAllowed(tw, rwOpDir)) {
             best = null;
           }
+        }
+        if (best && (rwOpDir === 'clockwise' || rwOpDir === 'counter_clockwise') &&
+            !isRunwayExitEgressGeomOkForCenterline(rVerts, ev, rwOpDir)) {
+          best = null;
         }
         if (best) results.push(best);
       });

@@ -256,7 +256,9 @@
   const PATH_JUNCTION_MERGE_RADIUS_PX = (isFinite(_junctionMergeRadiusRaw) && _junctionMergeRadiusRaw >= 0) ? _junctionMergeRadiusRaw : 7;
   const _styleTier = _tiers.style || {};
   const _flightVizStyle = (_styleTier.flightVisualization && typeof _styleTier.flightVisualization === 'object') ? _styleTier.flightVisualization : {};
-  const FLIGHT_SIM_VIZ_DEFAULT_PALETTE = ['#a78bfa', '#22d3ee', '#4ade80', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#fb7185', '#c084fc'];
+  const FLIGHT_SIM_VIZ_DEFAULT_PALETTE = [
+    '#ff1493', '#39ff14', '#00f5ff', '#ff6600', '#ffffff', '#ff2d2d', '#ffff00', '#c026fc', '#2563eb', '#9ca3af',
+  ];
   function flightSimVizPaletteList() {
     const p = _flightVizStyle.palette;
     if (Array.isArray(p) && p.length) {
@@ -384,6 +386,21 @@
   function c2dRoadWidthBandRunwayAsphaltColor() {
     return '#363636';
   }
+  /** Layer mono: cool blue-gray (slate), not warm taupe. */
+  function c2dLayerMonoLineStrokeCss() {
+    return '#94a3b8';
+  }
+  /** Layer mono: fills match path **asphalt** width band (`c2dRoadWidthBandForPavement('asphalt')`), not cement / `c2dTaxiwayPavementFill`. */
+  function c2dLayerMonoFillDarkAsphaltCss() {
+    return c2dCssColorToOpaque(c2dRoadWidthBandRunwayAsphaltColor());
+  }
+  function c2dLayerMonoFillDarkAsphaltRgba(a) {
+    const t = c2dParseCssRgbTriplet(c2dLayerMonoFillDarkAsphaltCss());
+    const al = Number(a);
+    if (!t || !isFinite(al)) return c2dLayerMonoFillDarkAsphaltCss();
+    return 'rgba(' + t[0] + ',' + t[1] + ',' + t[2] + ',' + Math.max(0, Math.min(1, al)) + ')';
+  }
+  const C2D_LAYER_MONO_ETC_WHITE = '#f8fafc';
   function pathPavementDefaultForPathType(pathType) {
     const pt = pathType || 'taxiway';
     if (pt === 'runway' || pt === 'runway_exit') return 'asphalt';
@@ -585,7 +602,10 @@
     const pathSpanM = halfLen * 2;
     const lineW = c2dHoldingPointMarkingLineWidthWorld();
     const centerlineStroke = k === 'runway_holding' ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke();
-    const stroke = preview ? 'rgba(250, 204, 21, 0.7)' : (selected ? c2dObjectSelectedStroke() : centerlineStroke);
+    const lineMono = layerMonoLinesOn() && !preview && !selected;
+    const stroke = preview
+      ? 'rgba(250, 204, 21, 0.7)'
+      : (selected ? c2dObjectSelectedStroke() : (lineMono ? c2dLayerMonoLineStrokeCss() : centerlineStroke));
     const lw = preview ? Math.max(0.2, lineW * 0.92) : (selected ? lineW + 0.14 : lineW);
     const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
     const dashLen = Math.max(lineW * 2.2, pathSpanM * 0.13);
@@ -799,6 +819,7 @@
     dummyFlight: false,
     junction: true
   };
+  const DEFAULT_LAYER_MONO = { lines: false, fill: false, etc: false };
   const RW_EXIT_ALLOWED_DEFAULT = normalizeAllowedRunwayDirections(_dc.rwExitAllowedDefaultRaw);
   function layoutPathVertexRadiusPx(vertexSelected, pathSelected) {
     if (vertexSelected) return 6 * LAYOUT_VERTEX_DOT_SCALE * LAYOUT_SELECTED_VERTEX_RADIUS_FACTOR;
@@ -854,7 +875,7 @@
   const layoutModeTabs = document.getElementById('layoutModeTabs');
   const panel = document.getElementById('right-panel');
   const panelToggle = document.getElementById('panel-toggle');
-  const MARKER_BLAZER_COLOR_OPTIONS = ['#a78bfa', '#22d3ee', '#4ade80', '#f59e0b', '#f43f5e'];
+  const MARKER_BLAZER_COLOR_OPTIONS = ['#ff1493', '#39ff14', '#00f5ff', '#ff6600', '#ffffff'];
   const markerFlightBlazerOverlayBtn = document.createElement('button');
   const markerFlightHeadingOverlayBtn = document.createElement('button');
   const markerFlightBlazerPaletteWrap = document.createElement('div');
@@ -1232,6 +1253,8 @@
     pathArcDrag: null,
     /** Pro Sim 2D: all | airline | icao | intdom | building */
     flightColorMode: 'all',
+    /** Layer popover: monotone overrides per section (Lines / Fill / ETC). */
+    layerMono: Object.assign({}, DEFAULT_LAYER_MONO),
   };
   const LAYER_STATE_KEYS = [
     'grid', 'image', 'pathLines', 'pathFill', 'standLines', 'standFill',
@@ -1242,6 +1265,10 @@
     fill: ['pathFill', 'standFill', 'islandAreaFill', 'buildingFill'],
     etc: ['textRuler', 'dummyFlight', 'junction']
   };
+  const LAYER_MONO_KEYS = ['lines', 'fill', 'etc'];
+  function layerMonoLinesOn() { return !!(state.layerMono && state.layerMono.lines); }
+  function layerMonoFillOn() { return !!(state.layerMono && state.layerMono.fill); }
+  function layerMonoEtcOn() { return !!(state.layerMono && state.layerMono.etc); }
   function syncLegacyViewFlagsFromLayers() {
     state.showGrid = !!state.layers.grid;
     state.showImage = !!state.layers.image;
@@ -1255,8 +1282,16 @@
       if (typeof raw[k] === 'boolean') state.layers[k] = raw[k];
     }
   }
+  function mergeLayerMonoFromObject(raw) {
+    if (!raw || typeof raw !== 'object') return;
+    for (let i = 0; i < LAYER_MONO_KEYS.length; i++) {
+      const k = LAYER_MONO_KEYS[i];
+      if (typeof raw[k] === 'boolean') state.layerMono[k] = raw[k];
+    }
+  }
   function hydrateLayersFromGridObject(grid, root) {
     state.layers = Object.assign({}, DEFAULT_LAYERS);
+    state.layerMono = Object.assign({}, DEFAULT_LAYER_MONO);
     const g = grid && typeof grid === 'object' ? grid : {};
     const r = root && typeof root === 'object' ? root : {};
     if (g.layers && typeof g.layers === 'object') {
@@ -1275,6 +1310,7 @@
         state.layers.dummyFlight = g.showLayoutMarkers;
       }
     }
+    if (g.layerMono && typeof g.layerMono === 'object') mergeLayerMonoFromObject(g.layerMono);
     syncLegacyViewFlagsFromLayers();
   }
   syncLegacyViewFlagsFromLayers();
@@ -1676,6 +1712,10 @@
       panel.querySelectorAll('input[data-layer-key]').forEach(function(inp) {
         const k = inp.getAttribute('data-layer-key');
         if (k && typeof state.layers[k] === 'boolean') inp.checked = !!state.layers[k];
+      });
+      panel.querySelectorAll('input[data-layer-mono]').forEach(function(inp) {
+        const mk = inp.getAttribute('data-layer-mono');
+        if (mk && state.layerMono && typeof state.layerMono[mk] === 'boolean') inp.checked = !!state.layerMono[mk];
       });
     }
     const allOn = LAYER_STATE_KEYS.every(function(k) { return !!state.layers[k]; });
@@ -3057,7 +3097,7 @@
     if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
       ctx.clip();
     }
-    ctx.strokeStyle = c2dStandSafetyStroke();
+    ctx.strokeStyle = layerMonoLinesOn() ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
     ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
     ctx.setLineDash([2, 2.5]);
     ctx.lineCap = 'butt';
@@ -3111,7 +3151,7 @@
   function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
     if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
     ctx.save();
-    ctx.strokeStyle = c2dStandSafetyStroke();
+    ctx.strokeStyle = (!selected && layerMonoLinesOn()) ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
     const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
     ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
     ctx.setLineDash([]);
@@ -3921,6 +3961,7 @@
         showRoadWidth: !!state.showRoadWidth,
         showLayoutMarkers: !!state.showLayoutMarkers,
         layers: Object.assign({}, state.layers),
+        layerMono: state.layerMono ? Object.assign({}, state.layerMono) : Object.assign({}, DEFAULT_LAYER_MONO),
         layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
       },
       networkJunctions: networkJunctions,
@@ -4494,6 +4535,9 @@
     const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
+    const monoFillP = layerMonoFillOn() && !sel;
+    const monoLineP = layerMonoLinesOn() && !sel;
+    const monoLp = c2dLayerMonoLineStrokeCss();
     if (!sl && !sf) return;
     ctx.save();
     ctx.beginPath();
@@ -4502,16 +4546,22 @@
     ctx.closePath();
     const hairW = layoutHairlineStrokeWidthWorld();
     if (sf) {
-      ctx.fillStyle = sel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.14)';
-      ctx.fill();
-      drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.4)', hairW);
+      if (monoFillP) {
+        ctx.fillStyle = c2dLayerMonoFillDarkAsphaltRgba(0.5);
+        ctx.fill();
+        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, monoLp, hairW);
+      } else {
+        ctx.fillStyle = sel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.14)';
+        ctx.fill();
+        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.4)', hairW);
+      }
     }
     if (sl) {
       ctx.beginPath();
       ctx.moveTo(poly[0][0], poly[0][1]);
       for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
       ctx.closePath();
-      ctx.strokeStyle = 'rgba(255,255,255,0.88)';
+      ctx.strokeStyle = monoLineP ? monoLp : 'rgba(255,255,255,0.88)';
       ctx.lineWidth = hairW;
       ctx.stroke();
     }
@@ -5167,16 +5217,21 @@
     const sub = (m.subType === 'ils') ? 'ils' : 'papi';
     const isIls = sub === 'ils';
     const scaleRef = Math.max(state.scale, 0.1);
+    const etcMono = layerMonoEtcOn() && !selected;
     ctx2.save();
     if (!isIls) {
       const lampXs = papiLampCenterXsWorld(x);
       const rLight = Math.max(2.4 * PAPI_VISUAL_SCALE, 2.9 * PAPI_VISUAL_SCALE / scaleRef);
       const fills = selected
         ? ['#ffffff', '#ffffff', '#fca5a5', '#fca5a5']
-        : ['#f8fafc', '#f8fafc', '#ef4444', '#ef4444'];
+        : (etcMono
+          ? [C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE]
+          : ['#f8fafc', '#f8fafc', '#ef4444', '#ef4444']);
       const strokes = selected
         ? [c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke()]
-        : ['rgba(148,163,184,0.95)', 'rgba(148,163,184,0.95)', 'rgba(127,29,29,0.98)', 'rgba(127,29,29,0.98)'];
+        : (etcMono
+          ? [c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss()]
+          : ['rgba(148,163,184,0.95)', 'rgba(148,163,184,0.95)', 'rgba(127,29,29,0.98)', 'rgba(127,29,29,0.98)']);
       for (let i = 0; i < 4; i++) {
         ctx2.beginPath();
         ctx2.arc(lampXs[i], y, rLight, 0, Math.PI * 2);
@@ -5202,9 +5257,9 @@
       return;
     }
     const label = 'ILS';
-    const fill = selected ? c2dObjectSelectedFill() : 'rgba(56, 189, 248, 0.85)';
-    const stroke = selected ? c2dObjectSelectedStroke() : 'rgba(2, 132, 199, 0.95)';
-    const fg = '#0c4a6e';
+    const fill = selected ? c2dObjectSelectedFill() : (etcMono ? C2D_LAYER_MONO_ETC_WHITE : 'rgba(56, 189, 248, 0.85)');
+    const stroke = selected ? c2dObjectSelectedStroke() : (etcMono ? c2dLayerMonoLineStrokeCss() : 'rgba(2, 132, 199, 0.95)');
+    const fg = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#0c4a6e';
     const r = Math.max(3, 3.6 / scaleRef);
     ctx2.beginPath();
     ctx2.arc(x, y, r, 0, Math.PI * 2);
@@ -8250,6 +8305,44 @@
     if (idx == null || idx >= 10) return overflow;
     return pal[idx] || overflow;
   }
+  function parseCssColorToRgbOptional(css) {
+    const s = String(css || '').trim();
+    const hex6 = s.match(/^#([0-9a-fA-F]{6})$/);
+    if (hex6) {
+      const h = hex6[1];
+      return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+    }
+    const rgba = s.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/);
+    if (rgba) return { r: +rgba[1], g: +rgba[2], b: +rgba[3] };
+    return null;
+  }
+  /** Trail stroke gradient: same hue as aircraft fill, fading to transparent along the tail. */
+  function simFlightTrailGradientFromFillCss(fillCss) {
+    const rgb = parseCssColorToRgbOptional(fillCss);
+    if (!rgb) {
+      return { near: c2dSimFlightTrailStroke(), far: c2dSimFlightTrailStrokeEnd() };
+    }
+    return {
+      near: 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.96)',
+      far: 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0)',
+    };
+  }
+  /** Pre-TD ring: same hue as fill, with soft fill + stroke + glow. */
+  function simPreTouchdownHaloFromFillCss(fillCss) {
+    const rgb = parseCssColorToRgbOptional(fillCss);
+    if (!rgb) {
+      return {
+        fill: c2dSimPreTouchdownHaloFill(),
+        stroke: c2dSimPreTouchdownHaloStroke(),
+        shadow: c2dSimPreTouchdownHaloStroke(),
+      };
+    }
+    return {
+      fill: 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.18)',
+      stroke: 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.92)',
+      shadow: 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.55)',
+    };
+  }
   function syncFlightAssignStripFromFlight(f) {
     const arrEl = document.getElementById('flightAssignStripArr');
     const termEl = document.getElementById('flightAssignStripTerm');
@@ -8529,10 +8622,14 @@
     for (let i = 0; i < tws.length; i++) {
       const t = tws[i];
       if (!t || (t.pathType !== 'runway' && t.pathType !== 'runway_exit')) continue;
-      parts.push(String(t.id) + '\x1e' + String(t.pathType) + '\x1e' + JSON.stringify(t.vertices || []));
+      let line = String(t.id) + '\x1e' + String(t.pathType) + '\x1e' + JSON.stringify(t.vertices || []);
+      if (t.pathType === 'runway' && typeof getTaxiwayDirection === 'function') {
+        line += '\x1e' + String(getTaxiwayDirection(t));
+      }
+      parts.push(line);
     }
     parts.sort();
-    return parts.join('\x1f');
+    return parts.join('\x1f') + '\x1e' + 'retEgressGeomV1';
   }
   function bumpScheduleRetExitDistCache() {
     __schedRetExitDistSig = '';
@@ -12658,14 +12755,18 @@
     ctx.save();
     const rwDecoOpaque = !!state.layers.pathFill;
     const rwPaveAsphalt = c2dRoadWidthBandRunwayAsphaltColor();
+    const monoFill = layerMonoFillOn() && rwDecoOpaque;
+    const monoLine = layerMonoLinesOn() && !!state.layers.pathLines;
+    const monoFillCss = c2dLayerMonoFillDarkAsphaltCss();
+    const monoLineCss = c2dLayerMonoLineStrokeCss();
     function rwO(c) { return rwDecoOpaque ? c2dCssColorToOpaque(c) : c; }
-    const thresholdColor = rwO(c2dRunwayThresholdColor());
-    const displacedArrowFill = rwDecoOpaque ? c2dCssColorToOpaque(c2dRunwayMarkingColor()) : thresholdColor;
-    const touchdownColor = rwO(c2dRunwayTouchdownColor());
-    const aimingPointColor = rwO(c2dRunwayAimingPointColor());
-    const extensionFill = rwDecoOpaque ? rwPaveAsphalt : rwO(c2dRunwayExtensionFill());
-    const extensionOutline = c2dRunwayOutline();
-    const blastChevronColor = rwDecoOpaque ? c2dCssColorToOpaque(c2dRunwayBlastChevronColor()) : rwO(c2dRunwayBlastChevronColor());
+    const thresholdColor = monoLine ? monoLineCss : rwO(c2dRunwayThresholdColor());
+    const displacedArrowFill = monoLine ? monoLineCss : (rwDecoOpaque ? c2dCssColorToOpaque(c2dRunwayMarkingColor()) : thresholdColor);
+    const touchdownColor = monoLine ? monoLineCss : rwO(c2dRunwayTouchdownColor());
+    const aimingPointColor = monoLine ? monoLineCss : rwO(c2dRunwayAimingPointColor());
+    const extensionFill = monoFill ? monoFillCss : (rwDecoOpaque ? rwPaveAsphalt : rwO(c2dRunwayExtensionFill()));
+    const extensionOutline = monoLine ? monoLineCss : c2dRunwayOutline();
+    const blastChevronColor = monoLine ? monoLineCss : (rwDecoOpaque ? c2dCssColorToOpaque(c2dRunwayBlastChevronColor()) : rwO(c2dRunwayBlastChevronColor()));
 
     function drawExtensionSegment(frame, directionSign, innerOffsetPx, segLenPx) {
       if (!(segLenPx > 0)) return;
@@ -12814,7 +12915,7 @@
     const clPts = polylineSliceBetweenDistances(pts, paveStart, paveEnd);
     if (!clPts || clPts.length < 2) return;
     ctx.save();
-    ctx.strokeStyle = c2dRunwayCenterlineColor();
+    ctx.strokeStyle = layerMonoLinesOn() && state.layers.pathLines ? c2dLayerMonoLineStrokeCss() : c2dRunwayCenterlineColor();
     ctx.lineWidth = Math.max(1, runwayWidth * 0.02);
     const dashPx = Math.max(10, runwayWidth * 0.2);
     const gapPx = Math.max(8, runwayWidth * 0.16);
@@ -13264,6 +13365,78 @@
     return out;
   }
 
+  /**
+   * Centerline-based egress: the first RET edge that leaves the strip must not aim opposite the operational
+   * roll direction (E·F << 0), and must not continue straight along the runway (|E×F|≈0, E·F>0) with no turn-off.
+   */
+  function isRunwayExitEgressGeomOkForCenterline(rVerts, ev, rwOpDir) {
+    const dOp = normalizeRwDirectionValue(rwOpDir);
+    if (dOp !== 'clockwise' && dOp !== 'counter_clockwise') return true;
+    if (!rVerts || rVerts.length < 2 || !ev || ev.length < 2) return true;
+    const n = ev.length;
+    function minDistSqToPolyline(q) {
+      let best = Infinity;
+      for (let i = 0; i < rVerts.length - 1; i++) {
+        const pr = projectOnSegment(rVerts[i], rVerts[i + 1], q);
+        const d2 = dist2(q, pr.p);
+        if (d2 < best) best = d2;
+      }
+      return best;
+    }
+    const d2s = [];
+    for (let i = 0; i < n; i++) d2s.push(minDistSqToPolyline(ev[i]));
+    let i0 = 0;
+    for (let i = 1; i < n; i++) {
+      if (d2s[i] < d2s[i0] - 1e-9) i0 = i;
+    }
+    const neigh = [];
+    if (i0 > 0) neigh.push(i0 - 1);
+    if (i0 < n - 1) neigh.push(i0 + 1);
+    if (!neigh.length) return true;
+    let jPick = neigh[0];
+    let dPick = d2s[jPick];
+    for (let k = 1; k < neigh.length; k++) {
+      const j = neigh[k];
+      if (d2s[j] > dPick + 1e-9) { dPick = d2s[j]; jPick = j; }
+    }
+    if (d2s[jPick] < d2s[i0] + 1e-4) {
+      dPick = -Infinity;
+      for (let k = 0; k < neigh.length; k++) {
+        const j = neigh[k];
+        if (d2s[j] > d2s[i0] + 0.01 && d2s[j] > dPick) { dPick = d2s[j]; jPick = j; }
+      }
+    }
+    if (d2s[jPick] < d2s[i0] + 1e-4) return true;
+    const a = ev[i0], b = ev[jPick];
+    const ex = b[0] - a[0], ey = b[1] - a[1];
+    const eLen = Math.sqrt(ex * ex + ey * ey);
+    if (eLen < 1e-9) return true;
+    const eux = ex / eLen, euy = ey / eLen;
+    const attach = a;
+    let fUx = 0, fUy = 0, bestA = Infinity, got = false;
+    for (let i = 0; i < rVerts.length - 1; i++) {
+      const p0 = rVerts[i], p1 = rVerts[i + 1];
+      const pr = projectOnSegment(p0, p1, attach);
+      const d2a = dist2(attach, pr.p);
+      if (d2a < bestA - 1e-9) {
+        bestA = d2a;
+        const sl = pathDist(p0, p1);
+        if (sl < 1e-9) { got = false; continue; }
+        fUx = (p1[0] - p0[0]) / sl;
+        fUy = (p1[1] - p0[1]) / sl;
+        got = true;
+      }
+    }
+    if (!got) return true;
+    const sign = dOp === 'counter_clockwise' ? -1 : 1;
+    const fx = sign * fUx, fy = sign * fUy;
+    const dotE = eux * fx + euy * fy;
+    const crossE = eux * fy - euy * fx;
+    if (dotE < -0.15) return false;
+    if (Math.abs(crossE) < 0.08 && dotE > 0.65) return false;
+    return true;
+  }
+
   function computeRunwayExitDistances() {
     const taxiways = state.taxiways || [];
     const runways = taxiways.filter(t => t.pathType === 'runway' && Array.isArray(t.vertices) && t.vertices.length >= 2);
@@ -13341,6 +13514,10 @@
               !isRunwayExitDirectionAllowed(tw, rwOpDir)) {
             best = null;
           }
+        }
+        if (best && (rwOpDir === 'clockwise' || rwOpDir === 'counter_clockwise') &&
+            !isRunwayExitEgressGeomOkForCenterline(rVerts, ev, rwOpDir)) {
+          best = null;
         }
         if (best) results.push(best);
       });
@@ -13582,6 +13759,7 @@
     return { minX: a.minX - pad, minY: a.minY - pad, maxX: a.maxX + pad, maxY: a.maxY + pad };
   }
   function overlayJunctionFillForWorldPoint(p, gCache) {
+    if (layerMonoEtcOn()) return C2D_LAYER_MONO_ETC_WHITE;
     if (!gCache || !p) return '#22c55e';
     const mergeR = PATH_JUNCTION_MERGE_RADIUS_PX * 3.5;
     const mergeR2 = mergeR * mergeR;
@@ -14817,13 +14995,14 @@
       let greens = filterPtsWorld(connectedJunctions);
       reds = subsamplePts(reds);
       greens = subsamplePts(greens);
-      ctx.fillStyle = '#ef4444';
+      const etcMono = layerMonoEtcOn();
+      ctx.fillStyle = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#ef4444';
       reds.forEach(function(p) {
         ctx.beginPath();
         ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
         ctx.fill();
       });
-      ctx.fillStyle = '#22c55e';
+      ctx.fillStyle = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#22c55e';
       greens.forEach(function(p) {
         ctx.beginPath();
         ctx.arc(p[0], p[1], rGreen, 0, Math.PI * 2);
@@ -14977,7 +15156,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    ctx.strokeStyle = '#dc2626';
+    ctx.strokeStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#dc2626';
     ctx.lineWidth = Math.max(1.25, armLen * 0.2);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -15011,9 +15190,9 @@
         if (!worldPointInsideLayoutViewportAabb(xy, vbQ)) continue;
         ctx.beginPath();
         ctx.arc(xy[0], xy[1], r, 0, Math.PI * 2);
-        ctx.fillStyle = '#22c55e';
+        ctx.fillStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#22c55e';
         ctx.fill();
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#ef4444';
         ctx.lineWidth = 1.8;
         ctx.stroke();
       }
@@ -15442,6 +15621,10 @@
       const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
       const outlineColor = _ac2d.outlineColor || '';
       const isFlightSel = state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id;
+      const isDeadlockGhost = pose.deadlockGhost === true;
+      const glyphFillCss = resolveFlightSim2DGlyphFillRgba(f, isDeadlockGhost, fcKeyIdx, fcPal, fcOver, fcMode);
+      const trailGrad = simFlightTrailGradientFromFillCss(glyphFillCss);
+      const preTdHalo = simPreTouchdownHaloFromFillCss(glyphFillCss);
       if (FLIGHT_TRAIL_LENGTH_M > 0 && !isFlightTrailHiddenAtSimTime(f, tSecDraw)) {
         const trailPts = getFlightTrailPolylineBackward(f, tSecDraw, FLIGHT_TRAIL_LENGTH_M);
         if (trailPts.length >= 2) {
@@ -15449,8 +15632,8 @@
           const x0 = trailPts[0][0], y0 = trailPts[0][1];
           const x1 = trailPts[trailPts.length - 1][0], y1 = trailPts[trailPts.length - 1][1];
           const g = ctx.createLinearGradient(x0, y0, x1, y1);
-          const cFar = c2dSimFlightTrailStrokeEnd();
-          const cNearAc = c2dSimFlightTrailStroke();
+          const cFar = trailGrad.far;
+          const cNearAc = trailGrad.near;
           g.addColorStop(0, cFar);
           g.addColorStop(0.42, cNearAc);
           g.addColorStop(1, cNearAc);
@@ -15471,11 +15654,11 @@
         ctx.save();
         ctx.beginPath();
         ctx.arc(x, y, rH, 0, Math.PI * 2);
-        ctx.fillStyle = c2dSimPreTouchdownHaloFill();
+        ctx.fillStyle = preTdHalo.fill;
         ctx.fill();
-        ctx.strokeStyle = c2dSimPreTouchdownHaloStroke();
+        ctx.strokeStyle = preTdHalo.stroke;
         ctx.lineWidth = 2;
-        ctx.shadowColor = c2dSimPreTouchdownHaloStroke();
+        ctx.shadowColor = preTdHalo.shadow;
         ctx.shadowBlur = c2dSimPreTouchdownHaloBlur();
         ctx.stroke();
         ctx.restore();
@@ -15495,8 +15678,7 @@
       ctx.translate(x, y);
       const ang = Math.atan2(ny, nx);
       ctx.rotate(ang);
-      const isDeadlockGhost = pose.deadlockGhost === true;
-      ctx.fillStyle = resolveFlightSim2DGlyphFillRgba(f, isDeadlockGhost, fcKeyIdx, fcPal, fcOver, fcMode);
+      ctx.fillStyle = glyphFillCss;
       ctx.beginPath();
       if (useDetailSil) {
         ctx.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
@@ -17818,6 +18000,7 @@
           syncPanelFromState();
           updateObjectInfo();
         } else {
+          objectInfoEl.className = 'object-info-panel is-empty';
           objectInfoEl.textContent = 'Select an object on the grid or from the list.';
         }
         draw();
@@ -17829,13 +18012,7 @@
     }
   }
 
-  /** Mirror #object-info into the grid HUD without duplicating id/for (getElementById targets stay in #object-info). */
-  function stripDomIdsFromHtmlForHudMirror(html) {
-    return String(html || '')
-      .replace(/\s+id="[^"]*"/gi, '')
-      .replace(/\s+for="[^"]*"/gi, '');
-  }
-
+  /** Flight selection: compact schedule readout on the grid. Layout objects use #object-info in the Objects panel only (no duplicate HUD). */
   function updateFlightGridHud() {
     const el = document.getElementById('flight-grid-hud');
     if (!el) return;
@@ -17854,17 +18031,6 @@
         '<div class="flight-grid-hud-type">' + escapeHtml(typeLabel) + '</div>' +
         '<div class="flight-grid-hud-e">ELDT ' + escapeHtml(fmtE(o.eldtMin)) + ' · EIBT ' + escapeHtml(fmtE(o.eibtMin)) + '</div>' +
         '<div class="flight-grid-hud-e">EOBT ' + escapeHtml(fmtE(o.eobtMin)) + ' · ETOT ' + escapeHtml(fmtE(o.etotMin)) + '</div>';
-    } else if (sel && sel.obj) {
-      const raw = objectInfoEl && typeof objectInfoEl.innerHTML === 'string' ? objectInfoEl.innerHTML : '';
-      const body = stripDomIdsFromHtmlForHudMirror(raw).trim();
-      if (body) {
-        el.removeAttribute('hidden');
-        el.classList.add('flight-grid-hud--layout-object');
-        el.innerHTML = '<div class="flight-grid-hud-object-body">' + body + '</div>';
-      } else {
-        el.setAttribute('hidden', '');
-        el.innerHTML = '';
-      }
     } else {
       el.setAttribute('hidden', '');
       el.innerHTML = '';
@@ -17994,6 +18160,7 @@
 
   function updateObjectInfo() {
     if (state.selectedObject) {
+      objectInfoEl.className = 'object-info-panel has-selection';
       const o = state.selectedObject.obj;
       if (state.selectedObject.type === 'terminal') {
         const areaM2 = o.vertices && o.vertices.length >= 3 ? polygonAreaM2(o.vertices) : 0;
@@ -18262,8 +18429,10 @@
           '<br>Airline Code: ' + (o.airlineCode || '—') + ' &nbsp; Flight Number: ' + (o.flightNumber || '—') +
           '<br>Dwell (Arr only): ' + (o.dwellMin || 0) + ' min';
       }
-    } else
+    } else {
+      objectInfoEl.className = 'object-info-panel is-empty';
       objectInfoEl.textContent = 'Select an object on the grid or from the list.';
+    }
     syncMarkerIslandSidebarWidthsFromSelection();
     updateFlightGridHud();
     updatePathArcHud();
@@ -18535,10 +18704,14 @@
         const hairW = layoutHairlineStrokeWidthWorld();
         const bl = !!state.layers.buildingLines;
         const bf = !!state.layers.buildingFill && !suppressBuildingFill;
+        const useFillMono = layerMonoFillOn() && !selected && bf;
+        const useLineMono = layerMonoLinesOn() && !selected;
+        const monoFillB = c2dLayerMonoFillDarkAsphaltCss();
+        const monoLineB = c2dLayerMonoLineStrokeCss();
         if (bl || bf || selected) {
           ctx.lineWidth = hairW;
-          ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : buildingTheme.stroke;
-          ctx.fillStyle = selected ? c2dObjectSelectedFill() : buildingTheme.fill;
+          ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : (useLineMono ? monoLineB : buildingTheme.stroke);
+          ctx.fillStyle = selected ? c2dObjectSelectedFill() : (useFillMono ? monoFillB : buildingTheme.fill);
           ctx.beginPath();
           for (let i = 0; i < termPts.length; i++) {
             const [x,y] = termPts[i];
@@ -18554,7 +18727,7 @@
               ctx,
               termPts,
               LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M,
-              selected ? c2dObjectSelectedStroke() : buildingTheme.stroke,
+              selected ? c2dObjectSelectedStroke() : (useLineMono ? monoLineB : buildingTheme.stroke),
               hairW,
               0.8
             );
@@ -18576,7 +18749,7 @@
               cx /= term.vertices.length;
               cy /= term.vertices.length;
               const label = term.name || term.id || 'Building';
-              ctx.fillStyle = buildingTheme.labelFill;
+              ctx.fillStyle = useLineMono ? monoLineB : buildingTheme.labelFill;
               ctx.font = '12px system-ui';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
@@ -18621,6 +18794,10 @@
       const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
       const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
+      const monoFillP = layerMonoFillOn() && !sel;
+      const monoLineP = layerMonoLinesOn() && !sel;
+      const monoFp = c2dLayerMonoFillDarkAsphaltCss();
+      const monoLp = c2dLayerMonoLineStrokeCss();
       if (!sl && !sf && !sel) return;
       if (!interactiveLite) drawPbbBoardingRectangle(ctx, pbb, sel);
       const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
@@ -18647,16 +18824,22 @@
         for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
         ctx.closePath();
         if (sf && !interactiveLite) {
-          ctx.fillStyle = sel ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.1)';
-          ctx.fill();
-          drawPolygonDiagonalHatch45M(ctx, quad, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.38)', hairW);
+          if (monoFillP) {
+            ctx.fillStyle = c2dLayerMonoFillDarkAsphaltRgba(0.52);
+            ctx.fill();
+            drawPolygonDiagonalHatch45M(ctx, quad, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, monoLp, hairW);
+          } else {
+            ctx.fillStyle = sel ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.1)';
+            ctx.fill();
+            drawPolygonDiagonalHatch45M(ctx, quad, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.38)', hairW);
+          }
         }
         if (sl && !interactiveLite) {
           ctx.beginPath();
           ctx.moveTo(quad[0][0], quad[0][1]);
           for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
           ctx.closePath();
-          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.strokeStyle = monoLineP ? monoLp : 'rgba(255,255,255,0.9)';
           ctx.lineWidth = hairW;
           ctx.stroke();
         }
@@ -18677,13 +18860,17 @@
       const angle = getPBBStandAngle(pbb);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === pbb.id);
       const apronLinked = standHasApronTaxiwayLink(pbb.id);
-      const idleFill = apronLinked ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)';
+      const idleFill = monoFillP
+        ? c2dLayerMonoFillDarkAsphaltRgba(apronLinked ? 0.4 : 0.48)
+        : (apronLinked ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)');
       ctx.save();
       ctx.translate(ex, ey);
       ctx.rotate(angle);
       ctx.setLineDash([]);
       if (sf && !interactiveLite) {
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFill);
+        ctx.fillStyle = sel
+          ? c2dObjectSelectedFill()
+          : (simOcc ? (monoFillP ? c2dLayerMonoFillDarkAsphaltRgba(0.58) : c2dSimStandOccupiedFill()) : idleFill);
         fillStandSafetyFootprintInLocalAxes(ctx, depP, widP, pbb.category || 'C');
       }
       if (sl) {
@@ -18695,7 +18882,7 @@
           const pad = 3;
           const tx = depP / 2 - pad;
           const ty = -widP / 2 + pad;
-          ctx.fillStyle = apronLinked ? '#dcd8cf' : '#d1d5db';
+          ctx.fillStyle = monoLineP ? monoLp : (apronLinked ? '#dcd8cf' : '#d1d5db');
           ctx.font = '8px system-ui';
           ctx.textAlign = 'right';
           ctx.textBaseline = 'top';
@@ -18705,7 +18892,7 @@
       ctx.restore();
       if (sl || sel) {
         const acMk = getStandAircraftMarkerWorldPxForPbb(pbb);
-        const fill = sel ? c2dObjectSelectedStroke() : (apronLinked ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)');
+        const fill = sel ? c2dObjectSelectedStroke() : (monoLineP ? monoLp : (apronLinked ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)'));
         drawApronSiteMarker(ctx, acMk[0], acMk[1], fill, null, sel, angle);
       }
       if (sel) {
@@ -18737,7 +18924,12 @@
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const apronLinkedR = standHasApronTaxiwayLink(st.id);
-      const idleFillR = apronLinkedR ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)';
+      const monoFillR = layerMonoFillOn() && !sel;
+      const monoLineR = layerMonoLinesOn() && !sel;
+      const monoLr = c2dLayerMonoLineStrokeCss();
+      const idleFillR = monoFillR
+        ? c2dLayerMonoFillDarkAsphaltRgba(apronLinkedR ? 0.4 : 0.48)
+        : (apronLinkedR ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)');
       const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
       if (!sl && !sf && !sel) return;
       ctx.save();
@@ -18745,7 +18937,9 @@
       ctx.rotate(angle);
       ctx.setLineDash([]);
       if (sf && !interactiveLite) {
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillR);
+        ctx.fillStyle = sel
+          ? c2dObjectSelectedFill()
+          : (simOcc ? (monoFillR ? c2dLayerMonoFillDarkAsphaltRgba(0.58) : c2dSimStandOccupiedFill()) : idleFillR);
         fillStandSafetyFootprintInLocalAxes(ctx, depR, widR, st.category || 'C');
       }
       if (sl) {
@@ -18757,7 +18951,7 @@
           const pad = 3;
           const tx = depR / 2 - pad;
           const ty = -widR / 2 + pad;
-          ctx.fillStyle = apronLinkedR ? '#dcd8cf' : '#d1d5db';
+          ctx.fillStyle = monoLineR ? monoLr : (apronLinkedR ? '#dcd8cf' : '#d1d5db');
           ctx.font = '8px system-ui';
           ctx.textAlign = 'right';
           ctx.textBaseline = 'top';
@@ -18767,7 +18961,7 @@
       ctx.restore();
       if (sl || sel) {
         const rm = getStandAircraftMarkerWorldPxForRemoteLike(st);
-        const fill = sel ? c2dObjectSelectedStroke() : (apronLinkedR ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)');
+        const fill = sel ? c2dObjectSelectedStroke() : (monoLineR ? monoLr : (apronLinkedR ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)'));
         drawApronSiteMarker(ctx, rm[0], rm[1], fill, null, sel, angle);
       }
       if (sel) {
@@ -18801,7 +18995,10 @@
       const sel = state.selectedObject && state.selectedObject.type === 'tempStand' && state.selectedObject.id === st.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
-      const idleFillT = 'rgba(139,92,246,0.2)';
+      const monoFillT = layerMonoFillOn() && !sel;
+      const monoLineT = layerMonoLinesOn() && !sel;
+      const monoLt = c2dLayerMonoLineStrokeCss();
+      const idleFillT = monoFillT ? c2dLayerMonoFillDarkAsphaltRgba(0.5) : 'rgba(139,92,246,0.2)';
       const idx = temps.indexOf(st);
       const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('T' + String(idx + 1).padStart(3, '0'));
       const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
@@ -18813,7 +19010,9 @@
       ctx.rotate(angle);
       ctx.setLineDash([]);
       if (sf && !interactiveLite) {
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillT);
+        ctx.fillStyle = sel
+          ? c2dObjectSelectedFill()
+          : (simOcc ? (monoFillT ? c2dLayerMonoFillDarkAsphaltRgba(0.58) : c2dSimStandOccupiedFill()) : idleFillT);
         fillStandSafetyFootprintInLocalAxes(ctx, depT, widT, st.category || 'C');
       }
       if (sl) {
@@ -18824,7 +19023,7 @@
           const pad = 3;
           const tx = depT / 2 - pad;
           const ty = -widT / 2 + pad;
-          ctx.fillStyle = '#e9d5ff';
+          ctx.fillStyle = monoLineT ? monoLt : '#e9d5ff';
           ctx.font = '8px system-ui';
           ctx.textAlign = 'right';
           ctx.textBaseline = 'top';
@@ -18835,7 +19034,7 @@
       if (mode === 'apronTaxiway' && (sl || sel)) {
         const tm = getStandAircraftMarkerWorldPxForRemoteLike(st);
         const apronLinkedT = standHasApronTaxiwayLink(st.id);
-        const fill = sel ? '#c4b5fd' : (apronLinkedT ? c2dTaxiwayCenterlineStroke() : '#7c3aed');
+        const fill = sel ? '#c4b5fd' : (monoLineT ? monoLt : (apronLinkedT ? c2dTaxiwayCenterlineStroke() : '#7c3aed'));
         drawApronSiteMarker(ctx, tm[0], tm[1], fill, null, sel, angle);
       }
       const junc = getTempStandTaxiwayJunctionPx(st);
@@ -18844,12 +19043,13 @@
       if (!!state.layers.junction && (sl || sel)) {
         ctx.save();
         ctx.setLineDash([]);
-        ctx.strokeStyle = sel ? '#22d3ee' : 'rgba(34,211,238,0.95)';
+        const etcM = layerMonoEtcOn() && !sel;
+        ctx.strokeStyle = etcM ? C2D_LAYER_MONO_ETC_WHITE : (sel ? '#22d3ee' : 'rgba(34,211,238,0.95)');
         ctx.lineWidth = sel ? 2.25 : 1.75;
         ctx.beginPath();
         ctx.arc(jx, jy, jr, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillStyle = sel ? '#ecfeff' : 'rgba(236,254,255,0.92)';
+        ctx.fillStyle = etcM ? C2D_LAYER_MONO_ETC_WHITE : (sel ? '#ecfeff' : 'rgba(236,254,255,0.92)');
         ctx.beginPath();
         ctx.arc(jx, jy, jr * 0.45, 0, Math.PI * 2);
         ctx.fill();
@@ -19439,6 +19639,11 @@
           fillC = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(fillC), ROAD_WIDTH_SURFACE_RGB_MUL);
         }
       }
+      if (pathFillWide && layerMonoFillOn() && !sel) {
+        const m = c2dLayerMonoFillDarkAsphaltCss();
+        strokeC = m;
+        fillC = m;
+      }
       ctx.strokeStyle = strokeC;
       ctx.fillStyle = fillC;
       if (pathFillWide) {
@@ -19471,6 +19676,7 @@
       if (!g || tw.vertices.length < 2) return;
       if (interactiveLite && g.isApronTaxiwayPath && !state.isPanning) return;
       const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, pathFillWide = g.pathFillWide, pathLineCap = g.pathLineCap, width = g.width;
+      const monoLineCss = layerMonoLinesOn() && !sel ? c2dLayerMonoLineStrokeCss() : null;
       if (!state.layers.pathLines) return;
       if (interactiveLite && !isRunwayPath && !state.isPanning) return;
       if (pathFillWide) {
@@ -19481,7 +19687,7 @@
           const tLen = runwayPolylineLengthPx(rwPtsCk);
           const rwW = Math.max(24, Number(width) || RUNWAY_PATH_DEFAULT_WIDTH);
           skipRunwayCenterlineStroke = tLen >= Math.max(220, rwW * 3);
-          ctx.strokeStyle = c2dRunwayCenterlineColor();
+          ctx.strokeStyle = monoLineCss || c2dRunwayCenterlineColor();
           ctx.setLineDash([10, 12]);
         } else {
           ctx.setLineDash([]);
@@ -19511,7 +19717,7 @@
             ctx.stroke();
             ctx.restore();
           } else {
-            strokeTwCenterlineYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+            strokeTwCenterlineYellow(monoLineCss || (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke()));
           }
         }
         ctx.setLineDash([]);
@@ -19526,11 +19732,11 @@
           ctx.strokeStyle = c2dObjectSelectedStroke();
           ctx.stroke();
         } else {
-          strokeTwCenterlineYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+          strokeTwCenterlineYellow(monoLineCss || (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke()));
         }
       } else {
         ctx.lineWidth = centerlineWidthWorld(1.5, 1.4);
-        ctx.strokeStyle = c2dRunwayCenterlineColor();
+        ctx.strokeStyle = monoLineCss || c2dRunwayCenterlineColor();
         ctx.setLineDash([10, 12]);
         ctx.lineCap = pathLineCap;
         ctx.lineJoin = 'round';
@@ -19613,6 +19819,7 @@
       }
       if (interactiveLite && !drawing && !sel) return;
       const dir = getTaxiwayDirection(tw);
+      const monoLineCssAr = layerMonoLinesOn() && !sel ? c2dLayerMonoLineStrokeCss() : null;
       if ((!_twPanCoarse || sel || g.drawing) && dir !== 'both' && tw.vertices.length >= 2) {
         const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
         const totalLen = pts.reduce((acc, p, i) => acc + (i > 0 ? Math.hypot(p[0]-pts[i-1][0], p[1]-pts[i-1][1]) : 0), 0);
@@ -19624,7 +19831,7 @@
           numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
         }
         const arrLen = isRunwayPath ? CELL_SIZE * 0.63 : CELL_SIZE * 0.54;
-        ctx.fillStyle = isRunwayPath ? c2dRunwayCenterlineColor() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+        ctx.fillStyle = monoLineCssAr || (isRunwayPath ? c2dRunwayCenterlineColor() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke()));
         for (let k = 1; k <= numArrows; k++) {
           const targetDist = totalLen * (k / (numArrows + 1));
           let acc = 0;
@@ -19786,7 +19993,7 @@
         ctx.beginPath();
         traceApronLinkPoly();
         ctx.lineWidth = 1;
-        ctx.strokeStyle = c2dTaxiwayCenterlineStroke();
+        ctx.strokeStyle = layerMonoLinesOn() ? c2dLayerMonoLineStrokeCss() : c2dTaxiwayCenterlineStroke();
         ctx.stroke();
       }
       const svApron = state.selectedVertex;
@@ -19819,7 +20026,11 @@
             vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'mid' && svApron.midIndex === midIdx);
           }
           const r = layoutPathVertexRadiusPx(vtxSel, draggable);
-          ctx.fillStyle = vtxSel ? '#f43f5e' : (draggable ? '#86efac' : '#22c55e');
+          ctx.fillStyle = vtxSel
+            ? '#f43f5e'
+            : (layerMonoLinesOn()
+              ? (draggable ? '#cbd5e1' : c2dLayerMonoLineStrokeCss())
+              : (draggable ? '#86efac' : '#22c55e'));
           ctx.beginPath();
           ctx.arc(px, py, r, 0, Math.PI*2);
           ctx.fill();
@@ -20082,12 +20293,17 @@
         ctx.lineTo(left, top + rr);
         ctx.quadraticCurveTo(left, top, left + rr, top);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
-        ctx.strokeStyle = 'rgba(148, 163, 184, 0.95)';
+        if (layerMonoLinesOn()) {
+          ctx.fillStyle = c2dLayerMonoFillDarkAsphaltRgba(0.92);
+          ctx.strokeStyle = c2dLayerMonoLineStrokeCss();
+        } else {
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.95)';
+        }
         ctx.lineWidth = Math.max(0.75, 1.15 / Math.max(state.scale, 0.08));
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#f1f5f9';
+        ctx.fillStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#f1f5f9';
         ctx.fillText(label, bx, by);
       }
     });
@@ -20210,6 +20426,8 @@
     const selKey = sel ? (String(sel.type) + ':' + String(sel.id)) : '';
     const layers = state.layers || {};
     const layerKey = Object.keys(layers).sort().map(function(k) { return k + '=' + (layers[k] ? '1' : '0'); }).join('&');
+    const lm = state.layerMono || {};
+    const layerMonoKey = ['lines', 'fill', 'etc'].map(function(k) { return k + '=' + (lm[k] ? '1' : '0'); }).join('&');
     return [
       w, h, dpr, state.panX, state.panY, state.scale,
       interactiveLite ? '1' : '0',
@@ -20217,6 +20435,7 @@
       state.pathPolylineCacheRev | 0,
       String(state.currentLayoutName || ''),
       layerKey,
+      layerMonoKey,
       state.pathArcDrag ? '1' : '0',
       layoutViewIsDragging() ? '1' : '0',
     ].join('|');
@@ -20380,7 +20599,7 @@
     ctx.lineCap = 'round';
     const wM = Math.max(0.05, Number(widthM) || LAYOUT_ISLAND_WIDTH_DEFAULT_M);
     ctx.lineWidth = wM;
-    ctx.strokeStyle = LAYOUT_ISLAND_STROKE_CSS;
+    ctx.strokeStyle = (!sel && layerMonoLinesOn()) ? c2dLayerMonoLineStrokeCss() : LAYOUT_ISLAND_STROKE_CSS;
     ctx.stroke();
     if (sel) {
       ctx.lineWidth = Math.max(wM * 0.6, 0.3);
@@ -20396,7 +20615,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const fillArea = c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
+    const fillArea = layerMonoFillOn() ? c2dLayerMonoFillDarkAsphaltCss() : c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
     (state.layoutMarkers || []).forEach(function(m) {
       if (!m || m.kind !== 'area') return;
       const pts = m.points;
@@ -20507,7 +20726,7 @@
       }
       if (layerIslandContourLinesEffective() || isSel) {
         ctx.lineWidth = lwYellow;
-        ctx.strokeStyle = '#fcd410';
+        ctx.strokeStyle = (!isSel && layerMonoLinesOn()) ? c2dLayerMonoLineStrokeCss() : '#fcd410';
         ctx.stroke();
       }
     });
@@ -20553,6 +20772,7 @@
         if (mkAabb && !aabbIntersectsViewport(vb, mkAabb)) return;
       }
       const sel = state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id;
+      const etcM = layerMonoEtcOn();
       if (m.kind === 'text') {
         if (interactiveLite) return;
         const x = Number(m.x), y = Number(m.y);
@@ -20563,8 +20783,13 @@
         ctx.textBaseline = 'top';
         const txt = String(m.text || '');
         ctx.lineWidth = Math.max(2, 3 / Math.max(state.scale, 0.1));
-        ctx.strokeStyle = 'rgba(15,23,42,0.92)';
-        ctx.fillStyle = '#e2e8f0';
+        if (etcM && !sel) {
+          ctx.strokeStyle = 'rgba(30,41,59,0.55)';
+          ctx.fillStyle = C2D_LAYER_MONO_ETC_WHITE;
+        } else {
+          ctx.strokeStyle = 'rgba(15,23,42,0.92)';
+          ctx.fillStyle = '#e2e8f0';
+        }
         ctx.strokeText(txt, x + 2, y + 2);
         ctx.fillText(txt, x + 2, y + 2);
         if (sel) layoutMarkerDrawEndpointDot(ctx, x, y, true);
@@ -20580,7 +20805,7 @@
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
-        ctx.strokeStyle = sel ? '#38bdf8' : '#94a3b8';
+        ctx.strokeStyle = sel ? '#38bdf8' : (etcM ? C2D_LAYER_MONO_ETC_WHITE : '#94a3b8');
         ctx.lineWidth = Math.max(1.2, 1.6 / Math.max(state.scale, 0.1));
         ctx.setLineDash([6, 4]);
         ctx.stroke();
@@ -20595,8 +20820,13 @@
           ctx.textBaseline = 'middle';
           const label = lenM.toFixed(1) + ' m';
           ctx.lineWidth = 2.5;
-          ctx.strokeStyle = 'rgba(15,23,42,0.85)';
-          ctx.fillStyle = '#f1f5f9';
+          if (etcM && !sel) {
+            ctx.strokeStyle = 'rgba(30,41,59,0.55)';
+            ctx.fillStyle = C2D_LAYER_MONO_ETC_WHITE;
+          } else {
+            ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+            ctx.fillStyle = '#f1f5f9';
+          }
           ctx.strokeText(label, mx, my - fs * 0.9);
           ctx.fillText(label, mx, my - fs * 0.9);
         }
@@ -20645,7 +20875,7 @@
             ctx.stroke();
             ctx.restore();
           }
-          const trailColor = m.blazerColor || MARKER_BLAZER_COLOR_OPTIONS[0];
+          const trailColor = (etcM && !sel) ? C2D_LAYER_MONO_ETC_WHITE : (m.blazerColor || MARKER_BLAZER_COLOR_OPTIONS[0]);
           drawTrailBand(lt, rt, trailColor);
           drawTrailBand(rt, lt, trailColor);
         }
@@ -20672,8 +20902,8 @@
           ctx.lineTo(scaleX * wRx, scaleY * lY);
           ctx.closePath();
         }
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : '#94a3b8';
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : 'rgba(30,41,59,0.9)';
+        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (etcM ? C2D_LAYER_MONO_ETC_WHITE : '#94a3b8');
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (etcM ? C2D_LAYER_MONO_ETC_WHITE : 'rgba(30,41,59,0.9)');
         ctx.lineWidth = Math.max(0.75, 1.1 / Math.max(state.scale, 0.1));
         if (!sel) ctx.globalAlpha = 0.4;
         if (sel) {
@@ -22318,6 +22548,16 @@
         parentInp.indeterminate = false;
         syncLegacyViewFlagsFromLayers();
         invalidateGridUnderlay();
+        syncLayerPopoverFromState();
+        draw();
+      });
+    });
+    layerPopoverPanel.querySelectorAll('input[data-layer-mono]').forEach(function(monoInp) {
+      monoInp.addEventListener('change', function(ev) {
+        ev.stopPropagation();
+        const mk = monoInp.getAttribute('data-layer-mono');
+        if (!mk || !state.layerMono || typeof state.layerMono[mk] !== 'boolean') return;
+        state.layerMono[mk] = !!monoInp.checked;
         syncLayerPopoverFromState();
         draw();
       });

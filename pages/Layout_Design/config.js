@@ -256,7 +256,9 @@
   const PATH_JUNCTION_MERGE_RADIUS_PX = (isFinite(_junctionMergeRadiusRaw) && _junctionMergeRadiusRaw >= 0) ? _junctionMergeRadiusRaw : 7;
   const _styleTier = _tiers.style || {};
   const _flightVizStyle = (_styleTier.flightVisualization && typeof _styleTier.flightVisualization === 'object') ? _styleTier.flightVisualization : {};
-  const FLIGHT_SIM_VIZ_DEFAULT_PALETTE = ['#a78bfa', '#22d3ee', '#4ade80', '#f59e0b', '#f43f5e', '#8b5cf6', '#06b6d4', '#84cc16', '#fb7185', '#c084fc'];
+  const FLIGHT_SIM_VIZ_DEFAULT_PALETTE = [
+    '#ff1493', '#39ff14', '#00f5ff', '#ff6600', '#ffffff', '#ff2d2d', '#ffff00', '#c026fc', '#2563eb', '#9ca3af',
+  ];
   function flightSimVizPaletteList() {
     const p = _flightVizStyle.palette;
     if (Array.isArray(p) && p.length) {
