@@ -1361,18 +1361,18 @@
         "arrRetFailedText": "#f87171"
       },
       "flightVisualization": {
-        "description": "Pro Sim 2D aircraft fill: 10 distinct colors by group order, 11+ groups use overflowGray. Palette[0] is the default blazer accent.",
+        "description": "Pro Sim 2D aircraft fill: 10 colors by group order (1st=primary, 2nd=second, …), 11+ use overflowGray. Palette[0] default blazer accent.",
         "palette": [
-          "#a78bfa",
-          "#22d3ee",
-          "#4ade80",
-          "#f59e0b",
-          "#f43f5e",
-          "#8b5cf6",
-          "#06b6d4",
-          "#84cc16",
-          "#fb7185",
-          "#c084fc"
+          "#ff1493",
+          "#39ff14",
+          "#00f5ff",
+          "#ff6600",
+          "#ffffff",
+          "#ff2d2d",
+          "#ffff00",
+          "#c026fc",
+          "#2563eb",
+          "#9ca3af"
         ],
         "overflowGray": "#9ca3af"
       },

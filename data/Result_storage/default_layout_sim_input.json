@@ -22,6 +22,11 @@
       "dummyFlight": true,
       "junction": true
     },
+    "layerMono": {
+      "lines": true,
+      "fill": true,
+      "etc": true
+    },
     "layoutImageOverlay": {
       "name": "Airport Chart_page-0001.jpg",
       "type": "image/jpeg",
@@ -9842,9 +9847,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 418.7324063365364,
-      "arrVTdMs": 65.75705870926275,
-      "arrDecelMs2": 1.8399999999999999,
+      "arrTdDistM": 432.9375652530404,
+      "arrVTdMs": 63.40479017326112,
+      "arrDecelMs2": 1.5025639899090382,
       "edge_list": [
         {
           "edge_id": "layout-edge-002",
@@ -10136,9 +10141,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 517.9604449005221,
-      "arrVTdMs": 69.45820057646804,
-      "arrDecelMs2": 1.1008174556064714,
+      "arrTdDistM": 441.3145657705586,
+      "arrVTdMs": 80.08453237836181,
+      "arrDecelMs2": 1.15,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -10462,14 +10467,14 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_6jclwcmft",
+        "ExitTaxiwayId": "id_holzos55b",
         "apronId": "id_dt2n7wpnl",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX200",
+        "ExitTaxiwayId": "RTX6",
         "apronId": "C014",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -10503,9 +10508,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 413.71123027014255,
-      "arrVTdMs": 63.31503745537939,
-      "arrDecelMs2": 1.6325820345072246,
+      "arrTdDistM": 340,
+      "arrVTdMs": 75.47490559610307,
+      "arrDecelMs2": 1.5726105443755685,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -10894,9 +10899,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 371.4907903474357,
-      "arrVTdMs": 57.8,
-      "arrDecelMs2": 1.8399999999999999,
+      "arrTdDistM": 374.56008160814787,
+      "arrVTdMs": 72.7752059615636,
+      "arrDecelMs2": 1.3666869843107126,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -11142,14 +11147,14 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_ufl92zcn3",
+        "ExitTaxiwayId": "id_6jclwcmft",
         "apronId": "id_arkq0wlw2",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX3_Right",
+        "ExitTaxiwayId": "RTX200",
         "apronId": "C009",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -11183,9 +11188,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 388.45203675384624,
-      "arrVTdMs": 63.14224801973553,
-      "arrDecelMs2": 1.6401554171472186,
+      "arrTdDistM": 440.5258917256651,
+      "arrVTdMs": 57.8,
+      "arrDecelMs2": 1.8399999999999999,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -11545,14 +11550,14 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_3jvb8zivh",
+        "ExitTaxiwayId": "id_ufl92zcn3",
         "apronId": "id_zcx0xbgmu",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX4",
+        "ExitTaxiwayId": "RTX3_Right",
         "apronId": "C016",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -11586,9 +11591,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 400.21020418313714,
-      "arrVTdMs": 65.67516506549667,
-      "arrDecelMs2": 1.4689722387060955,
+      "arrTdDistM": 459.99999999999994,
+      "arrVTdMs": 72.7795448225145,
+      "arrDecelMs2": 1.6476714237487904,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -11971,9 +11976,9 @@
       "sibtMin_d": 70.16666666666667,
       "sobtMin_d": 90.16666666666667,
       "stotMin_d": 93.16666666666667,
-      "arrTdDistM": 340,
-      "arrVTdMs": 78.19999999999999,
-      "arrDecelMs2": 1.5823523381488973,
+      "arrTdDistM": 395.65417544570624,
+      "arrVTdMs": 70.70381200079444,
+      "arrDecelMs2": 1.3848310498782879,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -12267,14 +12272,14 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_6jclwcmft",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_k9jkud2gs",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX200",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C012",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -12308,9 +12313,9 @@
       "sibtMin_d": 70.16666666666667,
       "sobtMin_d": 130.16666666666669,
       "stotMin_d": 133.16666666666669,
-      "arrTdDistM": 383.31743559484227,
-      "arrVTdMs": 64.43690815979278,
-      "arrDecelMs2": 1.59318562366675,
+      "arrTdDistM": 364.47502556461535,
+      "arrVTdMs": 78.19999999999999,
+      "arrDecelMs2": 1.36,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -12520,14 +12525,14 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_3jvb8zivh",
+        "ExitTaxiwayId": "id_6jclwcmft",
         "apronId": "id_kzql4nscf",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX4",
+        "ExitTaxiwayId": "RTX200",
         "apronId": "C010",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -12562,9 +12567,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 344.57900200233894,
-      "arrVTdMs": 78.19999999999999,
-      "arrDecelMs2": 1.4492514381000714,
+      "arrTdDistM": 370.0615586808574,
+      "arrVTdMs": 64.91330048845711,
+      "arrDecelMs2": 1.5570346014108754,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -12870,14 +12875,14 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_6jclwcmft",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_yvp2u2h3e",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX200",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "C015 (2)",
         "terminalId": null,
         "depRunwayId": "RW1"
@@ -12912,9 +12917,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 411.15436474253676,
-      "arrVTdMs": 57.8,
-      "arrDecelMs2": 1.36,
+      "arrTdDistM": 407.12229755007144,
+      "arrVTdMs": 66.01384651676833,
+      "arrDecelMs2": 1.5925081137661368,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -13394,9 +13399,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 380.5711821417518,
-      "arrVTdMs": 66.87438387888578,
-      "arrDecelMs2": 1.4609842323555773,
+      "arrTdDistM": 459.99999999999994,
+      "arrVTdMs": 77.49292313359825,
+      "arrDecelMs2": 1.7832251023222039,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -13816,9 +13821,9 @@
       "sibtMin_d": 10.166666666666666,
       "sobtMin_d": 70.16666666666667,
       "stotMin_d": 73.16666666666667,
-      "arrTdDistM": 382.7179724862149,
-      "arrVTdMs": 78.19999999999999,
-      "arrDecelMs2": 1.5974022951516311,
+      "arrTdDistM": 418.58725458214974,
+      "arrVTdMs": 68.79952749084737,
+      "arrDecelMs2": 1.649863586122566,
       "arrDep": "Arr",
       "edge_list": [
         {
@@ -14094,14 +14099,14 @@
       ],
       "token": {
         "arrRunwayId": "id_jnrp39cxa",
-        "ExitTaxiwayId": "id_6jclwcmft",
+        "ExitTaxiwayId": "id_3jvb8zivh",
         "apronId": "id_bessqqndx",
         "terminalId": null,
         "depRunwayId": "id_jnrp39cxa"
       },
       "token_name": {
         "arrRunwayId": "RW1",
-        "ExitTaxiwayId": "RTX200",
+        "ExitTaxiwayId": "RTX4",
         "apronId": "R023",
         "terminalId": null,
         "depRunwayId": "RW1"
