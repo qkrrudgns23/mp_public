@@ -498,11 +498,14 @@
       }
       if (t.pathType === 'runway_exit') {
         line += '\x1e' + JSON.stringify(t.allowedRwDirections || []);
+        if (typeof getTaxiwayDirection === 'function') {
+          line += '\x1e' + String(getTaxiwayDirection(t));
+        }
       }
       parts.push(line);
     }
     parts.sort();
-    return parts.join('\x1f') + '\x1e' + 'arrivalRetF2onlyV1';
+    return parts.join('\x1f') + '\x1e' + 'arrivalRetPathEdgeF1V1';
   }
   function bumpScheduleRetExitDistCache() {
     __schedRetExitDistSig = '';
@@ -2741,6 +2744,3 @@
         acDepDelay
       };
     });
-    const KPI_ROLL_STEP_MIN = 15;
-    const KPI_ROLL_WIN_MIN = 60;
-    const buckets = [];

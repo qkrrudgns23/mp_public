@@ -8705,11 +8705,14 @@
       }
       if (t.pathType === 'runway_exit') {
         line += '\x1e' + JSON.stringify(t.allowedRwDirections || []);
+        if (typeof getTaxiwayDirection === 'function') {
+          line += '\x1e' + String(getTaxiwayDirection(t));
+        }
       }
       parts.push(line);
     }
     parts.sort();
-    return parts.join('\x1f') + '\x1e' + 'arrivalRetF2onlyV1';
+    return parts.join('\x1f') + '\x1e' + 'arrivalRetPathEdgeF1V1';
   }
   function bumpScheduleRetExitDistCache() {
     __schedRetExitDistSig = '';
@@ -13430,6 +13433,35 @@
     return isRunwayExitDirAllowedForArrivalFilter2(exitTw, 'counter_clockwise');
   }
 
+  function isPointOnRunwayPolyline2D(rVerts, q) {
+    if (!rVerts || rVerts.length < 2 || !q) return false;
+    for (let i = 0; i < rVerts.length - 1; i++) {
+      if (pointOnSegmentStrict(rVerts[i], rVerts[i + 1], q)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Arrival: if RET path direction (Runway exit mode) is not "both", require at least one edge
+   * (fromIdx -> toIdx) to match: CCW — from off runway, to on; CW — from on, to off.
+   */
+  function arrivalRunwayExitPassPathDirEdgeToRunwayFilter(rw, exitTw, rVerts) {
+    if (!exitTw || exitTw.pathType !== 'runway_exit' || !rVerts) return true;
+    const pathDir = normalizeRwDirectionValue(getTaxiwayDirection(exitTw));
+    if (pathDir === 'both') return true;
+    const verts = exitTw.vertices;
+    if (!Array.isArray(verts) || verts.length < 2) return false;
+    for (let ei = 0; ei < verts.length - 1; ei++) {
+      const f = [verts[ei].col, verts[ei].row];
+      const t = [verts[ei + 1].col, verts[ei + 1].row];
+      const onF = isPointOnRunwayPolyline2D(rVerts, f);
+      const onT = isPointOnRunwayPolyline2D(rVerts, t);
+      if (pathDir === 'counter_clockwise' && !onF && onT) return true;
+      if (pathDir === 'clockwise' && onF && !onT) return true;
+    }
+    return false;
+  }
+
   function computeRunwayExitDistances() {
     const taxiways = state.taxiways || [];
     const runways = taxiways.filter(t => t.pathType === 'runway' && Array.isArray(t.vertices) && t.vertices.length >= 2);
@@ -13502,6 +13534,9 @@
         }
         if (best) {
           if (!arrivalRetPassesFilter2RunwayAvailableDir(rw, tw)) best = null;
+        }
+        if (best && !arrivalRunwayExitPassPathDirEdgeToRunwayFilter(rw, tw, rVerts)) {
+          best = null;
         }
         if (best) results.push(best);
       });

@@ -25,7 +25,7 @@ cuts = [
     8207,
     10953,
     12113,
-    13747,  # canvas2d: F3/egress + debug log removed
+    13782,  # +35: path-dir edge filter for arrival RET
     n,
 ]
 if cuts[-1] != n:

@@ -1,3 +1,6 @@
+    const KPI_ROLL_STEP_MIN = 15;
+    const KPI_ROLL_WIN_MIN = 60;
+    const buckets = [];
     if (rows.length) {
       const wLastStart = 1440 - KPI_ROLL_WIN_MIN;
       for (let w = 0; w <= wLastStart; w += KPI_ROLL_STEP_MIN) {
@@ -1155,6 +1158,3 @@
     if (f.arrRetFailed) {
       vRetIn = getMinArrVelocityMpsForRunwayId(runwayId);
       vRetOut = vTaxiBase;
-    }
-    const aDec = aircraftDecelMs2ForTimeline(f);
-    let runwayLenM = 0;
