@@ -3614,10 +3614,11 @@ def _overlay_schedule_timing_from_playback_positions(
 ) -> None:
     """
     Post-simulation only: overwrite schedule motion timing fields from exported
-    ``positions`` samples (``t``, ``x``, ``y``, ``v``, optional ``phase`` / ``pathType`` /
-    ``clearance``) plus the same layout geometry helpers used for playback (runway
-    polyline, stand token). Runs after the time-step loop; values are not fed back
-    into simulation state.
+    ``positions`` samples (``t``, ``x``, ``y``, optional ``phase`` for non-EIBT fields)
+    plus layout geometry only where needed (runway polyline for ``EXIT_RUNWAY``).
+    ``EIBT`` / ``EOBT`` use **consecutive-sample x,y displacement only** (plateau
+    detection). Runs after the time-step loop; values are not fed back into simulation
+    state.
     """
     sched = out.get("schedule")
     posmap = out.get("positions")
@@ -3626,9 +3627,72 @@ def _overlay_schedule_timing_from_playback_positions(
         return
     ppm = max(float(pixels_per_meter), 1e-9)
     exit_thr_m = float(_exit_runway_min_perpendicular_distance_m(information))
-    r_st_m = float(_sim_stand_arrival_stop_radius_m(information))
-    v_stop = float(_sim_stand_stopped_velocity_max_ms(information))
     cs = float(cell_size)
+    still_m = float(
+        _deep_get(
+            information,
+            "tiers",
+            "algorithm",
+            "simulation",
+            "playbackStandStillStepM",
+            default=0.25,
+        )
+    )
+    min_still_s = float(
+        _deep_get(
+            information,
+            "tiers",
+            "algorithm",
+            "simulation",
+            "playbackStandStillMinSec",
+            default=3.0,
+        )
+    )
+    eps_step_px = max(1.0, still_m * ppm)
+
+    def _eibt_eobt_from_xy_plateau(
+        plist: List[Dict[str, Any]],
+    ) -> Tuple[Optional[float], Optional[float]]:
+        """Longest run of consecutive near-zero x,y steps; EIBT=start t, EOBT=first t after end with a large step."""
+        n = len(plist)
+        if n < 2:
+            return None, None
+        best: Optional[Tuple[float, int, int]] = None  # (duration, start_idx, end_idx)
+        run_start = 0
+        for i in range(1, n):
+            p0, p1 = plist[i - 1], plist[i]
+            dx = float(p1.get("x", 0.0)) - float(p0.get("x", 0.0))
+            dy = float(p1.get("y", 0.0)) - float(p0.get("y", 0.0))
+            step = math.hypot(dx, dy)
+            if step >= eps_step_px:
+                if i - 1 > run_start:
+                    t0 = float(plist[run_start].get("t", 0.0))
+                    t1 = float(plist[i - 1].get("t", 0.0))
+                    dur = t1 - t0
+                    if dur + 1e-9 >= min_still_s:
+                        if best is None or dur > best[0] + 1e-9:
+                            best = (dur, run_start, i - 1)
+                run_start = i
+        if n - 1 > run_start:
+            t0 = float(plist[run_start].get("t", 0.0))
+            t1 = float(plist[n - 1].get("t", 0.0))
+            dur = t1 - t0
+            if dur + 1e-9 >= min_still_s:
+                if best is None or dur > best[0] + 1e-9:
+                    best = (dur, run_start, n - 1)
+        if best is None:
+            return None, None
+        _dur, s, e = best
+        eibt_v = float(plist[s].get("t", 0.0))
+        eobt_v: Optional[float] = None
+        for j in range(e + 1, n):
+            q0, q1 = plist[j - 1], plist[j]
+            dx = float(q1.get("x", 0.0)) - float(q0.get("x", 0.0))
+            dy = float(q1.get("y", 0.0)) - float(q0.get("y", 0.0))
+            if math.hypot(dx, dy) >= eps_step_px:
+                eobt_v = float(q1.get("t", 0.0))
+                break
+        return eibt_v, eobt_v
 
     def _apply_timings(row: Dict[str, Any], fobj: Dict[str, Any], pts: List[Dict[str, Any]]) -> None:
         has_landing = bool(row.get("HAS_LANDING"))
@@ -3646,21 +3710,16 @@ def _overlay_schedule_timing_from_playback_positions(
 
         e_hold: Optional[float] = None
         e_lineup: Optional[float] = None
-        rw_entry: Optional[float] = None
         for p in pts:
             ph = str(p.get("phase") or "")
             if e_hold is None and ph == PHASE_HOLDING_LINEUP:
                 e_hold = float(p.get("t", 0.0))
-            if rw_entry is None and ph == PHASE_LINEUP_DEPARTURE:
-                rw_entry = float(p.get("t", 0.0))
             if e_lineup is None and ph == PHASE_LINEUP_DEPARTURE:
                 e_lineup = float(p.get("t", 0.0))
         row["E_HOLD"] = _sim_sec_optional(e_hold) if e_hold is not None else None
         row["E_HOLD_dt"] = _sec_to_datetime_str(e_hold, base_date)
         row["E_LINEUP"] = _sim_sec_optional(e_lineup) if e_lineup is not None else None
         row["E_LINEUP_dt"] = _sec_to_datetime_str(e_lineup, base_date)
-        row["RUNWAY_ENTRY"] = _sim_sec_optional(rw_entry) if rw_entry is not None else None
-        row["RUNWAY_ENTRY_dt"] = _sec_to_datetime_str(rw_entry, base_date)
 
         exit_rw: Optional[float] = None
         arr_id = row.get("ARR_RUNWAY_ID")
@@ -3682,44 +3741,9 @@ def _overlay_schedule_timing_from_playback_positions(
         row["EXIT_RUNWAY"] = _sim_sec_optional(exit_rw) if exit_rw is not None else None
         row["EXIT_RUNWAY_dt"] = _sec_to_datetime_str(exit_rw, base_date)
 
-        eibt: Optional[float] = None
-        sid = _flight_apron_stand_id_from_fobj(fobj)
-        txy = _apron_token_xy(layout, cs, str(sid)) if sid else None
-        if txy is not None and pts:
-            tx, ty = float(txy[0]), float(txy[1])
-            for p in pts:
-                ph = str(p.get("phase") or "")
-                if ph not in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
-                    continue
-                if str(p.get("pathType") or "").strip() == "runway":
-                    continue
-                clr = str(p.get("clearance") or "")
-                if clr in ("WAIT", "YIELD"):
-                    continue
-                x = float(p.get("x", 0.0))
-                y = float(p.get("y", 0.0))
-                v = float(p.get("v", 0.0))
-                d_m = math.hypot(x - tx, y - ty) / ppm
-                if d_m <= r_st_m + 1e-6 and abs(v) <= v_stop + 1e-9:
-                    eibt = float(p.get("t", 0.0))
-                    break
+        eibt, eobt = _eibt_eobt_from_xy_plateau(pts)
         row["EIBT"] = _sim_sec_optional(eibt) if eibt is not None else None
         row["EIBT_dt"] = _sec_to_datetime_str(eibt, base_date)
-
-        eobt: Optional[float] = None
-        if eibt is not None and pts:
-            ds = float(eibt) + float(_dwell_sec_from_flight(fobj))
-            for p in pts:
-                if float(p.get("t", 0.0)) <= ds + 1e-9:
-                    continue
-                if str(p.get("phase") or "") != PHASE_DEP_TAXI:
-                    continue
-                if str(p.get("pathType") or "").strip() != "apron_link":
-                    continue
-                if abs(float(p.get("v", 0.0))) <= 0.01 + 1e-12:
-                    continue
-                eobt = float(p.get("t", 0.0))
-                break
         row["EOBT"] = _sim_sec_optional(eobt) if eobt is not None else None
         row["EOBT_dt"] = _sec_to_datetime_str(eobt, base_date)
 
@@ -3739,7 +3763,6 @@ def _overlay_schedule_timing_from_playback_positions(
             for k, dk in (
                 ("ELDT", "ELDT_dt"),
                 ("TOUCHDOWN_MOTION", "TOUCHDOWN_MOTION_dt"),
-                ("RUNWAY_ENTRY", "RUNWAY_ENTRY_dt"),
                 ("EXIT_RUNWAY", "EXIT_RUNWAY_dt"),
                 ("EIBT", "EIBT_dt"),
                 ("EOBT", "EOBT_dt"),
