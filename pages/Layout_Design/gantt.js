@@ -1,15 +1,3 @@
-    const prev = verts[(vertexIndex - 1 + n) % n];
-    const next = verts[(vertexIndex + 1) % n];
-    const Apx = [Number(prev.x), Number(prev.y)];
-    const Bpx = [Number(next.x), Number(next.y)];
-    const workPx = previewPx.map(function(p, j) {
-      if (j === 0) return [Apx[0], Apx[1]];
-      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
-      return [p[0], p[1]];
-    });
-    const cells = [];
-    if (previewPx.length > 2) {
-      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
       for (let k = 0; k < densePx.length; k++) {
         const snap = worldPointToPixel(densePx[k][0], densePx[k][1], snapToGrid);
         const c = { x: snap[0], y: snap[1] };
@@ -548,3 +536,15 @@
           const p1 = br0 && br0.points && br0.points[1], p2 = br0 && br0.points && br0.points[2];
           if (p1 && p2) arm = Math.hypot(Number(p2.x) - Number(p1.x), Number(p2.y) - Number(p1.y));
           else arm = 15;
+        }
+        lenInput.value = String(Math.max(1, Math.round(arm)));
+      }
+      if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
+      if (pbbCountInput) pbbCountInput.value = String(Math.max(1, parseInt(pbb.pbbCount, 10) || 1));
+      const boardingWInput = document.getElementById('pbbBoardingWidth');
+      const boardingHInput = document.getElementById('pbbBoardingHeight');
+      if (boardingWInput) boardingWInput.value = String(getPbbBoardingWidthM(pbb));
+      if (boardingHInput) boardingHInput.value = String(getPbbBoardingHeightM(pbb));
+      syncStandConstraintVisibility('stand');
+      renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb), pbb.allowedIcaoCategories);
+    }

@@ -268,8 +268,14 @@
     return 'both';
   }
   function normalizeRwDirectionValue(dir) {
-    if (dir === 'clockwise' || dir === 'cw') return 'clockwise';
-    if (dir === 'counter_clockwise' || dir === 'ccw') return 'counter_clockwise';
+    if (dir == null) return 'both';
+    const s0 = String(dir).trim();
+    if (!s0) return 'both';
+    const s = s0.toLowerCase().replace(/[\s-]+/g, '_');
+    if (s === 'clockwise' || s === 'cw') return 'clockwise';
+    if (s === 'counter_clockwise' || s === 'ccw' || s === 'counterclockwise') return 'counter_clockwise';
+    if (s === 'top_tobottom' || s === 'toptobottom' || s === 'ttb') return 'clockwise';
+    if (s === 'bottom_totop' || s === 'bottomtotop' || s === 'btt') return 'counter_clockwise';
     return 'both';
   }
   function normalizeAllowedRunwayDirections(raw) {
@@ -293,6 +299,33 @@
     if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
     const allow = getTaxiwayAllowedRunwayDirections(tw);
     return allow.indexOf(d) >= 0;
+  }
+  /**
+   * Arrival RET sampling (F2): runways in the property panel are always stored as CW or CCW;
+   * legacy data may still have direction "both". The panel coerces "both" to the CW option for display,
+   * so we use CW as the operational match for "Available RW direction" vs the runway.
+   */
+  function getRunwayOperationalDirForArrivalRetFilter2(rw) {
+    if (!rw || rw.pathType !== 'runway') return 'clockwise';
+    const raw = getTaxiwayDirection(rw);
+    const d = normalizeRwDirectionValue(raw);
+    if (d === 'clockwise' || d === 'counter_clockwise') return d;
+    return 'clockwise';
+  }
+  /**
+   * F2: same semantics as checkboxes, but an explicit `allowedRwDirections: []` (both unchecked) means
+   * "no use" — do not re-expand to the default both-way list (pathfinding may still do that for legacy).
+   */
+  function isRunwayExitDirAllowedForArrivalFilter2(exitTw, runwayDir) {
+    const d = normalizeRwDirectionValue(runwayDir);
+    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
+    if (!exitTw || exitTw.pathType !== 'runway_exit') return false;
+    if (Object.prototype.hasOwnProperty.call(exitTw, 'allowedRwDirections')) {
+      const arr = normalizeAllowedRunwayDirections(exitTw.allowedRwDirections);
+      if (arr.length === 0) return false;
+      return arr.indexOf(d) >= 0;
+    }
+    return isRunwayExitDirectionAllowed(exitTw, d);
   }
   function getRunwayExitAllowedDirectionsFromPanel() {
     const out = [];
@@ -628,3 +661,15 @@
     ctx.beginPath();
     ctx.moveTo(xNose + shiftX, -noseHalf);
     ctx.lineTo(xNose + shiftX, noseHalf);
+    ctx.lineTo(xStop + shiftX, noseHalf);
+    ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
+    if (xBendEnd < halfD - eps) {
+      ctx.lineTo(halfD + shiftX, halfW);
+      ctx.lineTo(halfD + shiftX, -halfW);
+      ctx.lineTo(xBendEnd + shiftX, -halfW);
+    } else {
+      ctx.lineTo(halfD + shiftX, -halfW);
+    }
+    ctx.lineTo(xStop + shiftX, -noseHalf);
+    ctx.closePath();
+    return true;

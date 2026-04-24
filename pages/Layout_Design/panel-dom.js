@@ -1,38 +1,3 @@
-      const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
-      const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
-      const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
-      const acDepDelay = (etot != null && stot != null) ? Math.max(0, etot - stot) : null;
-      return {
-        flight: f,
-        id: f && f.id ? f.id : '',
-        reg: f && f.reg ? f.reg : '',
-        flightNumber: f && f.flightNumber ? f.flightNumber : '',
-        standId: f && f.standId ? f.standId : null,
-        standName: kpiStandLabelById(f && f.standId ? f.standId : null),
-        arrTaxiMin,
-        depTaxiMin,
-        rotSec,
-        depRotSec,
-        arrTaxiDelayMin,
-        depTaxiDelayMin,
-        sibt,
-        sobt,
-        sldt,
-        stot,
-        eldt,
-        eibt,
-        eobt,
-        etot,
-        failed,
-        paxArrDelay,
-        paxDepDelay,
-        acArrDelay,
-        acDepDelay
-      };
-    });
-    const KPI_ROLL_STEP_MIN = 15;
-    const KPI_ROLL_WIN_MIN = 60;
-    const buckets = [];
     if (rows.length) {
       const wLastStart = 1440 - KPI_ROLL_WIN_MIN;
       for (let w = 0; w <= wLastStart; w += KPI_ROLL_STEP_MIN) {
@@ -1158,3 +1123,38 @@
       const midLen = accLen + lengths[i] * 0.5;
       const u = totalLen > 1e-9 ? midLen / totalLen : 0;
       const v = Math.max(1, vIn + (vOut - vIn) * u);
+      rawTotal += lengths[i] < 1e-9 ? 0 : lengths[i] / v;
+      accLen += lengths[i];
+    }
+    return rawTotal;
+  }
+  function splitTaxiInPartsForTimeline(f, runwayId, taxiInPts) {
+    const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
+    if (!taxiInPts || taxiInPts.length < 2) {
+      return {
+        vTaxiBase,
+        runwayPts: [],
+        retPts: [],
+        taxiPts: [],
+        phyRw: 0,
+        phyRet: 0,
+        phyTaxi: 0,
+        useRwPhy: false,
+        runwayLenM: 0,
+        vTd: 0,
+        aDec: 0,
+        vRetIn: 0,
+        vRetOut: 0,
+        vRetResolved: vTaxiBase,
+        carryAfterRunway: { lastTaxiwayMs: null },
+      };
+    }
+    const vTd = touchdownSpeedMsForTimeline(f);
+    let vRetIn = typeof f.arrVRetInMs === 'number' && isFinite(f.arrVRetInMs) && f.arrVRetInMs > 0 ? f.arrVRetInMs : getMinArrVelocityMpsForRunwayId(runwayId);
+    let vRetOut = typeof f.arrVRetOutMs === 'number' && isFinite(f.arrVRetOutMs) && f.arrVRetOutMs > 0 ? f.arrVRetOutMs : vTaxiBase;
+    if (f.arrRetFailed) {
+      vRetIn = getMinArrVelocityMpsForRunwayId(runwayId);
+      vRetOut = vTaxiBase;
+    }
+    const aDec = aircraftDecelMs2ForTimeline(f);
+    let runwayLenM = 0;

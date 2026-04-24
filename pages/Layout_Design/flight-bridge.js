@@ -1,15 +1,3 @@
-    ctx.lineTo(xStop + shiftX, noseHalf);
-    ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
-    if (xBendEnd < halfD - eps) {
-      ctx.lineTo(halfD + shiftX, halfW);
-      ctx.lineTo(halfD + shiftX, -halfW);
-      ctx.lineTo(xBendEnd + shiftX, -halfW);
-    } else {
-      ctx.lineTo(halfD + shiftX, -halfW);
-    }
-    ctx.lineTo(xStop + shiftX, -noseHalf);
-    ctx.closePath();
-    return true;
   }
   /** Stand-local +X = tail/apron-open, −X = nose/terminal-ward. Red dashed: stop bar (nose_clear), pushback (pushback), lateral gap bounds (wingspan ± vs stand width). Clipped to safety footprint when nose geometry applies. */
   function drawStandApronMarkingsInLocalAxes(ctx, depM, widM, category) {
@@ -448,3 +436,15 @@
       if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
     }
     for (let i = 0; i < state.pbbStands.length; i++) {
+      const o = state.pbbStands[i];
+      const oc = getStandConnectionPx(o);
+      const oa = getPBBStandAngle(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    return false;
+  }
+  function pbbStandOverlapsTerminal(pbb) {
+    const corners = getPBBStandCorners(pbb);
+    for (let t = 0; t < state.terminals.length; t++) {

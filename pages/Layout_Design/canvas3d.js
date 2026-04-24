@@ -1,35 +1,3 @@
-      if (!isFinite(x) || !isFinite(y)) continue;
-      ok = true;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
-  }
-  function markerWorldAabb(m) {
-    if (!m) return null;
-    const pts = [];
-    if (Array.isArray(m.points)) {
-      for (let i = 0; i < m.points.length; i++) {
-        const p = m.points[i];
-        if (!p) continue;
-        const x = Number(p.x), y = Number(p.y);
-        if (isFinite(x) && isFinite(y)) pts.push([x, y]);
-      }
-    }
-    [['x', 'y'], ['x1', 'y1'], ['x2', 'y2']].forEach(function(pair) {
-      const x = Number(m[pair[0]]), y = Number(m[pair[1]]);
-      if (isFinite(x) && isFinite(y)) pts.push([x, y]);
-    });
-    const a = pointsWorldAabb(pts);
-    if (!a) return null;
-    const pad = Math.max(8, CELL_SIZE * 0.8);
-    return { minX: a.minX - pad, minY: a.minY - pad, maxX: a.maxX + pad, maxY: a.maxY + pad };
-  }
-  function overlayJunctionFillForWorldPoint(p, gCache) {
-    if (layerMonoEtcOn()) return C2D_LAYER_MONO_ETC_WHITE;
-    if (!gCache || !p) return '#22c55e';
     const mergeR = PATH_JUNCTION_MERGE_RADIUS_PX * 3.5;
     const mergeR2 = mergeR * mergeR;
     const conn = gCache.connectedJunctions || gCache.junctions || [];

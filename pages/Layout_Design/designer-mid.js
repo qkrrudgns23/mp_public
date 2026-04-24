@@ -1,15 +1,3 @@
-  function isFlightTrailHiddenAtSimTime(f, tSec) {
-    if (isFlightAirsideCycleCompleteAtSimTime(f, tSec)) return true;
-    if (isFlightTimelineStationaryAtSimTime(f, tSec)) return true;
-    return false;
-  }
-
-  function getFlightTrailPolylineBackward(f, tEnd, maxDistM) {
-    const tl = f && f.timeline;
-    if (!tl || tl.length < 2 || !(maxDistM > 0)) return [];
-    const tMin = tl[0].t, tMax = tl[tl.length - 1].t;
-    let t = Math.min(Math.max(tEnd, tMin), tMax);
-    let seg = 0;
     for (let i = 0; i < tl.length - 1; i++) {
       if (t >= tl[i].t && t <= tl[i + 1].t) { seg = i; break; }
       if (t > tl[i + 1].t) seg = i;
@@ -508,10 +496,13 @@
       if (t.pathType === 'runway' && typeof getTaxiwayDirection === 'function') {
         line += '\x1e' + String(getTaxiwayDirection(t));
       }
+      if (t.pathType === 'runway_exit') {
+        line += '\x1e' + JSON.stringify(t.allowedRwDirections || []);
+      }
       parts.push(line);
     }
     parts.sort();
-    return parts.join('\x1f') + '\x1e' + 'retEgressGeomV1';
+    return parts.join('\x1f') + '\x1e' + 'arrivalRetF2onlyV1';
   }
   function bumpScheduleRetExitDistCache() {
     __schedRetExitDistSig = '';
@@ -533,31 +524,15 @@
   function getScheduleRetStatsAll() {
     if (__schedRetStatsBatchActive) {
       if (__schedRetStatsCached === null) {
-        // #region agent log
-        var _t0b = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
-        // #endregion
         __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-        // #region agent log
-        if (typeof fetch === 'function') { var _d = (typeof performance !== 'undefined' && performance.now) ? (performance.now() - _t0b) : 0; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'ret-path', location: 'designer.js:getScheduleRetStatsAll', message: 'batch computeRunwayExitDistances', data: { hypothesisId: 'H1', branch: 'batch', durationMs: Math.round(_d * 100) / 100, ms: _d }, timestamp: Date.now() }) }).catch(function() {}); }
-        // #endregion
       }
       return __schedRetStatsCached;
     }
     const sig = scheduleRetExitDistLayoutSig();
     if (sig === __schedRetExitDistSig && __schedRetExitDistMemo && Array.isArray(__schedRetExitDistMemo)) {
-      // #region agent log
-      if (typeof fetch === 'function') { window.__retSchedDbg = window.__retSchedDbg || { hit: 0, miss: 0 }; window.__retSchedDbg.hit = (window.__retSchedDbg.hit + 1) | 0; if (window.__retSchedDbg.hit <= 5 || (window.__retSchedDbg.hit % 15) === 0) { fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'ret-path', location: 'designer.js:getScheduleRetStatsAll', message: 'layoutSig cache HIT', data: { hypothesisId: 'H1', hitN: window.__retSchedDbg.hit, sigBytes: (sig && sig.length) | 0 }, timestamp: Date.now() }) }).catch(function() {}); } }
-      // #endregion
       return __schedRetExitDistMemo;
     }
-    // #region agent log
-    var _t0m = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
-    if (typeof fetch === 'function') { window.__retSchedDbg = window.__retSchedDbg || { hit: 0, miss: 0 }; window.__retSchedDbg.miss = (window.__retSchedDbg.miss + 1) | 0; }
-    // #endregion
     const res = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-    // #region agent log
-    if (typeof fetch === 'function') { var _dm = (typeof performance !== 'undefined' && performance.now) ? (performance.now() - _t0m) : 0; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'ret-path', location: 'designer.js:getScheduleRetStatsAll', message: 'layoutSig cache MISS compute', data: { hypothesisId: 'H1', missN: window.__retSchedDbg.miss, durationMs: Math.round(_dm * 100) / 100, sigBytes: (sig && sig.length) | 0 }, timestamp: Date.now() }) }).catch(function() {}); }
-    // #endregion
     __schedRetExitDistSig = sig;
     __schedRetExitDistMemo = res;
     return res;
@@ -598,15 +573,10 @@
     if (!f || f.sampledArrRet == null) return false;
     if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
     const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
-    const arrDir = resolveArrivalRunwayDirForRetGate(f);
     return retStatsAll.some(function(r) {
       if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
       if (arrRunwayId == null) return true;
-      if (!(r.runway && r.runway.id === arrRunwayId)) return false;
-      if (arrDir === 'clockwise' || arrDir === 'counter_clockwise') {
-        if (!isRunwayExitDirectionAllowed(r.exit, arrDir)) return false;
-      }
-      return true;
+      return !!(r.runway && r.runway.id === arrRunwayId);
     });
   }
   /** Runway-exit (RET) sampling for Arrival Configuration / schedule RET column. ROT(arr) seconds come from Pro Sim schedule (``ARR_ROT_SEC``), not from this function. */
@@ -644,13 +614,8 @@
     const aMin = Math.max(0.1, cfg.aMu * 0.85);
     const aMax = Math.min(6,   cfg.aMu * 1.15);
     const aDec = clamp(aSample, aMin, aMax);
-    const arrDir = resolveArrivalRunwayDirForRetGate(f);
     const candidates = retStatsAll.filter(function(r) {
-      if (!(r && r.runway && r.runway.id === arrRunwayId && r.exit)) return false;
-      if (arrDir === 'clockwise' || arrDir === 'counter_clockwise') {
-        return isRunwayExitDirectionAllowed(r.exit, arrDir);
-      }
-      return true;
+      return !!(r && r.runway && r.runway.id === arrRunwayId && r.exit);
     });
     if (!candidates.length) {
       f.arrDecelMs2 = null;
@@ -2744,3 +2709,38 @@
       const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
       const etot = kpiToNumber(f && f.etotMin != null ? f.etotMin : (f && f.stotMin_d != null ? f.stotMin_d : stot));
       const failed = !!(f && flightBlockedLikeNoWay(f));
+      const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
+      const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
+      const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
+      const acDepDelay = (etot != null && stot != null) ? Math.max(0, etot - stot) : null;
+      return {
+        flight: f,
+        id: f && f.id ? f.id : '',
+        reg: f && f.reg ? f.reg : '',
+        flightNumber: f && f.flightNumber ? f.flightNumber : '',
+        standId: f && f.standId ? f.standId : null,
+        standName: kpiStandLabelById(f && f.standId ? f.standId : null),
+        arrTaxiMin,
+        depTaxiMin,
+        rotSec,
+        depRotSec,
+        arrTaxiDelayMin,
+        depTaxiDelayMin,
+        sibt,
+        sobt,
+        sldt,
+        stot,
+        eldt,
+        eibt,
+        eobt,
+        etot,
+        failed,
+        paxArrDelay,
+        paxDepDelay,
+        acArrDelay,
+        acDepDelay
+      };
+    });
+    const KPI_ROLL_STEP_MIN = 15;
+    const KPI_ROLL_WIN_MIN = 60;
+    const buckets = [];

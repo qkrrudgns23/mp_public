@@ -1,15 +1,3 @@
-  const standAngleInputEl = document.getElementById('standAngle');
-  if (standAngleInputEl) {
-    standAngleInputEl.addEventListener('change', function() {
-      const nextDeg = normalizeAngleDeg(this.value);
-      this.value = String(Math.round(nextDeg));
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        const pbb = state.selectedObject.obj;
-        pbb.angleDeg = nextDeg;
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
       }
     });
   }
@@ -1095,3 +1083,15 @@
     return false;
   }
 
+  function isFlightTrailHiddenAtSimTime(f, tSec) {
+    if (isFlightAirsideCycleCompleteAtSimTime(f, tSec)) return true;
+    if (isFlightTimelineStationaryAtSimTime(f, tSec)) return true;
+    return false;
+  }
+
+  function getFlightTrailPolylineBackward(f, tEnd, maxDistM) {
+    const tl = f && f.timeline;
+    if (!tl || tl.length < 2 || !(maxDistM > 0)) return [];
+    const tMin = tl[0].t, tMax = tl[tl.length - 1].t;
+    let t = Math.min(Math.max(tEnd, tMin), tMax);
+    let seg = 0;

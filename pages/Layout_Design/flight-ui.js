@@ -1,15 +1,3 @@
-        if (!p || p.length < 2) continue;
-        const lx = Number(p[0]) * lenM;
-        const ly = Number(p[1]) * spanM;
-        if (!isFinite(lx) || !isFinite(ly)) continue;
-        if (ly < minY) { minY = ly; minPt = [lx, ly]; }
-        if (ly > maxY) { maxY = ly; maxPt = [lx, ly]; }
-      }
-      if (minPt && maxPt) {
-        leftLocal = minPt;
-        rightLocal = maxPt;
-      }
-    }
     const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
     function localToWorld(pt) {
       return {
@@ -858,3 +846,15 @@
     const verts = mk.points;
     const n = verts ? verts.length : 0;
     if (!verts || n < 3 || vertexIndex < 0 || vertexIndex >= n) return;
+    const prev = verts[(vertexIndex - 1 + n) % n];
+    const next = verts[(vertexIndex + 1) % n];
+    const Apx = [Number(prev.x), Number(prev.y)];
+    const Bpx = [Number(next.x), Number(next.y)];
+    const workPx = previewPx.map(function(p, j) {
+      if (j === 0) return [Apx[0], Apx[1]];
+      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
+      return [p[0], p[1]];
+    });
+    const cells = [];
+    if (previewPx.length > 2) {
+      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));

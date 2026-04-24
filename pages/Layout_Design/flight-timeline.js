@@ -1,15 +1,3 @@
-      const o = state.pbbStands[i];
-      const oc = getStandConnectionPx(o);
-      const oa = getPBBStandAngle(o);
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    return false;
-  }
-  function pbbStandOverlapsTerminal(pbb) {
-    const corners = getPBBStandCorners(pbb);
-    for (let t = 0; t < state.terminals.length; t++) {
       const term = state.terminals[t];
       if (!term.closed || term.vertices.length < 3) continue;
       const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
@@ -1328,3 +1316,15 @@
       let minPt = null, maxPt = null;
       for (let i = 0; i < silhouette2D.length; i++) {
         const p = silhouette2D[i];
+        if (!p || p.length < 2) continue;
+        const lx = Number(p[0]) * lenM;
+        const ly = Number(p[1]) * spanM;
+        if (!isFinite(lx) || !isFinite(ly)) continue;
+        if (ly < minY) { minY = ly; minPt = [lx, ly]; }
+        if (ly > maxY) { maxY = ly; maxPt = [lx, ly]; }
+      }
+      if (minPt && maxPt) {
+        leftLocal = minPt;
+        rightLocal = maxPt;
+      }
+    }

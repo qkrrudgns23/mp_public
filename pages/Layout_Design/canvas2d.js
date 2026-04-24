@@ -1,38 +1,3 @@
-      rawTotal += lengths[i] < 1e-9 ? 0 : lengths[i] / v;
-      accLen += lengths[i];
-    }
-    return rawTotal;
-  }
-  function splitTaxiInPartsForTimeline(f, runwayId, taxiInPts) {
-    const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
-    if (!taxiInPts || taxiInPts.length < 2) {
-      return {
-        vTaxiBase,
-        runwayPts: [],
-        retPts: [],
-        taxiPts: [],
-        phyRw: 0,
-        phyRet: 0,
-        phyTaxi: 0,
-        useRwPhy: false,
-        runwayLenM: 0,
-        vTd: 0,
-        aDec: 0,
-        vRetIn: 0,
-        vRetOut: 0,
-        vRetResolved: vTaxiBase,
-        carryAfterRunway: { lastTaxiwayMs: null },
-      };
-    }
-    const vTd = touchdownSpeedMsForTimeline(f);
-    let vRetIn = typeof f.arrVRetInMs === 'number' && isFinite(f.arrVRetInMs) && f.arrVRetInMs > 0 ? f.arrVRetInMs : getMinArrVelocityMpsForRunwayId(runwayId);
-    let vRetOut = typeof f.arrVRetOutMs === 'number' && isFinite(f.arrVRetOutMs) && f.arrVRetOutMs > 0 ? f.arrVRetOutMs : vTaxiBase;
-    if (f.arrRetFailed) {
-      vRetIn = getMinArrVelocityMpsForRunwayId(runwayId);
-      vRetOut = vTaxiBase;
-    }
-    const aDec = aircraftDecelMs2ForTimeline(f);
-    let runwayLenM = 0;
     if (typeof f.arrRetDistM === 'number' && isFinite(f.arrRetDistM) && typeof f.arrTdDistM === 'number' && isFinite(f.arrTdDistM)) {
       runwayLenM = Math.abs(f.arrRetDistM - f.arrTdDistM);
     }
@@ -1344,76 +1309,12 @@
     return out;
   }
 
-  /**
-   * Centerline-based egress: the first RET edge that leaves the strip must not aim opposite the operational
-   * roll direction (E·F << 0), and must not continue straight along the runway (|E×F|≈0, E·F>0) with no turn-off.
-   */
-  function isRunwayExitEgressGeomOkForCenterline(rVerts, ev, rwOpDir) {
-    const dOp = normalizeRwDirectionValue(rwOpDir);
-    if (dOp !== 'clockwise' && dOp !== 'counter_clockwise') return true;
-    if (!rVerts || rVerts.length < 2 || !ev || ev.length < 2) return true;
-    const n = ev.length;
-    function minDistSqToPolyline(q) {
-      let best = Infinity;
-      for (let i = 0; i < rVerts.length - 1; i++) {
-        const pr = projectOnSegment(rVerts[i], rVerts[i + 1], q);
-        const d2 = dist2(q, pr.p);
-        if (d2 < best) best = d2;
-      }
-      return best;
-    }
-    const d2s = [];
-    for (let i = 0; i < n; i++) d2s.push(minDistSqToPolyline(ev[i]));
-    let i0 = 0;
-    for (let i = 1; i < n; i++) {
-      if (d2s[i] < d2s[i0] - 1e-9) i0 = i;
-    }
-    const neigh = [];
-    if (i0 > 0) neigh.push(i0 - 1);
-    if (i0 < n - 1) neigh.push(i0 + 1);
-    if (!neigh.length) return true;
-    let jPick = neigh[0];
-    let dPick = d2s[jPick];
-    for (let k = 1; k < neigh.length; k++) {
-      const j = neigh[k];
-      if (d2s[j] > dPick + 1e-9) { dPick = d2s[j]; jPick = j; }
-    }
-    if (d2s[jPick] < d2s[i0] + 1e-4) {
-      dPick = -Infinity;
-      for (let k = 0; k < neigh.length; k++) {
-        const j = neigh[k];
-        if (d2s[j] > d2s[i0] + 0.01 && d2s[j] > dPick) { dPick = d2s[j]; jPick = j; }
-      }
-    }
-    if (d2s[jPick] < d2s[i0] + 1e-4) return true;
-    const a = ev[i0], b = ev[jPick];
-    const ex = b[0] - a[0], ey = b[1] - a[1];
-    const eLen = Math.sqrt(ex * ex + ey * ey);
-    if (eLen < 1e-9) return true;
-    const eux = ex / eLen, euy = ey / eLen;
-    const attach = a;
-    let fUx = 0, fUy = 0, bestA = Infinity, got = false;
-    for (let i = 0; i < rVerts.length - 1; i++) {
-      const p0 = rVerts[i], p1 = rVerts[i + 1];
-      const pr = projectOnSegment(p0, p1, attach);
-      const d2a = dist2(attach, pr.p);
-      if (d2a < bestA - 1e-9) {
-        bestA = d2a;
-        const sl = pathDist(p0, p1);
-        if (sl < 1e-9) { got = false; continue; }
-        fUx = (p1[0] - p0[0]) / sl;
-        fUy = (p1[1] - p0[1]) / sl;
-        got = true;
-      }
-    }
-    if (!got) return true;
-    const sign = dOp === 'counter_clockwise' ? -1 : 1;
-    const fx = sign * fUx, fy = sign * fUy;
-    const dotE = eux * fx + euy * fy;
-    const crossE = eux * fy - euy * fx;
-    if (dotE < -0.15) return false;
-    if (Math.abs(crossE) < 0.08 && dotE > 0.65) return false;
-    return true;
+  /** F2: operational runway direction vs RET "Available RW direction" only (arrival sample — no extra geometry gate). */
+  function arrivalRetPassesFilter2RunwayAvailableDir(rw, exitTw) {
+    if (!rw || !exitTw || rw.pathType !== 'runway' || exitTw.pathType !== 'runway_exit') return false;
+    const rd = getRunwayOperationalDirForArrivalRetFilter2(rw);
+    if (rd === 'clockwise') return isRunwayExitDirAllowedForArrivalFilter2(exitTw, 'clockwise');
+    return isRunwayExitDirAllowedForArrivalFilter2(exitTw, 'counter_clockwise');
   }
 
   function computeRunwayExitDistances() {
@@ -1430,8 +1331,6 @@
       for (let i = 1; i < rVerts.length; i++) {
         prefixDist[i] = prefixDist[i - 1] + pathDist(rVerts[i - 1], rVerts[i]);
       }
-      const rwOpDir = normalizeRwDirectionValue(getTaxiwayDirection(rw));
-
       exits.forEach(tw => {
         let best = null;
         const exitName = (tw.name && tw.name.trim()) ? tw.name.trim() : ('Exit ' + String(results.length + 1));
@@ -1489,14 +1388,7 @@
           }
         }
         if (best) {
-          if ((rwOpDir === 'clockwise' || rwOpDir === 'counter_clockwise') &&
-              !isRunwayExitDirectionAllowed(tw, rwOpDir)) {
-            best = null;
-          }
-        }
-        if (best && (rwOpDir === 'clockwise' || rwOpDir === 'counter_clockwise') &&
-            !isRunwayExitEgressGeomOkForCenterline(rVerts, ev, rwOpDir)) {
-          best = null;
+          if (!arrivalRetPassesFilter2RunwayAvailableDir(rw, tw)) best = null;
         }
         if (best) results.push(best);
       });
@@ -1708,3 +1600,35 @@
       const p = points[i];
       if (!p || p.length < 2) continue;
       const x = Number(p[0]), y = Number(p[1]);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      ok = true;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
+  }
+  function markerWorldAabb(m) {
+    if (!m) return null;
+    const pts = [];
+    if (Array.isArray(m.points)) {
+      for (let i = 0; i < m.points.length; i++) {
+        const p = m.points[i];
+        if (!p) continue;
+        const x = Number(p.x), y = Number(p.y);
+        if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+      }
+    }
+    [['x', 'y'], ['x1', 'y1'], ['x2', 'y2']].forEach(function(pair) {
+      const x = Number(m[pair[0]]), y = Number(m[pair[1]]);
+      if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+    });
+    const a = pointsWorldAabb(pts);
+    if (!a) return null;
+    const pad = Math.max(8, CELL_SIZE * 0.8);
+    return { minX: a.minX - pad, minY: a.minY - pad, maxX: a.maxX + pad, maxY: a.maxY + pad };
+  }
+  function overlayJunctionFillForWorldPoint(p, gCache) {
+    if (layerMonoEtcOn()) return C2D_LAYER_MONO_ETC_WHITE;
+    if (!gCache || !p) return '#22c55e';

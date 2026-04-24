@@ -2758,8 +2758,14 @@
     return 'both';
   }
   function normalizeRwDirectionValue(dir) {
-    if (dir === 'clockwise' || dir === 'cw') return 'clockwise';
-    if (dir === 'counter_clockwise' || dir === 'ccw') return 'counter_clockwise';
+    if (dir == null) return 'both';
+    const s0 = String(dir).trim();
+    if (!s0) return 'both';
+    const s = s0.toLowerCase().replace(/[\s-]+/g, '_');
+    if (s === 'clockwise' || s === 'cw') return 'clockwise';
+    if (s === 'counter_clockwise' || s === 'ccw' || s === 'counterclockwise') return 'counter_clockwise';
+    if (s === 'top_tobottom' || s === 'toptobottom' || s === 'ttb') return 'clockwise';
+    if (s === 'bottom_totop' || s === 'bottomtotop' || s === 'btt') return 'counter_clockwise';
     return 'both';
   }
   function normalizeAllowedRunwayDirections(raw) {
@@ -2783,6 +2789,33 @@
     if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
     const allow = getTaxiwayAllowedRunwayDirections(tw);
     return allow.indexOf(d) >= 0;
+  }
+  /**
+   * Arrival RET sampling (F2): runways in the property panel are always stored as CW or CCW;
+   * legacy data may still have direction "both". The panel coerces "both" to the CW option for display,
+   * so we use CW as the operational match for "Available RW direction" vs the runway.
+   */
+  function getRunwayOperationalDirForArrivalRetFilter2(rw) {
+    if (!rw || rw.pathType !== 'runway') return 'clockwise';
+    const raw = getTaxiwayDirection(rw);
+    const d = normalizeRwDirectionValue(raw);
+    if (d === 'clockwise' || d === 'counter_clockwise') return d;
+    return 'clockwise';
+  }
+  /**
+   * F2: same semantics as checkboxes, but an explicit `allowedRwDirections: []` (both unchecked) means
+   * "no use" — do not re-expand to the default both-way list (pathfinding may still do that for legacy).
+   */
+  function isRunwayExitDirAllowedForArrivalFilter2(exitTw, runwayDir) {
+    const d = normalizeRwDirectionValue(runwayDir);
+    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
+    if (!exitTw || exitTw.pathType !== 'runway_exit') return false;
+    if (Object.prototype.hasOwnProperty.call(exitTw, 'allowedRwDirections')) {
+      const arr = normalizeAllowedRunwayDirections(exitTw.allowedRwDirections);
+      if (arr.length === 0) return false;
+      return arr.indexOf(d) >= 0;
+    }
+    return isRunwayExitDirectionAllowed(exitTw, d);
   }
   function getRunwayExitAllowedDirectionsFromPanel() {
     const out = [];
@@ -8670,10 +8703,13 @@
       if (t.pathType === 'runway' && typeof getTaxiwayDirection === 'function') {
         line += '\x1e' + String(getTaxiwayDirection(t));
       }
+      if (t.pathType === 'runway_exit') {
+        line += '\x1e' + JSON.stringify(t.allowedRwDirections || []);
+      }
       parts.push(line);
     }
     parts.sort();
-    return parts.join('\x1f') + '\x1e' + 'retEgressGeomV1';
+    return parts.join('\x1f') + '\x1e' + 'arrivalRetF2onlyV1';
   }
   function bumpScheduleRetExitDistCache() {
     __schedRetExitDistSig = '';
@@ -8695,31 +8731,15 @@
   function getScheduleRetStatsAll() {
     if (__schedRetStatsBatchActive) {
       if (__schedRetStatsCached === null) {
-        // #region agent log
-        var _t0b = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
-        // #endregion
         __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-        // #region agent log
-        if (typeof fetch === 'function') { var _d = (typeof performance !== 'undefined' && performance.now) ? (performance.now() - _t0b) : 0; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'ret-path', location: 'designer.js:getScheduleRetStatsAll', message: 'batch computeRunwayExitDistances', data: { hypothesisId: 'H1', branch: 'batch', durationMs: Math.round(_d * 100) / 100, ms: _d }, timestamp: Date.now() }) }).catch(function() {}); }
-        // #endregion
       }
       return __schedRetStatsCached;
     }
     const sig = scheduleRetExitDistLayoutSig();
     if (sig === __schedRetExitDistSig && __schedRetExitDistMemo && Array.isArray(__schedRetExitDistMemo)) {
-      // #region agent log
-      if (typeof fetch === 'function') { window.__retSchedDbg = window.__retSchedDbg || { hit: 0, miss: 0 }; window.__retSchedDbg.hit = (window.__retSchedDbg.hit + 1) | 0; if (window.__retSchedDbg.hit <= 5 || (window.__retSchedDbg.hit % 15) === 0) { fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'ret-path', location: 'designer.js:getScheduleRetStatsAll', message: 'layoutSig cache HIT', data: { hypothesisId: 'H1', hitN: window.__retSchedDbg.hit, sigBytes: (sig && sig.length) | 0 }, timestamp: Date.now() }) }).catch(function() {}); } }
-      // #endregion
       return __schedRetExitDistMemo;
     }
-    // #region agent log
-    var _t0m = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
-    if (typeof fetch === 'function') { window.__retSchedDbg = window.__retSchedDbg || { hit: 0, miss: 0 }; window.__retSchedDbg.miss = (window.__retSchedDbg.miss + 1) | 0; }
-    // #endregion
     const res = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-    // #region agent log
-    if (typeof fetch === 'function') { var _dm = (typeof performance !== 'undefined' && performance.now) ? (performance.now() - _t0m) : 0; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'ret-path', location: 'designer.js:getScheduleRetStatsAll', message: 'layoutSig cache MISS compute', data: { hypothesisId: 'H1', missN: window.__retSchedDbg.miss, durationMs: Math.round(_dm * 100) / 100, sigBytes: (sig && sig.length) | 0 }, timestamp: Date.now() }) }).catch(function() {}); }
-    // #endregion
     __schedRetExitDistSig = sig;
     __schedRetExitDistMemo = res;
     return res;
@@ -8760,15 +8780,10 @@
     if (!f || f.sampledArrRet == null) return false;
     if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
     const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
-    const arrDir = resolveArrivalRunwayDirForRetGate(f);
     return retStatsAll.some(function(r) {
       if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
       if (arrRunwayId == null) return true;
-      if (!(r.runway && r.runway.id === arrRunwayId)) return false;
-      if (arrDir === 'clockwise' || arrDir === 'counter_clockwise') {
-        if (!isRunwayExitDirectionAllowed(r.exit, arrDir)) return false;
-      }
-      return true;
+      return !!(r.runway && r.runway.id === arrRunwayId);
     });
   }
   /** Runway-exit (RET) sampling for Arrival Configuration / schedule RET column. ROT(arr) seconds come from Pro Sim schedule (``ARR_ROT_SEC``), not from this function. */
@@ -8806,13 +8821,8 @@
     const aMin = Math.max(0.1, cfg.aMu * 0.85);
     const aMax = Math.min(6,   cfg.aMu * 1.15);
     const aDec = clamp(aSample, aMin, aMax);
-    const arrDir = resolveArrivalRunwayDirForRetGate(f);
     const candidates = retStatsAll.filter(function(r) {
-      if (!(r && r.runway && r.runway.id === arrRunwayId && r.exit)) return false;
-      if (arrDir === 'clockwise' || arrDir === 'counter_clockwise') {
-        return isRunwayExitDirectionAllowed(r.exit, arrDir);
-      }
-      return true;
+      return !!(r && r.runway && r.runway.id === arrRunwayId && r.exit);
     });
     if (!candidates.length) {
       f.arrDecelMs2 = null;
@@ -13412,76 +13422,12 @@
     return out;
   }
 
-  /**
-   * Centerline-based egress: the first RET edge that leaves the strip must not aim opposite the operational
-   * roll direction (E·F << 0), and must not continue straight along the runway (|E×F|≈0, E·F>0) with no turn-off.
-   */
-  function isRunwayExitEgressGeomOkForCenterline(rVerts, ev, rwOpDir) {
-    const dOp = normalizeRwDirectionValue(rwOpDir);
-    if (dOp !== 'clockwise' && dOp !== 'counter_clockwise') return true;
-    if (!rVerts || rVerts.length < 2 || !ev || ev.length < 2) return true;
-    const n = ev.length;
-    function minDistSqToPolyline(q) {
-      let best = Infinity;
-      for (let i = 0; i < rVerts.length - 1; i++) {
-        const pr = projectOnSegment(rVerts[i], rVerts[i + 1], q);
-        const d2 = dist2(q, pr.p);
-        if (d2 < best) best = d2;
-      }
-      return best;
-    }
-    const d2s = [];
-    for (let i = 0; i < n; i++) d2s.push(minDistSqToPolyline(ev[i]));
-    let i0 = 0;
-    for (let i = 1; i < n; i++) {
-      if (d2s[i] < d2s[i0] - 1e-9) i0 = i;
-    }
-    const neigh = [];
-    if (i0 > 0) neigh.push(i0 - 1);
-    if (i0 < n - 1) neigh.push(i0 + 1);
-    if (!neigh.length) return true;
-    let jPick = neigh[0];
-    let dPick = d2s[jPick];
-    for (let k = 1; k < neigh.length; k++) {
-      const j = neigh[k];
-      if (d2s[j] > dPick + 1e-9) { dPick = d2s[j]; jPick = j; }
-    }
-    if (d2s[jPick] < d2s[i0] + 1e-4) {
-      dPick = -Infinity;
-      for (let k = 0; k < neigh.length; k++) {
-        const j = neigh[k];
-        if (d2s[j] > d2s[i0] + 0.01 && d2s[j] > dPick) { dPick = d2s[j]; jPick = j; }
-      }
-    }
-    if (d2s[jPick] < d2s[i0] + 1e-4) return true;
-    const a = ev[i0], b = ev[jPick];
-    const ex = b[0] - a[0], ey = b[1] - a[1];
-    const eLen = Math.sqrt(ex * ex + ey * ey);
-    if (eLen < 1e-9) return true;
-    const eux = ex / eLen, euy = ey / eLen;
-    const attach = a;
-    let fUx = 0, fUy = 0, bestA = Infinity, got = false;
-    for (let i = 0; i < rVerts.length - 1; i++) {
-      const p0 = rVerts[i], p1 = rVerts[i + 1];
-      const pr = projectOnSegment(p0, p1, attach);
-      const d2a = dist2(attach, pr.p);
-      if (d2a < bestA - 1e-9) {
-        bestA = d2a;
-        const sl = pathDist(p0, p1);
-        if (sl < 1e-9) { got = false; continue; }
-        fUx = (p1[0] - p0[0]) / sl;
-        fUy = (p1[1] - p0[1]) / sl;
-        got = true;
-      }
-    }
-    if (!got) return true;
-    const sign = dOp === 'counter_clockwise' ? -1 : 1;
-    const fx = sign * fUx, fy = sign * fUy;
-    const dotE = eux * fx + euy * fy;
-    const crossE = eux * fy - euy * fx;
-    if (dotE < -0.15) return false;
-    if (Math.abs(crossE) < 0.08 && dotE > 0.65) return false;
-    return true;
+  /** F2: operational runway direction vs RET "Available RW direction" only (arrival sample — no extra geometry gate). */
+  function arrivalRetPassesFilter2RunwayAvailableDir(rw, exitTw) {
+    if (!rw || !exitTw || rw.pathType !== 'runway' || exitTw.pathType !== 'runway_exit') return false;
+    const rd = getRunwayOperationalDirForArrivalRetFilter2(rw);
+    if (rd === 'clockwise') return isRunwayExitDirAllowedForArrivalFilter2(exitTw, 'clockwise');
+    return isRunwayExitDirAllowedForArrivalFilter2(exitTw, 'counter_clockwise');
   }
 
   function computeRunwayExitDistances() {
@@ -13498,8 +13444,6 @@
       for (let i = 1; i < rVerts.length; i++) {
         prefixDist[i] = prefixDist[i - 1] + pathDist(rVerts[i - 1], rVerts[i]);
       }
-      const rwOpDir = normalizeRwDirectionValue(getTaxiwayDirection(rw));
-
       exits.forEach(tw => {
         let best = null;
         const exitName = (tw.name && tw.name.trim()) ? tw.name.trim() : ('Exit ' + String(results.length + 1));
@@ -13557,14 +13501,7 @@
           }
         }
         if (best) {
-          if ((rwOpDir === 'clockwise' || rwOpDir === 'counter_clockwise') &&
-              !isRunwayExitDirectionAllowed(tw, rwOpDir)) {
-            best = null;
-          }
-        }
-        if (best && (rwOpDir === 'clockwise' || rwOpDir === 'counter_clockwise') &&
-            !isRunwayExitEgressGeomOkForCenterline(rVerts, ev, rwOpDir)) {
-          best = null;
+          if (!arrivalRetPassesFilter2RunwayAvailableDir(rw, tw)) best = null;
         }
         if (best) results.push(best);
       });
