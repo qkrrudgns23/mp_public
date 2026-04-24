@@ -1,8 +1,3 @@
-    state.hasSimulationResult = mergedTimelines > 0;
-    if (state.hasSimulationResult) {
-      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
-    } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof resizeCanvas === 'function') resizeCanvas();
     if (typeof reset2DView === 'function') reset2DView();
@@ -628,3 +623,8 @@
     const latRun = halfW - noseHalf;
     if (latRun <= eps) return false;
     const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return false;
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    ctx.beginPath();
+    ctx.moveTo(xNose + shiftX, -noseHalf);
+    ctx.lineTo(xNose + shiftX, noseHalf);

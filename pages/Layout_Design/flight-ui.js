@@ -1,8 +1,3 @@
-    if (_ac2d.useDetailedSilhouette === true && silhouette2D.length >= 3) {
-      let minY = Infinity, maxY = -Infinity;
-      let minPt = null, maxPt = null;
-      for (let i = 0; i < silhouette2D.length; i++) {
-        const p = silhouette2D[i];
         if (!p || p.length < 2) continue;
         const lx = Number(p[0]) * lenM;
         const ly = Number(p[1]) * spanM;
@@ -858,3 +853,8 @@
     const B = cellToPixel(verts[vertexIndex + 1].col, verts[vertexIndex + 1].row);
     return pathArcComputePreviewWorldPxFromAB(A[0], A[1], B[0], B[1], wx, wy);
   }
+  function pathArcCommitIslandVertexFromPreview(mk, vertexIndex, previewPx, snapToGrid) {
+    if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !previewPx || previewPx.length < 2) return;
+    const verts = mk.points;
+    const n = verts ? verts.length : 0;
+    if (!verts || n < 3 || vertexIndex < 0 || vertexIndex >= n) return;

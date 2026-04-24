@@ -1,8 +1,3 @@
-        draw();
-        update3DSceneWhenVisible();
-      }
-    });
-  }
   const standAngleInputEl = document.getElementById('standAngle');
   if (standAngleInputEl) {
     standAngleInputEl.addEventListener('change', function() {
@@ -1095,3 +1090,8 @@
       const dt = b.t - a.t;
       if (dt < 1e-9) continue;
       const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      if (dist < stillEps) return true;
+    }
+    return false;
+  }
+

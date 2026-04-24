@@ -1,8 +1,3 @@
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    for (let i = 0; i < state.pbbStands.length; i++) {
       const o = state.pbbStands[i];
       const oc = getStandConnectionPx(o);
       const oa = getPBBStandAngle(o);
@@ -1328,3 +1323,8 @@
     const silhouette2D = getApronAircraftDetailedSilhouettePoints();
     let leftLocal = [0, -spanM];
     let rightLocal = [0, spanM];
+    if (_ac2d.useDetailedSilhouette === true && silhouette2D.length >= 3) {
+      let minY = Infinity, maxY = -Infinity;
+      let minPt = null, maxPt = null;
+      for (let i = 0; i < silhouette2D.length; i++) {
+        const p = silhouette2D[i];

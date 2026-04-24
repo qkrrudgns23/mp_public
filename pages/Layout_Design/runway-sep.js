@@ -1,8 +1,3 @@
-        delete tw.lineupDistM;
-        delete tw.lineupDistM_CW;
-        delete tw.lineupDistM_CCW;
-      }
-      if (tw.pathType === 'runway') {
         const startDisp = Number(el('runwayStartDisplacedThresholdM') ? el('runwayStartDisplacedThresholdM').value : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
         const startBlast = Number(el('runwayStartBlastPadM') ? el('runwayStartBlastPadM').value : RUNWAY_START_BLAST_PAD_DEFAULT_M);
         const endDisp = Number(el('runwayEndDisplacedThresholdM') ? el('runwayEndDisplacedThresholdM').value : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
@@ -383,3 +378,8 @@
         applyPbbArmLengthToBridgeEnds(pbb, nextLen);
         updateObjectInfo();
         renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }

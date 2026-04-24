@@ -1,8 +1,3 @@
-    let accLen = 0;
-    for (let i = 0; i < lengths.length; i++) {
-      const midLen = accLen + lengths[i] * 0.5;
-      const u = totalLen > 1e-9 ? midLen / totalLen : 0;
-      const v = Math.max(1, vIn + (vOut - vIn) * u);
       rawTotal += lengths[i] < 1e-9 ? 0 : lengths[i] / v;
       accLen += lengths[i];
     }
@@ -1708,3 +1703,8 @@
   function pointsWorldAabb(points) {
     if (!Array.isArray(points) || !points.length) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let ok = false;
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      if (!p || p.length < 2) continue;
+      const x = Number(p[0]), y = Number(p[1]);

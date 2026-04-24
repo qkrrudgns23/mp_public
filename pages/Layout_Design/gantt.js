@@ -1,8 +1,3 @@
-  function pathArcCommitIslandVertexFromPreview(mk, vertexIndex, previewPx, snapToGrid) {
-    if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !previewPx || previewPx.length < 2) return;
-    const verts = mk.points;
-    const n = verts ? verts.length : 0;
-    if (!verts || n < 3 || vertexIndex < 0 || vertexIndex >= n) return;
     const prev = verts[(vertexIndex - 1 + n) % n];
     const next = verts[(vertexIndex + 1) % n];
     const Apx = [Number(prev.x), Number(prev.y)];
@@ -548,3 +543,8 @@
       applyIcaoCategoriesToHost('standIcaoCategories', normalizeAllowedIcaoCategories(pbb.allowedIcaoCategories));
       if (lenInput) {
         let arm = Number(pbb.pbbArmLenM);
+        if (!isFinite(arm) || arm <= 0) {
+          const br0 = pbb.pbbBridges && pbb.pbbBridges[0];
+          const p1 = br0 && br0.points && br0.points[1], p2 = br0 && br0.points && br0.points[2];
+          if (p1 && p2) arm = Math.hypot(Number(p2.x) - Number(p1.x), Number(p2.y) - Number(p1.y));
+          else arm = 15;

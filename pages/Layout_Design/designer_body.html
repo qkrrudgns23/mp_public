@@ -133,13 +133,15 @@
         <button type="button" class="path-arc-hud-toggle" id="btnPathArcToggle" aria-pressed="false">호: OFF</button>
         <div id="pathArcHudHint" class="path-arc-hud-hint" hidden>드래그해 곡률 조절 · 놓으면 적용</div>
       </div>
-      <aside id="object-info-dock" class="object-info-dock" aria-label="Object details">
+      <div id="gridLeftFloatingStack" class="grid-left-floating-stack" aria-label="Left dock">
         <div id="arrRetFailedBanner" class="arr-ret-failed-banner" role="alert" hidden aria-hidden="true">
           <svg class="arr-ret-failed-banner__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.63-1.516 2.63H3.72c-1.347 0-2.189-1.463-1.515-2.63L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
           <span class="arr-ret-failed-banner__text" id="arrRetFailedBannerText"></span>
         </div>
-        <div id="object-info" class="object-info-panel is-empty"></div>
-      </aside>
+        <aside id="object-info-dock" class="object-info-dock" aria-label="Object details">
+          <div id="object-info" class="object-info-panel is-empty"></div>
+        </aside>
+      </div>
       <div id="cursor-pixel-readout" class="cursor-pixel-readout" aria-live="polite" title="Layout coordinates (px) under cursor">—</div>
     </div>
     <div id="info-bar">

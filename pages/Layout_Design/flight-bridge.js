@@ -1,8 +1,3 @@
-    if (xBendEnd > halfD + eps) return false;
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    ctx.beginPath();
-    ctx.moveTo(xNose + shiftX, -noseHalf);
-    ctx.lineTo(xNose + shiftX, noseHalf);
     ctx.lineTo(xStop + shiftX, noseHalf);
     ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
     if (xBendEnd < halfD - eps) {
@@ -448,3 +443,8 @@
       const o = temps[i];
       const oc = getRemoteStandCenterPx(o);
       const oa = getRemoteStandAngleRad(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {

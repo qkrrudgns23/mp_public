@@ -1,8 +1,3 @@
-        if (!isFinite(arm) || arm <= 0) {
-          const br0 = pbb.pbbBridges && pbb.pbbBridges[0];
-          const p1 = br0 && br0.points && br0.points[1], p2 = br0 && br0.points && br0.points[2];
-          if (p1 && p2) arm = Math.hypot(Number(p2.x) - Number(p1.x), Number(p2.y) - Number(p1.y));
-          else arm = 15;
         }
         lenInput.value = String(Math.max(1, Math.round(arm)));
       }
@@ -368,3 +363,8 @@
         tw.lineupDistM_CCW = (typeof lxCcw === 'number' && isFinite(lxCcw) && lxCcw >= 0) ? lxCcw : 0;
         tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
       } else if (tw.pathType !== 'runway') {
+        delete tw.lineupDistM;
+        delete tw.lineupDistM_CW;
+        delete tw.lineupDistM_CCW;
+      }
+      if (tw.pathType === 'runway') {

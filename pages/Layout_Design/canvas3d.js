@@ -1,8 +1,3 @@
-    let ok = false;
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i];
-      if (!p || p.length < 2) continue;
-      const x = Number(p[0]), y = Number(p[1]);
       if (!isFinite(x) || !isFinite(y)) continue;
       ok = true;
       if (x < minX) minX = x;

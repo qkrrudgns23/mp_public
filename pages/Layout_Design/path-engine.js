@@ -1,8 +1,3 @@
-    const btnAll = document.getElementById('btnLayerPopoverAll');
-    if (btnAll) {
-      btnAll.classList.toggle('active', allOn);
-      btnAll.setAttribute('aria-pressed', allOn ? 'true' : 'false');
-      btnAll.title = allOn ? 'Turn all layers off' : 'Turn all layers on';
     }
     if (panel) {
       panel.querySelectorAll('input[data-layer-section-parent]').forEach(function(parentInp) {
@@ -718,3 +713,8 @@
       }
       applyAirsideScheduleRowToFlight(f, srec);
     });
+    state.hasSimulationResult = mergedTimelines > 0;
+    if (state.hasSimulationResult) {
+      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
+    } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();

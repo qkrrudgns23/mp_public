@@ -1,8 +1,3 @@
-      const eldt = kpiToNumber(f && f.eldtMin != null ? f.eldtMin : (f && f.sldtMin_d != null ? f.sldtMin_d : sldt));
-      const eibt = kpiToNumber(f && f.eibtMin != null ? f.eibtMin : (eldt != null && arrTaxiMin != null && rotSec != null ? eldt + arrTaxiMin + rotSec / 60 + (kpiToNumber(f.vttADelayMin) || 0) : sibt));
-      const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
-      const etot = kpiToNumber(f && f.etotMin != null ? f.etotMin : (f && f.stotMin_d != null ? f.stotMin_d : stot));
-      const failed = !!(f && flightBlockedLikeNoWay(f));
       const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
       const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
       const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
@@ -1158,3 +1153,8 @@
       totalLen += len;
     }
     let rawTotal = 0;
+    let accLen = 0;
+    for (let i = 0; i < lengths.length; i++) {
+      const midLen = accLen + lengths[i] * 0.5;
+      const u = totalLen > 1e-9 ? midLen / totalLen : 0;
+      const v = Math.max(1, vIn + (vOut - vIn) * u);

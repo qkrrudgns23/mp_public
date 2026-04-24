@@ -1555,12 +1555,11 @@
   }
   /**
    * Pro Sim: allowed only when Update is fresh (green) and no arrival Runway exit (RET) failures
-   * (`arrRetFailed` on non-departure legs). Drives object-info-dock red banner and global Pro Sim dot.
+   * (`arrRetFailed` on non-departure legs). RET failure banner is in `#gridLeftFloatingStack`, separate from `#object-info-dock`.
    */
   function syncProSimButtonFromDesignerPageState() {
     const btn = document.getElementById('btnGlobalUpdate');
     const dot = document.getElementById('globalUpdateSyncDot');
-    const dock = document.getElementById('object-info-dock');
     const ban = document.getElementById('arrRetFailedBanner');
     const banT = document.getElementById('arrRetFailedBannerText');
     const failedRegs = [];
@@ -1572,10 +1571,6 @@
       }
     });
     const hasRetFail = failedRegs.length > 0;
-    if (dock) {
-      if (hasRetFail) dock.classList.add('object-info-dock--arr-ret-blocked');
-      else dock.classList.remove('object-info-dock--arr-ret-blocked');
-    }
     if (ban && banT) {
       if (hasRetFail) {
         ban.hidden = false;
