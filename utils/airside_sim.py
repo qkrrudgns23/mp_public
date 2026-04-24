@@ -2368,6 +2368,9 @@ def prepare_flight_path(
     leg_route_rows: List[Tuple[List[str], Optional[List[int]], Optional[PathGraph]]] = []
     direction_violation = False
 
+    token_f = flight.get("token") if isinstance(flight.get("token"), dict) else {}
+    arr_rwy_f = flight.get("arrRunwayId") or token_f.get("arrRunwayId")
+
     for leg_i, leg in enumerate(paths):
         if len(leg) < 4:
             return PreparedFlightPath()
@@ -2384,6 +2387,15 @@ def prepare_flight_path(
         ap_extra = 0.0
         if ap_ids and str(phase) == PHASE_ARR_TAXI:
             ap_extra = min(float(reverse_cost) * 0.04, 80_000.0)
+        # Leg 0 (touchdown → RET A): start Dijkstra from the runway polyline only, not from the
+        # full-graph nearest node (which can sit on a taxiway behind the touchpoint; see R2 case).
+        if leg_i == 0 and str(phase) == PHASE_LANDING and arr_rwy_f and str(arr_rwy_f).strip():
+            start_ep = RouteEndpoint(
+                runway_id=str(arr_rwy_f).strip(),
+                runway_pixel_xy=(float(sx), float(sy)),
+            )
+        else:
+            start_ep = RouteEndpoint(token_pixel_xy=(sx, sy))
         edges, dv, path, g = _flight_route_impl(
             layout,
             cell_size,
@@ -2393,7 +2405,7 @@ def prepare_flight_path(
             taxiway_h,
             information,
             rw_leg,
-            RouteEndpoint(token_pixel_xy=(sx, sy)),
+            start_ep,
             RouteEndpoint(token_pixel_xy=(ex, ey)),
             apron_transit_extra=ap_extra,
             apron_allowed_link_ids=ap_ids if ap_ids else None,
