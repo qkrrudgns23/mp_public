@@ -3604,6 +3604,159 @@ def _build_schedule_row(
     }
 
 
+def _overlay_schedule_timing_from_playback_positions(
+    out: Dict[str, Any],
+    layout: Dict[str, Any],
+    information: Dict[str, Any],
+    flights_raw: List[Any],
+    cell_size: float,
+    pixels_per_meter: float,
+) -> None:
+    """
+    Post-simulation only: overwrite schedule motion timing fields from exported
+    ``positions`` samples (``t``, ``x``, ``y``, ``v``, optional ``phase`` / ``pathType`` /
+    ``clearance``) plus the same layout geometry helpers used for playback (runway
+    polyline, stand token). Runs after the time-step loop; values are not fed back
+    into simulation state.
+    """
+    sched = out.get("schedule")
+    posmap = out.get("positions")
+    base_date = str(out.get("baseDate") or "2026-03-31")
+    if not isinstance(sched, list) or not isinstance(posmap, dict):
+        return
+    ppm = max(float(pixels_per_meter), 1e-9)
+    exit_thr_m = float(_exit_runway_min_perpendicular_distance_m(information))
+    r_st_m = float(_sim_stand_arrival_stop_radius_m(information))
+    v_stop = float(_sim_stand_stopped_velocity_max_ms(information))
+    cs = float(cell_size)
+
+    def _apply_timings(row: Dict[str, Any], fobj: Dict[str, Any], pts: List[Dict[str, Any]]) -> None:
+        has_landing = bool(row.get("HAS_LANDING"))
+        if has_landing and pts:
+            t_td = float(pts[0].get("t", 0.0))
+            row["ELDT"] = _sim_sec_optional(t_td)
+            row["ELDT_dt"] = _sec_to_datetime_str(t_td, base_date)
+            row["TOUCHDOWN_MOTION"] = row["ELDT"]
+            row["TOUCHDOWN_MOTION_dt"] = row["ELDT_dt"]
+        else:
+            row["ELDT"] = None
+            row["ELDT_dt"] = None
+            row["TOUCHDOWN_MOTION"] = None
+            row["TOUCHDOWN_MOTION_dt"] = None
+
+        e_hold: Optional[float] = None
+        e_lineup: Optional[float] = None
+        rw_entry: Optional[float] = None
+        for p in pts:
+            ph = str(p.get("phase") or "")
+            if e_hold is None and ph == PHASE_HOLDING_LINEUP:
+                e_hold = float(p.get("t", 0.0))
+            if rw_entry is None and ph == PHASE_LINEUP_DEPARTURE:
+                rw_entry = float(p.get("t", 0.0))
+            if e_lineup is None and ph == PHASE_LINEUP_DEPARTURE:
+                e_lineup = float(p.get("t", 0.0))
+        row["E_HOLD"] = _sim_sec_optional(e_hold) if e_hold is not None else None
+        row["E_HOLD_dt"] = _sec_to_datetime_str(e_hold, base_date)
+        row["E_LINEUP"] = _sim_sec_optional(e_lineup) if e_lineup is not None else None
+        row["E_LINEUP_dt"] = _sec_to_datetime_str(e_lineup, base_date)
+        row["RUNWAY_ENTRY"] = _sim_sec_optional(rw_entry) if rw_entry is not None else None
+        row["RUNWAY_ENTRY_dt"] = _sec_to_datetime_str(rw_entry, base_date)
+
+        exit_rw: Optional[float] = None
+        arr_id = row.get("ARR_RUNWAY_ID")
+        rid = str(arr_id).strip() if arr_id else ""
+        if has_landing and rid and pts:
+            verts = _oriented_arr_runway_centerline_px(
+                layout, cs, rid, _flight_rw_dir_for_leg(fobj, 0, layout)
+            )
+            if verts:
+                for p in pts:
+                    if str(p.get("phase") or "") == PHASE_LANDING:
+                        continue
+                    x = float(p.get("x", 0.0))
+                    y = float(p.get("y", 0.0))
+                    d_m = float(_min_distance_point_to_polyline(x, y, verts)) / ppm
+                    if d_m + 1e-9 >= exit_thr_m:
+                        exit_rw = float(p.get("t", 0.0))
+                        break
+        row["EXIT_RUNWAY"] = _sim_sec_optional(exit_rw) if exit_rw is not None else None
+        row["EXIT_RUNWAY_dt"] = _sec_to_datetime_str(exit_rw, base_date)
+
+        eibt: Optional[float] = None
+        sid = _flight_apron_stand_id_from_fobj(fobj)
+        txy = _apron_token_xy(layout, cs, str(sid)) if sid else None
+        if txy is not None and pts:
+            tx, ty = float(txy[0]), float(txy[1])
+            for p in pts:
+                ph = str(p.get("phase") or "")
+                if ph not in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
+                    continue
+                if str(p.get("pathType") or "").strip() == "runway":
+                    continue
+                clr = str(p.get("clearance") or "")
+                if clr in ("WAIT", "YIELD"):
+                    continue
+                x = float(p.get("x", 0.0))
+                y = float(p.get("y", 0.0))
+                v = float(p.get("v", 0.0))
+                d_m = math.hypot(x - tx, y - ty) / ppm
+                if d_m <= r_st_m + 1e-6 and abs(v) <= v_stop + 1e-9:
+                    eibt = float(p.get("t", 0.0))
+                    break
+        row["EIBT"] = _sim_sec_optional(eibt) if eibt is not None else None
+        row["EIBT_dt"] = _sec_to_datetime_str(eibt, base_date)
+
+        eobt: Optional[float] = None
+        if eibt is not None and pts:
+            ds = float(eibt) + float(_dwell_sec_from_flight(fobj))
+            for p in pts:
+                if float(p.get("t", 0.0)) <= ds + 1e-9:
+                    continue
+                if str(p.get("phase") or "") != PHASE_DEP_TAXI:
+                    continue
+                if str(p.get("pathType") or "").strip() != "apron_link":
+                    continue
+                if abs(float(p.get("v", 0.0))) <= 0.01 + 1e-12:
+                    continue
+                eobt = float(p.get("t", 0.0))
+                break
+        row["EOBT"] = _sim_sec_optional(eobt) if eobt is not None else None
+        row["EOBT_dt"] = _sec_to_datetime_str(eobt, base_date)
+
+        etot: Optional[float] = None
+        if pts:
+            etot = float(pts[-1].get("t", 0.0))
+        row["ETOT"] = _sim_sec_optional(etot) if etot is not None else None
+        row["ETOT_dt"] = _sec_to_datetime_str(etot, base_date)
+
+    for i, row in enumerate(sched):
+        if not isinstance(row, dict):
+            continue
+        fid = str(row.get("flight_id", "")).strip()
+        fobj = flights_raw[i] if i < len(flights_raw) and isinstance(flights_raw[i], dict) else {}
+        raw_plist = posmap.get(fid)
+        if not isinstance(raw_plist, list) or not raw_plist:
+            for k, dk in (
+                ("ELDT", "ELDT_dt"),
+                ("TOUCHDOWN_MOTION", "TOUCHDOWN_MOTION_dt"),
+                ("RUNWAY_ENTRY", "RUNWAY_ENTRY_dt"),
+                ("EXIT_RUNWAY", "EXIT_RUNWAY_dt"),
+                ("EIBT", "EIBT_dt"),
+                ("EOBT", "EOBT_dt"),
+                ("E_HOLD", "E_HOLD_dt"),
+                ("E_LINEUP", "E_LINEUP_dt"),
+                ("ETOT", "ETOT_dt"),
+            ):
+                row[k] = None
+                row[dk] = None
+            continue
+        pts_sorted = sorted(
+            (p for p in raw_plist if isinstance(p, dict)),
+            key=lambda p: float(p.get("t", 0.0)),
+        )
+        _apply_timings(row, fobj, pts_sorted)
+
+
 def _layout_edge_capacity(ed: Dict[str, Any]) -> int:
     raw = ed.get("capacity")
     try:
@@ -7648,4 +7801,12 @@ def run_simulation(
     if truncation_abs_sec is not None:
         out["simulation_truncated_deadlock"] = True
         out["simulation_playback_end_abs_sec"] = float(truncation_abs_sec)
+    _overlay_schedule_timing_from_playback_positions(
+        out,
+        layout,
+        information,
+        flights_raw,
+        cell_size,
+        pixels_per_meter,
+    )
     return out
