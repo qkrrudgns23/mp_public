@@ -1,3 +1,107 @@
+        if (!isFinite(arm) || arm <= 0) {
+          const br0 = pbb.pbbBridges && pbb.pbbBridges[0];
+          const p1 = br0 && br0.points && br0.points[1], p2 = br0 && br0.points && br0.points[2];
+          if (p1 && p2) arm = Math.hypot(Number(p2.x) - Number(p1.x), Number(p2.y) - Number(p1.y));
+          else arm = 15;
+        }
+        lenInput.value = String(Math.max(1, Math.round(arm)));
+      }
+      if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
+      if (pbbCountInput) pbbCountInput.value = String(Math.max(1, parseInt(pbb.pbbCount, 10) || 1));
+      const boardingWInput = document.getElementById('pbbBoardingWidth');
+      const boardingHInput = document.getElementById('pbbBoardingHeight');
+      if (boardingWInput) boardingWInput.value = String(getPbbBoardingWidthM(pbb));
+      if (boardingHInput) boardingHInput.value = String(getPbbBoardingHeightM(pbb));
+      syncStandConstraintVisibility('stand');
+      renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb), pbb.allowedIcaoCategories);
+    }
+    if (state.selectedObject && state.selectedObject.type === 'remote') {
+      const st = state.selectedObject.obj;
+      const nameInput = document.getElementById('remoteName');
+      if (nameInput) nameInput.value = st.name || '';
+      applyIcaoCategoriesToHost('remoteIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
+      syncStandConstraintVisibility('remote');
+      renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
+      renderRemoteTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
+    }
+    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+      const st = state.selectedObject.obj;
+      const nameInput = document.getElementById('tempStandName');
+      if (nameInput) nameInput.value = st.name || '';
+      applyIcaoCategoriesToHost('tempStandIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
+      syncStandConstraintVisibility('tempStand');
+      renderAircraftConstraintChoices('tempStandAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
+      renderTempStandTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
+    }
+    if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
+      const hp = state.selectedObject.obj;
+      const nameInput = document.getElementById('holdingPointName');
+      if (nameInput) nameInput.value = hp.name || '';
+    }
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const tw = state.selectedObject.obj;
+      const nameInput = document.getElementById('taxiwayName');
+      const widthInput = document.getElementById('taxiwayWidth');
+      const maxExitInput = document.getElementById('taxiwayMaxExitVel');
+      const minExitInput = document.getElementById('taxiwayMinExitVel');
+      if (nameInput) nameInput.value = tw.name || '';
+      const widthDefault = tw.pathType === 'runway'
+        ? RUNWAY_PATH_DEFAULT_WIDTH
+        : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+      if (widthInput) widthInput.value = tw.width != null ? tw.width : widthDefault;
+      const avgVelInput = document.getElementById('taxiwayAvgMoveVelocity');
+      if (avgVelInput) avgVelInput.value = (tw.avgMoveVelocity != null ? tw.avgMoveVelocity : 10);
+      syncPathFieldVisibilityForPathType(tw.pathType || 'taxiway');
+      const runwayMinArrInput = document.getElementById('runwayMinArrVelocity');
+      if (runwayMinArrInput) {
+        const mav = (typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0)
+          ? Math.max(1, Math.min(150, tw.minArrVelocity))
+          : 15;
+        runwayMinArrInput.value = mav;
+      }
+      const runwayLineupInputCw = document.getElementById('runwayLineupDistM_CW');
+      const runwayLineupInputCcw = document.getElementById('runwayLineupDistM_CCW');
+      if (tw.pathType === 'runway') {
+        if (runwayLineupInputCw) runwayLineupInputCw.value = String(getRunwayLineupDistMByDirection(tw, 'clockwise'));
+        if (runwayLineupInputCcw) runwayLineupInputCcw.value = String(getRunwayLineupDistMByDirection(tw, 'counter_clockwise'));
+      }
+      const runwayStartDispInput = document.getElementById('runwayStartDisplacedThresholdM');
+      if (runwayStartDispInput && tw.pathType === 'runway') runwayStartDispInput.value = String(getEffectiveRunwayStartDisplacedThresholdM(tw));
+      const runwayStartBlastInput = document.getElementById('runwayStartBlastPadM');
+      if (runwayStartBlastInput && tw.pathType === 'runway') runwayStartBlastInput.value = String(getEffectiveRunwayStartBlastPadM(tw));
+      const runwayEndDispInput = document.getElementById('runwayEndDisplacedThresholdM');
+      if (runwayEndDispInput && tw.pathType === 'runway') runwayEndDispInput.value = String(getEffectiveRunwayEndDisplacedThresholdM(tw));
+      const runwayEndBlastInput = document.getElementById('runwayEndBlastPadM');
+      if (runwayEndBlastInput && tw.pathType === 'runway') runwayEndBlastInput.value = String(getEffectiveRunwayEndBlastPadM(tw));
+      if (maxExitInput) maxExitInput.value = tw.maxExitVelocity != null ? tw.maxExitVelocity : 30;
+      if (minExitInput) {
+        const minVal = (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
+          ? tw.minExitVelocity
+          : 15;
+        minExitInput.value = minVal;
+      }
+      if (tw.pathType === 'runway_exit') {
+        const allow = getTaxiwayAllowedRunwayDirections(tw);
+        renderRunwayDirectionChoices(allow);
+      } else {
+        renderRunwayDirectionChoices([]);
+      }
+      const modeSel = document.getElementById('taxiwayDirectionMode');
+      let d = getTaxiwayDirection(tw);
+      if (tw.pathType === 'runway' && d === 'both') d = 'clockwise';
+      if (modeSel) modeSel.value = d;
+      const kindSel = document.getElementById('taxiwayPathTypeKind');
+      if (kindSel) {
+        const ptk = tw.pathType || 'taxiway';
+        kindSel.value = (ptk === 'general_queue_taxiway') ? 'queue' : 'normal';
+      }
+      syncPathPavementRadiosToValue(pathPavementResolvedForTaxiway(tw));
+    } else if (state.selectedObject && state.selectedObject.type === 'apronLink') {
+      const lk = state.selectedObject.obj;
+      const nameInput = document.getElementById('apronLinkName');
+      if (nameInput) nameInput.value = getApronLinkDisplayName(lk);
+    } else if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {
+      const ed = state.selectedObject.obj;
       const nameInput = document.getElementById('edgeName');
       if (nameInput) nameInput.value = getLayoutEdgeDisplayName(ed);
     } else {
@@ -264,107 +368,3 @@
         tw.lineupDistM_CCW = (typeof lxCcw === 'number' && isFinite(lxCcw) && lxCcw >= 0) ? lxCcw : 0;
         tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
       } else if (tw.pathType !== 'runway') {
-        delete tw.lineupDistM;
-        delete tw.lineupDistM_CW;
-        delete tw.lineupDistM_CCW;
-      }
-      if (tw.pathType === 'runway') {
-        const startDisp = Number(el('runwayStartDisplacedThresholdM') ? el('runwayStartDisplacedThresholdM').value : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
-        const startBlast = Number(el('runwayStartBlastPadM') ? el('runwayStartBlastPadM').value : RUNWAY_START_BLAST_PAD_DEFAULT_M);
-        const endDisp = Number(el('runwayEndDisplacedThresholdM') ? el('runwayEndDisplacedThresholdM').value : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
-        const endBlast = Number(el('runwayEndBlastPadM') ? el('runwayEndBlastPadM').value : RUNWAY_END_BLAST_PAD_DEFAULT_M);
-        tw.startDisplacedThresholdM = (typeof startDisp === 'number' && isFinite(startDisp) && startDisp >= 0) ? startDisp : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.startBlastPadM = (typeof startBlast === 'number' && isFinite(startBlast) && startBlast >= 0) ? startBlast : RUNWAY_START_BLAST_PAD_DEFAULT_M;
-        tw.endDisplacedThresholdM = (typeof endDisp === 'number' && isFinite(endDisp) && endDisp >= 0) ? endDisp : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.endBlastPadM = (typeof endBlast === 'number' && isFinite(endBlast) && endBlast >= 0) ? endBlast : RUNWAY_END_BLAST_PAD_DEFAULT_M;
-      } else {
-        delete tw.startDisplacedThresholdM;
-        delete tw.startBlastPadM;
-        delete tw.endDisplacedThresholdM;
-        delete tw.endBlastPadM;
-      }
-    }
-  }
-
-  function syncSettingsPaneToMode() {
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
-    if (layoutModeTabs) {
-      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
-      });
-    }
-    document.querySelectorAll('.settings-pane').forEach(el => { el.style.display = 'none'; });
-    const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
-    const pane = document.getElementById('settings-' + paneKey);
-    if (pane) pane.style.display = 'block';
-    if (mode === 'marker') {
-      syncMarkerFlightAircraftRowVisibility();
-      syncMarkerIslandWidthRowVisibility();
-      syncMarkerNavaidRowVisibility();
-    }
-    if (isPathLayoutMode(mode)) {
-      const pt = pathTypeFromLayoutMode(mode);
-      syncPathFieldVisibilityForPathType(pt);
-      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
-        const nameInput = document.getElementById('taxiwayName');
-        if (nameInput) nameInput.value = '';
-        const widthInput = document.getElementById('taxiwayWidth');
-        if (widthInput) {
-          widthInput.value = pt === 'runway'
-            ? RUNWAY_PATH_DEFAULT_WIDTH
-            : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-        }
-        syncPathPavementRadiosToValue(pathPavementDefaultForPathType(pt));
-        if (pt === 'runway') {
-          const startDispInput = document.getElementById('runwayStartDisplacedThresholdM');
-          if (startDispInput) startDispInput.value = String(RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
-          const startBlastInput = document.getElementById('runwayStartBlastPadM');
-          if (startBlastInput) startBlastInput.value = String(RUNWAY_START_BLAST_PAD_DEFAULT_M);
-          const endDispInput = document.getElementById('runwayEndDisplacedThresholdM');
-          if (endDispInput) endDispInput.value = String(RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
-          const endBlastInput = document.getElementById('runwayEndBlastPadM');
-          if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
-        }
-      }
-    }
-    if (typeof renderObjectList === 'function') renderObjectList();
-  }
-
-  settingModeSelect.addEventListener('change', function() {
-    cancelActiveLayoutDrawingState();
-    state.selectedObject = null;
-    syncSettingsPaneToMode();
-  });
-  if (layoutModeTabs && settingModeSelect) {
-    layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const mode = this.getAttribute('data-mode') || 'grid';
-        if (settingModeSelect.value === mode) {
-          cancelActiveLayoutDrawingState();
-          syncSettingsPaneToMode();
-          return;
-        }
-        settingModeSelect.value = mode;
-        settingModeSelect.dispatchEvent(new Event('change'));
-      });
-    });
-  }
-  syncSettingsPaneToMode();
-
-  let activeTab = 'settings';
-  function switchToTab(tabId) {
-    activeTab = tabId;
-    cancelActiveLayoutDrawingState();
-    document.querySelectorAll('.right-panel-tab').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    const tabBtn = document.querySelector('.right-panel-tab[data-tab="' + tabId + '"]');
-    const tabEl = document.getElementById('tab-' + tabId);
-    if (tabBtn) tabBtn.classList.add('active');
-    if (tabEl) tabEl.classList.add('active');
-    if (tabId === 'flight') {
-      if (state.selectedObject && state.selectedObject.type === 'flight' && typeof hookSyncFlightPanelFromSelection === 'function')
-        hookSyncFlightPanelFromSelection();
-      if (typeof renderFlightList === 'function') {
-        const flightListEl = document.getElementById('flightList');
-        const needsRerender = !flightListEl || !flightListEl.querySelector('.flight-schedule-table tbody tr:not(.flight-virt-spacer)');
-        if (needsRerender) renderFlightList();

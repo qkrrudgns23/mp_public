@@ -1,3 +1,233 @@
+    let ok = false;
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      if (!p || p.length < 2) continue;
+      const x = Number(p[0]), y = Number(p[1]);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      ok = true;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
+  }
+  function markerWorldAabb(m) {
+    if (!m) return null;
+    const pts = [];
+    if (Array.isArray(m.points)) {
+      for (let i = 0; i < m.points.length; i++) {
+        const p = m.points[i];
+        if (!p) continue;
+        const x = Number(p.x), y = Number(p.y);
+        if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+      }
+    }
+    [['x', 'y'], ['x1', 'y1'], ['x2', 'y2']].forEach(function(pair) {
+      const x = Number(m[pair[0]]), y = Number(m[pair[1]]);
+      if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+    });
+    const a = pointsWorldAabb(pts);
+    if (!a) return null;
+    const pad = Math.max(8, CELL_SIZE * 0.8);
+    return { minX: a.minX - pad, minY: a.minY - pad, maxX: a.maxX + pad, maxY: a.maxY + pad };
+  }
+  function overlayJunctionFillForWorldPoint(p, gCache) {
+    if (layerMonoEtcOn()) return C2D_LAYER_MONO_ETC_WHITE;
+    if (!gCache || !p) return '#22c55e';
+    const mergeR = PATH_JUNCTION_MERGE_RADIUS_PX * 3.5;
+    const mergeR2 = mergeR * mergeR;
+    const conn = gCache.connectedJunctions || gCache.junctions || [];
+    const disc = gCache.disconnectedValidJunctions;
+    let i;
+    for (i = 0; i < conn.length; i++) {
+      if (dist2(p, conn[i]) <= mergeR2) return '#22c55e';
+    }
+    if (disc && disc.length) {
+      for (i = 0; i < disc.length; i++) {
+        if (dist2(p, disc[i]) <= mergeR2) return '#ef4444';
+      }
+    }
+    return '#22c55e';
+  }
+  function segmentWorldAabbPadded(a, b, pad) {
+    const p = Number(pad) && isFinite(pad) ? pad : 0;
+    return {
+      minX: Math.min(a[0], b[0]) - p,
+      maxX: Math.max(a[0], b[0]) + p,
+      minY: Math.min(a[1], b[1]) - p,
+      maxY: Math.max(a[1], b[1]) + p
+    };
+  }
+  function aabbWorldIntersects2D(ax, bx) {
+    if (!ax || !bx) return true;
+    return !(ax.maxX < bx.minX || ax.minX > bx.maxX || ax.maxY < bx.minY || ax.minY > bx.maxY);
+  }
+  function collectPathJunctionWorldPointsForTaxiway(obj, pathList) {
+    if (!obj || !pathList || !pathList.length) return [];
+    const pts = getOrderedPoints(obj);
+    if (!pts || pts.length < 2) return [];
+    const junctions = [];
+    const segPad = CELL_SIZE * 32;
+    for (let seg = 0; seg < pts.length - 1; seg++) {
+      const a = pts[seg], b = pts[seg + 1];
+      const segBox = segmentWorldAabbPadded(a, b, segPad);
+      pathList.forEach(function(other) {
+        if (!other || other.id === obj.id) return;
+        const otherBox = taxiwayWorldAabb(other);
+        if (otherBox && !aabbWorldIntersects2D(segBox, otherBox)) return;
+        const otherOrd = getOrderedPoints(other);
+        if (!otherOrd || otherOrd.length < 2) return;
+        for (let oseg = 0; oseg < otherOrd.length - 1; oseg++) {
+          const c = otherOrd[oseg], d = otherOrd[oseg + 1];
+          const isec = segmentSegmentIntersection(a, b, c, d);
+          if (isec) {
+            const pr = projectOnSegment(a, b, isec.p);
+            junctions.push({ tAlong: seg + pr.t, p: pr.p });
+          } else {
+            const ov = collinearSegmentOverlapOnAB(a, b, c, d);
+            if (ov) {
+              const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+              const dx = bx - ax, dy = by - ay;
+              const p0 = [ax + ov.t0 * dx, ay + ov.t0 * dy];
+              const p1ov = [ax + ov.t1 * dx, ay + ov.t1 * dy];
+              const pr0 = projectOnSegment(a, b, p0);
+              junctions.push({ tAlong: seg + pr0.t, p: pr0.p });
+              if (dist2(p0, p1ov) > SPLIT_TOL_D2) {
+                const pr1 = projectOnSegment(a, b, p1ov);
+                junctions.push({ tAlong: seg + pr1.t, p: pr1.p });
+              }
+            } else {
+              [c, d].forEach(function(q) {
+                if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                  const prq = projectOnSegment(a, b, q);
+                  if (prq.t >= 0 && prq.t <= 1) junctions.push({ tAlong: seg + prq.t, p: prq.p });
+                }
+              });
+            }
+          }
+        }
+        otherOrd.forEach(function(q) {
+          if (!pointOnSegmentStrict(a, b, q)) return;
+          const prq = projectOnSegment(a, b, q);
+          junctions.push({ tAlong: seg + prq.t, p: prq.p });
+        });
+      });
+      const isRunway = obj.pathType === 'runway';
+      if (!isRunway) {
+        (state.apronLinks || []).forEach(function(lk) {
+          if (lk.taxiwayId !== obj.id || lk.tx == null || lk.ty == null) return;
+          const linkPt = [Number(lk.tx), Number(lk.ty)];
+          const pr = projectOnSegment(a, b, linkPt);
+          if (pr.t >= 0 && pr.t <= 1 && dist2(pr.p, linkPt) <= SPLIT_TOL_D2) {
+            junctions.push({ tAlong: seg + pr.t, p: pr.p });
+          }
+        });
+      }
+      {
+        const ptHp = obj.pathType;
+        if (ptHp === 'runway_exit' || ptHp === 'taxiway' || ptHp === 'apron_taxiway' || ptHp === 'general_queue_taxiway') {
+          const csH = (typeof CELL_SIZE === 'number' && isFinite(CELL_SIZE) && CELL_SIZE > 0) ? CELL_SIZE : 20;
+          const hpTolD2 = Math.max(SPLIT_TOL_D2, (csH * 0.35) * (csH * 0.35));
+          (state.holdingPoints || []).forEach(function(hp) {
+            if (!hp) return;
+            const k = (typeof normalizeHoldingPointKind === 'function') ? normalizeHoldingPointKind(hp.hpKind) : String(hp.hpKind || '').trim();
+            if (ptHp === 'runway_exit') {
+              if (k !== 'runway_holding') return;
+            } else {
+              if (k !== 'intermediate') return;
+            }
+            if (typeof hp.x !== 'number' || typeof hp.y !== 'number' || !isFinite(hp.x) || !isFinite(hp.y)) return;
+            const prh = projectOnSegment(a, b, [hp.x, hp.y]);
+            if (prh.t >= 0 && prh.t <= 1 && dist2(prh.p, [hp.x, hp.y]) <= hpTolD2) {
+              junctions.push({ tAlong: seg + prh.t, p: prh.p });
+            }
+          });
+        }
+      }
+      {
+        const ptTs = obj.pathType;
+        if (
+          ptTs === 'runway_exit' ||
+          ptTs === 'taxiway' ||
+          ptTs === 'apron_taxiway' ||
+          ptTs === 'runway_taxiway' ||
+          ptTs === 'general_queue_taxiway'
+        ) {
+          (state.tempStands || []).forEach(function(st) {
+            if (!st) return;
+            const corners = getRemoteStandCorners(st);
+            if (!corners || corners.length < 4) return;
+            for (let ei = 0; ei < 4; ei++) {
+              const c = corners[ei], d = corners[(ei + 1) % 4];
+              const isec2 = segmentSegmentIntersection(a, b, c, d);
+              if (isec2) {
+                const pr2 = projectOnSegment(a, b, isec2.p);
+                if (pr2.t >= 0 && pr2.t <= 1) junctions.push({ tAlong: seg + pr2.t, p: pr2.p });
+              } else {
+                const ov2 = collinearSegmentOverlapOnAB(a, b, c, d);
+                if (ov2) {
+                  const ax2 = a[0], ay2 = a[1], bx2 = b[0], by2 = b[1];
+                  const dx2 = bx2 - ax2, dy2 = by2 - ay2;
+                  const p0b = [ax2 + ov2.t0 * dx2, ay2 + ov2.t0 * dy2];
+                  const p1b = [ax2 + ov2.t1 * dx2, ay2 + ov2.t1 * dy2];
+                  const pr0b = projectOnSegment(a, b, p0b);
+                  junctions.push({ tAlong: seg + pr0b.t, p: pr0b.p });
+                  if (dist2(p0b, p1b) > SPLIT_TOL_D2) {
+                    const pr1b = projectOnSegment(a, b, p1b);
+                    junctions.push({ tAlong: seg + pr1b.t, p: pr1b.p });
+                  }
+                } else {
+                  [c, d].forEach(function(q) {
+                    if (dist2(a, q) <= SPLIT_TOL_D2 || dist2(b, q) <= SPLIT_TOL_D2) {
+                      const prq2 = projectOnSegment(a, b, q);
+                      if (prq2.t >= 0 && prq2.t <= 1) junctions.push({ tAlong: seg + prq2.t, p: prq2.p });
+                    }
+                  });
+                }
+              }
+            }
+          });
+        }
+      }
+    }
+    if (obj.pathType === 'general_queue_taxiway') {
+      queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
+        junctions.push({ tAlong: qj.tAlong, p: qj.p });
+      });
+    }
+    if (obj.pathType === 'runway') {
+      const ldm = getEffectiveRunwayLineupDistM(obj);
+      const rpath = getRunwayPath(obj.id);
+      if (rpath && rpath.pts && rpath.pts.length >= 2 && ldm > 1e-6) {
+        let total = 0;
+        for (let ri = 0; ri < rpath.pts.length - 1; ri++) total += pathDist(rpath.pts[ri], rpath.pts[ri + 1]);
+        const d = Math.min(ldm, total);
+        if (d > 1e-6) {
+          let acc = 0;
+          for (let ri = 0; ri < rpath.pts.length - 1; ri++) {
+            const p1 = rpath.pts[ri], p2 = rpath.pts[ri + 1];
+            const segLen = pathDist(p1, p2);
+            if (segLen < 1e-9) continue;
+            if (acc + segLen >= d - 1e-6) {
+              const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+              const px = p1[0] + t * (p2[0] - p1[0]), py = p1[1] + t * (p2[1] - p1[1]);
+              junctions.push({ tAlong: ri + t, p: [px, py] });
+              break;
+            }
+            acc += segLen;
+          }
+        }
+      }
+    }
+    const raw = [];
+    for (let ji = 0; ji < junctions.length; ji++) {
+      const j = junctions[ji];
+      const p = j && j.p;
+      if (p && isFinite(p[0]) && isFinite(p[1])) raw.push(p);
+    }
+    return mergeNearbyPathPointsForDraw(raw, PATH_JUNCTION_MERGE_RADIUS_PX);
+  }
 
   /** World-space polyline for apron link in progress (matches drawApronTaxiwayLinks draft). */
   function getApronLinkDrawingDraftWorldPts() {
@@ -1039,13 +1269,14 @@
       let greens = filterPtsWorld(connectedJunctions);
       reds = subsamplePts(reds);
       greens = subsamplePts(greens);
-      ctx.fillStyle = '#ef4444';
+      const etcMono = layerMonoEtcOn();
+      ctx.fillStyle = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#ef4444';
       reds.forEach(function(p) {
         ctx.beginPath();
         ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
         ctx.fill();
       });
-      ctx.fillStyle = '#22c55e';
+      ctx.fillStyle = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#22c55e';
       greens.forEach(function(p) {
         ctx.beginPath();
         ctx.arc(p[0], p[1], rGreen, 0, Math.PI * 2);
@@ -1199,7 +1430,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    ctx.strokeStyle = '#dc2626';
+    ctx.strokeStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#dc2626';
     ctx.lineWidth = Math.max(1.25, armLen * 0.2);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -1233,9 +1464,9 @@
         if (!worldPointInsideLayoutViewportAabb(xy, vbQ)) continue;
         ctx.beginPath();
         ctx.arc(xy[0], xy[1], r, 0, Math.PI * 2);
-        ctx.fillStyle = '#22c55e';
+        ctx.fillStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#22c55e';
         ctx.fill();
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#ef4444';
         ctx.lineWidth = 1.8;
         ctx.stroke();
       }
@@ -2277,6 +2508,20 @@
         }
         if (!state.designerPageUpdateFresh) {
           failProSim('먼저 Update로 경로 그래프·뷰를 동기화하세요.');
+          return;
+        }
+        const arrRetFailRegs = [];
+        (state.flights || []).forEach(function(f) {
+          if (!f || f.arrDep === 'Dep' || !f.arrRetFailed) return;
+          const r = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
+          if (arrRetFailRegs.indexOf(r) < 0) arrRetFailRegs.push(r);
+        });
+        if (arrRetFailRegs.length) {
+          const n = arrRetFailRegs.length;
+          const errMsg = n > 5
+            ? (arrRetFailRegs.slice(0, 3).join(', ') + ', etc. — ' + n + ' aircraft failed (no valid runway exit).')
+            : ('Runway exit failed: ' + arrRetFailRegs.map(function(r) { return String(r); }).join(' · '));
+          failProSim(errMsg);
           return;
         }
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
@@ -4747,10 +4992,14 @@
         const hairW = layoutHairlineStrokeWidthWorld();
         const bl = !!state.layers.buildingLines;
         const bf = !!state.layers.buildingFill && !suppressBuildingFill;
+        const useFillMono = layerMonoFillOn() && !selected && bf;
+        const useLineMono = layerMonoLinesOn() && !selected;
+        const monoFillB = c2dLayerMonoFillDarkAsphaltCss();
+        const monoLineB = c2dLayerMonoLineStrokeCss();
         if (bl || bf || selected) {
           ctx.lineWidth = hairW;
-          ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : buildingTheme.stroke;
-          ctx.fillStyle = selected ? c2dObjectSelectedFill() : buildingTheme.fill;
+          ctx.strokeStyle = selected ? c2dObjectSelectedStroke() : (useLineMono ? monoLineB : buildingTheme.stroke);
+          ctx.fillStyle = selected ? c2dObjectSelectedFill() : (useFillMono ? monoFillB : buildingTheme.fill);
           ctx.beginPath();
           for (let i = 0; i < termPts.length; i++) {
             const [x,y] = termPts[i];
@@ -4766,7 +5015,7 @@
               ctx,
               termPts,
               LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M,
-              selected ? c2dObjectSelectedStroke() : buildingTheme.stroke,
+              selected ? c2dObjectSelectedStroke() : (useLineMono ? monoLineB : buildingTheme.stroke),
               hairW,
               0.8
             );
@@ -4788,7 +5037,7 @@
               cx /= term.vertices.length;
               cy /= term.vertices.length;
               const label = term.name || term.id || 'Building';
-              ctx.fillStyle = buildingTheme.labelFill;
+              ctx.fillStyle = useLineMono ? monoLineB : buildingTheme.labelFill;
               ctx.font = '12px system-ui';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
@@ -4833,6 +5082,10 @@
       const sel = state.selectedObject && state.selectedObject.type === 'pbb' && state.selectedObject.id === pbb.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(pbb.id, state.simTimeSec);
       const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
+      const monoFillP = layerMonoFillOn() && !sel;
+      const monoLineP = layerMonoLinesOn() && !sel;
+      const monoFp = c2dLayerMonoFillDarkAsphaltCss();
+      const monoLp = c2dLayerMonoLineStrokeCss();
       if (!sl && !sf && !sel) return;
       if (!interactiveLite) drawPbbBoardingRectangle(ctx, pbb, sel);
       const bridges = Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : [];
@@ -4859,16 +5112,22 @@
         for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
         ctx.closePath();
         if (sf && !interactiveLite) {
-          ctx.fillStyle = sel ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.1)';
-          ctx.fill();
-          drawPolygonDiagonalHatch45M(ctx, quad, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.38)', hairW);
+          if (monoFillP) {
+            ctx.fillStyle = c2dLayerMonoFillDarkAsphaltRgba(0.52);
+            ctx.fill();
+            drawPolygonDiagonalHatch45M(ctx, quad, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, monoLp, hairW);
+          } else {
+            ctx.fillStyle = sel ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.1)';
+            ctx.fill();
+            drawPolygonDiagonalHatch45M(ctx, quad, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.38)', hairW);
+          }
         }
         if (sl && !interactiveLite) {
           ctx.beginPath();
           ctx.moveTo(quad[0][0], quad[0][1]);
           for (let qi = 1; qi < 4; qi++) ctx.lineTo(quad[qi][0], quad[qi][1]);
           ctx.closePath();
-          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.strokeStyle = monoLineP ? monoLp : 'rgba(255,255,255,0.9)';
           ctx.lineWidth = hairW;
           ctx.stroke();
         }
@@ -4889,13 +5148,17 @@
       const angle = getPBBStandAngle(pbb);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === pbb.id);
       const apronLinked = standHasApronTaxiwayLink(pbb.id);
-      const idleFill = apronLinked ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)';
+      const idleFill = monoFillP
+        ? c2dLayerMonoFillDarkAsphaltRgba(apronLinked ? 0.4 : 0.48)
+        : (apronLinked ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)');
       ctx.save();
       ctx.translate(ex, ey);
       ctx.rotate(angle);
       ctx.setLineDash([]);
       if (sf && !interactiveLite) {
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFill);
+        ctx.fillStyle = sel
+          ? c2dObjectSelectedFill()
+          : (simOcc ? (monoFillP ? c2dLayerMonoFillDarkAsphaltRgba(0.58) : c2dSimStandOccupiedFill()) : idleFill);
         fillStandSafetyFootprintInLocalAxes(ctx, depP, widP, pbb.category || 'C');
       }
       if (sl) {
@@ -4907,7 +5170,7 @@
           const pad = 3;
           const tx = depP / 2 - pad;
           const ty = -widP / 2 + pad;
-          ctx.fillStyle = apronLinked ? '#dcd8cf' : '#d1d5db';
+          ctx.fillStyle = monoLineP ? monoLp : (apronLinked ? '#dcd8cf' : '#d1d5db');
           ctx.font = '8px system-ui';
           ctx.textAlign = 'right';
           ctx.textBaseline = 'top';
@@ -4917,7 +5180,7 @@
       ctx.restore();
       if (sl || sel) {
         const acMk = getStandAircraftMarkerWorldPxForPbb(pbb);
-        const fill = sel ? c2dObjectSelectedStroke() : (apronLinked ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)');
+        const fill = sel ? c2dObjectSelectedStroke() : (monoLineP ? monoLp : (apronLinked ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)'));
         drawApronSiteMarker(ctx, acMk[0], acMk[1], fill, null, sel, angle);
       }
       if (sel) {
@@ -4949,7 +5212,12 @@
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
       const apronLinkedR = standHasApronTaxiwayLink(st.id);
-      const idleFillR = apronLinkedR ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)';
+      const monoFillR = layerMonoFillOn() && !sel;
+      const monoLineR = layerMonoLinesOn() && !sel;
+      const monoLr = c2dLayerMonoLineStrokeCss();
+      const idleFillR = monoFillR
+        ? c2dLayerMonoFillDarkAsphaltRgba(apronLinkedR ? 0.4 : 0.48)
+        : (apronLinkedR ? 'rgba(14,92,40,0.26)' : 'rgba(52,56,64,0.42)');
       const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
       if (!sl && !sf && !sel) return;
       ctx.save();
@@ -4957,7 +5225,9 @@
       ctx.rotate(angle);
       ctx.setLineDash([]);
       if (sf && !interactiveLite) {
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillR);
+        ctx.fillStyle = sel
+          ? c2dObjectSelectedFill()
+          : (simOcc ? (monoFillR ? c2dLayerMonoFillDarkAsphaltRgba(0.58) : c2dSimStandOccupiedFill()) : idleFillR);
         fillStandSafetyFootprintInLocalAxes(ctx, depR, widR, st.category || 'C');
       }
       if (sl) {
@@ -4969,7 +5239,7 @@
           const pad = 3;
           const tx = depR / 2 - pad;
           const ty = -widR / 2 + pad;
-          ctx.fillStyle = apronLinkedR ? '#dcd8cf' : '#d1d5db';
+          ctx.fillStyle = monoLineR ? monoLr : (apronLinkedR ? '#dcd8cf' : '#d1d5db');
           ctx.font = '8px system-ui';
           ctx.textAlign = 'right';
           ctx.textBaseline = 'top';
@@ -4979,7 +5249,7 @@
       ctx.restore();
       if (sl || sel) {
         const rm = getStandAircraftMarkerWorldPxForRemoteLike(st);
-        const fill = sel ? c2dObjectSelectedStroke() : (apronLinkedR ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)');
+        const fill = sel ? c2dObjectSelectedStroke() : (monoLineR ? monoLr : (apronLinkedR ? c2dTaxiwayCenterlineStroke() : 'rgba(156,163,175,0.95)'));
         drawApronSiteMarker(ctx, rm[0], rm[1], fill, null, sel, angle);
       }
       if (sel) {
@@ -5013,7 +5283,10 @@
       const sel = state.selectedObject && state.selectedObject.type === 'tempStand' && state.selectedObject.id === st.id;
       const simOcc = state.hasSimulationResult && isStandOccupiedAtSimSec(st.id, state.simTimeSec);
       const rotationActive = !!(state.selectedVertex && state.selectedVertex.type === 'standRotation' && state.selectedVertex.id === st.id);
-      const idleFillT = 'rgba(139,92,246,0.2)';
+      const monoFillT = layerMonoFillOn() && !sel;
+      const monoLineT = layerMonoLinesOn() && !sel;
+      const monoLt = c2dLayerMonoLineStrokeCss();
+      const idleFillT = monoFillT ? c2dLayerMonoFillDarkAsphaltRgba(0.5) : 'rgba(139,92,246,0.2)';
       const idx = temps.indexOf(st);
       const nameRaw = (st.name && st.name.trim()) ? st.name.trim() : ('T' + String(idx + 1).padStart(3, '0'));
       const labelPrefix = getStandCategoryMode(st) === 'aircraft' ? 'AC' : (st.category || 'C');
@@ -5025,7 +5298,9 @@
       ctx.rotate(angle);
       ctx.setLineDash([]);
       if (sf && !interactiveLite) {
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (simOcc ? c2dSimStandOccupiedFill() : idleFillT);
+        ctx.fillStyle = sel
+          ? c2dObjectSelectedFill()
+          : (simOcc ? (monoFillT ? c2dLayerMonoFillDarkAsphaltRgba(0.58) : c2dSimStandOccupiedFill()) : idleFillT);
         fillStandSafetyFootprintInLocalAxes(ctx, depT, widT, st.category || 'C');
       }
       if (sl) {
@@ -5036,7 +5311,7 @@
           const pad = 3;
           const tx = depT / 2 - pad;
           const ty = -widT / 2 + pad;
-          ctx.fillStyle = '#e9d5ff';
+          ctx.fillStyle = monoLineT ? monoLt : '#e9d5ff';
           ctx.font = '8px system-ui';
           ctx.textAlign = 'right';
           ctx.textBaseline = 'top';
@@ -5047,7 +5322,7 @@
       if (mode === 'apronTaxiway' && (sl || sel)) {
         const tm = getStandAircraftMarkerWorldPxForRemoteLike(st);
         const apronLinkedT = standHasApronTaxiwayLink(st.id);
-        const fill = sel ? '#c4b5fd' : (apronLinkedT ? c2dTaxiwayCenterlineStroke() : '#7c3aed');
+        const fill = sel ? '#c4b5fd' : (monoLineT ? monoLt : (apronLinkedT ? c2dTaxiwayCenterlineStroke() : '#7c3aed'));
         drawApronSiteMarker(ctx, tm[0], tm[1], fill, null, sel, angle);
       }
       const junc = getTempStandTaxiwayJunctionPx(st);
@@ -5056,12 +5331,13 @@
       if (!!state.layers.junction && (sl || sel)) {
         ctx.save();
         ctx.setLineDash([]);
-        ctx.strokeStyle = sel ? '#22d3ee' : 'rgba(34,211,238,0.95)';
+        const etcM = layerMonoEtcOn() && !sel;
+        ctx.strokeStyle = etcM ? C2D_LAYER_MONO_ETC_WHITE : (sel ? '#22d3ee' : 'rgba(34,211,238,0.95)');
         ctx.lineWidth = sel ? 2.25 : 1.75;
         ctx.beginPath();
         ctx.arc(jx, jy, jr, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillStyle = sel ? '#ecfeff' : 'rgba(236,254,255,0.92)';
+        ctx.fillStyle = etcM ? C2D_LAYER_MONO_ETC_WHITE : (sel ? '#ecfeff' : 'rgba(236,254,255,0.92)');
         ctx.beginPath();
         ctx.arc(jx, jy, jr * 0.45, 0, Math.PI * 2);
         ctx.fill();
@@ -5651,6 +5927,11 @@
           fillC = c2dCssColorRgbChannelScale(c2dCssColorToOpaque(fillC), ROAD_WIDTH_SURFACE_RGB_MUL);
         }
       }
+      if (pathFillWide && layerMonoFillOn() && !sel) {
+        const m = c2dLayerMonoFillDarkAsphaltCss();
+        strokeC = m;
+        fillC = m;
+      }
       ctx.strokeStyle = strokeC;
       ctx.fillStyle = fillC;
       if (pathFillWide) {
@@ -5683,6 +5964,7 @@
       if (!g || tw.vertices.length < 2) return;
       if (interactiveLite && g.isApronTaxiwayPath && !state.isPanning) return;
       const isRunwayPath = g.isRunwayPath, isRunwayExit = g.isRunwayExit, isApronTaxiwayPath = g.isApronTaxiwayPath, sel = g.sel, pathFillWide = g.pathFillWide, pathLineCap = g.pathLineCap, width = g.width;
+      const monoLineCss = layerMonoLinesOn() && !sel ? c2dLayerMonoLineStrokeCss() : null;
       if (!state.layers.pathLines) return;
       if (interactiveLite && !isRunwayPath && !state.isPanning) return;
       if (pathFillWide) {
@@ -5693,7 +5975,7 @@
           const tLen = runwayPolylineLengthPx(rwPtsCk);
           const rwW = Math.max(24, Number(width) || RUNWAY_PATH_DEFAULT_WIDTH);
           skipRunwayCenterlineStroke = tLen >= Math.max(220, rwW * 3);
-          ctx.strokeStyle = c2dRunwayCenterlineColor();
+          ctx.strokeStyle = monoLineCss || c2dRunwayCenterlineColor();
           ctx.setLineDash([10, 12]);
         } else {
           ctx.setLineDash([]);
@@ -5723,7 +6005,7 @@
             ctx.stroke();
             ctx.restore();
           } else {
-            strokeTwCenterlineYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+            strokeTwCenterlineYellow(monoLineCss || (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke()));
           }
         }
         ctx.setLineDash([]);
@@ -5738,11 +6020,11 @@
           ctx.strokeStyle = c2dObjectSelectedStroke();
           ctx.stroke();
         } else {
-          strokeTwCenterlineYellow(isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+          strokeTwCenterlineYellow(monoLineCss || (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke()));
         }
       } else {
         ctx.lineWidth = centerlineWidthWorld(1.5, 1.4);
-        ctx.strokeStyle = c2dRunwayCenterlineColor();
+        ctx.strokeStyle = monoLineCss || c2dRunwayCenterlineColor();
         ctx.setLineDash([10, 12]);
         ctx.lineCap = pathLineCap;
         ctx.lineJoin = 'round';
@@ -5825,6 +6107,7 @@
       }
       if (interactiveLite && !drawing && !sel) return;
       const dir = getTaxiwayDirection(tw);
+      const monoLineCssAr = layerMonoLinesOn() && !sel ? c2dLayerMonoLineStrokeCss() : null;
       if ((!_twPanCoarse || sel || g.drawing) && dir !== 'both' && tw.vertices.length >= 2) {
         const pts = tw.vertices.map(v => cellToPixel(v.col, v.row));
         const totalLen = pts.reduce((acc, p, i) => acc + (i > 0 ? Math.hypot(p[0]-pts[i-1][0], p[1]-pts[i-1][1]) : 0), 0);
@@ -5836,7 +6119,7 @@
           numArrows = Math.max(2, Math.floor(totalLen / arrowSpacing));
         }
         const arrLen = isRunwayPath ? CELL_SIZE * 0.63 : CELL_SIZE * 0.54;
-        ctx.fillStyle = isRunwayPath ? c2dRunwayCenterlineColor() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke());
+        ctx.fillStyle = monoLineCssAr || (isRunwayPath ? c2dRunwayCenterlineColor() : (isRunwayExit ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke()));
         for (let k = 1; k <= numArrows; k++) {
           const targetDist = totalLen * (k / (numArrows + 1));
           let acc = 0;
@@ -5998,7 +6281,7 @@
         ctx.beginPath();
         traceApronLinkPoly();
         ctx.lineWidth = 1;
-        ctx.strokeStyle = c2dTaxiwayCenterlineStroke();
+        ctx.strokeStyle = layerMonoLinesOn() ? c2dLayerMonoLineStrokeCss() : c2dTaxiwayCenterlineStroke();
         ctx.stroke();
       }
       const svApron = state.selectedVertex;
@@ -6031,7 +6314,11 @@
             vtxSel = !!(svApron && svApron.type === 'apronLink' && svApron.id === lk.id && svApron.kind === 'mid' && svApron.midIndex === midIdx);
           }
           const r = layoutPathVertexRadiusPx(vtxSel, draggable);
-          ctx.fillStyle = vtxSel ? '#f43f5e' : (draggable ? '#86efac' : '#22c55e');
+          ctx.fillStyle = vtxSel
+            ? '#f43f5e'
+            : (layerMonoLinesOn()
+              ? (draggable ? '#cbd5e1' : c2dLayerMonoLineStrokeCss())
+              : (draggable ? '#86efac' : '#22c55e'));
           ctx.beginPath();
           ctx.arc(px, py, r, 0, Math.PI*2);
           ctx.fill();
@@ -6294,12 +6581,17 @@
         ctx.lineTo(left, top + rr);
         ctx.quadraticCurveTo(left, top, left + rr, top);
         ctx.closePath();
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
-        ctx.strokeStyle = 'rgba(148, 163, 184, 0.95)';
+        if (layerMonoLinesOn()) {
+          ctx.fillStyle = c2dLayerMonoFillDarkAsphaltRgba(0.92);
+          ctx.strokeStyle = c2dLayerMonoLineStrokeCss();
+        } else {
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.95)';
+        }
         ctx.lineWidth = Math.max(0.75, 1.15 / Math.max(state.scale, 0.08));
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#f1f5f9';
+        ctx.fillStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#f1f5f9';
         ctx.fillText(label, bx, by);
       }
     });
@@ -6422,6 +6714,8 @@
     const selKey = sel ? (String(sel.type) + ':' + String(sel.id)) : '';
     const layers = state.layers || {};
     const layerKey = Object.keys(layers).sort().map(function(k) { return k + '=' + (layers[k] ? '1' : '0'); }).join('&');
+    const lm = state.layerMono || {};
+    const layerMonoKey = ['lines', 'fill', 'etc'].map(function(k) { return k + '=' + (lm[k] ? '1' : '0'); }).join('&');
     return [
       w, h, dpr, state.panX, state.panY, state.scale,
       interactiveLite ? '1' : '0',
@@ -6429,6 +6723,7 @@
       state.pathPolylineCacheRev | 0,
       String(state.currentLayoutName || ''),
       layerKey,
+      layerMonoKey,
       state.pathArcDrag ? '1' : '0',
       layoutViewIsDragging() ? '1' : '0',
     ].join('|');
@@ -6592,7 +6887,7 @@
     ctx.lineCap = 'round';
     const wM = Math.max(0.05, Number(widthM) || LAYOUT_ISLAND_WIDTH_DEFAULT_M);
     ctx.lineWidth = wM;
-    ctx.strokeStyle = LAYOUT_ISLAND_STROKE_CSS;
+    ctx.strokeStyle = (!sel && layerMonoLinesOn()) ? c2dLayerMonoLineStrokeCss() : LAYOUT_ISLAND_STROKE_CSS;
     ctx.stroke();
     if (sel) {
       ctx.lineWidth = Math.max(wM * 0.6, 0.3);
@@ -6608,7 +6903,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const fillArea = c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
+    const fillArea = layerMonoFillOn() ? c2dLayerMonoFillDarkAsphaltCss() : c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
     (state.layoutMarkers || []).forEach(function(m) {
       if (!m || m.kind !== 'area') return;
       const pts = m.points;
@@ -6719,7 +7014,7 @@
       }
       if (layerIslandContourLinesEffective() || isSel) {
         ctx.lineWidth = lwYellow;
-        ctx.strokeStyle = '#fcd410';
+        ctx.strokeStyle = (!isSel && layerMonoLinesOn()) ? c2dLayerMonoLineStrokeCss() : '#fcd410';
         ctx.stroke();
       }
     });
@@ -6765,6 +7060,7 @@
         if (mkAabb && !aabbIntersectsViewport(vb, mkAabb)) return;
       }
       const sel = state.selectedObject && state.selectedObject.type === 'layoutMarker' && state.selectedObject.id === m.id;
+      const etcM = layerMonoEtcOn();
       if (m.kind === 'text') {
         if (interactiveLite) return;
         const x = Number(m.x), y = Number(m.y);
@@ -6775,8 +7071,13 @@
         ctx.textBaseline = 'top';
         const txt = String(m.text || '');
         ctx.lineWidth = Math.max(2, 3 / Math.max(state.scale, 0.1));
-        ctx.strokeStyle = 'rgba(15,23,42,0.92)';
-        ctx.fillStyle = '#e2e8f0';
+        if (etcM && !sel) {
+          ctx.strokeStyle = 'rgba(30,41,59,0.55)';
+          ctx.fillStyle = C2D_LAYER_MONO_ETC_WHITE;
+        } else {
+          ctx.strokeStyle = 'rgba(15,23,42,0.92)';
+          ctx.fillStyle = '#e2e8f0';
+        }
         ctx.strokeText(txt, x + 2, y + 2);
         ctx.fillText(txt, x + 2, y + 2);
         if (sel) layoutMarkerDrawEndpointDot(ctx, x, y, true);
@@ -6792,7 +7093,7 @@
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
-        ctx.strokeStyle = sel ? '#38bdf8' : '#94a3b8';
+        ctx.strokeStyle = sel ? '#38bdf8' : (etcM ? C2D_LAYER_MONO_ETC_WHITE : '#94a3b8');
         ctx.lineWidth = Math.max(1.2, 1.6 / Math.max(state.scale, 0.1));
         ctx.setLineDash([6, 4]);
         ctx.stroke();
@@ -6807,8 +7108,13 @@
           ctx.textBaseline = 'middle';
           const label = lenM.toFixed(1) + ' m';
           ctx.lineWidth = 2.5;
-          ctx.strokeStyle = 'rgba(15,23,42,0.85)';
-          ctx.fillStyle = '#f1f5f9';
+          if (etcM && !sel) {
+            ctx.strokeStyle = 'rgba(30,41,59,0.55)';
+            ctx.fillStyle = C2D_LAYER_MONO_ETC_WHITE;
+          } else {
+            ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+            ctx.fillStyle = '#f1f5f9';
+          }
           ctx.strokeText(label, mx, my - fs * 0.9);
           ctx.fillText(label, mx, my - fs * 0.9);
         }
@@ -6857,7 +7163,7 @@
             ctx.stroke();
             ctx.restore();
           }
-          const trailColor = m.blazerColor || MARKER_BLAZER_COLOR_OPTIONS[0];
+          const trailColor = (etcM && !sel) ? C2D_LAYER_MONO_ETC_WHITE : (m.blazerColor || MARKER_BLAZER_COLOR_OPTIONS[0]);
           drawTrailBand(lt, rt, trailColor);
           drawTrailBand(rt, lt, trailColor);
         }
@@ -6884,8 +7190,8 @@
           ctx.lineTo(scaleX * wRx, scaleY * lY);
           ctx.closePath();
         }
-        ctx.fillStyle = sel ? c2dObjectSelectedFill() : '#94a3b8';
-        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : 'rgba(30,41,59,0.9)';
+        ctx.fillStyle = sel ? c2dObjectSelectedFill() : (etcM ? C2D_LAYER_MONO_ETC_WHITE : '#94a3b8');
+        ctx.strokeStyle = sel ? c2dObjectSelectedStroke() : (etcM ? C2D_LAYER_MONO_ETC_WHITE : 'rgba(30,41,59,0.9)');
         ctx.lineWidth = Math.max(0.75, 1.1 / Math.max(state.scale, 0.1));
         if (!sel) ctx.globalAlpha = 0.4;
         if (sel) {
@@ -8530,6 +8836,16 @@
         parentInp.indeterminate = false;
         syncLegacyViewFlagsFromLayers();
         invalidateGridUnderlay();
+        syncLayerPopoverFromState();
+        draw();
+      });
+    });
+    layerPopoverPanel.querySelectorAll('input[data-layer-mono]').forEach(function(monoInp) {
+      monoInp.addEventListener('change', function(ev) {
+        ev.stopPropagation();
+        const mk = monoInp.getAttribute('data-layer-mono');
+        if (!mk || !state.layerMono || typeof state.layerMono[mk] !== 'boolean') return;
+        state.layerMono[mk] = !!monoInp.checked;
         syncLayerPopoverFromState();
         draw();
       });

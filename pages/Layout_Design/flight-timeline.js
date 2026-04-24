@@ -1,3 +1,92 @@
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const o = state.pbbStands[i];
+      const oc = getStandConnectionPx(o);
+      const oa = getPBBStandAngle(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    return false;
+  }
+  function pbbStandOverlapsTerminal(pbb) {
+    const corners = getPBBStandCorners(pbb);
+    for (let t = 0; t < state.terminals.length; t++) {
+      const term = state.terminals[t];
+      if (!term.closed || term.vertices.length < 3) continue;
+      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
+      for (let k = 0; k < 4; k++) {
+        if (pointInPolygonXY(corners[k], termPix)) return true;
+      }
+      for (let k = 0; k < termPix.length; k++) {
+        if (pointInPolygonXY(termPix[k], corners)) return true;
+      }
+    }
+    return false;
+  }
+  function pbbStandOverlapsExisting(pbb, excludeId) {
+    if (pbbStandOverlapsTerminal(pbb)) return true;
+    const cat = pbb.category || 'C';
+    const center = getStandConnectionPx(pbb);
+    const angle = getPBBStandAngle(pbb);
+    if (standGapLineHitsExistingOuterContours(center, angle, cat)) return true;
+    return false;
+  }
+  function pbbStandOuterContoursOverlapExisting(pbb, excludeId) {
+    const corners = getPBBStandCorners(pbb);
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const other = state.pbbStands[i];
+      if (!other) continue;
+      if (excludeId && other.id === excludeId) continue;
+      if (rotatedRectsOverlap(corners, getPBBStandCorners(other))) return true;
+    }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const st = state.remoteStands[i];
+      if (!st) continue;
+      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
+    }
+    const temps = state.tempStands || [];
+    for (let i = 0; i < temps.length; i++) {
+      const st = temps[i];
+      if (!st) continue;
+      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
+    }
+    return false;
+  }
+  function tryPlacePbbAt(wx, wy) {
+    let bestEdge = null, bestD2 = Infinity;
+    state.terminals.forEach(t => {
+      if (!t.closed || t.vertices.length < 2) return;
+      let cx = 0, cy = 0;
+      t.vertices.forEach(v => { const [px, py] = cellToPixel(v.col, v.row); cx += px; cy += py; });
+      cx /= t.vertices.length || 1; cy /= t.vertices.length || 1;
+      for (let i = 0; i < t.vertices.length; i++) {
+        const v1 = t.vertices[i], v2 = t.vertices[(i + 1) % t.vertices.length];
+        const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
+        const near = closestPointOnSegment(p1, p2, [wx, wy]);
+        if (near) {
+          const d2 = dist2(near, [wx, wy]);
+          if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2, col: v1.col, row: v1.row, cx, cy }; }
+        }
+      }
+    });
+    const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
+    if (!bestEdge || bestD2 >= maxD2) return false;
+    const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
+    let nx = -(y2 - y1), ny = x2 - x1;
+    const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
+    const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
+    if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
+    const uPbb = readUnifiedNewStandConstraintFromPanel('standIcaoCategories', 'standAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uPbb.categoryMode;
+    const category = uPbb.category;
+    const allowedIcaoCategories = uPbb.allowedIcaoCategories;
+    const panelAllowedTypes = uPbb.allowedAircraftTypes;
+    const minLen = getStandDepthMeters(category) / 2 + 3;
+    const lenMeters = Number(document.getElementById('pbbLength').value || 15);
     const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
     const standAngleDeg = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
     const bwEl = document.getElementById('pbbBoardingWidth');
@@ -351,6 +440,7 @@
         showRoadWidth: !!state.showRoadWidth,
         showLayoutMarkers: !!state.showLayoutMarkers,
         layers: Object.assign({}, state.layers),
+        layerMono: state.layerMono ? Object.assign({}, state.layerMono) : Object.assign({}, DEFAULT_LAYER_MONO),
         layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
       },
       networkJunctions: networkJunctions,
@@ -924,6 +1014,9 @@
     const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
     const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
+    const monoFillP = layerMonoFillOn() && !sel;
+    const monoLineP = layerMonoLinesOn() && !sel;
+    const monoLp = c2dLayerMonoLineStrokeCss();
     if (!sl && !sf) return;
     ctx.save();
     ctx.beginPath();
@@ -932,16 +1025,22 @@
     ctx.closePath();
     const hairW = layoutHairlineStrokeWidthWorld();
     if (sf) {
-      ctx.fillStyle = sel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.14)';
-      ctx.fill();
-      drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.4)', hairW);
+      if (monoFillP) {
+        ctx.fillStyle = c2dLayerMonoFillDarkAsphaltRgba(0.5);
+        ctx.fill();
+        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, monoLp, hairW);
+      } else {
+        ctx.fillStyle = sel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.14)';
+        ctx.fill();
+        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.4)', hairW);
+      }
     }
     if (sl) {
       ctx.beginPath();
       ctx.moveTo(poly[0][0], poly[0][1]);
       for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
       ctx.closePath();
-      ctx.strokeStyle = 'rgba(255,255,255,0.88)';
+      ctx.strokeStyle = monoLineP ? monoLp : 'rgba(255,255,255,0.88)';
       ctx.lineWidth = hairW;
       ctx.stroke();
     }
@@ -1229,102 +1328,3 @@
     const silhouette2D = getApronAircraftDetailedSilhouettePoints();
     let leftLocal = [0, -spanM];
     let rightLocal = [0, spanM];
-    if (_ac2d.useDetailedSilhouette === true && silhouette2D.length >= 3) {
-      let minY = Infinity, maxY = -Infinity;
-      let minPt = null, maxPt = null;
-      for (let i = 0; i < silhouette2D.length; i++) {
-        const p = silhouette2D[i];
-        if (!p || p.length < 2) continue;
-        const lx = Number(p[0]) * lenM;
-        const ly = Number(p[1]) * spanM;
-        if (!isFinite(lx) || !isFinite(ly)) continue;
-        if (ly < minY) { minY = ly; minPt = [lx, ly]; }
-        if (ly > maxY) { maxY = ly; maxPt = [lx, ly]; }
-      }
-      if (minPt && maxPt) {
-        leftLocal = minPt;
-        rightLocal = maxPt;
-      }
-    }
-    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
-    function localToWorld(pt) {
-      return {
-        x: pose.x + pt[0] * cs - pt[1] * sn,
-        y: pose.y + pt[0] * sn + pt[1] * cs,
-      };
-    }
-    return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
-  }
-  function ensureMarkerFlightBlazerState(m) {
-    if (!m || m.kind !== 'flight') return;
-    if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
-    if (typeof m.headingReversed !== 'boolean') m.headingReversed = false;
-    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) < 0) m.blazerColor = MARKER_BLAZER_COLOR_OPTIONS[0];
-    if (!Array.isArray(m.blazerLeftTrail)) m.blazerLeftTrail = [];
-    if (!Array.isArray(m.blazerRightTrail)) m.blazerRightTrail = [];
-  }
-  function appendMarkerFlightBlazerTrail(m) {
-    if (!m || m.kind !== 'flight') return;
-    ensureMarkerFlightBlazerState(m);
-    if (!m.blazerEnabled) return;
-    const tips = getMarkerFlightWingtipWorldPoints(m);
-    if (!tips || !tips.left || !tips.right) return;
-    const minStep = Math.max(0.25, CELL_SIZE * 0.03);
-    const minStep2 = minStep * minStep;
-    function append(trail, pt) {
-      const last = trail.length ? trail[trail.length - 1] : null;
-      if (!last || dist2([last.x, last.y], [pt.x, pt.y]) >= minStep2) trail.push({ x: pt.x, y: pt.y });
-      if (trail.length > 4000) trail.splice(0, trail.length - 4000);
-    }
-    append(m.blazerLeftTrail, tips.left);
-    append(m.blazerRightTrail, tips.right);
-  }
-  function markerFlightBoundsWorld(m) {
-    if (!m || m.kind !== 'flight') return null;
-    const pose = resolveMarkerFlightPose(m);
-    if (!pose) return null;
-    const ac = getAircraftInfoByType(m.aircraftType);
-    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
-    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
-    const sil = getApronAircraftDetailedSilhouettePoints();
-    const localPts = [];
-    if (_ac2d.useDetailedSilhouette === true && sil.length >= 3) {
-      for (let i = 0; i < sil.length; i++) {
-        const p = sil[i];
-        if (!p || p.length < 2) continue;
-        const lx = Number(p[0]) * lenM;
-        const ly = Number(p[1]) * spanM;
-        if (isFinite(lx) && isFinite(ly)) localPts.push([lx, ly]);
-      }
-    }
-    if (!localPts.length) {
-      localPts.push([lenM * 0.5, 0], [-lenM * 0.5, -spanM], [-lenM * 0.5, spanM], [0, -spanM], [0, spanM]);
-    }
-    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (let i = 0; i < localPts.length; i++) {
-      const pt = localPts[i];
-      const wx = pose.x + pt[0] * cs - pt[1] * sn;
-      const wy = pose.y + pt[0] * sn + pt[1] * cs;
-      if (wx < minX) minX = wx;
-      if (wy < minY) minY = wy;
-      if (wx > maxX) maxX = wx;
-      if (wy > maxY) maxY = wy;
-    }
-    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
-    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
-  }
-  function syncMarkerFlightBlazerOverlayButton() {
-    if (!markerFlightBlazerOverlayBtn || !container) return;
-    const sel = state.selectedObject;
-    const show = !!(layoutMarkersVisible() && sel && sel.type === 'layoutMarker' && sel.obj && sel.obj.kind === 'flight');
-    if (!show) {
-      markerFlightBlazerOverlayBtn.style.display = 'none';
-      markerFlightHeadingOverlayBtn.style.display = 'none';
-      markerFlightBlazerPaletteWrap.style.display = 'none';
-      return;
-    }
-    const mk = sel.obj;
-    ensureMarkerFlightBlazerState(mk);
-    const b = markerFlightBoundsWorld(mk);
-    if (!b) {

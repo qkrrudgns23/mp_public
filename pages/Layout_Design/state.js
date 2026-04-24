@@ -1,3 +1,5 @@
+  /** Strip alpha from rgba for solid road surface when showRoadWidth is on. */
+  function c2dCssColorToOpaque(css) {
     const s = String(css || '').trim();
     const ra = s.match(/^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/i);
     if (ra) return 'rgb(' + ra[1] + ',' + ra[2] + ',' + ra[3] + ')';
@@ -54,6 +56,21 @@
   function c2dRoadWidthBandRunwayAsphaltColor() {
     return '#363636';
   }
+  /** Layer mono: cool blue-gray (slate), not warm taupe. */
+  function c2dLayerMonoLineStrokeCss() {
+    return '#94a3b8';
+  }
+  /** Layer mono: fills match path **asphalt** width band (`c2dRoadWidthBandForPavement('asphalt')`), not cement / `c2dTaxiwayPavementFill`. */
+  function c2dLayerMonoFillDarkAsphaltCss() {
+    return c2dCssColorToOpaque(c2dRoadWidthBandRunwayAsphaltColor());
+  }
+  function c2dLayerMonoFillDarkAsphaltRgba(a) {
+    const t = c2dParseCssRgbTriplet(c2dLayerMonoFillDarkAsphaltCss());
+    const al = Number(a);
+    if (!t || !isFinite(al)) return c2dLayerMonoFillDarkAsphaltCss();
+    return 'rgba(' + t[0] + ',' + t[1] + ',' + t[2] + ',' + Math.max(0, Math.min(1, al)) + ')';
+  }
+  const C2D_LAYER_MONO_ETC_WHITE = '#f8fafc';
   function pathPavementDefaultForPathType(pathType) {
     const pt = pathType || 'taxiway';
     if (pt === 'runway' || pt === 'runway_exit') return 'asphalt';
@@ -255,7 +272,10 @@
     const pathSpanM = halfLen * 2;
     const lineW = c2dHoldingPointMarkingLineWidthWorld();
     const centerlineStroke = k === 'runway_holding' ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke();
-    const stroke = preview ? 'rgba(250, 204, 21, 0.7)' : (selected ? c2dObjectSelectedStroke() : centerlineStroke);
+    const lineMono = layerMonoLinesOn() && !preview && !selected;
+    const stroke = preview
+      ? 'rgba(250, 204, 21, 0.7)'
+      : (selected ? c2dObjectSelectedStroke() : (lineMono ? c2dLayerMonoLineStrokeCss() : centerlineStroke));
     const lw = preview ? Math.max(0.2, lineW * 0.92) : (selected ? lineW + 0.14 : lineW);
     const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
     const dashLen = Math.max(lineW * 2.2, pathSpanM * 0.13);
@@ -268,23 +288,3 @@
       ctx.shadowColor = c2dObjectSelectedGlow();
       ctx.shadowBlur = c2dObjectSelectedGlowBlur();
     } else {
-      ctx.shadowBlur = 0;
-    }
-    function strokeBarAtOffset(ofs) {
-      const sx = cx - px * halfLen + g.ux * ofs;
-      const sy = cy - py * halfLen + g.uy * ofs;
-      const ex = cx + px * halfLen + g.ux * ofs;
-      const ey = cy + py * halfLen + g.uy * ofs;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(ex, ey);
-      ctx.stroke();
-    }
-    if (k === 'intermediate') {
-      ctx.setLineDash([dashLen, gapLen]);
-      strokeBarAtOffset(0);
-      ctx.setLineDash([]);
-    } else {
-      ctx.setLineDash([]);
-      strokeBarAtOffset(-pairHalf);
-      strokeBarAtOffset(pairHalf);

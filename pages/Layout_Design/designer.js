@@ -1505,36 +1505,21 @@
     state.rwySepPanelDirty = true;
     bumpRwySepSnapshotStaleGen();
     if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines({ keepDesResultTimelines: true });
-    const dot = document.getElementById('globalUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('fresh');
-      dot.classList.add('stale');
-      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim으로 재동기화 (완료 시 결과 자동 반영)');
-    }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   function markGlobalUpdateFresh() {
     state.globalUpdateFresh = true;
-    const dot = document.getElementById('globalUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('stale');
-      dot.classList.add('fresh');
-      dot.setAttribute('title', 'All views match the last Pro Sim run');
-    }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   function markProSimSyncStaleFromSchedule() {
     state.globalUpdateFresh = false;
     state.simPlaying = false;
     state.simSliderScrubbing = false;
     if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
-    const dot = document.getElementById('globalUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('fresh');
-      dot.classList.add('stale');
-      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim으로 재동기화 (완료 시 결과 자동 반영)');
-    }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   function markDesignerPageUpdateStale() {
     state.designerPageUpdateFresh = false;
@@ -1556,16 +1541,80 @@
     }
     if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
-  /** Pro Sim is allowed only when Update sync is fresh (green). */
+  /** English multi-line (≤5 aircraft) or summary (6+) for arrival RET failure dock banner. */
+  function formatArrRetFailedBannerEnglish(regs) {
+    const n = (regs && regs.length) || 0;
+    if (n < 1) return '';
+    if (n <= 5) {
+      return regs.map(function(reg) {
+        return String(reg) + ': Runway exit assignment failed.';
+      }).join('\n');
+    }
+    const head = regs.slice(0, 3).join(', ');
+    return head + ', etc. — ' + n + ' aircraft failed.';
+  }
+  /**
+   * Pro Sim: allowed only when Update is fresh (green) and no arrival Runway exit (RET) failures
+   * (`arrRetFailed` on non-departure legs). Drives object-info-dock red banner and global Pro Sim dot.
+   */
   function syncProSimButtonFromDesignerPageState() {
     const btn = document.getElementById('btnGlobalUpdate');
-    if (!btn) return;
-    const allow = !!state.designerPageUpdateFresh;
-    btn.disabled = !allow;
-    if (!allow) {
-      btn.setAttribute('title', '먼저 Update로 경로 그래프·뷰를 동기화(초록)한 뒤 Pro Sim을 실행하세요.');
-    } else {
-      btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
+    const dot = document.getElementById('globalUpdateSyncDot');
+    const dock = document.getElementById('object-info-dock');
+    const ban = document.getElementById('arrRetFailedBanner');
+    const banT = document.getElementById('arrRetFailedBannerText');
+    const failedRegs = [];
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.arrDep === 'Dep') return;
+      if (f.arrRetFailed) {
+        const r = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
+        if (failedRegs.indexOf(r) < 0) failedRegs.push(r);
+      }
+    });
+    const hasRetFail = failedRegs.length > 0;
+    if (dock) {
+      if (hasRetFail) dock.classList.add('object-info-dock--arr-ret-blocked');
+      else dock.classList.remove('object-info-dock--arr-ret-blocked');
+    }
+    if (ban && banT) {
+      if (hasRetFail) {
+        ban.hidden = false;
+        ban.setAttribute('aria-hidden', 'false');
+        banT.textContent = formatArrRetFailedBannerEnglish(failedRegs);
+      } else {
+        ban.hidden = true;
+        ban.setAttribute('aria-hidden', 'true');
+        banT.textContent = '';
+      }
+    }
+    const allow = !!state.designerPageUpdateFresh && !hasRetFail;
+    if (btn) {
+      btn.disabled = !allow;
+      btn.classList.toggle('global-update-blocked-arr-ret', hasRetFail);
+      if (!state.designerPageUpdateFresh) {
+        btn.setAttribute('title', 'Run Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
+      } else if (hasRetFail) {
+        const n = failedRegs.length;
+        const shortList = n > 5 ? (failedRegs.slice(0, 3).join(', ') + ', etc. (' + n + ' total)') : failedRegs.join(', ');
+        btn.setAttribute('title', 'Pro Sim is disabled: no valid runway exit. ' + shortList);
+      } else {
+        btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
+      }
+    }
+    if (dot) {
+      if (hasRetFail) {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Runway exit failure — resolve all arrival RET issues before Pro Sim.');
+      } else if (state.globalUpdateFresh) {
+        dot.classList.remove('stale');
+        dot.classList.add('fresh');
+        dot.setAttribute('title', 'All views match the last Pro Sim run');
+      } else {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Layout or schedule changed — run Pro Sim again to refresh (results apply when done)');
+      }
     }
   }
   function redrawLayoutAfterEdit() {
@@ -9099,6 +9148,7 @@
     if (!listEl) return;
     if (!state.flights.length) {
       _renderEmptyFlightListState(listEl, cfgEl);
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
       if (cb) cb();
       return;
     }
@@ -9115,6 +9165,7 @@
       } finally {
         endScheduleRetStatsBatch();
       }
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
       if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
       if (cb) cb();
       return;
@@ -9139,6 +9190,7 @@
       beginScheduleRetStatsBatch();
       try {
         _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl, scheduleOpts);
+        if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
       } finally {
         endScheduleRetStatsBatch();
       }
@@ -16234,6 +16286,20 @@
         }
         if (!state.designerPageUpdateFresh) {
           failProSim('먼저 Update로 경로 그래프·뷰를 동기화하세요.');
+          return;
+        }
+        const arrRetFailRegs = [];
+        (state.flights || []).forEach(function(f) {
+          if (!f || f.arrDep === 'Dep' || !f.arrRetFailed) return;
+          const r = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
+          if (arrRetFailRegs.indexOf(r) < 0) arrRetFailRegs.push(r);
+        });
+        if (arrRetFailRegs.length) {
+          const n = arrRetFailRegs.length;
+          const errMsg = n > 5
+            ? (arrRetFailRegs.slice(0, 3).join(', ') + ', etc. — ' + n + ' aircraft failed (no valid runway exit).')
+            : ('Runway exit failed: ' + arrRetFailRegs.map(function(r) { return String(r); }).join(' · '));
+          failProSim(errMsg);
           return;
         }
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();

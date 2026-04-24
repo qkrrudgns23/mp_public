@@ -1,3 +1,107 @@
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const standAngleInputEl = document.getElementById('standAngle');
+  if (standAngleInputEl) {
+    standAngleInputEl.addEventListener('change', function() {
+      const nextDeg = normalizeAngleDeg(this.value);
+      this.value = String(Math.round(nextDeg));
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        const pbb = state.selectedObject.obj;
+        pbb.angleDeg = nextDeg;
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const pbbBridgeCountInputEl = document.getElementById('pbbBridgeCount');
+  if (pbbBridgeCountInputEl) {
+    pbbBridgeCountInputEl.addEventListener('change', function() {
+      const nextCount = Math.max(1, Math.min(8, parseInt(this.value, 10) || 1));
+      this.value = String(nextCount);
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        const pbb = state.selectedObject.obj;
+        pbb.pbbCount = nextCount;
+        delete pbb.pbbBridges;
+        rebuildPbbBridgeGeometry(pbb);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  function applyPbbBoardingAreaDimsFromInputs(pbb) {
+    const wEl = document.getElementById('pbbBoardingWidth');
+    const hEl = document.getElementById('pbbBoardingHeight');
+    const nw = Math.max(0.5, Number(wEl && wEl.value) || 5);
+    const nh = Math.max(0.5, Number(hEl && hEl.value) || 15);
+    pbb.boardingWidthM = nw;
+    pbb.boardingHeightM = nh;
+    if (wEl) wEl.value = String(nw);
+    if (hEl) hEl.value = String(nh);
+    ensurePbbBoardingWallGeometry(pbb);
+    const arm = Number(pbb.pbbArmLenM);
+    if (isFinite(arm) && arm > 0) applyPbbArmLengthToBridgeEnds(pbb, arm);
+    bumpPathPolylineCacheRev();
+  }
+  const pbbBoardingWidthEl = document.getElementById('pbbBoardingWidth');
+  if (pbbBoardingWidthEl) {
+    pbbBoardingWidthEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        applyPbbBoardingAreaDimsFromInputs(state.selectedObject.obj);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const pbbBoardingHeightEl = document.getElementById('pbbBoardingHeight');
+  if (pbbBoardingHeightEl) {
+    pbbBoardingHeightEl.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        applyPbbBoardingAreaDimsFromInputs(state.selectedObject.obj);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  const standAircraftAccessEl = document.getElementById('standAircraftAccess');
+  if (standAircraftAccessEl) {
+    standAircraftAccessEl.addEventListener('change', function(ev) {
+      const target = ev.target;
+      if (!target || !target.classList.contains('aircraft-type-check')) return;
+      syncChoiceChipStates(standAircraftAccessEl);
+      if (!state.selectedObject || state.selectedObject.type !== 'pbb') return;
+      const pbbAc = state.selectedObject.obj;
+      applyUnifiedStandConstraintFromPanelToObject(pbbAc, 'standIcaoCategories', 'standAircraftAccess');
+      renderAircraftConstraintChoices('standAircraftAccess', pbbAc.allowedAircraftTypes, pbbAc.allowedIcaoCategories);
+      updateObjectInfo();
+      renderObjectList();
+      draw();
+    });
+  }
+
+  const remoteNameInput = document.getElementById('remoteName');
+  if (remoteNameInput) {
+    remoteNameInput.addEventListener('change', function() {
+      if (state.selectedObject && state.selectedObject.type === 'remote') {
+        const st = state.selectedObject.obj;
+        const raw = (this.value || '').trim();
+        if (raw && findDuplicateLayoutName('remote', st.id, raw)) {
+          alertDuplicateLayoutName();
+          this.value = st.name || '';
+          return;
+        }
+        st.name = raw;
+        updateObjectInfo();
         renderObjectList();
         draw();
         update3DSceneWhenVisible();
@@ -991,107 +1095,3 @@
       const dt = b.t - a.t;
       if (dt < 1e-9) continue;
       const dist = Math.hypot(b.x - a.x, b.y - a.y);
-      if (dist < stillEps) return true;
-    }
-    return false;
-  }
-
-  function isFlightTrailHiddenAtSimTime(f, tSec) {
-    if (isFlightAirsideCycleCompleteAtSimTime(f, tSec)) return true;
-    if (isFlightTimelineStationaryAtSimTime(f, tSec)) return true;
-    return false;
-  }
-
-  function getFlightTrailPolylineBackward(f, tEnd, maxDistM) {
-    const tl = f && f.timeline;
-    if (!tl || tl.length < 2 || !(maxDistM > 0)) return [];
-    const tMin = tl[0].t, tMax = tl[tl.length - 1].t;
-    let t = Math.min(Math.max(tEnd, tMin), tMax);
-    let seg = 0;
-    for (let i = 0; i < tl.length - 1; i++) {
-      if (t >= tl[i].t && t <= tl[i + 1].t) { seg = i; break; }
-      if (t > tl[i + 1].t) seg = i;
-    }
-    const pts = [];
-    function xyAt(T) {
-      if (T <= tMin) return [tl[0].x, tl[0].y];
-      if (T >= tMax) return [tl[tl.length - 1].x, tl[tl.length - 1].y];
-      for (let i = 0; i < tl.length - 1; i++) {
-        const a = tl[i], b = tl[i + 1];
-        if (T >= a.t && T <= b.t) {
-          const sp = b.t - a.t || 1;
-          const uu = (T - a.t) / sp;
-          return [a.x + (b.x - a.x) * uu, a.y + (b.y - a.y) * uu];
-        }
-      }
-      return [tl[tl.length - 1].x, tl[tl.length - 1].y];
-    }
-    pts.push(xyAt(t));
-    let rem = maxDistM;
-    let curSeg = seg;
-    let curT = t;
-    let guard = 0;
-    while (rem > 1e-6 && curSeg >= 0 && guard++ < 10000) {
-      const A = tl[curSeg], B = tl[curSeg + 1];
-      const ta = A.t, tb = B.t;
-      const dt = tb - ta || 1e-12;
-      const distAB = Math.hypot(B.x - A.x, B.y - A.y) || 1e-12;
-      let u = Math.max(0, Math.min(1, (curT - ta) / dt));
-      if (u < 1e-12) {
-        if (curSeg <= 0) break;
-        curSeg--;
-        curT = tl[curSeg + 1].t;
-        continue;
-      }
-      const distToA = u * distAB;
-      if (distToA <= rem) {
-        rem -= distToA;
-        pts.push([A.x, A.y]);
-        curSeg--;
-        curT = ta;
-      } else {
-        const frac = rem / distAB;
-        const uu = u - frac;
-        const nx = A.x + uu * (B.x - A.x);
-        const ny = A.y + uu * (B.y - A.y);
-        pts.push([nx, ny]);
-        rem = 0;
-        break;
-      }
-    }
-    return pts.slice().reverse();
-  }
-
-  function getRunwayOptions() {
-    const list = [];
-    (state.taxiways || []).filter(t => t.pathType === 'runway')
-      .forEach(t => list.push({ id: t.id, name: (t.name || '').trim() || 'Runway' }));
-    return list;
-  }
-
-  function buildRunwayOptionsHtml(selectedId) {
-    const opts = [];
-    const list = getRunwayOptions();
-    if (!list.length) {
-      opts.push('<option value=\"\">Runway</option>');
-    } else {
-      list.forEach(function(o) {
-        const sel = selectedId && o.id === selectedId ? ' selected' : '';
-        opts.push('<option value=\"' + String(o.id || '').replace(/\"/g, '&quot;') + '\"' + sel + '>' +
-          escapeHtml(o.name || o.id || 'Runway') + '</option>');
-      });
-    }
-    return opts.join('');
-  }
-  function buildTerminalOptionsHtml(selectedId) {
-    const opts = [];
-    const terms = makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {
-      return { id: t.id, name: (t.name || '').trim() || 'Building' };
-    });
-    if (!terms.length) {
-      opts.push('<option value=\"\">Building</option>');
-    } else {
-      if (terms.length > 1) opts.push('<option value=\"\">Random</option>');
-      terms.forEach(function(o) {
-        const sel = selectedId && o.id === selectedId ? ' selected' : '';
-        opts.push('<option value=\"' + String(o.id || '').replace(/\"/g, '&quot;') + '\"' + sel + '>' +

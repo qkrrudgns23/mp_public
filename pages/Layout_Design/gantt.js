@@ -1,3 +1,107 @@
+  function pathArcCommitIslandVertexFromPreview(mk, vertexIndex, previewPx, snapToGrid) {
+    if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !previewPx || previewPx.length < 2) return;
+    const verts = mk.points;
+    const n = verts ? verts.length : 0;
+    if (!verts || n < 3 || vertexIndex < 0 || vertexIndex >= n) return;
+    const prev = verts[(vertexIndex - 1 + n) % n];
+    const next = verts[(vertexIndex + 1) % n];
+    const Apx = [Number(prev.x), Number(prev.y)];
+    const Bpx = [Number(next.x), Number(next.y)];
+    const workPx = previewPx.map(function(p, j) {
+      if (j === 0) return [Apx[0], Apx[1]];
+      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
+      return [p[0], p[1]];
+    });
+    const cells = [];
+    if (previewPx.length > 2) {
+      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
+      for (let k = 0; k < densePx.length; k++) {
+        const snap = worldPointToPixel(densePx[k][0], densePx[k][1], snapToGrid);
+        const c = { x: snap[0], y: snap[1] };
+        if (cells.length && cells[cells.length - 1].x === c.x && cells[cells.length - 1].y === c.y) continue;
+        if (c.x === prev.x && c.y === prev.y) continue;
+        cells.push(c);
+      }
+      while (cells.length && cells[cells.length - 1].x === next.x && cells[cells.length - 1].y === next.y) cells.pop();
+    }
+    if (!cells.length) {
+      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
+      const snap = worldPointToPixel(M[0], M[1], snapToGrid);
+      cells.push({ x: snap[0], y: snap[1] });
+    }
+    const newArr = verts.slice();
+    newArr.splice(vertexIndex, 1, ...cells);
+    mk.points = newArr;
+    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
+    state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: midSel };
+  }
+  function pathArcCommitFromPreview(tw, vertexIndex, previewPx, snapToGrid) {
+    if (!tw || tw.pathType === 'runway') return;
+    if (!previewPx || previewPx.length < 2) return;
+    const verts = tw.vertices;
+    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return;
+    const prev = verts[vertexIndex - 1], next = verts[vertexIndex + 1];
+    const Apx = cellToPixel(prev.col, prev.row);
+    const Bpx = cellToPixel(next.col, next.row);
+    const workPx = previewPx.map(function(p, j) {
+      if (j === 0) return [Apx[0], Apx[1]];
+      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
+      return [p[0], p[1]];
+    });
+    const cells = [];
+    if (previewPx.length > 2) {
+      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
+      for (let k = 0; k < densePx.length; k++) {
+        const c = worldPointToCellPoint(densePx[k][0], densePx[k][1], snapToGrid);
+        if (cells.length && cells[cells.length - 1].col === c.col && cells[cells.length - 1].row === c.row) continue;
+        if (c.col === prev.col && c.row === prev.row) continue;
+        cells.push(c);
+      }
+      while (cells.length && cells[cells.length - 1].col === next.col && cells[cells.length - 1].row === next.row) cells.pop();
+    }
+    if (!cells.length) {
+      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
+      cells.push(worldPointToCellPoint(M[0], M[1], snapToGrid));
+    }
+    tw.vertices.splice(vertexIndex, 1, ...cells);
+    if (typeof syncStartEndFromVertices === 'function') syncStartEndFromVertices(tw);
+    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
+    state.selectedVertex = { type: 'taxiway', id: tw.id, index: midSel };
+    bumpPathPolylineCacheRev();
+  }
+  function apronLinkPolyVertexIndexForMid(lk, midIndex) {
+    const mids = Array.isArray(lk.midVertices) ? lk.midVertices : [];
+    const n = mids.length + 2;
+    if (n < 3 || midIndex < 0 || midIndex >= mids.length) return -1;
+    const standFirst = String(lk.apronDrawFirstEndpoint || 'stand') === 'stand';
+    return standFirst ? (midIndex + 1) : (n - 2 - midIndex);
+  }
+  function pathArcCommitApronLinkFromPreview(lk, polyVertexIndex, previewPx, snapToGrid) {
+    if (!lk || !previewPx || previewPx.length < 2) return;
+    const poly = getApronLinkPolylineWorldPts(lk);
+    const n = poly.length;
+    if (n < 3) return;
+    const vi = polyVertexIndex;
+    if (vi <= 0 || vi >= n - 1) return;
+    const Apx = poly[vi - 1], Bpx = poly[vi + 1];
+    const workPx = previewPx.map(function(p, j) {
+      if (j === 0) return [Apx[0], Apx[1]];
+      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
+      return [p[0], p[1]];
+    });
+    const cells = [];
+    const prevCell = worldPointToCellPoint(Apx[0], Apx[1], snapToGrid);
+    const nextCell = worldPointToCellPoint(Bpx[0], Bpx[1], snapToGrid);
+    if (previewPx.length > 2) {
+      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
+      for (let k = 0; k < densePx.length; k++) {
+        const c = worldPointToCellPoint(densePx[k][0], densePx[k][1], snapToGrid);
+        if (cells.length && cells[cells.length - 1].col === c.col && cells[cells.length - 1].row === c.row) continue;
+        if (c.col === prevCell.col && c.row === prevCell.row) continue;
+        cells.push(c);
+      }
+      while (cells.length && cells[cells.length - 1].col === nextCell.col && cells[cells.length - 1].row === nextCell.row) cells.pop();
+    }
     if (!cells.length) {
       const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
       cells.push(worldPointToCellPoint(M[0], M[1], snapToGrid));
@@ -444,107 +548,3 @@
       applyIcaoCategoriesToHost('standIcaoCategories', normalizeAllowedIcaoCategories(pbb.allowedIcaoCategories));
       if (lenInput) {
         let arm = Number(pbb.pbbArmLenM);
-        if (!isFinite(arm) || arm <= 0) {
-          const br0 = pbb.pbbBridges && pbb.pbbBridges[0];
-          const p1 = br0 && br0.points && br0.points[1], p2 = br0 && br0.points && br0.points[2];
-          if (p1 && p2) arm = Math.hypot(Number(p2.x) - Number(p1.x), Number(p2.y) - Number(p1.y));
-          else arm = 15;
-        }
-        lenInput.value = String(Math.max(1, Math.round(arm)));
-      }
-      if (angleInput) angleInput.value = String(Math.round(getPbbAngleDeg(pbb)));
-      if (pbbCountInput) pbbCountInput.value = String(Math.max(1, parseInt(pbb.pbbCount, 10) || 1));
-      const boardingWInput = document.getElementById('pbbBoardingWidth');
-      const boardingHInput = document.getElementById('pbbBoardingHeight');
-      if (boardingWInput) boardingWInput.value = String(getPbbBoardingWidthM(pbb));
-      if (boardingHInput) boardingHInput.value = String(getPbbBoardingHeightM(pbb));
-      syncStandConstraintVisibility('stand');
-      renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb), pbb.allowedIcaoCategories);
-    }
-    if (state.selectedObject && state.selectedObject.type === 'remote') {
-      const st = state.selectedObject.obj;
-      const nameInput = document.getElementById('remoteName');
-      if (nameInput) nameInput.value = st.name || '';
-      applyIcaoCategoriesToHost('remoteIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
-      syncStandConstraintVisibility('remote');
-      renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
-      renderRemoteTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
-    }
-    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-      const st = state.selectedObject.obj;
-      const nameInput = document.getElementById('tempStandName');
-      if (nameInput) nameInput.value = st.name || '';
-      applyIcaoCategoriesToHost('tempStandIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
-      syncStandConstraintVisibility('tempStand');
-      renderAircraftConstraintChoices('tempStandAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
-      renderTempStandTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
-    }
-    if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
-      const hp = state.selectedObject.obj;
-      const nameInput = document.getElementById('holdingPointName');
-      if (nameInput) nameInput.value = hp.name || '';
-    }
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      const nameInput = document.getElementById('taxiwayName');
-      const widthInput = document.getElementById('taxiwayWidth');
-      const maxExitInput = document.getElementById('taxiwayMaxExitVel');
-      const minExitInput = document.getElementById('taxiwayMinExitVel');
-      if (nameInput) nameInput.value = tw.name || '';
-      const widthDefault = tw.pathType === 'runway'
-        ? RUNWAY_PATH_DEFAULT_WIDTH
-        : (tw.pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-      if (widthInput) widthInput.value = tw.width != null ? tw.width : widthDefault;
-      const avgVelInput = document.getElementById('taxiwayAvgMoveVelocity');
-      if (avgVelInput) avgVelInput.value = (tw.avgMoveVelocity != null ? tw.avgMoveVelocity : 10);
-      syncPathFieldVisibilityForPathType(tw.pathType || 'taxiway');
-      const runwayMinArrInput = document.getElementById('runwayMinArrVelocity');
-      if (runwayMinArrInput) {
-        const mav = (typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0)
-          ? Math.max(1, Math.min(150, tw.minArrVelocity))
-          : 15;
-        runwayMinArrInput.value = mav;
-      }
-      const runwayLineupInputCw = document.getElementById('runwayLineupDistM_CW');
-      const runwayLineupInputCcw = document.getElementById('runwayLineupDistM_CCW');
-      if (tw.pathType === 'runway') {
-        if (runwayLineupInputCw) runwayLineupInputCw.value = String(getRunwayLineupDistMByDirection(tw, 'clockwise'));
-        if (runwayLineupInputCcw) runwayLineupInputCcw.value = String(getRunwayLineupDistMByDirection(tw, 'counter_clockwise'));
-      }
-      const runwayStartDispInput = document.getElementById('runwayStartDisplacedThresholdM');
-      if (runwayStartDispInput && tw.pathType === 'runway') runwayStartDispInput.value = String(getEffectiveRunwayStartDisplacedThresholdM(tw));
-      const runwayStartBlastInput = document.getElementById('runwayStartBlastPadM');
-      if (runwayStartBlastInput && tw.pathType === 'runway') runwayStartBlastInput.value = String(getEffectiveRunwayStartBlastPadM(tw));
-      const runwayEndDispInput = document.getElementById('runwayEndDisplacedThresholdM');
-      if (runwayEndDispInput && tw.pathType === 'runway') runwayEndDispInput.value = String(getEffectiveRunwayEndDisplacedThresholdM(tw));
-      const runwayEndBlastInput = document.getElementById('runwayEndBlastPadM');
-      if (runwayEndBlastInput && tw.pathType === 'runway') runwayEndBlastInput.value = String(getEffectiveRunwayEndBlastPadM(tw));
-      if (maxExitInput) maxExitInput.value = tw.maxExitVelocity != null ? tw.maxExitVelocity : 30;
-      if (minExitInput) {
-        const minVal = (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
-          ? tw.minExitVelocity
-          : 15;
-        minExitInput.value = minVal;
-      }
-      if (tw.pathType === 'runway_exit') {
-        const allow = getTaxiwayAllowedRunwayDirections(tw);
-        renderRunwayDirectionChoices(allow);
-      } else {
-        renderRunwayDirectionChoices([]);
-      }
-      const modeSel = document.getElementById('taxiwayDirectionMode');
-      let d = getTaxiwayDirection(tw);
-      if (tw.pathType === 'runway' && d === 'both') d = 'clockwise';
-      if (modeSel) modeSel.value = d;
-      const kindSel = document.getElementById('taxiwayPathTypeKind');
-      if (kindSel) {
-        const ptk = tw.pathType || 'taxiway';
-        kindSel.value = (ptk === 'general_queue_taxiway') ? 'queue' : 'normal';
-      }
-      syncPathPavementRadiosToValue(pathPavementResolvedForTaxiway(tw));
-    } else if (state.selectedObject && state.selectedObject.type === 'apronLink') {
-      const lk = state.selectedObject.obj;
-      const nameInput = document.getElementById('apronLinkName');
-      if (nameInput) nameInput.value = getApronLinkDisplayName(lk);
-    } else if (state.selectedObject && state.selectedObject.type === 'layoutEdge') {
-      const ed = state.selectedObject.obj;

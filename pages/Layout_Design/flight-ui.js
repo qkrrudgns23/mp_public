@@ -1,3 +1,102 @@
+    if (_ac2d.useDetailedSilhouette === true && silhouette2D.length >= 3) {
+      let minY = Infinity, maxY = -Infinity;
+      let minPt = null, maxPt = null;
+      for (let i = 0; i < silhouette2D.length; i++) {
+        const p = silhouette2D[i];
+        if (!p || p.length < 2) continue;
+        const lx = Number(p[0]) * lenM;
+        const ly = Number(p[1]) * spanM;
+        if (!isFinite(lx) || !isFinite(ly)) continue;
+        if (ly < minY) { minY = ly; minPt = [lx, ly]; }
+        if (ly > maxY) { maxY = ly; maxPt = [lx, ly]; }
+      }
+      if (minPt && maxPt) {
+        leftLocal = minPt;
+        rightLocal = maxPt;
+      }
+    }
+    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
+    function localToWorld(pt) {
+      return {
+        x: pose.x + pt[0] * cs - pt[1] * sn,
+        y: pose.y + pt[0] * sn + pt[1] * cs,
+      };
+    }
+    return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
+  }
+  function ensureMarkerFlightBlazerState(m) {
+    if (!m || m.kind !== 'flight') return;
+    if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
+    if (typeof m.headingReversed !== 'boolean') m.headingReversed = false;
+    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) < 0) m.blazerColor = MARKER_BLAZER_COLOR_OPTIONS[0];
+    if (!Array.isArray(m.blazerLeftTrail)) m.blazerLeftTrail = [];
+    if (!Array.isArray(m.blazerRightTrail)) m.blazerRightTrail = [];
+  }
+  function appendMarkerFlightBlazerTrail(m) {
+    if (!m || m.kind !== 'flight') return;
+    ensureMarkerFlightBlazerState(m);
+    if (!m.blazerEnabled) return;
+    const tips = getMarkerFlightWingtipWorldPoints(m);
+    if (!tips || !tips.left || !tips.right) return;
+    const minStep = Math.max(0.25, CELL_SIZE * 0.03);
+    const minStep2 = minStep * minStep;
+    function append(trail, pt) {
+      const last = trail.length ? trail[trail.length - 1] : null;
+      if (!last || dist2([last.x, last.y], [pt.x, pt.y]) >= minStep2) trail.push({ x: pt.x, y: pt.y });
+      if (trail.length > 4000) trail.splice(0, trail.length - 4000);
+    }
+    append(m.blazerLeftTrail, tips.left);
+    append(m.blazerRightTrail, tips.right);
+  }
+  function markerFlightBoundsWorld(m) {
+    if (!m || m.kind !== 'flight') return null;
+    const pose = resolveMarkerFlightPose(m);
+    if (!pose) return null;
+    const ac = getAircraftInfoByType(m.aircraftType);
+    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
+    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
+    const sil = getApronAircraftDetailedSilhouettePoints();
+    const localPts = [];
+    if (_ac2d.useDetailedSilhouette === true && sil.length >= 3) {
+      for (let i = 0; i < sil.length; i++) {
+        const p = sil[i];
+        if (!p || p.length < 2) continue;
+        const lx = Number(p[0]) * lenM;
+        const ly = Number(p[1]) * spanM;
+        if (isFinite(lx) && isFinite(ly)) localPts.push([lx, ly]);
+      }
+    }
+    if (!localPts.length) {
+      localPts.push([lenM * 0.5, 0], [-lenM * 0.5, -spanM], [-lenM * 0.5, spanM], [0, -spanM], [0, spanM]);
+    }
+    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < localPts.length; i++) {
+      const pt = localPts[i];
+      const wx = pose.x + pt[0] * cs - pt[1] * sn;
+      const wy = pose.y + pt[0] * sn + pt[1] * cs;
+      if (wx < minX) minX = wx;
+      if (wy < minY) minY = wy;
+      if (wx > maxX) maxX = wx;
+      if (wy > maxY) maxY = wy;
+    }
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+  }
+  function syncMarkerFlightBlazerOverlayButton() {
+    if (!markerFlightBlazerOverlayBtn || !container) return;
+    const sel = state.selectedObject;
+    const show = !!(layoutMarkersVisible() && sel && sel.type === 'layoutMarker' && sel.obj && sel.obj.kind === 'flight');
+    if (!show) {
+      markerFlightBlazerOverlayBtn.style.display = 'none';
+      markerFlightHeadingOverlayBtn.style.display = 'none';
+      markerFlightBlazerPaletteWrap.style.display = 'none';
+      return;
+    }
+    const mk = sel.obj;
+    ensureMarkerFlightBlazerState(mk);
+    const b = markerFlightBoundsWorld(mk);
+    if (!b) {
       markerFlightBlazerOverlayBtn.style.display = 'none';
       markerFlightHeadingOverlayBtn.style.display = 'none';
       markerFlightBlazerPaletteWrap.style.display = 'none';
@@ -267,16 +366,21 @@
     const sub = (m.subType === 'ils') ? 'ils' : 'papi';
     const isIls = sub === 'ils';
     const scaleRef = Math.max(state.scale, 0.1);
+    const etcMono = layerMonoEtcOn() && !selected;
     ctx2.save();
     if (!isIls) {
       const lampXs = papiLampCenterXsWorld(x);
       const rLight = Math.max(2.4 * PAPI_VISUAL_SCALE, 2.9 * PAPI_VISUAL_SCALE / scaleRef);
       const fills = selected
         ? ['#ffffff', '#ffffff', '#fca5a5', '#fca5a5']
-        : ['#f8fafc', '#f8fafc', '#ef4444', '#ef4444'];
+        : (etcMono
+          ? [C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE]
+          : ['#f8fafc', '#f8fafc', '#ef4444', '#ef4444']);
       const strokes = selected
         ? [c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke()]
-        : ['rgba(148,163,184,0.95)', 'rgba(148,163,184,0.95)', 'rgba(127,29,29,0.98)', 'rgba(127,29,29,0.98)'];
+        : (etcMono
+          ? [c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss()]
+          : ['rgba(148,163,184,0.95)', 'rgba(148,163,184,0.95)', 'rgba(127,29,29,0.98)', 'rgba(127,29,29,0.98)']);
       for (let i = 0; i < 4; i++) {
         ctx2.beginPath();
         ctx2.arc(lampXs[i], y, rLight, 0, Math.PI * 2);
@@ -302,9 +406,9 @@
       return;
     }
     const label = 'ILS';
-    const fill = selected ? c2dObjectSelectedFill() : 'rgba(56, 189, 248, 0.85)';
-    const stroke = selected ? c2dObjectSelectedStroke() : 'rgba(2, 132, 199, 0.95)';
-    const fg = '#0c4a6e';
+    const fill = selected ? c2dObjectSelectedFill() : (etcMono ? C2D_LAYER_MONO_ETC_WHITE : 'rgba(56, 189, 248, 0.85)');
+    const stroke = selected ? c2dObjectSelectedStroke() : (etcMono ? c2dLayerMonoLineStrokeCss() : 'rgba(2, 132, 199, 0.95)');
+    const fg = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#0c4a6e';
     const r = Math.max(3, 3.6 / scaleRef);
     ctx2.beginPath();
     ctx2.arc(x, y, r, 0, Math.PI * 2);
@@ -754,107 +858,3 @@
     const B = cellToPixel(verts[vertexIndex + 1].col, verts[vertexIndex + 1].row);
     return pathArcComputePreviewWorldPxFromAB(A[0], A[1], B[0], B[1], wx, wy);
   }
-  function pathArcCommitIslandVertexFromPreview(mk, vertexIndex, previewPx, snapToGrid) {
-    if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !previewPx || previewPx.length < 2) return;
-    const verts = mk.points;
-    const n = verts ? verts.length : 0;
-    if (!verts || n < 3 || vertexIndex < 0 || vertexIndex >= n) return;
-    const prev = verts[(vertexIndex - 1 + n) % n];
-    const next = verts[(vertexIndex + 1) % n];
-    const Apx = [Number(prev.x), Number(prev.y)];
-    const Bpx = [Number(next.x), Number(next.y)];
-    const workPx = previewPx.map(function(p, j) {
-      if (j === 0) return [Apx[0], Apx[1]];
-      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
-      return [p[0], p[1]];
-    });
-    const cells = [];
-    if (previewPx.length > 2) {
-      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
-      for (let k = 0; k < densePx.length; k++) {
-        const snap = worldPointToPixel(densePx[k][0], densePx[k][1], snapToGrid);
-        const c = { x: snap[0], y: snap[1] };
-        if (cells.length && cells[cells.length - 1].x === c.x && cells[cells.length - 1].y === c.y) continue;
-        if (c.x === prev.x && c.y === prev.y) continue;
-        cells.push(c);
-      }
-      while (cells.length && cells[cells.length - 1].x === next.x && cells[cells.length - 1].y === next.y) cells.pop();
-    }
-    if (!cells.length) {
-      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
-      const snap = worldPointToPixel(M[0], M[1], snapToGrid);
-      cells.push({ x: snap[0], y: snap[1] });
-    }
-    const newArr = verts.slice();
-    newArr.splice(vertexIndex, 1, ...cells);
-    mk.points = newArr;
-    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
-    state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: midSel };
-  }
-  function pathArcCommitFromPreview(tw, vertexIndex, previewPx, snapToGrid) {
-    if (!tw || tw.pathType === 'runway') return;
-    if (!previewPx || previewPx.length < 2) return;
-    const verts = tw.vertices;
-    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return;
-    const prev = verts[vertexIndex - 1], next = verts[vertexIndex + 1];
-    const Apx = cellToPixel(prev.col, prev.row);
-    const Bpx = cellToPixel(next.col, next.row);
-    const workPx = previewPx.map(function(p, j) {
-      if (j === 0) return [Apx[0], Apx[1]];
-      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
-      return [p[0], p[1]];
-    });
-    const cells = [];
-    if (previewPx.length > 2) {
-      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
-      for (let k = 0; k < densePx.length; k++) {
-        const c = worldPointToCellPoint(densePx[k][0], densePx[k][1], snapToGrid);
-        if (cells.length && cells[cells.length - 1].col === c.col && cells[cells.length - 1].row === c.row) continue;
-        if (c.col === prev.col && c.row === prev.row) continue;
-        cells.push(c);
-      }
-      while (cells.length && cells[cells.length - 1].col === next.col && cells[cells.length - 1].row === next.row) cells.pop();
-    }
-    if (!cells.length) {
-      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
-      cells.push(worldPointToCellPoint(M[0], M[1], snapToGrid));
-    }
-    tw.vertices.splice(vertexIndex, 1, ...cells);
-    if (typeof syncStartEndFromVertices === 'function') syncStartEndFromVertices(tw);
-    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
-    state.selectedVertex = { type: 'taxiway', id: tw.id, index: midSel };
-    bumpPathPolylineCacheRev();
-  }
-  function apronLinkPolyVertexIndexForMid(lk, midIndex) {
-    const mids = Array.isArray(lk.midVertices) ? lk.midVertices : [];
-    const n = mids.length + 2;
-    if (n < 3 || midIndex < 0 || midIndex >= mids.length) return -1;
-    const standFirst = String(lk.apronDrawFirstEndpoint || 'stand') === 'stand';
-    return standFirst ? (midIndex + 1) : (n - 2 - midIndex);
-  }
-  function pathArcCommitApronLinkFromPreview(lk, polyVertexIndex, previewPx, snapToGrid) {
-    if (!lk || !previewPx || previewPx.length < 2) return;
-    const poly = getApronLinkPolylineWorldPts(lk);
-    const n = poly.length;
-    if (n < 3) return;
-    const vi = polyVertexIndex;
-    if (vi <= 0 || vi >= n - 1) return;
-    const Apx = poly[vi - 1], Bpx = poly[vi + 1];
-    const workPx = previewPx.map(function(p, j) {
-      if (j === 0) return [Apx[0], Apx[1]];
-      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
-      return [p[0], p[1]];
-    });
-    const cells = [];
-    const prevCell = worldPointToCellPoint(Apx[0], Apx[1], snapToGrid);
-    const nextCell = worldPointToCellPoint(Bpx[0], Bpx[1], snapToGrid);
-    if (previewPx.length > 2) {
-      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
-      for (let k = 0; k < densePx.length; k++) {
-        const c = worldPointToCellPoint(densePx[k][0], densePx[k][1], snapToGrid);
-        if (cells.length && cells[cells.length - 1].col === c.col && cells[cells.length - 1].row === c.row) continue;
-        if (c.col === prevCell.col && c.row === prevCell.row) continue;
-        cells.push(c);
-      }
-      while (cells.length && cells[cells.length - 1].col === nextCell.col && cells[cells.length - 1].row === nextCell.row) cells.pop();
-    }

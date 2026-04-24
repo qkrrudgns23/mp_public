@@ -1,3 +1,92 @@
+    const btnAll = document.getElementById('btnLayerPopoverAll');
+    if (btnAll) {
+      btnAll.classList.toggle('active', allOn);
+      btnAll.setAttribute('aria-pressed', allOn ? 'true' : 'false');
+      btnAll.title = allOn ? 'Turn all layers off' : 'Turn all layers on';
+    }
+    if (panel) {
+      panel.querySelectorAll('input[data-layer-section-parent]').forEach(function(parentInp) {
+        const sec = parentInp.getAttribute('data-layer-section-parent');
+        const keys = sec && LAYER_SECTION_KEYS[sec];
+        if (!keys || !keys.length) return;
+        const secAll = keys.every(function(k) { return !!state.layers[k]; });
+        const secSome = keys.some(function(k) { return !!state.layers[k]; });
+        parentInp.checked = secAll;
+        parentInp.indeterminate = !secAll && secSome;
+      });
+    }
+    const btn = document.getElementById('btnLayerPopover');
+    if (btn) {
+      btn.classList.toggle('active', allOn);
+    }
+    const on = !!state.showLayoutMarkers;
+    const t1 = document.getElementById('btnLayoutMarkersToggle');
+    const t2 = document.getElementById('btnGridMarkerOverlayToggle');
+    [t1, t2].forEach(function(el) {
+      if (!el) return;
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+  function setLayerPopoverOpen(open) {
+    const btn = document.getElementById('btnLayerPopover');
+    const panel = document.getElementById('layerPopoverPanel');
+    if (!btn || !panel) return;
+    const o = !!open;
+    btn.setAttribute('aria-expanded', o ? 'true' : 'false');
+    if (o) {
+      panel.removeAttribute('hidden');
+      const cp = document.getElementById('colorPopoverPanel');
+      const cb = document.getElementById('btnColorPopover');
+      if (cp && cb && !cp.hasAttribute('hidden')) {
+        cp.setAttribute('hidden', '');
+        cb.setAttribute('aria-expanded', 'false');
+      }
+    } else {
+      panel.setAttribute('hidden', '');
+    }
+  }
+  function clampLayoutImageOpacity(value) {
+    const n = Number(value);
+    if (!isFinite(n)) return GRID_LAYOUT_IMAGE_DEFAULTS.opacity;
+    return Math.max(GRID_LAYOUT_IMAGE_DEFAULTS.opacityMin, Math.min(GRID_LAYOUT_IMAGE_DEFAULTS.opacityMax, n));
+  }
+  function clampLayoutImageSize(value, fallback) {
+    const n = Number(value);
+    if (!isFinite(n) || n <= 0) return fallback;
+    return n;
+  }
+  function clampLayoutImagePoint(value, fallback) {
+    const n = Number(value);
+    return isFinite(n) ? n : fallback;
+  }
+  function getLayoutImageAspectRatio(overlay) {
+    if (!overlay || typeof overlay !== 'object') return 1;
+    const ow = Number(overlay.originalWidthPx);
+    const oh = Number(overlay.originalHeightPx);
+    if (isFinite(ow) && ow > 0 && isFinite(oh) && oh > 0) return oh / ow;
+    const w = Number(overlay.widthM);
+    const h = Number(overlay.heightM);
+    if (isFinite(w) && w > 0 && isFinite(h) && h > 0) return h / w;
+    return 1;
+  }
+  function applyLayoutImageWidthByAspect(widthM) {
+    if (!state.layoutImageOverlay) return;
+    state.layoutImageOverlay.widthM = clampLayoutImageSize(widthM, state.layoutImageOverlay.widthM);
+  }
+  function applyLayoutImageHeightByAspect(heightM) {
+    if (!state.layoutImageOverlay) return;
+    state.layoutImageOverlay.heightM = clampLayoutImageSize(heightM, state.layoutImageOverlay.heightM);
+  }
+  function normalizeLayoutImageOverlay(raw) {
+    if (!raw || typeof raw !== 'object' || !raw.dataUrl) return null;
+    const widthM = clampLayoutImageSize(raw.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM);
+    const heightM = clampLayoutImageSize(raw.heightM, GRID_LAYOUT_IMAGE_DEFAULTS.heightM);
+    const originalWidthPx = clampLayoutImageSize(raw.originalWidthPx, widthM);
+    const originalHeightPx = clampLayoutImageSize(raw.originalHeightPx, heightM);
+    return {
+      name: String(raw.name || 'Layout image'),
+      type: String(raw.type || 'image/png'),
       dataUrl: String(raw.dataUrl || ''),
       opacity: clampLayoutImageOpacity(raw.opacity),
       widthM: widthM,
@@ -629,92 +718,3 @@
       }
       applyAirsideScheduleRowToFlight(f, srec);
     });
-    state.hasSimulationResult = mergedTimelines > 0;
-    if (state.hasSimulationResult) {
-      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
-    } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
-    else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-    if (typeof resizeCanvas === 'function') resizeCanvas();
-    if (typeof reset2DView === 'function') reset2DView();
-    if (typeof syncPanelFromState === 'function') syncPanelFromState();
-    if (typeof renderFlightList === 'function') renderFlightList(false, false);
-    if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
-    if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
-    if (typeof draw === 'function') draw();
-    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-    const playDockBtn = document.getElementById('btnShowPlayDock');
-    if (playDockBtn) playDockBtn.disabled = !state.hasSimulationResult;
-  }
-  function applyInitialLayoutFromJson() {
-    if (!INITIAL_LAYOUT || typeof INITIAL_LAYOUT !== 'object') return;
-    applyLayoutObject(INITIAL_LAYOUT);
-  }
-  function updateLayoutNameBar(name) {
-    const n = (name && String(name).trim()) || '';
-    state.currentLayoutName = n || state.currentLayoutName || 'default_layout';
-    const bar = document.getElementById('layout-name-bar');
-    if (bar) bar.textContent = n || state.currentLayoutName;
-  }
-  function uniqueNameAgainstSet(baseName, usedNames) {
-    const base = (baseName && String(baseName).trim()) || 'Untitled';
-    const used = usedNames instanceof Set ? usedNames : new Set();
-    if (!used.has(base)) return base;
-    let idx = 1;
-    while (used.has(base + ' (' + idx + ')')) idx++;
-    return base + ' (' + idx + ')';
-  }
-  function zeroPadNumber(num, width) {
-    return String(Math.max(0, Number(num) || 0)).padStart(width, '0');
-  }
-  function getDefaultPathName(pathType, currentId) {
-    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : (pathType === 'apron_taxiway' ? 'ATX' : (pathType === 'general_queue_taxiway' ? 'QTX' : 'TX')));
-    const sameType = (state.taxiways || []).filter(function(tw) { return tw && tw.id !== currentId && tw.pathType === pathType; });
-    const used = new Set(sameType.map(function(tw) { return (tw.name && String(tw.name).trim()) || ''; }).filter(Boolean));
-    let n = 1;
-    let candidate = prefix + String(n);
-    while (used.has(candidate)) {
-      n++;
-      candidate = prefix + String(n);
-      if (n > 100000) break;
-    }
-    return candidate;
-  }
-  function getDefaultTerminalName(currentId) {
-    return getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, currentId);
-  }
-  function getDefaultPbbStandName(currentId) {
-    const stands = (state.pbbStands || []).filter(function(st) { return st && st.id !== currentId; });
-    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
-    return uniqueNameAgainstSet('C' + zeroPadNumber(stands.length + 1, 3), used);
-  }
-  function getDefaultRemoteStandName(currentId) {
-    const stands = (state.remoteStands || []).filter(function(st) { return st && st.id !== currentId; });
-    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
-    return uniqueNameAgainstSet('R' + zeroPadNumber(stands.length + 1, 3), used);
-  }
-  function getDefaultTempStandName(currentId) {
-    const stands = (state.tempStands || []).filter(function(st) { return st && st.id !== currentId; });
-    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
-    return uniqueNameAgainstSet('T' + zeroPadNumber(stands.length + 1, 3), used);
-  }
-  function getApronLinkDefaultName(linkOrId) {
-    const linkId = (typeof linkOrId === 'object' && linkOrId) ? linkOrId.id : linkOrId;
-    const idx = (state.apronLinks || []).findIndex(function(lk) { return lk && lk.id === linkId; });
-    return 'Apron Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
-  }
-  function getApronLinkDisplayName(link) {
-    if (!link) return 'Apron Taxiway';
-    return (link.name && String(link.name).trim()) || getApronLinkDefaultName(link);
-  }
-  function ensureUniqueApronLinkName(rawName, currentId) {
-    const fallbackBase = getApronLinkDefaultName(currentId);
-    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
-    const used = new Set((state.apronLinks || [])
-      .filter(function(lk) { return lk && lk.id !== currentId; })
-      .map(function(lk) { return (lk.name && String(lk.name).trim()) || getApronLinkDefaultName(lk); })
-      .filter(Boolean));
-    return uniqueNameAgainstSet(baseName, used);
-  }
-  function getLayoutEdgeDefaultName(edge) {
-    if (!edge) return 'Edge';

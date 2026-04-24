@@ -1,3 +1,39 @@
+      edges: [],
+      adj: [],
+      edgeMap: {},
+      runwayNodeIndicesById: {},
+      standIdToNodeIndex: {}
+    };
+    state.pathGraphCacheValid = true;
+    state.pathGraphCacheSig = computeTaxiwaysGraphSig();
+    state.pathGraphCacheDirty = true;
+    state.pathGraphInvalidatedAtMs = Date.now();
+  }
+  function graphSigParseRecords(sig) {
+    const m = {};
+    if (!sig || typeof sig !== 'string') return m;
+    const chunks = sig.split('||');
+    for (let i = 0; i < chunks.length; i++) {
+      const rec = chunks[i];
+      if (!rec) continue;
+      const pipe = rec.indexOf('|');
+      const id = pipe >= 0 ? rec.slice(0, pipe) : rec;
+      if (id) m[id] = rec;
+    }
+    return m;
+  }
+  function graphSigTaxiwayDiff(oldSig, newSig) {
+    const o = graphSigParseRecords(oldSig);
+    const n = graphSigParseRecords(newSig);
+    const removed = [];
+    const changed = [];
+    Object.keys(o).forEach(function(id) {
+      if (!(id in n)) removed.push(id);
+    });
+    Object.keys(n).forEach(function(id) {
+      if (!(id in o)) changed.push(id);
+      else if (o[id] !== n[id]) changed.push(id);
+    });
     return { removed: removed, changed: changed };
   }
   function cloneFlightsWithoutPathPolylineCache(flights) {
@@ -19,36 +55,21 @@
     state.rwySepPanelDirty = true;
     bumpRwySepSnapshotStaleGen();
     if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines({ keepDesResultTimelines: true });
-    const dot = document.getElementById('globalUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('fresh');
-      dot.classList.add('stale');
-      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim으로 재동기화 (완료 시 결과 자동 반영)');
-    }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   function markGlobalUpdateFresh() {
     state.globalUpdateFresh = true;
-    const dot = document.getElementById('globalUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('stale');
-      dot.classList.add('fresh');
-      dot.setAttribute('title', 'All views match the last Pro Sim run');
-    }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   function markProSimSyncStaleFromSchedule() {
     state.globalUpdateFresh = false;
     state.simPlaying = false;
     state.simSliderScrubbing = false;
     if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
-    const dot = document.getElementById('globalUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('fresh');
-      dot.classList.add('stale');
-      dot.setAttribute('title', '레이아웃/스케줄 변경됨 — Pro Sim으로 재동기화 (완료 시 결과 자동 반영)');
-    }
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   function markDesignerPageUpdateStale() {
     state.designerPageUpdateFresh = false;
@@ -70,16 +91,80 @@
     }
     if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
-  /** Pro Sim is allowed only when Update sync is fresh (green). */
+  /** English multi-line (≤5 aircraft) or summary (6+) for arrival RET failure dock banner. */
+  function formatArrRetFailedBannerEnglish(regs) {
+    const n = (regs && regs.length) || 0;
+    if (n < 1) return '';
+    if (n <= 5) {
+      return regs.map(function(reg) {
+        return String(reg) + ': Runway exit assignment failed.';
+      }).join('\n');
+    }
+    const head = regs.slice(0, 3).join(', ');
+    return head + ', etc. — ' + n + ' aircraft failed.';
+  }
+  /**
+   * Pro Sim: allowed only when Update is fresh (green) and no arrival Runway exit (RET) failures
+   * (`arrRetFailed` on non-departure legs). Drives object-info-dock red banner and global Pro Sim dot.
+   */
   function syncProSimButtonFromDesignerPageState() {
     const btn = document.getElementById('btnGlobalUpdate');
-    if (!btn) return;
-    const allow = !!state.designerPageUpdateFresh;
-    btn.disabled = !allow;
-    if (!allow) {
-      btn.setAttribute('title', '먼저 Update로 경로 그래프·뷰를 동기화(초록)한 뒤 Pro Sim을 실행하세요.');
-    } else {
-      btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
+    const dot = document.getElementById('globalUpdateSyncDot');
+    const dock = document.getElementById('object-info-dock');
+    const ban = document.getElementById('arrRetFailedBanner');
+    const banT = document.getElementById('arrRetFailedBannerText');
+    const failedRegs = [];
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.arrDep === 'Dep') return;
+      if (f.arrRetFailed) {
+        const r = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
+        if (failedRegs.indexOf(r) < 0) failedRegs.push(r);
+      }
+    });
+    const hasRetFail = failedRegs.length > 0;
+    if (dock) {
+      if (hasRetFail) dock.classList.add('object-info-dock--arr-ret-blocked');
+      else dock.classList.remove('object-info-dock--arr-ret-blocked');
+    }
+    if (ban && banT) {
+      if (hasRetFail) {
+        ban.hidden = false;
+        ban.setAttribute('aria-hidden', 'false');
+        banT.textContent = formatArrRetFailedBannerEnglish(failedRegs);
+      } else {
+        ban.hidden = true;
+        ban.setAttribute('aria-hidden', 'true');
+        banT.textContent = '';
+      }
+    }
+    const allow = !!state.designerPageUpdateFresh && !hasRetFail;
+    if (btn) {
+      btn.disabled = !allow;
+      btn.classList.toggle('global-update-blocked-arr-ret', hasRetFail);
+      if (!state.designerPageUpdateFresh) {
+        btn.setAttribute('title', 'Run Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
+      } else if (hasRetFail) {
+        const n = failedRegs.length;
+        const shortList = n > 5 ? (failedRegs.slice(0, 3).join(', ') + ', etc. (' + n + ' total)') : failedRegs.join(', ');
+        btn.setAttribute('title', 'Pro Sim is disabled: no valid runway exit. ' + shortList);
+      } else {
+        btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
+      }
+    }
+    if (dot) {
+      if (hasRetFail) {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Runway exit failure — resolve all arrival RET issues before Pro Sim.');
+      } else if (state.globalUpdateFresh) {
+        dot.classList.remove('stale');
+        dot.classList.add('fresh');
+        dot.setAttribute('title', 'All views match the last Pro Sim run');
+      } else {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Layout or schedule changed — run Pro Sim again to refresh (results apply when done)');
+      }
     }
   }
   function redrawLayoutAfterEdit() {
@@ -227,94 +312,9 @@
         const k = inp.getAttribute('data-layer-key');
         if (k && typeof state.layers[k] === 'boolean') inp.checked = !!state.layers[k];
       });
-    }
-    const allOn = LAYER_STATE_KEYS.every(function(k) { return !!state.layers[k]; });
-    const btnAll = document.getElementById('btnLayerPopoverAll');
-    if (btnAll) {
-      btnAll.classList.toggle('active', allOn);
-      btnAll.setAttribute('aria-pressed', allOn ? 'true' : 'false');
-      btnAll.title = allOn ? 'Turn all layers off' : 'Turn all layers on';
-    }
-    if (panel) {
-      panel.querySelectorAll('input[data-layer-section-parent]').forEach(function(parentInp) {
-        const sec = parentInp.getAttribute('data-layer-section-parent');
-        const keys = sec && LAYER_SECTION_KEYS[sec];
-        if (!keys || !keys.length) return;
-        const secAll = keys.every(function(k) { return !!state.layers[k]; });
-        const secSome = keys.some(function(k) { return !!state.layers[k]; });
-        parentInp.checked = secAll;
-        parentInp.indeterminate = !secAll && secSome;
+      panel.querySelectorAll('input[data-layer-mono]').forEach(function(inp) {
+        const mk = inp.getAttribute('data-layer-mono');
+        if (mk && state.layerMono && typeof state.layerMono[mk] === 'boolean') inp.checked = !!state.layerMono[mk];
       });
     }
-    const btn = document.getElementById('btnLayerPopover');
-    if (btn) {
-      btn.classList.toggle('active', allOn);
-    }
-    const on = !!state.showLayoutMarkers;
-    const t1 = document.getElementById('btnLayoutMarkersToggle');
-    const t2 = document.getElementById('btnGridMarkerOverlayToggle');
-    [t1, t2].forEach(function(el) {
-      if (!el) return;
-      el.classList.toggle('active', on);
-      el.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-  }
-  function setLayerPopoverOpen(open) {
-    const btn = document.getElementById('btnLayerPopover');
-    const panel = document.getElementById('layerPopoverPanel');
-    if (!btn || !panel) return;
-    const o = !!open;
-    btn.setAttribute('aria-expanded', o ? 'true' : 'false');
-    if (o) {
-      panel.removeAttribute('hidden');
-      const cp = document.getElementById('colorPopoverPanel');
-      const cb = document.getElementById('btnColorPopover');
-      if (cp && cb && !cp.hasAttribute('hidden')) {
-        cp.setAttribute('hidden', '');
-        cb.setAttribute('aria-expanded', 'false');
-      }
-    } else {
-      panel.setAttribute('hidden', '');
-    }
-  }
-  function clampLayoutImageOpacity(value) {
-    const n = Number(value);
-    if (!isFinite(n)) return GRID_LAYOUT_IMAGE_DEFAULTS.opacity;
-    return Math.max(GRID_LAYOUT_IMAGE_DEFAULTS.opacityMin, Math.min(GRID_LAYOUT_IMAGE_DEFAULTS.opacityMax, n));
-  }
-  function clampLayoutImageSize(value, fallback) {
-    const n = Number(value);
-    if (!isFinite(n) || n <= 0) return fallback;
-    return n;
-  }
-  function clampLayoutImagePoint(value, fallback) {
-    const n = Number(value);
-    return isFinite(n) ? n : fallback;
-  }
-  function getLayoutImageAspectRatio(overlay) {
-    if (!overlay || typeof overlay !== 'object') return 1;
-    const ow = Number(overlay.originalWidthPx);
-    const oh = Number(overlay.originalHeightPx);
-    if (isFinite(ow) && ow > 0 && isFinite(oh) && oh > 0) return oh / ow;
-    const w = Number(overlay.widthM);
-    const h = Number(overlay.heightM);
-    if (isFinite(w) && w > 0 && isFinite(h) && h > 0) return h / w;
-    return 1;
-  }
-  function applyLayoutImageWidthByAspect(widthM) {
-    if (!state.layoutImageOverlay) return;
-    state.layoutImageOverlay.widthM = clampLayoutImageSize(widthM, state.layoutImageOverlay.widthM);
-  }
-  function applyLayoutImageHeightByAspect(heightM) {
-    if (!state.layoutImageOverlay) return;
-    state.layoutImageOverlay.heightM = clampLayoutImageSize(heightM, state.layoutImageOverlay.heightM);
-  }
-  function normalizeLayoutImageOverlay(raw) {
-    if (!raw || typeof raw !== 'object' || !raw.dataUrl) return null;
-    const widthM = clampLayoutImageSize(raw.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM);
-    const heightM = clampLayoutImageSize(raw.heightM, GRID_LAYOUT_IMAGE_DEFAULTS.heightM);
-    const originalWidthPx = clampLayoutImageSize(raw.originalWidthPx, widthM);
-    const originalHeightPx = clampLayoutImageSize(raw.originalHeightPx, heightM);
-    return {
-      name: String(raw.name || 'Layout image'),
-      type: String(raw.type || 'image/png'),
+    const allOn = LAYER_STATE_KEYS.every(function(k) { return !!state.layers[k]; });

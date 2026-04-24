@@ -1,3 +1,92 @@
+    state.hasSimulationResult = mergedTimelines > 0;
+    if (state.hasSimulationResult) {
+      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
+    } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+    else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+    if (typeof resizeCanvas === 'function') resizeCanvas();
+    if (typeof reset2DView === 'function') reset2DView();
+    if (typeof syncPanelFromState === 'function') syncPanelFromState();
+    if (typeof renderFlightList === 'function') renderFlightList(false, false);
+    if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
+    if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
+    if (typeof draw === 'function') draw();
+    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+    const playDockBtn = document.getElementById('btnShowPlayDock');
+    if (playDockBtn) playDockBtn.disabled = !state.hasSimulationResult;
+  }
+  function applyInitialLayoutFromJson() {
+    if (!INITIAL_LAYOUT || typeof INITIAL_LAYOUT !== 'object') return;
+    applyLayoutObject(INITIAL_LAYOUT);
+  }
+  function updateLayoutNameBar(name) {
+    const n = (name && String(name).trim()) || '';
+    state.currentLayoutName = n || state.currentLayoutName || 'default_layout';
+    const bar = document.getElementById('layout-name-bar');
+    if (bar) bar.textContent = n || state.currentLayoutName;
+  }
+  function uniqueNameAgainstSet(baseName, usedNames) {
+    const base = (baseName && String(baseName).trim()) || 'Untitled';
+    const used = usedNames instanceof Set ? usedNames : new Set();
+    if (!used.has(base)) return base;
+    let idx = 1;
+    while (used.has(base + ' (' + idx + ')')) idx++;
+    return base + ' (' + idx + ')';
+  }
+  function zeroPadNumber(num, width) {
+    return String(Math.max(0, Number(num) || 0)).padStart(width, '0');
+  }
+  function getDefaultPathName(pathType, currentId) {
+    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : (pathType === 'apron_taxiway' ? 'ATX' : (pathType === 'general_queue_taxiway' ? 'QTX' : 'TX')));
+    const sameType = (state.taxiways || []).filter(function(tw) { return tw && tw.id !== currentId && tw.pathType === pathType; });
+    const used = new Set(sameType.map(function(tw) { return (tw.name && String(tw.name).trim()) || ''; }).filter(Boolean));
+    let n = 1;
+    let candidate = prefix + String(n);
+    while (used.has(candidate)) {
+      n++;
+      candidate = prefix + String(n);
+      if (n > 100000) break;
+    }
+    return candidate;
+  }
+  function getDefaultTerminalName(currentId) {
+    return getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, currentId);
+  }
+  function getDefaultPbbStandName(currentId) {
+    const stands = (state.pbbStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('C' + zeroPadNumber(stands.length + 1, 3), used);
+  }
+  function getDefaultRemoteStandName(currentId) {
+    const stands = (state.remoteStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('R' + zeroPadNumber(stands.length + 1, 3), used);
+  }
+  function getDefaultTempStandName(currentId) {
+    const stands = (state.tempStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('T' + zeroPadNumber(stands.length + 1, 3), used);
+  }
+  function getApronLinkDefaultName(linkOrId) {
+    const linkId = (typeof linkOrId === 'object' && linkOrId) ? linkOrId.id : linkOrId;
+    const idx = (state.apronLinks || []).findIndex(function(lk) { return lk && lk.id === linkId; });
+    return 'Apron Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
+  }
+  function getApronLinkDisplayName(link) {
+    if (!link) return 'Apron Taxiway';
+    return (link.name && String(link.name).trim()) || getApronLinkDefaultName(link);
+  }
+  function ensureUniqueApronLinkName(rawName, currentId) {
+    const fallbackBase = getApronLinkDefaultName(currentId);
+    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
+    const used = new Set((state.apronLinks || [])
+      .filter(function(lk) { return lk && lk.id !== currentId; })
+      .map(function(lk) { return (lk.name && String(lk.name).trim()) || getApronLinkDefaultName(lk); })
+      .filter(Boolean));
+    return uniqueNameAgainstSet(baseName, used);
+  }
+  function getLayoutEdgeDefaultName(edge) {
+    if (!edge) return 'Edge';
     return 'Edge ' + (edge.label || '001');
   }
   function getLayoutEdgeDisplayName(edge) {
@@ -539,92 +628,3 @@
     const latRun = halfW - noseHalf;
     if (latRun <= eps) return false;
     const xBendEnd = xStop + latRun;
-    if (xBendEnd > halfD + eps) return false;
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    ctx.beginPath();
-    ctx.moveTo(xNose + shiftX, -noseHalf);
-    ctx.lineTo(xNose + shiftX, noseHalf);
-    ctx.lineTo(xStop + shiftX, noseHalf);
-    ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
-    if (xBendEnd < halfD - eps) {
-      ctx.lineTo(halfD + shiftX, halfW);
-      ctx.lineTo(halfD + shiftX, -halfW);
-      ctx.lineTo(xBendEnd + shiftX, -halfW);
-    } else {
-      ctx.lineTo(halfD + shiftX, -halfW);
-    }
-    ctx.lineTo(xStop + shiftX, -noseHalf);
-    ctx.closePath();
-    return true;
-  }
-  /** Stand-local +X = tail/apron-open, −X = nose/terminal-ward. Red dashed: stop bar (nose_clear), pushback (pushback), lateral gap bounds (wingspan ± vs stand width). Clipped to safety footprint when nose geometry applies. */
-  function drawStandApronMarkingsInLocalAxes(ctx, depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return;
-    const halfD = depM / 2, halfW = widM / 2;
-    const eps = 0.12;
-    ctx.save();
-    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
-      ctx.clip();
-    }
-    ctx.strokeStyle = c2dStandSafetyStroke();
-    ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
-    ctx.setLineDash([2, 2.5]);
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'miter';
-    const nc = Number(r.nose_clear), pb = Number(r.pushback);
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    if (isFinite(nc) && isFinite(pb)) {
-      const xStop = 0;
-      const xPush = (halfD - pb) + shiftX;
-      const xMin = (-halfD) + shiftX;
-      const xMax = (halfD) + shiftX;
-      if (xStop > -halfD + eps && xStop < halfD - eps) {
-        ctx.beginPath();
-        ctx.moveTo(xStop, -halfW);
-        ctx.lineTo(xStop, halfW);
-        ctx.stroke();
-      }
-      if (xPush < xMax - eps && xPush > xMin + eps) {
-        ctx.beginPath();
-        ctx.moveTo(xPush, -halfW);
-        ctx.lineTo(xPush, halfW);
-        ctx.stroke();
-      }
-    }
-    const g = Number(r.gap), ws = Number(r.wingspan);
-    if (isFinite(g) && g > eps && isFinite(ws) && ws > 0) {
-      const yLim = halfW - g;
-      if (yLim > eps && yLim < halfW - eps) {
-        ctx.beginPath();
-        ctx.moveTo(-halfD + shiftX, yLim);
-        ctx.lineTo(halfD + shiftX, yLim);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-halfD + shiftX, -yLim);
-        ctx.lineTo(halfD + shiftX, -yLim);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
-  function fillStandSafetyFootprintInLocalAxes(ctx, depM, widM, category) {
-    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
-      ctx.fill();
-      return;
-    }
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    ctx.beginPath();
-    ctx.rect((-depM / 2) + shiftX, -widM / 2, depM, widM);
-    ctx.fill();
-  }
-  function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
-    if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
-    ctx.save();
-    ctx.strokeStyle = c2dStandSafetyStroke();
-    const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
-    ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
-    ctx.setLineDash([]);
-    ctx.lineJoin = 'miter';
-    ctx.lineCap = 'butt';
-    if (selected) {

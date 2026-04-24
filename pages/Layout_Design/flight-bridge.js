@@ -1,3 +1,92 @@
+    if (xBendEnd > halfD + eps) return false;
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    ctx.beginPath();
+    ctx.moveTo(xNose + shiftX, -noseHalf);
+    ctx.lineTo(xNose + shiftX, noseHalf);
+    ctx.lineTo(xStop + shiftX, noseHalf);
+    ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
+    if (xBendEnd < halfD - eps) {
+      ctx.lineTo(halfD + shiftX, halfW);
+      ctx.lineTo(halfD + shiftX, -halfW);
+      ctx.lineTo(xBendEnd + shiftX, -halfW);
+    } else {
+      ctx.lineTo(halfD + shiftX, -halfW);
+    }
+    ctx.lineTo(xStop + shiftX, -noseHalf);
+    ctx.closePath();
+    return true;
+  }
+  /** Stand-local +X = tail/apron-open, −X = nose/terminal-ward. Red dashed: stop bar (nose_clear), pushback (pushback), lateral gap bounds (wingspan ± vs stand width). Clipped to safety footprint when nose geometry applies. */
+  function drawStandApronMarkingsInLocalAxes(ctx, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return;
+    const halfD = depM / 2, halfW = widM / 2;
+    const eps = 0.12;
+    ctx.save();
+    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
+      ctx.clip();
+    }
+    ctx.strokeStyle = layerMonoLinesOn() ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
+    ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
+    ctx.setLineDash([2, 2.5]);
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    const nc = Number(r.nose_clear), pb = Number(r.pushback);
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    if (isFinite(nc) && isFinite(pb)) {
+      const xStop = 0;
+      const xPush = (halfD - pb) + shiftX;
+      const xMin = (-halfD) + shiftX;
+      const xMax = (halfD) + shiftX;
+      if (xStop > -halfD + eps && xStop < halfD - eps) {
+        ctx.beginPath();
+        ctx.moveTo(xStop, -halfW);
+        ctx.lineTo(xStop, halfW);
+        ctx.stroke();
+      }
+      if (xPush < xMax - eps && xPush > xMin + eps) {
+        ctx.beginPath();
+        ctx.moveTo(xPush, -halfW);
+        ctx.lineTo(xPush, halfW);
+        ctx.stroke();
+      }
+    }
+    const g = Number(r.gap), ws = Number(r.wingspan);
+    if (isFinite(g) && g > eps && isFinite(ws) && ws > 0) {
+      const yLim = halfW - g;
+      if (yLim > eps && yLim < halfW - eps) {
+        ctx.beginPath();
+        ctx.moveTo(-halfD + shiftX, yLim);
+        ctx.lineTo(halfD + shiftX, yLim);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-halfD + shiftX, -yLim);
+        ctx.lineTo(halfD + shiftX, -yLim);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  function fillStandSafetyFootprintInLocalAxes(ctx, depM, widM, category) {
+    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
+      ctx.fill();
+      return;
+    }
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    ctx.beginPath();
+    ctx.rect((-depM / 2) + shiftX, -widM / 2, depM, widM);
+    ctx.fill();
+  }
+  function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
+    if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
+    ctx.save();
+    ctx.strokeStyle = (!selected && layerMonoLinesOn()) ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
+    const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
+    ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
+    ctx.setLineDash([]);
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'butt';
+    if (selected) {
       ctx.shadowColor = c2dObjectSelectedGlow();
       ctx.shadowBlur = c2dObjectSelectedGlowBlur();
     }
@@ -359,92 +448,3 @@
       const o = temps[i];
       const oc = getRemoteStandCenterPx(o);
       const oa = getRemoteStandAngleRad(o);
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      const o = state.pbbStands[i];
-      const oc = getStandConnectionPx(o);
-      const oa = getPBBStandAngle(o);
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    return false;
-  }
-  function pbbStandOverlapsTerminal(pbb) {
-    const corners = getPBBStandCorners(pbb);
-    for (let t = 0; t < state.terminals.length; t++) {
-      const term = state.terminals[t];
-      if (!term.closed || term.vertices.length < 3) continue;
-      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
-      for (let k = 0; k < 4; k++) {
-        if (pointInPolygonXY(corners[k], termPix)) return true;
-      }
-      for (let k = 0; k < termPix.length; k++) {
-        if (pointInPolygonXY(termPix[k], corners)) return true;
-      }
-    }
-    return false;
-  }
-  function pbbStandOverlapsExisting(pbb, excludeId) {
-    if (pbbStandOverlapsTerminal(pbb)) return true;
-    const cat = pbb.category || 'C';
-    const center = getStandConnectionPx(pbb);
-    const angle = getPBBStandAngle(pbb);
-    if (standGapLineHitsExistingOuterContours(center, angle, cat)) return true;
-    return false;
-  }
-  function pbbStandOuterContoursOverlapExisting(pbb, excludeId) {
-    const corners = getPBBStandCorners(pbb);
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      const other = state.pbbStands[i];
-      if (!other) continue;
-      if (excludeId && other.id === excludeId) continue;
-      if (rotatedRectsOverlap(corners, getPBBStandCorners(other))) return true;
-    }
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      const st = state.remoteStands[i];
-      if (!st) continue;
-      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
-    }
-    const temps = state.tempStands || [];
-    for (let i = 0; i < temps.length; i++) {
-      const st = temps[i];
-      if (!st) continue;
-      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
-    }
-    return false;
-  }
-  function tryPlacePbbAt(wx, wy) {
-    let bestEdge = null, bestD2 = Infinity;
-    state.terminals.forEach(t => {
-      if (!t.closed || t.vertices.length < 2) return;
-      let cx = 0, cy = 0;
-      t.vertices.forEach(v => { const [px, py] = cellToPixel(v.col, v.row); cx += px; cy += py; });
-      cx /= t.vertices.length || 1; cy /= t.vertices.length || 1;
-      for (let i = 0; i < t.vertices.length; i++) {
-        const v1 = t.vertices[i], v2 = t.vertices[(i + 1) % t.vertices.length];
-        const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-        const near = closestPointOnSegment(p1, p2, [wx, wy]);
-        if (near) {
-          const d2 = dist2(near, [wx, wy]);
-          if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2, col: v1.col, row: v1.row, cx, cy }; }
-        }
-      }
-    });
-    const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
-    if (!bestEdge || bestD2 >= maxD2) return false;
-    const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
-    let nx = -(y2 - y1), ny = x2 - x1;
-    const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
-    const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
-    if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
-    const uPbb = readUnifiedNewStandConstraintFromPanel('standIcaoCategories', 'standAircraftAccess', ['A', 'B', 'C']);
-    const categoryMode = uPbb.categoryMode;
-    const category = uPbb.category;
-    const allowedIcaoCategories = uPbb.allowedIcaoCategories;
-    const panelAllowedTypes = uPbb.allowedAircraftTypes;
-    const minLen = getStandDepthMeters(category) / 2 + 3;
-    const lenMeters = Number(document.getElementById('pbbLength').value || 15);

@@ -1,3 +1,23 @@
+      ctx.shadowBlur = 0;
+    }
+    function strokeBarAtOffset(ofs) {
+      const sx = cx - px * halfLen + g.ux * ofs;
+      const sy = cy - py * halfLen + g.uy * ofs;
+      const ex = cx + px * halfLen + g.ux * ofs;
+      const ey = cy + py * halfLen + g.uy * ofs;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+    }
+    if (k === 'intermediate') {
+      ctx.setLineDash([dashLen, gapLen]);
+      strokeBarAtOffset(0);
+      ctx.setLineDash([]);
+    } else {
+      ctx.setLineDash([]);
+      strokeBarAtOffset(-pairHalf);
+      strokeBarAtOffset(pairHalf);
       const R = closestPointOnAnyRunwayCenterlineWorld(cx, cy);
       const rx = R ? R[0] : cx + g.ux * (CELL_SIZE * 40);
       const ry = R ? R[1] : cy + g.uy * (CELL_SIZE * 40);
@@ -613,6 +633,7 @@
     pathArcDrag: null,
     /** Pro Sim 2D: all | airline | icao | intdom | building */
     flightColorMode: 'all',
+    /** Layer popover: monotone overrides per section (Lines / Fill / ETC). */
     layerMono: Object.assign({}, DEFAULT_LAYER_MONO),
   };
   const LAYER_STATE_KEYS = [
@@ -625,6 +646,9 @@
     etc: ['textRuler', 'dummyFlight', 'junction']
   };
   const LAYER_MONO_KEYS = ['lines', 'fill', 'etc'];
+  function layerMonoLinesOn() { return !!(state.layerMono && state.layerMono.lines); }
+  function layerMonoFillOn() { return !!(state.layerMono && state.layerMono.fill); }
+  function layerMonoEtcOn() { return !!(state.layerMono && state.layerMono.etc); }
   function syncLegacyViewFlagsFromLayers() {
     state.showGrid = !!state.layers.grid;
     state.showImage = !!state.layers.image;
@@ -804,39 +828,3 @@
       disconnectedValidJunctions: [],
       junctions: [],
       nodes: [],
-      edges: [],
-      adj: [],
-      edgeMap: {},
-      runwayNodeIndicesById: {},
-      standIdToNodeIndex: {}
-    };
-    state.pathGraphCacheValid = true;
-    state.pathGraphCacheSig = computeTaxiwaysGraphSig();
-    state.pathGraphCacheDirty = true;
-    state.pathGraphInvalidatedAtMs = Date.now();
-  }
-  function graphSigParseRecords(sig) {
-    const m = {};
-    if (!sig || typeof sig !== 'string') return m;
-    const chunks = sig.split('||');
-    for (let i = 0; i < chunks.length; i++) {
-      const rec = chunks[i];
-      if (!rec) continue;
-      const pipe = rec.indexOf('|');
-      const id = pipe >= 0 ? rec.slice(0, pipe) : rec;
-      if (id) m[id] = rec;
-    }
-    return m;
-  }
-  function graphSigTaxiwayDiff(oldSig, newSig) {
-    const o = graphSigParseRecords(oldSig);
-    const n = graphSigParseRecords(newSig);
-    const removed = [];
-    const changed = [];
-    Object.keys(o).forEach(function(id) {
-      if (!(id in n)) removed.push(id);
-    });
-    Object.keys(n).forEach(function(id) {
-      if (!(id in o)) changed.push(id);
-      else if (o[id] !== n[id]) changed.push(id);
-    });

@@ -328,5 +328,3 @@
   function c2dRunwayAimingPointColor() { return _canvas2dStyle.runwayAimingPointColor || c2dRunwayMarkingColor(); }
   function c2dRunwayExtensionFill() { return _canvas2dStyle.runwayExtensionFill || c2dRunwayStroke(); }
   function c2dRunwayBlastChevronColor() { return _canvas2dStyle.runwayBlastChevronColor || '#facc15'; }
-  /** Strip alpha from rgba for solid road surface when showRoadWidth is on. */
-  function c2dCssColorToOpaque(css) {
