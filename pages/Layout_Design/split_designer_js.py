@@ -14,18 +14,18 @@ cuts = [
     620,
     1450,
     1770,
-    2490,
-    3165,
-    3615,
-    4945,
-    5805,
-    6355,
-    6725,
-    7110,
-    8207,
-    10953,
-    12113,
-    13782,  # +35: path-dir edge filter for arrival RET
+    2502,  # +3 after sim payload timeline pathType
+    3177,
+    3627,
+    4986,
+    5846,
+    6396,
+    6766,
+    7151,
+    8270,  # simulation: getFlightPose + EObT/apron dep pushback nose helper; designer-mid = ForDraw
+    11009,
+    12169,
+    13838,  # path-dir edge filter for arrival RET
     n,
 ]
 if cuts[-1] != n:

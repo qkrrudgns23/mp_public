@@ -1,48 +1,3 @@
-            pointBackgroundColor: '#ddd6fe'
-          }]
-        },
-        options: opt
-      });
-    }
-    const elR = document.getElementById('kpiChartRunway');
-    if (elR) {
-      window.__kpiChartRunway = new Chart(elR, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              type: 'bar',
-              label: 'Runway arr (ELDT)',
-              data: arr,
-              backgroundColor: 'rgba(56, 189, 248, 0.72)',
-              order: 3
-            },
-            {
-              type: 'bar',
-              label: 'Runway dep (ETOT)',
-              data: dep,
-              backgroundColor: 'rgba(251, 146, 60, 0.72)',
-              order: 3
-            },
-            {
-              type: 'line',
-              label: 'Total',
-              data: tot,
-              borderColor: '#c4b5fd',
-              backgroundColor: 'transparent',
-              borderWidth: 3,
-              tension: 0.22,
-              pointRadius: 3,
-              pointHoverRadius: 6,
-              order: 1
-            }
-          ]
-        },
-        options: opt
-      });
-    }
-  }
   function kpiGateChartPlaceholder(buckets) {
     if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No gate occupancy data is available for the current snapshot.</div>';
     return '<div class="kpi-chart-canvas-host kpi-chart-wrap--gate-fill"><canvas id="kpiChartGateOcc" aria-label="Gate occupancy chart"></canvas></div>';
@@ -1158,3 +1113,48 @@
     }
     tl[tl.length - 1].t = tEnd;
     return tl;
+  }
+  function polylineTimelineConstantAccelFromRest(pts, tStart, tEnd, accelMs2) {
+    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
+      const p = pts && pts.length ? polylinePointAtDistance(pts, 0) : [0, 0];
+      return [{ t: tStart, x: p[0], y: p[1] }, { t: tEnd, x: p[0], y: p[1] }];
+    }
+    const L = polylineTotalLength(pts);
+    const a = Math.max(0.1, accelMs2);
+    const tPhys = L < 1e-9 ? 0 : Math.sqrt(2 * L / a);
+    const win = tEnd - tStart;
+    const n = Math.max(8, Math.min(48, Math.ceil(Math.max(L, 1) / 25)));
+    const tl = [];
+    for (let i = 0; i <= n; i++) {
+      const u = i / n;
+      const tt = tStart + u * win;
+      const tau = u * tPhys;
+      const s = Math.min(L, 0.5 * a * tau * tau);
+      const pt = polylinePointAtDistance(pts, s);
+      tl.push({ t: tt, x: pt[0], y: pt[1] });
+    }
+    tl[0].t = tStart;
+    tl[tl.length - 1].t = tEnd;
+    return tl;
+  }
+  function polylineTimelineLinearRetSpeed(pts, tStart, tEnd, vIn, vOut) {
+    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
+      const p = pts && pts.length ? pts[0] : [0, 0];
+      return [{ t: tStart, x: p[0], y: p[1] }];
+    }
+    const lengths = [];
+    let totalLen = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const len = pathDist(pts[i], pts[i + 1]);
+      lengths.push(len);
+      totalLen += len;
+    }
+    const rawDts = [];
+    let accLen = 0;
+    for (let i = 0; i < lengths.length; i++) {
+      const midLen = accLen + lengths[i] * 0.5;
+      const u = totalLen > 1e-9 ? midLen / totalLen : 0;
+      const v = Math.max(1, vIn + (vOut - vIn) * u);
+      rawDts.push(lengths[i] < 1e-9 ? 0 : lengths[i] / v);
+      accLen += lengths[i];
+    }

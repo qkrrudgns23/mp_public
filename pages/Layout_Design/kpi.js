@@ -1,31 +1,3 @@
-    if (state.selectedObject && state.selectedObject.type === 'remote') {
-      const st = state.selectedObject.obj;
-      const nameInput = document.getElementById('remoteName');
-      if (nameInput) nameInput.value = st.name || '';
-      applyIcaoCategoriesToHost('remoteIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
-      syncStandConstraintVisibility('remote');
-      renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
-      renderRemoteTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
-    }
-    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
-      const st = state.selectedObject.obj;
-      const nameInput = document.getElementById('tempStandName');
-      if (nameInput) nameInput.value = st.name || '';
-      applyIcaoCategoriesToHost('tempStandIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
-      syncStandConstraintVisibility('tempStand');
-      renderAircraftConstraintChoices('tempStandAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
-      renderTempStandTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
-    }
-    if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
-      const hp = state.selectedObject.obj;
-      const nameInput = document.getElementById('holdingPointName');
-      if (nameInput) nameInput.value = hp.name || '';
-    }
-    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
-      const tw = state.selectedObject.obj;
-      const nameInput = document.getElementById('taxiwayName');
-      const widthInput = document.getElementById('taxiwayWidth');
-      const maxExitInput = document.getElementById('taxiwayMaxExitVel');
       const minExitInput = document.getElementById('taxiwayMinExitVel');
       if (nameInput) nameInput.value = tw.name || '';
       const widthDefault = tw.pathType === 'runway'
@@ -368,3 +340,31 @@
         delete tw.startDisplacedThresholdM;
         delete tw.startBlastPadM;
         delete tw.endDisplacedThresholdM;
+        delete tw.endBlastPadM;
+      }
+    }
+  }
+
+  function syncSettingsPaneToMode() {
+    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
+    if (layoutModeTabs) {
+      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+      });
+    }
+    document.querySelectorAll('.settings-pane').forEach(el => { el.style.display = 'none'; });
+    const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
+    const pane = document.getElementById('settings-' + paneKey);
+    if (pane) pane.style.display = 'block';
+    if (mode === 'marker') {
+      syncMarkerFlightAircraftRowVisibility();
+      syncMarkerIslandWidthRowVisibility();
+      syncMarkerNavaidRowVisibility();
+    }
+    if (isPathLayoutMode(mode)) {
+      const pt = pathTypeFromLayoutMode(mode);
+      syncPathFieldVisibilityForPathType(pt);
+      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
+        const nameInput = document.getElementById('taxiwayName');
+        if (nameInput) nameInput.value = '';
+        const widthInput = document.getElementById('taxiwayWidth');

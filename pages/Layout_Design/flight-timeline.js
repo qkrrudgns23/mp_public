@@ -1,3 +1,4 @@
+    for (let t = 0; t < state.terminals.length; t++) {
       const term = state.terminals[t];
       if (!term.closed || term.vertices.length < 3) continue;
       const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
@@ -1328,3 +1329,31 @@
         rightLocal = maxPt;
       }
     }
+    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
+    function localToWorld(pt) {
+      return {
+        x: pose.x + pt[0] * cs - pt[1] * sn,
+        y: pose.y + pt[0] * sn + pt[1] * cs,
+      };
+    }
+    return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
+  }
+  function ensureMarkerFlightBlazerState(m) {
+    if (!m || m.kind !== 'flight') return;
+    if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
+    if (typeof m.headingReversed !== 'boolean') m.headingReversed = false;
+    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) < 0) m.blazerColor = MARKER_BLAZER_COLOR_OPTIONS[0];
+    if (!Array.isArray(m.blazerLeftTrail)) m.blazerLeftTrail = [];
+    if (!Array.isArray(m.blazerRightTrail)) m.blazerRightTrail = [];
+  }
+  function appendMarkerFlightBlazerTrail(m) {
+    if (!m || m.kind !== 'flight') return;
+    ensureMarkerFlightBlazerState(m);
+    if (!m.blazerEnabled) return;
+    const tips = getMarkerFlightWingtipWorldPoints(m);
+    if (!tips || !tips.left || !tips.right) return;
+    const minStep = Math.max(0.25, CELL_SIZE * 0.03);
+    const minStep2 = minStep * minStep;
+    function append(trail, pt) {
+      const last = trail.length ? trail[trail.length - 1] : null;
+      if (!last || dist2([last.x, last.y], [pt.x, pt.y]) >= minStep2) trail.push({ x: pt.x, y: pt.y });

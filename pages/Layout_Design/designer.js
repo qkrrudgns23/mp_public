@@ -2453,9 +2453,11 @@
             const tl = pts.map(function(p) {
               const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
               const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-              const mf = p.motionForward !== false && p.motion_forward !== false;
               const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
-              return { t: Number(p.t), x: x, y: y, motionForward: mf, deadlockGhost: dg };
+              const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
+              if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
+              if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+              return o;
             }).filter(function(k) {
               return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
             }).sort(function(a, b) { return a.t - b.t; });
@@ -2471,13 +2473,24 @@
         const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
         const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
         const etotS = srec.ETOT != null ? Number(srec.ETOT) : NaN;
-        f.timeline_meta = {
-          playbackSource: 'des_result',
-          eldtSec: isFinite(eldtS) ? eldtS : undefined,
-          eibtSec: isFinite(eibtS) ? eibtS : undefined,
-          eobtSec: isFinite(eobtS) ? eobtS : undefined,
-          etotSec: isFinite(etotS) ? etotS : undefined,
-        };
+        const prevMeta = f.timeline_meta || {};
+        const builtDep = (typeof buildDepartureSurfaceTimelineSegments === 'function' && f.arrDep === 'Dep'
+          && isFinite(eobtS) && isFinite(etotS))
+          ? buildDepartureSurfaceTimelineSegments(f, eobtS, etotS)
+          : null;
+        const builtDepMeta = (builtDep && builtDep.meta) ? builtDep.meta : null;
+        f.timeline_meta = Object.assign(
+          {},
+          prevMeta,
+          builtDepMeta || {},
+          {
+            playbackSource: 'des_result',
+            eldtSec: isFinite(eldtS) ? eldtS : undefined,
+            eibtSec: isFinite(eibtS) ? eibtS : undefined,
+            eobtSec: isFinite(eobtS) ? eobtS : undefined,
+            etotSec: isFinite(etotS) ? etotS : undefined,
+          }
+        );
       } else {
         delete f.timeline_meta;
       }
@@ -8053,10 +8066,10 @@
   }
 
   /**
-   * Walk along the timeline polyline from (fx, fy) toward earlier vertices by distM.
-   * Forward move on path: rear lies "behind" F along traveled polyline. Extrapolates before tl[0] if needed.
+   * Walk distM on the timeline polyline from (fx,fy) on segment segIndex.
+   * forward: toward +t; !forward: toward earlier samples (e.g. rear reference from front point).
    */
-  function walkTimelinePolylineBackwardFromPoint(tl, segIndex, fx, fy, distM) {
+  function walkTimelinePolylineFromPoint(tl, segIndex, fx, fy, distM, forward) {
     const eps = 1e-6;
     if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
       return null;
@@ -8066,81 +8079,42 @@
     let x = fx, y = fy;
     let s = segIndex;
     while (rem > eps) {
-      if (s < 0) {
-        if (tl.length < 2) return { x, y };
-        const p0 = tl[0], p1 = tl[1];
-        let bx = p0.x - p1.x, by = p0.y - p1.y;
-        const bl = Math.hypot(bx, by);
-        if (bl < eps) return { x, y };
-        const inv = 1 / bl;
-        return { x: x + bx * inv * rem, y: y + by * inv * rem };
-      }
-      const tx = tl[s].x, ty = tl[s].y;
-      const ddx = tx - x, ddy = ty - y;
-      const dlen = Math.hypot(ddx, ddy);
-      if (dlen < eps) {
-        x = tx;
-        y = ty;
-        s--;
-        continue;
-      }
-      const step = Math.min(rem, dlen);
-      const inv = 1 / dlen;
-      x += ddx * inv * step;
-      y += ddy * inv * step;
-      rem -= step;
-      if (rem < eps) return { x, y };
-      if (dlen - step < eps) {
-        x = tx;
-        y = ty;
-        s--;
-      }
-    }
-    return { x, y };
-  }
-
-  /**
-   * Walk toward later keyframes (same direction as increasing time along the polyline). Pushback: rear
-   * lies "ahead" of the nose (F) on the path, so R is this walk from F. Extrapolates past tl[last] if needed.
-   */
-  function walkTimelinePolylineForwardFromPoint(tl, segIndex, fx, fy, distM) {
-    const eps = 1e-6;
-    if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
-      return null;
-    }
-    if (segIndex < 0 || segIndex > tl.length - 2) return null;
-    let rem = distM;
-    let x = fx, y = fy;
-    let s = segIndex;
-    while (rem > eps) {
-      if (s > tl.length - 2) {
-        if (tl.length < 2) return { x, y };
-        const pEnd = tl[tl.length - 1], pPrev = tl[tl.length - 2];
-        let bx = pEnd.x - pPrev.x, by = pEnd.y - pPrev.y;
-        const bl = Math.hypot(bx, by);
-        if (bl < eps) return { x, y };
-        const inv = 1 / bl;
-        return { x: x + bx * inv * rem, y: y + by * inv * rem };
-      }
-      const tx = tl[s + 1].x, ty = tl[s + 1].y;
-      const ddx = tx - x, ddy = ty - y;
-      const dlen = Math.hypot(ddx, ddy);
-      if (dlen < eps) {
-        x = tx;
-        y = ty;
-        s++;
-        continue;
-      }
-      const step = Math.min(rem, dlen);
-      const inv = 1 / dlen;
-      x += ddx * inv * step;
-      y += ddy * inv * step;
-      rem -= step;
-      if (rem < eps) return { x, y };
-      if (dlen - step < eps) {
-        x = tx;
-        y = ty;
-        s++;
+      if (forward) {
+        if (s > tl.length - 2) {
+          if (tl.length < 2) return { x, y };
+          const n = tl.length, pa = tl[n - 2], pb = tl[n - 1];
+          const bx = pb.x - pa.x, by = pb.y - pa.y;
+          const bl = Math.hypot(bx, by);
+          if (bl < eps) return { x, y };
+          const inv = 1 / bl;
+          return { x: x + bx * inv * rem, y: y + by * inv * rem };
+        }
+        const b = tl[s + 1];
+        const ddx = b.x - x, ddy = b.y - y;
+        const dlen = Math.hypot(ddx, ddy);
+        if (dlen < eps) { x = b.x; y = b.y; s++; continue; }
+        const step = Math.min(rem, dlen), inv = 1 / dlen;
+        x += ddx * inv * step; y += ddy * inv * step; rem -= step;
+        if (rem < eps) return { x, y };
+        if (dlen - step < eps) { x = b.x; y = b.y; s++; }
+      } else {
+        if (s < 0) {
+          if (tl.length < 2) return { x, y };
+          const p0 = tl[0], p1 = tl[1];
+          const bx = p0.x - p1.x, by = p0.y - p1.y;
+          const bl = Math.hypot(bx, by);
+          if (bl < eps) return { x, y };
+          const inv = 1 / bl;
+          return { x: x + bx * inv * rem, y: y + by * inv * rem };
+        }
+        const tx = tl[s].x, ty = tl[s].y;
+        const ddx = tx - x, ddy = ty - y;
+        const dlen = Math.hypot(ddx, ddy);
+        if (dlen < eps) { x = tx; y = ty; s--; continue; }
+        const step = Math.min(rem, dlen), inv = 1 / dlen;
+        x += ddx * inv * step; y += ddy * inv * step; rem -= step;
+        if (rem < eps) return { x, y };
+        if (dlen - step < eps) { x = tx; y = ty; s--; }
       }
     }
     return { x, y };
@@ -8171,7 +8145,6 @@
       const a = tl[0];
       if (tSec + 1e-6 < a.t || tSec - 1e-6 > a.t) return null;
       const dg = a.deadlockGhost === true;
-      if (a.motionForward === false) return { x: a.x, y: a.y, dx: -1, dy: 0, deadlockGhost: dg };
       return { x: a.x, y: a.y, dx: 1, dy: 0, deadlockGhost: dg };
     }
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
@@ -8211,49 +8184,90 @@
       if (next) return { dx: next.dx, dy: next.dy };
       return { dx: 1, dy: 0 };
     }
+    function frBicyclePose(R, x, y, lenM, bmin, dg) {
+      if (!R || lenM <= 1e-6) return null;
+      const vdx = x - R.x, vdy = y - R.y, vl = Math.hypot(vdx, vdy);
+      if (vl < bmin) return null;
+      return { x, y, dx: vdx / vl, dy: vdy / vl, deadlockGhost: dg };
+    }
     for (let i = 0; i < tl.length - 1; i++) {
-      const a = tl[i], b = tl[i+1];
+      let a = tl[i], b = tl[i+1];
       if (tSec >= a.t && tSec <= b.t) {
+        let useI = i;
+        // At a time-key at the end of [a,b], the first matching segment is the *incoming* leg.
+        // The bicycle (rear on polyline) + that chord can show nose 180° off next-second motion.
+        // Prefer the *outgoing* segment [b, next] (same (x,y) at t=b.t, u=0) so F/R wheels stay
+        // consistent with time-forward motion. Last segment has no outgoing — keep i.
+        if (i + 1 < tl.length - 1) {
+          const a2 = tl[i+1], b2 = tl[i+2];
+          if (a2 && b2 && b2.t > a2.t && Math.abs(tSec - b.t) < 1e-5) {
+            if (Math.abs(b.t - a2.t) < 1e-5) {
+              useI = i + 1;
+              a = a2;
+              b = b2;
+            }
+          }
+        }
         const span = b.t - a.t || 1;
         const u = (tSec - a.t) / span;
         const x = a.x + (b.x - a.x) * u;
         const y = a.y + (b.y - a.y) * u;
-        const h = headingForInterval(i);
-        const dist2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y);
-        // Stationary / dwell: use start keyframe motion (matches export); do not use end keyframe
-        // (e.g. next sample is pushback with motionForward false — would flip silhouette while parked).
-        const mfB = (dist2 < motionChordEps2) ? (a.motionForward !== false) : (b.motionForward !== false);
+        const h = headingForInterval(useI);
         const dg = !!(a.deadlockGhost || b.deadlockGhost);
         const { lenM } = getSimAircraftWorldDimsM(flight);
-        // Nose-anchored fractions (sim F = 10% from nose; virtual rear 65% from nose) => wheelbase 0.55*L
         const wheelBaseM = 0.55 * lenM;
-        const bicycleMin = Math.max(0.02 * lenM, 2 * motionChordEps);
-        const R = mfB !== false
-          ? walkTimelinePolylineBackwardFromPoint(tl, i, x, y, wheelBaseM)
-          : walkTimelinePolylineForwardFromPoint(tl, i, x, y, wheelBaseM);
-        if (R && lenM > 1e-6) {
-          const vdx = x - R.x, vdy = y - R.y;
-          const vl = Math.hypot(vdx, vdy);
-          if (vl >= bicycleMin) {
-            // F−R = main→nose; same for forward (R behind) and pushback (R ahead on path). Do not +π.
-            const brdx = vdx / vl, brdy = vdy / vl;
-            return { x, y, dx: brdx, dy: brdy, deadlockGhost: dg };
-          }
+        const bicycleMin = Math.max(0.15 * motionChordEps, 0.005 * lenM, 0.04);
+        let out = frBicyclePose(
+          walkTimelinePolylineFromPoint(tl, useI, x, y, wheelBaseM, false), x, y, lenM, bicycleMin, dg);
+        if (!out) {
+          out = { x, y, dx: h.dx, dy: h.dy, deadlockGhost: dg };
         }
-        let rdx = h.dx, rdy = h.dy;
-        if (mfB === false) {
-          const lenH = Math.hypot(rdx, rdy) || 1;
-          const ang = Math.atan2(rdy, rdx) + Math.PI;
-          rdx = Math.cos(ang) * lenH;
-          rdy = Math.sin(ang) * lenH;
-        }
-        return { x, y, dx: rdx, dy: rdy, deadlockGhost: dg };
+        return out;
       }
     }
     return null;
   }
 
-  
+  /**
+   * After EOBT, while on apron_link (departure push/taxi) only: if the bicycle nose points with
+   * the ground track step (nose . track &gt; 0), flip dx/dy 180&deg; so the silhouette shows
+   * towed/reverse (retro) like R3, without changing (x,y) or the underlying bicycle trace.
+   * Does not run before EObT, not off apron, not Arr_taxi, and does not change already-retro
+   * pose. Other flights/pathTypes unchanged.
+   */
+  function applyEobtApronDepTaxiPushbackNoseIfNeeded(flight, tSec, pose) {
+    if (!pose || !flight) return pose;
+    const m = flight.timeline_meta;
+    if (!m || typeof m.eobtSec !== 'number' || !isFinite(m.eobtSec)) return pose;
+    if (tSec + 1e-3 < m.eobtSec) return pose;
+    const tl = flight.timeline;
+    if (!tl || !tl.length) return pose;
+    const tKey = Math.round(Number(tSec));
+    const byT = Object.create(null);
+    for (let i = 0; i < tl.length; i++) {
+      const w = tl[i];
+      if (!w) continue;
+      const tt = Math.round(Number(w.t));
+      if (isFinite(tt)) byT[tt] = w;
+    }
+    const cur = byT[tKey];
+    if (!cur || String(cur.pathType || '') !== 'apron_link') return pose;
+    const ph = String(cur.phase || '');
+    if (ph && ph !== 'Dep_taxi') return pose;
+    const prev = byT[tKey - 1];
+    if (!prev) return pose;
+    const ddx = cur.x - prev.x, ddy = cur.y - prev.y;
+    const dlen = Math.hypot(ddx, ddy);
+    if (dlen < 1e-9) return pose;
+    const ux = ddx / dlen, uy = ddy / dlen;
+    const pl = Math.hypot(pose.dx, pose.dy);
+    if (pl < 1e-9) return pose;
+    const px = pose.dx / pl, py = pose.dy / pl;
+    const dotU = px * ux + py * uy;
+    if (dotU <= 0.05) return pose;
+    return { x: pose.x, y: pose.y, dx: -pose.dx, dy: -pose.dy, deadlockGhost: !!pose.deadlockGhost };
+  }
+
   function getFlightPoseAtTimeForDraw(flight, tSec) {
     const tl = flight && flight.timeline;
     if (!tl || !tl.length) return null;
@@ -8262,7 +8276,7 @@
     const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
     if (t + 1e-9 < t0) return null;
     if (t > t1) t = t1;
-    return getFlightPoseAtTime(flight, t);
+    return applyEobtApronDepTaxiPushbackNoseIfNeeded(flight, t, getFlightPoseAtTime(flight, t));
   }
 
   function isFlightPreTouchdownForDraw(f, tSec) {
@@ -9238,9 +9252,6 @@
     if (!skipGanttRefresh && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
   }
   function _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl, scheduleOpts) {
-    // #region agent log
-    if (typeof fetch === 'function') { var _dlen = (dirtySet && (typeof dirtySet.size === 'number')) ? dirtySet.size : -1; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'flight-list', location: 'designer.js:_renderFlightListAfterPathEnsure', message: 'after path ensure', data: { hypothesisId: 'H2', schedFull: !!schedFull, forceResampleRet: !!forceResampleRet, nFl: (flightsSorted && flightsSorted.length) | 0, dirtyN: _dlen }, timestamp: Date.now() }) }).catch(function() {}); }
-    // #endregion
     if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
     let retStatsAll = [];
     if (schedFull) {
@@ -12494,6 +12505,7 @@
         timeline: tl,
         meta: {
           eobtSec: t0, etotSec: t3,
+          depNoseExitsApronSec: t0, depApronExitCumulativeM: 0,
           depTaxiLineupSec: 0, depTaxiDelaySec: 0, depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
           lineupArrivalSec: t0, depRollStartSec: t0, depRotSec: depRotFull, depLineupHoldSec: 0, depTaxiDelayAtHolding: false,
           lineupBackM: backClamped,
@@ -12508,6 +12520,14 @@
     let tAfterDelay = tAfterTaxi + delaySecUsed;
     let afterDelay = Math.max(0, t3 - tAfterDelay - eps);
     let lineupHoldSec = Math.min(DEP_LINEUP_HOLD_SEC, afterDelay);
+    const sExitApron = (typeof depNoseExitsApronCumulativeM === 'function') ? depNoseExitsApronCumulativeM(f, toLineupOrig) : 0;
+    let depNoseExitsApronSec = t0;
+    if (taxiSecUsed > eps && sExitApron > 1e-3) {
+      depNoseExitsApronSec = (typeof taxiTimeAtCumulativeDistanceM === 'function')
+        ? taxiTimeAtCumulativeDistanceM(toLineupOrig, t0, t0 + taxiSecUsed, sExitApron, makeVelTaxi)
+        : t0;
+    }
+    depNoseExitsApronSec = Math.min(t0 + taxiSecUsed, Math.max(t0, depNoseExitsApronSec));
     let merged;
     let t_cur = t0;
     if (validHold) {
@@ -12552,6 +12572,7 @@
       timeline: merged,
       meta: {
         eobtSec: t0, etotSec: t3,
+        depNoseExitsApronSec: depNoseExitsApronSec, depApronExitCumulativeM: sExitApron,
         depTaxiLineupSec: taxiSecUsed, depTaxiDelaySec: delaySecUsed,
         depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
         lineupArrivalSec: tAfterTaxi, depRollStartSec: tRollStart,
@@ -13370,6 +13391,48 @@
       acc += segLen;
     }
     return best;
+  }
+  function taxiTimeAtCumulativeDistanceM(pts, tStart, tEnd, sTarget, velForSeg) {
+    if (!pts || pts.length < 2 || !(sTarget > 1e-6) || tEnd <= tStart + 1e-9) return tStart;
+    const lengths = [];
+    for (let i = 0; i < pts.length - 1; i++) lengths.push(pathDist(pts[i], pts[i + 1]));
+    const rawDts = [];
+    for (let i = 0; i < lengths.length; i++) {
+      const v = Math.max(1, velForSeg(i, pts[i], pts[i + 1]));
+      rawDts.push(lengths[i] < 1e-9 ? 0 : lengths[i] / v);
+    }
+    const rawTotal = rawDts.reduce(function(s, x) { return s + x; }, 0);
+    if (rawTotal < 1e-9) return tStart;
+    const totalLen = lengths.reduce(function(s, l) { return s + l; }, 0);
+    const sClamped = Math.min(sTarget, totalLen);
+    if (sClamped >= totalLen - 1e-6) return tEnd;
+    const scale = (tEnd - tStart) / rawTotal;
+    let distAcc = 0;
+    let rawAcc = 0;
+    for (let i = 0; i < lengths.length; i++) {
+      if (distAcc + lengths[i] >= sClamped) {
+        const u = (sClamped - distAcc) / (lengths[i] || 1);
+        return tStart + (rawAcc + u * rawDts[i]) * scale;
+      }
+      distAcc += lengths[i];
+      rawAcc += rawDts[i];
+    }
+    return tEnd;
+  }
+  function depNoseExitsApronCumulativeM(f, pathPts) {
+    if (!pathPts || pathPts.length < 2) return 0;
+    const standId = f && (f.standId != null && f.standId !== '' ? f.standId : (f.token && f.token.apronId));
+    if (standId == null || standId === '') return 0;
+    const links = state.apronLinks || [];
+    const lk = links.find(function(l) { return l && String(l.pbbId) === String(standId); });
+    if (!lk || lk.tx == null || lk.ty == null) return 0;
+    const jx = Number(lk.tx), jy = Number(lk.ty);
+    if (!isFinite(jx) || !isFinite(jy)) return 0;
+    const cum = cumulativeDistAlongPolylineToPoint(pathPts, [jx, jy]);
+    if (!cum) return 0;
+    if (cum.d2 > 35 * 35) return 0;
+    const L = polylineTotalLength(pathPts);
+    return Math.min(cum.distAlong, Math.max(0, L - 1e-3));
   }
   function findLastRunwayHoldingOnDeparturePath(toLineup, candIds) {
     if (!toLineup || toLineup.length < 2) return null;

@@ -1,31 +1,3 @@
-      for (let k = 0; k < densePx.length; k++) {
-        const snap = worldPointToPixel(densePx[k][0], densePx[k][1], snapToGrid);
-        const c = { x: snap[0], y: snap[1] };
-        if (cells.length && cells[cells.length - 1].x === c.x && cells[cells.length - 1].y === c.y) continue;
-        if (c.x === prev.x && c.y === prev.y) continue;
-        cells.push(c);
-      }
-      while (cells.length && cells[cells.length - 1].x === next.x && cells[cells.length - 1].y === next.y) cells.pop();
-    }
-    if (!cells.length) {
-      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
-      const snap = worldPointToPixel(M[0], M[1], snapToGrid);
-      cells.push({ x: snap[0], y: snap[1] });
-    }
-    const newArr = verts.slice();
-    newArr.splice(vertexIndex, 1, ...cells);
-    mk.points = newArr;
-    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
-    state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: midSel };
-  }
-  function pathArcCommitFromPreview(tw, vertexIndex, previewPx, snapToGrid) {
-    if (!tw || tw.pathType === 'runway') return;
-    if (!previewPx || previewPx.length < 2) return;
-    const verts = tw.vertices;
-    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return;
-    const prev = verts[vertexIndex - 1], next = verts[vertexIndex + 1];
-    const Apx = cellToPixel(prev.col, prev.row);
-    const Bpx = cellToPixel(next.col, next.row);
     const workPx = previewPx.map(function(p, j) {
       if (j === 0) return [Apx[0], Apx[1]];
       if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
@@ -548,3 +520,31 @@
       syncStandConstraintVisibility('stand');
       renderAircraftConstraintChoices('standAircraftAccess', getStandAllowedAircraftTypes(pbb), pbb.allowedIcaoCategories);
     }
+    if (state.selectedObject && state.selectedObject.type === 'remote') {
+      const st = state.selectedObject.obj;
+      const nameInput = document.getElementById('remoteName');
+      if (nameInput) nameInput.value = st.name || '';
+      applyIcaoCategoriesToHost('remoteIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
+      syncStandConstraintVisibility('remote');
+      renderAircraftConstraintChoices('remoteAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
+      renderRemoteTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
+    }
+    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+      const st = state.selectedObject.obj;
+      const nameInput = document.getElementById('tempStandName');
+      if (nameInput) nameInput.value = st.name || '';
+      applyIcaoCategoriesToHost('tempStandIcaoCategories', normalizeAllowedIcaoCategories(st.allowedIcaoCategories));
+      syncStandConstraintVisibility('tempStand');
+      renderAircraftConstraintChoices('tempStandAircraftAccess', getStandAllowedAircraftTypes(st), st.allowedIcaoCategories);
+      renderTempStandTerminalAccessChoices(Array.isArray(st.allowedTerminals) ? st.allowedTerminals : []);
+    }
+    if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
+      const hp = state.selectedObject.obj;
+      const nameInput = document.getElementById('holdingPointName');
+      if (nameInput) nameInput.value = hp.name || '';
+    }
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      const tw = state.selectedObject.obj;
+      const nameInput = document.getElementById('taxiwayName');
+      const widthInput = document.getElementById('taxiwayWidth');
+      const maxExitInput = document.getElementById('taxiwayMaxExitVel');

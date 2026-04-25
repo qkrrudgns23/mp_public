@@ -1,31 +1,3 @@
-      }
-    });
-  }
-  const pbbBridgeCountInputEl = document.getElementById('pbbBridgeCount');
-  if (pbbBridgeCountInputEl) {
-    pbbBridgeCountInputEl.addEventListener('change', function() {
-      const nextCount = Math.max(1, Math.min(8, parseInt(this.value, 10) || 1));
-      this.value = String(nextCount);
-      if (state.selectedObject && state.selectedObject.type === 'pbb') {
-        const pbb = state.selectedObject.obj;
-        pbb.pbbCount = nextCount;
-        delete pbb.pbbBridges;
-        rebuildPbbBridgeGeometry(pbb);
-        updateObjectInfo();
-        renderObjectList();
-        draw();
-        update3DSceneWhenVisible();
-      }
-    });
-  }
-  function applyPbbBoardingAreaDimsFromInputs(pbb) {
-    const wEl = document.getElementById('pbbBoardingWidth');
-    const hEl = document.getElementById('pbbBoardingHeight');
-    const nw = Math.max(0.5, Number(wEl && wEl.value) || 5);
-    const nh = Math.max(0.5, Number(hEl && hEl.value) || 15);
-    pbb.boardingWidthM = nw;
-    pbb.boardingHeightM = nh;
-    if (wEl) wEl.value = String(nw);
     if (hEl) hEl.value = String(nh);
     ensurePbbBoardingWallGeometry(pbb);
     const arm = Number(pbb.pbbArmLenM);
@@ -943,10 +915,10 @@
   }
 
   /**
-   * Walk along the timeline polyline from (fx, fy) toward earlier vertices by distM.
-   * Forward move on path: rear lies "behind" F along traveled polyline. Extrapolates before tl[0] if needed.
+   * Walk distM on the timeline polyline from (fx,fy) on segment segIndex.
+   * forward: toward +t; !forward: toward earlier samples (e.g. rear reference from front point).
    */
-  function walkTimelinePolylineBackwardFromPoint(tl, segIndex, fx, fy, distM) {
+  function walkTimelinePolylineFromPoint(tl, segIndex, fx, fy, distM, forward) {
     const eps = 1e-6;
     if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
       return null;
@@ -956,81 +928,42 @@
     let x = fx, y = fy;
     let s = segIndex;
     while (rem > eps) {
-      if (s < 0) {
-        if (tl.length < 2) return { x, y };
-        const p0 = tl[0], p1 = tl[1];
-        let bx = p0.x - p1.x, by = p0.y - p1.y;
-        const bl = Math.hypot(bx, by);
-        if (bl < eps) return { x, y };
-        const inv = 1 / bl;
-        return { x: x + bx * inv * rem, y: y + by * inv * rem };
-      }
-      const tx = tl[s].x, ty = tl[s].y;
-      const ddx = tx - x, ddy = ty - y;
-      const dlen = Math.hypot(ddx, ddy);
-      if (dlen < eps) {
-        x = tx;
-        y = ty;
-        s--;
-        continue;
-      }
-      const step = Math.min(rem, dlen);
-      const inv = 1 / dlen;
-      x += ddx * inv * step;
-      y += ddy * inv * step;
-      rem -= step;
-      if (rem < eps) return { x, y };
-      if (dlen - step < eps) {
-        x = tx;
-        y = ty;
-        s--;
-      }
-    }
-    return { x, y };
-  }
-
-  /**
-   * Walk toward later keyframes (same direction as increasing time along the polyline). Pushback: rear
-   * lies "ahead" of the nose (F) on the path, so R is this walk from F. Extrapolates past tl[last] if needed.
-   */
-  function walkTimelinePolylineForwardFromPoint(tl, segIndex, fx, fy, distM) {
-    const eps = 1e-6;
-    if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
-      return null;
-    }
-    if (segIndex < 0 || segIndex > tl.length - 2) return null;
-    let rem = distM;
-    let x = fx, y = fy;
-    let s = segIndex;
-    while (rem > eps) {
-      if (s > tl.length - 2) {
-        if (tl.length < 2) return { x, y };
-        const pEnd = tl[tl.length - 1], pPrev = tl[tl.length - 2];
-        let bx = pEnd.x - pPrev.x, by = pEnd.y - pPrev.y;
-        const bl = Math.hypot(bx, by);
-        if (bl < eps) return { x, y };
-        const inv = 1 / bl;
-        return { x: x + bx * inv * rem, y: y + by * inv * rem };
-      }
-      const tx = tl[s + 1].x, ty = tl[s + 1].y;
-      const ddx = tx - x, ddy = ty - y;
-      const dlen = Math.hypot(ddx, ddy);
-      if (dlen < eps) {
-        x = tx;
-        y = ty;
-        s++;
-        continue;
-      }
-      const step = Math.min(rem, dlen);
-      const inv = 1 / dlen;
-      x += ddx * inv * step;
-      y += ddy * inv * step;
-      rem -= step;
-      if (rem < eps) return { x, y };
-      if (dlen - step < eps) {
-        x = tx;
-        y = ty;
-        s++;
+      if (forward) {
+        if (s > tl.length - 2) {
+          if (tl.length < 2) return { x, y };
+          const n = tl.length, pa = tl[n - 2], pb = tl[n - 1];
+          const bx = pb.x - pa.x, by = pb.y - pa.y;
+          const bl = Math.hypot(bx, by);
+          if (bl < eps) return { x, y };
+          const inv = 1 / bl;
+          return { x: x + bx * inv * rem, y: y + by * inv * rem };
+        }
+        const b = tl[s + 1];
+        const ddx = b.x - x, ddy = b.y - y;
+        const dlen = Math.hypot(ddx, ddy);
+        if (dlen < eps) { x = b.x; y = b.y; s++; continue; }
+        const step = Math.min(rem, dlen), inv = 1 / dlen;
+        x += ddx * inv * step; y += ddy * inv * step; rem -= step;
+        if (rem < eps) return { x, y };
+        if (dlen - step < eps) { x = b.x; y = b.y; s++; }
+      } else {
+        if (s < 0) {
+          if (tl.length < 2) return { x, y };
+          const p0 = tl[0], p1 = tl[1];
+          const bx = p0.x - p1.x, by = p0.y - p1.y;
+          const bl = Math.hypot(bx, by);
+          if (bl < eps) return { x, y };
+          const inv = 1 / bl;
+          return { x: x + bx * inv * rem, y: y + by * inv * rem };
+        }
+        const tx = tl[s].x, ty = tl[s].y;
+        const ddx = tx - x, ddy = ty - y;
+        const dlen = Math.hypot(ddx, ddy);
+        if (dlen < eps) { x = tx; y = ty; s--; continue; }
+        const step = Math.min(rem, dlen), inv = 1 / dlen;
+        x += ddx * inv * step; y += ddy * inv * step; rem -= step;
+        if (rem < eps) return { x, y };
+        if (dlen - step < eps) { x = tx; y = ty; s--; }
       }
     }
     return { x, y };
@@ -1061,7 +994,6 @@
       const a = tl[0];
       if (tSec + 1e-6 < a.t || tSec - 1e-6 > a.t) return null;
       const dg = a.deadlockGhost === true;
-      if (a.motionForward === false) return { x: a.x, y: a.y, dx: -1, dy: 0, deadlockGhost: dg };
       return { x: a.x, y: a.y, dx: 1, dy: 0, deadlockGhost: dg };
     }
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
@@ -1095,3 +1027,93 @@
       const dx = b.x - a.x, dy = b.y - a.y;
       const l2 = dx * dx + dy * dy;
       if (l2 >= motionChordEps2) return { dx: dx, dy: dy };
+      const prev = lastMotionUnitDirBefore(i);
+      if (prev) return { dx: prev.dx, dy: prev.dy };
+      const next = firstMotionUnitDirFrom(i + 1);
+      if (next) return { dx: next.dx, dy: next.dy };
+      return { dx: 1, dy: 0 };
+    }
+    function frBicyclePose(R, x, y, lenM, bmin, dg) {
+      if (!R || lenM <= 1e-6) return null;
+      const vdx = x - R.x, vdy = y - R.y, vl = Math.hypot(vdx, vdy);
+      if (vl < bmin) return null;
+      return { x, y, dx: vdx / vl, dy: vdy / vl, deadlockGhost: dg };
+    }
+    for (let i = 0; i < tl.length - 1; i++) {
+      let a = tl[i], b = tl[i+1];
+      if (tSec >= a.t && tSec <= b.t) {
+        let useI = i;
+        // At a time-key at the end of [a,b], the first matching segment is the *incoming* leg.
+        // The bicycle (rear on polyline) + that chord can show nose 180° off next-second motion.
+        // Prefer the *outgoing* segment [b, next] (same (x,y) at t=b.t, u=0) so F/R wheels stay
+        // consistent with time-forward motion. Last segment has no outgoing — keep i.
+        if (i + 1 < tl.length - 1) {
+          const a2 = tl[i+1], b2 = tl[i+2];
+          if (a2 && b2 && b2.t > a2.t && Math.abs(tSec - b.t) < 1e-5) {
+            if (Math.abs(b.t - a2.t) < 1e-5) {
+              useI = i + 1;
+              a = a2;
+              b = b2;
+            }
+          }
+        }
+        const span = b.t - a.t || 1;
+        const u = (tSec - a.t) / span;
+        const x = a.x + (b.x - a.x) * u;
+        const y = a.y + (b.y - a.y) * u;
+        const h = headingForInterval(useI);
+        const dg = !!(a.deadlockGhost || b.deadlockGhost);
+        const { lenM } = getSimAircraftWorldDimsM(flight);
+        const wheelBaseM = 0.55 * lenM;
+        const bicycleMin = Math.max(0.15 * motionChordEps, 0.005 * lenM, 0.04);
+        let out = frBicyclePose(
+          walkTimelinePolylineFromPoint(tl, useI, x, y, wheelBaseM, false), x, y, lenM, bicycleMin, dg);
+        if (!out) {
+          out = { x, y, dx: h.dx, dy: h.dy, deadlockGhost: dg };
+        }
+        return out;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * After EOBT, while on apron_link (departure push/taxi) only: if the bicycle nose points with
+   * the ground track step (nose . track &gt; 0), flip dx/dy 180&deg; so the silhouette shows
+   * towed/reverse (retro) like R3, without changing (x,y) or the underlying bicycle trace.
+   * Does not run before EObT, not off apron, not Arr_taxi, and does not change already-retro
+   * pose. Other flights/pathTypes unchanged.
+   */
+  function applyEobtApronDepTaxiPushbackNoseIfNeeded(flight, tSec, pose) {
+    if (!pose || !flight) return pose;
+    const m = flight.timeline_meta;
+    if (!m || typeof m.eobtSec !== 'number' || !isFinite(m.eobtSec)) return pose;
+    if (tSec + 1e-3 < m.eobtSec) return pose;
+    const tl = flight.timeline;
+    if (!tl || !tl.length) return pose;
+    const tKey = Math.round(Number(tSec));
+    const byT = Object.create(null);
+    for (let i = 0; i < tl.length; i++) {
+      const w = tl[i];
+      if (!w) continue;
+      const tt = Math.round(Number(w.t));
+      if (isFinite(tt)) byT[tt] = w;
+    }
+    const cur = byT[tKey];
+    if (!cur || String(cur.pathType || '') !== 'apron_link') return pose;
+    const ph = String(cur.phase || '');
+    if (ph && ph !== 'Dep_taxi') return pose;
+    const prev = byT[tKey - 1];
+    if (!prev) return pose;
+    const ddx = cur.x - prev.x, ddy = cur.y - prev.y;
+    const dlen = Math.hypot(ddx, ddy);
+    if (dlen < 1e-9) return pose;
+    const ux = ddx / dlen, uy = ddy / dlen;
+    const pl = Math.hypot(pose.dx, pose.dy);
+    if (pl < 1e-9) return pose;
+    const px = pose.dx / pl, py = pose.dy / pl;
+    const dotU = px * ux + py * uy;
+    if (dotU <= 0.05) return pose;
+    return { x: pose.x, y: pose.y, dx: -pose.dx, dy: -pose.dy, deadlockGhost: !!pose.deadlockGhost };
+  }
+

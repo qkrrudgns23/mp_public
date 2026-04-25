@@ -1,52 +1,3 @@
-      const prev = lastMotionUnitDirBefore(i);
-      if (prev) return { dx: prev.dx, dy: prev.dy };
-      const next = firstMotionUnitDirFrom(i + 1);
-      if (next) return { dx: next.dx, dy: next.dy };
-      return { dx: 1, dy: 0 };
-    }
-    for (let i = 0; i < tl.length - 1; i++) {
-      const a = tl[i], b = tl[i+1];
-      if (tSec >= a.t && tSec <= b.t) {
-        const span = b.t - a.t || 1;
-        const u = (tSec - a.t) / span;
-        const x = a.x + (b.x - a.x) * u;
-        const y = a.y + (b.y - a.y) * u;
-        const h = headingForInterval(i);
-        const dist2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y);
-        // Stationary / dwell: use start keyframe motion (matches export); do not use end keyframe
-        // (e.g. next sample is pushback with motionForward false — would flip silhouette while parked).
-        const mfB = (dist2 < motionChordEps2) ? (a.motionForward !== false) : (b.motionForward !== false);
-        const dg = !!(a.deadlockGhost || b.deadlockGhost);
-        const { lenM } = getSimAircraftWorldDimsM(flight);
-        // Nose-anchored fractions (sim F = 10% from nose; virtual rear 65% from nose) => wheelbase 0.55*L
-        const wheelBaseM = 0.55 * lenM;
-        const bicycleMin = Math.max(0.02 * lenM, 2 * motionChordEps);
-        const R = mfB !== false
-          ? walkTimelinePolylineBackwardFromPoint(tl, i, x, y, wheelBaseM)
-          : walkTimelinePolylineForwardFromPoint(tl, i, x, y, wheelBaseM);
-        if (R && lenM > 1e-6) {
-          const vdx = x - R.x, vdy = y - R.y;
-          const vl = Math.hypot(vdx, vdy);
-          if (vl >= bicycleMin) {
-            // F−R = main→nose; same for forward (R behind) and pushback (R ahead on path). Do not +π.
-            const brdx = vdx / vl, brdy = vdy / vl;
-            return { x, y, dx: brdx, dy: brdy, deadlockGhost: dg };
-          }
-        }
-        let rdx = h.dx, rdy = h.dy;
-        if (mfB === false) {
-          const lenH = Math.hypot(rdx, rdy) || 1;
-          const ang = Math.atan2(rdy, rdx) + Math.PI;
-          rdx = Math.cos(ang) * lenH;
-          rdy = Math.sin(ang) * lenH;
-        }
-        return { x, y, dx: rdx, dy: rdy, deadlockGhost: dg };
-      }
-    }
-    return null;
-  }
-
-  
   function getFlightPoseAtTimeForDraw(flight, tSec) {
     const tl = flight && flight.timeline;
     if (!tl || !tl.length) return null;
@@ -55,7 +6,7 @@
     const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
     if (t + 1e-9 < t0) return null;
     if (t > t1) t = t1;
-    return getFlightPoseAtTime(flight, t);
+    return applyEobtApronDepTaxiPushbackNoseIfNeeded(flight, t, getFlightPoseAtTime(flight, t));
   }
 
   function isFlightPreTouchdownForDraw(f, tSec) {
@@ -1031,9 +982,6 @@
     if (!skipGanttRefresh && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
   }
   function _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl, scheduleOpts) {
-    // #region agent log
-    if (typeof fetch === 'function') { var _dlen = (dirtySet && (typeof dirtySet.size === 'number')) ? dirtySet.size : -1; fetch('http://127.0.0.1:7450/ingest/7927c173-ed79-45dc-8881-dedfd9142689', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'daed72' }, body: JSON.stringify({ sessionId: 'daed72', runId: 'flight-list', location: 'designer.js:_renderFlightListAfterPathEnsure', message: 'after path ensure', data: { hypothesisId: 'H2', schedFull: !!schedFull, forceResampleRet: !!forceResampleRet, nFl: (flightsSorted && flightsSorted.length) | 0, dirtyN: _dlen }, timestamp: Date.now() }) }).catch(function() {}); }
-    // #endregion
     if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
     let retStatsAll = [];
     if (schedFull) {
@@ -2744,3 +2692,48 @@
             tension: 0.28,
             pointRadius: 3,
             pointHoverRadius: 7,
+            pointBackgroundColor: '#ddd6fe'
+          }]
+        },
+        options: opt
+      });
+    }
+    const elR = document.getElementById('kpiChartRunway');
+    if (elR) {
+      window.__kpiChartRunway = new Chart(elR, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Runway arr (ELDT)',
+              data: arr,
+              backgroundColor: 'rgba(56, 189, 248, 0.72)',
+              order: 3
+            },
+            {
+              type: 'bar',
+              label: 'Runway dep (ETOT)',
+              data: dep,
+              backgroundColor: 'rgba(251, 146, 60, 0.72)',
+              order: 3
+            },
+            {
+              type: 'line',
+              label: 'Total',
+              data: tot,
+              borderColor: '#c4b5fd',
+              backgroundColor: 'transparent',
+              borderWidth: 3,
+              tension: 0.22,
+              pointRadius: 3,
+              pointHoverRadius: 6,
+              order: 1
+            }
+          ]
+        },
+        options: opt
+      });
+    }
+  }

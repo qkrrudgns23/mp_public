@@ -1,31 +1,3 @@
-        delete tw.endBlastPadM;
-      }
-    }
-  }
-
-  function syncSettingsPaneToMode() {
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
-    if (layoutModeTabs) {
-      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
-      });
-    }
-    document.querySelectorAll('.settings-pane').forEach(el => { el.style.display = 'none'; });
-    const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
-    const pane = document.getElementById('settings-' + paneKey);
-    if (pane) pane.style.display = 'block';
-    if (mode === 'marker') {
-      syncMarkerFlightAircraftRowVisibility();
-      syncMarkerIslandWidthRowVisibility();
-      syncMarkerNavaidRowVisibility();
-    }
-    if (isPathLayoutMode(mode)) {
-      const pt = pathTypeFromLayoutMode(mode);
-      syncPathFieldVisibilityForPathType(pt);
-      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
-        const nameInput = document.getElementById('taxiwayName');
-        if (nameInput) nameInput.value = '';
-        const widthInput = document.getElementById('taxiwayWidth');
         if (widthInput) {
           widthInput.value = pt === 'runway'
             ? RUNWAY_PATH_DEFAULT_WIDTH
@@ -383,3 +355,31 @@
         renderObjectList();
         draw();
         update3DSceneWhenVisible();
+      }
+    });
+  }
+  const pbbBridgeCountInputEl = document.getElementById('pbbBridgeCount');
+  if (pbbBridgeCountInputEl) {
+    pbbBridgeCountInputEl.addEventListener('change', function() {
+      const nextCount = Math.max(1, Math.min(8, parseInt(this.value, 10) || 1));
+      this.value = String(nextCount);
+      if (state.selectedObject && state.selectedObject.type === 'pbb') {
+        const pbb = state.selectedObject.obj;
+        pbb.pbbCount = nextCount;
+        delete pbb.pbbBridges;
+        rebuildPbbBridgeGeometry(pbb);
+        updateObjectInfo();
+        renderObjectList();
+        draw();
+        update3DSceneWhenVisible();
+      }
+    });
+  }
+  function applyPbbBoardingAreaDimsFromInputs(pbb) {
+    const wEl = document.getElementById('pbbBoardingWidth');
+    const hEl = document.getElementById('pbbBoardingHeight');
+    const nw = Math.max(0.5, Number(wEl && wEl.value) || 5);
+    const nh = Math.max(0.5, Number(hEl && hEl.value) || 15);
+    pbb.boardingWidthM = nw;
+    pbb.boardingHeightM = nh;
+    if (wEl) wEl.value = String(nw);

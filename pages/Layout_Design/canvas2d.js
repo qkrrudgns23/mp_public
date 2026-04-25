@@ -1,48 +1,3 @@
-  }
-  function polylineTimelineConstantAccelFromRest(pts, tStart, tEnd, accelMs2) {
-    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
-      const p = pts && pts.length ? polylinePointAtDistance(pts, 0) : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }, { t: tEnd, x: p[0], y: p[1] }];
-    }
-    const L = polylineTotalLength(pts);
-    const a = Math.max(0.1, accelMs2);
-    const tPhys = L < 1e-9 ? 0 : Math.sqrt(2 * L / a);
-    const win = tEnd - tStart;
-    const n = Math.max(8, Math.min(48, Math.ceil(Math.max(L, 1) / 25)));
-    const tl = [];
-    for (let i = 0; i <= n; i++) {
-      const u = i / n;
-      const tt = tStart + u * win;
-      const tau = u * tPhys;
-      const s = Math.min(L, 0.5 * a * tau * tau);
-      const pt = polylinePointAtDistance(pts, s);
-      tl.push({ t: tt, x: pt[0], y: pt[1] });
-    }
-    tl[0].t = tStart;
-    tl[tl.length - 1].t = tEnd;
-    return tl;
-  }
-  function polylineTimelineLinearRetSpeed(pts, tStart, tEnd, vIn, vOut) {
-    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
-      const p = pts && pts.length ? pts[0] : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }];
-    }
-    const lengths = [];
-    let totalLen = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const len = pathDist(pts[i], pts[i + 1]);
-      lengths.push(len);
-      totalLen += len;
-    }
-    const rawDts = [];
-    let accLen = 0;
-    for (let i = 0; i < lengths.length; i++) {
-      const midLen = accLen + lengths[i] * 0.5;
-      const u = totalLen > 1e-9 ? midLen / totalLen : 0;
-      const v = Math.max(1, vIn + (vOut - vIn) * u);
-      rawDts.push(lengths[i] < 1e-9 ? 0 : lengths[i] / v);
-      accLen += lengths[i];
-    }
     const rawTotal = rawDts.reduce(function(s, x) { return s + x; }, 0);
     const window = tEnd - tStart;
     if (rawTotal < 1e-9) {
@@ -381,6 +336,7 @@
         timeline: tl,
         meta: {
           eobtSec: t0, etotSec: t3,
+          depNoseExitsApronSec: t0, depApronExitCumulativeM: 0,
           depTaxiLineupSec: 0, depTaxiDelaySec: 0, depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
           lineupArrivalSec: t0, depRollStartSec: t0, depRotSec: depRotFull, depLineupHoldSec: 0, depTaxiDelayAtHolding: false,
           lineupBackM: backClamped,
@@ -395,6 +351,14 @@
     let tAfterDelay = tAfterTaxi + delaySecUsed;
     let afterDelay = Math.max(0, t3 - tAfterDelay - eps);
     let lineupHoldSec = Math.min(DEP_LINEUP_HOLD_SEC, afterDelay);
+    const sExitApron = (typeof depNoseExitsApronCumulativeM === 'function') ? depNoseExitsApronCumulativeM(f, toLineupOrig) : 0;
+    let depNoseExitsApronSec = t0;
+    if (taxiSecUsed > eps && sExitApron > 1e-3) {
+      depNoseExitsApronSec = (typeof taxiTimeAtCumulativeDistanceM === 'function')
+        ? taxiTimeAtCumulativeDistanceM(toLineupOrig, t0, t0 + taxiSecUsed, sExitApron, makeVelTaxi)
+        : t0;
+    }
+    depNoseExitsApronSec = Math.min(t0 + taxiSecUsed, Math.max(t0, depNoseExitsApronSec));
     let merged;
     let t_cur = t0;
     if (validHold) {
@@ -439,6 +403,7 @@
       timeline: merged,
       meta: {
         eobtSec: t0, etotSec: t3,
+        depNoseExitsApronSec: depNoseExitsApronSec, depApronExitCumulativeM: sExitApron,
         depTaxiLineupSec: taxiSecUsed, depTaxiDelaySec: delaySecUsed,
         depTaxiLineupSecReq: depTaxiLineupSecReq, depTaxiDelaySecReq: depTaxiDelaySecReq,
         lineupArrivalSec: tAfterTaxi, depRollStartSec: tRollStart,
@@ -1258,6 +1223,48 @@
     }
     return best;
   }
+  function taxiTimeAtCumulativeDistanceM(pts, tStart, tEnd, sTarget, velForSeg) {
+    if (!pts || pts.length < 2 || !(sTarget > 1e-6) || tEnd <= tStart + 1e-9) return tStart;
+    const lengths = [];
+    for (let i = 0; i < pts.length - 1; i++) lengths.push(pathDist(pts[i], pts[i + 1]));
+    const rawDts = [];
+    for (let i = 0; i < lengths.length; i++) {
+      const v = Math.max(1, velForSeg(i, pts[i], pts[i + 1]));
+      rawDts.push(lengths[i] < 1e-9 ? 0 : lengths[i] / v);
+    }
+    const rawTotal = rawDts.reduce(function(s, x) { return s + x; }, 0);
+    if (rawTotal < 1e-9) return tStart;
+    const totalLen = lengths.reduce(function(s, l) { return s + l; }, 0);
+    const sClamped = Math.min(sTarget, totalLen);
+    if (sClamped >= totalLen - 1e-6) return tEnd;
+    const scale = (tEnd - tStart) / rawTotal;
+    let distAcc = 0;
+    let rawAcc = 0;
+    for (let i = 0; i < lengths.length; i++) {
+      if (distAcc + lengths[i] >= sClamped) {
+        const u = (sClamped - distAcc) / (lengths[i] || 1);
+        return tStart + (rawAcc + u * rawDts[i]) * scale;
+      }
+      distAcc += lengths[i];
+      rawAcc += rawDts[i];
+    }
+    return tEnd;
+  }
+  function depNoseExitsApronCumulativeM(f, pathPts) {
+    if (!pathPts || pathPts.length < 2) return 0;
+    const standId = f && (f.standId != null && f.standId !== '' ? f.standId : (f.token && f.token.apronId));
+    if (standId == null || standId === '') return 0;
+    const links = state.apronLinks || [];
+    const lk = links.find(function(l) { return l && String(l.pbbId) === String(standId); });
+    if (!lk || lk.tx == null || lk.ty == null) return 0;
+    const jx = Number(lk.tx), jy = Number(lk.ty);
+    if (!isFinite(jx) || !isFinite(jy)) return 0;
+    const cum = cumulativeDistAlongPolylineToPoint(pathPts, [jx, jy]);
+    if (!cum) return 0;
+    if (cum.d2 > 35 * 35) return 0;
+    const L = polylineTotalLength(pathPts);
+    return Math.min(cum.distAlong, Math.max(0, L - 1e-3));
+  }
   function findLastRunwayHoldingOnDeparturePath(toLineup, candIds) {
     if (!toLineup || toLineup.length < 2) return null;
     const hps = state.holdingPoints || [];
@@ -1660,10 +1667,3 @@
   function layoutWorldViewportAabbWorldM() {
     if (!layoutDrawCanvas) return { minWx: -Infinity, maxWx: Infinity, minWy: -Infinity, maxWy: Infinity, marginWorld: 0 };
     const w = layoutDrawCanvas.width / dpr;
-    const h = layoutDrawCanvas.height / dpr;
-    const s = state.scale || 1;
-    const marginWorld = CELL_SIZE * Math.max(6, 96 / Math.max(s, 0.06));
-    return {
-      minWx: (0 - state.panX) / s - marginWorld,
-      maxWx: (w - state.panX) / s + marginWorld,
-      minWy: (0 - state.panY) / s - marginWorld,

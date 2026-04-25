@@ -1,3 +1,4 @@
+    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof resizeCanvas === 'function') resizeCanvas();
     if (typeof reset2DView === 'function') reset2DView();
@@ -672,4 +673,3 @@
     }
     ctx.lineTo(xStop + shiftX, -noseHalf);
     ctx.closePath();
-    return true;

@@ -90,6 +90,8 @@ STOT_POST_BUFFER_SEC = 3_600.0
 _LOG = logging.getLogger(__name__)
 
 TAXI_SPEED_MPS = 15.0
+# Apron link edges (PBB/terminal ↔ taxiway) default taxi speed; optional per-link ``avgMoveVelocity`` overrides.
+APRON_LINK_SPEED_MPS = 1.5
 MIN_LANDING_VELOCITY_MS = 15.0
 MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS = 15.0
 ARR_RET_DECEL_MS2 = 0.5
@@ -628,8 +630,6 @@ class Flight:
     current_edge_id: Optional[str] = None
     next_edge_id: Optional[str] = None
     heading_rad: Optional[float] = None
-    # True = nose along segment p0→p1; False = reverse (e.g. tow on apron_link).
-    motion_is_forward: bool = True
     segment_graph_uv: List[Tuple[int, int]] = field(default_factory=list)
     completed_directed_hops: List[Tuple[str, int, int, str]] = field(default_factory=list)
     control_halt: bool = False
@@ -1867,15 +1867,10 @@ def _avg_move_velocity_ms_for_link(layout: Dict[str, Any], link_id: str, flight_
     for al in layout.get("apronLinks") or []:
         if not isinstance(al, dict) or str(al.get("id", "")).strip() != lid:
             continue
-        tw = al.get("taxiwayId")
-        if tw is not None and str(tw).strip() != "":
-            from_tw = _avg_move_velocity_ms_for_taxiway_id(layout, str(tw).strip(), flight_id)
-            if from_tw is not None:
-                return from_tw
         v = _safe_float(al.get("avgMoveVelocity"), float("nan"))
         if math.isfinite(v) and v > 0:
             return float(v)
-        return float(TAXI_SPEED_MPS)
+        return float(APRON_LINK_SPEED_MPS)
     raise ValueError(
         f"link_id={lid!r} not found in layout taxiways/runwayTaxiways/runwayPaths/apronLinks "
         f"(flight_id={flight_id!r})"
@@ -2763,15 +2758,6 @@ def move_agent(
             agent.velocity_ms = max(
                 agent.velocity_ms, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS
             )
-    if agent.edge_phases and agent.segment_path_types and agent.edge_ids:
-        _ptm = str(agent.segment_path_types[0] or "")
-        _phm = str(agent.edge_phases[0])
-        if _ptm == "apron_link" and _phm == PHASE_DEP_TAXI:
-            agent.motion_is_forward = False
-        elif _ptm == "apron_link" and _phm in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
-            agent.motion_is_forward = True
-        elif _ptm != "apron_link":
-            agent.motion_is_forward = True
 
 
 def _sim_time_step_sec(information: Dict[str, Any], dt: float) -> float:
@@ -4991,14 +4977,7 @@ def refresh_agent_edge_fsm(agents: Iterable[Flight]) -> None:
             ag.next_edge_id = str(ag.edge_ids[1]) if len(ag.edge_ids) > 1 else None
             if ag.segment_endpoints:
                 p0, p1 = ag.segment_endpoints[0]
-                h = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
-                if (
-                    not ag.motion_is_forward
-                    and ag.segment_path_types
-                    and str(ag.segment_path_types[0] or "") == "apron_link"
-                ):
-                    h += math.pi
-                ag.heading_rad = h
+                ag.heading_rad = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
             ag.fsm_state = str(ag.edge_phases[0]) if ag.edge_phases else "TAXI"
         else:
             ag.current_edge_id = None
@@ -7276,13 +7255,6 @@ def run_simulation(
             _arr_rid = str(arr_rwy_o).strip() if arr_rwy_o else ""
             dep_rwy_o = fobj.get("depRunwayId") or token_o.get("depRunwayId")
             _dep_rid = str(dep_rwy_o).strip() if dep_rwy_o else ""
-            _mf0 = True
-            if path_rem and eph:
-                if (
-                    str(path_rem[0] or "") == "apron_link"
-                    and str(eph[0]) == PHASE_DEP_TAXI
-                ):
-                    _mf0 = False
             ag_new = Flight(
                 id=fid,
                 edge_ids=list(eids),
@@ -7304,7 +7276,6 @@ def run_simulation(
                 segment_path_types=path_rem,
                 segment_graph_uv=list(_guv_rem),
                 completed_directed_hops=list(_cdh),
-                motion_is_forward=_mf0,
                 dep_taxi_start_sim_time=None,
                 dep_taxi_start_abs_sec=None,
                 arr_runway_id=_arr_rid if _arr_rid else None,
@@ -7567,7 +7538,7 @@ def run_simulation(
                     ag.col,
                     ag.row,
                     ag.velocity_ms,
-                    bool(ag.motion_is_forward),
+                    True,
                     bool(_gh),
                     _dst_snap,
                     (_st_dbg.clearance if _st_dbg is not None else None),
@@ -7703,14 +7674,12 @@ def run_simulation(
             t, c, r, v = float(row[0]), float(row[1]), float(row[2]), float(row[3])
             if _pc is not None and t > float(_pc) + 1e-9:
                 continue
-            _mf = bool(row[4]) if len(row) > 4 else True
             _dghost = bool(row[5]) if len(row) > 5 else False
             _pos: Dict[str, Any] = {
                 "t": int(round(t)),
                 "x": round(c, 3),
                 "y": round(r, 3),
                 "v": round(v, 3),
-                "motionForward": _mf,
                 "deadlockGhost": _dghost,
             }
             _dsnap = row[6] if len(row) > 6 else None

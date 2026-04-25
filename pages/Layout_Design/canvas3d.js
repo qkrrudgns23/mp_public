@@ -1,3 +1,10 @@
+    const h = layoutDrawCanvas.height / dpr;
+    const s = state.scale || 1;
+    const marginWorld = CELL_SIZE * Math.max(6, 96 / Math.max(s, 0.06));
+    return {
+      minWx: (0 - state.panX) / s - marginWorld,
+      maxWx: (w - state.panX) / s + marginWorld,
+      minWy: (0 - state.panY) / s - marginWorld,
       maxWy: (h - state.panY) / s + marginWorld,
       marginWorld: marginWorld
     };

@@ -683,9 +683,11 @@
             const tl = pts.map(function(p) {
               const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
               const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-              const mf = p.motionForward !== false && p.motion_forward !== false;
               const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
-              return { t: Number(p.t), x: x, y: y, motionForward: mf, deadlockGhost: dg };
+              const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
+              if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
+              if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+              return o;
             }).filter(function(k) {
               return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
             }).sort(function(a, b) { return a.t - b.t; });
@@ -701,13 +703,24 @@
         const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
         const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
         const etotS = srec.ETOT != null ? Number(srec.ETOT) : NaN;
-        f.timeline_meta = {
-          playbackSource: 'des_result',
-          eldtSec: isFinite(eldtS) ? eldtS : undefined,
-          eibtSec: isFinite(eibtS) ? eibtS : undefined,
-          eobtSec: isFinite(eobtS) ? eobtS : undefined,
-          etotSec: isFinite(etotS) ? etotS : undefined,
-        };
+        const prevMeta = f.timeline_meta || {};
+        const builtDep = (typeof buildDepartureSurfaceTimelineSegments === 'function' && f.arrDep === 'Dep'
+          && isFinite(eobtS) && isFinite(etotS))
+          ? buildDepartureSurfaceTimelineSegments(f, eobtS, etotS)
+          : null;
+        const builtDepMeta = (builtDep && builtDep.meta) ? builtDep.meta : null;
+        f.timeline_meta = Object.assign(
+          {},
+          prevMeta,
+          builtDepMeta || {},
+          {
+            playbackSource: 'des_result',
+            eldtSec: isFinite(eldtS) ? eldtS : undefined,
+            eibtSec: isFinite(eibtS) ? eibtS : undefined,
+            eobtSec: isFinite(eobtS) ? eobtS : undefined,
+            etotSec: isFinite(etotS) ? etotS : undefined,
+          }
+        );
       } else {
         delete f.timeline_meta;
       }
@@ -717,4 +730,3 @@
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
     } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();

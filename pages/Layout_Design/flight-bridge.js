@@ -1,3 +1,4 @@
+    return true;
   }
   /** Stand-local +X = tail/apron-open, −X = nose/terminal-ward. Red dashed: stop bar (nose_clear), pushback (pushback), lateral gap bounds (wingspan ± vs stand width). Clipped to safety footprint when nose geometry applies. */
   function drawStandApronMarkingsInLocalAxes(ctx, depM, widM, category) {
@@ -447,4 +448,3 @@
   }
   function pbbStandOverlapsTerminal(pbb) {
     const corners = getPBBStandCorners(pbb);
-    for (let t = 0; t < state.terminals.length; t++) {

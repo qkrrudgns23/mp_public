@@ -1,31 +1,3 @@
-    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
-    function localToWorld(pt) {
-      return {
-        x: pose.x + pt[0] * cs - pt[1] * sn,
-        y: pose.y + pt[0] * sn + pt[1] * cs,
-      };
-    }
-    return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
-  }
-  function ensureMarkerFlightBlazerState(m) {
-    if (!m || m.kind !== 'flight') return;
-    if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
-    if (typeof m.headingReversed !== 'boolean') m.headingReversed = false;
-    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) < 0) m.blazerColor = MARKER_BLAZER_COLOR_OPTIONS[0];
-    if (!Array.isArray(m.blazerLeftTrail)) m.blazerLeftTrail = [];
-    if (!Array.isArray(m.blazerRightTrail)) m.blazerRightTrail = [];
-  }
-  function appendMarkerFlightBlazerTrail(m) {
-    if (!m || m.kind !== 'flight') return;
-    ensureMarkerFlightBlazerState(m);
-    if (!m.blazerEnabled) return;
-    const tips = getMarkerFlightWingtipWorldPoints(m);
-    if (!tips || !tips.left || !tips.right) return;
-    const minStep = Math.max(0.25, CELL_SIZE * 0.03);
-    const minStep2 = minStep * minStep;
-    function append(trail, pt) {
-      const last = trail.length ? trail[trail.length - 1] : null;
-      if (!last || dist2([last.x, last.y], [pt.x, pt.y]) >= minStep2) trail.push({ x: pt.x, y: pt.y });
       if (trail.length > 4000) trail.splice(0, trail.length - 4000);
     }
     append(m.blazerLeftTrail, tips.left);
@@ -858,3 +830,31 @@
     const cells = [];
     if (previewPx.length > 2) {
       const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
+      for (let k = 0; k < densePx.length; k++) {
+        const snap = worldPointToPixel(densePx[k][0], densePx[k][1], snapToGrid);
+        const c = { x: snap[0], y: snap[1] };
+        if (cells.length && cells[cells.length - 1].x === c.x && cells[cells.length - 1].y === c.y) continue;
+        if (c.x === prev.x && c.y === prev.y) continue;
+        cells.push(c);
+      }
+      while (cells.length && cells[cells.length - 1].x === next.x && cells[cells.length - 1].y === next.y) cells.pop();
+    }
+    if (!cells.length) {
+      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
+      const snap = worldPointToPixel(M[0], M[1], snapToGrid);
+      cells.push({ x: snap[0], y: snap[1] });
+    }
+    const newArr = verts.slice();
+    newArr.splice(vertexIndex, 1, ...cells);
+    mk.points = newArr;
+    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
+    state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: midSel };
+  }
+  function pathArcCommitFromPreview(tw, vertexIndex, previewPx, snapToGrid) {
+    if (!tw || tw.pathType === 'runway') return;
+    if (!previewPx || previewPx.length < 2) return;
+    const verts = tw.vertices;
+    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return;
+    const prev = verts[vertexIndex - 1], next = verts[vertexIndex + 1];
+    const Apx = cellToPixel(prev.col, prev.row);
+    const Bpx = cellToPixel(next.col, next.row);
