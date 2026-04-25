@@ -8052,6 +8052,100 @@
     return timeline;
   }
 
+  /**
+   * Walk along the timeline polyline from (fx, fy) toward earlier vertices by distM.
+   * Forward move on path: rear lies "behind" F along traveled polyline. Extrapolates before tl[0] if needed.
+   */
+  function walkTimelinePolylineBackwardFromPoint(tl, segIndex, fx, fy, distM) {
+    const eps = 1e-6;
+    if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
+      return null;
+    }
+    if (segIndex < 0 || segIndex > tl.length - 2) return null;
+    let rem = distM;
+    let x = fx, y = fy;
+    let s = segIndex;
+    while (rem > eps) {
+      if (s < 0) {
+        if (tl.length < 2) return { x, y };
+        const p0 = tl[0], p1 = tl[1];
+        let bx = p0.x - p1.x, by = p0.y - p1.y;
+        const bl = Math.hypot(bx, by);
+        if (bl < eps) return { x, y };
+        const inv = 1 / bl;
+        return { x: x + bx * inv * rem, y: y + by * inv * rem };
+      }
+      const tx = tl[s].x, ty = tl[s].y;
+      const ddx = tx - x, ddy = ty - y;
+      const dlen = Math.hypot(ddx, ddy);
+      if (dlen < eps) {
+        x = tx;
+        y = ty;
+        s--;
+        continue;
+      }
+      const step = Math.min(rem, dlen);
+      const inv = 1 / dlen;
+      x += ddx * inv * step;
+      y += ddy * inv * step;
+      rem -= step;
+      if (rem < eps) return { x, y };
+      if (dlen - step < eps) {
+        x = tx;
+        y = ty;
+        s--;
+      }
+    }
+    return { x, y };
+  }
+
+  /**
+   * Walk toward later keyframes (same direction as increasing time along the polyline). Pushback: rear
+   * lies "ahead" of the nose (F) on the path, so R is this walk from F. Extrapolates past tl[last] if needed.
+   */
+  function walkTimelinePolylineForwardFromPoint(tl, segIndex, fx, fy, distM) {
+    const eps = 1e-6;
+    if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
+      return null;
+    }
+    if (segIndex < 0 || segIndex > tl.length - 2) return null;
+    let rem = distM;
+    let x = fx, y = fy;
+    let s = segIndex;
+    while (rem > eps) {
+      if (s > tl.length - 2) {
+        if (tl.length < 2) return { x, y };
+        const pEnd = tl[tl.length - 1], pPrev = tl[tl.length - 2];
+        let bx = pEnd.x - pPrev.x, by = pEnd.y - pPrev.y;
+        const bl = Math.hypot(bx, by);
+        if (bl < eps) return { x, y };
+        const inv = 1 / bl;
+        return { x: x + bx * inv * rem, y: y + by * inv * rem };
+      }
+      const tx = tl[s + 1].x, ty = tl[s + 1].y;
+      const ddx = tx - x, ddy = ty - y;
+      const dlen = Math.hypot(ddx, ddy);
+      if (dlen < eps) {
+        x = tx;
+        y = ty;
+        s++;
+        continue;
+      }
+      const step = Math.min(rem, dlen);
+      const inv = 1 / dlen;
+      x += ddx * inv * step;
+      y += ddy * inv * step;
+      rem -= step;
+      if (rem < eps) return { x, y };
+      if (dlen - step < eps) {
+        x = tx;
+        y = ty;
+        s++;
+      }
+    }
+    return { x, y };
+  }
+
   function getFlightPositionAtTime(flight, tSec) {
     const tl = flight.timeline;
     if (!tl || !tl.length) return null;
@@ -8129,14 +8223,30 @@
         // Stationary / dwell: use start keyframe motion (matches export); do not use end keyframe
         // (e.g. next sample is pushback with motionForward false — would flip silhouette while parked).
         const mfB = (dist2 < motionChordEps2) ? (a.motionForward !== false) : (b.motionForward !== false);
+        const dg = !!(a.deadlockGhost || b.deadlockGhost);
+        const { lenM } = getSimAircraftWorldDimsM(flight);
+        // Nose-anchored fractions (sim F = 10% from nose; virtual rear 65% from nose) => wheelbase 0.55*L
+        const wheelBaseM = 0.55 * lenM;
+        const bicycleMin = Math.max(0.02 * lenM, 2 * motionChordEps);
+        const R = mfB !== false
+          ? walkTimelinePolylineBackwardFromPoint(tl, i, x, y, wheelBaseM)
+          : walkTimelinePolylineForwardFromPoint(tl, i, x, y, wheelBaseM);
+        if (R && lenM > 1e-6) {
+          const vdx = x - R.x, vdy = y - R.y;
+          const vl = Math.hypot(vdx, vdy);
+          if (vl >= bicycleMin) {
+            // F−R = main→nose; same for forward (R behind) and pushback (R ahead on path). Do not +π.
+            const brdx = vdx / vl, brdy = vdy / vl;
+            return { x, y, dx: brdx, dy: brdy, deadlockGhost: dg };
+          }
+        }
         let rdx = h.dx, rdy = h.dy;
         if (mfB === false) {
-          const len = Math.hypot(rdx, rdy) || 1;
+          const lenH = Math.hypot(rdx, rdy) || 1;
           const ang = Math.atan2(rdy, rdx) + Math.PI;
-          rdx = Math.cos(ang) * len;
-          rdy = Math.sin(ang) * len;
+          rdx = Math.cos(ang) * lenH;
+          rdy = Math.sin(ang) * lenH;
         }
-        const dg = !!(a.deadlockGhost || b.deadlockGhost);
         return { x, y, dx: rdx, dy: rdy, deadlockGhost: dg };
       }
     }
@@ -15636,6 +15746,10 @@
         scaleY = wingM / wingNorm;
         sizeRef = 0.5 * Math.hypot(lenM, wingM);
       }
+      // Pose (x,y) = front wheel (10% from nose on fuselage). Silhouette origin (0,0) is not the nose: offset draw so 10% point lands on (x,y).
+      const pFwX = nX * scaleX - 0.1 * lenM;
+      const drawX = x - nx * pFwX;
+      const drawY = y - ny * pFwX;
       const outW = Number(_ac2d.outlineWidth);
       const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
       const outlineColor = _ac2d.outlineColor || '';
@@ -15694,7 +15808,7 @@
         ctx.restore();
       }
       ctx.save();
-      ctx.translate(x, y);
+      ctx.translate(drawX, drawY);
       const ang = Math.atan2(ny, nx);
       ctx.rotate(ang);
       ctx.fillStyle = glyphFillCss;

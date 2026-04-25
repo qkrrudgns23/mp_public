@@ -942,6 +942,100 @@
     return timeline;
   }
 
+  /**
+   * Walk along the timeline polyline from (fx, fy) toward earlier vertices by distM.
+   * Forward move on path: rear lies "behind" F along traveled polyline. Extrapolates before tl[0] if needed.
+   */
+  function walkTimelinePolylineBackwardFromPoint(tl, segIndex, fx, fy, distM) {
+    const eps = 1e-6;
+    if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
+      return null;
+    }
+    if (segIndex < 0 || segIndex > tl.length - 2) return null;
+    let rem = distM;
+    let x = fx, y = fy;
+    let s = segIndex;
+    while (rem > eps) {
+      if (s < 0) {
+        if (tl.length < 2) return { x, y };
+        const p0 = tl[0], p1 = tl[1];
+        let bx = p0.x - p1.x, by = p0.y - p1.y;
+        const bl = Math.hypot(bx, by);
+        if (bl < eps) return { x, y };
+        const inv = 1 / bl;
+        return { x: x + bx * inv * rem, y: y + by * inv * rem };
+      }
+      const tx = tl[s].x, ty = tl[s].y;
+      const ddx = tx - x, ddy = ty - y;
+      const dlen = Math.hypot(ddx, ddy);
+      if (dlen < eps) {
+        x = tx;
+        y = ty;
+        s--;
+        continue;
+      }
+      const step = Math.min(rem, dlen);
+      const inv = 1 / dlen;
+      x += ddx * inv * step;
+      y += ddy * inv * step;
+      rem -= step;
+      if (rem < eps) return { x, y };
+      if (dlen - step < eps) {
+        x = tx;
+        y = ty;
+        s--;
+      }
+    }
+    return { x, y };
+  }
+
+  /**
+   * Walk toward later keyframes (same direction as increasing time along the polyline). Pushback: rear
+   * lies "ahead" of the nose (F) on the path, so R is this walk from F. Extrapolates past tl[last] if needed.
+   */
+  function walkTimelinePolylineForwardFromPoint(tl, segIndex, fx, fy, distM) {
+    const eps = 1e-6;
+    if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
+      return null;
+    }
+    if (segIndex < 0 || segIndex > tl.length - 2) return null;
+    let rem = distM;
+    let x = fx, y = fy;
+    let s = segIndex;
+    while (rem > eps) {
+      if (s > tl.length - 2) {
+        if (tl.length < 2) return { x, y };
+        const pEnd = tl[tl.length - 1], pPrev = tl[tl.length - 2];
+        let bx = pEnd.x - pPrev.x, by = pEnd.y - pPrev.y;
+        const bl = Math.hypot(bx, by);
+        if (bl < eps) return { x, y };
+        const inv = 1 / bl;
+        return { x: x + bx * inv * rem, y: y + by * inv * rem };
+      }
+      const tx = tl[s + 1].x, ty = tl[s + 1].y;
+      const ddx = tx - x, ddy = ty - y;
+      const dlen = Math.hypot(ddx, ddy);
+      if (dlen < eps) {
+        x = tx;
+        y = ty;
+        s++;
+        continue;
+      }
+      const step = Math.min(rem, dlen);
+      const inv = 1 / dlen;
+      x += ddx * inv * step;
+      y += ddy * inv * step;
+      rem -= step;
+      if (rem < eps) return { x, y };
+      if (dlen - step < eps) {
+        x = tx;
+        y = ty;
+        s++;
+      }
+    }
+    return { x, y };
+  }
+
   function getFlightPositionAtTime(flight, tSec) {
     const tl = flight.timeline;
     if (!tl || !tl.length) return null;
@@ -1001,97 +1095,3 @@
       const dx = b.x - a.x, dy = b.y - a.y;
       const l2 = dx * dx + dy * dy;
       if (l2 >= motionChordEps2) return { dx: dx, dy: dy };
-      const prev = lastMotionUnitDirBefore(i);
-      if (prev) return { dx: prev.dx, dy: prev.dy };
-      const next = firstMotionUnitDirFrom(i + 1);
-      if (next) return { dx: next.dx, dy: next.dy };
-      return { dx: 1, dy: 0 };
-    }
-    for (let i = 0; i < tl.length - 1; i++) {
-      const a = tl[i], b = tl[i+1];
-      if (tSec >= a.t && tSec <= b.t) {
-        const span = b.t - a.t || 1;
-        const u = (tSec - a.t) / span;
-        const x = a.x + (b.x - a.x) * u;
-        const y = a.y + (b.y - a.y) * u;
-        const h = headingForInterval(i);
-        const dist2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y);
-        // Stationary / dwell: use start keyframe motion (matches export); do not use end keyframe
-        // (e.g. next sample is pushback with motionForward false — would flip silhouette while parked).
-        const mfB = (dist2 < motionChordEps2) ? (a.motionForward !== false) : (b.motionForward !== false);
-        let rdx = h.dx, rdy = h.dy;
-        if (mfB === false) {
-          const len = Math.hypot(rdx, rdy) || 1;
-          const ang = Math.atan2(rdy, rdx) + Math.PI;
-          rdx = Math.cos(ang) * len;
-          rdy = Math.sin(ang) * len;
-        }
-        const dg = !!(a.deadlockGhost || b.deadlockGhost);
-        return { x, y, dx: rdx, dy: rdy, deadlockGhost: dg };
-      }
-    }
-    return null;
-  }
-
-  
-  function getFlightPoseAtTimeForDraw(flight, tSec) {
-    const tl = flight && flight.timeline;
-    if (!tl || !tl.length) return null;
-    let t = Number(tSec);
-    if (!isFinite(t)) return null;
-    const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
-    if (t + 1e-9 < t0) return null;
-    if (t > t1) t = t1;
-    return getFlightPoseAtTime(flight, t);
-  }
-
-  function isFlightPreTouchdownForDraw(f, tSec) {
-    if (!PRE_TOUCHDOWN_HALO_ENABLED) return false;
-    if (!f || f.arrDep === 'Dep') return false;
-    const m = f.timeline_meta;
-    if (!m || typeof m.eldtSec !== 'number' || !isFinite(m.eldtSec)) return false;
-    const t = Number(tSec);
-    if (!isFinite(t)) return false;
-    return t < m.eldtSec - 1e-3;
-  }
-
-  function isFlightAirsideCycleCompleteAtSimTime(f, tSec) {
-    const m = f && f.timeline_meta;
-    const t = Number(tSec);
-    if (!isFinite(t) || !m || m.error) return false;
-    if (typeof m.etotSec !== 'number' || !isFinite(m.etotSec)) return false;
-    return t >= m.etotSec - 1e-3;
-  }
-
-  
-  function isFlightTimelineStationaryAtSimTime(f, tSec) {
-    const tl = f && f.timeline;
-    if (!tl || tl.length < 2) return false;
-    const t = Number(tSec);
-    if (!isFinite(t)) return false;
-    const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
-    if (t < t0 - 1e-9 || t > t1 + 1e-9) return false;
-    const stillEps = 0.08;
-    for (let i = 0; i < tl.length - 1; i++) {
-      const a = tl[i], b = tl[i + 1];
-      if (!(t + 1e-9 >= a.t && t - 1e-9 <= b.t)) continue;
-      const dt = b.t - a.t;
-      if (dt < 1e-9) continue;
-      const dist = Math.hypot(b.x - a.x, b.y - a.y);
-      if (dist < stillEps) return true;
-    }
-    return false;
-  }
-
-  function isFlightTrailHiddenAtSimTime(f, tSec) {
-    if (isFlightAirsideCycleCompleteAtSimTime(f, tSec)) return true;
-    if (isFlightTimelineStationaryAtSimTime(f, tSec)) return true;
-    return false;
-  }
-
-  function getFlightTrailPolylineBackward(f, tEnd, maxDistM) {
-    const tl = f && f.timeline;
-    if (!tl || tl.length < 2 || !(maxDistM > 0)) return [];
-    const tMin = tl[0].t, tMax = tl[tl.length - 1].t;
-    let t = Math.min(Math.max(tEnd, tMin), tMax);
-    let seg = 0;

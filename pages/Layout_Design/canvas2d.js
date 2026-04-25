@@ -1,3 +1,113 @@
+  }
+  function polylineTimelineConstantAccelFromRest(pts, tStart, tEnd, accelMs2) {
+    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
+      const p = pts && pts.length ? polylinePointAtDistance(pts, 0) : [0, 0];
+      return [{ t: tStart, x: p[0], y: p[1] }, { t: tEnd, x: p[0], y: p[1] }];
+    }
+    const L = polylineTotalLength(pts);
+    const a = Math.max(0.1, accelMs2);
+    const tPhys = L < 1e-9 ? 0 : Math.sqrt(2 * L / a);
+    const win = tEnd - tStart;
+    const n = Math.max(8, Math.min(48, Math.ceil(Math.max(L, 1) / 25)));
+    const tl = [];
+    for (let i = 0; i <= n; i++) {
+      const u = i / n;
+      const tt = tStart + u * win;
+      const tau = u * tPhys;
+      const s = Math.min(L, 0.5 * a * tau * tau);
+      const pt = polylinePointAtDistance(pts, s);
+      tl.push({ t: tt, x: pt[0], y: pt[1] });
+    }
+    tl[0].t = tStart;
+    tl[tl.length - 1].t = tEnd;
+    return tl;
+  }
+  function polylineTimelineLinearRetSpeed(pts, tStart, tEnd, vIn, vOut) {
+    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
+      const p = pts && pts.length ? pts[0] : [0, 0];
+      return [{ t: tStart, x: p[0], y: p[1] }];
+    }
+    const lengths = [];
+    let totalLen = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const len = pathDist(pts[i], pts[i + 1]);
+      lengths.push(len);
+      totalLen += len;
+    }
+    const rawDts = [];
+    let accLen = 0;
+    for (let i = 0; i < lengths.length; i++) {
+      const midLen = accLen + lengths[i] * 0.5;
+      const u = totalLen > 1e-9 ? midLen / totalLen : 0;
+      const v = Math.max(1, vIn + (vOut - vIn) * u);
+      rawDts.push(lengths[i] < 1e-9 ? 0 : lengths[i] / v);
+      accLen += lengths[i];
+    }
+    const rawTotal = rawDts.reduce(function(s, x) { return s + x; }, 0);
+    const window = tEnd - tStart;
+    if (rawTotal < 1e-9) {
+      return [
+        { t: tStart, x: pts[0][0], y: pts[0][1] },
+        { t: tEnd, x: pts[pts.length - 1][0], y: pts[pts.length - 1][1] },
+      ];
+    }
+    const scale = window / rawTotal;
+    const tl = [{ t: tStart, x: pts[0][0], y: pts[0][1] }];
+    let acc = 0;
+    for (let i = 0; i < lengths.length; i++) {
+      acc += rawDts[i] * scale;
+      tl.push({ t: Math.min(tStart + acc, tEnd), x: pts[i + 1][0], y: pts[i + 1][1] });
+    }
+    tl[tl.length - 1].t = tEnd;
+    return tl;
+  }
+  function polylineRawDurationLinearRetSpeed(pts, vIn, vOut) {
+    if (!pts || pts.length < 2) return 0;
+    const lengths = [];
+    let totalLen = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const len = pathDist(pts[i], pts[i + 1]);
+      lengths.push(len);
+      totalLen += len;
+    }
+    let rawTotal = 0;
+    let accLen = 0;
+    for (let i = 0; i < lengths.length; i++) {
+      const midLen = accLen + lengths[i] * 0.5;
+      const u = totalLen > 1e-9 ? midLen / totalLen : 0;
+      const v = Math.max(1, vIn + (vOut - vIn) * u);
+      rawTotal += lengths[i] < 1e-9 ? 0 : lengths[i] / v;
+      accLen += lengths[i];
+    }
+    return rawTotal;
+  }
+  function splitTaxiInPartsForTimeline(f, runwayId, taxiInPts) {
+    const vTaxiBase = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
+    if (!taxiInPts || taxiInPts.length < 2) {
+      return {
+        vTaxiBase,
+        runwayPts: [],
+        retPts: [],
+        taxiPts: [],
+        phyRw: 0,
+        phyRet: 0,
+        phyTaxi: 0,
+        useRwPhy: false,
+        runwayLenM: 0,
+        vTd: 0,
+        aDec: 0,
+        vRetIn: 0,
+        vRetOut: 0,
+        vRetResolved: vTaxiBase,
+        carryAfterRunway: { lastTaxiwayMs: null },
+      };
+    }
+    const vTd = touchdownSpeedMsForTimeline(f);
+    let vRetIn = typeof f.arrVRetInMs === 'number' && isFinite(f.arrVRetInMs) && f.arrVRetInMs > 0 ? f.arrVRetInMs : getMinArrVelocityMpsForRunwayId(runwayId);
+    let vRetOut = typeof f.arrVRetOutMs === 'number' && isFinite(f.arrVRetOutMs) && f.arrVRetOutMs > 0 ? f.arrVRetOutMs : vTaxiBase;
+    if (f.arrRetFailed) {
+      vRetIn = getMinArrVelocityMpsForRunwayId(runwayId);
+      vRetOut = vTaxiBase;
     }
     const aDec = aircraftDecelMs2ForTimeline(f);
     let runwayLenM = 0;
@@ -1557,113 +1667,3 @@
       minWx: (0 - state.panX) / s - marginWorld,
       maxWx: (w - state.panX) / s + marginWorld,
       minWy: (0 - state.panY) / s - marginWorld,
-      maxWy: (h - state.panY) / s + marginWorld,
-      marginWorld: marginWorld
-    };
-  }
-  function worldPointInsideLayoutViewportAabb(p, vb) {
-    if (!p || p.length < 2 || !vb) return false;
-    return p[0] >= vb.minWx && p[0] <= vb.maxWx && p[1] >= vb.minWy && p[1] <= vb.maxWy;
-  }
-  function taxiwayWorldAabb(tw) {
-    if (!tw || !tw.vertices || !tw.vertices.length) return null;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (let vi = 0; vi < tw.vertices.length; vi++) {
-      const v = tw.vertices[vi];
-      const xy = cellToPixel(Number(v.col), Number(v.row));
-      minX = Math.min(minX, xy[0]); maxX = Math.max(maxX, xy[0]);
-      minY = Math.min(minY, xy[1]); maxY = Math.max(maxY, xy[1]);
-    }
-    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
-  }
-  function taxiwayWorldAabbIntersectsViewport(tw, vb) {
-    const a = taxiwayWorldAabb(tw);
-    if (!a || !vb) return true;
-    const pad = CELL_SIZE * 3;
-    return !(a.maxX + pad < vb.minWx - pad || a.minX - pad > vb.maxWx + pad || a.maxY + pad < vb.minWy - pad || a.minY - pad > vb.maxWy + pad);
-  }
-  function taxiwayShouldDrawInViewport(tw, vb) {
-    if (!tw || !vb) return true;
-    if (state.taxiwayDrawingId != null && String(state.taxiwayDrawingId) === String(tw.id)) return true;
-    const so = state.selectedObject;
-    if (so && so.type === 'taxiway' && String(so.id) === String(tw.id)) return true;
-    return taxiwayWorldAabbIntersectsViewport(tw, vb);
-  }
-  function terminalWorldAabbFromVertices(term) {
-    if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return null;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    let ok = false;
-    for (let i = 0; i < term.vertices.length; i++) {
-      const v = term.vertices[i];
-      if (!v) continue;
-      const col = Number(v.col), row = Number(v.row);
-      if (!isFinite(col) || !isFinite(row)) continue;
-      const x = col * CELL_SIZE;
-      const y = row * CELL_SIZE;
-      ok = true;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
-  }
-  const LAYOUT_RENDER_VIEWPORT_BUFFER_M = 200;
-  function layoutWorldViewportAabbWithBufferM(bufferM) {
-    if (!layoutDrawCanvas) return { minWx: -Infinity, maxWx: Infinity, minWy: -Infinity, maxWy: Infinity, marginWorld: 0 };
-    const w = layoutDrawCanvas.width / dpr;
-    const h = layoutDrawCanvas.height / dpr;
-    const s = state.scale || 1;
-    const m = Math.max(0, Number(bufferM) || 0);
-    return {
-      minWx: (0 - state.panX) / s - m,
-      maxWx: (w - state.panX) / s + m,
-      minWy: (0 - state.panY) / s - m,
-      maxWy: (h - state.panY) / s + m,
-      marginWorld: m
-    };
-  }
-  function aabbIntersectsViewport(vb, aabb) {
-    if (!vb || !aabb) return true;
-    return !(aabb.maxX < vb.minWx || aabb.minX > vb.maxWx || aabb.maxY < vb.minWy || aabb.minY > vb.maxWy);
-  }
-  function pointsWorldAabb(points) {
-    if (!Array.isArray(points) || !points.length) return null;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    let ok = false;
-    for (let i = 0; i < points.length; i++) {
-      const p = points[i];
-      if (!p || p.length < 2) continue;
-      const x = Number(p[0]), y = Number(p[1]);
-      if (!isFinite(x) || !isFinite(y)) continue;
-      ok = true;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
-  }
-  function markerWorldAabb(m) {
-    if (!m) return null;
-    const pts = [];
-    if (Array.isArray(m.points)) {
-      for (let i = 0; i < m.points.length; i++) {
-        const p = m.points[i];
-        if (!p) continue;
-        const x = Number(p.x), y = Number(p.y);
-        if (isFinite(x) && isFinite(y)) pts.push([x, y]);
-      }
-    }
-    [['x', 'y'], ['x1', 'y1'], ['x2', 'y2']].forEach(function(pair) {
-      const x = Number(m[pair[0]]), y = Number(m[pair[1]]);
-      if (isFinite(x) && isFinite(y)) pts.push([x, y]);
-    });
-    const a = pointsWorldAabb(pts);
-    if (!a) return null;
-    const pad = Math.max(8, CELL_SIZE * 0.8);
-    return { minX: a.minX - pad, minY: a.minY - pad, maxX: a.maxX + pad, maxY: a.maxY + pad };
-  }
-  function overlayJunctionFillForWorldPoint(p, gCache) {
-    if (layerMonoEtcOn()) return C2D_LAYER_MONO_ETC_WHITE;
-    if (!gCache || !p) return '#22c55e';

@@ -1,3 +1,113 @@
+      maxWy: (h - state.panY) / s + marginWorld,
+      marginWorld: marginWorld
+    };
+  }
+  function worldPointInsideLayoutViewportAabb(p, vb) {
+    if (!p || p.length < 2 || !vb) return false;
+    return p[0] >= vb.minWx && p[0] <= vb.maxWx && p[1] >= vb.minWy && p[1] <= vb.maxWy;
+  }
+  function taxiwayWorldAabb(tw) {
+    if (!tw || !tw.vertices || !tw.vertices.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let vi = 0; vi < tw.vertices.length; vi++) {
+      const v = tw.vertices[vi];
+      const xy = cellToPixel(Number(v.col), Number(v.row));
+      minX = Math.min(minX, xy[0]); maxX = Math.max(maxX, xy[0]);
+      minY = Math.min(minY, xy[1]); maxY = Math.max(maxY, xy[1]);
+    }
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+  }
+  function taxiwayWorldAabbIntersectsViewport(tw, vb) {
+    const a = taxiwayWorldAabb(tw);
+    if (!a || !vb) return true;
+    const pad = CELL_SIZE * 3;
+    return !(a.maxX + pad < vb.minWx - pad || a.minX - pad > vb.maxWx + pad || a.maxY + pad < vb.minWy - pad || a.minY - pad > vb.maxWy + pad);
+  }
+  function taxiwayShouldDrawInViewport(tw, vb) {
+    if (!tw || !vb) return true;
+    if (state.taxiwayDrawingId != null && String(state.taxiwayDrawingId) === String(tw.id)) return true;
+    const so = state.selectedObject;
+    if (so && so.type === 'taxiway' && String(so.id) === String(tw.id)) return true;
+    return taxiwayWorldAabbIntersectsViewport(tw, vb);
+  }
+  function terminalWorldAabbFromVertices(term) {
+    if (!term || !Array.isArray(term.vertices) || !term.vertices.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let ok = false;
+    for (let i = 0; i < term.vertices.length; i++) {
+      const v = term.vertices[i];
+      if (!v) continue;
+      const col = Number(v.col), row = Number(v.row);
+      if (!isFinite(col) || !isFinite(row)) continue;
+      const x = col * CELL_SIZE;
+      const y = row * CELL_SIZE;
+      ok = true;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
+  }
+  const LAYOUT_RENDER_VIEWPORT_BUFFER_M = 200;
+  function layoutWorldViewportAabbWithBufferM(bufferM) {
+    if (!layoutDrawCanvas) return { minWx: -Infinity, maxWx: Infinity, minWy: -Infinity, maxWy: Infinity, marginWorld: 0 };
+    const w = layoutDrawCanvas.width / dpr;
+    const h = layoutDrawCanvas.height / dpr;
+    const s = state.scale || 1;
+    const m = Math.max(0, Number(bufferM) || 0);
+    return {
+      minWx: (0 - state.panX) / s - m,
+      maxWx: (w - state.panX) / s + m,
+      minWy: (0 - state.panY) / s - m,
+      maxWy: (h - state.panY) / s + m,
+      marginWorld: m
+    };
+  }
+  function aabbIntersectsViewport(vb, aabb) {
+    if (!vb || !aabb) return true;
+    return !(aabb.maxX < vb.minWx || aabb.minX > vb.maxWx || aabb.maxY < vb.minWy || aabb.minY > vb.maxWy);
+  }
+  function pointsWorldAabb(points) {
+    if (!Array.isArray(points) || !points.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let ok = false;
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      if (!p || p.length < 2) continue;
+      const x = Number(p[0]), y = Number(p[1]);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      ok = true;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return ok ? { minX: minX, minY: minY, maxX: maxX, maxY: maxY } : null;
+  }
+  function markerWorldAabb(m) {
+    if (!m) return null;
+    const pts = [];
+    if (Array.isArray(m.points)) {
+      for (let i = 0; i < m.points.length; i++) {
+        const p = m.points[i];
+        if (!p) continue;
+        const x = Number(p.x), y = Number(p.y);
+        if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+      }
+    }
+    [['x', 'y'], ['x1', 'y1'], ['x2', 'y2']].forEach(function(pair) {
+      const x = Number(m[pair[0]]), y = Number(m[pair[1]]);
+      if (isFinite(x) && isFinite(y)) pts.push([x, y]);
+    });
+    const a = pointsWorldAabb(pts);
+    if (!a) return null;
+    const pad = Math.max(8, CELL_SIZE * 0.8);
+    return { minX: a.minX - pad, minY: a.minY - pad, maxX: a.maxX + pad, maxY: a.maxY + pad };
+  }
+  function overlayJunctionFillForWorldPoint(p, gCache) {
+    if (layerMonoEtcOn()) return C2D_LAYER_MONO_ETC_WHITE;
+    if (!gCache || !p) return '#22c55e';
     const mergeR = PATH_JUNCTION_MERGE_RADIUS_PX * 3.5;
     const mergeR2 = mergeR * mergeR;
     const conn = gCache.connectedJunctions || gCache.junctions || [];
@@ -1854,6 +1964,10 @@
         scaleY = wingM / wingNorm;
         sizeRef = 0.5 * Math.hypot(lenM, wingM);
       }
+      // Pose (x,y) = front wheel (10% from nose on fuselage). Silhouette origin (0,0) is not the nose: offset draw so 10% point lands on (x,y).
+      const pFwX = nX * scaleX - 0.1 * lenM;
+      const drawX = x - nx * pFwX;
+      const drawY = y - ny * pFwX;
       const outW = Number(_ac2d.outlineWidth);
       const outlineWidth = (isFinite(outW) && outW > 0) ? outW : 0;
       const outlineColor = _ac2d.outlineColor || '';
@@ -1912,7 +2026,7 @@
         ctx.restore();
       }
       ctx.save();
-      ctx.translate(x, y);
+      ctx.translate(drawX, drawY);
       const ang = Math.atan2(ny, nx);
       ctx.rotate(ang);
       ctx.fillStyle = glyphFillCss;

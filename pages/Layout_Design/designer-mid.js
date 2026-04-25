@@ -1,3 +1,113 @@
+      const prev = lastMotionUnitDirBefore(i);
+      if (prev) return { dx: prev.dx, dy: prev.dy };
+      const next = firstMotionUnitDirFrom(i + 1);
+      if (next) return { dx: next.dx, dy: next.dy };
+      return { dx: 1, dy: 0 };
+    }
+    for (let i = 0; i < tl.length - 1; i++) {
+      const a = tl[i], b = tl[i+1];
+      if (tSec >= a.t && tSec <= b.t) {
+        const span = b.t - a.t || 1;
+        const u = (tSec - a.t) / span;
+        const x = a.x + (b.x - a.x) * u;
+        const y = a.y + (b.y - a.y) * u;
+        const h = headingForInterval(i);
+        const dist2 = (b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y);
+        // Stationary / dwell: use start keyframe motion (matches export); do not use end keyframe
+        // (e.g. next sample is pushback with motionForward false — would flip silhouette while parked).
+        const mfB = (dist2 < motionChordEps2) ? (a.motionForward !== false) : (b.motionForward !== false);
+        const dg = !!(a.deadlockGhost || b.deadlockGhost);
+        const { lenM } = getSimAircraftWorldDimsM(flight);
+        // Nose-anchored fractions (sim F = 10% from nose; virtual rear 65% from nose) => wheelbase 0.55*L
+        const wheelBaseM = 0.55 * lenM;
+        const bicycleMin = Math.max(0.02 * lenM, 2 * motionChordEps);
+        const R = mfB !== false
+          ? walkTimelinePolylineBackwardFromPoint(tl, i, x, y, wheelBaseM)
+          : walkTimelinePolylineForwardFromPoint(tl, i, x, y, wheelBaseM);
+        if (R && lenM > 1e-6) {
+          const vdx = x - R.x, vdy = y - R.y;
+          const vl = Math.hypot(vdx, vdy);
+          if (vl >= bicycleMin) {
+            // F−R = main→nose; same for forward (R behind) and pushback (R ahead on path). Do not +π.
+            const brdx = vdx / vl, brdy = vdy / vl;
+            return { x, y, dx: brdx, dy: brdy, deadlockGhost: dg };
+          }
+        }
+        let rdx = h.dx, rdy = h.dy;
+        if (mfB === false) {
+          const lenH = Math.hypot(rdx, rdy) || 1;
+          const ang = Math.atan2(rdy, rdx) + Math.PI;
+          rdx = Math.cos(ang) * lenH;
+          rdy = Math.sin(ang) * lenH;
+        }
+        return { x, y, dx: rdx, dy: rdy, deadlockGhost: dg };
+      }
+    }
+    return null;
+  }
+
+  
+  function getFlightPoseAtTimeForDraw(flight, tSec) {
+    const tl = flight && flight.timeline;
+    if (!tl || !tl.length) return null;
+    let t = Number(tSec);
+    if (!isFinite(t)) return null;
+    const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
+    if (t + 1e-9 < t0) return null;
+    if (t > t1) t = t1;
+    return getFlightPoseAtTime(flight, t);
+  }
+
+  function isFlightPreTouchdownForDraw(f, tSec) {
+    if (!PRE_TOUCHDOWN_HALO_ENABLED) return false;
+    if (!f || f.arrDep === 'Dep') return false;
+    const m = f.timeline_meta;
+    if (!m || typeof m.eldtSec !== 'number' || !isFinite(m.eldtSec)) return false;
+    const t = Number(tSec);
+    if (!isFinite(t)) return false;
+    return t < m.eldtSec - 1e-3;
+  }
+
+  function isFlightAirsideCycleCompleteAtSimTime(f, tSec) {
+    const m = f && f.timeline_meta;
+    const t = Number(tSec);
+    if (!isFinite(t) || !m || m.error) return false;
+    if (typeof m.etotSec !== 'number' || !isFinite(m.etotSec)) return false;
+    return t >= m.etotSec - 1e-3;
+  }
+
+  
+  function isFlightTimelineStationaryAtSimTime(f, tSec) {
+    const tl = f && f.timeline;
+    if (!tl || tl.length < 2) return false;
+    const t = Number(tSec);
+    if (!isFinite(t)) return false;
+    const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
+    if (t < t0 - 1e-9 || t > t1 + 1e-9) return false;
+    const stillEps = 0.08;
+    for (let i = 0; i < tl.length - 1; i++) {
+      const a = tl[i], b = tl[i + 1];
+      if (!(t + 1e-9 >= a.t && t - 1e-9 <= b.t)) continue;
+      const dt = b.t - a.t;
+      if (dt < 1e-9) continue;
+      const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      if (dist < stillEps) return true;
+    }
+    return false;
+  }
+
+  function isFlightTrailHiddenAtSimTime(f, tSec) {
+    if (isFlightAirsideCycleCompleteAtSimTime(f, tSec)) return true;
+    if (isFlightTimelineStationaryAtSimTime(f, tSec)) return true;
+    return false;
+  }
+
+  function getFlightTrailPolylineBackward(f, tEnd, maxDistM) {
+    const tl = f && f.timeline;
+    if (!tl || tl.length < 2 || !(maxDistM > 0)) return [];
+    const tMin = tl[0].t, tMax = tl[tl.length - 1].t;
+    let t = Math.min(Math.max(tEnd, tMin), tMax);
+    let seg = 0;
     for (let i = 0; i < tl.length - 1; i++) {
       if (t >= tl[i].t && t <= tl[i + 1].t) { seg = i; break; }
       if (t > tl[i + 1].t) seg = i;
@@ -2634,113 +2744,3 @@
             tension: 0.28,
             pointRadius: 3,
             pointHoverRadius: 7,
-            pointBackgroundColor: '#ddd6fe'
-          }]
-        },
-        options: opt
-      });
-    }
-    const elR = document.getElementById('kpiChartRunway');
-    if (elR) {
-      window.__kpiChartRunway = new Chart(elR, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              type: 'bar',
-              label: 'Runway arr (ELDT)',
-              data: arr,
-              backgroundColor: 'rgba(56, 189, 248, 0.72)',
-              order: 3
-            },
-            {
-              type: 'bar',
-              label: 'Runway dep (ETOT)',
-              data: dep,
-              backgroundColor: 'rgba(251, 146, 60, 0.72)',
-              order: 3
-            },
-            {
-              type: 'line',
-              label: 'Total',
-              data: tot,
-              borderColor: '#c4b5fd',
-              backgroundColor: 'transparent',
-              borderWidth: 3,
-              tension: 0.22,
-              pointRadius: 3,
-              pointHoverRadius: 6,
-              order: 1
-            }
-          ]
-        },
-        options: opt
-      });
-    }
-  }
-  function kpiGateChartPlaceholder(buckets) {
-    if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No gate occupancy data is available for the current snapshot.</div>';
-    return '<div class="kpi-chart-canvas-host kpi-chart-wrap--gate-fill"><canvas id="kpiChartGateOcc" aria-label="Gate occupancy chart"></canvas></div>';
-  }
-  function kpiRunwayChartPlaceholder(buckets) {
-    if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No arrival or departure events are available for the current snapshot.</div>';
-    return '<div class="kpi-chart-canvas-host"><canvas id="kpiChartRunway" aria-label="Runway traffic chart"></canvas></div>';
-  }
-
-  function collectKpiSnapshot() {
-    const flights = Array.isArray(state.flights) ? state.flights.slice() : [];
-    const rows = flights.map(function(f) {
-      const arrTaxiMin = kpiToNumber(typeof getBaseVttArrMinutes === 'function' ? getBaseVttArrMinutes(f) : null);
-      const depBlockOutMin = kpiToNumber(typeof getDepBlockOutMin === 'function' ? getDepBlockOutMin(f) : null);
-      const depTaxiMin = kpiToNumber(typeof getBaseVttDepMinutesToLineup === 'function' ? getBaseVttDepMinutesToLineup(f) : null);
-      const rotSec = kpiToNumber(f && f.arrRotSec != null ? f.arrRotSec : (typeof getArrRotMinutes === 'function' ? getArrRotMinutes(f) * 60 : null));
-      const depRotSec = (f && f.arrDep === 'Dep' && typeof computeDepRotSecondsForFlight === 'function')
-        ? computeDepRotSecondsForFlight(f)
-        : ((typeof SCHED_DEP_ROT_MIN === 'number' && isFinite(SCHED_DEP_ROT_MIN)) ? SCHED_DEP_ROT_MIN * 60 : null);
-      const arrTaxiDelayMin = kpiToNumber(f && f.vttADelayMin != null ? f.vttADelayMin : 0);
-      const depTaxiDelayMin = kpiToNumber(f && f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
-      const sibt = kpiToNumber(f && f.sibtMin_orig != null ? f.sibtMin_orig : (f && f.timeMin != null ? f.timeMin : null));
-      const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiMin != null && rotSec != null ? Math.max(0, sibt - arrTaxiMin - rotSec / 60) : null));
-      const dwellMin = kpiToNumber(f && f.dwellMin != null ? f.dwellMin : null);
-      const sobt = kpiToNumber(f && f.sobtMin_orig != null ? f.sobtMin_orig : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
-      const sttDepMinK = kpiToNumber(typeof getBaseVttDepMinutesToHoldingSlot === 'function' ? getBaseVttDepMinutesToHoldingSlot(f) : depTaxiMin);
-      const depRotMinK = depRotSec != null && isFinite(depRotSec) ? depRotSec / 60 : null;
-      const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depRotMinK != null && sttDepMinK != null ? sobt + depRotMinK + sttDepMinK : (sobt != null && depBlockOutMin != null ? sobt + depBlockOutMin : null)));
-      const eldt = kpiToNumber(f && f.eldtMin != null ? f.eldtMin : (f && f.sldtMin_d != null ? f.sldtMin_d : sldt));
-      const eibt = kpiToNumber(f && f.eibtMin != null ? f.eibtMin : (eldt != null && arrTaxiMin != null && rotSec != null ? eldt + arrTaxiMin + rotSec / 60 + (kpiToNumber(f.vttADelayMin) || 0) : sibt));
-      const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
-      const etot = kpiToNumber(f && f.etotMin != null ? f.etotMin : (f && f.stotMin_d != null ? f.stotMin_d : stot));
-      const failed = !!(f && flightBlockedLikeNoWay(f));
-      const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
-      const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
-      const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
-      const acDepDelay = (etot != null && stot != null) ? Math.max(0, etot - stot) : null;
-      return {
-        flight: f,
-        id: f && f.id ? f.id : '',
-        reg: f && f.reg ? f.reg : '',
-        flightNumber: f && f.flightNumber ? f.flightNumber : '',
-        standId: f && f.standId ? f.standId : null,
-        standName: kpiStandLabelById(f && f.standId ? f.standId : null),
-        arrTaxiMin,
-        depTaxiMin,
-        rotSec,
-        depRotSec,
-        arrTaxiDelayMin,
-        depTaxiDelayMin,
-        sibt,
-        sobt,
-        sldt,
-        stot,
-        eldt,
-        eibt,
-        eobt,
-        etot,
-        failed,
-        paxArrDelay,
-        paxDepDelay,
-        acArrDelay,
-        acDepDelay
-      };
-    });
