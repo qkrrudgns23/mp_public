@@ -708,6 +708,8 @@
       f.arrRotSec = null;
       delete f.proSimVttArrSec;
       delete f.proSimVttDepSec;
+      delete f.proSimDttArrSec;
+      delete f.proSimDttDepSec;
       delete f.proSimDepLineupSec;
       return;
     }
@@ -737,6 +739,12 @@
     const vttDepS = secOpt('VTT_DEP_SEC');
     if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
     else delete f.proSimVttDepSec;
+    const dttArrS = secOpt('DTT_ARR_SEC');
+    if (isFinite(dttArrS)) f.proSimDttArrSec = dttArrS;
+    else delete f.proSimDttArrSec;
+    const dttDepS = secOpt('DTT_DEP_SEC');
+    if (isFinite(dttDepS)) f.proSimDttDepSec = dttDepS;
+    else delete f.proSimDttDepSec;
     const lineupS = secOpt('LINEUP_DEPARTURE_SEC');
     if (isFinite(lineupS)) f.proSimDepLineupSec = lineupS;
     else delete f.proSimDepLineupSec;

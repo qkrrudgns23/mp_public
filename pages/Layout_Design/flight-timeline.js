@@ -491,6 +491,8 @@
           'etotMin_orig',
           'arrRotSec',
           'proSimVttArrSec',
+          'proSimDttArrSec',
+          'proSimDttDepSec',
           'proSimVttDepSec',
           'proSimDepLineupSec',
           'arrRunwayIdUsed',

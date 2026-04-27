@@ -2373,6 +2373,8 @@
           f.arrRotSec = null;
           delete f.proSimVttArrSec;
           delete f.proSimVttDepSec;
+          delete f.proSimDttArrSec;
+          delete f.proSimDttDepSec;
           delete f.proSimDepLineupSec;
           f.arrRunwayIdUsed = null;
           f.arrTdDistM = null;
@@ -2418,6 +2420,8 @@
             f.arrRotSec = null;
             delete f.proSimVttArrSec;
             delete f.proSimVttDepSec;
+            delete f.proSimDttArrSec;
+            delete f.proSimDttDepSec;
             delete f.proSimDepLineupSec;
             f.arrRunwayIdUsed = null;
             f.arrTdDistM = null;
@@ -2500,7 +2504,7 @@
     if (typeof renderFlightList === 'function') renderFlightList(false, false);
     if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
-  /** E-series minutes; ARR_ROT_SEC / VTT_* / LINEUP_DEPARTURE_SEC from ``airside_sim`` schedule (motion phases). */
+  /** E-series minutes; ARR_ROT_SEC / VTT_* / DTT_* / LINEUP_DEPARTURE_SEC from ``airside_sim`` schedule (motion phases). */
   function applyAirsideScheduleRowToFlight(f, srec) {
     if (!f) return;
     if (!srec || typeof srec !== 'object') {
@@ -2515,6 +2519,8 @@
       f.arrRotSec = null;
       delete f.proSimVttArrSec;
       delete f.proSimVttDepSec;
+      delete f.proSimDttArrSec;
+      delete f.proSimDttDepSec;
       delete f.proSimDepLineupSec;
       return;
     }
@@ -2544,6 +2550,12 @@
     const vttDepS = secOpt('VTT_DEP_SEC');
     if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
     else delete f.proSimVttDepSec;
+    const dttArrS = secOpt('DTT_ARR_SEC');
+    if (isFinite(dttArrS)) f.proSimDttArrSec = dttArrS;
+    else delete f.proSimDttArrSec;
+    const dttDepS = secOpt('DTT_DEP_SEC');
+    if (isFinite(dttDepS)) f.proSimDttDepSec = dttDepS;
+    else delete f.proSimDttDepSec;
     const lineupS = secOpt('LINEUP_DEPARTURE_SEC');
     if (isFinite(lineupS)) f.proSimDepLineupSec = lineupS;
     else delete f.proSimDepLineupSec;
@@ -4279,6 +4291,8 @@
           'etotMin_orig',
           'arrRotSec',
           'proSimVttArrSec',
+          'proSimDttArrSec',
+          'proSimDttDepSec',
           'proSimVttDepSec',
           'proSimDepLineupSec',
           'arrRunwayIdUsed',
@@ -9295,6 +9309,8 @@
     const muted = has ? '' : ' flight-sched-dot--muted';
     let dotClass = 'flight-sched-dot--green';
     if (dotKind === 'vttarr') dotClass = 'flight-sched-dot--vttarr';
+    else if (dotKind === 'dttarr') dotClass = 'flight-sched-dot--dttarr';
+    else if (dotKind === 'dttdep') dotClass = 'flight-sched-dot--dttdep';
     else if (dotKind === 'red') dotClass = 'flight-sched-dot--red';
     else if (dotKind === 'pink') dotClass = 'flight-sched-dot--pink';
     return '<span class="flight-sched-cell-inner">' +
@@ -9327,6 +9343,8 @@
         '<th class="flight-col-e">ETOT</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
         '<th class="flight-th-mixed">VTT(Arr)</th>' +
+        '<th class="flight-th-mixed">DTT(Arr)</th>' +
+        '<th class="flight-th-mixed">DTT(Dep)</th>' +
         '<th class="flight-th-mixed">VTT(Dep)</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(dep)</th>' +
         '<th class="flight-td-del"></th>' +
@@ -9374,10 +9392,14 @@
     const dash = '—';
     const rotArrStr = (f.arrRotSec != null && isFinite(f.arrRotSec)) ? formatSecondsToHHMMSS(f.arrRotSec) : dash;
     const vttArrStr = (f.proSimVttArrSec != null && isFinite(f.proSimVttArrSec)) ? formatSecondsToHHMMSS(f.proSimVttArrSec) : dash;
+    const dttArrStr = (f.proSimDttArrSec != null && isFinite(f.proSimDttArrSec)) ? formatSecondsToHHMMSS(f.proSimDttArrSec) : dash;
+    const dttDepStr = (f.proSimDttDepSec != null && isFinite(f.proSimDttDepSec)) ? formatSecondsToHHMMSS(f.proSimDttDepSec) : dash;
     const vttDepStr = (f.proSimVttDepSec != null && isFinite(f.proSimVttDepSec)) ? formatSecondsToHHMMSS(f.proSimVttDepSec) : dash;
     const rotDepStr = (f.proSimDepLineupSec != null && isFinite(f.proSimDepLineupSec)) ? formatSecondsToHHMMSS(f.proSimDepLineupSec) : dash;
     const rotArrCell = flightScheduleProSimTimedCell(rotArrStr, 'green');
     const vttArrCell = flightScheduleProSimTimedCell(vttArrStr, 'vttarr');
+    const dttArrCell = flightScheduleProSimTimedCell(dttArrStr, 'dttarr');
+    const dttDepCell = flightScheduleProSimTimedCell(dttDepStr, 'dttdep');
     const vttDepCell = flightScheduleProSimTimedCell(vttDepStr, 'red');
     const rotDepCell = flightScheduleProSimTimedCell(rotDepStr, 'pink');
     const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
@@ -9411,6 +9433,8 @@
         '<td class="flight-td-time flight-col-e">' + escapeHtml(etotStr) + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
         '<td class="flight-td-time">' + vttArrCell + '</td>' +
+        '<td class="flight-td-time">' + dttArrCell + '</td>' +
+        '<td class="flight-td-time">' + dttDepCell + '</td>' +
         '<td class="flight-td-time">' + vttDepCell + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotDepCell + '</td>' +
         '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +

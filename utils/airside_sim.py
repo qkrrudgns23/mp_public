@@ -20,6 +20,9 @@ finishes the last path segment (``path_completed_abs_sec``); no nominal EOBT+leg
 
 After the time-step loop, ``_overlay_schedule_timing_from_playback_positions`` adds motion-duration fields (seconds) derived from
 consecutive ``positions`` samples: ``ARR_ROT_SEC`` (``Landing``), ``VTT_ARR_SEC`` (``Arr_taxi`` + ``Arr_taxi_occupied``),
+``DTT_ARR_SEC`` / ``DTT_DEP_SEC`` (within those VTT phases, time where the aircraft is effectively stopped:
+reported ``v`` ≤ ``standStoppedVelocityMaxMs``, or consecutive-sample step ≤ ``playbackStandStillStepM``, or ``controlHalt``;
+``Dep`` uses only ``Dep_taxi`` after ``EOBT``, matching ``VTT_DEP_SEC``). Playback ``v`` can be floored for runway-taxiway display, so the step/halt checks are required.
 ``VTT_DEP_SEC`` (``Dep_taxi`` only, wall-clock overlap with ``[EOBT, +∞)`` from playback; excludes pre-EOBT pushback and ``Holding_lineup``),
 ``LINEUP_DEPARTURE_SEC`` (``Lineup_departure``), aligned with Pro Sim 2D colors.
 
@@ -43,7 +46,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
 
 from utils.designer_path_graph import (
     DirectedEdgeRecord,
@@ -3651,7 +3654,81 @@ def _sum_dep_taxi_sec_after_eobt(
     return total
 
 
-def _apply_pro_sim_phase_durations_to_schedule_row(row: Dict[str, Any], pts: List[Dict[str, Any]]) -> None:
+_DTT_ARR_PHASES = frozenset({PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP})
+_DTT_DEP_PHASES = frozenset({PHASE_DEP_TAXI})
+
+
+def _playback_pair_step_m(
+    p0: Dict[str, Any], p1: Dict[str, Any], pixels_per_meter: float
+) -> float:
+    """Geodesic step in meters between two playback samples (x,y in px)."""
+    ppm = max(float(pixels_per_meter), 1e-9)
+    dx = float(p1.get("x", 0.0)) - float(p0.get("x", 0.0))
+    dy = float(p1.get("y", 0.0)) - float(p0.get("y", 0.0))
+    return math.hypot(dx, dy) / ppm
+
+
+def _sum_stopped_delay_in_phases(
+    pts: List[Dict[str, Any]],
+    phase_allow: FrozenSet[str],
+    v_stop_max_ms: float,
+    still_step_m: float,
+    pixels_per_meter: float,
+    t_clip_min: Optional[float] = None,
+) -> float:
+    """
+    Sum of ``(t1 - t0)`` over consecutive samples where ``phase`` at ``p0`` is in ``phase_allow``,
+    and the interval is treated as stopped: average ``v`` ≤ ``v_stop_max_ms``, or planar step
+    ≤ ``still_step_m``, or ``controlHalt`` on an endpoint. Optionally clip each interval to
+    ``[t_clip_min, +∞)``.
+    """
+    if not pts or len(pts) < 2:
+        return 0.0
+    vth = max(0.01, float(v_stop_max_ms))
+    step_tol = max(1e-6, float(still_step_m))
+    ppm = max(float(pixels_per_meter), 1e-9)
+    total = 0.0
+    for i in range(len(pts) - 1):
+        p0, p1 = pts[i], pts[i + 1]
+        ph = str(p0.get("phase") or "").strip()
+        if ph not in phase_allow:
+            continue
+        ta = float(p0.get("t", 0.0))
+        tb = float(p1.get("t", 0.0))
+        if tb <= ta:
+            continue
+        if t_clip_min is not None:
+            try:
+                tc = float(t_clip_min)
+            except (TypeError, ValueError):
+                tc = None
+            if tc is None or not math.isfinite(tc):
+                continue
+            ta = max(ta, tc)
+            if tb <= ta:
+                continue
+        try:
+            v0 = float(p0.get("v", 0.0) or 0.0)
+            v1 = float(p1.get("v", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            v0, v1 = 0.0, 0.0
+        step_m = _playback_pair_step_m(p0, p1, ppm)
+        stopped_by_v = (v0 + v1) * 0.5 <= vth + 1e-9
+        stopped_by_xy = step_m <= step_tol + 1e-9
+        halted = bool(p0.get("controlHalt")) or bool(p1.get("controlHalt"))
+        if not (stopped_by_v or stopped_by_xy or halted):
+            continue
+        total += tb - ta
+    return total
+
+
+def _apply_pro_sim_phase_durations_to_schedule_row(
+    row: Dict[str, Any],
+    pts: List[Dict[str, Any]],
+    v_stop_max_ms: float,
+    still_step_m: float,
+    pixels_per_meter: float,
+) -> None:
     """Post-overlay: wall-clock phase spans from ``positions`` for Flight Schedule KPI columns."""
     pdur = _sum_phase_durations_from_position_samples(pts)
     has_ldg = bool(row.get("HAS_LANDING"))
@@ -3668,6 +3745,26 @@ def _apply_pro_sim_phase_durations_to_schedule_row(row: Dict[str, Any], pts: Lis
     if eobt_for_vtt is not None and not math.isfinite(eobt_for_vtt):
         eobt_for_vtt = None
     vtt_dep = _sum_dep_taxi_sec_after_eobt(pts, eobt_for_vtt)
+    dtt_arr = _sum_stopped_delay_in_phases(
+        pts,
+        _DTT_ARR_PHASES,
+        v_stop_max_ms,
+        still_step_m,
+        pixels_per_meter,
+        t_clip_min=None,
+    )
+    dtt_dep = (
+        _sum_stopped_delay_in_phases(
+            pts,
+            _DTT_DEP_PHASES,
+            v_stop_max_ms,
+            still_step_m,
+            pixels_per_meter,
+            t_clip_min=eobt_for_vtt,
+        )
+        if eobt_for_vtt is not None
+        else 0.0
+    )
     lineup = float(pdur.get(PHASE_LINEUP_DEPARTURE, 0.0))
 
     def _set_sec(key: str, val: float, allow: bool) -> None:
@@ -3678,6 +3775,8 @@ def _apply_pro_sim_phase_durations_to_schedule_row(row: Dict[str, Any], pts: Lis
 
     _set_sec("ARR_ROT_SEC", land, has_ldg)
     _set_sec("VTT_ARR_SEC", vtt_arr, vtt_arr > 1e-6)
+    _set_sec("DTT_ARR_SEC", dtt_arr, dtt_arr > 1e-6)
+    _set_sec("DTT_DEP_SEC", dtt_dep, dtt_dep > 1e-6)
     _set_sec("VTT_DEP_SEC", vtt_dep, vtt_dep > 1e-6)
     _set_sec("LINEUP_DEPARTURE_SEC", lineup, lineup > 1e-6)
 
@@ -3853,6 +3952,8 @@ def _overlay_schedule_timing_from_playback_positions(
             for pk in (
                 "ARR_ROT_SEC",
                 "VTT_ARR_SEC",
+                "DTT_ARR_SEC",
+                "DTT_DEP_SEC",
                 "VTT_DEP_SEC",
                 "LINEUP_DEPARTURE_SEC",
             ):
@@ -3863,7 +3964,13 @@ def _overlay_schedule_timing_from_playback_positions(
             key=lambda p: float(p.get("t", 0.0)),
         )
         _apply_timings(row, fobj, pts_sorted)
-        _apply_pro_sim_phase_durations_to_schedule_row(row, pts_sorted)
+        _apply_pro_sim_phase_durations_to_schedule_row(
+            row,
+            pts_sorted,
+            _sim_stand_stopped_velocity_max_ms(information),
+            float(still_m),
+            float(ppm),
+        )
 
 
 def _layout_edge_capacity(ed: Dict[str, Any]) -> int:

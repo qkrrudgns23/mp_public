@@ -864,6 +864,19 @@
       background:linear-gradient(90deg, #3b82f6 0%, #3b82f6 50%, #a855f7 50%, #a855f7 100%);
       box-shadow:0 0 0 1px rgba(0,0,0,0.35);
     }
+    .flight-schedule-table .flight-sched-dot--dttarr,
+    .flight-schedule-table .flight-sched-dot--dttdep {
+      border-radius: 0;
+      box-shadow: none;
+      width: 10px;
+      height: 10px;
+      clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+    }
+    .flight-schedule-table .flight-sched-dot--dttarr {
+      background: linear-gradient(90deg, #3b82f6 0%, #3b82f6 50%, #a855f7 50%, #a855f7 100%);
+      filter: drop-shadow(0 0 1px rgba(0,0,0,0.4));
+    }
+    .flight-schedule-table .flight-sched-dot--dttdep { background: #ef4444; filter: drop-shadow(0 0 1px rgba(0,0,0,0.4)); }
     .flight-schedule-table .flight-sched-dot--muted { opacity:0.35; }
     .flight-schedule-table .flight-sched-cell-text { font-variant-numeric:tabular-nums; }
     .flight-schedule-table .flight-td-select { padding:4px 6px 4px 0; min-width:0; }
