@@ -1606,10 +1606,10 @@
       return { wMul: 1.72, stroke: '#3b82f6' };
     }
     if (p === 'Dep_taxi' || p === 'Holding_lineup') {
-      return { wMul: 0.58, stroke: '#ef4444' };
+      return { wMul: 0.58 * 1.2, stroke: '#ef4444' };
     }
     if (p === 'Lineup_departure') {
-      return { wMul: 0.45, stroke: '#ff1493' };
+      return { wMul: 0.45 * 1.2, stroke: '#ff1493' };
     }
     return { wMul: 1.72, stroke: '#22c55e' };
   }
@@ -1713,11 +1713,8 @@
   function proSimArrowFillForStroke(strokeHex) {
     const s = String(strokeHex || '').trim();
     const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(s);
-    if (!m) return 'rgba(250, 250, 250, 0.82)';
-    const r = parseInt(m[1], 16);
-    const g = parseInt(m[2], 16);
-    const b = parseInt(m[3], 16);
-    return 'rgba(' + r + ',' + g + ',' + b + ',0.42)';
+    if (!m) return '#fafafa';
+    return '#' + m[1] + m[2] + m[3];
   }
   function drawProSimFlightPathEdges() {
     const sel = state.selectedObject;
@@ -1730,8 +1727,8 @@
     (state.derivedGraphEdges || []).forEach(function(ed) {
       if (ed && ed.id) byId[ed.id] = ed;
     });
-    /* Base stroke: ~1.5× legacy × 1.3 (extra thickness) */
-    const baseW = Math.max(4.2, CELL_SIZE * 0.148) * 1.5 * 1.3;
+    /* Base stroke: ~1.5× legacy × 1.3 (extra thickness) × 1.2 (flight schedule route reveal) */
+    const baseW = Math.max(4.2, CELL_SIZE * 0.148) * 1.5 * 1.3 * 1.2;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -1802,15 +1799,16 @@
       const isRedOrPinkArrow = ph === 'Dep_taxi' || ph === 'Holding_lineup' || ph === 'Lineup_departure';
       const arrowFill = isRedOrPinkArrow
         ? proSimArrowFillForStroke(item.st.stroke)
-        : 'rgba(250, 250, 250, 0.82)';
+        : '#fafafa';
       const baseSpacing = Math.max(20, CELL_SIZE * 0.34) * 1.15;
       const baseHead = Math.max(4.5, CELL_SIZE * 0.135) * 1.15;
-      drawProSimSegmentArrows(
-        edgePts,
-        arrowFill,
-        isRedOrPinkArrow ? baseSpacing * 2 : baseSpacing,
-        isRedOrPinkArrow ? baseHead * 2 : baseHead
-      );
+      const redPinkArrowMul = 2 * 1.5;
+      const arrowSizeMul = 1.1;
+      const stHex = String(item.st && item.st.stroke || '').trim().toLowerCase();
+      const greenBlueArrowMul = (stHex === '#22c55e' || stHex === '#3b82f6') ? 1.3 : 1;
+      let arrSp = (isRedOrPinkArrow ? baseSpacing * redPinkArrowMul : baseSpacing) * arrowSizeMul * greenBlueArrowMul;
+      let arrHd = (isRedOrPinkArrow ? baseHead * redPinkArrowMul : baseHead) * arrowSizeMul * greenBlueArrowMul;
+      drawProSimSegmentArrows(edgePts, arrowFill, arrSp, arrHd);
     });
     ctx.restore();
   }
@@ -3163,10 +3161,8 @@
           return isFinite(parsed) ? parsed : null;
         };
         const map = {
-          sldtMin_d: FLIGHT_SCHED_TD_SLD,
           sibtMin_d: FLIGHT_SCHED_TD_SIBTD,
           sobtMin_d: FLIGHT_SCHED_TD_SOBTD,
-          stotMin_d: FLIGHT_SCHED_TD_STOTD,
           eldtMin: FLIGHT_SCHED_TD_ELDT,
           eibtMin: FLIGHT_SCHED_TD_EIBT,
           eobtMin: FLIGHT_SCHED_TD_EOBT,
@@ -3176,6 +3172,7 @@
           const v = getMin(map[key]);
           if (v != null) f[key] = v;
         });
+        if (typeof applySdDispDeltaFromSibtSobt === 'function') applySdDispDeltaFromSibtSobt(f);
       });
     }
     function setLayoutMessage(msg, isError) {

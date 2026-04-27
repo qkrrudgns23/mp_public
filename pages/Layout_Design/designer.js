@@ -729,8 +729,8 @@
     return (isFinite(v) && v >= 0) ? v : 20;
   })();
   /** Dispatched schedule (d): SLDT(d) = SIBT(d) − this many minutes; STOT(d) = SOBT(d) + SCHED_SD_STOT_PLUS_SOBD_MIN. */
-  const SCHED_SD_SIBT_MINUS_SLD_MIN = 3;
-  const SCHED_SD_STOT_PLUS_SOBD_MIN = 3;
+  const SCHED_SD_SIBT_MINUS_SLD_MIN = 5;
+  const SCHED_SD_STOT_PLUS_SOBD_MIN = 5;
   const RSEP_MISSING_MATRIX_SEC = (function() {
     const v = Number(_schedAlgo.rsepMissingMatrixSeparationSec);
     return (isFinite(v) && v >= 0) ? v : 90;
@@ -2215,6 +2215,9 @@
   }
   function applyLayoutObject(obj) {
     if (!obj || typeof obj !== 'object') return;
+    state.simPlaybackEndCapSec = null;
+    const dp = obj.designerPersist;
+    const restoreProSimSyncUi = !!(dp && dp.v === 1 && dp.globalUpdateFresh === true);
     if (obj.grid) {
       if (typeof obj.grid.cols === 'number') GRID_COLS = obj.grid.cols;
       if (typeof obj.grid.rows === 'number') GRID_ROWS = obj.grid.rows;
@@ -2279,7 +2282,13 @@
     if (Array.isArray(obj.flights)) {
       state.flights = obj.flights.slice();
       state.flights.forEach(f => {
+        const rawTl = Array.isArray(f.timeline) ? f.timeline : null;
+        const rawMeta = f.timeline_meta;
+        const rawProSimEl = Array.isArray(f.proSimEdgeList) ? f.proSimEdgeList.slice() : null;
+        const restorePlaybackFlight = !!(rawTl && rawTl.length >= 2);
         const t = f.token || {};
+        const exitTwPersist = (t.ExitTaxiwayId != null && t.ExitTaxiwayId !== '') ? t.ExitTaxiwayId : null;
+        const arrRetFailedPersist = f.arrRetFailed === true;
         if (f.aircraftType && typeof getCodeForAircraft === 'function') {
           f.code = getCodeForAircraft(f.aircraftType);
         } else if (f.code && typeof AIRCRAFT_TYPES !== 'undefined') {
@@ -2298,22 +2307,92 @@
           terminalId: f.terminalId || null,
           depRunwayId: f.depRunwayId || null,
         };
+        if (exitTwPersist) f.token.ExitTaxiwayId = exitTwPersist;
         f.noWayArr = false;
         f.noWayDep = false;
         delete f._noWayArrDetail;
         delete f._noWayDepDetail;
-        f.arrRetFailed = false;
-        f.sampledArrRet = null;
-        f.arrRotSec = null;
-        f.arrRunwayIdUsed = null;
-        f.arrTdDistM = null;
-        f.arrRetDistM = null;
-        f.arrVTdMs = null;
-        f.arrDecelMs2 = null;
-        f.arrVRetInMs = null;
-        f.arrVRetOutMs = null;
-        f.timeline = null;
-        delete f.timeline_meta;
+        if (restoreProSimSyncUi && f.arrDep !== 'Dep') {
+          if (exitTwPersist) {
+            f.sampledArrRet = exitTwPersist;
+            f.arrRetFailed = arrRetFailedPersist;
+          } else {
+            f.sampledArrRet = null;
+            f.arrRetFailed = false;
+          }
+        } else {
+          f.arrRetFailed = false;
+          f.sampledArrRet = null;
+        }
+        if (!restorePlaybackFlight) {
+          f.arrRotSec = null;
+          delete f.proSimVttArrSec;
+          delete f.proSimVttDepSec;
+          delete f.proSimDepLineupSec;
+          f.arrRunwayIdUsed = null;
+          f.arrTdDistM = null;
+          f.arrRetDistM = null;
+          f.arrVTdMs = null;
+          f.arrDecelMs2 = null;
+          f.arrVRetInMs = null;
+          f.arrVRetOutMs = null;
+          f.timeline = null;
+          delete f.timeline_meta;
+          delete f.proSimEdgeList;
+          delete f.eldtMin;
+          delete f.eibtMin;
+          delete f.eobtMin;
+          delete f.etotMin;
+          delete f.eldtMin_orig;
+          delete f.eibtMin_orig;
+          delete f.eobtMin_orig;
+          delete f.etotMin_orig;
+        } else {
+          const tlNorm = rawTl.map(function(p) {
+            const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+            const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+            const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
+            const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
+            if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
+            if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            return o;
+          }).filter(function(k) {
+            return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+          }).sort(function(a, b) { return a.t - b.t; });
+          if (tlNorm.length >= 2) {
+            f.timeline = tlNorm;
+            if (rawMeta && typeof rawMeta === 'object') f.timeline_meta = Object.assign({}, rawMeta);
+            else delete f.timeline_meta;
+            if (rawProSimEl && rawProSimEl.length) {
+              f.proSimEdgeList = rawProSimEl;
+            } else if (Array.isArray(f.edge_list) && f.edge_list.length) {
+              f.proSimEdgeList = f.edge_list.slice();
+            }
+          } else {
+            f.arrRotSec = null;
+            delete f.proSimVttArrSec;
+            delete f.proSimVttDepSec;
+            delete f.proSimDepLineupSec;
+            f.arrRunwayIdUsed = null;
+            f.arrTdDistM = null;
+            f.arrRetDistM = null;
+            f.arrVTdMs = null;
+            f.arrDecelMs2 = null;
+            f.arrVRetInMs = null;
+            f.arrVRetOutMs = null;
+            f.timeline = null;
+            delete f.timeline_meta;
+            delete f.proSimEdgeList;
+            delete f.eldtMin;
+            delete f.eibtMin;
+            delete f.eobtMin;
+            delete f.etotMin;
+            delete f.eldtMin_orig;
+            delete f.eibtMin_orig;
+            delete f.eobtMin_orig;
+            delete f.etotMin_orig;
+          }
+        }
         delete f.cachedArrPathPts;
         delete f.cachedDepPathPts;
         delete f._pathPolylineCacheRev;
@@ -2321,14 +2400,6 @@
         f.__schedRetRotRev = null;
         f.__schedVttArrRev = null;
         f.__schedVttArrMin = null;
-        delete f.eldtMin;
-        delete f.eibtMin;
-        delete f.eobtMin;
-        delete f.etotMin;
-        delete f.eldtMin_orig;
-        delete f.eibtMin_orig;
-        delete f.eobtMin_orig;
-        delete f.etotMin_orig;
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
         if (!String(f.reg || '').trim()) f.reg = randomRegNumber();
@@ -2343,7 +2414,14 @@
     if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
     state.simPlaying = false;
     state.layoutPathDrawPointer = null;
-    state.hasSimulationResult = false;
+    let playbackFlightCount = 0;
+    (state.flights || []).forEach(function(f) {
+      if (f && f.timeline && f.timeline.length >= 2) playbackFlightCount++;
+    });
+    state.hasSimulationResult = playbackFlightCount > 0;
+    if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
+      state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
+    }
     if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
@@ -2356,9 +2434,26 @@
         console.warn('applyLayoutObject: path graph sync', ePg);
       }
     }
-    if (typeof renderFlightList === 'function') renderFlightList();
+    if (restoreProSimSyncUi) {
+      state.globalUpdateFresh = true;
+      if (dp.designerPageUpdateFresh === true) {
+        if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+      } else {
+        state.designerPageUpdateFresh = false;
+        const ddot = document.getElementById('designerPageUpdateSyncDot');
+        if (ddot) {
+          ddot.classList.remove('fresh');
+          ddot.classList.add('stale');
+          ddot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
+        }
+      }
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+    }
+    if (typeof renderFlightList === 'function') renderFlightList(false, false);
+    const playDockBtnApplyLayout = document.getElementById('btnShowPlayDock');
+    if (playDockBtnApplyLayout) playDockBtnApplyLayout.disabled = !state.hasSimulationResult;
   }
-  /** E-series minutes and ARR_ROT_SEC from ``airside_sim`` schedule row only (seconds → minutes). */
+  /** E-series minutes; ARR_ROT_SEC / VTT_* / LINEUP_DEPARTURE_SEC from ``airside_sim`` schedule (motion phases). */
   function applyAirsideScheduleRowToFlight(f, srec) {
     if (!f) return;
     if (!srec || typeof srec !== 'object') {
@@ -2371,6 +2466,9 @@
       delete f.eobtMin_orig;
       delete f.etotMin_orig;
       f.arrRotSec = null;
+      delete f.proSimVttArrSec;
+      delete f.proSimVttDepSec;
+      delete f.proSimDepLineupSec;
       return;
     }
     function secOpt(key) {
@@ -2393,15 +2491,25 @@
     const rotS = secOpt('ARR_ROT_SEC');
     if (isFinite(rotS)) f.arrRotSec = rotS;
     else f.arrRotSec = null;
+    const vttArrS = secOpt('VTT_ARR_SEC');
+    if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
+    else delete f.proSimVttArrSec;
+    const vttDepS = secOpt('VTT_DEP_SEC');
+    if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
+    else delete f.proSimVttDepSec;
+    const lineupS = secOpt('LINEUP_DEPARTURE_SEC');
+    if (isFinite(lineupS)) f.proSimDepLineupSec = lineupS;
+    else delete f.proSimDepLineupSec;
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
-    state.simPlaybackEndCapSec = null;
-    if (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true) {
-      const rawCap = payload.simulation_playback_end_abs_sec;
-      const c = Number(rawCap);
-      if (isFinite(c)) state.simPlaybackEndCapSec = c;
-    }
+    const truncCap = (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true)
+      ? (function() {
+        const rawCap = payload.simulation_playback_end_abs_sec;
+        const c = Number(rawCap);
+        return isFinite(c) ? c : null;
+      })()
+      : null;
     const flightsDetail = Array.isArray(payload.flights_detail) ? payload.flights_detail : null;
     if (flightsDetail) {
       const byId = {};
@@ -2436,6 +2544,9 @@
     const layout = payload.layout;
     if (layout && typeof layout === 'object') {
       applyLayoutObject(layout);
+    }
+    if (truncCap != null) {
+      state.simPlaybackEndCapSec = truncCap;
     }
     const schedById = {};
     scheduleList.forEach(function(s) {
@@ -4107,6 +4218,23 @@
           'arrVTdMs',
           'arrDecelMs2',
           'arrDep',
+          'intDom',
+          'eldtMin',
+          'eibtMin',
+          'eobtMin',
+          'etotMin',
+          'eldtMin_orig',
+          'eibtMin_orig',
+          'eobtMin_orig',
+          'etotMin_orig',
+          'arrRotSec',
+          'proSimVttArrSec',
+          'proSimVttDepSec',
+          'proSimDepLineupSec',
+          'arrRunwayIdUsed',
+          'arrRetDistM',
+          'arrVRetInMs',
+          'arrVRetOutMs',
         ];
         simFlightKeys.forEach(function(k) {
           if (Object.prototype.hasOwnProperty.call(f, k) && f[k] !== undefined) {
@@ -4168,6 +4296,30 @@
         copy.sibtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sibt_d);
         copy.sobtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sobt_d);
         copy.stotDateTime_d = formatFlightScheduleDateTime(f, schedExport.stot_d);
+        if (state.hasSimulationResult && Array.isArray(f.timeline) && f.timeline.length >= 2) {
+          copy.timeline = f.timeline.map(function(p) {
+            const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+            const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+            const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
+            const o = { t: Number(p.t), x: x, y: y };
+            if (dg) o.deadlockGhost = true;
+            if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
+            if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            return o;
+          }).filter(function(k) {
+            return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+          });
+          if (copy.timeline.length >= 2 && f.timeline_meta && typeof f.timeline_meta === 'object') {
+            try {
+              copy.timeline_meta = JSON.parse(JSON.stringify(f.timeline_meta));
+            } catch (eMeta) {
+              copy.timeline_meta = Object.assign({}, f.timeline_meta);
+            }
+          }
+        }
+        if (state.hasSimulationResult && Array.isArray(f.proSimEdgeList) && f.proSimEdgeList.length) {
+          copy.proSimEdgeList = f.proSimEdgeList.slice();
+        }
         return copy;
       }),
       layoutMarkers: (state.layoutMarkers || []).map(function(m) {
@@ -4218,6 +4370,15 @@
         }
         return null;
       }).filter(Boolean),
+      designerPersist: {
+        v: 1,
+        globalUpdateFresh: !!state.globalUpdateFresh,
+        designerPageUpdateFresh: !!state.designerPageUpdateFresh,
+        hasSimulationPlayback: !!state.hasSimulationResult,
+        simPlaybackEndCapSec: (state.simPlaybackEndCapSec != null && isFinite(Number(state.simPlaybackEndCapSec)))
+          ? Number(state.simPlaybackEndCapSec)
+          : null,
+      },
       simPathGraph: buildSimPathGraphExport()
     };
   }
@@ -8666,16 +8827,14 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  const FLIGHT_SCHED_TABLE_COL_COUNT = 28;
-  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). S-group SLDT/STOT columns removed. */
-  const FLIGHT_SCHED_TD_SLD = 10;
-  const FLIGHT_SCHED_TD_SIBTD = 11;
-  const FLIGHT_SCHED_TD_SOBTD = 12;
-  const FLIGHT_SCHED_TD_STOTD = 13;
-  const FLIGHT_SCHED_TD_ELDT = 14;
-  const FLIGHT_SCHED_TD_EIBT = 15;
-  const FLIGHT_SCHED_TD_EOBT = 16;
-  const FLIGHT_SCHED_TD_ETOT = 17;
+  const FLIGHT_SCHED_TABLE_COL_COUNT = 24;
+  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). SLDT(d)/STOT(d) hidden from table; sync via applySdDispDeltaFromSibtSobt. */
+  const FLIGHT_SCHED_TD_SIBTD = 13;
+  const FLIGHT_SCHED_TD_SOBTD = 14;
+  const FLIGHT_SCHED_TD_ELDT = 15;
+  const FLIGHT_SCHED_TD_EIBT = 16;
+  const FLIGHT_SCHED_TD_EOBT = 17;
+  const FLIGHT_SCHED_TD_ETOT = 18;
   function ensureFlightAssignStripWired() {
     if (window.__flightAssignStripWired) return;
     const wrap = document.getElementById('flightAssignStrip');
@@ -9060,11 +9219,12 @@
     const tArrMin = f.timeMin != null ? f.timeMin : 0;
     const dwell = f.dwellMin != null ? f.dwellMin : 0;
     const tDepMin = tArrMin + dwell;
-    const schedDepRotMin = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
-    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin));
+    const sibtD = f.sibtMin_d != null ? f.sibtMin_d : tArrMin;
+    const sobtD = f.sobtMin_d != null ? f.sobtMin_d : tDepMin;
+    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, sibtD - SCHED_SD_SIBT_MINUS_SLD_MIN));
     const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
     const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + schedDepRotMin);
+    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (sobtD + SCHED_SD_STOT_PLUS_SOBD_MIN);
     return {
       sibt: tArrMin,
       sobt: tDepMin,
@@ -9075,6 +9235,20 @@
     };
   }
 
+  function flightScheduleProSimTimedCell(displayStr, dotKind) {
+    const d = '—';
+    const has = displayStr != null && String(displayStr).trim() !== '' && displayStr !== d;
+    const text = has ? String(displayStr) : d;
+    const muted = has ? '' : ' flight-sched-dot--muted';
+    let dotClass = 'flight-sched-dot--green';
+    if (dotKind === 'vttarr') dotClass = 'flight-sched-dot--vttarr';
+    else if (dotKind === 'red') dotClass = 'flight-sched-dot--red';
+    else if (dotKind === 'pink') dotClass = 'flight-sched-dot--pink';
+    return '<span class="flight-sched-cell-inner">' +
+      '<span class="flight-sched-dot ' + dotClass + muted + '" aria-hidden="true"></span>' +
+      '<span class="flight-sched-cell-text">' + (has ? escapeHtml(text) : d) + '</span></span>';
+  }
+
   function _buildFlightListHeaderHtml() {
     return '' +
       '<table class="flight-schedule-table">' +
@@ -9082,6 +9256,9 @@
         '<th>Reg</th>' +
         '<th class="flight-th-mixed">Airline</th>' +
         '<th class="flight-th-mixed">Flight Num</th>' +
+        '<th>Aircraft Type</th>' +
+        '<th class="flight-th-mixed">Code(ICAO)</th>' +
+        '<th>Int/Dom</th>' +
         '<th>Arr Rw</th>' +
         '<th>Arr RET</th>' +
         '<th>Building</th>' +
@@ -9089,23 +9266,16 @@
         '<th>Dep Rw</th>' +
         '<th class="flight-col-s flight-col-s-start flight-td-sibt">SIBT</th>' +
         '<th class="flight-col-s flight-col-s-last">SOBT</th>' +
-        '<th class="flight-col-sd flight-col-sd-start">SLDT(d)</th>' +
-        '<th class="flight-col-sd">SIBT(d)</th>' +
-        '<th class="flight-col-sd">SOBT(d)</th>' +
-        '<th class="flight-col-sd flight-col-sd-last">STOT(d)</th>' +
+        '<th class="flight-col-sd flight-col-sd-start">SIBT(d)</th>' +
+        '<th class="flight-col-sd flight-col-sd-last">SOBT(d)</th>' +
         '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
         '<th class="flight-col-e">EIBT</th>' +
         '<th class="flight-col-e">EOBT</th>' +
         '<th class="flight-col-e">ETOT</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
-        '<th class="flight-th-mixed">STT(arr)</th>' +
-        '<th class="flight-th-mixed">ATT(arr)</th>' +
+        '<th class="flight-th-mixed">VTT(Arr)</th>' +
+        '<th class="flight-th-mixed">ATT(Dep)</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(dep)</th>' +
-        '<th class="flight-th-mixed">STT(dep)</th>' +
-        '<th class="flight-th-mixed">ATT(dep)</th>' +
-        '<th>Aircraft Type</th>' +
-        '<th class="flight-th-mixed">Code(ICAO)</th>' +
-        '<th>Int/Dom</th>' +
         '<th class="flight-td-del"></th>' +
       '</tr></thead>' +
       '<tbody>';
@@ -9138,24 +9308,25 @@
     const schedM = flightScheduleMinutesForRow(f);
     const sibtDisp = formatFlightScheduleDateTime(f, schedM.sibt);
     const sobtDisp = formatFlightScheduleDateTime(f, schedM.sobt);
-    const sldtStr_d = formatFlightScheduleDateTime(f, schedM.sldt_d);
     const sibtStr_d = formatFlightScheduleDateTime(f, schedM.sibt_d);
     const sobtStr_d = formatFlightScheduleDateTime(f, schedM.sobt_d);
-    const stotStr_d = formatFlightScheduleDateTime(f, schedM.stot_d);
     function fmtFlightESchedCell(minVal) {
-      return (typeof minVal === 'number' && isFinite(minVal)) ? formatMinutesToHHMMSS(minVal) : '—';
+      if (!(typeof minVal === 'number' && isFinite(minVal))) return '—';
+      return formatFlightScheduleDateTime(f, minVal);
     }
     const eldtStr = fmtFlightESchedCell(f.eldtMin);
     const eibtStr = fmtFlightESchedCell(f.eibtMin);
     const eobtStr = fmtFlightESchedCell(f.eobtMin);
     const etotStr = fmtFlightESchedCell(f.etotMin);
     const dash = '—';
-    const rotArrCell = (f.arrRotSec != null && isFinite(f.arrRotSec)) ? (Math.round(f.arrRotSec) + ' s') : dash;
-    const rotDepCell = (f.depRotSec != null && isFinite(f.depRotSec)) ? (Math.round(f.depRotSec) + ' s') : dash;
-    const sttArrCell = (typeof f.sttArrMin === 'number' && isFinite(f.sttArrMin)) ? formatMinutesToHHMMSS(f.sttArrMin) : dash;
-    const attArrCell = (typeof f.attArrMin === 'number' && isFinite(f.attArrMin)) ? formatMinutesToHHMMSS(f.attArrMin) : dash;
-    const sttDepCell = (typeof f.sttDepMin === 'number' && isFinite(f.sttDepMin)) ? formatMinutesToHHMMSS(f.sttDepMin) : dash;
-    const attDepCell = (typeof f.attDepMin === 'number' && isFinite(f.attDepMin)) ? formatMinutesToHHMMSS(f.attDepMin) : dash;
+    const rotArrStr = (f.arrRotSec != null && isFinite(f.arrRotSec)) ? formatSecondsToHHMMSS(f.arrRotSec) : dash;
+    const vttArrStr = (f.proSimVttArrSec != null && isFinite(f.proSimVttArrSec)) ? formatSecondsToHHMMSS(f.proSimVttArrSec) : dash;
+    const attDepStr = (f.proSimVttDepSec != null && isFinite(f.proSimVttDepSec)) ? formatSecondsToHHMMSS(f.proSimVttDepSec) : dash;
+    const rotDepStr = (f.proSimDepLineupSec != null && isFinite(f.proSimDepLineupSec)) ? formatSecondsToHHMMSS(f.proSimDepLineupSec) : dash;
+    const rotArrCell = flightScheduleProSimTimedCell(rotArrStr, 'green');
+    const vttArrCell = flightScheduleProSimTimedCell(vttArrStr, 'vttarr');
+    const attDepCell = flightScheduleProSimTimedCell(attDepStr, 'red');
+    const rotDepCell = flightScheduleProSimTimedCell(rotDepStr, 'pink');
     const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
     const termId = f.terminalId || (f.token && f.token.terminalId);
     const arrRwRead = escapeHtml(getRunwayDisplayLabelById(arrRunwayId));
@@ -9169,6 +9340,9 @@
         '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
+        '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
+        '<td>' + escapeHtml(codeIcao) + '</td>' +
+        '<td class="flight-td-readonly" title="Edit in Int/Dom above when flight is selected">' + escapeHtml(intDomVal) + '</td>' +
         '<td class="flight-td-readonly">' + arrRwRead + '</td>' +
         '<td class="flight-td-arr-ret' + (arrRetFailed ? ' flight-td-arr-ret-failed' : '') + '">' + (arrRetFailed ? 'Failed' : escapeHtml(sampledRetName)) + '</td>' +
         '<td class="flight-td-readonly">' + buildingRead + '</td>' +
@@ -9176,23 +9350,16 @@
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-start flight-td-sibt" data-sched-min="' + schedM.sibt + '">' + escapeHtml(sibtDisp) + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-last" data-sched-min="' + schedM.sobt + '">' + escapeHtml(sobtDisp) + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-start" data-sched-min="' + schedM.sldt_d + '">' + escapeHtml(sldtStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-sd" data-sched-min="' + schedM.sibt_d + '">' + escapeHtml(sibtStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-sd" data-sched-min="' + schedM.sobt_d + '">' + escapeHtml(sobtStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-last" data-sched-min="' + schedM.stot_d + '">' + escapeHtml(stotStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-e flight-col-e-start">' + eldtStr + '</td>' +
-        '<td class="flight-td-time flight-col-e">' + eibtStr + '</td>' +
-        '<td class="flight-td-time flight-col-e">' + eobtStr + '</td>' +
-        '<td class="flight-td-time flight-col-e">' + etotStr + '</td>' +
+        '<td class="flight-td-time flight-col-sd flight-col-sd-start" data-sched-min="' + schedM.sibt_d + '">' + escapeHtml(sibtStr_d) + '</td>' +
+        '<td class="flight-td-time flight-col-sd flight-col-sd-last" data-sched-min="' + schedM.sobt_d + '">' + escapeHtml(sobtStr_d) + '</td>' +
+        '<td class="flight-td-time flight-col-e flight-col-e-start">' + escapeHtml(eldtStr) + '</td>' +
+        '<td class="flight-td-time flight-col-e">' + escapeHtml(eibtStr) + '</td>' +
+        '<td class="flight-td-time flight-col-e">' + escapeHtml(eobtStr) + '</td>' +
+        '<td class="flight-td-time flight-col-e">' + escapeHtml(etotStr) + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
-        '<td class="flight-td-time">' + sttArrCell + '</td>' +
-        '<td class="flight-td-time">' + attArrCell + '</td>' +
-        '<td class="flight-td-time">' + rotDepCell + '</td>' +
-        '<td class="flight-td-time">' + sttDepCell + '</td>' +
+        '<td class="flight-td-time">' + vttArrCell + '</td>' +
         '<td class="flight-td-time">' + attDepCell + '</td>' +
-        '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
-        '<td>' + escapeHtml(codeIcao) + '</td>' +
-        '<td class="flight-td-readonly" title="Edit in Int/Dom above when flight is selected">' + escapeHtml(intDomVal) + '</td>' +
+        '<td class="flight-td-time flight-col-e flight-col-rot">' + rotDepCell + '</td>' +
         '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
       '</tr>';
   }
@@ -9828,10 +9995,10 @@
             return 0;
           }
         };
-        const sldt_d = getMin(FLIGHT_SCHED_TD_SLD);
         const sibt_d = getMin(FLIGHT_SCHED_TD_SIBTD);
         const sobt_d = getMin(FLIGHT_SCHED_TD_SOBTD);
-        const stot_d = getMin(FLIGHT_SCHED_TD_STOTD);
+        const sldt_d = Math.max(0, sibt_d - SCHED_SD_SIBT_MINUS_SLD_MIN);
+        const stot_d = sobt_d + SCHED_SD_STOT_PLUS_SOBD_MIN;
         const eSer = ganttESeriesMinutesFromTimelineMeta(f);
         const eldt = eSer.eldt;
         const eibt = eSer.eibt;
@@ -15444,10 +15611,10 @@
       return { wMul: 1.72, stroke: '#3b82f6' };
     }
     if (p === 'Dep_taxi' || p === 'Holding_lineup') {
-      return { wMul: 0.58, stroke: '#ef4444' };
+      return { wMul: 0.58 * 1.2, stroke: '#ef4444' };
     }
     if (p === 'Lineup_departure') {
-      return { wMul: 0.45, stroke: '#ff1493' };
+      return { wMul: 0.45 * 1.2, stroke: '#ff1493' };
     }
     return { wMul: 1.72, stroke: '#22c55e' };
   }
@@ -15551,11 +15718,8 @@
   function proSimArrowFillForStroke(strokeHex) {
     const s = String(strokeHex || '').trim();
     const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(s);
-    if (!m) return 'rgba(250, 250, 250, 0.82)';
-    const r = parseInt(m[1], 16);
-    const g = parseInt(m[2], 16);
-    const b = parseInt(m[3], 16);
-    return 'rgba(' + r + ',' + g + ',' + b + ',0.42)';
+    if (!m) return '#fafafa';
+    return '#' + m[1] + m[2] + m[3];
   }
   function drawProSimFlightPathEdges() {
     const sel = state.selectedObject;
@@ -15568,8 +15732,8 @@
     (state.derivedGraphEdges || []).forEach(function(ed) {
       if (ed && ed.id) byId[ed.id] = ed;
     });
-    /* Base stroke: ~1.5× legacy × 1.3 (extra thickness) */
-    const baseW = Math.max(4.2, CELL_SIZE * 0.148) * 1.5 * 1.3;
+    /* Base stroke: ~1.5× legacy × 1.3 (extra thickness) × 1.2 (flight schedule route reveal) */
+    const baseW = Math.max(4.2, CELL_SIZE * 0.148) * 1.5 * 1.3 * 1.2;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
@@ -15640,15 +15804,16 @@
       const isRedOrPinkArrow = ph === 'Dep_taxi' || ph === 'Holding_lineup' || ph === 'Lineup_departure';
       const arrowFill = isRedOrPinkArrow
         ? proSimArrowFillForStroke(item.st.stroke)
-        : 'rgba(250, 250, 250, 0.82)';
+        : '#fafafa';
       const baseSpacing = Math.max(20, CELL_SIZE * 0.34) * 1.15;
       const baseHead = Math.max(4.5, CELL_SIZE * 0.135) * 1.15;
-      drawProSimSegmentArrows(
-        edgePts,
-        arrowFill,
-        isRedOrPinkArrow ? baseSpacing * 2 : baseSpacing,
-        isRedOrPinkArrow ? baseHead * 2 : baseHead
-      );
+      const redPinkArrowMul = 2 * 1.5;
+      const arrowSizeMul = 1.1;
+      const stHex = String(item.st && item.st.stroke || '').trim().toLowerCase();
+      const greenBlueArrowMul = (stHex === '#22c55e' || stHex === '#3b82f6') ? 1.3 : 1;
+      let arrSp = (isRedOrPinkArrow ? baseSpacing * redPinkArrowMul : baseSpacing) * arrowSizeMul * greenBlueArrowMul;
+      let arrHd = (isRedOrPinkArrow ? baseHead * redPinkArrowMul : baseHead) * arrowSizeMul * greenBlueArrowMul;
+      drawProSimSegmentArrows(edgePts, arrowFill, arrSp, arrHd);
     });
     ctx.restore();
   }
@@ -17001,10 +17166,8 @@
           return isFinite(parsed) ? parsed : null;
         };
         const map = {
-          sldtMin_d: FLIGHT_SCHED_TD_SLD,
           sibtMin_d: FLIGHT_SCHED_TD_SIBTD,
           sobtMin_d: FLIGHT_SCHED_TD_SOBTD,
-          stotMin_d: FLIGHT_SCHED_TD_STOTD,
           eldtMin: FLIGHT_SCHED_TD_ELDT,
           eibtMin: FLIGHT_SCHED_TD_EIBT,
           eobtMin: FLIGHT_SCHED_TD_EOBT,
@@ -17014,6 +17177,7 @@
           const v = getMin(map[key]);
           if (v != null) f[key] = v;
         });
+        if (typeof applySdDispDeltaFromSibtSobt === 'function') applySdDispDeltaFromSibtSobt(f);
       });
     }
     function setLayoutMessage(msg, isError) {

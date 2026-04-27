@@ -18,6 +18,10 @@ recorded.
 finishes the last path segment (``path_completed_abs_sec``); no nominal EOBT+leg projection. If the sim never completes that path,
 ``ETOT`` is omitted (null).
 
+After the time-step loop, ``_overlay_schedule_timing_from_playback_positions`` adds motion-duration fields (seconds) derived from
+consecutive ``positions`` samples: ``ARR_ROT_SEC`` (``Landing``), ``VTT_ARR_SEC`` (``Arr_taxi`` + ``Arr_taxi_occupied``),
+``VTT_DEP_SEC`` (``Dep_taxi`` + ``Holding_lineup``), ``LINEUP_DEPARTURE_SEC`` (``Lineup_departure``), aligned with Pro Sim 2D colors.
+
 ``positions`` timelines use ``t`` = absolute schedule seconds (day base, same as ELDT scale);
 ``Dep_taxi`` pushback/taxi-out is gated until **physical** in-blocks at stand + ``dwell_sec`` (not ELDT+nominal taxi-in).
 Between heavy control ticks, a full reservation rebook runs every ``LIGHT_RESERVATION_RETRY_INTERVAL_SEC`` so agents
@@ -3590,6 +3594,56 @@ def _build_schedule_row(
     }
 
 
+def _sum_phase_durations_from_position_samples(
+    pts: List[Dict[str, Any]],
+) -> Dict[str, float]:
+    """
+    For each consecutive pair of playback samples, credit (t_{i+1}-t_i) to the phase
+    recorded on the first sample. Matches Pro Sim 2D segment colors (Landing=green,
+    Arr_taxi/Arr_taxi_occupied=blue/purple, Dep_taxi/Holding_lineup=red,
+    Lineup_departure=pink).
+    """
+    totals: Dict[str, float] = {}
+    if not pts or len(pts) < 2:
+        return totals
+    for i in range(len(pts) - 1):
+        p0, p1 = pts[i], pts[i + 1]
+        ph = str(p0.get("phase") or "").strip()
+        if not ph:
+            continue
+        dt = float(p1.get("t", 0.0)) - float(p0.get("t", 0.0))
+        if dt <= 0:
+            continue
+        totals[ph] = totals.get(ph, 0.0) + dt
+    return totals
+
+
+def _apply_pro_sim_phase_durations_to_schedule_row(row: Dict[str, Any], pts: List[Dict[str, Any]]) -> None:
+    """Post-overlay: wall-clock phase spans from ``positions`` for Flight Schedule KPI columns."""
+    pdur = _sum_phase_durations_from_position_samples(pts)
+    has_ldg = bool(row.get("HAS_LANDING"))
+
+    land = float(pdur.get(PHASE_LANDING, 0.0))
+    vtt_arr = float(pdur.get(PHASE_ARR_TAXI, 0.0)) + float(
+        pdur.get(PHASE_ARR_TAXI_TEMP, 0.0)
+    )
+    vtt_dep = float(pdur.get(PHASE_DEP_TAXI, 0.0)) + float(
+        pdur.get(PHASE_HOLDING_LINEUP, 0.0)
+    )
+    lineup = float(pdur.get(PHASE_LINEUP_DEPARTURE, 0.0))
+
+    def _set_sec(key: str, val: float, allow: bool) -> None:
+        if allow and val > 1e-6:
+            row[key] = round(val, 3)
+        else:
+            row[key] = None
+
+    _set_sec("ARR_ROT_SEC", land, has_ldg)
+    _set_sec("VTT_ARR_SEC", vtt_arr, vtt_arr > 1e-6)
+    _set_sec("VTT_DEP_SEC", vtt_dep, vtt_dep > 1e-6)
+    _set_sec("LINEUP_DEPARTURE_SEC", lineup, lineup > 1e-6)
+
+
 def _overlay_schedule_timing_from_playback_positions(
     out: Dict[str, Any],
     layout: Dict[str, Any],
@@ -3758,12 +3812,20 @@ def _overlay_schedule_timing_from_playback_positions(
             ):
                 row[k] = None
                 row[dk] = None
+            for pk in (
+                "ARR_ROT_SEC",
+                "VTT_ARR_SEC",
+                "VTT_DEP_SEC",
+                "LINEUP_DEPARTURE_SEC",
+            ):
+                row[pk] = None
             continue
         pts_sorted = sorted(
             (p for p in raw_plist if isinstance(p, dict)),
             key=lambda p: float(p.get("t", 0.0)),
         )
         _apply_timings(row, fobj, pts_sorted)
+        _apply_pro_sim_phase_durations_to_schedule_row(row, pts_sorted)
 
 
 def _layout_edge_capacity(ed: Dict[str, Any]) -> int:

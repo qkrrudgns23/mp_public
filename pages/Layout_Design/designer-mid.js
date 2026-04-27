@@ -396,16 +396,14 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  const FLIGHT_SCHED_TABLE_COL_COUNT = 28;
-  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). S-group SLDT/STOT columns removed. */
-  const FLIGHT_SCHED_TD_SLD = 10;
-  const FLIGHT_SCHED_TD_SIBTD = 11;
-  const FLIGHT_SCHED_TD_SOBTD = 12;
-  const FLIGHT_SCHED_TD_STOTD = 13;
-  const FLIGHT_SCHED_TD_ELDT = 14;
-  const FLIGHT_SCHED_TD_EIBT = 15;
-  const FLIGHT_SCHED_TD_EOBT = 16;
-  const FLIGHT_SCHED_TD_ETOT = 17;
+  const FLIGHT_SCHED_TABLE_COL_COUNT = 24;
+  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). SLDT(d)/STOT(d) hidden from table. */
+  const FLIGHT_SCHED_TD_SIBTD = 13;
+  const FLIGHT_SCHED_TD_SOBTD = 14;
+  const FLIGHT_SCHED_TD_ELDT = 15;
+  const FLIGHT_SCHED_TD_EIBT = 16;
+  const FLIGHT_SCHED_TD_EOBT = 17;
+  const FLIGHT_SCHED_TD_ETOT = 18;
   function ensureFlightAssignStripWired() {
     if (window.__flightAssignStripWired) return;
     const wrap = document.getElementById('flightAssignStrip');
@@ -790,11 +788,12 @@
     const tArrMin = f.timeMin != null ? f.timeMin : 0;
     const dwell = f.dwellMin != null ? f.dwellMin : 0;
     const tDepMin = tArrMin + dwell;
-    const schedDepRotMin = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
-    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin));
+    const sibtD = f.sibtMin_d != null ? f.sibtMin_d : tArrMin;
+    const sobtD = f.sobtMin_d != null ? f.sobtMin_d : tDepMin;
+    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, sibtD - SCHED_SD_SIBT_MINUS_SLD_MIN));
     const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
     const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + schedDepRotMin);
+    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (sobtD + SCHED_SD_STOT_PLUS_SOBD_MIN);
     return {
       sibt: tArrMin,
       sobt: tDepMin,
@@ -803,6 +802,20 @@
       sobt_d: f.sobtMin_d != null ? f.sobtMin_d : tDepMin,
       stot_d: f.stotMin_d != null ? f.stotMin_d : stotOrig,
     };
+  }
+
+  function flightScheduleProSimTimedCell(displayStr, dotKind) {
+    const d = '—';
+    const has = displayStr != null && String(displayStr).trim() !== '' && displayStr !== d;
+    const text = has ? String(displayStr) : d;
+    const muted = has ? '' : ' flight-sched-dot--muted';
+    let dotClass = 'flight-sched-dot--green';
+    if (dotKind === 'vttarr') dotClass = 'flight-sched-dot--vttarr';
+    else if (dotKind === 'red') dotClass = 'flight-sched-dot--red';
+    else if (dotKind === 'pink') dotClass = 'flight-sched-dot--pink';
+    return '<span class="flight-sched-cell-inner">' +
+      '<span class="flight-sched-dot ' + dotClass + muted + '" aria-hidden="true"></span>' +
+      '<span class="flight-sched-cell-text">' + (has ? escapeHtml(text) : d) + '</span></span>';
   }
 
   function _buildFlightListHeaderHtml() {
@@ -819,23 +832,16 @@
         '<th>Dep Rw</th>' +
         '<th class="flight-col-s flight-col-s-start flight-td-sibt">SIBT</th>' +
         '<th class="flight-col-s flight-col-s-last">SOBT</th>' +
-        '<th class="flight-col-sd flight-col-sd-start">SLDT(d)</th>' +
-        '<th class="flight-col-sd">SIBT(d)</th>' +
-        '<th class="flight-col-sd">SOBT(d)</th>' +
-        '<th class="flight-col-sd flight-col-sd-last">STOT(d)</th>' +
+        '<th class="flight-col-sd flight-col-sd-start">SIBT(d)</th>' +
+        '<th class="flight-col-sd flight-col-sd-last">SOBT(d)</th>' +
         '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
         '<th class="flight-col-e">EIBT</th>' +
         '<th class="flight-col-e">EOBT</th>' +
         '<th class="flight-col-e">ETOT</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
-        '<th class="flight-th-mixed">STT(arr)</th>' +
-        '<th class="flight-th-mixed">ATT(arr)</th>' +
+        '<th class="flight-th-mixed">VTT(Arr)</th>' +
+        '<th class="flight-th-mixed">ATT(Dep)</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(dep)</th>' +
-        '<th class="flight-th-mixed">STT(dep)</th>' +
-        '<th class="flight-th-mixed">ATT(dep)</th>' +
-        '<th>Aircraft Type</th>' +
-        '<th class="flight-th-mixed">Code(ICAO)</th>' +
-        '<th>Int/Dom</th>' +
         '<th class="flight-td-del"></th>' +
       '</tr></thead>' +
       '<tbody>';
@@ -868,24 +874,25 @@
     const schedM = flightScheduleMinutesForRow(f);
     const sibtDisp = formatFlightScheduleDateTime(f, schedM.sibt);
     const sobtDisp = formatFlightScheduleDateTime(f, schedM.sobt);
-    const sldtStr_d = formatFlightScheduleDateTime(f, schedM.sldt_d);
     const sibtStr_d = formatFlightScheduleDateTime(f, schedM.sibt_d);
     const sobtStr_d = formatFlightScheduleDateTime(f, schedM.sobt_d);
-    const stotStr_d = formatFlightScheduleDateTime(f, schedM.stot_d);
     function fmtFlightESchedCell(minVal) {
-      return (typeof minVal === 'number' && isFinite(minVal)) ? formatMinutesToHHMMSS(minVal) : '—';
+      if (!(typeof minVal === 'number' && isFinite(minVal))) return '—';
+      return formatFlightScheduleDateTime(f, minVal);
     }
     const eldtStr = fmtFlightESchedCell(f.eldtMin);
     const eibtStr = fmtFlightESchedCell(f.eibtMin);
     const eobtStr = fmtFlightESchedCell(f.eobtMin);
     const etotStr = fmtFlightESchedCell(f.etotMin);
     const dash = '—';
-    const rotArrCell = (f.arrRotSec != null && isFinite(f.arrRotSec)) ? (Math.round(f.arrRotSec) + ' s') : dash;
-    const rotDepCell = (f.depRotSec != null && isFinite(f.depRotSec)) ? (Math.round(f.depRotSec) + ' s') : dash;
-    const sttArrCell = (typeof f.sttArrMin === 'number' && isFinite(f.sttArrMin)) ? formatMinutesToHHMMSS(f.sttArrMin) : dash;
-    const attArrCell = (typeof f.attArrMin === 'number' && isFinite(f.attArrMin)) ? formatMinutesToHHMMSS(f.attArrMin) : dash;
-    const sttDepCell = (typeof f.sttDepMin === 'number' && isFinite(f.sttDepMin)) ? formatMinutesToHHMMSS(f.sttDepMin) : dash;
-    const attDepCell = (typeof f.attDepMin === 'number' && isFinite(f.attDepMin)) ? formatMinutesToHHMMSS(f.attDepMin) : dash;
+    const rotArrStr = (f.arrRotSec != null && isFinite(f.arrRotSec)) ? formatSecondsToHHMMSS(f.arrRotSec) : dash;
+    const vttArrStr = (f.proSimVttArrSec != null && isFinite(f.proSimVttArrSec)) ? formatSecondsToHHMMSS(f.proSimVttArrSec) : dash;
+    const attDepStr = (f.proSimVttDepSec != null && isFinite(f.proSimVttDepSec)) ? formatSecondsToHHMMSS(f.proSimVttDepSec) : dash;
+    const rotDepStr = (f.proSimDepLineupSec != null && isFinite(f.proSimDepLineupSec)) ? formatSecondsToHHMMSS(f.proSimDepLineupSec) : dash;
+    const rotArrCell = flightScheduleProSimTimedCell(rotArrStr, 'green');
+    const vttArrCell = flightScheduleProSimTimedCell(vttArrStr, 'vttarr');
+    const attDepCell = flightScheduleProSimTimedCell(attDepStr, 'red');
+    const rotDepCell = flightScheduleProSimTimedCell(rotDepStr, 'pink');
     const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
     const termId = f.terminalId || (f.token && f.token.terminalId);
     const arrRwRead = escapeHtml(getRunwayDisplayLabelById(arrRunwayId));
@@ -899,6 +906,9 @@
         '<td class="flight-td-reg">' + escapeHtml(f.reg || '') + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.airlineCode || '') + '</td>' +
         '<td class="flight-td-reg">' + escapeHtml(f.flightNumber || '') + '</td>' +
+        '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
+        '<td>' + escapeHtml(codeIcao) + '</td>' +
+        '<td class="flight-td-readonly" title="Edit in Int/Dom above when flight is selected">' + escapeHtml(intDomVal) + '</td>' +
         '<td class="flight-td-readonly">' + arrRwRead + '</td>' +
         '<td class="flight-td-arr-ret' + (arrRetFailed ? ' flight-td-arr-ret-failed' : '') + '">' + (arrRetFailed ? 'Failed' : escapeHtml(sampledRetName)) + '</td>' +
         '<td class="flight-td-readonly">' + buildingRead + '</td>' +
@@ -906,23 +916,16 @@
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-start flight-td-sibt" data-sched-min="' + schedM.sibt + '">' + escapeHtml(sibtDisp) + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-last" data-sched-min="' + schedM.sobt + '">' + escapeHtml(sobtDisp) + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-start" data-sched-min="' + schedM.sldt_d + '">' + escapeHtml(sldtStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-sd" data-sched-min="' + schedM.sibt_d + '">' + escapeHtml(sibtStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-sd" data-sched-min="' + schedM.sobt_d + '">' + escapeHtml(sobtStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-last" data-sched-min="' + schedM.stot_d + '">' + escapeHtml(stotStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-e flight-col-e-start">' + eldtStr + '</td>' +
-        '<td class="flight-td-time flight-col-e">' + eibtStr + '</td>' +
-        '<td class="flight-td-time flight-col-e">' + eobtStr + '</td>' +
-        '<td class="flight-td-time flight-col-e">' + etotStr + '</td>' +
+        '<td class="flight-td-time flight-col-sd flight-col-sd-start" data-sched-min="' + schedM.sibt_d + '">' + escapeHtml(sibtStr_d) + '</td>' +
+        '<td class="flight-td-time flight-col-sd flight-col-sd-last" data-sched-min="' + schedM.sobt_d + '">' + escapeHtml(sobtStr_d) + '</td>' +
+        '<td class="flight-td-time flight-col-e flight-col-e-start">' + escapeHtml(eldtStr) + '</td>' +
+        '<td class="flight-td-time flight-col-e">' + escapeHtml(eibtStr) + '</td>' +
+        '<td class="flight-td-time flight-col-e">' + escapeHtml(eobtStr) + '</td>' +
+        '<td class="flight-td-time flight-col-e">' + escapeHtml(etotStr) + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
-        '<td class="flight-td-time">' + sttArrCell + '</td>' +
-        '<td class="flight-td-time">' + attArrCell + '</td>' +
-        '<td class="flight-td-time">' + rotDepCell + '</td>' +
-        '<td class="flight-td-time">' + sttDepCell + '</td>' +
+        '<td class="flight-td-time">' + vttArrCell + '</td>' +
         '<td class="flight-td-time">' + attDepCell + '</td>' +
-        '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
-        '<td>' + escapeHtml(codeIcao) + '</td>' +
-        '<td class="flight-td-readonly" title="Edit in Int/Dom above when flight is selected">' + escapeHtml(intDomVal) + '</td>' +
+        '<td class="flight-td-time flight-col-e flight-col-rot">' + rotDepCell + '</td>' +
         '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
       '</tr>';
   }
@@ -1558,10 +1561,10 @@
             return 0;
           }
         };
-        const sldt_d = getMin(FLIGHT_SCHED_TD_SLD);
         const sibt_d = getMin(FLIGHT_SCHED_TD_SIBTD);
         const sobt_d = getMin(FLIGHT_SCHED_TD_SOBTD);
-        const stot_d = getMin(FLIGHT_SCHED_TD_STOTD);
+        const sldt_d = Math.max(0, sibt_d - SCHED_SD_SIBT_MINUS_SLD_MIN);
+        const stot_d = sobt_d + SCHED_SD_STOT_PLUS_SOBD_MIN;
         const eSer = ganttESeriesMinutesFromTimelineMeta(f);
         const eldt = eSer.eldt;
         const eibt = eSer.eibt;

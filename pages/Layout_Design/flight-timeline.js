@@ -480,6 +480,23 @@
           'arrVTdMs',
           'arrDecelMs2',
           'arrDep',
+          'intDom',
+          'eldtMin',
+          'eibtMin',
+          'eobtMin',
+          'etotMin',
+          'eldtMin_orig',
+          'eibtMin_orig',
+          'eobtMin_orig',
+          'etotMin_orig',
+          'arrRotSec',
+          'proSimVttArrSec',
+          'proSimVttDepSec',
+          'proSimDepLineupSec',
+          'arrRunwayIdUsed',
+          'arrRetDistM',
+          'arrVRetInMs',
+          'arrVRetOutMs',
         ];
         simFlightKeys.forEach(function(k) {
           if (Object.prototype.hasOwnProperty.call(f, k) && f[k] !== undefined) {
@@ -541,6 +558,30 @@
         copy.sibtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sibt_d);
         copy.sobtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sobt_d);
         copy.stotDateTime_d = formatFlightScheduleDateTime(f, schedExport.stot_d);
+        if (state.hasSimulationResult && Array.isArray(f.timeline) && f.timeline.length >= 2) {
+          copy.timeline = f.timeline.map(function(p) {
+            const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+            const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+            const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
+            const o = { t: Number(p.t), x: x, y: y };
+            if (dg) o.deadlockGhost = true;
+            if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
+            if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            return o;
+          }).filter(function(k) {
+            return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+          });
+          if (copy.timeline.length >= 2 && f.timeline_meta && typeof f.timeline_meta === 'object') {
+            try {
+              copy.timeline_meta = JSON.parse(JSON.stringify(f.timeline_meta));
+            } catch (eMeta) {
+              copy.timeline_meta = Object.assign({}, f.timeline_meta);
+            }
+          }
+        }
+        if (state.hasSimulationResult && Array.isArray(f.proSimEdgeList) && f.proSimEdgeList.length) {
+          copy.proSimEdgeList = f.proSimEdgeList.slice();
+        }
         return copy;
       }),
       layoutMarkers: (state.layoutMarkers || []).map(function(m) {
@@ -591,6 +632,15 @@
         }
         return null;
       }).filter(Boolean),
+      designerPersist: {
+        v: 1,
+        globalUpdateFresh: !!state.globalUpdateFresh,
+        designerPageUpdateFresh: !!state.designerPageUpdateFresh,
+        hasSimulationPlayback: !!state.hasSimulationResult,
+        simPlaybackEndCapSec: (state.simPlaybackEndCapSec != null && isFinite(Number(state.simPlaybackEndCapSec)))
+          ? Number(state.simPlaybackEndCapSec)
+          : null,
+      },
       simPathGraph: buildSimPathGraphExport()
     };
   }

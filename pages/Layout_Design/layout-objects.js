@@ -109,8 +109,8 @@
     return (isFinite(v) && v >= 0) ? v : 20;
   })();
   /** Dispatched schedule (d): SLDT(d) = SIBT(d) − this many minutes; STOT(d) = SOBT(d) + SCHED_SD_STOT_PLUS_SOBD_MIN. */
-  const SCHED_SD_SIBT_MINUS_SLD_MIN = 3;
-  const SCHED_SD_STOT_PLUS_SOBD_MIN = 3;
+  const SCHED_SD_SIBT_MINUS_SLD_MIN = 5;
+  const SCHED_SD_STOT_PLUS_SOBD_MIN = 5;
   const RSEP_MISSING_MATRIX_SEC = (function() {
     const v = Number(_schedAlgo.rsepMissingMatrixSeparationSec);
     return (isFinite(v) && v >= 0) ? v : 90;

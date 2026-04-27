@@ -445,6 +445,9 @@
   }
   function applyLayoutObject(obj) {
     if (!obj || typeof obj !== 'object') return;
+    state.simPlaybackEndCapSec = null;
+    const dp = obj.designerPersist;
+    const restoreProSimSyncUi = !!(dp && dp.v === 1 && dp.globalUpdateFresh === true);
     if (obj.grid) {
       if (typeof obj.grid.cols === 'number') GRID_COLS = obj.grid.cols;
       if (typeof obj.grid.rows === 'number') GRID_ROWS = obj.grid.rows;
@@ -509,7 +512,13 @@
     if (Array.isArray(obj.flights)) {
       state.flights = obj.flights.slice();
       state.flights.forEach(f => {
+        const rawTl = Array.isArray(f.timeline) ? f.timeline : null;
+        const rawMeta = f.timeline_meta;
+        const rawProSimEl = Array.isArray(f.proSimEdgeList) ? f.proSimEdgeList.slice() : null;
+        const restorePlaybackFlight = !!(rawTl && rawTl.length >= 2);
         const t = f.token || {};
+        const exitTwPersist = (t.ExitTaxiwayId != null && t.ExitTaxiwayId !== '') ? t.ExitTaxiwayId : null;
+        const arrRetFailedPersist = f.arrRetFailed === true;
         if (f.aircraftType && typeof getCodeForAircraft === 'function') {
           f.code = getCodeForAircraft(f.aircraftType);
         } else if (f.code && typeof AIRCRAFT_TYPES !== 'undefined') {
@@ -528,22 +537,86 @@
           terminalId: f.terminalId || null,
           depRunwayId: f.depRunwayId || null,
         };
+        if (exitTwPersist) f.token.ExitTaxiwayId = exitTwPersist;
         f.noWayArr = false;
         f.noWayDep = false;
         delete f._noWayArrDetail;
         delete f._noWayDepDetail;
-        f.arrRetFailed = false;
-        f.sampledArrRet = null;
-        f.arrRotSec = null;
-        f.arrRunwayIdUsed = null;
-        f.arrTdDistM = null;
-        f.arrRetDistM = null;
-        f.arrVTdMs = null;
-        f.arrDecelMs2 = null;
-        f.arrVRetInMs = null;
-        f.arrVRetOutMs = null;
-        f.timeline = null;
-        delete f.timeline_meta;
+        if (restoreProSimSyncUi && f.arrDep !== 'Dep') {
+          if (exitTwPersist) {
+            f.sampledArrRet = exitTwPersist;
+            f.arrRetFailed = arrRetFailedPersist;
+          } else {
+            f.sampledArrRet = null;
+            f.arrRetFailed = false;
+          }
+        } else {
+          f.arrRetFailed = false;
+          f.sampledArrRet = null;
+        }
+        if (!restorePlaybackFlight) {
+          f.arrRotSec = null;
+          f.arrRunwayIdUsed = null;
+          f.arrTdDistM = null;
+          f.arrRetDistM = null;
+          f.arrVTdMs = null;
+          f.arrDecelMs2 = null;
+          f.arrVRetInMs = null;
+          f.arrVRetOutMs = null;
+          f.timeline = null;
+          delete f.timeline_meta;
+          delete f.proSimEdgeList;
+          delete f.eldtMin;
+          delete f.eibtMin;
+          delete f.eobtMin;
+          delete f.etotMin;
+          delete f.eldtMin_orig;
+          delete f.eibtMin_orig;
+          delete f.eobtMin_orig;
+          delete f.etotMin_orig;
+        } else {
+          const tlNorm = rawTl.map(function(p) {
+            const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+            const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+            const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
+            const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
+            if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
+            if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            return o;
+          }).filter(function(k) {
+            return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+          }).sort(function(a, b) { return a.t - b.t; });
+          if (tlNorm.length >= 2) {
+            f.timeline = tlNorm;
+            if (rawMeta && typeof rawMeta === 'object') f.timeline_meta = Object.assign({}, rawMeta);
+            else delete f.timeline_meta;
+            if (rawProSimEl && rawProSimEl.length) {
+              f.proSimEdgeList = rawProSimEl;
+            } else if (Array.isArray(f.edge_list) && f.edge_list.length) {
+              f.proSimEdgeList = f.edge_list.slice();
+            }
+          } else {
+            f.arrRotSec = null;
+            f.arrRunwayIdUsed = null;
+            f.arrTdDistM = null;
+            f.arrRetDistM = null;
+            f.arrVTdMs = null;
+            f.arrDecelMs2 = null;
+            f.arrVRetInMs = null;
+            f.arrVRetOutMs = null;
+            f.timeline = null;
+            delete f.timeline_meta;
+            delete f.proSimEdgeList;
+            delete f.eldtMin;
+            delete f.eibtMin;
+            delete f.eobtMin;
+            delete f.etotMin;
+            delete f.eldtMin_orig;
+            delete f.eibtMin_orig;
+            delete f.eobtMin_orig;
+            delete f.etotMin_orig;
+          }
+        }
         delete f.cachedArrPathPts;
         delete f.cachedDepPathPts;
         delete f._pathPolylineCacheRev;
@@ -551,14 +624,6 @@
         f.__schedRetRotRev = null;
         f.__schedVttArrRev = null;
         f.__schedVttArrMin = null;
-        delete f.eldtMin;
-        delete f.eibtMin;
-        delete f.eobtMin;
-        delete f.etotMin;
-        delete f.eldtMin_orig;
-        delete f.eibtMin_orig;
-        delete f.eobtMin_orig;
-        delete f.etotMin_orig;
         if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
         if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
         if (!String(f.reg || '').trim()) f.reg = randomRegNumber();
@@ -573,7 +638,14 @@
     if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
     state.simPlaying = false;
     state.layoutPathDrawPointer = null;
-    state.hasSimulationResult = false;
+    let playbackFlightCount = 0;
+    (state.flights || []).forEach(function(f) {
+      if (f && f.timeline && f.timeline.length >= 2) playbackFlightCount++;
+    });
+    state.hasSimulationResult = playbackFlightCount > 0;
+    if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
+      state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
+    }
     if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
@@ -586,9 +658,26 @@
         console.warn('applyLayoutObject: path graph sync', ePg);
       }
     }
-    if (typeof renderFlightList === 'function') renderFlightList();
+    if (restoreProSimSyncUi) {
+      state.globalUpdateFresh = true;
+      if (dp.designerPageUpdateFresh === true) {
+        if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+      } else {
+        state.designerPageUpdateFresh = false;
+        const ddot = document.getElementById('designerPageUpdateSyncDot');
+        if (ddot) {
+          ddot.classList.remove('fresh');
+          ddot.classList.add('stale');
+          ddot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
+        }
+      }
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+    }
+    if (typeof renderFlightList === 'function') renderFlightList(false, false);
+    const playDockBtnApplyLayout = document.getElementById('btnShowPlayDock');
+    if (playDockBtnApplyLayout) playDockBtnApplyLayout.disabled = !state.hasSimulationResult;
   }
-  /** E-series minutes and ARR_ROT_SEC from ``airside_sim`` schedule row only (seconds → minutes). */
+  /** E-series minutes; phase-duration seconds from ``airside_sim`` schedule row. */
   function applyAirsideScheduleRowToFlight(f, srec) {
     if (!f) return;
     if (!srec || typeof srec !== 'object') {
@@ -601,6 +690,9 @@
       delete f.eobtMin_orig;
       delete f.etotMin_orig;
       f.arrRotSec = null;
+      delete f.proSimVttArrSec;
+      delete f.proSimVttDepSec;
+      delete f.proSimDepLineupSec;
       return;
     }
     function secOpt(key) {
@@ -623,15 +715,25 @@
     const rotS = secOpt('ARR_ROT_SEC');
     if (isFinite(rotS)) f.arrRotSec = rotS;
     else f.arrRotSec = null;
+    const vttArrS = secOpt('VTT_ARR_SEC');
+    if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
+    else delete f.proSimVttArrSec;
+    const vttDepS = secOpt('VTT_DEP_SEC');
+    if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
+    else delete f.proSimVttDepSec;
+    const lineupS = secOpt('LINEUP_DEPARTURE_SEC');
+    if (isFinite(lineupS)) f.proSimDepLineupSec = lineupS;
+    else delete f.proSimDepLineupSec;
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
-    state.simPlaybackEndCapSec = null;
-    if (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true) {
-      const rawCap = payload.simulation_playback_end_abs_sec;
-      const c = Number(rawCap);
-      if (isFinite(c)) state.simPlaybackEndCapSec = c;
-    }
+    const truncCap = (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true)
+      ? (function() {
+        const rawCap = payload.simulation_playback_end_abs_sec;
+        const c = Number(rawCap);
+        return isFinite(c) ? c : null;
+      })()
+      : null;
     const flightsDetail = Array.isArray(payload.flights_detail) ? payload.flights_detail : null;
     if (flightsDetail) {
       const byId = {};
@@ -666,6 +768,9 @@
     const layout = payload.layout;
     if (layout && typeof layout === 'object') {
       applyLayoutObject(layout);
+    }
+    if (truncCap != null) {
+      state.simPlaybackEndCapSec = truncCap;
     }
     const schedById = {};
     scheduleList.forEach(function(s) {
