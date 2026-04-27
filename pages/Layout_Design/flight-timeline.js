@@ -567,6 +567,7 @@
             if (dg) o.deadlockGhost = true;
             if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
             if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
             return o;
           }).filter(function(k) {
             return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
@@ -640,6 +641,8 @@
         simPlaybackEndCapSec: (state.simPlaybackEndCapSec != null && isFinite(Number(state.simPlaybackEndCapSec)))
           ? Number(state.simPlaybackEndCapSec)
           : null,
+        mapTypeMode: (state.mapTypeMode === 'heatmap') ? 'heatmap' : 'normal',
+        heatmapTrafficPhases: Object.assign({}, state.heatmapTrafficPhases || {}),
       },
       simPathGraph: buildSimPathGraphExport()
     };

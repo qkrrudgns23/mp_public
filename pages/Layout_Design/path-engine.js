@@ -582,6 +582,7 @@
             const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
             if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
             if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
             return o;
           }).filter(function(k) {
             return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
@@ -646,6 +647,21 @@
     if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
       state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
     }
+    if (typeof applyDesignerPersistMapTypeAfterLoad === 'function') {
+      applyDesignerPersistMapTypeAfterLoad(dp);
+    } else if (dp && dp.v === 1) {
+      const pk = ['rotArr', 'vttArr', 'vttDep', 'rotDep'];
+      if (dp.heatmapTrafficPhases && typeof dp.heatmapTrafficPhases === 'object' && state.heatmapTrafficPhases) {
+        for (let i = 0; i < pk.length; i++) {
+          const k = pk[i];
+          if (typeof dp.heatmapTrafficPhases[k] === 'boolean') state.heatmapTrafficPhases[k] = dp.heatmapTrafficPhases[k];
+        }
+      }
+      const m = String(dp.mapTypeMode || '');
+      const wantHeat = m === 'heatmap' || m === 'heatmap_traffic' || m === 'heatmap_queue';
+      state.mapTypeMode = (state.hasSimulationResult && wantHeat) ? 'heatmap' : 'normal';
+    }
+    if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
     if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();

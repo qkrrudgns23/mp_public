@@ -862,6 +862,13 @@
     }
   }
   const container = document.getElementById('canvas-container');
+  let overlayCanvas = document.getElementById('grid-canvas-overlay');
+  if (!overlayCanvas && container) {
+    overlayCanvas = document.createElement('canvas');
+    overlayCanvas.id = 'grid-canvas-overlay';
+    container.appendChild(overlayCanvas);
+  }
+  let overlayCtx = (overlayCanvas && typeof overlayCanvas.getContext === 'function') ? overlayCanvas.getContext('2d') : null;
   const coordEl = document.getElementById('coord');
   const cursorPixelReadoutEl = document.getElementById('cursor-pixel-readout');
   const objectInfoEl = document.getElementById('object-info');
@@ -1255,6 +1262,9 @@
     flightColorMode: 'all',
     /** Layer popover: monotone overrides per section (Lines / Fill / ETC). */
     layerMono: Object.assign({}, DEFAULT_LAYER_MONO),
+    /** Map Type: normal | heatmap (overlays when hasSimulationResult). */
+    mapTypeMode: 'normal',
+    heatmapTrafficPhases: { rotArr: true, vttArr: true, vttDep: true, rotDep: true },
   };
   const LAYER_STATE_KEYS = [
     'grid', 'image', 'pathLines', 'pathFill', 'standLines', 'standFill',
@@ -1807,9 +1817,77 @@
         cp.setAttribute('hidden', '');
         cb.setAttribute('aria-expanded', 'false');
       }
+      const mp = document.getElementById('mapTypePopoverPanel');
+      const mb = document.getElementById('btnMapTypePopover');
+      if (mp && mb && !mp.hasAttribute('hidden')) {
+        mp.setAttribute('hidden', '');
+        mb.setAttribute('aria-expanded', 'false');
+      }
     } else {
       panel.setAttribute('hidden', '');
     }
+  }
+  function setMapTypePopoverOpen(open) {
+    const btn = document.getElementById('btnMapTypePopover');
+    const panel = document.getElementById('mapTypePopoverPanel');
+    if (!btn || !panel) return;
+    const o = !!open;
+    btn.setAttribute('aria-expanded', o ? 'true' : 'false');
+    if (o) {
+      panel.removeAttribute('hidden');
+      setLayerPopoverOpen(false);
+      const cp = document.getElementById('colorPopoverPanel');
+      const cb = document.getElementById('btnColorPopover');
+      if (cp && cb && !cp.hasAttribute('hidden')) {
+        cp.setAttribute('hidden', '');
+        cb.setAttribute('aria-expanded', 'false');
+      }
+    } else {
+      panel.setAttribute('hidden', '');
+    }
+  }
+  function syncMapTypePopoverFromState() {
+    const panel = document.getElementById('mapTypePopoverPanel');
+    if (!panel) return;
+    const heatOk = !!state.hasSimulationResult;
+    if (!heatOk && state.mapTypeMode !== 'normal') state.mapTypeMode = 'normal';
+    const mode = state.mapTypeMode || 'normal';
+    const modeSel = document.getElementById('mapTypeModeSelect');
+    if (modeSel) {
+      modeSel.value = mode;
+      modeSel.querySelectorAll('option').forEach(function(opt) {
+        const v = String(opt.value || '');
+        opt.disabled = !heatOk && v !== 'normal';
+      });
+    }
+    panel.querySelectorAll('input[data-heatmap-traffic]').forEach(function(inp) {
+      const k = inp.getAttribute('data-heatmap-traffic');
+      if (k && state.heatmapTrafficPhases) inp.checked = !!state.heatmapTrafficPhases[k];
+      inp.disabled = !heatOk || mode !== 'heatmap';
+    });
+    panel.querySelectorAll('.map-type-phase-block').forEach(function(el) {
+      const tag = el.getAttribute('data-heat-for');
+      const show = tag === 'heatmap' && heatOk && mode === 'heatmap';
+      if (show) el.removeAttribute('hidden');
+      else el.setAttribute('hidden', '');
+    });
+    const btnMt = document.getElementById('btnMapTypePopover');
+    if (btnMt) btnMt.classList.toggle('active', heatOk && mode !== 'normal');
+    if (typeof syncHeatmapTrafficLegend === 'function') syncHeatmapTrafficLegend();
+  }
+  /** After layout load: restore Map Type from `designerPersist` when timelines exist. */
+  function applyDesignerPersistMapTypeAfterLoad(dp) {
+    if (!dp || dp.v !== 1) return;
+    const phaseKeys = ['rotArr', 'vttArr', 'vttDep', 'rotDep'];
+    if (dp.heatmapTrafficPhases && typeof dp.heatmapTrafficPhases === 'object' && state.heatmapTrafficPhases) {
+      for (let i = 0; i < phaseKeys.length; i++) {
+        const k = phaseKeys[i];
+        if (typeof dp.heatmapTrafficPhases[k] === 'boolean') state.heatmapTrafficPhases[k] = dp.heatmapTrafficPhases[k];
+      }
+    }
+    const m = String(dp.mapTypeMode || '');
+    const wantHeat = m === 'heatmap' || m === 'heatmap_traffic' || m === 'heatmap_queue';
+    state.mapTypeMode = (state.hasSimulationResult && wantHeat) ? 'heatmap' : 'normal';
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -2355,6 +2433,7 @@
             const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
             if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
             if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
             return o;
           }).filter(function(k) {
             return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
@@ -2422,6 +2501,8 @@
     if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
       state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
     }
+    applyDesignerPersistMapTypeAfterLoad(dp);
+    syncMapTypePopoverFromState();
     if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
@@ -2568,6 +2649,7 @@
               const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
               if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
               if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+              if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
               return o;
             }).filter(function(k) {
               return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
@@ -2623,6 +2705,7 @@
     if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
     const playDockBtn = document.getElementById('btnShowPlayDock');
     if (playDockBtn) playDockBtn.disabled = !state.hasSimulationResult;
+    if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
   }
   function applyInitialLayoutFromJson() {
     if (!INITIAL_LAYOUT || typeof INITIAL_LAYOUT !== 'object') return;
@@ -3136,6 +3219,9 @@
   let dpr = window.devicePixelRatio || 1;
   let ctx = (canvas && typeof canvas.getContext === 'function') ? canvas.getContext('2d') : null;
   let layoutDrawCanvas = canvas;
+  function layoutUseForegroundOverlay() {
+    return !!(overlayCtx && overlayCanvas && layoutDrawCanvas === canvas);
+  }
 
   function screenToWorld(sx, sy) {
     return [(sx - state.panX) / state.scale, (sy - state.panY) / state.scale];
@@ -4305,6 +4391,7 @@
             if (dg) o.deadlockGhost = true;
             if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
             if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
             return o;
           }).filter(function(k) {
             return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
@@ -4378,6 +4465,8 @@
         simPlaybackEndCapSec: (state.simPlaybackEndCapSec != null && isFinite(Number(state.simPlaybackEndCapSec)))
           ? Number(state.simPlaybackEndCapSec)
           : null,
+        mapTypeMode: (state.mapTypeMode === 'heatmap') ? 'heatmap' : 'normal',
+        heatmapTrafficPhases: Object.assign({}, state.heatmapTrafficPhases || {}),
       },
       simPathGraph: buildSimPathGraphExport()
     };
@@ -14898,14 +14987,15 @@
     }
   }
 
-  function rebuildDerivedGraphEdges() {
+  function rebuildDerivedGraphEdges(opt) {
+    const forHeatmap = !!(opt && opt.forHeatmap);
     state.derivedGraphEdges = [];
     if (!state.taxiways || !state.taxiways.length) return;
     const graphSig = computeTaxiwaysGraphSig();
     let g = null;
     if (state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === graphSig) {
       g = state.pathGraphCache;
-    } else if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+    } else if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && !forHeatmap) {
       return;
     } else {
       try {
@@ -14985,6 +15075,501 @@
       }
     });
     return best;
+  }
+
+  function closestLayoutEdgeToPoint(wx, wy, maxDistSq) {
+    if (!state.derivedGraphEdges || !state.derivedGraphEdges.length) return null;
+    const click = [wx, wy];
+    const lim = maxDistSq != null && isFinite(maxDistSq) ? maxDistSq : Infinity;
+    let best = null;
+    let bestD2 = lim;
+    state.derivedGraphEdges.forEach(function(ed) {
+      const pts = (ed.pts && ed.pts.length >= 2) ? ed.pts : [[ed.x1, ed.y1], [ed.x2, ed.y2]];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const near = closestPointOnSegment(pts[i], pts[i + 1], click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          best = ed;
+        }
+      }
+    });
+    return best;
+  }
+
+  /** Prefer Pro Sim ``edgeId`` on timeline samples; fall back to nearest graph edge (wider snap than picking). */
+  function resolveLayoutGraphEdgeForHeatmap(a, b, mx, my, maxDistSq) {
+    const raw = (b && b.edgeId != null && String(b.edgeId).trim()) ? String(b.edgeId).trim()
+      : ((a && a.edgeId != null && String(a.edgeId).trim()) ? String(a.edgeId).trim() : '');
+    if (raw) {
+      const edges = state.derivedGraphEdges || [];
+      for (let i = 0; i < edges.length; i++) {
+        if (edges[i].id === raw) return edges[i];
+      }
+    }
+    return closestLayoutEdgeToPoint(mx, my, maxDistSq);
+  }
+
+  function proSimPhaseToHeatCategory(phaseRaw) {
+    const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : '';
+    const q = p.toLowerCase().replace(/[\s-]+/g, '_');
+    if (q === 'landing') return 'rotArr';
+    if (q === 'arr_taxi' || q === 'arr_taxi_occupied') return 'vttArr';
+    if (q === 'dep_taxi' || q === 'holding_lineup') return 'vttDep';
+    if (q === 'lineup_departure') return 'rotDep';
+    return null;
+  }
+  /** Heatmap: displayU=0 최소(네온 녹) → 1 최대(빨강), 선형 보간. displayU는 아래 왜곡 함수로부터 온다. */
+  function heatmapTrafficGreenToRed(displayU) {
+    const t = Math.max(0, Math.min(1, displayU));
+    const r0 = 0x39, g0 = 0xff, b0 = 0x14;
+    const r1 = 0xff, g1 = 0x22, b1 = 0x33;
+    const r = Math.round(r0 + (r1 - r0) * t);
+    const g = Math.round(g0 + (g1 - g0) * t);
+    const b = Math.round(b0 + (b1 - b0) * t);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+  /**
+   * 랭크 u∈[0,1](적게 지남→많이 지남)을 색 축으로 연속 재매핑.
+   * 통과량 하위 HEATMAP_TRAFFIC_GREEN_BIAS 비율은 녹~중간(그라데이션 전반부), 나머지는 중간~빨(후반부)만 사용해 빨간 비중을 줄임.
+   */
+  const HEATMAP_TRAFFIC_GREEN_BIAS = 0.75;
+  /** 히트맵 색·분할 기준: 월드 좌표(m) 150m 격자. 셀 단위 클립·집계. */
+  const HEATMAP_GRID_STEP_M = 150;
+  function heatmapTrafficRankToDisplayU(uRank) {
+    const t = Math.max(0, Math.min(1, Number(uRank) || 0));
+    const g = HEATMAP_TRAFFIC_GREEN_BIAS;
+    if (g >= 1 - 1e-9) return t * 0.5;
+    if (g <= 1e-9) return 0.5 + t * 0.5;
+    if (t <= g) return (t / g) * 0.5;
+    return 0.5 + ((t - g) / (1 - g)) * 0.5;
+  }
+  let _heatmapTrafficLegendDomSig = '';
+  /** Heatmap uses full scenario [0, T]; independent of playback scrubber. */
+  function heatmapClipSecFullScenarioStatic() {
+    let maxT = isFinite(state.simDurationSec) ? Math.max(0, Number(state.simDurationSec)) : 0;
+    (state.flights || []).forEach(function(f) {
+      const tl = f && f.timeline;
+      if (!tl || !tl.length) return;
+      const last = tl[tl.length - 1];
+      const tt = Number(last && last.t);
+      if (isFinite(tt) && tt > maxT) maxT = tt;
+    });
+    return maxT;
+  }
+  /** Left legend: 5-quantile of segment-hit counts (150m cells), same colors as map. */
+  function syncHeatmapTrafficLegend() {
+    const root = document.getElementById('heatmap-traffic-legend');
+    if (!root) return;
+    const heatOk = !!state.hasSimulationResult;
+    const mode = state.mapTypeMode || 'normal';
+    if (!heatOk || mode !== 'heatmap') {
+      _heatmapTrafficLegendDomSig = '';
+      root.setAttribute('hidden', '');
+      root.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    const edgeN = (state.derivedGraphEdges || []).length;
+    const domSig = layoutHeatmapBakeContentSignature() + '|e' + String(edgeN);
+    root.removeAttribute('hidden');
+    root.removeAttribute('aria-hidden');
+    const titleEl = root.querySelector('.heatmap-traffic-legend__title');
+    if (titleEl) {
+      titleEl.textContent = 'Segment Dwell';
+    }
+    if (domSig === _heatmapTrafficLegendDomSig) return;
+    const rowsEl = document.getElementById('heatmapTrafficLegendRows');
+    if (!rowsEl) return;
+    const pack = buildHeatmapTrafficWeights();
+    const gmap = pack.gridWeights || {};
+    const rankU = heatmapTrafficRankUFromWeights(gmap);
+    const items = [];
+    Object.keys(gmap).forEach(function(k) {
+      const w = gmap[k];
+      if (w > 0) items.push({ id: k, w: w });
+    });
+    const n = items.length;
+    rowsEl.innerHTML = '';
+    if (n === 0) {
+      const row = document.createElement('div');
+      row.className = 'heatmap-traffic-legend__row heatmap-traffic-legend__row--empty';
+      row.textContent = 'No data for selected phases';
+      rowsEl.appendChild(row);
+      _heatmapTrafficLegendDomSig = domSig;
+      return;
+    }
+    items.sort(function(a, b) {
+      if (a.w !== b.w) return a.w - b.w;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    const fracs = [1, 0.75, 0.5, 0.25, 0];
+    const hints = ['High', '', '', '', 'Low'];
+    for (let i = 0; i < fracs.length; i++) {
+      const idx = Math.round(fracs[i] * (n - 1));
+      const it = items[idx];
+      const cnt = Math.max(0, Math.round(Number(it.w) || 0));
+      const uR = rankU[it.id];
+      const col = heatmapTrafficGreenToRed(heatmapTrafficRankToDisplayU(uR));
+      const row = document.createElement('div');
+      row.className = 'heatmap-traffic-legend__row';
+      const dot = document.createElement('span');
+      dot.className = 'heatmap-traffic-legend__dot';
+      dot.style.background = col;
+      dot.setAttribute('aria-hidden', 'true');
+      const lab = document.createElement('span');
+      lab.className = 'heatmap-traffic-legend__label';
+      const num = document.createElement('strong');
+      num.className = 'heatmap-traffic-legend__num';
+      num.textContent = String(cnt);
+      lab.appendChild(num);
+      lab.appendChild(document.createTextNode(' hits'));
+      if (hints[i]) {
+        const hint = document.createElement('span');
+        hint.className = 'heatmap-traffic-legend__hint';
+        hint.textContent = ' · ' + hints[i];
+        lab.appendChild(hint);
+      }
+      row.appendChild(dot);
+      row.appendChild(lab);
+      rowsEl.appendChild(row);
+    }
+    _heatmapTrafficLegendDomSig = domSig;
+  }
+  /**
+   * 체크된 phase에서 가중치 > 0 인 항목만 모아 랭크 후 u에 매핑.
+   * 최소 u=0(녹), 최대 u=1(빨); 동점은 같은 구간의 중간 u.
+   */
+  function heatmapTrafficRankUFromWeights(weights) {
+    const rankU = Object.create(null);
+    const items = [];
+    Object.keys(weights).forEach(function(k) {
+      const w = weights[k];
+      if (w > 0) items.push({ id: k, w: w });
+    });
+    const n = items.length;
+    if (n === 0) return rankU;
+    items.sort(function(a, b) {
+      if (a.w !== b.w) return a.w - b.w;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    for (let i = 0; i < n; ) {
+      let j = i + 1;
+      while (j < n && items[j].w === items[i].w) j++;
+      const mid = (i + j - 1) / 2;
+      const u = n > 1 ? mid / (n - 1) : 0.5;
+      for (let k = i; k < j; k++) rankU[items[k].id] = u;
+      i = j;
+    }
+    return rankU;
+  }
+  /**
+   * Edge·격자 셀별 세그먼트 히트: 전체 시나리오 [0, T] 안에서 타임라인 인접 샘플 한 쌍이 조건을 만족할 때마다 +1 (Δt·체류 가중 없음).
+   * 재생 슬라이더와 무관하게 항상 전체 타임라인을 사용.
+   */
+  function buildHeatmapTrafficWeights() {
+    const weights = Object.create(null);
+    const gridWeights = Object.create(null);
+    const edges = state.derivedGraphEdges || [];
+    if (!edges.length) return { weights: weights, gridWeights: gridWeights };
+    const bag = state.heatmapTrafficPhases;
+    const gw = HEATMAP_GRID_STEP_M;
+    const maxD2 = Math.pow(Math.max(CELL_SIZE * 2.8, 80), 2);
+    const flights = state.flights || [];
+    const tMax = heatmapClipSecFullScenarioStatic();
+    if (tMax <= 1e-9) return { weights: weights, gridWeights: gridWeights };
+    for (let fi = 0; fi < flights.length; fi++) {
+      const f = flights[fi];
+      if (!f) continue;
+      const tl = f.timeline;
+      if (!tl || tl.length < 2) continue;
+      for (let i = 0; i < tl.length - 1; i++) {
+        const a = tl[i];
+        const b = tl[i + 1];
+        if (!a || !b) continue;
+        const t1 = Number(b.t);
+        const t0 = Number(a.t);
+        if (!isFinite(t0) || !isFinite(t1)) continue;
+        const lo = Math.max(t0, 0);
+        const hi = Math.min(t1, tMax);
+        if (hi <= lo + 1e-9) continue;
+        const ph = (a.phase != null && String(a.phase).trim()) ? String(a.phase).trim() : ((b.phase != null && String(b.phase).trim()) ? String(b.phase).trim() : 'Landing');
+        const cat = proSimPhaseToHeatCategory(ph);
+        if (!cat || !bag || !bag[cat]) continue;
+        const mx = (Number(a.x) + Number(b.x)) * 0.5;
+        const my = (Number(a.y) + Number(b.y)) * 0.5;
+        if (!isFinite(mx) || !isFinite(my)) continue;
+        const ed = resolveLayoutGraphEdgeForHeatmap(a, b, mx, my, maxD2);
+        if (!ed || !ed.id) continue;
+        const id = ed.id;
+        weights[id] = (weights[id] || 0) + 1;
+        const gkx = Math.floor(mx / gw);
+        const gky = Math.floor(my / gw);
+        const gkey = gkx + ',' + gky;
+        gridWeights[gkey] = (gridWeights[gkey] || 0) + 1;
+      }
+    }
+    return { weights: weights, gridWeights: gridWeights };
+  }
+  /** Liang–Barsky: 선분을 축정렬 사각형 [xmin,xmax]×[ymin,ymax] 으로 클립. */
+  function clipHeatmapSegmentToAxisRect(x0, y0, x1, y1, xmin, xmax, ymin, ymax) {
+    let t0 = 0, t1 = 1;
+    const dx = x1 - x0, dy = y1 - y0;
+    const te = 1e-10;
+    function clip(p, q) {
+      if (Math.abs(p) < te) return q >= -1e-8;
+      const r = q / p;
+      if (p < 0) {
+        if (r > t1 + te) return false;
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0 - te) return false;
+        if (r < t1) t1 = r;
+      }
+      return true;
+    }
+    if (!clip(-dx, x0 - xmin)) return null;
+    if (!clip(dx, xmax - x0)) return null;
+    if (!clip(-dy, y0 - ymin)) return null;
+    if (!clip(dy, ymax - y0)) return null;
+    if (t1 < t0 - 1e-9) return null;
+    return [x0 + t0 * dx, y0 + t0 * dy, x0 + t1 * dx, y0 + t1 * dy];
+  }
+  function heatmapPolylineBboxIntersectsRect(pts, xmin, xmax, ymin, ymax) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const x = pts[i][0], y = pts[i][1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return !(maxX < xmin || minX > xmax || maxY < ymin || minY > ymax);
+  }
+  /** 폴리라인을 한 격자 셀 안에 들어가는 연속 선분 체인들로 분해. */
+  function clipHeatmapPolylineToRectChains(pts, xmin, xmax, ymin, ymax) {
+    const chains = [];
+    let cur = [];
+    function flush() {
+      if (cur.length >= 2) chains.push(cur);
+      cur = [];
+    }
+    function appendSeg(p0x, p0y, p1x, p1y) {
+      if (!cur.length) {
+        cur.push([p0x, p0y]);
+        cur.push([p1x, p1y]);
+        return;
+      }
+      const L = cur[cur.length - 1];
+      if (Math.hypot(L[0] - p0x, L[1] - p0y) < 1e-5) {
+        if (Math.hypot(L[0] - p1x, L[1] - p1y) > 1e-5) cur.push([p1x, p1y]);
+      } else {
+        flush();
+        cur.push([p0x, p0y]);
+        cur.push([p1x, p1y]);
+      }
+    }
+    for (let i = 0; i < pts.length - 1; i++) {
+      const ax = pts[i][0], ay = pts[i][1], bx = pts[i + 1][0], by = pts[i + 1][1];
+      const seg = clipHeatmapSegmentToAxisRect(ax, ay, bx, by, xmin, xmax, ymin, ymax);
+      if (!seg) {
+        flush();
+        continue;
+      }
+      appendSeg(seg[0], seg[1], seg[2], seg[3]);
+    }
+    flush();
+    return chains;
+  }
+  function layoutHeatmapEdgeIntersectsViewport(ed, vb) {
+    if (!vb || !ed) return true;
+    const pts = (ed.pts && ed.pts.length >= 2) ? ed.pts : [[ed.x1, ed.y1], [ed.x2, ed.y2]];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const x = pts[i][0], y = pts[i][1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const pad = CELL_SIZE * 6;
+    return !(maxX + pad < vb.minWx || minX - pad > vb.maxWx || maxY + pad < vb.minWy || minY - pad > vb.maxWy);
+  }
+  function layoutHeatmapPhaseBagSig(bag) {
+    if (!bag) return '';
+    const keys = Object.keys(bag).sort();
+    let s = '';
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      s += k + (bag[k] ? '1' : '0');
+    }
+    return s;
+  }
+  function layoutHeatmapHashStr(str) {
+    const s = str == null ? '' : String(str);
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(36);
+  }
+  /** Fingerprint of timeline geometry/timing so cache invalidates when sim payload changes. */
+  function layoutHeatmapFlightsDataSig() {
+    const flights = state.flights || [];
+    let tlPts = 0;
+    let h = 2166136261;
+    for (let fi = 0; fi < flights.length; fi++) {
+      const f = flights[fi];
+      if (!f) continue;
+      const tl = f.timeline;
+      if (!tl || !tl.length) continue;
+      tlPts += tl.length;
+      const step = Math.max(1, Math.floor(tl.length / 16));
+      for (let j = 0; j < tl.length; j += step) {
+        const s = tl[j];
+        if (!s) continue;
+        const x = Math.round(Number(s.x) * 10), y = Math.round(Number(s.y) * 10), tt = Math.round(Number(s.t) * 1000);
+        h = Math.imul(h ^ x, 16777619);
+        h = Math.imul(h ^ y, 16777619);
+        h = Math.imul(h ^ tt, 16777619);
+      }
+    }
+    return String(flights.length) + ':' + String(tlPts) + ':' + String(h >>> 0);
+  }
+  /**
+   * 히트맵 SVG 재구축 조건: 맵 타입·phase 체크·레이아웃·항공기 지문(svg1).
+   * pan/줌·tClip 제외 — 경로는 캐시, 매 프레임 matrix만 갱신.
+   */
+  function layoutHeatmapBakeContentSignature() {
+    const mode = state.mapTypeMode || 'normal';
+    if (mode === 'normal') return '';
+    const graphH = layoutHeatmapHashStr(computeTaxiwaysGraphSig());
+    const tp = layoutHeatmapPhaseBagSig(state.heatmapTrafficPhases);
+    const flightsSig = layoutHeatmapFlightsDataSig();
+    return ['svg2', 'cellclip', 'staticfull', 'segcnt', 'gb' + String(HEATMAP_TRAFFIC_GREEN_BIAS), 'g' + String(HEATMAP_GRID_STEP_M), mode, graphH, tp, flightsSig].join('|');
+  }
+  function ensureLayoutHeatmapSvgRefs() {
+    if (!_layoutHeatmapSvg) _layoutHeatmapSvg = document.getElementById('layout-heatmap-svg');
+    if (!_layoutHeatmapSvgG) _layoutHeatmapSvgG = document.getElementById('layout-heatmap-world-g');
+  }
+  function syncLayoutHeatmapSvgViewBox() {
+    ensureLayoutHeatmapSvgRefs();
+    if (!_layoutHeatmapSvg || !layoutDrawCanvas) return;
+    const w = layoutDrawCanvas.width / dpr;
+    const h = layoutDrawCanvas.height / dpr;
+    _layoutHeatmapSvg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+  }
+  function syncLayoutHeatmapSvgWorldMatrix() {
+    ensureLayoutHeatmapSvgRefs();
+    if (!_layoutHeatmapSvgG) return;
+    const s = state.scale || 1;
+    const px = state.panX;
+    const py = state.panY;
+    _layoutHeatmapSvgG.setAttribute('transform', 'matrix(' + s + ',0,0,' + s + ',' + px + ',' + py + ')');
+  }
+  function hideLayoutHeatmapSvg() {
+    ensureLayoutHeatmapSvgRefs();
+    if (_layoutHeatmapSvg) _layoutHeatmapSvg.style.display = 'none';
+  }
+  function rebuildLayoutHeatmapSvgDom() {
+    ensureLayoutHeatmapSvgRefs();
+    if (!_layoutHeatmapSvgG) return;
+    const ns = 'http://www.w3.org/2000/svg';
+    while (_layoutHeatmapSvgG.firstChild) {
+      _layoutHeatmapSvgG.removeChild(_layoutHeatmapSvgG.firstChild);
+    }
+    const mode = state.mapTypeMode || 'normal';
+    const heatmapPathStrokeWidthM = 20;
+    if (mode === 'heatmap') {
+      const pack = buildHeatmapTrafficWeights();
+      const wmap = pack.weights;
+      const gridW = pack.gridWeights || {};
+      const rankG = heatmapTrafficRankUFromWeights(gridW);
+      const gStep = HEATMAP_GRID_STEP_M;
+      const edges = state.derivedGraphEdges || [];
+      /** 동일 geometry+색 중복(겹치는 엣지 등) 제거 */
+      const seenHeatmapStroke = new Set();
+      Object.keys(gridW).forEach(function(gkey) {
+        if (!(gridW[gkey] > 0)) return;
+        const parts = gkey.split(',');
+        const gx = parseInt(parts[0], 10);
+        const gy = parseInt(parts[1], 10);
+        if (!isFinite(gx) || !isFinite(gy)) return;
+        const xmin = gx * gStep;
+        const xmax = (gx + 1) * gStep;
+        const ymin = gy * gStep;
+        const ymax = (gy + 1) * gStep;
+        const uRank = rankG[gkey] != null ? rankG[gkey] : 0;
+        const col = heatmapTrafficGreenToRed(heatmapTrafficRankToDisplayU(uRank));
+        for (let ei = 0; ei < edges.length; ei++) {
+          const ed = edges[ei];
+          if (!(wmap[ed.id] > 0)) continue;
+          const pts = (ed.pts && ed.pts.length >= 2) ? ed.pts : [[ed.x1, ed.y1], [ed.x2, ed.y2]];
+          if (!heatmapPolylineBboxIntersectsRect(pts, xmin, xmax, ymin, ymax)) continue;
+          const chains = clipHeatmapPolylineToRectChains(pts, xmin, xmax, ymin, ymax);
+          for (let ci = 0; ci < chains.length; ci++) {
+            const ch = chains[ci];
+            if (ch.length < 2) continue;
+            let ptStr = '';
+            for (let j = 0; j < ch.length; j++) {
+              if (j) ptStr += ' ';
+              ptStr += Number(ch[j][0]).toFixed(4) + ',' + Number(ch[j][1]).toFixed(4);
+            }
+            const sig = ptStr + '|' + col;
+            if (seenHeatmapStroke.has(sig)) continue;
+            seenHeatmapStroke.add(sig);
+            const pl = document.createElementNS(ns, 'polyline');
+            pl.setAttribute('points', ptStr);
+            pl.setAttribute('fill', 'none');
+            pl.setAttribute('stroke', col);
+            pl.setAttribute('stroke-width', String(heatmapPathStrokeWidthM));
+            pl.setAttribute('stroke-linecap', 'round');
+            pl.setAttribute('stroke-linejoin', 'round');
+            pl.setAttribute('stroke-opacity', '0.88');
+            pl.setAttribute('shape-rendering', 'geometricPrecision');
+            _layoutHeatmapSvgG.appendChild(pl);
+          }
+        }
+      });
+    }
+  }
+  function ensureDerivedGraphEdgesForHeatmap() {
+    if (state.derivedGraphEdges && state.derivedGraphEdges.length) return;
+    if (typeof rebuildDerivedGraphEdges === 'function') rebuildDerivedGraphEdges({ forHeatmap: true });
+  }
+  /** 벡터 SVG + 월드 matrix: export/오프스크린 draw 시에는 건너뜀. */
+  function drawLayoutHeatmapOverlays() {
+    if (layoutDrawCanvas !== canvas) return;
+    if (!state.hasSimulationResult) {
+      hideLayoutHeatmapSvg();
+      return;
+    }
+    const mode = state.mapTypeMode || 'normal';
+    if (mode === 'normal') {
+      hideLayoutHeatmapSvg();
+      return;
+    }
+    ensureLayoutHeatmapSvgRefs();
+    if (!_layoutHeatmapSvg || !_layoutHeatmapSvgG) return;
+    const contentSig = layoutHeatmapBakeContentSignature();
+    if (!contentSig) return;
+    if (contentSig !== _layoutHeatmapSvgContentSig) {
+      ensureDerivedGraphEdgesForHeatmap();
+      const ghNow = layoutHeatmapHashStr(computeTaxiwaysGraphSig());
+      if (ghNow !== _layoutHeatmapBakedGraphHash || !(state.derivedGraphEdges || []).length) {
+        if (typeof rebuildDerivedGraphEdges === 'function') rebuildDerivedGraphEdges({ forHeatmap: true });
+        _layoutHeatmapBakedGraphHash = ghNow;
+      } else {
+        ensureDerivedGraphEdgesForHeatmap();
+      }
+      rebuildLayoutHeatmapSvgDom();
+      _layoutHeatmapSvgContentSig = contentSig;
+    }
+    syncLayoutHeatmapSvgViewBox();
+    syncLayoutHeatmapSvgWorldMatrix();
+    _layoutHeatmapSvg.style.display = 'block';
+    if (typeof syncHeatmapTrafficLegend === 'function') syncHeatmapTrafficLegend();
   }
 
   class MinHeap {
@@ -17064,6 +17649,7 @@
         ensureSimLoop._lastTs = null;
         ensureSimLoop._playKick = true;
         ensureSimLoop();
+        if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
         try { draw(); } catch(e) {}
         update3DSceneWhenVisible();
       });
@@ -17072,6 +17658,9 @@
       pauseBtn.addEventListener('click', function() {
         state.simPlaying = false;
         if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+        if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
+        try { draw(); } catch(e) {}
+        update3DSceneWhenVisible();
       });
     }
     if (resetBtn) {
@@ -17081,6 +17670,7 @@
         state.simTimeSec = snapSimTimeSecForSlider(state.simStartSec);
         if (simSlider) simSlider.value = state.simTimeSec;
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+        if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
         try { draw(); } catch(e) {}
         update3DSceneWhenVisible();
       });
@@ -18849,8 +19439,15 @@
     canvas.height = h * dpr;
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
+    if (overlayCanvas && overlayCtx) {
+      overlayCanvas.width = w * dpr;
+      overlayCanvas.height = h * dpr;
+      overlayCanvas.style.width = w + 'px';
+      overlayCanvas.style.height = h + 'px';
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     invalidateGridUnderlay();
+    syncLayoutHeatmapSvgViewBox();
     safeDraw({ bypassSimScrubGuard: true });
     syncMarkerTextDraftInputPosition();
   }
@@ -20784,6 +21381,11 @@
   /** Offscreen bitmap: grid → holding points (no sim-time stand fill / flights). Used during sim playback. */
   let _simPlaybackBgCanvas = null;
   let _simPlaybackBgSig = '';
+  /** Baked heatmap in world space; redraw bitmap only when sim/phase/layout/tClip changes. */
+  let _layoutHeatmapSvg = null;
+  let _layoutHeatmapSvgG = null;
+  let _layoutHeatmapSvgContentSig = '';
+  let _layoutHeatmapBakedGraphHash = null;
   function ensureSimPlaybackBgCanvasBuffer(w, h) {
     if (!_simPlaybackBgCanvas) _simPlaybackBgCanvas = document.createElement('canvas');
     if (_simPlaybackBgCanvas.width !== w || _simPlaybackBgCanvas.height !== h) {
@@ -21387,11 +21989,11 @@
   }
   function draw(drawOpts) {
     if (!ctx || !layoutDrawCanvas) return;
+    if (overlayCanvas && !overlayCtx) overlayCtx = overlayCanvas.getContext('2d');
     if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
     const interactiveLite = layoutViewSkipsTaxiDetail(drawOpts);
     const simPlaybackSkipHeavyPathOverlays = !!(state.simPlaying && state.hasSimulationResult && !(drawOpts && drawOpts.forceFullLayoutDraw));
     const skipPathGeometryOverlays = !!(drawOpts && drawOpts.skipPathGeometryOverlays);
-    if (!state.simPlaying) _simPlaybackBgSig = '';
     function drawSimPlaybackBackgroundLayers() {
       drawGrid(interactiveLite);
       drawLayoutAreaMarkers2DFloor();
@@ -21403,8 +22005,11 @@
       drawPathArcPreview();
       drawHoldingPoints2D(interactiveLite);
     }
-    const simPlaybackBgCache = !!(state.simPlaying && state.hasSimulationResult && !interactiveLite && !(drawOpts && drawOpts.forceFullLayoutDraw));
-    if (simPlaybackBgCache) {
+    const nowPerfDraw = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const viewRoughInteraction = !!(state.isPanning || nowPerfDraw < _layoutDetailSuppressUntil);
+    /** 시뮬 재생 여부와 무관: 결과가 있고 뷰가 안정일 때 그리드~홀딩포인트까지 비트맵으로 재사용. 팬/휠 중에는 직접 그려 오프스크린 이중 작업 방지. */
+    const layoutBgBitmapCache = !!(state.hasSimulationResult && !interactiveLite && !(drawOpts && drawOpts.forceFullLayoutDraw) && !viewRoughInteraction);
+    if (layoutBgBitmapCache) {
       const w = layoutDrawCanvas.width, h = layoutDrawCanvas.height;
       ensureSimPlaybackBgCanvasBuffer(w, h);
       const sig = simPlaybackBackgroundCacheSignature(interactiveLite);
@@ -21428,31 +22033,45 @@
     } else {
       drawSimPlaybackBackgroundLayers();
     }
-    drawPBBs(interactiveLite);
-    drawRemoteStands(interactiveLite);
-    drawTempStands(interactiveLite);
-    if (!interactiveLite || state.isPanning) drawApronTaxiwayLinks();
-    drawStandPreview(interactiveLite);
-    drawSelectedLayoutEdge();
-    {
-      const sel = state.selectedObject;
-      const rid = state.flightPathRevealFlightId;
-      if (sel && sel.type === 'flight' && rid != null && String(sel.id) === String(rid)) {
-        drawFlightPathHighlight();
-        drawDeparturePathHighlight();
-      }
+    drawLayoutHeatmapOverlays();
+    const wPxDraw = layoutDrawCanvas.width;
+    const hPxDraw = layoutDrawCanvas.height;
+    const useFg = layoutUseForegroundOverlay();
+    if (useFg) {
+      overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+      overlayCtx.clearRect(0, 0, wPxDraw, hPxDraw);
     }
-    if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawProSimFlightPathEdges();
-    drawHoldingQueueGhostFlights2D();
-    drawFlights2D();
-    if (!interactiveLite) {
-      if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawPathJunctions();
-      if (!skipPathGeometryOverlays) {
-        drawTaxiwayDanglingEndpointMarks();
-        drawQueueTaxiwayLaneMarkers();
+    const savedCtxDraw = ctx;
+    if (useFg) ctx = overlayCtx;
+    try {
+      drawPBBs(interactiveLite);
+      drawRemoteStands(interactiveLite);
+      drawTempStands(interactiveLite);
+      if (!interactiveLite || state.isPanning) drawApronTaxiwayLinks();
+      drawStandPreview(interactiveLite);
+      drawSelectedLayoutEdge();
+      {
+        const sel = state.selectedObject;
+        const rid = state.flightPathRevealFlightId;
+        if (sel && sel.type === 'flight' && rid != null && String(sel.id) === String(rid)) {
+          drawFlightPathHighlight();
+          drawDeparturePathHighlight();
+        }
       }
+      if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawProSimFlightPathEdges();
+      drawHoldingQueueGhostFlights2D();
+      drawFlights2D();
+      if (!interactiveLite) {
+        if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawPathJunctions();
+        if (!skipPathGeometryOverlays) {
+          drawTaxiwayDanglingEndpointMarks();
+          drawQueueTaxiwayLaneMarkers();
+        }
+      }
+      drawLayoutMarkers2D(interactiveLite);
+    } finally {
+      ctx = savedCtxDraw;
     }
-    drawLayoutMarkers2D(interactiveLite);
     syncMarkerTextDraftInputPosition();
     syncMarkerFlightBlazerOverlayButton();
     updatePathArcHud();
@@ -22897,6 +23516,7 @@
     });
   }
   syncLayerPopoverFromState();
+  syncMapTypePopoverFromState();
   if (layerPopoverPanel) {
     layerPopoverPanel.querySelectorAll('input[data-layer-key]').forEach(function(inp) {
       inp.addEventListener('change', function() {
@@ -22976,6 +23596,44 @@
       setLayerPopoverOpen(false);
     });
   }
+  const mapTypePopoverBtn = document.getElementById('btnMapTypePopover');
+  const mapTypePopoverPanel = document.getElementById('mapTypePopoverPanel');
+  const mapTypePopoverWrap = document.getElementById('mapTypePopoverWrap');
+  if (mapTypePopoverBtn && mapTypePopoverPanel) {
+    mapTypePopoverBtn.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      const open = mapTypePopoverPanel.hasAttribute('hidden');
+      setMapTypePopoverOpen(open);
+    });
+    document.addEventListener('click', function(ev) {
+      if (!mapTypePopoverWrap || mapTypePopoverPanel.hasAttribute('hidden')) return;
+      if (mapTypePopoverWrap.contains(ev.target)) return;
+      setMapTypePopoverOpen(false);
+    });
+  }
+  if (mapTypePopoverPanel) {
+    const mapTypeModeSelect = document.getElementById('mapTypeModeSelect');
+    if (mapTypeModeSelect) {
+      mapTypeModeSelect.addEventListener('change', function() {
+        const v = String(this.value || 'normal');
+        state.mapTypeMode = (v === 'heatmap') ? 'heatmap' : 'normal';
+        syncMapTypePopoverFromState();
+        safeDraw({ bypassSimScrubGuard: true });
+        if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+      });
+    }
+    mapTypePopoverPanel.querySelectorAll('input[data-heatmap-traffic]').forEach(function(inp) {
+      inp.addEventListener('change', function(ev) {
+        ev.stopPropagation();
+        const k = inp.getAttribute('data-heatmap-traffic');
+        if (!k || !state.heatmapTrafficPhases) return;
+        state.heatmapTrafficPhases[k] = !!inp.checked;
+        syncMapTypePopoverFromState();
+        safeDraw({ bypassSimScrubGuard: true });
+        if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+      });
+    });
+  }
   const colorPopoverBtn = document.getElementById('btnColorPopover');
   const colorPopoverPanel = document.getElementById('colorPopoverPanel');
   const colorPopoverWrap = document.getElementById('colorPopoverWrap');
@@ -22985,6 +23643,12 @@
     if (open) {
       colorPopoverPanel.removeAttribute('hidden');
       colorPopoverBtn.setAttribute('aria-expanded', 'true');
+      const mp = document.getElementById('mapTypePopoverPanel');
+      const mb = document.getElementById('btnMapTypePopover');
+      if (mp && mb && !mp.hasAttribute('hidden')) {
+        mp.setAttribute('hidden', '');
+        mb.setAttribute('aria-expanded', 'false');
+      }
     } else {
       colorPopoverPanel.setAttribute('hidden', '');
       colorPopoverBtn.setAttribute('aria-expanded', 'false');
@@ -23002,6 +23666,7 @@
       ev.stopPropagation();
       const open = colorPopoverPanel.hasAttribute('hidden');
       if (open && layerPopoverPanel && !layerPopoverPanel.hasAttribute('hidden')) setLayerPopoverOpen(false);
+      if (open && mapTypePopoverPanel && !mapTypePopoverPanel.hasAttribute('hidden')) setMapTypePopoverOpen(false);
       setColorPopoverOpen(open);
     });
     document.addEventListener('click', function(ev) {

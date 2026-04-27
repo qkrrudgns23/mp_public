@@ -12,6 +12,26 @@
             <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
             <button class="tool-btn" id="btnView3D" title="Open 3D viewer (new window)">3D</button>
             <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
+            <div class="layer-popover-wrap" id="mapTypePopoverWrap">
+              <button type="button" class="tool-btn" id="btnMapTypePopover" aria-expanded="false" aria-haspopup="true" aria-controls="mapTypePopoverPanel" title="Map display: normal layout vs simulation heatmaps">Map Type</button>
+              <div id="mapTypePopoverPanel" class="layer-popover-panel map-type-popover-panel" role="menu" aria-label="Map type" hidden>
+                <div class="map-type-mode-list">
+                  <label class="map-type-mode-label" for="mapTypeModeSelect">Map mode</label>
+                  <select id="mapTypeModeSelect" class="map-type-mode-select" aria-label="Map mode">
+                    <option value="normal">Normal</option>
+                    <option value="heatmap">Heatmap</option>
+                  </select>
+                </div>
+                <div class="map-type-phase-block" data-heat-for="heatmap" hidden>
+                  <div class="map-type-phase-title">Phases</div>
+                  <label class="layer-popover-row"><input type="checkbox" data-heatmap-traffic="rotArr" checked /> ROT (Arr)</label>
+                  <label class="layer-popover-row"><input type="checkbox" data-heatmap-traffic="vttArr" checked /> VTT (Arr)</label>
+                  <label class="layer-popover-row"><input type="checkbox" data-heatmap-traffic="vttDep" checked /> VTT (Dep)</label>
+                  <label class="layer-popover-row"><input type="checkbox" data-heatmap-traffic="rotDep" checked /> ROT (Dep)</label>
+                </div>
+                <div class="map-type-hint">Heatmaps use Pro Sim timelines — visible on the map whenever results are loaded.</div>
+              </div>
+            </div>
             <div class="layer-popover-wrap" id="layerPopoverWrap">
               <button type="button" class="tool-btn active" id="btnLayerPopover" aria-expanded="false" aria-haspopup="true" aria-controls="layerPopoverPanel" title="Layer visibility (grid, image, paths, stands, markers…)">Layer</button>
               <div id="layerPopoverPanel" class="layer-popover-panel" role="menu" aria-label="Layers" hidden>
@@ -124,7 +144,15 @@
       </div>
     </div>
     <div id="canvas-container">
+      <div id="heatmap-traffic-legend" class="heatmap-traffic-legend" hidden aria-hidden="true" aria-label="Segment Dwell legend">
+        <div class="heatmap-traffic-legend__title">Segment Dwell</div>
+        <div class="heatmap-traffic-legend__rows" id="heatmapTrafficLegendRows"></div>
+      </div>
       <canvas id="grid-canvas"></canvas>
+      <svg id="layout-heatmap-svg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:none">
+        <g id="layout-heatmap-world-g"></g>
+      </svg>
+      <canvas id="grid-canvas-overlay"></canvas>
       <div id="marker-text-edit-layer" class="marker-text-edit-layer" hidden aria-hidden="true">
         <input type="text" id="markerTextDraftInput" class="marker-text-draft-input" maxlength="500" placeholder="Text…" autocomplete="off" aria-label="Marker text" />
       </div>
