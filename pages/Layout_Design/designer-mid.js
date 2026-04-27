@@ -6,7 +6,8 @@
     const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
     if (t + 1e-9 < t0) return null;
     if (t > t1) t = t1;
-    return applyEobtApronDepTaxiPushbackNoseIfNeeded(flight, t, getFlightPoseAtTime(flight, t));
+    const pose = applyEobtApronDepTaxiPushbackNoseIfNeeded(flight, t, getFlightPoseAtTime(flight, t));
+    return applyApronLinkDepReverseFuselageStation75PoseIfNeeded(flight, t, pose);
   }
 
   function isFlightPreTouchdownForDraw(f, tSec) {

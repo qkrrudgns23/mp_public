@@ -1117,3 +1117,66 @@
     return { x: pose.x, y: pose.y, dx: -pose.dx, dy: -pose.dy, deadlockGhost: !!pose.deadlockGhost };
   }
 
+  /**
+   * EOBT+ apron_link Dep_taxi, tail-first motion: no bicycle model. Fuselage nose=0, tail=100; path
+   * sample is station 75 (75% nose→tail). Draw anchor (≈10% aft of nose) at C + h * (0.75−0.1) * lenM
+   * with h = unit nose from pose (after applyEobt). Forward taxi leaves pose unchanged.
+   */
+  function applyApronLinkDepReverseFuselageStation75PoseIfNeeded(flight, tSec, pose) {
+    if (!pose || !flight) return pose;
+    const m = flight.timeline_meta;
+    if (!m || typeof m.eobtSec !== 'number' || !isFinite(m.eobtSec)) return pose;
+    const t = Number(tSec);
+    if (!isFinite(t) || t + 1e-3 < m.eobtSec) return pose;
+    const tl = flight.timeline;
+    if (!tl || !tl.length) return pose;
+    const tKey = Math.round(t);
+    const byT = Object.create(null);
+    for (let i = 0; i < tl.length; i++) {
+      const w = tl[i];
+      if (!w) continue;
+      const tt = Math.round(Number(w.t));
+      if (isFinite(tt)) byT[tt] = w;
+    }
+    const cur = byT[tKey];
+    if (!cur || String(cur.pathType || '') !== 'apron_link') return pose;
+    const ph = String(cur.phase || '');
+    if (ph && ph !== 'Dep_taxi') return pose;
+    let a = null;
+    let b = null;
+    for (let i = 0; i < tl.length - 1; i++) {
+      const p = tl[i];
+      const q = tl[i + 1];
+      if (t + 1e-9 >= p.t && t - 1e-9 <= q.t) {
+        a = p;
+        b = q;
+        break;
+      }
+    }
+    if (!a || !b) return pose;
+    const ddx = b.x - a.x;
+    const ddy = b.y - a.y;
+    const segLen = Math.hypot(ddx, ddy);
+    if (segLen < 0.08) return pose;
+    const vx = ddx / segLen;
+    const vy = ddy / segLen;
+    const pl = Math.hypot(pose.dx, pose.dy);
+    if (pl < 1e-9) return pose;
+    const hx = pose.dx / pl;
+    const hy = pose.dy / pl;
+    if (hx * vx + hy * vy > -0.05) return pose;
+    const C = getFlightPositionAtTime(flight, t);
+    if (!C) return pose;
+    const { lenM } = getSimAircraftWorldDimsM(flight);
+    const NOSE_TO_STATION75_FRAC = 0.75;
+    const NOSE_TO_FRONT_WHEEL_FRAC = 0.1;
+    const alongNoseM = (NOSE_TO_STATION75_FRAC - NOSE_TO_FRONT_WHEEL_FRAC) * lenM;
+    return {
+      x: C.x + hx * alongNoseM,
+      y: C.y + hy * alongNoseM,
+      dx: pose.dx,
+      dy: pose.dy,
+      deadlockGhost: !!pose.deadlockGhost,
+    };
+  }
+
