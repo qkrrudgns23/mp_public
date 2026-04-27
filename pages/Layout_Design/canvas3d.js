@@ -9038,6 +9038,85 @@
       setAiAssistantDockOpen(false);
     });
   }
+  const aiAssistantDockThread = document.getElementById('aiAssistantDockThread');
+  const aiAssistantComposerInput = document.getElementById('aiAssistantComposerInput');
+  const btnAiAssistantSend = document.getElementById('btnAiAssistantSend');
+  const _aiKimiChatHistory = [];
+  function appendAiAssistantThread(role, text) {
+    if (!aiAssistantDockThread) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-assistant-msg ' + (role === 'user' ? 'ai-assistant-msg-user' : 'ai-assistant-msg-agent');
+    const meta = document.createElement('div');
+    meta.className = 'ai-assistant-msg-meta';
+    meta.textContent = role === 'user' ? 'You' : 'Kimi';
+    const body = document.createElement('div');
+    body.className = 'ai-assistant-msg-body';
+    body.textContent = text;
+    wrap.appendChild(meta);
+    wrap.appendChild(body);
+    aiAssistantDockThread.appendChild(wrap);
+    aiAssistantDockThread.scrollTop = aiAssistantDockThread.scrollHeight;
+  }
+  function setAiAssistantSendBusy(busy) {
+    if (btnAiAssistantSend) {
+      btnAiAssistantSend.disabled = !!busy;
+      btnAiAssistantSend.setAttribute('aria-busy', busy ? 'true' : 'false');
+    }
+    if (aiAssistantComposerInput) aiAssistantComposerInput.disabled = !!busy;
+  }
+  function sendAiAssistantKimiMessage() {
+    if (!aiAssistantComposerInput) return;
+    const text = (aiAssistantComposerInput.value || '').trim();
+    if (!text) return;
+    const apiBase = (typeof getLayoutApiBase === 'function') ? getLayoutApiBase() : (LAYOUT_API_URL || '');
+    if (!apiBase) {
+      appendAiAssistantThread('agent', 'Layout API base URL is not set — cannot call /api/ai-chat.');
+      return;
+    }
+    aiAssistantComposerInput.value = '';
+    appendAiAssistantThread('user', text);
+    _aiKimiChatHistory.push({ role: 'user', content: text });
+    setAiAssistantSendBusy(true);
+    fetch(apiBase + '/api/ai-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: _aiKimiChatHistory.slice(), model: 'kimi-k2.5' }),
+    }).then(function(r) {
+      return r.text().then(function(t) {
+        let j = null;
+        try {
+          j = t ? JSON.parse(t) : null;
+        } catch (e) {
+          j = { ok: false, error: (t || '').slice(0, 240) };
+        }
+        return { ok: r.ok, status: r.status, j: j };
+      });
+    }).then(function(o) {
+      setAiAssistantSendBusy(false);
+      if (!o.ok || !o.j || o.j.ok === false) {
+        const err = (o.j && (o.j.hint || o.j.error)) || ('HTTP ' + o.status);
+        appendAiAssistantThread('agent', String(err));
+        _aiKimiChatHistory.pop();
+        return;
+      }
+      const reply = (o.j && o.j.reply) != null ? String(o.j.reply) : '';
+      appendAiAssistantThread('agent', reply || '(empty)');
+      _aiKimiChatHistory.push({ role: 'assistant', content: reply });
+    }).catch(function(e) {
+      setAiAssistantSendBusy(false);
+      appendAiAssistantThread('agent', (e && e.message) ? e.message : 'Network error');
+      _aiKimiChatHistory.pop();
+    });
+  }
+  if (btnAiAssistantSend && aiAssistantComposerInput) {
+    btnAiAssistantSend.addEventListener('click', sendAiAssistantKimiMessage);
+    aiAssistantComposerInput.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Enter' && !ev.shiftKey) {
+        ev.preventDefault();
+        sendAiAssistantKimiMessage();
+      }
+    });
+  }
   const btnDesignerPageUpdate = document.getElementById('btnDesignerPageUpdate');
   if (btnDesignerPageUpdate) {
     btnDesignerPageUpdate.addEventListener('click', function() {

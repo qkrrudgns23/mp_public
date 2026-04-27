@@ -7,6 +7,7 @@ Save Layout/load: data/Layout_storage/ Save by name to.
 - GET /api/airport-map-exists?icao=RPLL → ``airport_map_file_status`` → { ok, exists, file, icao }
 - POST /api/fetch-airport-map: body { "icao": "RPLL" } → download OSM bundle, write ``{ICAO}_map.json``, build ``{ICAO}_OSM.json``.
 - POST /api/process-stored-airport-map: body { "icao": "RPLL" } → read saved ``{ICAO}_map.json`` only, rebuild ``{ICAO}_OSM.json``.
+- POST /api/ai-chat: body ``{ "messages": [ {"role":"user","content":"..."} ], "model": "kimi-k2.5" }`` → Moonshot Kimi (OpenAI-compatible). Set ``MOONSHOT_API_KEY`` (or ``KIMI_API_KEY``) in the process environment, or in project-root ``.env`` (loaded at import; not sent from the browser).
 """
 
 from __future__ import annotations
@@ -14,9 +15,12 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
+import os
 import re
 import sys
 import threading
+import urllib.error
+import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -39,6 +43,39 @@ _GRID3D_VIEWER_HTML = (_ROOT / "pages" / "Layout_Design" / "3D" / "grid3d-viewer
 LAYOUT_RECEIVER_PORT = 8765
 _PORT = LAYOUT_RECEIVER_PORT
 _RESERVED_NAMES = frozenset({"current_layout", "default_layout"})
+
+
+def _load_dotenv_from_project_root() -> None:
+    """Load project-root ``.env`` into ``os.environ`` if the file exists. Does not override existing vars."""
+    p = _ROOT / ".env"
+    if not p.is_file():
+        return
+    try:
+        raw = p.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("export "):
+            s = s[7:].lstrip()
+        if "=" not in s:
+            continue
+        k, _, rest = s.partition("=")
+        k = k.strip()
+        if not k:
+            continue
+        v = rest.strip()
+        if not v:
+            continue
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+            v = v[1:-1]
+        if k not in os.environ:
+            os.environ[k] = v
+
+
+_load_dotenv_from_project_root()
 
 
 @lru_cache(maxsize=1)
@@ -331,6 +368,61 @@ def _safe_grid3d_asset_file(rel: str) -> Optional[Path]:
     return candidate
 
 
+def _proxy_kimi_chat_completions(
+    messages: list, model: str
+) -> tuple[bool, str, Optional[str]]:
+    """
+    Call Moonshot OpenAI-compatible chat completions. Returns (ok, reply_or_empty, error_detail).
+    """
+    api_key = (
+        (os.environ.get("MOONSHOT_API_KEY") or os.environ.get("KIMI_API_KEY") or "").strip()
+    )
+    if not api_key:
+        return False, "", "missing_api_key"
+    base = (os.environ.get("MOONSHOT_BASE_URL") or "https://api.moonshot.ai/v1").rstrip("/")
+    url = f"{base}/chat/completions"
+    payload: Dict[str, Any] = {
+        "model": model or "kimi-k2.5",
+        "messages": messages,
+        "temperature": 0.6,
+    }
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            raw = resp.read().decode("utf-8")
+            data = json.loads(raw)
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8")[:2000]
+        except Exception:
+            pass
+        return False, "", f"upstream_http_{e.code}:{detail}"
+    except urllib.error.URLError as e:
+        return False, "", f"upstream_url:{e.reason!r}"
+    except Exception as e:
+        return False, "", str(e)
+    try:
+        choices = data.get("choices") if isinstance(data, dict) else None
+        if not isinstance(choices, list) or not choices:
+            return False, "", "no_choices"
+        msg0 = choices[0].get("message") if isinstance(choices[0], dict) else None
+        content = (msg0 or {}).get("content") if isinstance(msg0, dict) else None
+        if content is None:
+            return False, "", "no_content"
+        return True, str(content).strip(), None
+    except Exception as e:
+        return False, "", str(e)
+
+
 def delete_layout(name: str) -> None:
     """Layout_storageof that name in json Delete file. default_layout/current_layout cannot be deleted."""
     if not name or (name or "").strip().lower() in _RESERVED_NAMES:
@@ -409,6 +501,7 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                         "fetchAirportMapPost": True,
                         "receiverSourceMtime": mtime,
                         "hint": "POST /api/fetch-airport-map with {\"icao\":\"RPLL\"}. If you still get 404 on POST, another process may be bound to this port with old code — stop it and restart run_app.py.",
+                        "aiChatPost": True,
                     }
                 ).encode("utf-8")
             )
@@ -709,6 +802,76 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"ok": True, "message": "simulation started"}).encode("utf-8"))
             except Exception as e:
                 self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
+        if path == "/api/ai-chat" or path.startswith("/api/ai-chat"):
+            try:
+                obj = json.loads(body) if body else {}
+                if not isinstance(obj, dict):
+                    raise ValueError("invalid_json_object")
+                messages = obj.get("messages")
+                if not isinstance(messages, list) or not messages:
+                    single = (obj.get("message") or "").strip()
+                    if not single:
+                        raise ValueError("missing_messages")
+                    messages = [{"role": "user", "content": single}]
+                clean: list = []
+                for m in messages[:40]:
+                    if not isinstance(m, dict):
+                        continue
+                    role = str(m.get("role") or "").strip().lower()
+                    content = m.get("content")
+                    if role not in ("user", "assistant", "system"):
+                        continue
+                    if content is None:
+                        continue
+                    text = str(content).strip()
+                    if not text:
+                        continue
+                    if len(text) > 12000:
+                        text = text[:12000]
+                    clean.append({"role": role, "content": text})
+                if not clean:
+                    raise ValueError("no_valid_messages")
+                model_raw = (obj.get("model") or os.environ.get("MOONSHOT_MODEL") or "kimi-k2.5")
+                model = str(model_raw).strip() or "kimi-k2.5"
+                ok, reply, err = _proxy_kimi_chat_completions(clean, model)
+                if not ok:
+                    code = 503 if err == "missing_api_key" else 502
+                    self.send_response(code)
+                    self.send_header("Content-Type", "application/json")
+                    self._send_cors()
+                    self.end_headers()
+                    hint = (
+                        "Set MOONSHOT_API_KEY (or KIMI_API_KEY) in the environment and restart the layout receiver."
+                        if err == "missing_api_key"
+                        else ""
+                    )
+                    self.wfile.write(
+                        json.dumps(
+                            {"ok": False, "error": err or "chat_failed", "hint": hint},
+                            ensure_ascii=False,
+                        ).encode("utf-8")
+                    )
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(
+                    json.dumps({"ok": True, "reply": reply}, ensure_ascii=False).encode("utf-8")
+                )
+            except ValueError as e:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
                 self.send_header("Content-Type", "application/json")
                 self._send_cors()
                 self.end_headers()

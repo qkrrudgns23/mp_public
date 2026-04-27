@@ -97,7 +97,7 @@
                 </div>
               </div>
             </div>
-            <button type="button" class="tool-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle layout AI assistant (placeholder UI)">AI mode</button>
+            <button type="button" class="tool-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle Kimi chat (MOONSHOT_API_KEY on layout receiver)">AI mode</button>
             <span class="global-update-wrap">
               <span id="designerPageUpdateSyncDot" class="global-update-sync-dot stale" title="레이아웃/객체가 변경됨 — Update로 경로 그래프·뷰 동기화" role="status" aria-label="Designer Update sync status"></span>
               <button type="button" class="tool-btn" id="btnDesignerPageUpdate" title="Re-apply settings, refresh views, and sync path graph / junction data (heavy work runs here, not while panning or zooming)">Update</button>
@@ -699,31 +699,27 @@
         </div>
       </div>
     </div>
-    <aside id="aiAssistantDock" class="ai-assistant-dock" hidden aria-hidden="true" aria-label="AI assistant placeholder">
+    <aside id="aiAssistantDock" class="ai-assistant-dock" hidden aria-hidden="true" aria-label="Layout AI assistant">
       <div class="ai-assistant-dock-header">
-        <span class="ai-assistant-dock-title">Agent</span>
+        <span class="ai-assistant-dock-title">Kimi</span>
         <button type="button" class="ai-assistant-dock-close" id="btnAiAssistantDockClose" aria-label="Close AI assistant">×</button>
       </div>
       <div class="ai-assistant-dock-scroll">
-        <div class="ai-assistant-dock-thread" role="log">
-          <div class="ai-assistant-msg ai-assistant-msg-user">
-            <div class="ai-assistant-msg-meta">You</div>
-            <div class="ai-assistant-msg-body">Match the background image width to the apron outline.</div>
-          </div>
+        <div id="aiAssistantDockThread" class="ai-assistant-dock-thread" role="log">
           <div class="ai-assistant-msg ai-assistant-msg-agent">
-            <div class="ai-assistant-msg-meta">Assistant</div>
-            <div class="ai-assistant-msg-body">Placeholder only — wire an agent here later to edit the layout from natural language.</div>
+            <div class="ai-assistant-msg-meta">Kimi</div>
+            <div class="ai-assistant-msg-body">Set MOONSHOT_API_KEY in the environment for the layout receiver (see project docs), then chat here. Messages go through POST /api/ai-chat — the key is never sent from the browser.</div>
           </div>
         </div>
         <div class="ai-assistant-composer">
           <div class="ai-assistant-composer-inner">
-            <textarea id="aiAssistantComposerInput" class="ai-assistant-input" rows="3" placeholder="Plan, search, build anything" tabindex="0"></textarea>
+            <textarea id="aiAssistantComposerInput" class="ai-assistant-input" rows="3" placeholder="Message Kimi (Shift+Enter for newline)" tabindex="0"></textarea>
             <div class="ai-assistant-composer-footer">
               <div class="ai-assistant-composer-hints">
-                <span class="ai-assistant-chip">∞ Agent</span>
-                <span class="ai-assistant-chip muted">Auto</span>
+                <span class="ai-assistant-chip">kimi-k2.5</span>
+                <span class="ai-assistant-chip muted">via receiver</span>
               </div>
-              <button type="button" class="ai-assistant-send" disabled aria-label="Send (not connected)">↑</button>
+              <button type="button" class="ai-assistant-send" id="btnAiAssistantSend" aria-label="Send message">↑</button>
             </div>
           </div>
         </div>
