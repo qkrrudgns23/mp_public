@@ -693,7 +693,7 @@
     const playDockBtnApplyLayout = document.getElementById('btnShowPlayDock');
     if (playDockBtnApplyLayout) playDockBtnApplyLayout.disabled = !state.hasSimulationResult;
   }
-  /** E-series minutes; phase-duration seconds from ``airside_sim`` schedule row. */
+  /** E-series minutes; duration seconds from ``airside_sim`` schedule row. */
   function applyAirsideScheduleRowToFlight(f, srec) {
     if (!f) return;
     if (!srec || typeof srec !== 'object') {
@@ -745,8 +745,8 @@
     const dttDepS = secOpt('DTT_DEP_SEC');
     if (isFinite(dttDepS)) f.proSimDttDepSec = dttDepS;
     else delete f.proSimDttDepSec;
-    const lineupS = secOpt('LINEUP_DEPARTURE_SEC');
-    if (isFinite(lineupS)) f.proSimDepLineupSec = lineupS;
+    const depRotS = secOpt('DEP_ROT_SEC');
+    if (isFinite(depRotS)) f.proSimDepLineupSec = depRotS;
     else delete f.proSimDepLineupSec;
   }
   function applyAirsideSimulationResultPayload(payload) {

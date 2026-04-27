@@ -18,13 +18,12 @@ recorded.
 finishes the last path segment (``path_completed_abs_sec``); no nominal EOBT+leg projection. If the sim never completes that path,
 ``ETOT`` is omitted (null).
 
-After the time-step loop, ``_overlay_schedule_timing_from_playback_positions`` adds motion-duration fields (seconds) derived from
-consecutive ``positions`` samples: ``ARR_ROT_SEC`` (``Landing``), ``VTT_ARR_SEC`` (``Arr_taxi`` + ``Arr_taxi_occupied``),
-``DTT_ARR_SEC`` / ``DTT_DEP_SEC`` (within those VTT phases, time where the aircraft is effectively stopped:
-reported ``v`` ≤ ``standStoppedVelocityMaxMs``, or consecutive-sample step ≤ ``playbackStandStillStepM``, or ``controlHalt``;
-``Dep`` uses only ``Dep_taxi`` after ``EOBT``, matching ``VTT_DEP_SEC``). Playback ``v`` can be floored for runway-taxiway display, so the step/halt checks are required.
-``VTT_DEP_SEC`` (``Dep_taxi`` only, wall-clock overlap with ``[EOBT, +∞)`` from playback; excludes pre-EOBT pushback and ``Holding_lineup``),
-``LINEUP_DEPARTURE_SEC`` (``Lineup_departure``), aligned with Pro Sim 2D colors.
+After the time-step loop, ``_overlay_schedule_timing_from_playback_positions`` adds Flight Schedule
+duration fields (seconds) from E-series timestamps: ``ARR_ROT_SEC = EXIT_RUNWAY - ELDT``,
+``VTT_ARR_SEC = EIBT - EXIT_RUNWAY``, ``VTT_DEP_SEC = E_LINEUP - EOBT``, and
+``DEP_ROT_SEC = ETOT - E_LINEUP``. ``DTT_ARR_SEC`` / ``DTT_DEP_SEC`` are the sums of
+consecutive ``positions`` intervals inside each VTT window whose start sample has ``v == 0``.
+``LINEUP_DEPARTURE_SEC`` remains as the ``Lineup_departure`` phase duration for playback diagnostics.
 
 ``positions`` timelines use ``t`` = absolute schedule seconds (day base, same as ELDT scale);
 ``Dep_taxi`` pushback/taxi-out is gated until **physical** in-blocks at stand + ``dwell_sec`` (not ELDT+nominal taxi-in).
@@ -46,7 +45,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from utils.designer_path_graph import (
     DirectedEdgeRecord,
@@ -3622,103 +3621,62 @@ def _sum_phase_durations_from_position_samples(
     return totals
 
 
-def _sum_dep_taxi_sec_after_eobt(
-    pts: List[Dict[str, Any]],
-    eobt_sec: Optional[float],
-) -> float:
-    """
-    Duration credited to ``Dep_taxi`` only, summing each sample interval's overlap with
-    ``[eobt_sec, +∞)``. Excludes ``Holding_lineup`` and ``Lineup_departure``.
-    """
-    if eobt_sec is None or not pts or len(pts) < 2:
-        return 0.0
+def _schedule_row_sec(row: Dict[str, Any], key: str) -> Optional[float]:
+    raw = row.get(key)
+    if raw is None or raw == "":
+        return None
     try:
-        t_cut = float(eobt_sec)
+        val = float(raw)
     except (TypeError, ValueError):
-        return 0.0
-    if not math.isfinite(t_cut):
-        return 0.0
-    total = 0.0
-    for i in range(len(pts) - 1):
-        p0, p1 = pts[i], pts[i + 1]
-        if str(p0.get("phase") or "").strip() != PHASE_DEP_TAXI:
-            continue
-        t0 = float(p0.get("t", 0.0))
-        t1 = float(p1.get("t", 0.0))
-        if t1 <= t0:
-            continue
-        a = max(t0, t_cut)
-        b = t1
-        if b > a:
-            total += b - a
-    return total
+        return None
+    return val if math.isfinite(val) else None
 
 
-_DTT_ARR_PHASES = frozenset({PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP})
-_DTT_DEP_PHASES = frozenset({PHASE_DEP_TAXI})
+def _duration_between_schedule_secs(
+    row: Dict[str, Any], start_key: str, end_key: str
+) -> Optional[float]:
+    start = _schedule_row_sec(row, start_key)
+    end = _schedule_row_sec(row, end_key)
+    if start is None or end is None:
+        return None
+    dur = end - start
+    if dur < -1e-9:
+        return None
+    return max(0.0, dur)
 
 
-def _playback_pair_step_m(
-    p0: Dict[str, Any], p1: Dict[str, Any], pixels_per_meter: float
-) -> float:
-    """Geodesic step in meters between two playback samples (x,y in px)."""
-    ppm = max(float(pixels_per_meter), 1e-9)
-    dx = float(p1.get("x", 0.0)) - float(p0.get("x", 0.0))
-    dy = float(p1.get("y", 0.0)) - float(p0.get("y", 0.0))
-    return math.hypot(dx, dy) / ppm
-
-
-def _sum_stopped_delay_in_phases(
+def _sum_zero_speed_seconds_in_interval(
     pts: List[Dict[str, Any]],
-    phase_allow: FrozenSet[str],
-    v_stop_max_ms: float,
-    still_step_m: float,
-    pixels_per_meter: float,
-    t_clip_min: Optional[float] = None,
-) -> float:
-    """
-    Sum of ``(t1 - t0)`` over consecutive samples where ``phase`` at ``p0`` is in ``phase_allow``,
-    and the interval is treated as stopped: average ``v`` ≤ ``v_stop_max_ms``, or planar step
-    ≤ ``still_step_m``, or ``controlHalt`` on an endpoint. Optionally clip each interval to
-    ``[t_clip_min, +∞)``.
-    """
+    start_sec: Optional[float],
+    end_sec: Optional[float],
+) -> Optional[float]:
+    """Sum interval overlaps where the start playback sample reports exactly zero speed."""
+    if start_sec is None or end_sec is None:
+        return None
+    try:
+        start = float(start_sec)
+        end = float(end_sec)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(start) or not math.isfinite(end) or end < start:
+        return None
     if not pts or len(pts) < 2:
         return 0.0
-    vth = max(0.01, float(v_stop_max_ms))
-    step_tol = max(1e-6, float(still_step_m))
-    ppm = max(float(pixels_per_meter), 1e-9)
     total = 0.0
     for i in range(len(pts) - 1):
         p0, p1 = pts[i], pts[i + 1]
-        ph = str(p0.get("phase") or "").strip()
-        if ph not in phase_allow:
-            continue
-        ta = float(p0.get("t", 0.0))
-        tb = float(p1.get("t", 0.0))
-        if tb <= ta:
-            continue
-        if t_clip_min is not None:
-            try:
-                tc = float(t_clip_min)
-            except (TypeError, ValueError):
-                tc = None
-            if tc is None or not math.isfinite(tc):
-                continue
-            ta = max(ta, tc)
-            if tb <= ta:
-                continue
         try:
-            v0 = float(p0.get("v", 0.0) or 0.0)
-            v1 = float(p1.get("v", 0.0) or 0.0)
+            t0 = float(p0.get("t", 0.0))
+            t1 = float(p1.get("t", 0.0))
+            v0 = float(p0.get("v"))
         except (TypeError, ValueError):
-            v0, v1 = 0.0, 0.0
-        step_m = _playback_pair_step_m(p0, p1, ppm)
-        stopped_by_v = (v0 + v1) * 0.5 <= vth + 1e-9
-        stopped_by_xy = step_m <= step_tol + 1e-9
-        halted = bool(p0.get("controlHalt")) or bool(p1.get("controlHalt"))
-        if not (stopped_by_v or stopped_by_xy or halted):
             continue
-        total += tb - ta
+        if t1 <= t0 or abs(v0) > 1e-9:
+            continue
+        a = max(t0, start)
+        b = min(t1, end)
+        if b > a:
+            total += b - a
     return total
 
 
@@ -3729,56 +3687,36 @@ def _apply_pro_sim_phase_durations_to_schedule_row(
     still_step_m: float,
     pixels_per_meter: float,
 ) -> None:
-    """Post-overlay: wall-clock phase spans from ``positions`` for Flight Schedule KPI columns."""
+    """Post-overlay: E-series timestamp deltas for Flight Schedule KPI columns."""
     pdur = _sum_phase_durations_from_position_samples(pts)
-    has_ldg = bool(row.get("HAS_LANDING"))
+    _ = (v_stop_max_ms, still_step_m, pixels_per_meter)
+    eldt = _schedule_row_sec(row, "ELDT")
+    exit_runway = _schedule_row_sec(row, "EXIT_RUNWAY")
+    eibt = _schedule_row_sec(row, "EIBT")
+    eobt = _schedule_row_sec(row, "EOBT")
+    e_lineup = _schedule_row_sec(row, "E_LINEUP")
 
-    land = float(pdur.get(PHASE_LANDING, 0.0))
-    vtt_arr = float(pdur.get(PHASE_ARR_TAXI, 0.0)) + float(
-        pdur.get(PHASE_ARR_TAXI_TEMP, 0.0)
-    )
-    eobt_raw = row.get("EOBT")
-    try:
-        eobt_for_vtt = float(eobt_raw) if eobt_raw is not None else None
-    except (TypeError, ValueError):
-        eobt_for_vtt = None
-    if eobt_for_vtt is not None and not math.isfinite(eobt_for_vtt):
-        eobt_for_vtt = None
-    vtt_dep = _sum_dep_taxi_sec_after_eobt(pts, eobt_for_vtt)
-    dtt_arr = _sum_stopped_delay_in_phases(
-        pts,
-        _DTT_ARR_PHASES,
-        v_stop_max_ms,
-        still_step_m,
-        pixels_per_meter,
-        t_clip_min=None,
-    )
-    dtt_dep = (
-        _sum_stopped_delay_in_phases(
-            pts,
-            _DTT_DEP_PHASES,
-            v_stop_max_ms,
-            still_step_m,
-            pixels_per_meter,
-            t_clip_min=eobt_for_vtt,
-        )
-        if eobt_for_vtt is not None
-        else 0.0
-    )
+    arr_rot = _duration_between_schedule_secs(row, "ELDT", "EXIT_RUNWAY")
+    vtt_arr = _duration_between_schedule_secs(row, "EXIT_RUNWAY", "EIBT")
+    vtt_dep = _duration_between_schedule_secs(row, "EOBT", "E_LINEUP")
+    dep_rot = _duration_between_schedule_secs(row, "E_LINEUP", "ETOT")
+    dtt_arr = _sum_zero_speed_seconds_in_interval(pts, exit_runway, eibt)
+    dtt_dep = _sum_zero_speed_seconds_in_interval(pts, eobt, e_lineup)
     lineup = float(pdur.get(PHASE_LINEUP_DEPARTURE, 0.0))
 
-    def _set_sec(key: str, val: float, allow: bool) -> None:
-        if allow and val > 1e-6:
+    def _set_sec(key: str, val: Optional[float]) -> None:
+        if val is not None and math.isfinite(float(val)):
             row[key] = round(val, 3)
         else:
             row[key] = None
 
-    _set_sec("ARR_ROT_SEC", land, has_ldg)
-    _set_sec("VTT_ARR_SEC", vtt_arr, vtt_arr > 1e-6)
-    _set_sec("DTT_ARR_SEC", dtt_arr, dtt_arr > 1e-6)
-    _set_sec("DTT_DEP_SEC", dtt_dep, dtt_dep > 1e-6)
-    _set_sec("VTT_DEP_SEC", vtt_dep, vtt_dep > 1e-6)
-    _set_sec("LINEUP_DEPARTURE_SEC", lineup, lineup > 1e-6)
+    _set_sec("ARR_ROT_SEC", arr_rot if eldt is not None else None)
+    _set_sec("VTT_ARR_SEC", vtt_arr)
+    _set_sec("DTT_ARR_SEC", dtt_arr if vtt_arr is not None else None)
+    _set_sec("DTT_DEP_SEC", dtt_dep if vtt_dep is not None else None)
+    _set_sec("VTT_DEP_SEC", vtt_dep)
+    _set_sec("DEP_ROT_SEC", dep_rot)
+    _set_sec("LINEUP_DEPARTURE_SEC", lineup if lineup > 1e-6 else None)
 
 
 def _overlay_schedule_timing_from_playback_positions(
@@ -3955,6 +3893,7 @@ def _overlay_schedule_timing_from_playback_positions(
                 "DTT_ARR_SEC",
                 "DTT_DEP_SEC",
                 "VTT_DEP_SEC",
+                "DEP_ROT_SEC",
                 "LINEUP_DEPARTURE_SEC",
             ):
                 row[pk] = None

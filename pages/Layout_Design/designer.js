@@ -2504,7 +2504,7 @@
     if (typeof renderFlightList === 'function') renderFlightList(false, false);
     if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
-  /** E-series minutes; ARR_ROT_SEC / VTT_* / DTT_* / LINEUP_DEPARTURE_SEC from ``airside_sim`` schedule (motion phases). */
+  /** E-series minutes; ARR_ROT_SEC / VTT_* / DTT_* / DEP_ROT_SEC from ``airside_sim`` schedule. */
   function applyAirsideScheduleRowToFlight(f, srec) {
     if (!f) return;
     if (!srec || typeof srec !== 'object') {
@@ -2556,8 +2556,8 @@
     const dttDepS = secOpt('DTT_DEP_SEC');
     if (isFinite(dttDepS)) f.proSimDttDepSec = dttDepS;
     else delete f.proSimDttDepSec;
-    const lineupS = secOpt('LINEUP_DEPARTURE_SEC');
-    if (isFinite(lineupS)) f.proSimDepLineupSec = lineupS;
+    const depRotS = secOpt('DEP_ROT_SEC');
+    if (isFinite(depRotS)) f.proSimDepLineupSec = depRotS;
     else delete f.proSimDepLineupSec;
   }
   function applyAirsideSimulationResultPayload(payload) {
@@ -11458,7 +11458,7 @@
         kpiBuildMetricRow('Avg arrival ROT', kpiFormatOptionalSecondsAvg(snapshot.rotArrAvgSec), 'ROT(Arr) · flight schedule avg · sec'),
         kpiBuildMetricRow('Avg Arrival VTT', kpiFormatOptionalMinutesAvg(snapshot.arrTaxiAvgMin), 'VTT(Arr) · flight schedule avg · min'),
         kpiBuildMetricRow('Avg Departure VTT', kpiFormatOptionalMinutesAvg(snapshot.depTaxiAvgMin), 'Dep_taxi after EOBT · VTT_DEP_SEC · min'),
-        kpiBuildMetricRow('Avg Departure ROT', kpiFormatOptionalSecondsAvg(snapshot.rotDepAvgSec), 'LINEUP_DEPARTURE_SEC (schedule) · else tier depRotMin · avg sec')
+        kpiBuildMetricRow('Avg Departure ROT', kpiFormatOptionalSecondsAvg(snapshot.rotDepAvgSec), 'DEP_ROT_SEC (ETOT - E_LINEUP) · else tier depRotMin · avg sec')
       ]),
       kpiBuildPanel('Apron utilization', 'ratio = utilization / (stands × window)', [
         kpiBuildMetricRow('Utilization ratio', kpiFormatRatioPercent(snapshot.apronUtilRatio), apronMeta)
