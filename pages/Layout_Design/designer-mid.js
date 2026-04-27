@@ -840,7 +840,7 @@
         '<th class="flight-col-e">ETOT</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
         '<th class="flight-th-mixed">VTT(Arr)</th>' +
-        '<th class="flight-th-mixed">ATT(Dep)</th>' +
+        '<th class="flight-th-mixed">VTT(Dep)</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(dep)</th>' +
         '<th class="flight-td-del"></th>' +
       '</tr></thead>' +
@@ -887,11 +887,11 @@
     const dash = '—';
     const rotArrStr = (f.arrRotSec != null && isFinite(f.arrRotSec)) ? formatSecondsToHHMMSS(f.arrRotSec) : dash;
     const vttArrStr = (f.proSimVttArrSec != null && isFinite(f.proSimVttArrSec)) ? formatSecondsToHHMMSS(f.proSimVttArrSec) : dash;
-    const attDepStr = (f.proSimVttDepSec != null && isFinite(f.proSimVttDepSec)) ? formatSecondsToHHMMSS(f.proSimVttDepSec) : dash;
+    const vttDepStr = (f.proSimVttDepSec != null && isFinite(f.proSimVttDepSec)) ? formatSecondsToHHMMSS(f.proSimVttDepSec) : dash;
     const rotDepStr = (f.proSimDepLineupSec != null && isFinite(f.proSimDepLineupSec)) ? formatSecondsToHHMMSS(f.proSimDepLineupSec) : dash;
     const rotArrCell = flightScheduleProSimTimedCell(rotArrStr, 'green');
     const vttArrCell = flightScheduleProSimTimedCell(vttArrStr, 'vttarr');
-    const attDepCell = flightScheduleProSimTimedCell(attDepStr, 'red');
+    const vttDepCell = flightScheduleProSimTimedCell(vttDepStr, 'red');
     const rotDepCell = flightScheduleProSimTimedCell(rotDepStr, 'pink');
     const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
     const termId = f.terminalId || (f.token && f.token.terminalId);
@@ -924,7 +924,7 @@
         '<td class="flight-td-time flight-col-e">' + escapeHtml(etotStr) + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
         '<td class="flight-td-time">' + vttArrCell + '</td>' +
-        '<td class="flight-td-time">' + attDepCell + '</td>' +
+        '<td class="flight-td-time">' + vttDepCell + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotDepCell + '</td>' +
         '<td class="flight-td-del"><button type="button" class="obj-item-delete" data-del="' + f.id + '">×</button></td>' +
       '</tr>';

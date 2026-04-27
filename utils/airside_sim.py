@@ -20,7 +20,8 @@ finishes the last path segment (``path_completed_abs_sec``); no nominal EOBT+leg
 
 After the time-step loop, ``_overlay_schedule_timing_from_playback_positions`` adds motion-duration fields (seconds) derived from
 consecutive ``positions`` samples: ``ARR_ROT_SEC`` (``Landing``), ``VTT_ARR_SEC`` (``Arr_taxi`` + ``Arr_taxi_occupied``),
-``VTT_DEP_SEC`` (``Dep_taxi`` + ``Holding_lineup``), ``LINEUP_DEPARTURE_SEC`` (``Lineup_departure``), aligned with Pro Sim 2D colors.
+``VTT_DEP_SEC`` (``Dep_taxi`` only, wall-clock overlap with ``[EOBT, +∞)`` from playback; excludes pre-EOBT pushback and ``Holding_lineup``),
+``LINEUP_DEPARTURE_SEC`` (``Lineup_departure``), aligned with Pro Sim 2D colors.
 
 ``positions`` timelines use ``t`` = absolute schedule seconds (day base, same as ELDT scale);
 ``Dep_taxi`` pushback/taxi-out is gated until **physical** in-blocks at stand + ``dwell_sec`` (not ELDT+nominal taxi-in).
@@ -3618,6 +3619,38 @@ def _sum_phase_durations_from_position_samples(
     return totals
 
 
+def _sum_dep_taxi_sec_after_eobt(
+    pts: List[Dict[str, Any]],
+    eobt_sec: Optional[float],
+) -> float:
+    """
+    Duration credited to ``Dep_taxi`` only, summing each sample interval's overlap with
+    ``[eobt_sec, +∞)``. Excludes ``Holding_lineup`` and ``Lineup_departure``.
+    """
+    if eobt_sec is None or not pts or len(pts) < 2:
+        return 0.0
+    try:
+        t_cut = float(eobt_sec)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(t_cut):
+        return 0.0
+    total = 0.0
+    for i in range(len(pts) - 1):
+        p0, p1 = pts[i], pts[i + 1]
+        if str(p0.get("phase") or "").strip() != PHASE_DEP_TAXI:
+            continue
+        t0 = float(p0.get("t", 0.0))
+        t1 = float(p1.get("t", 0.0))
+        if t1 <= t0:
+            continue
+        a = max(t0, t_cut)
+        b = t1
+        if b > a:
+            total += b - a
+    return total
+
+
 def _apply_pro_sim_phase_durations_to_schedule_row(row: Dict[str, Any], pts: List[Dict[str, Any]]) -> None:
     """Post-overlay: wall-clock phase spans from ``positions`` for Flight Schedule KPI columns."""
     pdur = _sum_phase_durations_from_position_samples(pts)
@@ -3627,9 +3660,14 @@ def _apply_pro_sim_phase_durations_to_schedule_row(row: Dict[str, Any], pts: Lis
     vtt_arr = float(pdur.get(PHASE_ARR_TAXI, 0.0)) + float(
         pdur.get(PHASE_ARR_TAXI_TEMP, 0.0)
     )
-    vtt_dep = float(pdur.get(PHASE_DEP_TAXI, 0.0)) + float(
-        pdur.get(PHASE_HOLDING_LINEUP, 0.0)
-    )
+    eobt_raw = row.get("EOBT")
+    try:
+        eobt_for_vtt = float(eobt_raw) if eobt_raw is not None else None
+    except (TypeError, ValueError):
+        eobt_for_vtt = None
+    if eobt_for_vtt is not None and not math.isfinite(eobt_for_vtt):
+        eobt_for_vtt = None
+    vtt_dep = _sum_dep_taxi_sec_after_eobt(pts, eobt_for_vtt)
     lineup = float(pdur.get(PHASE_LINEUP_DEPARTURE, 0.0))
 
     def _set_sec(key: str, val: float, allow: bool) -> None:

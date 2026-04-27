@@ -1,156 +1,260 @@
-  function kpiGateChartPlaceholder(buckets) {
-    if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No gate occupancy data is available for the current snapshot.</div>';
-    return '<div class="kpi-chart-canvas-host kpi-chart-wrap--gate-fill"><canvas id="kpiChartGateOcc" aria-label="Gate occupancy chart"></canvas></div>';
+  function kpiNormalizeScheduleDateForKpi(raw) {
+    const s = (raw == null ? '' : String(raw)).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return typeof DEFAULT_SIBT_DATE !== 'undefined' ? DEFAULT_SIBT_DATE : '1970-01-01';
   }
-  function kpiRunwayChartPlaceholder(buckets) {
-    if (!buckets || !buckets.length) return '<div class="kpi-empty-state">No arrival or departure events are available for the current snapshot.</div>';
-    return '<div class="kpi-chart-canvas-host"><canvas id="kpiChartRunway" aria-label="Runway traffic chart"></canvas></div>';
+  function kpiScheduleDayStartAbsMin(dateStr) {
+    const parts = String(dateStr).split('-');
+    if (parts.length !== 3) return 0;
+    const y = parseInt(parts[0], 10), mo = parseInt(parts[1], 10) - 1, d = parseInt(parts[2], 10);
+    if (!isFinite(y) || !isFinite(mo) || !isFinite(d)) return 0;
+    return Math.floor(Date.UTC(y, mo, d) / 60000);
+  }
+  /** Minutes since Unix epoch (UTC midnight of schedule date + minute-of-day). */
+  function kpiFlightScheduleAbsMinute(f, minuteFromMidnight) {
+    const m = kpiToNumber(minuteFromMidnight);
+    if (m == null || !isFinite(m)) return null;
+    const day0 = kpiScheduleDayStartAbsMin(kpiNormalizeScheduleDateForKpi(f && (f.sibtDate != null ? f.sibtDate : f.serviceDate)));
+    const mod = ((Math.floor(m) % 1440) + 1440) % 1440;
+    return day0 + mod;
+  }
+  function kpiApronStandCountState() {
+    const p = (state.pbbStands || []).length;
+    const r = (state.remoteStands || []).length;
+    const t = (state.tempStands || []).length;
+    const n = p + r + t;
+    return Math.max(1, n);
+  }
+  function kpiFormatOptionalSecondsAvg(value) {
+    const v = kpiToNumber(value);
+    if (v == null || !isFinite(v)) return '—';
+    return kpiFormatSecondsValue(v);
+  }
+  function kpiFormatOptionalMinutesAvg(value) {
+    const v = kpiToNumber(value);
+    if (v == null || !isFinite(v)) return '—';
+    return kpiFormatMinutesValue(v);
+  }
+  function kpiFormatRatioPercent(value) {
+    const v = kpiToNumber(value);
+    if (v == null || !isFinite(v)) return '—';
+    return (v * 100).toFixed(1) + '%';
+  }
+
+  function kpiDisposeInteractiveCharts() {
+    try {
+      if (window.__kpiChartGate) { window.__kpiChartGate.destroy(); window.__kpiChartGate = null; }
+      if (window.__kpiChartRunway) { window.__kpiChartRunway.destroy(); window.__kpiChartRunway = null; }
+    } catch (e) { console.warn('kpiDisposeInteractiveCharts', e); }
+  }
+  function kpiRunwayHourlyChartOptions(labelsLen) {
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#94a3b8', font: { size: 12, family: 'var(--ui-font, system-ui, sans-serif)' } } },
+        tooltip: {
+          backgroundColor: 'rgba(15, 23, 42, 0.94)',
+          titleColor: '#f1f5f9',
+          bodyColor: '#e2e8f0',
+          borderColor: 'rgba(148, 163, 184, 0.28)',
+          borderWidth: 1,
+          padding: 10
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,0.07)' },
+          ticks: {
+            color: '#94a3b8',
+            maxRotation: labelsLen > 18 ? 45 : 0,
+            autoSkip: labelsLen > 24,
+            maxTicksLimit: labelsLen > 32 ? 18 : undefined,
+            font: { size: 11 }
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255,255,255,0.07)' },
+          ticks: { color: '#94a3b8', precision: 0, font: { size: 12 } }
+        }
+      }
+    };
+  }
+  function kpiMountRunwayHourlyChart(series) {
+    if (typeof Chart === 'undefined') {
+      console.warn('Chart.js failed to load; KPI charts are static until CDN is available.');
+      return;
+    }
+    if (!series || !series.labels || !series.labels.length) return;
+    const elR = document.getElementById('kpiChartRunway');
+    if (!elR) return;
+    const opt = kpiRunwayHourlyChartOptions(series.labels.length);
+    window.__kpiChartRunway = new Chart(elR, {
+      type: 'line',
+      data: {
+        labels: series.labels,
+        datasets: [
+          {
+            label: 'Total',
+            data: series.total,
+            borderColor: '#c4b5fd',
+            backgroundColor: 'transparent',
+            borderWidth: 2.5,
+            tension: 0.2,
+            pointRadius: 3,
+            pointHoverRadius: 6,
+            order: 1
+          },
+          {
+            label: 'Arrivals',
+            data: series.arr,
+            borderColor: '#38bdf8',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: 3,
+            pointHoverRadius: 6,
+            order: 2
+          },
+          {
+            label: 'Departures',
+            data: series.dep,
+            borderColor: '#fb923c',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: 3,
+            pointHoverRadius: 6,
+            order: 3
+          }
+        ]
+      },
+      options: opt
+    });
+  }
+  function kpiRunwayChartPlaceholder(hasHourly) {
+    if (!hasHourly) return '<div class="kpi-empty-state">No runway movements in the flight schedule for the hourly chart.</div>';
+    return '<div class="kpi-chart-canvas-host"><canvas id="kpiChartRunway" aria-label="Hourly runway traffic chart"></canvas></div>';
   }
 
   function collectKpiSnapshot() {
     const flights = Array.isArray(state.flights) ? state.flights.slice() : [];
     const rows = flights.map(function(f) {
-      const arrTaxiMin = kpiToNumber(typeof getBaseVttArrMinutes === 'function' ? getBaseVttArrMinutes(f) : null);
+      const isDepOnly = !!(f && f.arrDep === 'Dep');
+      const arrTaxiBase = kpiToNumber(typeof getBaseVttArrMinutes === 'function' ? getBaseVttArrMinutes(f) : null);
       const depBlockOutMin = kpiToNumber(typeof getDepBlockOutMin === 'function' ? getDepBlockOutMin(f) : null);
-      const depTaxiMin = kpiToNumber(typeof getBaseVttDepMinutesToLineup === 'function' ? getBaseVttDepMinutesToLineup(f) : null);
+      const depTaxiBase = kpiToNumber(typeof getBaseVttDepMinutesToLineup === 'function' ? getBaseVttDepMinutesToLineup(f) : null);
+      const arrTaxiFromSchedSec = (f && f.proSimVttArrSec != null && isFinite(Number(f.proSimVttArrSec))) ? Number(f.proSimVttArrSec) / 60 : null;
+      const depTaxiFromSchedSec = (f && f.proSimVttDepSec != null && isFinite(Number(f.proSimVttDepSec))) ? Number(f.proSimVttDepSec) / 60 : null;
+      const arrTaxiSch = kpiToNumber(arrTaxiFromSchedSec != null ? arrTaxiFromSchedSec : arrTaxiBase);
+      const depTaxiSch = kpiToNumber(depTaxiFromSchedSec != null ? depTaxiFromSchedSec : depTaxiBase);
       const rotSec = kpiToNumber(f && f.arrRotSec != null ? f.arrRotSec : (typeof getArrRotMinutes === 'function' ? getArrRotMinutes(f) * 60 : null));
-      const depRotSec = (f && f.arrDep === 'Dep' && typeof computeDepRotSecondsForFlight === 'function')
-        ? computeDepRotSecondsForFlight(f)
-        : ((typeof SCHED_DEP_ROT_MIN === 'number' && isFinite(SCHED_DEP_ROT_MIN)) ? SCHED_DEP_ROT_MIN * 60 : null);
-      const arrTaxiDelayMin = kpiToNumber(f && f.vttADelayMin != null ? f.vttADelayMin : 0);
-      const depTaxiDelayMin = kpiToNumber(f && f.depTaxiDelayMin != null ? f.depTaxiDelayMin : 0);
+      const depRotFromSchedSec = (f && f.proSimDepLineupSec != null && isFinite(Number(f.proSimDepLineupSec))) ? Number(f.proSimDepLineupSec) : null;
+      const depRotSec = kpiToNumber(depRotFromSchedSec != null ? depRotFromSchedSec : (
+        (typeof SCHED_DEP_ROT_MIN === 'number' && isFinite(SCHED_DEP_ROT_MIN)) ? SCHED_DEP_ROT_MIN * 60 : null
+      ));
       const sibt = kpiToNumber(f && f.sibtMin_orig != null ? f.sibtMin_orig : (f && f.timeMin != null ? f.timeMin : null));
-      const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiMin != null && rotSec != null ? Math.max(0, sibt - arrTaxiMin - rotSec / 60) : null));
+      const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiSch != null && rotSec != null ? Math.max(0, sibt - arrTaxiSch - rotSec / 60) : null));
       const dwellMin = kpiToNumber(f && f.dwellMin != null ? f.dwellMin : null);
       const sobt = kpiToNumber(f && f.sobtMin_orig != null ? f.sobtMin_orig : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
-      const sttDepMinK = kpiToNumber(typeof getBaseVttDepMinutesToHoldingSlot === 'function' ? getBaseVttDepMinutesToHoldingSlot(f) : depTaxiMin);
+      const sttDepMinK = kpiToNumber(typeof getBaseVttDepMinutesToHoldingSlot === 'function' ? getBaseVttDepMinutesToHoldingSlot(f) : depTaxiSch);
       const depRotMinK = depRotSec != null && isFinite(depRotSec) ? depRotSec / 60 : null;
       const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depRotMinK != null && sttDepMinK != null ? sobt + depRotMinK + sttDepMinK : (sobt != null && depBlockOutMin != null ? sobt + depBlockOutMin : null)));
-      const eldt = kpiToNumber(f && f.eldtMin != null ? f.eldtMin : (f && f.sldtMin_d != null ? f.sldtMin_d : sldt));
-      const eibt = kpiToNumber(f && f.eibtMin != null ? f.eibtMin : (eldt != null && arrTaxiMin != null && rotSec != null ? eldt + arrTaxiMin + rotSec / 60 + (kpiToNumber(f.vttADelayMin) || 0) : sibt));
-      const eobt = kpiToNumber(f && f.eobtMin != null ? f.eobtMin : sobt);
-      const etot = kpiToNumber(f && f.etotMin != null ? f.etotMin : (f && f.stotMin_d != null ? f.stotMin_d : stot));
+      const eldtSched = kpiToNumber(sldt);
+      const etotSched = kpiToNumber(stot);
       const failed = !!(f && flightBlockedLikeNoWay(f));
-      const paxArrDelay = (eibt != null && sibt != null) ? Math.max(0, eibt - sibt) : null;
-      const paxDepDelay = (eobt != null && sobt != null) ? Math.max(0, eobt - sobt) : null;
-      const acArrDelay = (eldt != null && sldt != null) ? Math.max(0, eldt - sldt) : null;
-      const acDepDelay = (etot != null && stot != null) ? Math.max(0, etot - stot) : null;
       return {
         flight: f,
-        id: f && f.id ? f.id : '',
-        reg: f && f.reg ? f.reg : '',
-        flightNumber: f && f.flightNumber ? f.flightNumber : '',
-        standId: f && f.standId ? f.standId : null,
-        standName: kpiStandLabelById(f && f.standId ? f.standId : null),
-        arrTaxiMin,
-        depTaxiMin,
-        rotSec,
-        depRotSec,
-        arrTaxiDelayMin,
-        depTaxiDelayMin,
-        sibt,
-        sobt,
-        sldt,
-        stot,
-        eldt,
-        eibt,
-        eobt,
-        etot,
-        failed,
-        paxArrDelay,
-        paxDepDelay,
-        acArrDelay,
-        acDepDelay
+        isDepOnly: isDepOnly,
+        arrTaxiSch: arrTaxiSch,
+        depTaxiSch: depTaxiSch,
+        rotSec: rotSec,
+        depRotSec: depRotSec,
+        sibt: sibt,
+        sobt: sobt,
+        eldtSched: eldtSched,
+        etotSched: etotSched,
+        failed: failed
       };
     });
-    const KPI_ROLL_STEP_MIN = 15;
-    const KPI_ROLL_WIN_MIN = 60;
-    const buckets = [];
-    if (rows.length) {
-      const wLastStart = 1440 - KPI_ROLL_WIN_MIN;
-      for (let w = 0; w <= wLastStart; w += KPI_ROLL_STEP_MIN) {
-        const wPlus = w + KPI_ROLL_WIN_MIN;
-        const activeStands = new Set();
-        let arrivals = 0;
-        let departures = 0;
-        rows.forEach(function(row) {
-          const occStartRaw = row.eibt != null ? row.eibt : row.sibt;
-          const occEndRaw = row.eobt != null ? row.eobt : row.sobt;
-          const osStart = kpiMinuteOfDay(occStartRaw);
-          const osEnd = kpiMinuteOfDay(occEndRaw);
-          if (row.standId && osStart != null && osEnd != null &&
-              kpiRollWindowOverlapsInterval(w, KPI_ROLL_WIN_MIN, osStart, osEnd)) {
-            activeStands.add(row.standId);
-          }
-          const eldtM = kpiMinuteOfDay(row.eldt);
-          const etotM = kpiMinuteOfDay(row.etot);
-          if (eldtM != null && eldtM >= w && eldtM < wPlus) arrivals += 1;
-          if (etotM != null && etotM >= w && etotM < wPlus) departures += 1;
-        });
-        buckets.push({
-          label: kpiFormatClockBucket15(w),
-          occupancy: activeStands.size,
-          arrivals: arrivals,
-          departures: departures,
-          total: arrivals + departures,
-          bucketStart: w
-        });
-      }
+    const hourCounts = Object.create(null);
+    function bumpRunwayHour(absMin, kind) {
+      if (absMin == null || !isFinite(absMin)) return;
+      const hk = Math.floor(absMin / 60);
+      if (!hourCounts[hk]) hourCounts[hk] = { arr: 0, dep: 0 };
+      hourCounts[hk][kind] += 1;
     }
-    const failedFlights = rows.filter(function(row) { return row.failed; });
-    const operationalFlights = rows.filter(function(row) { return !row.failed; });
-    const peakBucket = buckets.reduce(function(best, bucket) {
-      if (!best) return bucket;
-      return (bucket.occupancy || 0) > (best.occupancy || 0) ? bucket : best;
-    }, null);
-    const busiestBucket = buckets.reduce(function(best, bucket) {
-      if (!best) return bucket;
-      return (bucket.total || 0) > (best.total || 0) ? bucket : best;
-    }, null);
-    const peakRunwayArrBucket = buckets.reduce(function(best, bucket) {
-      if (!best) return bucket;
-      return (bucket.arrivals || 0) > (best.arrivals || 0) ? bucket : best;
-    }, null);
-    const peakRunwayDepBucket = buckets.reduce(function(best, bucket) {
-      if (!best) return bucket;
-      return (bucket.departures || 0) > (best.departures || 0) ? bucket : best;
-    }, null);
-    const detailRows = rows.slice().sort(function(a, b) {
-      const delayA = (a.paxArrDelay || 0) + (a.paxDepDelay || 0) + (a.acArrDelay || 0) + (a.acDepDelay || 0);
-      const delayB = (b.paxArrDelay || 0) + (b.paxDepDelay || 0) + (b.acArrDelay || 0) + (b.acDepDelay || 0);
-      return delayB - delayA;
+    rows.forEach(function(r) {
+      if (r.failed) return;
+      if (!r.isDepOnly && r.eldtSched != null) {
+        const am = kpiFlightScheduleAbsMinute(r.flight, r.eldtSched);
+        bumpRunwayHour(am, 'arr');
+      }
+      if (r.isDepOnly) {
+        if (r.etotSched != null) {
+          const am = kpiFlightScheduleAbsMinute(r.flight, r.etotSched);
+          bumpRunwayHour(am, 'dep');
+        }
+      } else if (r.etotSched != null) {
+        const am = kpiFlightScheduleAbsMinute(r.flight, r.etotSched);
+        bumpRunwayHour(am, 'dep');
+      }
     });
+    const hourKeys = Object.keys(hourCounts).map(function(x) { return parseInt(x, 10); }).filter(function(x) { return isFinite(x); }).sort(function(a, b) { return a - b; });
+    const hourlyRunway = hourKeys.map(function(hk) {
+      const c = hourCounts[hk];
+      const arr = c.arr || 0, dep = c.dep || 0;
+      const absMin0 = hk * 60;
+      const dayOff = Math.floor(absMin0 / 1440);
+      const mod = ((absMin0 % 1440) + 1440) % 1440;
+      const hh = Math.floor(mod / 60);
+      const label = (dayOff > 0 ? ('D+' + String(dayOff) + ' ') : '') + String(hh).padStart(2, '0') + ':00';
+      return { hourKey: hk, label: label, arrivals: arr, departures: dep, total: arr + dep };
+    });
+    const hourlyChart = {
+      labels: hourlyRunway.map(function(h) { return h.label; }),
+      arr: hourlyRunway.map(function(h) { return h.arrivals; }),
+      dep: hourlyRunway.map(function(h) { return h.departures; }),
+      total: hourlyRunway.map(function(h) { return h.total; })
+    };
+    let minAbs = Infinity, maxAbs = -Infinity;
+    let utilMinTotal = 0;
+    rows.forEach(function(r) {
+      if (r.failed) return;
+      const a0 = kpiFlightScheduleAbsMinute(r.flight, r.sibt);
+      const a1 = kpiFlightScheduleAbsMinute(r.flight, r.sobt);
+      if (a0 != null) { minAbs = Math.min(minAbs, a0); maxAbs = Math.max(maxAbs, a0); }
+      if (a1 != null) { minAbs = Math.min(minAbs, a1); maxAbs = Math.max(maxAbs, a1); }
+      if (a0 != null && a1 != null && a1 > a0) utilMinTotal += (a1 - a0);
+    });
+    const windowMin = (isFinite(minAbs) && isFinite(maxAbs) && maxAbs > minAbs) ? (maxAbs - minAbs) : 0;
+    const standN = kpiApronStandCountState();
+    const totalStandMin = standN * windowMin;
+    const apronUtilRatio = (totalStandMin > 1e-6) ? (utilMinTotal / totalStandMin) : null;
+    const okRows = rows.filter(function(r) { return !r.failed; });
+    const arrLegRows = okRows.filter(function(r) { return !r.isDepOnly; });
+    const depLegRows = okRows.filter(function(r) { return r.isDepOnly || r.etotSched != null; });
+    const rotArrAvgSec = kpiAverage(arrLegRows, function(r) { return r.rotSec; });
+    const arrTaxiAvgMin = kpiAverage(arrLegRows, function(r) { return r.arrTaxiSch; });
+    const depTaxiAvgMin = kpiAverage(depLegRows, function(r) { return r.depTaxiSch; });
+    const rotDepAvgSec = kpiAverage(depLegRows, function(r) { return r.depRotSec; });
+    const failedFlights = rows.filter(function(r) { return r.failed; });
     return {
       rows: rows,
-      buckets: buckets,
       totalFlights: rows.length,
       failedFlights: failedFlights.length,
-      operationalFlights: operationalFlights.length,
-      peakBucket: peakBucket,
-      busiestBucket: busiestBucket,
-      peakRunwayArrBucket: peakRunwayArrBucket,
-      peakRunwayDepBucket: peakRunwayDepBucket,
-      rotArrTotalSec: kpiSum(rows, function(row) { return row.rotSec; }),
-      rotArrAvgSec: kpiAverage(rows, function(row) { return row.rotSec; }),
-      rotDepTotalSec: kpiSum(rows, function(row) { return row.depRotSec; }),
-      rotDepAvgSec: kpiAverage(rows, function(row) { return row.depRotSec; }),
-      arrTaxiTotalMin: kpiSum(rows, function(row) { return row.arrTaxiMin; }),
-      arrTaxiAvgMin: kpiAverage(rows, function(row) { return row.arrTaxiMin; }),
-      depTaxiTotalMin: kpiSum(rows, function(row) { return row.depTaxiMin; }),
-      depTaxiAvgMin: kpiAverage(rows, function(row) { return row.depTaxiMin; }),
-      arrTaxiDelayTotalMin: kpiSum(rows, function(row) { return row.arrTaxiDelayMin; }),
-      arrTaxiDelayAvgMin: kpiAverage(rows, function(row) { return row.arrTaxiDelayMin; }),
-      depTaxiDelayTotalMin: kpiSum(rows, function(row) { return row.depTaxiDelayMin; }),
-      depTaxiDelayAvgMin: kpiAverage(rows, function(row) { return row.depTaxiDelayMin; }),
-      paxArrDelayTotalMin: kpiSum(rows, function(row) { return row.paxArrDelay; }),
-      paxArrDelayAvgMin: kpiAverage(rows, function(row) { return row.paxArrDelay; }),
-      paxDepDelayTotalMin: kpiSum(rows, function(row) { return row.paxDepDelay; }),
-      paxDepDelayAvgMin: kpiAverage(rows, function(row) { return row.paxDepDelay; }),
-      acArrDelayTotalMin: kpiSum(rows, function(row) { return row.acArrDelay; }),
-      acArrDelayAvgMin: kpiAverage(rows, function(row) { return row.acArrDelay; }),
-      acDepDelayTotalMin: kpiSum(rows, function(row) { return row.acDepDelay; }),
-      acDepDelayAvgMin: kpiAverage(rows, function(row) { return row.acDepDelay; }),
-      detailRows: detailRows
+      hourlyChart: hourlyChart,
+      hasHourlyRunway: hourKeys.length > 0,
+      apronStandCount: standN,
+      apronWindowMin: windowMin,
+      apronUtilMin: utilMinTotal,
+      apronUtilRatio: apronUtilRatio,
+      rotArrAvgSec: rotArrAvgSec,
+      arrTaxiAvgMin: arrTaxiAvgMin,
+      depTaxiAvgMin: depTaxiAvgMin,
+      rotDepAvgSec: rotDepAvgSec
     };
   }
 
@@ -158,149 +262,52 @@
     const host = document.getElementById('kpiDashboard');
     const status = document.getElementById('kpiSnapshotStatus');
     if (!host) return;
-    if (reasonLabel === 'Updated') state.kpiRollingDetailExpanded = false;
-    if (!host._kpiRollingMoreBound) {
-      host._kpiRollingMoreBound = true;
-      host.addEventListener('click', function(ev) {
-        const t = ev.target;
-        if (t && t.id === 'btnKpiRollingExpand') {
-          state.kpiRollingDetailExpanded = true;
-          renderKpiDashboard('Expanded');
-        }
-      });
-    }
     kpiDisposeInteractiveCharts();
     const snapshot = collectKpiSnapshot();
     if (!snapshot.totalFlights) {
-      host.innerHTML = '<div class="kpi-empty-state">No flights are available yet. Add or load a schedule, then click <strong>Pro Sim</strong> to refresh the KPI snapshot.</div>';
-      if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
+      host.innerHTML = '<div class="kpi-empty-state">Flight schedule에 항공편이 없습니다. 스케줄을 추가하거나 불러온 뒤 KPI를 확인하세요.</div>';
+      if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · Flight schedule · ' + kpiFormatSnapshotTime();
       return;
     }
-    const prArr = snapshot.peakRunwayArrBucket;
-    const prDep = snapshot.peakRunwayDepBucket;
-    const pkOcc = snapshot.peakBucket;
-    const peakRunwayArrText = prArr ? (kpiFormatCount(prArr.arrivals || 0) + ' · ' + prArr.label) : '—';
-    const peakRunwayDepText = prDep ? (kpiFormatCount(prDep.departures || 0) + ' · ' + prDep.label) : '—';
-    const peakGateText = pkOcc ? (kpiFormatCount(pkOcc.occupancy || 0) + ' · ' + pkOcc.label) : '—';
-    const busiestText = snapshot.busiestBucket ? (kpiFormatCount(snapshot.busiestBucket.total) + ' · ' + snapshot.busiestBucket.label) : '—';
-    const busiestMeta = snapshot.busiestBucket ? ('15m step · 60m rolling · ELDT+ETOT') : 'No runway data';
+    const apronMeta = 'Stands ' + kpiFormatCount(snapshot.apronStandCount) +
+      ' · Window ' + (snapshot.apronWindowMin > 0 ? (snapshot.apronWindowMin / 60).toFixed(1) + ' h span' : '—') +
+      ' · Utilization Σ(SOBT−SIBT) ' + kpiFormatMinutesValue(snapshot.apronUtilMin) + ' min (flight schedule gate block)';
     const summaryCards = [
-      kpiBuildSummaryCard('Total Flights', kpiFormatCount(snapshot.totalFlights), 'accent'),
-      kpiBuildSummaryCard('Failed Flights', kpiFormatCount(snapshot.failedFlights), snapshot.failedFlights > 0 ? 'danger' : 'success'),
-      kpiBuildSummaryCard('Peak Runway Arr', peakRunwayArrText, 'warning'),
-      kpiBuildSummaryCard('Peak Runway Dep', peakRunwayDepText, 'warning'),
-      kpiBuildSummaryCard('Peak Gate Occupancy', peakGateText, 'accent')
+      kpiBuildSummaryCard('Total flights', kpiFormatCount(snapshot.totalFlights), 'accent'),
+      kpiBuildSummaryCard('Schedule block / path issues', kpiFormatCount(snapshot.failedFlights), snapshot.failedFlights > 0 ? 'danger' : 'success')
     ].join('');
     const panelHtml = [
-      kpiBuildPanel('Surface Movement', 'ROT · Taxi · Taxi delay', [
-        kpiBuildMetricRow('Arr ROT time', 'Avg ' + kpiFormatSecondsValue(snapshot.rotArrAvgSec), 'Total ' + kpiFormatSecondsValue(snapshot.rotArrTotalSec)),
-        kpiBuildMetricRow('Dep ROT time', 'Avg ' + kpiFormatSecondsValue(snapshot.rotDepAvgSec), 'Total ' + kpiFormatSecondsValue(snapshot.rotDepTotalSec)),
-        kpiBuildMetricRow('Arr taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.arrTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.arrTaxiTotalMin)),
-        kpiBuildMetricRow('Dep taxi time', 'Avg ' + kpiFormatMinutesValue(snapshot.depTaxiAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.depTaxiTotalMin)),
-        kpiBuildMetricRow('Arr taxi delay', 'Avg ' + kpiFormatMinutesValue(snapshot.arrTaxiDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.arrTaxiDelayTotalMin)),
-        kpiBuildMetricRow('Dep taxi delay', 'Avg ' + kpiFormatMinutesValue(snapshot.depTaxiDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.depTaxiDelayTotalMin))
+      kpiBuildPanel('Flight schedule · movement (averages)', 'ROT(Arr/Dep) · VTT(Arr/Dep) from schedule', [
+        kpiBuildMetricRow('Avg arrival ROT', kpiFormatOptionalSecondsAvg(snapshot.rotArrAvgSec), 'ROT(Arr) · flight schedule avg · sec'),
+        kpiBuildMetricRow('Avg Arrival VTT', kpiFormatOptionalMinutesAvg(snapshot.arrTaxiAvgMin), 'VTT(Arr) · flight schedule avg · min'),
+        kpiBuildMetricRow('Avg Departure VTT', kpiFormatOptionalMinutesAvg(snapshot.depTaxiAvgMin), 'Dep_taxi after EOBT · VTT_DEP_SEC · min'),
+        kpiBuildMetricRow('Avg Departure ROT', kpiFormatOptionalSecondsAvg(snapshot.rotDepAvgSec), 'LINEUP_DEPARTURE_SEC (schedule) · else tier depRotMin · avg sec')
       ]),
-      kpiBuildPanel('Gate Delay', 'EIBT/EOBT vs schedule', [
-        kpiBuildMetricRow('EIBT − SIBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxArrDelayTotalMin)),
-        kpiBuildMetricRow('EOBT − SOBT', 'Avg ' + kpiFormatMinutesValue(snapshot.paxDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.paxDepDelayTotalMin)),
-        kpiBuildMetricRow('Busiest runway window', busiestText, busiestMeta)
-      ]),
-      kpiBuildPanel('Runway Delay', 'ELDT/ETOT vs schedule', [
-        kpiBuildMetricRow('ELDT − SLDT', 'Avg ' + kpiFormatMinutesValue(snapshot.acArrDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acArrDelayTotalMin)),
-        kpiBuildMetricRow('ETOT − STOT', 'Avg ' + kpiFormatMinutesValue(snapshot.acDepDelayAvgMin), 'Total ' + kpiFormatMinutesValue(snapshot.acDepDelayTotalMin)),
-        kpiBuildMetricRow('Snapshot basis', kpiFormatCount(snapshot.totalFlights) + ' flights', 'Rendered only on initial load and Pro Sim')
+      kpiBuildPanel('Apron utilization', 'ratio = utilization / (stands × window)', [
+        kpiBuildMetricRow('Utilization ratio', kpiFormatRatioPercent(snapshot.apronUtilRatio), apronMeta)
       ])
     ].join('');
-    const bucketsAll = snapshot.buckets || [];
-    const capRows = KPI_ROLLING_TABLE_VISIBLE_ROWS;
-    const rollExpanded = !!state.kpiRollingDetailExpanded;
-    const bucketsForTable = (!rollExpanded && bucketsAll.length > capRows) ? bucketsAll.slice(0, capRows) : bucketsAll;
-    const hourlyTableRows = bucketsForTable.map(function(bucket) {
-      const highlight = snapshot.peakBucket && bucket.bucketStart === snapshot.peakBucket.bucketStart ? ' class="kpi-row-highlight"' : '';
-      return '' +
-        '<tr' + highlight + '>' +
-          '<td>' + escapeHtml(bucket.label) + '</td>' +
-          '<td>' + escapeHtml(kpiFormatCount(bucket.occupancy)) + '</td>' +
-          '<td>' + escapeHtml(kpiFormatCount(bucket.arrivals)) + '</td>' +
-          '<td>' + escapeHtml(kpiFormatCount(bucket.departures)) + '</td>' +
-          '<td>' + escapeHtml(kpiFormatCount(bucket.total)) + '</td>' +
-        '</tr>';
-    }).join('');
-    const rollingMoreRow = (!rollExpanded && bucketsAll.length > capRows)
-      ? ('<tr class="kpi-rolling-more"><td colspan="5" style="font-size:11px;color:#9ca3af;padding:8px 6px;">' +
-          '<button type="button" class="tool-btn" id="btnKpiRollingExpand">더 보기 (' + String(bucketsAll.length - capRows) + '행)</button>' +
-        '</td></tr>')
-      : '';
-    const topDelayRows = snapshot.detailRows.slice(0, 10).map(function(row) {
-      const statusClass = row.failed ? 'fail' : 'ok';
-      const statusLabel = row.failed ? 'Failed' : 'Normal';
-      return '' +
-        '<tr>' +
-          '<td>' + escapeHtml((row.reg || row.flightNumber || row.id || '—')) + '</td>' +
-          '<td>' + escapeHtml(row.standName || 'Unassigned') + '</td>' +
-          '<td>' + escapeHtml(kpiFormatMinutesValue(row.paxArrDelay)) + '</td>' +
-          '<td>' + escapeHtml(kpiFormatMinutesValue(row.paxDepDelay)) + '</td>' +
-          '<td>' + escapeHtml(kpiFormatMinutesValue((row.acArrDelay || 0) + (row.acDepDelay || 0))) + '</td>' +
-          '<td><span class="kpi-badge ' + statusClass + '">' + escapeHtml(statusLabel) + '</span></td>' +
-        '</tr>';
-    }).join('');
     host.innerHTML = '' +
       '<div class="kpi-summary-grid">' + summaryCards + '</div>' +
       '<div class="kpi-panel-grid">' + panelHtml + '</div>' +
       '<div class="kpi-chart-grid">' +
-        '<div class="kpi-chart-card kpi-chart-card-primary">' +
+        '<div class="kpi-chart-card kpi-chart-card-primary kpi-chart-card--runway-only">' +
           '<div class="kpi-chart-head">' +
             '<div>' +
-              '<div class="kpi-chart-title">Hourly Gate Occupancy</div>' +
-
-
-              '<div class="kpi-chart-subtitle">15m anchors · rolling 60m: unique stands overlapping EIBT–EOBT with [w, w+60).</div>' +
+              '<div class="kpi-chart-title">Hourly runway traffic</div>' +
+              '<div class="kpi-chart-subtitle">Flight schedule · 정각 시각(시간)별 SLDT 착륙·STOT 출발 건수 · line: total / arrivals / departures</div>' +
             '</div>' +
             '<div class="kpi-chart-legend">' +
-              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#a78bfa;"></span>Gate occupancy</span>' +
-            '</div>' +
-          '</div>' +
-          kpiGateChartPlaceholder(snapshot.buckets) +
-        '</div>' +
-        '<div class="kpi-chart-card kpi-chart-card-primary">' +
-          '<div class="kpi-chart-head">' +
-            '<div>' +
-              '<div class="kpi-chart-title">Hourly Runway Traffic</div>' +
-              '<div class="kpi-chart-subtitle">15m anchors · rolling 60m: ELDT arrivals and ETOT departures in [w, w+60).</div>' +
-            '</div>' +
-            '<div class="kpi-chart-legend">' +
+              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#c4b5fd;"></span>Total</span>' +
               '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#38bdf8;"></span>Arrivals</span>' +
               '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#fb923c;"></span>Departures</span>' +
-              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#c4b5fd;"></span>Total</span>' +
             '</div>' +
           '</div>' +
-          kpiRunwayChartPlaceholder(snapshot.buckets) +
-        '</div>' +
-      '</div>' +
-      '<div class="kpi-detail-grid">' +
-        '<div class="kpi-table-card">' +
-          '<div class="kpi-chart-title">Rolling window detail</div>' +
-          '<div class="kpi-chart-subtitle">Same 15m / 60m windows: gate occupancy; runway arr/dep = ELDT / ETOT counts.</div>' +
-          '<div class="kpi-table-wrap">' +
-            '<table class="kpi-table">' +
-              '<thead><tr><th>Window w</th><th>Gate occ</th><th>Runway arr</th><th>Runway dep</th><th>Total</th></tr></thead>' +
-              '<tbody>' + hourlyTableRows + rollingMoreRow + '</tbody>' +
-            '</table>' +
-          '</div>' +
-        '</div>' +
-        '<div class="kpi-table-card">' +
-          '<div class="kpi-chart-title">Top Delay Flights</div>' +
-          '<div class="kpi-chart-subtitle">Largest combined gate delay (EIBT/SIBT, EOBT/SOBT) and runway delay (ELDT/SLDT, ETOT/STOT) footprint.</div>' +
-          '<div class="kpi-table-wrap">' +
-            '<table class="kpi-table">' +
-              '<thead><tr><th>Flight</th><th>Stand</th><th>Gate Arr Delay</th><th>Gate Dep Delay</th><th>Runway Delay</th><th>Status</th></tr></thead>' +
-              '<tbody>' + topDelayRows + '</tbody>' +
-            '</table>' +
-          '</div>' +
+          kpiRunwayChartPlaceholder(snapshot.hasHourlyRunway) +
         '</div>' +
       '</div>';
-    if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · ' + kpiFormatSnapshotTime();
-    kpiMountInteractiveCharts(snapshot.buckets || []);
+    if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · Flight schedule · ' + kpiFormatSnapshotTime();
+    kpiMountRunwayHourlyChart(snapshot.hourlyChart);
   }
 
   function scheduledSldtFromSibtMinutes(f, sibtMin) {

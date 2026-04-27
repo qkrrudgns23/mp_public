@@ -1218,6 +1218,7 @@
     .kpi-metric-primary { font-size:15px; font-weight:700; color:#ffffff; }
     .kpi-metric-secondary { margin-top:4px; font-size:10px; color:var(--ui-text-muted); }
     .kpi-chart-grid { display:grid; grid-template-columns:1fr; gap:12px; }
+    .kpi-chart-card--runway-only { grid-column:1 / -1; }
     .kpi-chart-card { padding:16px; border-radius:14px; border:1px solid var(--ui-border-default); background:var(--ui-bg-elevated); }
     .kpi-chart-card-primary .kpi-chart-title { font-size:17px; font-weight:700; color:var(--ui-text-primary); letter-spacing:-0.02em; }
     .kpi-chart-card-primary .kpi-chart-subtitle { margin-top:6px; font-size:12px; line-height:1.45; color:var(--ui-text-secondary); }
