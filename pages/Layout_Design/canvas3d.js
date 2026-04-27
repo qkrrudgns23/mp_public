@@ -9049,6 +9049,9 @@
       if (typeof draw === 'function') draw();
       if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
       if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+      /** Path graph is fresh but last Pro Sim no longer matches (e.g. arrival RET / layout resample). */
+      if (typeof markProSimSyncStaleFromSchedule === 'function') markProSimSyncStaleFromSchedule();
+      if (typeof draw === 'function') draw();
     });
   }
   if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();

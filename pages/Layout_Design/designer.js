@@ -1567,11 +1567,7 @@
    * Pro Sim: allowed only when Update is fresh (green) and no arrival Runway exit (RET) failures
    * (`arrRetFailed` on non-departure legs). RET failure banner is in `#gridLeftFloatingStack`, separate from `#object-info-dock`.
    */
-  function syncProSimButtonFromDesignerPageState() {
-    const btn = document.getElementById('btnGlobalUpdate');
-    const dot = document.getElementById('globalUpdateSyncDot');
-    const ban = document.getElementById('arrRetFailedBanner');
-    const banT = document.getElementById('arrRetFailedBannerText');
+  function getArrRetFailedRegsForProSimUi() {
     const failedRegs = [];
     (state.flights || []).forEach(function(f) {
       if (!f || f.arrDep === 'Dep') return;
@@ -1580,6 +1576,14 @@
         if (failedRegs.indexOf(r) < 0) failedRegs.push(r);
       }
     });
+    return failedRegs;
+  }
+  function syncProSimButtonFromDesignerPageState() {
+    const btn = document.getElementById('btnGlobalUpdate');
+    const dot = document.getElementById('globalUpdateSyncDot');
+    const ban = document.getElementById('arrRetFailedBanner');
+    const banT = document.getElementById('arrRetFailedBannerText');
+    const failedRegs = getArrRetFailedRegsForProSimUi();
     const hasRetFail = failedRegs.length > 0;
     if (ban && banT) {
       if (hasRetFail) {
@@ -1621,6 +1625,12 @@
         dot.setAttribute('title', 'Layout or schedule changed — run Pro Sim again to refresh (results apply when done)');
       }
     }
+    const playDock = document.getElementById('btnShowPlayDock');
+    if (playDock) {
+      const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
+      playDock.disabled = !state.hasSimulationResult || !proSimUiFresh;
+    }
+    if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
   }
   function redrawLayoutAfterEdit() {
     if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
@@ -1817,74 +1827,31 @@
         cp.setAttribute('hidden', '');
         cb.setAttribute('aria-expanded', 'false');
       }
-      const mp = document.getElementById('mapTypePopoverPanel');
-      const mb = document.getElementById('btnMapTypePopover');
-      if (mp && mb && !mp.hasAttribute('hidden')) {
-        mp.setAttribute('hidden', '');
-        mb.setAttribute('aria-expanded', 'false');
-      }
-    } else {
-      panel.setAttribute('hidden', '');
-    }
-  }
-  function setMapTypePopoverOpen(open) {
-    const btn = document.getElementById('btnMapTypePopover');
-    const panel = document.getElementById('mapTypePopoverPanel');
-    if (!btn || !panel) return;
-    const o = !!open;
-    btn.setAttribute('aria-expanded', o ? 'true' : 'false');
-    if (o) {
-      panel.removeAttribute('hidden');
-      setLayerPopoverOpen(false);
-      const cp = document.getElementById('colorPopoverPanel');
-      const cb = document.getElementById('btnColorPopover');
-      if (cp && cb && !cp.hasAttribute('hidden')) {
-        cp.setAttribute('hidden', '');
-        cb.setAttribute('aria-expanded', 'false');
-      }
     } else {
       panel.setAttribute('hidden', '');
     }
   }
   function syncMapTypePopoverFromState() {
-    const panel = document.getElementById('mapTypePopoverPanel');
-    if (!panel) return;
+    const btnHt = document.getElementById('btnHeatmapToggle');
     const heatOk = !!state.hasSimulationResult;
+    const failedRegs = typeof getArrRetFailedRegsForProSimUi === 'function' ? getArrRetFailedRegsForProSimUi() : [];
+    const hasRetFail = failedRegs.length > 0;
+    const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
+    const heatmapAllowed = heatOk && proSimUiFresh;
+    if (!heatmapAllowed && state.mapTypeMode === 'heatmap') state.mapTypeMode = 'normal';
     if (!heatOk && state.mapTypeMode !== 'normal') state.mapTypeMode = 'normal';
     const mode = state.mapTypeMode || 'normal';
-    const modeSel = document.getElementById('mapTypeModeSelect');
-    if (modeSel) {
-      modeSel.value = mode;
-      modeSel.querySelectorAll('option').forEach(function(opt) {
-        const v = String(opt.value || '');
-        opt.disabled = !heatOk && v !== 'normal';
-      });
+    const heatOn = heatmapAllowed && mode === 'heatmap';
+    if (btnHt) {
+      btnHt.disabled = !heatmapAllowed;
+      btnHt.classList.toggle('active', heatOn);
+      btnHt.setAttribute('aria-pressed', heatOn ? 'true' : 'false');
     }
-    panel.querySelectorAll('input[data-heatmap-traffic]').forEach(function(inp) {
-      const k = inp.getAttribute('data-heatmap-traffic');
-      if (k && state.heatmapTrafficPhases) inp.checked = !!state.heatmapTrafficPhases[k];
-      inp.disabled = !heatOk || mode !== 'heatmap';
-    });
-    panel.querySelectorAll('.map-type-phase-block').forEach(function(el) {
-      const tag = el.getAttribute('data-heat-for');
-      const show = tag === 'heatmap' && heatOk && mode === 'heatmap';
-      if (show) el.removeAttribute('hidden');
-      else el.setAttribute('hidden', '');
-    });
-    const btnMt = document.getElementById('btnMapTypePopover');
-    if (btnMt) btnMt.classList.toggle('active', heatOk && mode !== 'normal');
     if (typeof syncHeatmapTrafficLegend === 'function') syncHeatmapTrafficLegend();
   }
-  /** After layout load: restore Map Type from `designerPersist` when timelines exist. */
+  /** After layout load: restore heatmap on/off from `designerPersist` when timelines exist. */
   function applyDesignerPersistMapTypeAfterLoad(dp) {
     if (!dp || dp.v !== 1) return;
-    const phaseKeys = ['rotArr', 'vttArr', 'vttDep', 'rotDep'];
-    if (dp.heatmapTrafficPhases && typeof dp.heatmapTrafficPhases === 'object' && state.heatmapTrafficPhases) {
-      for (let i = 0; i < phaseKeys.length; i++) {
-        const k = phaseKeys[i];
-        if (typeof dp.heatmapTrafficPhases[k] === 'boolean') state.heatmapTrafficPhases[k] = dp.heatmapTrafficPhases[k];
-      }
-    }
     const m = String(dp.mapTypeMode || '');
     const wantHeat = m === 'heatmap' || m === 'heatmap_traffic' || m === 'heatmap_queue';
     state.mapTypeMode = (state.hasSimulationResult && wantHeat) ? 'heatmap' : 'normal';
@@ -2531,8 +2498,7 @@
       if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
     }
     if (typeof renderFlightList === 'function') renderFlightList(false, false);
-    const playDockBtnApplyLayout = document.getElementById('btnShowPlayDock');
-    if (playDockBtnApplyLayout) playDockBtnApplyLayout.disabled = !state.hasSimulationResult;
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   /** E-series minutes; ARR_ROT_SEC / VTT_* / LINEUP_DEPARTURE_SEC from ``airside_sim`` schedule (motion phases). */
   function applyAirsideScheduleRowToFlight(f, srec) {
@@ -2703,9 +2669,7 @@
     if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
     if (typeof draw === 'function') draw();
     if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-    const playDockBtn = document.getElementById('btnShowPlayDock');
-    if (playDockBtn) playDockBtn.disabled = !state.hasSimulationResult;
-    if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   function applyInitialLayoutFromJson() {
     if (!INITIAL_LAYOUT || typeof INITIAL_LAYOUT !== 'object') return;
@@ -15194,7 +15158,7 @@
     if (n === 0) {
       const row = document.createElement('div');
       row.className = 'heatmap-traffic-legend__row heatmap-traffic-legend__row--empty';
-      row.textContent = 'No data for selected phases';
+      row.textContent = 'No heatmap data';
       rowsEl.appendChild(row);
       _heatmapTrafficLegendDomSig = domSig;
       return;
@@ -15272,7 +15236,6 @@
     const gridWeights = Object.create(null);
     const edges = state.derivedGraphEdges || [];
     if (!edges.length) return { weights: weights, gridWeights: gridWeights };
-    const bag = state.heatmapTrafficPhases;
     const gw = HEATMAP_GRID_STEP_M;
     const maxD2 = Math.pow(Math.max(CELL_SIZE * 2.8, 80), 2);
     const flights = state.flights || [];
@@ -15295,7 +15258,7 @@
         if (hi <= lo + 1e-9) continue;
         const ph = (a.phase != null && String(a.phase).trim()) ? String(a.phase).trim() : ((b.phase != null && String(b.phase).trim()) ? String(b.phase).trim() : 'Landing');
         const cat = proSimPhaseToHeatCategory(ph);
-        if (!cat || !bag || !bag[cat]) continue;
+        if (!cat) continue;
         const mx = (Number(a.x) + Number(b.x)) * 0.5;
         const my = (Number(a.y) + Number(b.y)) * 0.5;
         if (!isFinite(mx) || !isFinite(my)) continue;
@@ -15395,16 +15358,6 @@
     const pad = CELL_SIZE * 6;
     return !(maxX + pad < vb.minWx || minX - pad > vb.maxWx || maxY + pad < vb.minWy || minY - pad > vb.maxWy);
   }
-  function layoutHeatmapPhaseBagSig(bag) {
-    if (!bag) return '';
-    const keys = Object.keys(bag).sort();
-    let s = '';
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i];
-      s += k + (bag[k] ? '1' : '0');
-    }
-    return s;
-  }
   function layoutHeatmapHashStr(str) {
     const s = str == null ? '' : String(str);
     let h = 2166136261;
@@ -15438,16 +15391,15 @@
     return String(flights.length) + ':' + String(tlPts) + ':' + String(h >>> 0);
   }
   /**
-   * 히트맵 SVG 재구축 조건: 맵 타입·phase 체크·레이아웃·항공기 지문(svg1).
+   * 히트맵 SVG 재구축 조건: 맵 타입·레이아웃·항공기 지문(svg1).
    * pan/줌·tClip 제외 — 경로는 캐시, 매 프레임 matrix만 갱신.
    */
   function layoutHeatmapBakeContentSignature() {
     const mode = state.mapTypeMode || 'normal';
     if (mode === 'normal') return '';
     const graphH = layoutHeatmapHashStr(computeTaxiwaysGraphSig());
-    const tp = layoutHeatmapPhaseBagSig(state.heatmapTrafficPhases);
     const flightsSig = layoutHeatmapFlightsDataSig();
-    return ['svg2', 'cellclip', 'staticfull', 'segcnt', 'gb' + String(HEATMAP_TRAFFIC_GREEN_BIAS), 'g' + String(HEATMAP_GRID_STEP_M), mode, graphH, tp, flightsSig].join('|');
+    return ['svg2', 'cellclip', 'staticfull', 'segcnt', 'gb' + String(HEATMAP_TRAFFIC_GREEN_BIAS), 'g' + String(HEATMAP_GRID_STEP_M), mode, graphH, flightsSig].join('|');
   }
   function ensureLayoutHeatmapSvgRefs() {
     if (!_layoutHeatmapSvg) _layoutHeatmapSvg = document.getElementById('layout-heatmap-svg');
@@ -17171,6 +17123,7 @@
           const m = (msg && String(msg)) || 'Pro Sim failed';
           console.error('Pro Sim:', m);
           if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
+          if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
           if (typeof alert === 'function') alert(m);
         }
         const base = proSimApiBase();
@@ -17182,12 +17135,7 @@
           failProSim('먼저 Update로 경로 그래프·뷰를 동기화하세요.');
           return;
         }
-        const arrRetFailRegs = [];
-        (state.flights || []).forEach(function(f) {
-          if (!f || f.arrDep === 'Dep' || !f.arrRetFailed) return;
-          const r = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
-          if (arrRetFailRegs.indexOf(r) < 0) arrRetFailRegs.push(r);
-        });
+        const arrRetFailRegs = typeof getArrRetFailedRegsForProSimUi === 'function' ? getArrRetFailedRegsForProSimUi() : [];
         if (arrRetFailRegs.length) {
           const n = arrRetFailRegs.length;
           const errMsg = n > 5
@@ -23596,42 +23544,15 @@
       setLayerPopoverOpen(false);
     });
   }
-  const mapTypePopoverBtn = document.getElementById('btnMapTypePopover');
-  const mapTypePopoverPanel = document.getElementById('mapTypePopoverPanel');
-  const mapTypePopoverWrap = document.getElementById('mapTypePopoverWrap');
-  if (mapTypePopoverBtn && mapTypePopoverPanel) {
-    mapTypePopoverBtn.addEventListener('click', function(ev) {
+  const btnHeatmapToggle = document.getElementById('btnHeatmapToggle');
+  if (btnHeatmapToggle) {
+    btnHeatmapToggle.addEventListener('click', function(ev) {
       ev.stopPropagation();
-      const open = mapTypePopoverPanel.hasAttribute('hidden');
-      setMapTypePopoverOpen(open);
-    });
-    document.addEventListener('click', function(ev) {
-      if (!mapTypePopoverWrap || mapTypePopoverPanel.hasAttribute('hidden')) return;
-      if (mapTypePopoverWrap.contains(ev.target)) return;
-      setMapTypePopoverOpen(false);
-    });
-  }
-  if (mapTypePopoverPanel) {
-    const mapTypeModeSelect = document.getElementById('mapTypeModeSelect');
-    if (mapTypeModeSelect) {
-      mapTypeModeSelect.addEventListener('change', function() {
-        const v = String(this.value || 'normal');
-        state.mapTypeMode = (v === 'heatmap') ? 'heatmap' : 'normal';
-        syncMapTypePopoverFromState();
-        safeDraw({ bypassSimScrubGuard: true });
-        if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-      });
-    }
-    mapTypePopoverPanel.querySelectorAll('input[data-heatmap-traffic]').forEach(function(inp) {
-      inp.addEventListener('change', function(ev) {
-        ev.stopPropagation();
-        const k = inp.getAttribute('data-heatmap-traffic');
-        if (!k || !state.heatmapTrafficPhases) return;
-        state.heatmapTrafficPhases[k] = !!inp.checked;
-        syncMapTypePopoverFromState();
-        safeDraw({ bypassSimScrubGuard: true });
-        if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-      });
+      if (!state.hasSimulationResult) return;
+      state.mapTypeMode = (state.mapTypeMode === 'heatmap') ? 'normal' : 'heatmap';
+      syncMapTypePopoverFromState();
+      safeDraw({ bypassSimScrubGuard: true });
+      if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
     });
   }
   const colorPopoverBtn = document.getElementById('btnColorPopover');
@@ -23643,12 +23564,6 @@
     if (open) {
       colorPopoverPanel.removeAttribute('hidden');
       colorPopoverBtn.setAttribute('aria-expanded', 'true');
-      const mp = document.getElementById('mapTypePopoverPanel');
-      const mb = document.getElementById('btnMapTypePopover');
-      if (mp && mb && !mp.hasAttribute('hidden')) {
-        mp.setAttribute('hidden', '');
-        mb.setAttribute('aria-expanded', 'false');
-      }
     } else {
       colorPopoverPanel.setAttribute('hidden', '');
       colorPopoverBtn.setAttribute('aria-expanded', 'false');
@@ -23666,7 +23581,6 @@
       ev.stopPropagation();
       const open = colorPopoverPanel.hasAttribute('hidden');
       if (open && layerPopoverPanel && !layerPopoverPanel.hasAttribute('hidden')) setLayerPopoverOpen(false);
-      if (open && mapTypePopoverPanel && !mapTypePopoverPanel.hasAttribute('hidden')) setMapTypePopoverOpen(false);
       setColorPopoverOpen(open);
     });
     document.addEventListener('click', function(ev) {
@@ -23719,6 +23633,9 @@
       if (typeof draw === 'function') draw();
       if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
       if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+      /** Path graph is fresh but last Pro Sim no longer matches (e.g. arrival RET / layout resample). */
+      if (typeof markProSimSyncStaleFromSchedule === 'function') markProSimSyncStaleFromSchedule();
+      if (typeof draw === 'function') draw();
     });
   }
   if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();

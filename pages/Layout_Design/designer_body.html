@@ -12,26 +12,7 @@
             <button class="tool-btn" id="btnView2D" title="2D view">2D</button>
             <button class="tool-btn" id="btnView3D" title="Open 3D viewer (new window)">3D</button>
             <button class="tool-btn" id="btnResetView" title="Fit full grid">Fit</button>
-            <div class="layer-popover-wrap" id="mapTypePopoverWrap">
-              <button type="button" class="tool-btn" id="btnMapTypePopover" aria-expanded="false" aria-haspopup="true" aria-controls="mapTypePopoverPanel" title="Map display: normal layout vs simulation heatmaps">Map Type</button>
-              <div id="mapTypePopoverPanel" class="layer-popover-panel map-type-popover-panel" role="menu" aria-label="Map type" hidden>
-                <div class="map-type-mode-list">
-                  <label class="map-type-mode-label" for="mapTypeModeSelect">Map mode</label>
-                  <select id="mapTypeModeSelect" class="map-type-mode-select" aria-label="Map mode">
-                    <option value="normal">Normal</option>
-                    <option value="heatmap">Heatmap</option>
-                  </select>
-                </div>
-                <div class="map-type-phase-block" data-heat-for="heatmap" hidden>
-                  <div class="map-type-phase-title">Phases</div>
-                  <label class="layer-popover-row"><input type="checkbox" data-heatmap-traffic="rotArr" checked /> ROT (Arr)</label>
-                  <label class="layer-popover-row"><input type="checkbox" data-heatmap-traffic="vttArr" checked /> VTT (Arr)</label>
-                  <label class="layer-popover-row"><input type="checkbox" data-heatmap-traffic="vttDep" checked /> VTT (Dep)</label>
-                  <label class="layer-popover-row"><input type="checkbox" data-heatmap-traffic="rotDep" checked /> ROT (Dep)</label>
-                </div>
-                <div class="map-type-hint">Heatmaps use Pro Sim timelines — visible on the map whenever results are loaded.</div>
-              </div>
-            </div>
+            <button type="button" class="tool-btn" id="btnHeatmapToggle" aria-pressed="false" disabled title="Pro Sim 결과가 있을 때: 클릭하면 히트맵 표시, 다시 누르면 일반 맵">Heatmap</button>
             <div class="layer-popover-wrap" id="layerPopoverWrap">
               <button type="button" class="tool-btn active" id="btnLayerPopover" aria-expanded="false" aria-haspopup="true" aria-controls="layerPopoverPanel" title="Layer visibility (grid, image, paths, stands, markers…)">Layer</button>
               <div id="layerPopoverPanel" class="layer-popover-panel" role="menu" aria-label="Layers" hidden>
