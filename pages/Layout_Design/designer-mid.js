@@ -844,6 +844,7 @@
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
         '<th class="flight-th-mixed">VTT(Arr)</th>' +
         '<th class="flight-th-mixed">DTT(Arr)</th>' +
+        '<th class="flight-th-mixed">PUSHBACK</th>' +
         '<th class="flight-th-mixed">DTT(Dep)</th>' +
         '<th class="flight-th-mixed">VTT(Dep)</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(dep)</th>' +
@@ -893,12 +894,14 @@
     const rotArrStr = (f.arrRotSec != null && isFinite(f.arrRotSec)) ? formatSecondsToHHMMSS(f.arrRotSec) : dash;
     const vttArrStr = (f.proSimVttArrSec != null && isFinite(f.proSimVttArrSec)) ? formatSecondsToHHMMSS(f.proSimVttArrSec) : dash;
     const dttArrStr = (f.proSimDttArrSec != null && isFinite(f.proSimDttArrSec)) ? formatSecondsToHHMMSS(f.proSimDttArrSec) : dash;
+    const pushbackStr = (f.proSimPushbackSec != null && isFinite(f.proSimPushbackSec)) ? formatSecondsToHHMMSS(f.proSimPushbackSec) : dash;
     const dttDepStr = (f.proSimDttDepSec != null && isFinite(f.proSimDttDepSec)) ? formatSecondsToHHMMSS(f.proSimDttDepSec) : dash;
     const vttDepStr = (f.proSimVttDepSec != null && isFinite(f.proSimVttDepSec)) ? formatSecondsToHHMMSS(f.proSimVttDepSec) : dash;
     const rotDepStr = (f.proSimDepLineupSec != null && isFinite(f.proSimDepLineupSec)) ? formatSecondsToHHMMSS(f.proSimDepLineupSec) : dash;
     const rotArrCell = flightScheduleProSimTimedCell(rotArrStr, 'green');
     const vttArrCell = flightScheduleProSimTimedCell(vttArrStr, 'vttarr');
     const dttArrCell = flightScheduleProSimTimedCell(dttArrStr, 'dttarr');
+    const pushbackCell = flightScheduleProSimTimedCell(pushbackStr, 'pink');
     const dttDepCell = flightScheduleProSimTimedCell(dttDepStr, 'dttdep');
     const vttDepCell = flightScheduleProSimTimedCell(vttDepStr, 'red');
     const rotDepCell = flightScheduleProSimTimedCell(rotDepStr, 'pink');
@@ -934,6 +937,7 @@
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
         '<td class="flight-td-time">' + vttArrCell + '</td>' +
         '<td class="flight-td-time">' + dttArrCell + '</td>' +
+        '<td class="flight-td-time">' + pushbackCell + '</td>' +
         '<td class="flight-td-time">' + dttDepCell + '</td>' +
         '<td class="flight-td-time">' + vttDepCell + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotDepCell + '</td>' +

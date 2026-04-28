@@ -280,7 +280,7 @@
       kpiBuildPanel('Flight schedule · movement (averages)', 'ROT(Arr/Dep) · VTT(Arr/Dep) from schedule', [
         kpiBuildMetricRow('Avg arrival ROT', kpiFormatOptionalSecondsAvg(snapshot.rotArrAvgSec), 'ROT(Arr) · flight schedule avg · sec'),
         kpiBuildMetricRow('Avg Arrival VTT', kpiFormatOptionalMinutesAvg(snapshot.arrTaxiAvgMin), 'VTT(Arr) · flight schedule avg · min'),
-        kpiBuildMetricRow('Avg Departure VTT', kpiFormatOptionalMinutesAvg(snapshot.depTaxiAvgMin), 'Dep_taxi after EOBT · VTT_DEP_SEC · min'),
+        kpiBuildMetricRow('Avg Departure VTT', kpiFormatOptionalMinutesAvg(snapshot.depTaxiAvgMin), 'Dep_taxi after pushback finished · VTT_DEP_SEC · min'),
         kpiBuildMetricRow('Avg Departure ROT', kpiFormatOptionalSecondsAvg(snapshot.rotDepAvgSec), 'DEP_ROT_SEC (ETOT - E_LINEUP) · else tier depRotMin · avg sec')
       ]),
       kpiBuildPanel('Apron utilization', 'ratio = utilization / (stands × window)', [

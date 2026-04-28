@@ -709,6 +709,7 @@
       delete f.proSimVttArrSec;
       delete f.proSimVttDepSec;
       delete f.proSimDttArrSec;
+      delete f.proSimPushbackSec;
       delete f.proSimDttDepSec;
       delete f.proSimDepLineupSec;
       return;
@@ -736,6 +737,9 @@
     const vttArrS = secOpt('VTT_ARR_SEC');
     if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
     else delete f.proSimVttArrSec;
+    const pushbackS = secOpt('PUSHBACK_SEC');
+    if (isFinite(pushbackS)) f.proSimPushbackSec = pushbackS;
+    else delete f.proSimPushbackSec;
     const vttDepS = secOpt('VTT_DEP_SEC');
     if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
     else delete f.proSimVttDepSec;

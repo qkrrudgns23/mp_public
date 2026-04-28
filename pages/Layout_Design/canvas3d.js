@@ -1593,9 +1593,10 @@
     Landing: 0,
     Arr_taxi: 1,
     Arr_taxi_occupied: 1,
-    Dep_taxi: 2,
-    Holding_lineup: 3,
-    Lineup_departure: 4,
+    Pushback: 2,
+    Dep_taxi: 3,
+    Holding_lineup: 4,
+    Lineup_departure: 5,
   };
   function proSimPhaseStrokeStyle(phaseRaw) {
     const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : 'Landing';
@@ -1604,6 +1605,9 @@
     }
     if (p === 'Arr_taxi') {
       return { wMul: 1.72, stroke: '#3b82f6' };
+    }
+    if (p === 'Pushback') {
+      return { wMul: 0.58 * 1.2, stroke: '#f97316' };
     }
     if (p === 'Dep_taxi' || p === 'Holding_lineup') {
       return { wMul: 0.58 * 1.2, stroke: '#ef4444' };
@@ -1741,6 +1745,7 @@
     let prevUx = null;
     let prevUy = null;
     let lastDrawnKey = null;
+    let lastDrawnPhase = null;
     let seqIx = 0;
     const drawList = [];
     ids.forEach(function(entry) {
@@ -1755,10 +1760,14 @@
           if (entry.phase != null) phase = String(entry.phase).trim() || 'Landing';
         }
       }
-      if (key && key === lastDrawnKey) {
+      const phaseNorm = String(phase || '').trim() || 'Landing';
+      if (key && key === lastDrawnKey && phaseNorm === lastDrawnPhase) {
         return;
       }
       const st = proSimPhaseStrokeStyle(phase);
+      if (phaseNorm === 'Pushback') {
+        st.stroke = '#0d0d0f';
+      }
       const lineW = baseW * st.wMul;
       const e = key ? byId[key] : null;
       if (!e) return;
@@ -1780,6 +1789,7 @@
         prevUy = ou.uy;
       }
       lastDrawnKey = key;
+      lastDrawnPhase = phaseNorm;
     });
     drawList.sort(function(a, b) {
       if (a.z !== b.z) return a.z - b.z;
@@ -1796,7 +1806,7 @@
       ctx.stroke();
       ctx.globalAlpha = 1;
       const ph = String(item.phase || '').trim();
-      const isRedOrPinkArrow = ph === 'Dep_taxi' || ph === 'Holding_lineup' || ph === 'Lineup_departure';
+      const isRedOrPinkArrow = ph === 'Pushback' || ph === 'Dep_taxi' || ph === 'Holding_lineup' || ph === 'Lineup_departure';
       const arrowFill = isRedOrPinkArrow
         ? proSimArrowFillForStroke(item.st.stroke)
         : '#fafafa';

@@ -11,7 +11,7 @@ plus ``RWY_ARRIVAL_SPACING_BUFFER_SEC`` (taxing / hold-wait margin). Outputs ``s
 E times (ELDT/EIBT/EOBT/ETOT); ``EIBT`` is **only** from simulation: first time within ``standArrivalStopRadiusM`` of
 the stand token on ``Arr_taxi`` (any path type except pure ``runway``) with speed below ``standStoppedVelocityMaxMs``, only when
 ``PROCEED`` (not ``WAIT``/``YIELD``) and the destination stand pipeline has capacity (no cooldown). Phase-change
-fallback if stand px is missing. No schedule/path nominal fill-in for EIBT. ``EOBT`` is first time on Dep_taxi ``apron_link`` after
+fallback if stand px is missing. No schedule/path nominal fill-in for EIBT. ``EOBT`` is first pushback/taxi-out motion after
 ``dep_taxi_start_abs_sec`` (set at in-blocks + dwell) with speed above a small threshold, else path timing + ``dwellMin`` when not
 recorded.
 ``ETOT`` (when the path includes a ``Lineup_departure`` / takeoff-roll leg) is **only** the simulated time when the flight
@@ -20,7 +20,8 @@ finishes the last path segment (``path_completed_abs_sec``); no nominal EOBT+leg
 
 After the time-step loop, ``_overlay_schedule_timing_from_playback_positions`` adds Flight Schedule
 duration fields (seconds) from E-series timestamps: ``ARR_ROT_SEC = EXIT_RUNWAY - ELDT``,
-``VTT_ARR_SEC = EIBT - EXIT_RUNWAY``, ``VTT_DEP_SEC = E_LINEUP - EOBT``, and
+``VTT_ARR_SEC = EIBT - EXIT_RUNWAY``, ``PUSHBACK_SEC = E_PUSH_FINISHED - EOBT``,
+``VTT_DEP_SEC = E_LINEUP - E_PUSH_FINISHED``, and
 ``DEP_ROT_SEC = ETOT - E_LINEUP``. ``DTT_ARR_SEC`` / ``DTT_DEP_SEC`` are the sums of
 consecutive ``positions`` intervals inside each VTT window whose start sample has ``v == 0``.
 ``LINEUP_DEPARTURE_SEC`` remains as the ``Lineup_departure`` phase duration for playback diagnostics.
@@ -77,6 +78,7 @@ DestinationStandHistorySnap = Tuple[str, int, int, int, bool, bool]
 PHASE_LANDING = "Landing"
 PHASE_ARR_TAXI = "Arr_taxi"
 PHASE_ARR_TAXI_TEMP = "Arr_taxi_occupied"
+PHASE_PUSHBACK = "Pushback"
 PHASE_DEP_TAXI = "Dep_taxi"
 PHASE_HOLDING_LINEUP = "Holding_lineup"
 PHASE_LINEUP_DEPARTURE = "Lineup_departure"
@@ -86,6 +88,7 @@ _DEFAULT_RW_DIR = "clockwise"
 _EXTRACT_LEG_PHASES: Tuple[str, ...] = (
     PHASE_LANDING,
     PHASE_ARR_TAXI,
+    PHASE_PUSHBACK,
     PHASE_DEP_TAXI,
     PHASE_HOLDING_LINEUP,
     PHASE_LINEUP_DEPARTURE,
@@ -620,6 +623,7 @@ class Flight:
     actual_apron_inblocks_abs_sec: Optional[float] = None
     # Apron off-blocks: first Dep_taxi motion (pushback / taxi-out start from stand).
     actual_apron_offblocks_abs_sec: Optional[float] = None
+    pushback_finished_abs_sec: Optional[float] = None
     apron_stand_id: Optional[str] = None
     dep_taxi_start_sim_time: Optional[float] = None
     dep_taxi_start_abs_sec: Optional[float] = None
@@ -1699,6 +1703,62 @@ def _world_xy_chain_from_graph_path(
     return chain
 
 
+def _pushback_endpoint_from_departure_chain(
+    apron_point: Tuple[float, float],
+    to_lineup_pts: List[Tuple[float, float]],
+    pixels_per_meter: float,
+    pushback_m: float = 10.0,
+) -> Optional[Tuple[float, float]]:
+    """Straight pushback endpoint: 10m opposite the initial departure taxi direction."""
+    if len(to_lineup_pts) < 2:
+        return None
+    px, py = float(apron_point[0]), float(apron_point[1])
+    start_idx = 0
+    best_d2: Optional[float] = None
+    for i, (x, y) in enumerate(to_lineup_pts):
+        d2 = (float(x) - px) ** 2 + (float(y) - py) ** 2
+        if best_d2 is None or d2 < best_d2:
+            start_idx = i
+            best_d2 = d2
+    sx, sy = to_lineup_pts[start_idx]
+    for x, y in to_lineup_pts[start_idx + 1 :]:
+        dx = float(x) - float(sx)
+        dy = float(y) - float(sy)
+        mag = math.hypot(dx, dy)
+        if mag <= 1e-9:
+            continue
+        dist_px = max(0.0, float(pushback_m)) * max(float(pixels_per_meter), 1e-9)
+        ux, uy = dx / mag, dy / mag
+        return (px - ux * dist_px, py - uy * dist_px)
+    return None
+
+
+def _snap_pushback_endpoint_to_existing_graph_node(
+    g: PathGraph,
+    apron_point: Tuple[float, float],
+    desired_pushback_point: Tuple[float, float],
+    path_nodes: List[int],
+) -> Optional[Tuple[float, float]]:
+    """Use an existing graph node so pushback expands to resource-backed layout-edge ids."""
+    if not g.nodes:
+        return None
+    px, py = float(apron_point[0]), float(apron_point[1])
+    sx = int(g.nearest_path_node((px, py)))
+    allowed: set[int] = {
+        int(i) for i in path_nodes if 0 <= int(i) < len(g.nodes) and int(i) != sx
+    }
+    if not allowed:
+        allowed = {i for i in range(len(g.nodes)) if i != sx}
+    if not allowed:
+        return None
+    tx, ty = float(desired_pushback_point[0]), float(desired_pushback_point[1])
+    best_i = min(
+        allowed,
+        key=lambda i: (float(g.nodes[i][0]) - tx) ** 2 + (float(g.nodes[i][1]) - ty) ** 2,
+    )
+    return (float(g.nodes[best_i][0]), float(g.nodes[best_i][1]))
+
+
 def _dep_runway_far_end_xy(
     layout: Dict[str, Any],
     cell_size: float,
@@ -1727,7 +1787,7 @@ def extract_point_to_paths(
     ``A`` is the first ``networkJunction`` on ``ExitTaxiwayId`` along the runway-leave direction
     (excluding the runway–RET touch); if none, the runway-far RET vertex.
 
-    Leg phases: ``Landing``, ``Arr_taxi``, ``Dep_taxi``, ``Holding_lineup``, ``Lineup_departure``.
+    Leg phases: ``Landing``, ``Arr_taxi``, ``Pushback``, ``Dep_taxi``, ``Holding_lineup``, ``Lineup_departure``.
     Requires a ``runway_holding`` on the apron→lineup route near lineup-connected RET; else ``[]``.
     """
     token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
@@ -1757,7 +1817,7 @@ def extract_point_to_paths(
             layout,
             cell_size,
             str(dep_rwy),
-            _flight_rw_dir_for_leg(flight, 2, layout),
+            _flight_rw_dir_for_leg(flight, 3, layout),
         )
         if dep_rwy
         else None
@@ -1781,7 +1841,7 @@ def extract_point_to_paths(
         g0 = _cached_path_graph_for_direction(
             layout,
             cell_size,
-            _flight_rw_dir_for_leg(flight, 2, layout),
+            _flight_rw_dir_for_leg(flight, 3, layout),
             reverse_cost,
             merge_r,
             taxiway_h,
@@ -1802,7 +1862,7 @@ def extract_point_to_paths(
         merge_r,
         taxiway_h,
         info,
-        _flight_rw_dir_for_leg(flight, 2, layout),
+        _flight_rw_dir_for_leg(flight, 3, layout),
         RouteEndpoint(token_pixel_xy=(float(px), float(py))),
         RouteEndpoint(token_pixel_xy=(float(lx), float(ly))),
     )
@@ -1811,6 +1871,22 @@ def extract_point_to_paths(
     to_lineup_pts = _world_xy_chain_from_graph_path(g_apron, path_apron, pair_index)
     if len(to_lineup_pts) < 2:
         return []
+    pushback_point = _pushback_endpoint_from_departure_chain(
+        (float(px), float(py)),
+        to_lineup_pts,
+        _layout_pixels_per_meter(info),
+    )
+    if pushback_point is None:
+        return []
+    pushback_node = _snap_pushback_endpoint_to_existing_graph_node(
+        g_apron,
+        (float(px), float(py)),
+        pushback_point,
+        path_apron,
+    )
+    if pushback_node is None:
+        return []
+    pbx, pby = float(pushback_node[0]), float(pushback_node[1])
 
     runway_tw = _layout_runway_object_for_lineup_expansion(layout, str(dep_rwy))
     cand_ids = _expand_rtx_candidate_ids_touching_lineup(
@@ -1825,7 +1901,7 @@ def extract_point_to_paths(
     hx, hy = float(hp_proj[0]), float(hp_proj[1])
 
     rw_end = _dep_runway_far_end_xy(
-        layout, cell_size, str(dep_rwy), _flight_rw_dir_for_leg(flight, 2, layout)
+        layout, cell_size, str(dep_rwy), _flight_rw_dir_for_leg(flight, 3, layout)
     )
     if rw_end is None:
         return []
@@ -1836,7 +1912,8 @@ def extract_point_to_paths(
     return [
         [float(wx), float(wy), float(ax), float(ay)],
         [float(ax), float(ay), float(px), float(py)],
-        [float(px), float(py), float(hx), float(hy)],
+        [float(px), float(py), float(pbx), float(pby)],
+        [float(pbx), float(pby), float(hx), float(hy)],
         [float(hx), float(hy), float(lx), float(ly)],
         [float(lx), float(ly), float(ex), float(ey)],
     ]
@@ -2011,6 +2088,14 @@ def _annotate_segment_kinematics(
             v_cur = float(v_end)
             if pt == "runway_taxiway":
                 v_cur = max(v_cur, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
+            continue
+
+        if phase == PHASE_PUSHBACK:
+            v_t = float(APRON_LINK_SPEED_MPS)
+            v0_out[i] = v_t
+            a_out[i] = 0.0
+            dur_out[i] = _duration_slice_sec(v_t, 0.0, 0.0, seg_m, False)
+            v_cur = v_t
             continue
 
         if phase in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP, PHASE_DEP_TAXI, PHASE_HOLDING_LINEUP):
@@ -2367,7 +2452,9 @@ def prepare_flight_path(
         pair_index = _pair_index_from_path_graph(g0) if g0 else {}
 
     logical_edge_list: List[Dict[str, str]] = []
-    leg_route_rows: List[Tuple[List[str], Optional[List[int]], Optional[PathGraph]]] = []
+    leg_route_rows: List[
+        Tuple[List[str], Optional[List[int]], Optional[PathGraph], Tuple[float, float, float, float], str]
+    ] = []
     direction_violation = False
 
     token_f = flight.get("token") if isinstance(flight.get("token"), dict) else {}
@@ -2418,7 +2505,7 @@ def prepare_flight_path(
             break
         for eid in edges:
             logical_edge_list.append({"edge_id": str(eid), "phase": phase})
-        leg_route_rows.append((edges, path, g))
+        leg_route_rows.append((edges, path, g, (sx, sy, ex, ey), phase))
 
     expanded_ids: List[str] = []
     segment_phases: List[str] = []
@@ -2429,10 +2516,8 @@ def prepare_flight_path(
     leg_lengths_px: List[float] = []
     leg_micro_counts: List[int] = []
     if not direction_violation:
-        for leg_i, (_edges, path, g) in enumerate(leg_route_rows):
-            phase = (
-                _EXTRACT_LEG_PHASES[leg_i] if leg_i < len(_EXTRACT_LEG_PHASES) else PHASE_DEP_TAXI
-            )
+        for leg_i, (_edges, path, g, leg_xy, phase) in enumerate(leg_route_rows):
+            sx, sy, ex, ey = leg_xy
             if path is None or g is None:
                 leg_lengths_px.append(0.0)
                 leg_micro_counts.append(0)
@@ -2456,6 +2541,9 @@ def prepare_flight_path(
                     ok=False,
                 )
             expanded_ids.extend(ex_ids)
+            if str(phase) == PHASE_DEP_TAXI and segs:
+                _p0, _p1 = segs[0]
+                segs[0] = ((float(sx), float(sy)), _p1)
             segments.extend(segs)
             segment_phases.extend(phs)
             segment_link_ids.extend(lnks)
@@ -2610,7 +2698,7 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
     if (
         sim_time_abs is not None
         and old_ph == PHASE_ARR_TAXI
-        and new_ph == PHASE_DEP_TAXI
+        and new_ph in (PHASE_PUSHBACK, PHASE_DEP_TAXI)
         and agent.actual_apron_inblocks_abs_sec is None
     ):
         # Fallback EIBT if stand token / radius never matched during Arr_taxi.
@@ -2622,6 +2710,14 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
                 agent.eldt_anchor_sec
             )
 
+    if (
+        sim_time_abs is not None
+        and old_ph == PHASE_PUSHBACK
+        and new_ph == PHASE_DEP_TAXI
+        and agent.pushback_finished_abs_sec is None
+    ):
+        agent.pushback_finished_abs_sec = float(sim_time_abs)
+
 
 def move_agent(
     agent: Flight,
@@ -2632,7 +2728,7 @@ def move_agent(
 ) -> None:
     """Advance along ``segment_endpoints`` using per-segment :math:`v_0` + constant ``acceleration_ms2``.
 
-    If ``sim_time`` / ``sim_time_abs`` are set, the first ``Dep_taxi`` segment does not move until
+    If ``sim_time`` / ``sim_time_abs`` are set, ``Pushback`` / first ``Dep_taxi`` segments do not move until
     ``dep_taxi_start_*`` is reached; those are set only when in-blocks is stamped (stand arrival + dwell),
     not from ELDT+nominal taxi-in. If both are ``None``, Dep_taxi is not time-gated here.
     Use ``sim_time=None`` to skip this (e.g. drain pass).
@@ -2662,7 +2758,7 @@ def move_agent(
         sim_time_abs is not None
         and agent.dep_taxi_start_abs_sec is not None
         and agent.edge_phases
-        and agent.edge_phases[0] == PHASE_DEP_TAXI
+        and agent.edge_phases[0] in (PHASE_PUSHBACK, PHASE_DEP_TAXI)
         and float(sim_time_abs) <= float(agent.dep_taxi_start_abs_sec) + 1e-9
     ):
         agent.velocity_ms = 0.0
@@ -2671,7 +2767,7 @@ def move_agent(
         sim_time is not None
         and agent.dep_taxi_start_sim_time is not None
         and agent.edge_phases
-        and agent.edge_phases[0] == PHASE_DEP_TAXI
+        and agent.edge_phases[0] in (PHASE_PUSHBACK, PHASE_DEP_TAXI)
         and float(sim_time) + 1e-9 < float(agent.dep_taxi_start_sim_time)
     ):
         agent.velocity_ms = 0.0
@@ -3022,26 +3118,13 @@ def _taxi_in_out_sec_from_prep(
     phs = prep.segment_phases
     v0s = prep.segment_start_velocity_ms
     accs = prep.segment_accel_ms2
-    counts = prep.leg_micro_counts
     if (
         not durs
         or len(durs) != len(segs)
-        or len(counts) < 5
         or len(v0s) != len(segs)
         or len(accs) != len(segs)
         or len(phs) != len(segs)
     ):
-        return None, None
-    c0, c1, c2, c3, c4 = (
-        int(counts[0]),
-        int(counts[1]),
-        int(counts[2]),
-        int(counts[3]),
-        int(counts[4]),
-    )
-    c01 = c0 + c1
-    c01234 = c01 + c2 + c3 + c4
-    if c01234 != len(segs):
         return None, None
     gi = max(0, int(prep.playback_first_segment_index))
     along0_px = float(prep.spawn_along_first_segment_px or 0.0)
@@ -3075,16 +3158,21 @@ def _taxi_in_out_sec_from_prep(
         )
 
     taxi_in = 0.0
-    for g in range(gi, c01):
+    for g in range(gi, len(segs)):
         if g < 0 or g >= len(segs):
             continue
-        taxi_in += dur_from_playback_start(g)
+        if str(phs[g]) in (PHASE_LANDING, PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
+            taxi_in += dur_from_playback_start(g)
 
     taxi_out = 0.0
-    for g in range(c01, c01234):
-        if g < 0 or g >= len(segs):
-            continue
-        taxi_out += dur_full(g)
+    for g, ph in enumerate(phs):
+        if str(ph) in (
+            PHASE_PUSHBACK,
+            PHASE_DEP_TAXI,
+            PHASE_HOLDING_LINEUP,
+            PHASE_LINEUP_DEPARTURE,
+        ):
+            taxi_out += dur_full(g)
     return taxi_in, taxi_out
 
 
@@ -3109,23 +3197,16 @@ def _agent_path_includes_landing(agent: Flight) -> bool:
 def _departure_leg_durations_sec_for_schedule(
     prep: PreparedFlightPath,
 ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
-    """Sums of segment_duration_sec for legs 2,3,4 (Dep_taxi, Holding_lineup, Lineup_departure)."""
+    """Sums of segment_duration_sec for Dep_taxi, Holding_lineup, Lineup_departure."""
     if not prep.ok:
         return None, None, None
     durs = prep.segment_duration_sec
-    counts = prep.leg_micro_counts
-    if not durs or len(counts) < 5 or sum(int(c) for c in counts) != len(durs):
+    phs = prep.segment_phases
+    if not durs or len(phs) != len(durs):
         return None, None, None
-    c0, c1, c2, c3, c4 = (int(counts[0]), int(counts[1]), int(counts[2]), int(counts[3]), int(counts[4]))
-    i2 = c0 + c1
-    i3 = i2 + c2
-    i4 = i3 + c3
-    end = i4 + c4
-    if end != len(durs):
-        return None, None, None
-    t2 = sum(float(durs[g]) for g in range(i2, i3))
-    t3 = sum(float(durs[g]) for g in range(i3, i4))
-    t4 = sum(float(durs[g]) for g in range(i4, end))
+    t2 = sum(float(durs[g]) for g, ph in enumerate(phs) if str(ph) == PHASE_DEP_TAXI)
+    t3 = sum(float(durs[g]) for g, ph in enumerate(phs) if str(ph) == PHASE_HOLDING_LINEUP)
+    t4 = sum(float(durs[g]) for g, ph in enumerate(phs) if str(ph) == PHASE_LINEUP_DEPARTURE)
     return t2, t3, t4
 
 
@@ -3470,6 +3551,7 @@ def _build_schedule_row(
     eldt_schedule_sec: Optional[int] = None,
     actual_apron_inblocks_abs_sec: Optional[float] = None,
     actual_apron_offblocks_abs_sec: Optional[float] = None,
+    pushback_finished_abs_sec: Optional[float] = None,
     path_completed_abs_sec: Optional[float] = None,
     information: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -3586,6 +3668,10 @@ def _build_schedule_row(
         "EXIT_RUNWAY_dt": _sec_to_datetime_str(exit_runway_abs_sec, base_date),
         "EIBT": _sim_sec_optional(eibt_sec) if eibt_sec is not None else None,
         "EIBT_dt": _sec_to_datetime_str(eibt_sec, base_date),
+        "E_PUSH_FINISHED": _sim_sec_optional(pushback_finished_abs_sec)
+        if pushback_finished_abs_sec is not None
+        else None,
+        "E_PUSH_FINISHED_dt": _sec_to_datetime_str(pushback_finished_abs_sec, base_date),
         "EOBT": _sim_sec_optional(eobt_sec) if eobt_sec is not None else None,
         "EOBT_dt": _sec_to_datetime_str(eobt_sec, base_date),
         "E_HOLD": _sim_sec_optional(e_hold_sec) if e_hold_sec is not None else None,
@@ -3694,14 +3780,16 @@ def _apply_pro_sim_phase_durations_to_schedule_row(
     exit_runway = _schedule_row_sec(row, "EXIT_RUNWAY")
     eibt = _schedule_row_sec(row, "EIBT")
     eobt = _schedule_row_sec(row, "EOBT")
+    e_push_finished = _schedule_row_sec(row, "E_PUSH_FINISHED")
     e_lineup = _schedule_row_sec(row, "E_LINEUP")
 
     arr_rot = _duration_between_schedule_secs(row, "ELDT", "EXIT_RUNWAY")
     vtt_arr = _duration_between_schedule_secs(row, "EXIT_RUNWAY", "EIBT")
-    vtt_dep = _duration_between_schedule_secs(row, "EOBT", "E_LINEUP")
+    pushback = _duration_between_schedule_secs(row, "EOBT", "E_PUSH_FINISHED")
+    vtt_dep = _duration_between_schedule_secs(row, "E_PUSH_FINISHED", "E_LINEUP")
     dep_rot = _duration_between_schedule_secs(row, "E_LINEUP", "ETOT")
     dtt_arr = _sum_zero_speed_seconds_in_interval(pts, exit_runway, eibt)
-    dtt_dep = _sum_zero_speed_seconds_in_interval(pts, eobt, e_lineup)
+    dtt_dep = _sum_zero_speed_seconds_in_interval(pts, e_push_finished, e_lineup)
     lineup = float(pdur.get(PHASE_LINEUP_DEPARTURE, 0.0))
 
     def _set_sec(key: str, val: Optional[float]) -> None:
@@ -3712,6 +3800,7 @@ def _apply_pro_sim_phase_durations_to_schedule_row(
 
     _set_sec("ARR_ROT_SEC", arr_rot if eldt is not None else None)
     _set_sec("VTT_ARR_SEC", vtt_arr)
+    _set_sec("PUSHBACK_SEC", pushback)
     _set_sec("DTT_ARR_SEC", dtt_arr if vtt_arr is not None else None)
     _set_sec("DTT_DEP_SEC", dtt_dep if vtt_dep is not None else None)
     _set_sec("VTT_DEP_SEC", vtt_dep)
@@ -3825,8 +3914,11 @@ def _overlay_schedule_timing_from_playback_positions(
 
         e_hold: Optional[float] = None
         e_lineup: Optional[float] = None
+        e_push_finished: Optional[float] = None
         for p in pts:
             ph = str(p.get("phase") or "")
+            if e_push_finished is None and ph == PHASE_DEP_TAXI:
+                e_push_finished = float(p.get("t", 0.0))
             if e_hold is None and ph == PHASE_HOLDING_LINEUP:
                 e_hold = float(p.get("t", 0.0))
             if e_lineup is None and ph == PHASE_LINEUP_DEPARTURE:
@@ -3859,6 +3951,10 @@ def _overlay_schedule_timing_from_playback_positions(
         eibt, eobt = _eibt_eobt_from_xy_plateau(pts)
         row["EIBT"] = _sim_sec_optional(eibt) if eibt is not None else None
         row["EIBT_dt"] = _sec_to_datetime_str(eibt, base_date)
+        row["E_PUSH_FINISHED"] = (
+            _sim_sec_optional(e_push_finished) if e_push_finished is not None else None
+        )
+        row["E_PUSH_FINISHED_dt"] = _sec_to_datetime_str(e_push_finished, base_date)
         row["EOBT"] = _sim_sec_optional(eobt) if eobt is not None else None
         row["EOBT_dt"] = _sec_to_datetime_str(eobt, base_date)
 
@@ -3880,6 +3976,7 @@ def _overlay_schedule_timing_from_playback_positions(
                 ("TOUCHDOWN_MOTION", "TOUCHDOWN_MOTION_dt"),
                 ("EXIT_RUNWAY", "EXIT_RUNWAY_dt"),
                 ("EIBT", "EIBT_dt"),
+                ("E_PUSH_FINISHED", "E_PUSH_FINISHED_dt"),
                 ("EOBT", "EOBT_dt"),
                 ("E_HOLD", "E_HOLD_dt"),
                 ("E_LINEUP", "E_LINEUP_dt"),
@@ -3890,6 +3987,7 @@ def _overlay_schedule_timing_from_playback_positions(
             for pk in (
                 "ARR_ROT_SEC",
                 "VTT_ARR_SEC",
+                "PUSHBACK_SEC",
                 "DTT_ARR_SEC",
                 "DTT_DEP_SEC",
                 "VTT_DEP_SEC",
@@ -4604,7 +4702,10 @@ def _try_splice_temp_stand_arrival_detour(
         return
     first_arr, last_arr = block
     dep_idx = last_arr + 1
-    if dep_idx >= len(ag.edge_phases) or str(ag.edge_phases[dep_idx]) != PHASE_DEP_TAXI:
+    if dep_idx >= len(ag.edge_phases) or str(ag.edge_phases[dep_idx]) not in (
+        PHASE_PUSHBACK,
+        PHASE_DEP_TAXI,
+    ):
         ag.arr_temp_detour_decided = True
         return
     sid = str(ag.apron_stand_id or "").strip()
@@ -5235,11 +5336,11 @@ def get_agent_priority_rank(agent: Flight) -> int:
         return AGENT_PRIORITY_RUNWAY_ARR_DEP
     if ph in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE):
         return AGENT_PRIORITY_LINEUP_HOLDING
-    if ph in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP, PHASE_DEP_TAXI) and pt_s in rw_pts:
+    if ph in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP, PHASE_PUSHBACK, PHASE_DEP_TAXI) and pt_s in rw_pts:
         return AGENT_PRIORITY_RUNWAY_ARR_DEP
     if pt_s in apron_pts:
         return AGENT_PRIORITY_APRON_TRANSIT
-    if ph == PHASE_DEP_TAXI:
+    if ph in (PHASE_PUSHBACK, PHASE_DEP_TAXI):
         return AGENT_PRIORITY_DEP_TAXI
     if ph in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
         return AGENT_PRIORITY_ARR_TAXI
@@ -5408,13 +5509,13 @@ def _lookahead_and_reservation_depth_for_agent(
     on_runway_seg = pt0 in rw_pts
     if ph0 == PHASE_LANDING:
         return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
-    if ph0 in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP, PHASE_DEP_TAXI) and on_runway_seg:
+    if ph0 in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP, PHASE_PUSHBACK, PHASE_DEP_TAXI) and on_runway_seg:
         return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
     if ph0 in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE):
         if on_runway_seg:
             return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
         return (LOOKAHEAD_DEP_TAXI, RESERV_DEPTH_DEP_TAXI)
-    if ph0 == PHASE_DEP_TAXI:
+    if ph0 in (PHASE_PUSHBACK, PHASE_DEP_TAXI):
         return (LOOKAHEAD_DEP_TAXI, RESERV_DEPTH_DEP_TAXI)
     if ph0 in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
         eldt = agent.eldt_anchor_sec
@@ -5835,7 +5936,7 @@ def can_reserve_path(
         if (
             idx == 0
             and dep_rwy
-            and ph0 in (PHASE_DEP_TAXI, PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE)
+            and ph0 in (PHASE_PUSHBACK, PHASE_DEP_TAXI, PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE)
             and pt0 in _RUNWAY_APPROACH_PT
         ):
             rem_m = _dep_runway_entry_remaining_m(agent, ppm)
@@ -6233,13 +6334,15 @@ def _leg_index_for_phase(phase: str) -> int:
         return 0
     if phase in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
         return 1
-    if phase == PHASE_DEP_TAXI:
+    if phase == PHASE_PUSHBACK:
         return 2
-    if phase == PHASE_HOLDING_LINEUP:
+    if phase == PHASE_DEP_TAXI:
         return 3
-    if phase == PHASE_LINEUP_DEPARTURE:
+    if phase == PHASE_HOLDING_LINEUP:
         return 4
-    return 2
+    if phase == PHASE_LINEUP_DEPARTURE:
+        return 5
+    return 3
 
 
 def _reroute_leg_destination_xy(
@@ -6251,18 +6354,20 @@ def _reroute_leg_destination_xy(
 ) -> Optional[Tuple[float, float]]:
     info = information if isinstance(information, dict) else _load_information_json()
     paths = extract_point_to_paths(flight, layout, cell_size, information=info)
-    if not paths or len(paths) < 5:
+    if not paths or len(paths) < 6:
         return None
     if phase == PHASE_LANDING and paths[0] and len(paths[0]) >= 4:
         return (float(paths[0][2]), float(paths[0][3]))
     if phase == PHASE_ARR_TAXI and len(paths) > 1 and len(paths[1]) >= 4:
         return (float(paths[1][2]), float(paths[1][3]))
-    if phase == PHASE_DEP_TAXI and len(paths) > 2 and len(paths[2]) >= 4:
+    if phase == PHASE_PUSHBACK and len(paths) > 2 and len(paths[2]) >= 4:
         return (float(paths[2][2]), float(paths[2][3]))
-    if phase == PHASE_HOLDING_LINEUP and len(paths) > 3 and len(paths[3]) >= 4:
+    if phase == PHASE_DEP_TAXI and len(paths) > 3 and len(paths[3]) >= 4:
         return (float(paths[3][2]), float(paths[3][3]))
-    if phase == PHASE_LINEUP_DEPARTURE and len(paths) > 4 and len(paths[4]) >= 4:
+    if phase == PHASE_HOLDING_LINEUP and len(paths) > 4 and len(paths[4]) >= 4:
         return (float(paths[4][2]), float(paths[4][3]))
+    if phase == PHASE_LINEUP_DEPARTURE and len(paths) > 5 and len(paths[5]) >= 4:
+        return (float(paths[5][2]), float(paths[5][3]))
     return None
 
 
@@ -7649,8 +7754,10 @@ def run_simulation(
                 ag.actual_apron_offblocks_abs_sec is None
                 and ag.actual_apron_inblocks_abs_sec is not None
                 and ag.edge_phases
-                and str(ag.edge_phases[0]) == PHASE_DEP_TAXI
-                and _pt_eobt == "apron_link"
+                and (
+                    str(ag.edge_phases[0]) == PHASE_PUSHBACK
+                    or (str(ag.edge_phases[0]) == PHASE_DEP_TAXI and _pt_eobt == "apron_link")
+                )
                 and ag.dep_taxi_start_abs_sec is not None
                 and float(current_time_abs) > float(ag.dep_taxi_start_abs_sec) + 1e-9
                 and abs(float(ag.velocity_ms)) > 0.01
@@ -7783,6 +7890,7 @@ def run_simulation(
             actual_apron_offblocks_abs_sec=(
                 ag.actual_apron_offblocks_abs_sec if ag else None
             ),
+            pushback_finished_abs_sec=(ag.pushback_finished_abs_sec if ag else None),
             path_completed_abs_sec=(
                 ag.path_completed_abs_sec if ag is not None else None
             ),
@@ -7911,6 +8019,7 @@ def run_simulation(
                 actual_apron_offblocks_abs_sec=(
                     ag.actual_apron_offblocks_abs_sec if ag else None
                 ),
+                pushback_finished_abs_sec=(ag.pushback_finished_abs_sec if ag else None),
                 path_completed_abs_sec=(
                     ag.path_completed_abs_sec if ag is not None else None
                 ),

@@ -492,6 +492,7 @@
           'arrRotSec',
           'proSimVttArrSec',
           'proSimDttArrSec',
+          'proSimPushbackSec',
           'proSimDttDepSec',
           'proSimVttDepSec',
           'proSimDepLineupSec',

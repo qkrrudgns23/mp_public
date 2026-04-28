@@ -2374,6 +2374,7 @@
           delete f.proSimVttArrSec;
           delete f.proSimVttDepSec;
           delete f.proSimDttArrSec;
+          delete f.proSimPushbackSec;
           delete f.proSimDttDepSec;
           delete f.proSimDepLineupSec;
           f.arrRunwayIdUsed = null;
@@ -2421,6 +2422,7 @@
             delete f.proSimVttArrSec;
             delete f.proSimVttDepSec;
             delete f.proSimDttArrSec;
+            delete f.proSimPushbackSec;
             delete f.proSimDttDepSec;
             delete f.proSimDepLineupSec;
             f.arrRunwayIdUsed = null;
@@ -2520,6 +2522,7 @@
       delete f.proSimVttArrSec;
       delete f.proSimVttDepSec;
       delete f.proSimDttArrSec;
+      delete f.proSimPushbackSec;
       delete f.proSimDttDepSec;
       delete f.proSimDepLineupSec;
       return;
@@ -2547,6 +2550,9 @@
     const vttArrS = secOpt('VTT_ARR_SEC');
     if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
     else delete f.proSimVttArrSec;
+    const pushbackS = secOpt('PUSHBACK_SEC');
+    if (isFinite(pushbackS)) f.proSimPushbackSec = pushbackS;
+    else delete f.proSimPushbackSec;
     const vttDepS = secOpt('VTT_DEP_SEC');
     if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
     else delete f.proSimVttDepSec;
@@ -4292,6 +4298,7 @@
           'arrRotSec',
           'proSimVttArrSec',
           'proSimDttArrSec',
+          'proSimPushbackSec',
           'proSimDttDepSec',
           'proSimVttDepSec',
           'proSimDepLineupSec',
@@ -8479,9 +8486,9 @@
       if (isFinite(tt)) byT[tt] = w;
     }
     const cur = byT[tKey];
-    if (!cur || String(cur.pathType || '') !== 'apron_link') return pose;
+    if (!cur) return pose;
     const ph = String(cur.phase || '');
-    if (ph && ph !== 'Dep_taxi') return pose;
+    if (ph !== 'Pushback') return pose;
     const prev = byT[tKey - 1];
     if (!prev) return pose;
     const ddx = cur.x - prev.x, ddy = cur.y - prev.y;
@@ -8497,8 +8504,8 @@
   }
 
   /**
-   * EOBT+ apron_link Dep_taxi, tail-first motion: no bicycle model. Fuselage nose=0, tail=100; path
-   * sample is station 75 (75% nose→tail). Draw anchor (≈10% aft of nose) at C + h * (0.75−0.1) * lenM
+   * Pushback tail-first motion: no bicycle model. Fuselage nose=0, tail=100; path
+   * sample is station 70 (70% nose→tail). Draw anchor (≈10% aft of nose) at C + h * (0.70−0.1) * lenM
    * with h = unit nose from pose (after applyEobt). Forward taxi leaves pose unchanged.
    */
   function applyApronLinkDepReverseFuselageStation75PoseIfNeeded(flight, tSec, pose) {
@@ -8518,9 +8525,9 @@
       if (isFinite(tt)) byT[tt] = w;
     }
     const cur = byT[tKey];
-    if (!cur || String(cur.pathType || '') !== 'apron_link') return pose;
+    if (!cur) return pose;
     const ph = String(cur.phase || '');
-    if (ph && ph !== 'Dep_taxi') return pose;
+    if (ph !== 'Pushback') return pose;
     let a = null;
     let b = null;
     for (let i = 0; i < tl.length - 1; i++) {
@@ -8547,7 +8554,7 @@
     const C = getFlightPositionAtTime(flight, t);
     if (!C) return pose;
     const { lenM } = getSimAircraftWorldDimsM(flight);
-    const NOSE_TO_STATION75_FRAC = 0.75;
+    const NOSE_TO_STATION75_FRAC = 0.70;
     const NOSE_TO_FRONT_WHEEL_FRAC = 0.1;
     const alongNoseM = (NOSE_TO_STATION75_FRAC - NOSE_TO_FRONT_WHEEL_FRAC) * lenM;
     return {
@@ -9408,6 +9415,7 @@
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
         '<th class="flight-th-mixed">VTT(Arr)</th>' +
         '<th class="flight-th-mixed">DTT(Arr)</th>' +
+        '<th class="flight-th-mixed">PUSHBACK</th>' +
         '<th class="flight-th-mixed">DTT(Dep)</th>' +
         '<th class="flight-th-mixed">VTT(Dep)</th>' +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(dep)</th>' +
@@ -9457,12 +9465,14 @@
     const rotArrStr = (f.arrRotSec != null && isFinite(f.arrRotSec)) ? formatSecondsToHHMMSS(f.arrRotSec) : dash;
     const vttArrStr = (f.proSimVttArrSec != null && isFinite(f.proSimVttArrSec)) ? formatSecondsToHHMMSS(f.proSimVttArrSec) : dash;
     const dttArrStr = (f.proSimDttArrSec != null && isFinite(f.proSimDttArrSec)) ? formatSecondsToHHMMSS(f.proSimDttArrSec) : dash;
+    const pushbackStr = (f.proSimPushbackSec != null && isFinite(f.proSimPushbackSec)) ? formatSecondsToHHMMSS(f.proSimPushbackSec) : dash;
     const dttDepStr = (f.proSimDttDepSec != null && isFinite(f.proSimDttDepSec)) ? formatSecondsToHHMMSS(f.proSimDttDepSec) : dash;
     const vttDepStr = (f.proSimVttDepSec != null && isFinite(f.proSimVttDepSec)) ? formatSecondsToHHMMSS(f.proSimVttDepSec) : dash;
     const rotDepStr = (f.proSimDepLineupSec != null && isFinite(f.proSimDepLineupSec)) ? formatSecondsToHHMMSS(f.proSimDepLineupSec) : dash;
     const rotArrCell = flightScheduleProSimTimedCell(rotArrStr, 'green');
     const vttArrCell = flightScheduleProSimTimedCell(vttArrStr, 'vttarr');
     const dttArrCell = flightScheduleProSimTimedCell(dttArrStr, 'dttarr');
+    const pushbackCell = flightScheduleProSimTimedCell(pushbackStr, 'pink');
     const dttDepCell = flightScheduleProSimTimedCell(dttDepStr, 'dttdep');
     const vttDepCell = flightScheduleProSimTimedCell(vttDepStr, 'red');
     const rotDepCell = flightScheduleProSimTimedCell(rotDepStr, 'pink');
@@ -9498,6 +9508,7 @@
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
         '<td class="flight-td-time">' + vttArrCell + '</td>' +
         '<td class="flight-td-time">' + dttArrCell + '</td>' +
+        '<td class="flight-td-time">' + pushbackCell + '</td>' +
         '<td class="flight-td-time">' + dttDepCell + '</td>' +
         '<td class="flight-td-time">' + vttDepCell + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotDepCell + '</td>' +
@@ -11457,7 +11468,7 @@
       kpiBuildPanel('Flight schedule · movement (averages)', 'ROT(Arr/Dep) · VTT(Arr/Dep) from schedule', [
         kpiBuildMetricRow('Avg arrival ROT', kpiFormatOptionalSecondsAvg(snapshot.rotArrAvgSec), 'ROT(Arr) · flight schedule avg · sec'),
         kpiBuildMetricRow('Avg Arrival VTT', kpiFormatOptionalMinutesAvg(snapshot.arrTaxiAvgMin), 'VTT(Arr) · flight schedule avg · min'),
-        kpiBuildMetricRow('Avg Departure VTT', kpiFormatOptionalMinutesAvg(snapshot.depTaxiAvgMin), 'Dep_taxi after EOBT · VTT_DEP_SEC · min'),
+        kpiBuildMetricRow('Avg Departure VTT', kpiFormatOptionalMinutesAvg(snapshot.depTaxiAvgMin), 'Dep_taxi after pushback finished · VTT_DEP_SEC · min'),
         kpiBuildMetricRow('Avg Departure ROT', kpiFormatOptionalSecondsAvg(snapshot.rotDepAvgSec), 'DEP_ROT_SEC (ETOT - E_LINEUP) · else tier depRotMin · avg sec')
       ]),
       kpiBuildPanel('Apron utilization', 'ratio = utilization / (stands × window)', [
@@ -16090,9 +16101,10 @@
     Landing: 0,
     Arr_taxi: 1,
     Arr_taxi_occupied: 1,
-    Dep_taxi: 2,
-    Holding_lineup: 3,
-    Lineup_departure: 4,
+    Pushback: 2,
+    Dep_taxi: 3,
+    Holding_lineup: 4,
+    Lineup_departure: 5,
   };
   function proSimPhaseStrokeStyle(phaseRaw) {
     const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : 'Landing';
@@ -16101,6 +16113,9 @@
     }
     if (p === 'Arr_taxi') {
       return { wMul: 1.72, stroke: '#3b82f6' };
+    }
+    if (p === 'Pushback') {
+      return { wMul: 0.58 * 1.2, stroke: '#f97316' };
     }
     if (p === 'Dep_taxi' || p === 'Holding_lineup') {
       return { wMul: 0.58 * 1.2, stroke: '#ef4444' };
@@ -16238,6 +16253,7 @@
     let prevUx = null;
     let prevUy = null;
     let lastDrawnKey = null;
+    let lastDrawnPhase = null;
     let seqIx = 0;
     const drawList = [];
     ids.forEach(function(entry) {
@@ -16252,10 +16268,14 @@
           if (entry.phase != null) phase = String(entry.phase).trim() || 'Landing';
         }
       }
-      if (key && key === lastDrawnKey) {
+      const phaseNorm = String(phase || '').trim() || 'Landing';
+      if (key && key === lastDrawnKey && phaseNorm === lastDrawnPhase) {
         return;
       }
       const st = proSimPhaseStrokeStyle(phase);
+      if (phaseNorm === 'Pushback') {
+        st.stroke = '#0d0d0f';
+      }
       const lineW = baseW * st.wMul;
       const e = key ? byId[key] : null;
       if (!e) return;
@@ -16277,6 +16297,7 @@
         prevUy = ou.uy;
       }
       lastDrawnKey = key;
+      lastDrawnPhase = phaseNorm;
     });
     drawList.sort(function(a, b) {
       if (a.z !== b.z) return a.z - b.z;
@@ -16293,7 +16314,7 @@
       ctx.stroke();
       ctx.globalAlpha = 1;
       const ph = String(item.phase || '').trim();
-      const isRedOrPinkArrow = ph === 'Dep_taxi' || ph === 'Holding_lineup' || ph === 'Lineup_departure';
+      const isRedOrPinkArrow = ph === 'Pushback' || ph === 'Dep_taxi' || ph === 'Holding_lineup' || ph === 'Lineup_departure';
       const arrowFill = isRedOrPinkArrow
         ? proSimArrowFillForStroke(item.st.stroke)
         : '#fafafa';

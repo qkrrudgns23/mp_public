@@ -1100,9 +1100,9 @@
       if (isFinite(tt)) byT[tt] = w;
     }
     const cur = byT[tKey];
-    if (!cur || String(cur.pathType || '') !== 'apron_link') return pose;
+    if (!cur) return pose;
     const ph = String(cur.phase || '');
-    if (ph && ph !== 'Dep_taxi') return pose;
+    if (ph !== 'Pushback') return pose;
     const prev = byT[tKey - 1];
     if (!prev) return pose;
     const ddx = cur.x - prev.x, ddy = cur.y - prev.y;
@@ -1118,8 +1118,8 @@
   }
 
   /**
-   * EOBT+ apron_link Dep_taxi, tail-first motion: no bicycle model. Fuselage nose=0, tail=100; path
-   * sample is station 75 (75% nose→tail). Draw anchor (≈10% aft of nose) at C + h * (0.75−0.1) * lenM
+   * Pushback tail-first motion: no bicycle model. Fuselage nose=0, tail=100; path
+   * sample is station 70 (70% nose→tail). Draw anchor (≈10% aft of nose) at C + h * (0.70−0.1) * lenM
    * with h = unit nose from pose (after applyEobt). Forward taxi leaves pose unchanged.
    */
   function applyApronLinkDepReverseFuselageStation75PoseIfNeeded(flight, tSec, pose) {
@@ -1139,9 +1139,9 @@
       if (isFinite(tt)) byT[tt] = w;
     }
     const cur = byT[tKey];
-    if (!cur || String(cur.pathType || '') !== 'apron_link') return pose;
+    if (!cur) return pose;
     const ph = String(cur.phase || '');
-    if (ph && ph !== 'Dep_taxi') return pose;
+    if (ph !== 'Pushback') return pose;
     let a = null;
     let b = null;
     for (let i = 0; i < tl.length - 1; i++) {
@@ -1168,7 +1168,7 @@
     const C = getFlightPositionAtTime(flight, t);
     if (!C) return pose;
     const { lenM } = getSimAircraftWorldDimsM(flight);
-    const NOSE_TO_STATION75_FRAC = 0.75;
+    const NOSE_TO_STATION75_FRAC = 0.70;
     const NOSE_TO_FRONT_WHEEL_FRAC = 0.1;
     const alongNoseM = (NOSE_TO_STATION75_FRAC - NOSE_TO_FRONT_WHEEL_FRAC) * lenM;
     return {
