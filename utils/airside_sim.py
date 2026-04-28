@@ -3,17 +3,17 @@ Airside simulation: Dijkstra paths on the Layout_Design path graph, then a time-
 events) moving each flight along edge polylines with per-segment ``avgMoveVelocity``, landing
 deceleration, and runway-exit decel (see ``layoutPixelsPerMeter`` in Information.json for px/m scale).
 
-Schedule inputs: S series (``*_Min_orig``) and Sd series (``*_Min_d`` minutes) are read from each
-flight; routing and time axis use Sd only (``eldtMin_d`` or ``sldtMin_d`` → ELDT anchor in sim
+Schedule inputs: S series (``*Min``) and S series (``*Min`` minutes) are read from each
+flight; routing and time axis use S only (``eldtMin`` or ``sldtMin`` → ELDT anchor in sim
 seconds). Same arrival runway: ``ELDT`` is pushed forward so the next landing is not earlier than
 the previous touchdown plus landing-leg duration (touchdown through end of Landing micro-legs)
-plus ``RWY_ARRIVAL_SPACING_BUFFER_SEC`` (taxing / hold-wait margin). Outputs ``schedule`` with S, Sd echo,
+plus ``RWY_ARRIVAL_SPACING_BUFFER_SEC`` (taxing / hold-wait margin). Outputs ``schedule`` with S, S schedule,
 E times (ELDT/EIBT/EOBT/ETOT); ``EIBT`` is **only** from simulation: first time within ``standArrivalStopRadiusM`` of
 the stand token on ``Arr_taxi`` (any path type except pure ``runway``) with speed below ``standStoppedVelocityMaxMs``, only when
 ``PROCEED`` (not ``WAIT``/``YIELD``) and the destination stand pipeline has capacity (no cooldown). Phase-change
 fallback if stand px is missing. No schedule/path nominal fill-in for EIBT. ``EOBT`` is first pushback/taxi-out motion after
 ``dep_taxi_start_abs_sec`` (set at in-blocks + on-stand dwell) with speed above a small threshold; if not recorded, nominal
-``EOBT`` = ``EIBT`` + ``SOBT_sd - SIBT_sd`` (Sd minute fields) when both are set, else ``dwellMin``.
+``EOBT`` = ``EIBT`` + ``SOBT - SIBT`` (S minute fields) when both are set, else ``dwellMin``.
 ``ETOT`` (when the path includes a ``Lineup_departure`` / takeoff-roll leg) is **only** the simulated time when the flight
 finishes the last path segment (``path_completed_abs_sec``); no nominal EOBT+leg projection. If the sim never completes that path,
 ``ETOT`` is omitted (null).
@@ -28,7 +28,7 @@ consecutive ``positions`` intervals inside each VTT window whose start sample ha
 
 ``positions`` timelines use ``t`` = absolute schedule seconds (day base, same as ELDT scale);
 ``Dep_taxi`` pushback/taxi-out is gated until **physical** in-blocks at stand + on-stand ``dwell_sec``
-(Sd ``sobtMin_d - sibtMin_d`` when both set, else ``dwellMin``), not ELDT+nominal taxi-in.
+(``sobtMin - sibtMin`` when both set, else ``dwellMin``), not ELDT+nominal taxi-in.
 Between heavy control ticks, a full reservation rebook runs every ``LIGHT_RESERVATION_RETRY_INTERVAL_SEC`` so agents
 re-check stand pipeline and departure-runway resources and regain ``PROCEED`` when slots free (same rules as ``can_reserve_path``).
 Per-flight lookahead / billed reservation depth by regime (runway, Dep_taxi, Arr_taxi, Arr_taxi stand-busy after ELDT);
@@ -95,7 +95,7 @@ _EXTRACT_LEG_PHASES: Tuple[str, ...] = (
     PHASE_LINEUP_DEPARTURE,
 )
 SIM_MAX_TIME_SEC = 200_000.0
-# After max scheduled STOT (Sd / ``stotMin_d``), advance sim time only this much (absolute seconds).
+# After max scheduled STOT (S / ``stotMin``), advance sim time only this much (absolute seconds).
 STOT_POST_BUFFER_SEC = 3_600.0
 
 _LOG = logging.getLogger(__name__)
@@ -320,7 +320,7 @@ def _minutes_to_sec(m: Any) -> Optional[float]:
 
 
 def _sim_sec_optional(sec: Optional[float]) -> Optional[int]:
-    """Snap schedule times to integer seconds (same convention as airside_sim_orig)."""
+    """Snap schedule times to integer seconds (same convention as legacy simulator)."""
     if sec is None:
         return None
     try:
@@ -350,31 +350,23 @@ def _sec_to_datetime_str(sec: Optional[float], base_date: str) -> Optional[str]:
     return result.strftime("%m/%d %H:%M:%S")
 
 
-def _schedule_sd_sec(flight: Dict[str, Any], key_d: str) -> Optional[int]:
-    """Simulation schedule axis: Sd series only (minutes → sim seconds)."""
-    return _sim_sec_optional(_minutes_to_sec(flight.get(key_d)))
+def _schedule_s_sec(flight: Dict[str, Any], key: str) -> Optional[int]:
+    """Single S schedule axis: minutes -> sim seconds."""
+    return _sim_sec_optional(_minutes_to_sec(flight.get(key)))
 
 
-def _schedule_s_sec(flight: Dict[str, Any], key_orig: str) -> Optional[int]:
-    """S series for result display: ``*_orig`` minutes → seconds (airside_sim_orig input shape)."""
-    return _sim_sec_optional(_minutes_to_sec(flight.get(key_orig)))
+def _s_eldt_sec(flight: Dict[str, Any]) -> Optional[int]:
+    """ELDT anchor from the single S schedule axis: ``sldtMin``."""
+    return _schedule_s_sec(flight, "sldtMin")
 
 
-def _sd_eldt_sec(flight: Dict[str, Any]) -> Optional[int]:
-    """ELDT anchor from Sd: ``eldtMin_d`` if set, else ``sldtMin_d`` (scheduled landing)."""
-    eldt = _schedule_sd_sec(flight, "eldtMin_d")
-    if eldt is not None:
-        return eldt
-    return _schedule_sd_sec(flight, "sldtMin_d")
-
-
-def _max_stot_sd_sec(flights_raw: List[Any]) -> Optional[float]:
-    """Largest ``stotMin_d`` (Sd → sim seconds) among flights, or ``None`` if none set."""
+def _max_stot_s_sec(flights_raw: List[Any]) -> Optional[float]:
+    """Largest ``stotMin`` among flights, or ``None`` if none set."""
     max_stot: Optional[float] = None
     for fobj in flights_raw:
         if not isinstance(fobj, dict):
             continue
-        st = _schedule_sd_sec(fobj, "stotMin_d")
+        st = _schedule_s_sec(fobj, "stotMin")
         if st is None:
             continue
         v = float(st)
@@ -385,12 +377,8 @@ def _max_stot_sd_sec(flights_raw: List[Any]) -> Optional[float]:
 def _sim_progress_elapsed_total_sec(
     flights_raw: List[Any], ref_t0: float
 ) -> float:
-    """Pro Sim progress denominator (same units as ``current_time_abs - ref_t0``).
-
-    ``max(STOT_sd) + STOT_POST_BUFFER_SEC - ref_t0`` where ``STOT_sd`` is ``stotMin_d`` (Sd axis).
-    Matches the main-loop time horizon when STOT is present. If no ``stotMin_d``, ``SIM_MAX_TIME_SEC``.
-    """
-    max_stot = _max_stot_sd_sec(flights_raw)
+    """Pro Sim progress denominator based on max scheduled STOT on the S axis."""
+    max_stot = _max_stot_s_sec(flights_raw)
     if max_stot is None:
         return float(SIM_MAX_TIME_SEC)
     span = float(max_stot) + float(STOT_POST_BUFFER_SEC) - float(ref_t0)
@@ -3398,7 +3386,7 @@ def _adjust_eldt_for_runway_arrival_spacing(
         rw = str(arr_rwy).strip() if arr_rwy else ""
         if not rw:
             continue
-        raw_eldt = _sd_eldt_sec(fobj)
+        raw_eldt = _s_eldt_sec(fobj)
         if raw_eldt is None:
             continue
         rot_opt = _arr_rot_sec_from_prep(prep, ppm)
@@ -3409,10 +3397,10 @@ def _adjust_eldt_for_runway_arrival_spacing(
         by_rw.setdefault(row[3], []).append(row)
     out: Dict[str, int] = {}
     for _rwid, lst in by_rw.items():
-        lst.sort(key=lambda r: (int(_sd_eldt_sec(r[1]) or 0), r[0]))
+        lst.sort(key=lambda r: (int(_s_eldt_sec(r[1]) or 0), r[0]))
         next_floor: Optional[float] = None
         for fid, fobj, _prep, __rw, rot in lst:
-            raw = int(_sd_eldt_sec(fobj) or 0)
+            raw = int(_s_eldt_sec(fobj) or 0)
             if next_floor is None:
                 adj = raw
             else:
@@ -3437,12 +3425,12 @@ def _stand_dwell_sec_from_flight(fobj: Dict[str, Any]) -> float:
     """
     Seconds on stand for ``dep_taxi_start`` gating and nominal ``EOBT`` = ``EIBT`` + this value.
 
-    Prefer Sim Sd scheduled block: ``(sobtMin_d - sibtMin_d)`` minutes → seconds when both inputs
+    Prefer Sim S scheduled block: ``(sobtMin - sibtMin)`` minutes → seconds when both inputs
     are finite and the difference is non-negative. Otherwise ``dwellMin`` (minutes) via
     ``_dwell_sec_from_flight``.
     """
-    sobt_m = _safe_float(fobj.get("sobtMin_d"), float("nan"))
-    sibt_m = _safe_float(fobj.get("sibtMin_d"), float("nan"))
+    sobt_m = _safe_float(fobj.get("sobtMin"), float("nan"))
+    sibt_m = _safe_float(fobj.get("sibtMin"), float("nan"))
     if math.isfinite(sobt_m) and math.isfinite(sibt_m):
         delta_m = float(sobt_m) - float(sibt_m)
         if delta_m >= 0.0 and math.isfinite(delta_m):
@@ -3671,11 +3659,11 @@ def _build_schedule_row(
     information: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    S series from ``*_Min_orig``; Sd echo from ``*_Min_d``; E series from path timing + dwell.
-    ``eldt_schedule_sec``가 있으면 동일 활주로 간격 조정된 ELDT를 쓰고, 없으면 ``_sd_eldt_sec``만 쓴다.
+    S series from ``*Min``; S schedule from ``*Min``; E series from path timing + dwell.
+    ``eldt_schedule_sec``가 있으면 동일 활주로 간격 조정된 ELDT를 쓰고, 없으면 ``_s_eldt_sec``만 쓴다.
     ``EIBT`` is measured only (near stand on Arr_taxi apron segment, or phase-transition fallback); no ``ELDT``+taxi-in estimate.
     ``EOBT`` = measured off-blocks when set; else ``EIBT`` + scheduled on-stand duration
-    (``SOBT_sd - SIBT_sd`` from Sd minutes when both set, else ``dwellMin``-based dwell).
+    (``SOBT - SIBT`` from S minutes when both set, else ``dwellMin``-based dwell).
     ``ETOT`` with a takeoff leg in ``prep`` uses ``path_completed_abs_sec`` only; otherwise nominal ``E_LINEUP``+takeoff duration
     when that chain is available.
     """
@@ -3684,18 +3672,13 @@ def _build_schedule_row(
     eldt_sec = (
         int(eldt_schedule_sec)
         if eldt_schedule_sec is not None
-        else _sd_eldt_sec(fobj)
+        else _s_eldt_sec(fobj)
     )
 
-    sldt_s = _schedule_s_sec(fobj, "sldtMin_orig")
-    sibt_s = _schedule_s_sec(fobj, "sibtMin_orig")
-    sobt_s = _schedule_s_sec(fobj, "sobtMin_orig")
-    stot_s = _schedule_s_sec(fobj, "stotMin_orig")
-
-    sldt_d = _schedule_sd_sec(fobj, "sldtMin_d")
-    sibt_d = _schedule_sd_sec(fobj, "sibtMin_d")
-    sobt_d = _schedule_sd_sec(fobj, "sobtMin_d")
-    stot_d = _schedule_sd_sec(fobj, "stotMin_d")
+    sldt_s = _schedule_s_sec(fobj, "sldtMin")
+    sibt_s = _schedule_s_sec(fobj, "sibtMin")
+    sobt_s = _schedule_s_sec(fobj, "sobtMin")
+    stot_s = _schedule_s_sec(fobj, "stotMin")
 
     taxi_in_sec: Optional[float] = None
     taxi_out_sec: Optional[float] = None
@@ -3762,14 +3745,6 @@ def _build_schedule_row(
         "SOBT_dt": _sec_to_datetime_str(_sf(sobt_s), base_date),
         "STOT": stot_s,
         "STOT_dt": _sec_to_datetime_str(_sf(stot_s), base_date),
-        "SLDT_sd": sldt_d,
-        "SLDT_sd_dt": _sec_to_datetime_str(_sf(sldt_d), base_date),
-        "SIBT_sd": sibt_d,
-        "SIBT_sd_dt": _sec_to_datetime_str(_sf(sibt_d), base_date),
-        "SOBT_sd": sobt_d,
-        "SOBT_sd_dt": _sec_to_datetime_str(_sf(sobt_d), base_date),
-        "STOT_sd": stot_d,
-        "STOT_sd_dt": _sec_to_datetime_str(_sf(stot_d), base_date),
         "ELDT": eldt_sec,
         "ELDT_dt": _sec_to_datetime_str(_sf(eldt_sec), base_date),
         "TOUCHDOWN_MOTION": _sim_sec_optional(touchdown_motion_abs_sec)
@@ -4751,7 +4726,7 @@ def _temp_stand_pipeline_sort_key(
     nearer temp first** (T001 before T002 when both need a slot the same tick).
 
     1. Earlier ``eldt_anchor_sec``
-    2. Lower ``sldtMin_d`` from sim flight input
+    2. Lower ``sldtMin`` from sim flight input
     3. Lower index in ``layout[\"flights\"]`` (먼저 입력·먼저 온 편)
     4. ``str(ag.id)`` (last resort)
     """
@@ -4761,7 +4736,7 @@ def _temp_stand_pipeline_sort_key(
     sldt_d = float("inf")
     fo = flights_by_id.get(str(ag.id))
     if isinstance(fo, dict):
-        raw = fo.get("sldtMin_d")
+        raw = fo.get("sldtMin")
         if raw is not None:
             try:
                 sldt_d = float(raw)
@@ -7611,7 +7586,7 @@ def run_simulation(
             prep.spawn_along_first_segment_px = float(along0)
             prep.playback_first_segment_index = int(g_start)
             ppm = max(float(pixels_per_meter), 1e-9)
-            anchor_raw = _sd_eldt_sec(fobj)
+            anchor_raw = _s_eldt_sec(fobj)
             anchor_adj = eldt_adjust_map.get(fid)
             if anchor_adj is not None:
                 anchor_use: Optional[float] = float(anchor_adj)
@@ -7710,7 +7685,7 @@ def run_simulation(
     progress_elapsed_total_sec = _sim_progress_elapsed_total_sec(
         flights_raw, float(ref_t0)
     )
-    max_stot_abs = _max_stot_sd_sec(flights_raw)
+    max_stot_abs = _max_stot_s_sec(flights_raw)
     truncation_abs_sec: Optional[float] = None
 
     while True:

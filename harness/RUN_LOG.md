@@ -341,3 +341,64 @@
   - MNL `deadlock_resolve_event_count = 0`.
 - **next**: RTX·lineup 구간에 걸린 다른 기체 시나리오에서도 동일 가드가 과도하게 이동을 묶지 않는지 샘플 회귀 검증.
 
+
+---
+
+### RUN 20260428T0548Z remove-sd-schedule-layer
+- **command**:
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/default_layout_sim_input.json --output data/Result_storage/_validation_sim_result.json`
+  - `python -m harness.validate --input data/Result_storage/default_layout_sim_input.json --result data/Result_storage/_validation_sim_result.json`
+- **result**: PASS run+validate
+- **builder change**:
+  - Removed active S(d) schedule fields from UI, simulation input/result contract, and stored JSON.
+  - Plain `sldtMin/sibtMin/sobtMin/stotMin` are now the single S schedule source.
+  - Removed automatic OVLP/stand-delay push; same-stand SIBT-SOBT overlap is blocked at assignment.
+- **alternatives compared**:
+  - Smoke only: fastest but would not prove schema run compatibility.
+  - Default run+validate: selected because it checks the changed input/result contract with low runtime.
+  - Broader MNL run: stronger coverage but unnecessary before the default schema smoke passes.
+- **reviewer check**:
+  - `Information.json` unchanged.
+  - S(d) keys removed from active source/data search.
+  - Default harness output generated at `_validation_sim_result.json`.
+- **next**: If needed, run a larger airport input after UI manual checks.
+
+---
+
+### RUN 20260428T0628Z s-anchored-eldt-fix
+- **command**:
+  - `python -m py_compile utils/airside_sim.py`
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/default_layout_sim_input.json --output data/Result_storage/_validation_sim_result.json`
+  - `python -m harness.validate --input data/Result_storage/default_layout_sim_input.json --result data/Result_storage/_validation_sim_result.json`
+- **result**: PASS run+validate
+- **root cause**:
+  - S-only 전환 후에도 `_s_eldt_sec()`가 stale `eldtMin` 입력을 우선 사용해 `R6_5`가 S schedule보다 이른 16분 anchor로 시뮬레이션됨.
+- **builder change**:
+  - `_s_eldt_sec()` now anchors simulation from `sldtMin` only.
+- **evidence**:
+  - Before: `R6_5` SIBT `00:50:00`, EIBT `00:22:35`.
+  - After validation run: ELDT `00:45:00`, EIBT `00:51:11`, EOBT `02:01:13`.
+- **alternatives compared**:
+  - Ignore `eldtMin` in `airside_sim.py`: selected, fixes simulation contract at source.
+  - Remove stale E fields from input JSON: useful cleanup but not sufficient if future inputs include them.
+  - Clamp output E fields after simulation: hides the symptom while positions/timing remain inconsistent.
+
+---
+
+### RUN 20260428T0634Z remove-e-min-input-fields
+- **command**:
+  - `node --check pages/Layout_Design/designer.js`
+  - `python -m py_compile utils/airside_sim.py`
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/default_layout_sim_input.json --output data/Result_storage/_validation_sim_result.json`
+  - `python -m harness.validate --input data/Result_storage/default_layout_sim_input.json --result data/Result_storage/_validation_sim_result.json`
+- **result**: PASS run+validate
+- **builder change**:
+  - Removed `eldtMin/eibtMin/eobtMin/etotMin` from sim/layout serialization allowlists.
+  - Scrubbed stale E-minute fields from stored JSON payloads under `data/`.
+  - Kept runtime E-minute cache fields for result display/playback.
+- **evidence**:
+  - `rg` found no E-minute fields in `data/*.json`.
+  - `simFlightKeys` no longer contains `eldtMin`.

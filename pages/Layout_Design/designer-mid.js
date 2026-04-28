@@ -396,14 +396,14 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  const FLIGHT_SCHED_TABLE_COL_COUNT = 24;
-  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). SLDT(d)/STOT(d) hidden from table. */
-  const FLIGHT_SCHED_TD_SIBTD = 13;
-  const FLIGHT_SCHED_TD_SOBTD = 14;
-  const FLIGHT_SCHED_TD_ELDT = 15;
-  const FLIGHT_SCHED_TD_EIBT = 16;
-  const FLIGHT_SCHED_TD_EOBT = 17;
-  const FLIGHT_SCHED_TD_ETOT = 18;
+  const FLIGHT_SCHED_TABLE_COL_COUNT = 22;
+  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). SLDT/STOT are derived from SIBT/SOBT. */
+  const FLIGHT_SCHED_TD_SIBT = 11;
+  const FLIGHT_SCHED_TD_SOBT = 12;
+  const FLIGHT_SCHED_TD_ELDT = 13;
+  const FLIGHT_SCHED_TD_EIBT = 14;
+  const FLIGHT_SCHED_TD_EOBT = 15;
+  const FLIGHT_SCHED_TD_ETOT = 16;
   function ensureFlightAssignStripWired() {
     if (window.__flightAssignStripWired) return;
     const wrap = document.getElementById('flightAssignStrip');
@@ -538,14 +538,14 @@
       sibtU = anchor - minD;
     }
     f.timeMin = sibtU;
-    f.sibtMin_orig = sibtU;
-    f.sldtMin_orig = scheduledSldtFromSibtMinutes(f, sibtU);
-    f.sobtMin_orig = anchor;
+    f.sibtMin = sibtU;
+    f.sldtMin = scheduledSldtFromSibtMinutes(f, sibtU);
+    f.sobtMin = anchor;
     f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, newDwell);
     if (f.minDwellMin != null) {
       f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
     }
-    f.stotMin_orig = scheduledStotFromSobtMinutes(f, anchor);
+    f.stotMin = scheduledStotFromSobtMinutes(f, anchor);
     const deibt = sibtU - startS;
     if (dragCtx.startEibt != null && isFinite(dragCtx.startEibt)) f.eibtMin = dragCtx.startEibt + deibt;
     return true;
@@ -558,10 +558,10 @@
     const { dwell, minDwell } = getNormalizedStandDwellBounds(f);
     const low = eibt + minDwell;
     const high = eibt + dwell;
-    const sobtPref = (f.sobtMin_d != null)
-      ? f.sobtMin_d
-      : (f.sibtMin_d != null
-        ? f.sibtMin_d + dwell
+    const sobtPref = (f.sobtMin != null)
+      ? f.sobtMin
+      : (f.sibtMin != null
+        ? f.sibtMin + dwell
         : (f.timeMin != null ? f.timeMin + dwell : low));
     const eobt = Math.min(Math.max(sobtPref, low), high);
     const etotDraft = eobt + block;
@@ -822,22 +822,14 @@
   }
 
   function flightScheduleMinutesForRow(f) {
-    const tArrMin = f.timeMin != null ? f.timeMin : 0;
+    const sibt = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
     const dwell = f.dwellMin != null ? f.dwellMin : 0;
-    const tDepMin = tArrMin + dwell;
-    const sibtD = f.sibtMin_d != null ? f.sibtMin_d : tArrMin;
-    const sobtD = f.sobtMin_d != null ? f.sobtMin_d : tDepMin;
-    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, sibtD - SCHED_SD_SIBT_MINUS_SLD_MIN));
-    const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
-    const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (sobtD + SCHED_SD_STOT_PLUS_SOBD_MIN);
+    const sobt = f.sobtMin != null ? f.sobtMin : (sibt + dwell);
     return {
-      sibt: tArrMin,
-      sobt: tDepMin,
-      sldt_d: f.sldtMin_d != null ? f.sldtMin_d : sldtOrig,
-      sibt_d: f.sibtMin_d != null ? f.sibtMin_d : tArrMin,
-      sobt_d: f.sobtMin_d != null ? f.sobtMin_d : tDepMin,
-      stot_d: f.stotMin_d != null ? f.stotMin_d : stotOrig,
+      sldt: f.sldtMin != null ? f.sldtMin : Math.max(0, sibt - SCHED_SIBT_MINUS_SLDT_MIN),
+      sibt: sibt,
+      sobt: sobt,
+      stot: f.stotMin != null ? f.stotMin : (sobt + SCHED_STOT_MINUS_SOBT_MIN),
     };
   }
 
@@ -872,8 +864,6 @@
         '<th>Dep Rw</th>' +
         '<th class="flight-col-s flight-col-s-start flight-td-sibt">SIBT</th>' +
         '<th class="flight-col-s flight-col-s-last">SOBT</th>' +
-        '<th class="flight-col-sd flight-col-sd-start">SIBT(d)</th>' +
-        '<th class="flight-col-sd flight-col-sd-last">SOBT(d)</th>' +
         '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
         '<th class="flight-col-e">EIBT</th>' +
         '<th class="flight-col-e">EOBT</th>' +
@@ -900,25 +890,21 @@
       const retInfo = retStatsAll.find(r => r.exit && r.exit.id === f.sampledArrRet);
       sampledRetName = retInfo ? (retInfo.name || 'RET') : 'RET';
     }
-    const tArrMin = f.timeMin != null ? f.timeMin : 0;
+    const tArrMin = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
     const dwell = f.dwellMin != null ? f.dwellMin : 0;
-    const tDepMin = tArrMin + dwell;
+    const tDepMin = f.sobtMin != null ? f.sobtMin : (tArrMin + dwell);
     const schedDepRotMin = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
-    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin));
-    const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
-    const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + schedDepRotMin);
-    if (f.sobtMin_orig == null) {
-      f.sldtMin_orig = sldtOrig;
-      f.sibtMin_orig = tArrMin;
-      f.sobtMin_orig = sobtOrig;
-      f.stotMin_orig = stotOrig;
+    const sldtCalc = (f.sldtMin != null ? f.sldtMin : Math.max(0, tArrMin));
+    const stotCalc = (f.stotMin != null) ? f.stotMin : (tDepMin + schedDepRotMin);
+    if (f.sibtMin == null || f.sobtMin == null || f.sldtMin == null || f.stotMin == null) {
+      f.sldtMin = sldtCalc;
+      f.sibtMin = tArrMin;
+      f.sobtMin = tDepMin;
+      f.stotMin = stotCalc;
     }
     const schedM = flightScheduleMinutesForRow(f);
     const sibtDisp = formatFlightScheduleDateTime(f, schedM.sibt);
     const sobtDisp = formatFlightScheduleDateTime(f, schedM.sobt);
-    const sibtStr_d = formatFlightScheduleDateTime(f, schedM.sibt_d);
-    const sobtStr_d = formatFlightScheduleDateTime(f, schedM.sobt_d);
     function fmtFlightESchedCell(minVal) {
       if (!(typeof minVal === 'number' && isFinite(minVal))) return '—';
       return formatFlightScheduleDateTime(f, minVal);
@@ -965,8 +951,6 @@
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-start flight-td-sibt" data-sched-min="' + schedM.sibt + '">' + escapeHtml(sibtDisp) + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-last" data-sched-min="' + schedM.sobt + '">' + escapeHtml(sobtDisp) + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-start" data-sched-min="' + schedM.sibt_d + '">' + escapeHtml(sibtStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-last" data-sched-min="' + schedM.sobt_d + '">' + escapeHtml(sobtStr_d) + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-e-start">' + escapeHtml(eldtStr) + '</td>' +
         '<td class="flight-td-time flight-col-e">' + escapeHtml(eibtStr) + '</td>' +
         '<td class="flight-td-time flight-col-e">' + escapeHtml(eobtStr) + '</td>' +
@@ -1002,7 +986,7 @@
       if (!deferOnlyDirty && typeof computeScheduledDisplayTimesIncremental === 'function')
         computeScheduledDisplayTimesIncremental(state.flights, dirtySet, standSet);
     }
-    flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+    flightsSorted.sort((a, b) => (a.sibtMin != null ? a.sibtMin : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin != null ? b.sibtMin : (b.timeMin != null ? b.timeMin : 0)));
     const usePagination = FLIGHT_SCHED_PAGE_SIZE > 0;
     let flightsForDom = flightsSorted;
     if (usePagination) {
@@ -1068,7 +1052,7 @@
     }
     if (scheduleOpts && scheduleOpts.pageTurnOnly === true && FLIGHT_SCHED_PAGE_SIZE > 0) {
       const flightsSorted = state.flights.slice();
-      flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+      flightsSorted.sort((a, b) => (a.sibtMin != null ? a.sibtMin : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin != null ? b.sibtMin : (b.timeMin != null ? b.timeMin : 0)));
       beginScheduleRetStatsBatch();
       var retStatsAll2 = [];
       try {
@@ -1099,7 +1083,7 @@
     }
     if (forceResampleRet) schedFull = true;
     const flightsSorted = state.flights.slice();
-    flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+    flightsSorted.sort((a, b) => (a.sibtMin != null ? a.sibtMin : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin != null ? b.sibtMin : (b.timeMin != null ? b.timeMin : 0)));
     function runTail() {
       beginScheduleRetStatsBatch();
       try {
@@ -1613,38 +1597,36 @@
             return 0;
           }
         };
-        const sibt_d = getMin(FLIGHT_SCHED_TD_SIBTD);
-        const sobt_d = getMin(FLIGHT_SCHED_TD_SOBTD);
-        const sldt_d = Math.max(0, sibt_d - SCHED_SD_SIBT_MINUS_SLD_MIN);
-        const stot_d = sobt_d + SCHED_SD_STOT_PLUS_SOBD_MIN;
+        const sibt = getMin(FLIGHT_SCHED_TD_SIBT);
+        const sobt = getMin(FLIGHT_SCHED_TD_SOBT);
+        const sldt = Math.max(0, sibt - SCHED_SIBT_MINUS_SLDT_MIN);
+        const stot = sobt + SCHED_STOT_MINUS_SOBT_MIN;
         const eSer = ganttESeriesMinutesFromTimelineMeta(f);
         const eldt = eSer.eldt;
         const eibt = eSer.eibt;
         const eobt = eSer.eobt;
         const etot = eSer.etot;
-        const t0 = sibt_d;
-        const t1 = sobt_d || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-        const sldt = sldt_d || t0;
-        const stot = stot_d || t1;
+        const t0 = sibt;
+        const t1 = sobt || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
         const sldtOrig = sldt;
-        const sobtOrig = sobt_d || t1;
+        const sobtOrig = sobt || t1;
         const stotOrig = stot;
         intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig });
       });
     }
     if (!intervals.length) {
       intervals = flights.map(f => {
-        const t0 = f.sibtMin_d != null ? f.sibtMin_d : (f.timeMin != null ? f.timeMin : 0);
-        const t1 = f.sobtMin_d != null ? f.sobtMin_d : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-        const sldt = f.sldtMin_d != null ? f.sldtMin_d : t0;
-        const stot = f.stotMin_d != null ? f.stotMin_d : t1;
+        const t0 = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+        const t1 = f.sobtMin != null ? f.sobtMin : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
+        const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, t0 - SCHED_SIBT_MINUS_SLDT_MIN);
+        const stot = f.stotMin != null ? f.stotMin : (t1 + SCHED_STOT_MINUS_SOBT_MIN);
         const eSer2 = ganttESeriesMinutesFromTimelineMeta(f);
         const eibt = eSer2.eibt;
         const eobt = eSer2.eobt;
         const eldt = eSer2.eldt;
         const etot = eSer2.etot;
         const sldtOrig = sldt;
-        const sobtOrig = f.sobtMin_d != null ? f.sobtMin_d : t1;
+        const sobtOrig = f.sobtMin != null ? f.sobtMin : t1;
         const stotOrig = stot;
         return { f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig };
       });
@@ -1815,8 +1797,6 @@
         if (showEibtBars && eBars && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {
           pushAllocSpan(eBars, eibt, eobt, 'alloc-e-bar', 2);
         }
-        const hasOverlap = (f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed;
-        const ovlpBadgeHtml = hasOverlap ? '<span class="alloc-flight-ovlp-badge">OVLP</span>' : '';
         if (showEldtBars && e2Bars) {
           if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) pushAllocSpan(e2Bars, eldt, eibt, 'alloc-e2-bar', 0.5);
           if (isFinite(eobt) && isFinite(etot) && etot >= eobt) pushAllocSpan(e2Bars, eobt, etot, 'alloc-e2-bar', 0.5);
@@ -1843,13 +1823,6 @@
           pushAllocTriangle(sTrisDown, sldt, 'alloc-s-tri alloc-s-tri-down');
           pushAllocTriangle(sTrisUp, stot, 'alloc-s-tri alloc-s-tri-up');
         }
-      if (sLines && ((f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed) && isFinite(sobtOrig)) {
-        const sobtD = (f.sobtMin_d != null ? f.sobtMin_d : t1);
-        if (!isNaN(sobtD) && Math.abs(sobtOrig - sobtD) > 1e-6) {
-          const sx = ((sobtOrig - winStart) / displaySpan) * 100 * zoom;
-          sLines.push('<div class="alloc-s-line-orig" style="left:' + sx + '%;"></div>');
-        }
-      }
         const handleHtml = (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f)) ? '' : (
           '<button type="button" class="alloc-flight-handle alloc-flight-handle--sibt" data-handle-role="sibt" tabindex="-1" aria-label="Adjust SIBT (5 min)" title="' + handleHoverSibt + '"></button>' +
           '<button type="button" class="alloc-flight-handle alloc-flight-handle--sobt" data-handle-role="sobt" tabindex="-1" aria-label="Adjust SOBT (5 min)" title="' + handleHoverSobt + '"></button>'
@@ -1861,7 +1834,6 @@
             handleHtml +
             '<div class="alloc-flight-reg">' + regSafe + '</div>' +
             metaHtml +
-            ovlpBadgeHtml +
           '</div>';
       }).join('');
       const sidAttr = standId ? String(standId) : '';
@@ -2468,8 +2440,8 @@
         const pid = ev.pointerId;
         const snapMin = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && isFinite(GANTT_SIBT_SOBT_HANDLE_SNAP_MIN) && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0) ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN : 5;
         const b0 = (typeof getNormalizedStandDwellBounds === 'function') ? getNormalizedStandDwellBounds(f) : { dwell: 0, minDwell: 0 };
-        const startSibt0 = (f.sibtMin_d != null && isFinite(f.sibtMin_d)) ? f.sibtMin_d : (f.timeMin != null ? f.timeMin : 0);
-        let anchorSobt0 = (f.sobtMin_d != null && isFinite(f.sobtMin_d)) ? f.sobtMin_d : (f.sobtMin_orig != null && isFinite(f.sobtMin_orig) ? f.sobtMin_orig : (startSibt0 + b0.dwell));
+        const startSibt0 = (f.sibtMin != null && isFinite(f.sibtMin)) ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+        let anchorSobt0 = (f.sobtMin != null && isFinite(f.sobtMin)) ? f.sobtMin : (f.sobtMin != null && isFinite(f.sobtMin) ? f.sobtMin : (startSibt0 + b0.dwell));
         const dragSibtCtx = {
           anchorSobt: anchorSobt0,
           startSibt: startSibt0,
@@ -2506,7 +2478,7 @@
           if (role === 'sibt') {
             tip.textContent = 'SIBT: ' + formatFlightScheduleDateTime(f, f.timeMin);
           } else {
-            const sobtShow = f.sobtMin_orig != null ? f.sobtMin_orig : (f.sobtMin_d != null ? f.sobtMin_d : m);
+            const sobtShow = f.sobtMin != null ? f.sobtMin : (f.sobtMin != null ? f.sobtMin : m);
             tip.textContent = 'SOBT: ' + formatFlightScheduleDateTime(f, sobtShow);
           }
           tip.removeAttribute('hidden');

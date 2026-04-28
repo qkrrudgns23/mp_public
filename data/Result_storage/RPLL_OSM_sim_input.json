@@ -43095,14 +43095,6 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 440,
-      "sibtMin_orig": 440,
-      "sobtMin_orig": 500,
-      "stotMin_orig": 500.3333333333333,
-      "sldtMin_d": 437,
-      "sibtMin_d": 440,
-      "sobtMin_d": 500,
-      "stotMin_d": 503,
       "arrTdDistM": 414.968982873362,
       "arrVTdMs": 75.36349472323201,
       "arrDecelMs2": 1.4695448973811347,
@@ -43126,7 +43118,11 @@
       "sldtDateTime_d": "2026-03-31 07:17:00",
       "sibtDateTime_d": "2026-03-31 07:20:00",
       "sobtDateTime_d": "2026-03-31 08:20:00",
-      "stotDateTime_d": "2026-03-31 08:23:00"
+      "stotDateTime_d": "2026-03-31 08:23:00",
+      "sldtMin": 440,
+      "sibtMin": 440,
+      "sobtMin": 500,
+      "stotMin": 500.3333333333333
     },
     {
       "id": "id_fn93szx90",
@@ -43142,14 +43138,6 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 450,
-      "sibtMin_orig": 450,
-      "sobtMin_orig": 510,
-      "stotMin_orig": 510.3333333333333,
-      "sldtMin_d": 447,
-      "sibtMin_d": 450,
-      "sobtMin_d": 510,
-      "stotMin_d": 513,
       "arrTdDistM": 409.988446205344,
       "arrVTdMs": 75.5313389072287,
       "arrDecelMs2": 1.4328927414445303,
@@ -43173,7 +43161,11 @@
       "sldtDateTime_d": "2026-03-31 07:27:00",
       "sibtDateTime_d": "2026-03-31 07:30:00",
       "sobtDateTime_d": "2026-03-31 08:30:00",
-      "stotDateTime_d": "2026-03-31 08:33:00"
+      "stotDateTime_d": "2026-03-31 08:33:00",
+      "sldtMin": 450,
+      "sibtMin": 450,
+      "sobtMin": 510,
+      "stotMin": 510.3333333333333
     }
   ],
   "simPathGraph": {

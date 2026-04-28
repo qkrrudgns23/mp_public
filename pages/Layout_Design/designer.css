@@ -846,7 +846,6 @@
     .flight-schedule-table th.flight-th-mixed { text-transform:none; letter-spacing:0.03em; }
     .flight-schedule-table td { padding:4px 8px 4px 0; border-bottom:1px solid var(--ui-border-subtle); vertical-align:middle; white-space:nowrap; background:transparent; }
     .flight-schedule-table th.flight-col-s { color: var(--style-fs-col-s, #22c55e); }
-    .flight-schedule-table th.flight-col-sd { color: var(--style-fs-col-sd, #007aff); }
     .flight-schedule-table th.flight-col-e { color: var(--style-fs-col-e, #ff69b4); }
     .flight-schedule-table th.flight-col-e.flight-col-rot,
     .flight-schedule-table td.flight-col-e.flight-col-rot { color: var(--style-fs-col-rot, #ffffff); }
@@ -971,7 +970,6 @@
     
     .alloc-flight.alloc-flight-sbar-dim { opacity:var(--style-gantt-flight-dim-opacity, 0.4); }
     .alloc-flight.alloc-flight-selected { outline:1px solid var(--style-gantt-selected, #fbbf24); outline-offset:1px; box-shadow:0 0 0 1px var(--style-gantt-selected-ring, #0f172a), 0 1px 4px var(--style-gantt-selected-glow, rgba(251,191,36,0.4)); z-index:2; }
-    .alloc-flight-ovlp-badge { position:absolute; top:0; right:1px; font-size:3px; font-weight:700; padding:0 1px; border-radius:1px; background:var(--style-gantt-ovlp-bg, #e879f9); color:var(--style-gantt-ovlp-fg, #0f172a); pointer-events:none; line-height:1.1; }
     .alloc-apron-tag { font-size:3px; font-weight:500; padding:0 1px; border-radius:9999px; background:var(--ui-bg-overlay); color:var(--ui-text-primary); border:1px solid var(--ui-border-default); align-self:flex-start; margin-bottom:0; white-space:nowrap; }
     .alloc-flight-reg { font-weight:600; font-size:9px; line-height:1.0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; flex:0 0 auto; }
     .alloc-flight-meta { font-size:8px; line-height:1.0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; opacity:0.95; display:none; flex:1 1 auto; min-width:0; }

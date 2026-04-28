@@ -2535,7 +2535,7 @@
 
       (state.flights || []).forEach(f => {
         if (!f) return;
-        const sibt = f.sibtMin_d != null ? f.sibtMin_d : (typeof f.timeMin === 'number' ? f.timeMin : 0);
+        const sibt = f.sibtMin != null ? f.sibtMin : (typeof f.timeMin === 'number' ? f.timeMin : 0);
         if (isFinite(sibt) && sibt > maxT) maxT = sibt;
       });
       return maxT + 10;
@@ -3007,9 +3007,9 @@
         this.value = f.dwellMin;
         if (minDwellEl) minDwellEl.value = f.minDwellMin;
         const tArr = f.timeMin != null ? f.timeMin : 0;
-        f.sobtMin_orig = tArr + dwell;
-        f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
-        f.sldtMin_orig = scheduledSldtFromSibtMinutes(f, tArr);
+        f.sobtMin = tArr + dwell;
+        f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
+        f.sldtMin = scheduledSldtFromSibtMinutes(f, tArr);
         if (typeof computeScheduledDisplayTimesIncremental === 'function') {
           const touched = f.standId ? [f.standId] : [];
           computeScheduledDisplayTimesIncremental(state.flights, new Set([f.id]), new Set(touched));
@@ -3171,8 +3171,8 @@
           return isFinite(parsed) ? parsed : null;
         };
         const map = {
-          sibtMin_d: FLIGHT_SCHED_TD_SIBTD,
-          sobtMin_d: FLIGHT_SCHED_TD_SOBTD,
+          sibtMin: FLIGHT_SCHED_TD_SIBT,
+          sobtMin: FLIGHT_SCHED_TD_SOBT,
           eldtMin: FLIGHT_SCHED_TD_ELDT,
           eibtMin: FLIGHT_SCHED_TD_EIBT,
           eobtMin: FLIGHT_SCHED_TD_EOBT,
@@ -3182,7 +3182,7 @@
           const v = getMin(map[key]);
           if (v != null) f[key] = v;
         });
-        if (typeof applySdDispDeltaFromSibtSobt === 'function') applySdDispDeltaFromSibtSobt(f);
+        if (typeof applySOffsetsFromSibtSobt === 'function') applySOffsetsFromSibtSobt(f);
       });
     }
     function setLayoutMessage(msg, isError) {
@@ -4784,8 +4784,8 @@
       } else if (state.selectedObject.type === 'flight') {
         const dir = o.arrDep === 'Dep' ? 'Departure' : 'Arrival';
         const smInfo = flightScheduleMinutesForRow(o);
-        const sibt = formatFlightScheduleDateTime(o, smInfo.sibt_d);
-        const sobt = formatFlightScheduleDateTime(o, smInfo.sobt_d);
+        const sibt = formatFlightScheduleDateTime(o, smInfo.sibt);
+        const sobt = formatFlightScheduleDateTime(o, smInfo.sobt);
         const arrRunwayId = resolveArrivalRunwayIdForFlight(o);
         const arrRunwayObj = state.taxiways.find(function(tw) {
           return tw && tw.pathType === 'runway' && String(tw.id) === String(arrRunwayId || '');

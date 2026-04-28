@@ -728,9 +728,9 @@
     const v = Number(_schedAlgo.dwellFloorMin);
     return (isFinite(v) && v >= 0) ? v : 20;
   })();
-  /** Dispatched schedule (d): SLDT(d) = SIBT(d) − this many minutes; STOT(d) = SOBT(d) + SCHED_SD_STOT_PLUS_SOBD_MIN. */
-  const SCHED_SD_SIBT_MINUS_SLD_MIN = 5;
-  const SCHED_SD_STOT_PLUS_SOBD_MIN = 5;
+  /** Single S schedule: SLDT = SIBT − this many minutes; STOT = SOBT + SCHED_STOT_MINUS_SOBT_MIN. */
+  const SCHED_SIBT_MINUS_SLDT_MIN = 5;
+  const SCHED_STOT_MINUS_SOBT_MIN = 5;
   const RSEP_MISSING_MATRIX_SEC = (function() {
     const v = Number(_schedAlgo.rsepMissingMatrixSeparationSec);
     return (isFinite(v) && v >= 0) ? v : 90;
@@ -2396,10 +2396,10 @@
           delete f.eibtMin;
           delete f.eobtMin;
           delete f.etotMin;
-          delete f.eldtMin_orig;
-          delete f.eibtMin_orig;
-          delete f.eobtMin_orig;
-          delete f.etotMin_orig;
+          delete f.eldtMin;
+          delete f.eibtMin;
+          delete f.eobtMin;
+          delete f.etotMin;
         } else {
           const tlNorm = rawTl.map(function(p) {
             const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
@@ -2444,10 +2444,10 @@
             delete f.eibtMin;
             delete f.eobtMin;
             delete f.etotMin;
-            delete f.eldtMin_orig;
-            delete f.eibtMin_orig;
-            delete f.eobtMin_orig;
-            delete f.etotMin_orig;
+            delete f.eldtMin;
+            delete f.eibtMin;
+            delete f.eobtMin;
+            delete f.etotMin;
           }
         }
         delete f.cachedArrPathPts;
@@ -2519,10 +2519,10 @@
       delete f.eibtMin;
       delete f.eobtMin;
       delete f.etotMin;
-      delete f.eldtMin_orig;
-      delete f.eibtMin_orig;
-      delete f.eobtMin_orig;
-      delete f.etotMin_orig;
+      delete f.eldtMin;
+      delete f.eibtMin;
+      delete f.eobtMin;
+      delete f.etotMin;
       f.arrRotSec = null;
       delete f.proSimVttArrSec;
       delete f.proSimVttDepSec;
@@ -4275,17 +4275,12 @@
           'minDwellMin',
           'noWayArr',
           'noWayDep',
-          'eOverlapPushed',
           'arrRetFailed',
           'serviceDate',
-          'sldtMin_orig',
-          'sibtMin_orig',
-          'sobtMin_orig',
-          'stotMin_orig',
-          'sldtMin_d',
-          'sibtMin_d',
-          'sobtMin_d',
-          'stotMin_d',
+          'sldtMin',
+          'sibtMin',
+          'sobtMin',
+          'stotMin',
           'arrRunwayDirUsed',
           'depRunwayDirUsed',
           'arrTdDistM',
@@ -4293,14 +4288,6 @@
           'arrDecelMs2',
           'arrDep',
           'intDom',
-          'eldtMin',
-          'eibtMin',
-          'eobtMin',
-          'etotMin',
-          'eldtMin_orig',
-          'eibtMin_orig',
-          'eobtMin_orig',
-          'etotMin_orig',
           'arrRotSec',
           'proSimVttArrSec',
           'proSimDttArrSec',
@@ -4369,10 +4356,8 @@
         const schedExport = flightScheduleMinutesForRow(f);
         copy.sibtDateTime = formatFlightScheduleDateTime(f, schedExport.sibt);
         copy.sobtDateTime = formatFlightScheduleDateTime(f, schedExport.sobt);
-        copy.sldtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sldt_d);
-        copy.sibtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sibt_d);
-        copy.sobtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sobt_d);
-        copy.stotDateTime_d = formatFlightScheduleDateTime(f, schedExport.stot_d);
+        copy.sldtDateTime = formatFlightScheduleDateTime(f, schedExport.sldt);
+        copy.stotDateTime = formatFlightScheduleDateTime(f, schedExport.stot);
         if (state.hasSimulationResult && Array.isArray(f.timeline) && f.timeline.length >= 2) {
           copy.timeline = f.timeline.map(function(p) {
             const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
@@ -8075,7 +8060,7 @@
       const win = getFlightAirsideWindowSec(f);
       if (!win) return;
       const end = win.t1;
-      const dwellMin = (f.sobtMin_d != null && f.sibtMin_d != null) ? (f.sobtMin_d - f.sibtMin_d) : (f.dwellMin || 0);
+      const dwellMin = (f.sobtMin != null && f.sibtMin != null) ? (f.sobtMin - f.sibtMin) : (f.dwellMin || 0);
       const dwellSec = Math.max(0, dwellMin * 60);
       const start = Math.max(0, end - dwellSec);
       if (end > start) intervals.push({ start, end });
@@ -8188,18 +8173,15 @@
         alert("Stand constraints or selected building do not match this aircraft, so it cannot be assigned.");
         return false;
       }
+      if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
+      if (flightWouldOverlapStandAssignment(f, standId)) {
+        alert("This stand already has an overlapping flight in the selected SIBT-SOBT window.");
+        return false;
+      }
     }
     const prevStandForSched = f.standId || null;
     f.standId = standId;
     if (f.token) f.token.apronId = standId;
-    delete f.sobtMin_orig;
-    delete f.sldtMin_orig;
-    delete f.sibtMin_orig;
-    delete f.stotMin_orig;
-    delete f.eldtMin_orig;
-    delete f.eibtMin_orig;
-    delete f.eobtMin_orig;
-    delete f.etotMin_orig;
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     const touchedSt = [];
     if (prevStandForSched) touchedSt.push(prevStandForSched);
@@ -8213,6 +8195,26 @@
       draw({ skipPathGeometryOverlays: true });
     }
     return true;
+  }
+
+  function flightScheduleStandWindowMinutes(f) {
+    if (!f) return null;
+    const sibt = (f.sibtMin != null && isFinite(f.sibtMin)) ? Number(f.sibtMin) : (f.timeMin != null ? Number(f.timeMin) : 0);
+    const dwell = (f.dwellMin != null && isFinite(f.dwellMin)) ? Number(f.dwellMin) : 0;
+    const sobt = (f.sobtMin != null && isFinite(f.sobtMin)) ? Number(f.sobtMin) : (sibt + dwell);
+    if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return null;
+    return { sibt, sobt };
+  }
+
+  function flightWouldOverlapStandAssignment(f, standId) {
+    if (!f || !standId) return false;
+    const win = flightScheduleStandWindowMinutes(f);
+    if (!win) return false;
+    return (state.flights || []).some(function(other) {
+      if (!other || other === f || flightBlockedLikeNoWay(other) || other.standId !== standId) return false;
+      const ow = flightScheduleStandWindowMinutes(other);
+      return !!ow && win.sibt < ow.sobt && ow.sibt < win.sobt;
+    });
   }
 
   function getCandidatePbbStandsForCode(code, flight) {
@@ -8263,8 +8265,8 @@
 
   function buildArrivalTimelineFromPts(flight, pts) {
     if (!pts || pts.length < 2) return null;
-    const sibtMin_d = flight.sibtMin_d != null ? flight.sibtMin_d : (flight.timeMin != null ? flight.timeMin : 0);
-    const baseT = sibtMin_d * 60;
+    const sibtMin = flight.sibtMin != null ? flight.sibtMin : (flight.timeMin != null ? flight.timeMin : 0);
+    const baseT = sibtMin * 60;
     const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
     const timeline = [];
     let tAcc = baseT;
@@ -8277,10 +8279,10 @@
       tAcc += dt;
       timeline.push({ t: tAcc, x: x2, y: y2 });
     }
-    const sobtMin_d = flight.sobtMin_d != null ? flight.sobtMin_d : (sibtMin_d + (flight.dwellMin != null ? flight.dwellMin : 0));
-    const dwellSec = Math.max(0, (sobtMin_d - sibtMin_d) * 60);
+    const sobtMin = flight.sobtMin != null ? flight.sobtMin : (sibtMin + (flight.dwellMin != null ? flight.dwellMin : 0));
+    const dwellSec = Math.max(0, (sobtMin - sibtMin) * 60);
     if (dwellSec > 0) {
-      tAcc = sobtMin_d * 60;
+      tAcc = sobtMin * 60;
       const last = timeline[timeline.length - 1];
       timeline.push({ t: tAcc, x: last.x, y: last.y });
     }
@@ -8289,8 +8291,8 @@
 
   function buildDepartureTimelineFromPts(flight, pts) {
     if (!pts || pts.length < 2) return null;
-    const sobtMin_d = flight.sobtMin_d != null ? flight.sobtMin_d : (flight.timeMin != null ? flight.timeMin + (flight.dwellMin != null ? flight.dwellMin : 0) : 0);
-    const baseT = sobtMin_d * 60;
+    const sobtMin = flight.sobtMin != null ? flight.sobtMin : (flight.timeMin != null ? flight.timeMin + (flight.dwellMin != null ? flight.dwellMin : 0) : 0);
+    const baseT = sobtMin * 60;
     const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
     const timeline = [];
     let tAcc = baseT;
@@ -9107,14 +9109,14 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  const FLIGHT_SCHED_TABLE_COL_COUNT = 24;
-  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). SLDT(d)/STOT(d) hidden from table; sync via applySdDispDeltaFromSibtSobt. */
-  const FLIGHT_SCHED_TD_SIBTD = 13;
-  const FLIGHT_SCHED_TD_SOBTD = 14;
-  const FLIGHT_SCHED_TD_ELDT = 15;
-  const FLIGHT_SCHED_TD_EIBT = 16;
-  const FLIGHT_SCHED_TD_EOBT = 17;
-  const FLIGHT_SCHED_TD_ETOT = 18;
+  const FLIGHT_SCHED_TABLE_COL_COUNT = 22;
+  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). SLDT/STOT are derived from SIBT/SOBT. */
+  const FLIGHT_SCHED_TD_SIBT = 11;
+  const FLIGHT_SCHED_TD_SOBT = 12;
+  const FLIGHT_SCHED_TD_ELDT = 13;
+  const FLIGHT_SCHED_TD_EIBT = 14;
+  const FLIGHT_SCHED_TD_EOBT = 15;
+  const FLIGHT_SCHED_TD_ETOT = 16;
   function ensureFlightAssignStripWired() {
     if (window.__flightAssignStripWired) return;
     const wrap = document.getElementById('flightAssignStrip');
@@ -9253,14 +9255,14 @@
       sibtU = anchor - minD;
     }
     f.timeMin = sibtU;
-    f.sibtMin_orig = sibtU;
-    f.sldtMin_orig = scheduledSldtFromSibtMinutes(f, sibtU);
-    f.sobtMin_orig = anchor;
+    f.sibtMin = sibtU;
+    f.sldtMin = scheduledSldtFromSibtMinutes(f, sibtU);
+    f.sobtMin = anchor;
     f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, newDwell);
     if (f.minDwellMin != null) {
       f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
     }
-    f.stotMin_orig = scheduledStotFromSobtMinutes(f, anchor);
+    f.stotMin = scheduledStotFromSobtMinutes(f, anchor);
     const deibt = sibtU - startS;
     if (dragCtx.startEibt != null && isFinite(dragCtx.startEibt)) f.eibtMin = dragCtx.startEibt + deibt;
     return true;
@@ -9273,10 +9275,10 @@
     const { dwell, minDwell } = getNormalizedStandDwellBounds(f);
     const low = eibt + minDwell;
     const high = eibt + dwell;
-    const sobtPref = (f.sobtMin_d != null)
-      ? f.sobtMin_d
-      : (f.sibtMin_d != null
-        ? f.sibtMin_d + dwell
+    const sobtPref = (f.sobtMin != null)
+      ? f.sobtMin
+      : (f.sibtMin != null
+        ? f.sibtMin + dwell
         : (f.timeMin != null ? f.timeMin + dwell : low));
     const eobt = Math.min(Math.max(sobtPref, low), high);
     const etotDraft = eobt + block;
@@ -9537,22 +9539,14 @@
   }
 
   function flightScheduleMinutesForRow(f) {
-    const tArrMin = f.timeMin != null ? f.timeMin : 0;
+    const sibt = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
     const dwell = f.dwellMin != null ? f.dwellMin : 0;
-    const tDepMin = tArrMin + dwell;
-    const sibtD = f.sibtMin_d != null ? f.sibtMin_d : tArrMin;
-    const sobtD = f.sobtMin_d != null ? f.sobtMin_d : tDepMin;
-    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, sibtD - SCHED_SD_SIBT_MINUS_SLD_MIN));
-    const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
-    const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (sobtD + SCHED_SD_STOT_PLUS_SOBD_MIN);
+    const sobt = f.sobtMin != null ? f.sobtMin : (sibt + dwell);
     return {
-      sibt: tArrMin,
-      sobt: tDepMin,
-      sldt_d: f.sldtMin_d != null ? f.sldtMin_d : sldtOrig,
-      sibt_d: f.sibtMin_d != null ? f.sibtMin_d : tArrMin,
-      sobt_d: f.sobtMin_d != null ? f.sobtMin_d : tDepMin,
-      stot_d: f.stotMin_d != null ? f.stotMin_d : stotOrig,
+      sldt: f.sldtMin != null ? f.sldtMin : Math.max(0, sibt - SCHED_SIBT_MINUS_SLDT_MIN),
+      sibt: sibt,
+      sobt: sobt,
+      stot: f.stotMin != null ? f.stotMin : (sobt + SCHED_STOT_MINUS_SOBT_MIN),
     };
   }
 
@@ -9590,8 +9584,6 @@
         '<th>Dep Rw</th>' +
         '<th class="flight-col-s flight-col-s-start flight-td-sibt">SIBT</th>' +
         '<th class="flight-col-s flight-col-s-last">SOBT</th>' +
-        '<th class="flight-col-sd flight-col-sd-start">SIBT(d)</th>' +
-        '<th class="flight-col-sd flight-col-sd-last">SOBT(d)</th>' +
         '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
         '<th class="flight-col-e">EIBT</th>' +
         '<th class="flight-col-e">EOBT</th>' +
@@ -9618,25 +9610,21 @@
       const retInfo = retStatsAll.find(r => r.exit && r.exit.id === f.sampledArrRet);
       sampledRetName = retInfo ? (retInfo.name || 'RET') : 'RET';
     }
-    const tArrMin = f.timeMin != null ? f.timeMin : 0;
+    const tArrMin = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
     const dwell = f.dwellMin != null ? f.dwellMin : 0;
-    const tDepMin = tArrMin + dwell;
+    const tDepMin = f.sobtMin != null ? f.sobtMin : (tArrMin + dwell);
     const schedDepRotMin = Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2);
-    const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin));
-    const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
-    const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-    const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + schedDepRotMin);
-    if (f.sobtMin_orig == null) {
-      f.sldtMin_orig = sldtOrig;
-      f.sibtMin_orig = tArrMin;
-      f.sobtMin_orig = sobtOrig;
-      f.stotMin_orig = stotOrig;
+    const sldtCalc = (f.sldtMin != null ? f.sldtMin : Math.max(0, tArrMin));
+    const stotCalc = (f.stotMin != null) ? f.stotMin : (tDepMin + schedDepRotMin);
+    if (f.sibtMin == null || f.sobtMin == null || f.sldtMin == null || f.stotMin == null) {
+      f.sldtMin = sldtCalc;
+      f.sibtMin = tArrMin;
+      f.sobtMin = tDepMin;
+      f.stotMin = stotCalc;
     }
     const schedM = flightScheduleMinutesForRow(f);
     const sibtDisp = formatFlightScheduleDateTime(f, schedM.sibt);
     const sobtDisp = formatFlightScheduleDateTime(f, schedM.sobt);
-    const sibtStr_d = formatFlightScheduleDateTime(f, schedM.sibt_d);
-    const sobtStr_d = formatFlightScheduleDateTime(f, schedM.sobt_d);
     function fmtFlightESchedCell(minVal) {
       if (!(typeof minVal === 'number' && isFinite(minVal))) return '—';
       return formatFlightScheduleDateTime(f, minVal);
@@ -9683,8 +9671,6 @@
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-start flight-td-sibt" data-sched-min="' + schedM.sibt + '">' + escapeHtml(sibtDisp) + '</td>' +
         '<td class="flight-td-time flight-col-s flight-col-s-last" data-sched-min="' + schedM.sobt + '">' + escapeHtml(sobtDisp) + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-start" data-sched-min="' + schedM.sibt_d + '">' + escapeHtml(sibtStr_d) + '</td>' +
-        '<td class="flight-td-time flight-col-sd flight-col-sd-last" data-sched-min="' + schedM.sobt_d + '">' + escapeHtml(sobtStr_d) + '</td>' +
         '<td class="flight-td-time flight-col-e flight-col-e-start">' + escapeHtml(eldtStr) + '</td>' +
         '<td class="flight-td-time flight-col-e">' + escapeHtml(eibtStr) + '</td>' +
         '<td class="flight-td-time flight-col-e">' + escapeHtml(eobtStr) + '</td>' +
@@ -9720,7 +9706,7 @@
       if (!deferOnlyDirty && typeof computeScheduledDisplayTimesIncremental === 'function')
         computeScheduledDisplayTimesIncremental(state.flights, dirtySet, standSet);
     }
-    flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+    flightsSorted.sort((a, b) => (a.sibtMin != null ? a.sibtMin : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin != null ? b.sibtMin : (b.timeMin != null ? b.timeMin : 0)));
     const usePagination = FLIGHT_SCHED_PAGE_SIZE > 0;
     let flightsForDom = flightsSorted;
     if (usePagination) {
@@ -9786,7 +9772,7 @@
     }
     if (scheduleOpts && scheduleOpts.pageTurnOnly === true && FLIGHT_SCHED_PAGE_SIZE > 0) {
       const flightsSorted = state.flights.slice();
-      flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+      flightsSorted.sort((a, b) => (a.sibtMin != null ? a.sibtMin : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin != null ? b.sibtMin : (b.timeMin != null ? b.timeMin : 0)));
       beginScheduleRetStatsBatch();
       var retStatsAll2 = [];
       try {
@@ -9817,7 +9803,7 @@
     }
     if (forceResampleRet) schedFull = true;
     const flightsSorted = state.flights.slice();
-    flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+    flightsSorted.sort((a, b) => (a.sibtMin != null ? a.sibtMin : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin != null ? b.sibtMin : (b.timeMin != null ? b.timeMin : 0)));
     function runTail() {
       beginScheduleRetStatsBatch();
       try {
@@ -10331,38 +10317,36 @@
             return 0;
           }
         };
-        const sibt_d = getMin(FLIGHT_SCHED_TD_SIBTD);
-        const sobt_d = getMin(FLIGHT_SCHED_TD_SOBTD);
-        const sldt_d = Math.max(0, sibt_d - SCHED_SD_SIBT_MINUS_SLD_MIN);
-        const stot_d = sobt_d + SCHED_SD_STOT_PLUS_SOBD_MIN;
+        const sibt = getMin(FLIGHT_SCHED_TD_SIBT);
+        const sobt = getMin(FLIGHT_SCHED_TD_SOBT);
+        const sldt = Math.max(0, sibt - SCHED_SIBT_MINUS_SLDT_MIN);
+        const stot = sobt + SCHED_STOT_MINUS_SOBT_MIN;
         const eSer = ganttESeriesMinutesFromTimelineMeta(f);
         const eldt = eSer.eldt;
         const eibt = eSer.eibt;
         const eobt = eSer.eobt;
         const etot = eSer.etot;
-        const t0 = sibt_d;
-        const t1 = sobt_d || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-        const sldt = sldt_d || t0;
-        const stot = stot_d || t1;
+        const t0 = sibt;
+        const t1 = sobt || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
         const sldtOrig = sldt;
-        const sobtOrig = sobt_d || t1;
+        const sobtOrig = sobt || t1;
         const stotOrig = stot;
         intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig });
       });
     }
     if (!intervals.length) {
       intervals = flights.map(f => {
-        const t0 = f.sibtMin_d != null ? f.sibtMin_d : (f.timeMin != null ? f.timeMin : 0);
-        const t1 = f.sobtMin_d != null ? f.sobtMin_d : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-        const sldt = f.sldtMin_d != null ? f.sldtMin_d : t0;
-        const stot = f.stotMin_d != null ? f.stotMin_d : t1;
+        const t0 = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+        const t1 = f.sobtMin != null ? f.sobtMin : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
+        const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, t0 - SCHED_SIBT_MINUS_SLDT_MIN);
+        const stot = f.stotMin != null ? f.stotMin : (t1 + SCHED_STOT_MINUS_SOBT_MIN);
         const eSer2 = ganttESeriesMinutesFromTimelineMeta(f);
         const eibt = eSer2.eibt;
         const eobt = eSer2.eobt;
         const eldt = eSer2.eldt;
         const etot = eSer2.etot;
         const sldtOrig = sldt;
-        const sobtOrig = f.sobtMin_d != null ? f.sobtMin_d : t1;
+        const sobtOrig = f.sobtMin != null ? f.sobtMin : t1;
         const stotOrig = stot;
         return { f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig };
       });
@@ -10533,8 +10517,6 @@
         if (showEibtBars && eBars && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {
           pushAllocSpan(eBars, eibt, eobt, 'alloc-e-bar', 2);
         }
-        const hasOverlap = (f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed;
-        const ovlpBadgeHtml = hasOverlap ? '<span class="alloc-flight-ovlp-badge">OVLP</span>' : '';
         if (showEldtBars && e2Bars) {
           if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) pushAllocSpan(e2Bars, eldt, eibt, 'alloc-e2-bar', 0.5);
           if (isFinite(eobt) && isFinite(etot) && etot >= eobt) pushAllocSpan(e2Bars, eobt, etot, 'alloc-e2-bar', 0.5);
@@ -10561,13 +10543,6 @@
           pushAllocTriangle(sTrisDown, sldt, 'alloc-s-tri alloc-s-tri-down');
           pushAllocTriangle(sTrisUp, stot, 'alloc-s-tri alloc-s-tri-up');
         }
-      if (sLines && ((f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed) && isFinite(sobtOrig)) {
-        const sobtD = (f.sobtMin_d != null ? f.sobtMin_d : t1);
-        if (!isNaN(sobtD) && Math.abs(sobtOrig - sobtD) > 1e-6) {
-          const sx = ((sobtOrig - winStart) / displaySpan) * 100 * zoom;
-          sLines.push('<div class="alloc-s-line-orig" style="left:' + sx + '%;"></div>');
-        }
-      }
         const handleHtml = (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f)) ? '' : (
           '<button type="button" class="alloc-flight-handle alloc-flight-handle--sibt" data-handle-role="sibt" tabindex="-1" aria-label="Adjust SIBT (5 min)" title="' + handleHoverSibt + '"></button>' +
           '<button type="button" class="alloc-flight-handle alloc-flight-handle--sobt" data-handle-role="sobt" tabindex="-1" aria-label="Adjust SOBT (5 min)" title="' + handleHoverSobt + '"></button>'
@@ -10579,7 +10554,6 @@
             handleHtml +
             '<div class="alloc-flight-reg">' + regSafe + '</div>' +
             metaHtml +
-            ovlpBadgeHtml +
           '</div>';
       }).join('');
       const sidAttr = standId ? String(standId) : '';
@@ -11185,8 +11159,8 @@
         const tip = _ganttEnsureSibtSobtTooltipEl();
         const pid = ev.pointerId;
         const b0 = (typeof getNormalizedStandDwellBounds === 'function') ? getNormalizedStandDwellBounds(f) : { dwell: 0, minDwell: 0 };
-        const startSibt0 = (f.sibtMin_d != null && isFinite(f.sibtMin_d)) ? f.sibtMin_d : (f.timeMin != null ? f.timeMin : 0);
-        let anchorSobt0 = (f.sobtMin_d != null && isFinite(f.sobtMin_d)) ? f.sobtMin_d : (f.sobtMin_orig != null && isFinite(f.sobtMin_orig) ? f.sobtMin_orig : (startSibt0 + b0.dwell));
+        const startSibt0 = (f.sibtMin != null && isFinite(f.sibtMin)) ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+        let anchorSobt0 = (f.sobtMin != null && isFinite(f.sobtMin)) ? f.sobtMin : (startSibt0 + b0.dwell);
         const dragSibtCtx = {
           anchorSobt: anchorSobt0,
           startSibt: startSibt0,
@@ -11224,7 +11198,7 @@
           if (role === 'sibt') {
             tip.textContent = 'SIBT: ' + formatFlightScheduleDateTime(f, f.timeMin);
           } else {
-            const sobtShow = f.sobtMin_orig != null ? f.sobtMin_orig : (f.sobtMin_d != null ? f.sobtMin_d : m);
+            const sobtShow = f.sobtMin != null ? f.sobtMin : m;
             tip.textContent = 'SOBT: ' + formatFlightScheduleDateTime(f, sobtShow);
           }
           tip.removeAttribute('hidden');
@@ -11641,13 +11615,13 @@
       const depRotSec = kpiToNumber(depRotFromSchedSec != null ? depRotFromSchedSec : (
         (typeof SCHED_DEP_ROT_MIN === 'number' && isFinite(SCHED_DEP_ROT_MIN)) ? SCHED_DEP_ROT_MIN * 60 : null
       ));
-      const sibt = kpiToNumber(f && f.sibtMin_orig != null ? f.sibtMin_orig : (f && f.timeMin != null ? f.timeMin : null));
-      const sldt = kpiToNumber(f && f.sldtMin_orig != null ? f.sldtMin_orig : (sibt != null && arrTaxiSch != null && rotSec != null ? Math.max(0, sibt - arrTaxiSch - rotSec / 60) : null));
+      const sibt = kpiToNumber(f && f.sibtMin != null ? f.sibtMin : (f && f.timeMin != null ? f.timeMin : null));
+      const sldt = kpiToNumber(f && f.sldtMin != null ? f.sldtMin : (sibt != null && arrTaxiSch != null && rotSec != null ? Math.max(0, sibt - arrTaxiSch - rotSec / 60) : null));
       const dwellMin = kpiToNumber(f && f.dwellMin != null ? f.dwellMin : null);
-      const sobt = kpiToNumber(f && f.sobtMin_orig != null ? f.sobtMin_orig : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
+      const sobt = kpiToNumber(f && f.sobtMin != null ? f.sobtMin : (sibt != null && dwellMin != null ? sibt + dwellMin : null));
       const sttDepMinK = kpiToNumber(typeof getBaseVttDepMinutesToHoldingSlot === 'function' ? getBaseVttDepMinutesToHoldingSlot(f) : depTaxiSch);
       const depRotMinK = depRotSec != null && isFinite(depRotSec) ? depRotSec / 60 : null;
-      const stot = kpiToNumber(f && f.stotMin_orig != null ? f.stotMin_orig : (sobt != null && depRotMinK != null && sttDepMinK != null ? sobt + depRotMinK + sttDepMinK : (sobt != null && depBlockOutMin != null ? sobt + depBlockOutMin : null)));
+      const stot = kpiToNumber(f && f.stotMin != null ? f.stotMin : (sobt != null && depRotMinK != null && sttDepMinK != null ? sobt + depRotMinK + sttDepMinK : (sobt != null && depBlockOutMin != null ? sobt + depBlockOutMin : null)));
       const eldtSched = kpiToNumber(sldt);
       const etotSched = kpiToNumber(stot);
       const failed = !!(f && flightBlockedLikeNoWay(f));
@@ -11842,22 +11816,22 @@
     if (field === 'sldt') {
       const vttArrMin = getBaseVttArrMinutes(f);
       const rotArrMin = getArrRotMinutes(f);
-      f.sldtMin_orig = m;
+      f.sldtMin = m;
       const sibt = Math.max(0, m + vttArrMin + rotArrMin);
       f.timeMin = sibt;
-      f.sibtMin_orig = sibt;
-      f.sobtMin_orig = sibt + dwell;
-      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      f.sibtMin = sibt;
+      f.sobtMin = sibt + dwell;
+      f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
       f.dwellMin = dwell;
       f.minDwellMin = minDwell;
       return true;
     }
     if (field === 'sibt') {
       f.timeMin = m;
-      f.sibtMin_orig = m;
-      f.sldtMin_orig = scheduledSldtFromSibtMinutes(f, m);
-      f.sobtMin_orig = m + dwell;
-      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      f.sibtMin = m;
+      f.sldtMin = scheduledSldtFromSibtMinutes(f, m);
+      f.sobtMin = m + dwell;
+      f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
       f.dwellMin = dwell;
       f.minDwellMin = minDwell;
       return true;
@@ -11865,38 +11839,38 @@
     if (field === 'sobt') {
       const sibt = f.timeMin != null ? f.timeMin : 0;
       let sobtAdj = Math.max(m, sibt + minDwell);
-      f.sobtMin_orig = sobtAdj;
+      f.sobtMin = sobtAdj;
       f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobtAdj - sibt);
       if (f.minDwellMin != null) {
         f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
       }
-      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
       return true;
     }
     if (field === 'stot') {
       const sibt = f.timeMin != null ? f.timeMin : 0;
       const sobtGuess = scheduledSobtFromStotMinutes(f, m);
       let sobtAdj = Math.max(sobtGuess, sibt + minDwell);
-      f.sobtMin_orig = sobtAdj;
+      f.sobtMin = sobtAdj;
       f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobtAdj - sibt);
       if (f.minDwellMin != null) {
         f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
       }
-      f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
+      f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
       return true;
     }
     return false;
   }
 
-  function applySdDispDeltaFromSibtSobt(f) {
+  function applySOffsetsFromSibtSobt(f) {
     if (!f || flightBlockedLikeNoWay(f)) return;
-    const sibt = f.sibtMin_d;
-    const sobt = f.sobtMin_d;
+    const sibt = f.sibtMin;
+    const sobt = f.sobtMin;
     if (typeof sibt === 'number' && isFinite(sibt)) {
-      f.sldtMin_d = Math.max(0, sibt - SCHED_SD_SIBT_MINUS_SLD_MIN);
+      f.sldtMin = Math.max(0, sibt - SCHED_SIBT_MINUS_SLDT_MIN);
     }
     if (typeof sobt === 'number' && isFinite(sobt)) {
-      f.stotMin_d = sobt + SCHED_SD_STOT_PLUS_SOBD_MIN;
+      f.stotMin = sobt + SCHED_STOT_MINUS_SOBT_MIN;
     }
   }
 
@@ -11904,8 +11878,7 @@
     if (!flights || !flights.length) return;
     flights.forEach(f => {
       if (flightBlockedLikeNoWay(f)) return;
-      f.vttADelayMin = 0;
-      const tArrMin = f.timeMin != null ? f.timeMin : 0;
+      const tArrMin = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
       let dwell = f.dwellMin != null ? f.dwellMin : 0;
       let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
       dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
@@ -11913,60 +11886,12 @@
       if (minDwell > dwell) minDwell = dwell;
       f.dwellMin = dwell;
       f.minDwellMin = minDwell;
-      const sldtOrig = scheduledSldtFromSibtMinutes(f, tArrMin);
-      const sobtOrig = tArrMin + dwell;
-      const stotOrig = scheduledStotFromSobtMinutes(f, sobtOrig);
-      f.sldtMin_orig = sldtOrig;
-      f.sibtMin_orig = tArrMin;
-      f.sobtMin_orig = sobtOrig;
-      f.stotMin_orig = stotOrig;
-      f.sibtMin_d = tArrMin;
-      f.sobtMin_d = sobtOrig;
-      applySdDispDeltaFromSibtSobt(f);
-    });
-    const standToFlights = {};
-    flights.forEach(f => {
-      if (flightBlockedLikeNoWay(f) || !f.standId) return;
-      const sid = f.standId;
-      if (!standToFlights[sid]) standToFlights[sid] = [];
-      standToFlights[sid].push(f);
-    });
-    Object.keys(standToFlights).forEach(standId => {
-      const list = standToFlights[standId];
-      list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
-      let prevSOBT = -1e9;
-      list.forEach(f => {
-        const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
-        const overlap = Math.max(0, prevSOBT - sibt0);
-        f.vttADelayMin = overlap;
-        f.sibtMin_d = sibt0 + overlap;
-        const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
-        const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-        const minSobtByDwell = f.sibtMin_d + minDwell;
-        const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
-        f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-        applySdDispDeltaFromSibtSobt(f);
-        prevSOBT = f.sobtMin_d;
-      });
-    });
-    flights.forEach(f => {
-      if (!f || flightBlockedLikeNoWay(f) || !f.standId) return;
-      const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
-      const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-      const sibt = (f.sibtMin_d != null ? f.sibtMin_d
-                   : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
-      const minSobtByDwell = sibt + minDwell;
-      const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
-      if (sobtCurrent < minSobtByDwell) {
-        f.sobtMin_d = minSobtByDwell;
-        applySdDispDeltaFromSibtSobt(f);
-      }
-    });
-    flights.forEach(f => {
-      if (flightBlockedLikeNoWay(f)) return;
-      f.sldtMin = f.sldtMin_d;
-      f.stotMin = f.stotMin_d;
-      f.sobtMin = f.sobtMin_d;
+      const sobt = f.sobtMin != null ? Math.max(f.sobtMin, tArrMin + minDwell) : (tArrMin + dwell);
+      f.timeMin = tArrMin;
+      f.sibtMin = tArrMin;
+      f.sobtMin = sobt;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobt - tArrMin);
+      applySOffsetsFromSibtSobt(f);
     });
   }
 
@@ -11985,8 +11910,7 @@
     allFlights.forEach(function(f) {
       if (!f || !needStep1.has(f.id)) return;
       if (flightBlockedLikeNoWay(f)) return;
-      f.vttADelayMin = 0;
-      const tArrMin = f.timeMin != null ? f.timeMin : 0;
+      const tArrMin = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
       let dwell = f.dwellMin != null ? f.dwellMin : 0;
       let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
       dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
@@ -11994,57 +11918,12 @@
       if (minDwell > dwell) minDwell = dwell;
       f.dwellMin = dwell;
       f.minDwellMin = minDwell;
-      const sldtOrig = scheduledSldtFromSibtMinutes(f, tArrMin);
-      const sobtOrig = tArrMin + dwell;
-      const stotOrig = scheduledStotFromSobtMinutes(f, sobtOrig);
-      f.sldtMin_orig = sldtOrig;
-      f.sibtMin_orig = tArrMin;
-      f.sobtMin_orig = sobtOrig;
-      f.stotMin_orig = stotOrig;
-      f.sibtMin_d = tArrMin;
-      f.sobtMin_d = sobtOrig;
-      applySdDispDeltaFromSibtSobt(f);
-    });
-    standsToRecompute.forEach(function(standId) {
-      const list = allFlights.filter(function(f) {
-        return f && !flightBlockedLikeNoWay(f) && f.standId === standId;
-      });
-      list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
-      let prevSOBT = -1e9;
-      list.forEach(function(f) {
-        const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
-        const overlap = Math.max(0, prevSOBT - sibt0);
-        f.vttADelayMin = overlap;
-        f.sibtMin_d = sibt0 + overlap;
-        const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
-        const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-        const minSobtByDwell = f.sibtMin_d + minDwell;
-        const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
-        f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-        applySdDispDeltaFromSibtSobt(f);
-        prevSOBT = f.sobtMin_d;
-      });
-    });
-    allFlights.forEach(function(f) {
-      if (!f || flightBlockedLikeNoWay(f) || !f.standId) return;
-      if (!standsToRecompute.has(f.standId)) return;
-      const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
-      const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-      const sibt = (f.sibtMin_d != null ? f.sibtMin_d : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
-      const minSobtByDwell = sibt + minDwell;
-      const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
-      if (sobtCurrent < minSobtByDwell) {
-        f.sobtMin_d = minSobtByDwell;
-        applySdDispDeltaFromSibtSobt(f);
-      }
-    });
-    allFlights.forEach(function(f) {
-      if (!f || flightBlockedLikeNoWay(f)) return;
-      const onTouched = f.standId && standsToRecompute.has(f.standId);
-      if (!needStep1.has(f.id) && !onTouched) return;
-      f.sldtMin = f.sldtMin_d;
-      f.stotMin = f.stotMin_d;
-      f.sobtMin = f.sobtMin_d;
+      const sobt = f.sobtMin != null ? Math.max(f.sobtMin, tArrMin + minDwell) : (tArrMin + dwell);
+      f.timeMin = tArrMin;
+      f.sibtMin = tArrMin;
+      f.sobtMin = sobt;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobt - tArrMin);
+      applySOffsetsFromSibtSobt(f);
     });
   }
 
@@ -12074,9 +11953,8 @@
         let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
         let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
         const etotSep = Math.max(ev.time, minFromArr, minFromDep);
-        const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
         const rotM = (ev.rotArrMin != null && isFinite(ev.rotArrMin)) ? ev.rotArrMin : getArrRotMinutes(ev.flight);
-        const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + rotM + (ev.vttArrMin || 0) + vttADelay;
+        const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + rotM + (ev.vttArrMin || 0);
         const vttDep = ev.vttDepMin || 0;
         const etotMin = etotSep;
         const eobtMin = etotMin - vttDep;
@@ -12116,15 +11994,15 @@
       if (arrRwy !== rwy.id && depRwy !== rwy.id) return;
       const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
       const cat = stdKey === 'ICAO' ? (ac && ac.icaoJHL ? ac.icaoJHL : 'M') : (ac && ac.recatEu ? ac.recatEu : 'D');
-      const sldtMin_d = f.sldtMin_d != null ? f.sldtMin_d : 0;
-      const stotMin_d = f.stotMin_d != null ? f.stotMin_d : 0;
-      const sobtMin_d = f.sobtMin_d != null ? f.sobtMin_d : 0;
+      const sldtMin = f.sldtMin != null ? f.sldtMin : 0;
+      const stotMin = f.stotMin != null ? f.stotMin : 0;
+      const sobtMin = f.sobtMin != null ? f.sobtMin : 0;
       const vttArrMin = getBaseVttArrMinutes(f);
       const rotArrMin = getArrRotMinutes(f);
       const vttDepMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-      if (arrRwy === rwy.id) events.push({ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ });
+      if (arrRwy === rwy.id) events.push({ time: sldtMin, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ });
       if (depRwy === rwy.id) {
-        events.push({ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin_d, index: eventIndex++ });
+        events.push({ time: stotMin, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin, index: eventIndex++ });
       }
     });
     return { cfg, events };
@@ -13139,10 +13017,9 @@
     const t0 = eldtS - rawApprDur;
     const airTl = polylineTimelineBySegmentSpeeds(apprPts, t0, eldtS, function() { return vTd; });
     const rotS = (typeof f.arrRotSec === 'number' && isFinite(f.arrRotSec)) ? Math.max(0, f.arrRotSec) : 0;
-    const vttDelayS = (typeof f.vttADelayMin === 'number' && isFinite(f.vttADelayMin) ? f.vttADelayMin : 0) * 60;
     const tAfterRot = eldtS + rotS;
     const runwayEndT = Math.min(tAfterRot, eibtS);
-    let tTaxiStart = Math.min(tAfterRot + vttDelayS, eibtS);
+    let tTaxiStart = Math.min(tAfterRot, eibtS);
     if (tTaxiStart < runwayEndT) tTaxiStart = runwayEndT;
 
 
@@ -17341,7 +17218,7 @@
 
       (state.flights || []).forEach(f => {
         if (!f) return;
-        const sibt = f.sibtMin_d != null ? f.sibtMin_d : (typeof f.timeMin === 'number' ? f.timeMin : 0);
+        const sibt = f.sibtMin != null ? f.sibtMin : (typeof f.timeMin === 'number' ? f.timeMin : 0);
         if (isFinite(sibt) && sibt > maxT) maxT = sibt;
       });
       return maxT + 10;
@@ -17809,9 +17686,9 @@
         this.value = f.dwellMin;
         if (minDwellEl) minDwellEl.value = f.minDwellMin;
         const tArr = f.timeMin != null ? f.timeMin : 0;
-        f.sobtMin_orig = tArr + dwell;
-        f.stotMin_orig = scheduledStotFromSobtMinutes(f, f.sobtMin_orig);
-        f.sldtMin_orig = scheduledSldtFromSibtMinutes(f, tArr);
+        f.sobtMin = tArr + dwell;
+        f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
+        f.sldtMin = scheduledSldtFromSibtMinutes(f, tArr);
         if (typeof computeScheduledDisplayTimesIncremental === 'function') {
           const touched = f.standId ? [f.standId] : [];
           computeScheduledDisplayTimesIncremental(state.flights, new Set([f.id]), new Set(touched));
@@ -17978,8 +17855,8 @@
           return isFinite(parsed) ? parsed : null;
         };
         const map = {
-          sibtMin_d: FLIGHT_SCHED_TD_SIBTD,
-          sobtMin_d: FLIGHT_SCHED_TD_SOBTD,
+          sibtMin: FLIGHT_SCHED_TD_SIBT,
+          sobtMin: FLIGHT_SCHED_TD_SOBT,
           eldtMin: FLIGHT_SCHED_TD_ELDT,
           eibtMin: FLIGHT_SCHED_TD_EIBT,
           eobtMin: FLIGHT_SCHED_TD_EOBT,
@@ -17989,7 +17866,7 @@
           const v = getMin(map[key]);
           if (v != null) f[key] = v;
         });
-        if (typeof applySdDispDeltaFromSibtSobt === 'function') applySdDispDeltaFromSibtSobt(f);
+        if (typeof applySOffsetsFromSibtSobt === 'function') applySOffsetsFromSibtSobt(f);
       });
     }
     function setLayoutMessage(msg, isError) {
@@ -19591,8 +19468,8 @@
       } else if (state.selectedObject.type === 'flight') {
         const dir = o.arrDep === 'Dep' ? 'Departure' : 'Arrival';
         const smInfo = flightScheduleMinutesForRow(o);
-        const sibt = formatFlightScheduleDateTime(o, smInfo.sibt_d);
-        const sobt = formatFlightScheduleDateTime(o, smInfo.sobt_d);
+        const sibt = formatFlightScheduleDateTime(o, smInfo.sibt);
+        const sobt = formatFlightScheduleDateTime(o, smInfo.sobt);
         const arrRunwayId = resolveArrivalRunwayIdForFlight(o);
         const arrRunwayObj = state.taxiways.find(function(tw) {
           return tw && tw.pathType === 'runway' && String(tw.id) === String(arrRunwayId || '');

@@ -892,7 +892,7 @@
         flights: state.flights.map(function(f) {
           const copy = { };
           // First the basics·Order in which you want time-related fields(S(orig) > S(d) > S(final) > E(final), Each group ldt > ibt > obt > tot net)Fill with
-          // NOTE: E(orig) line(eldtMin_orig/eibtMin_orig/eobtMin_orig/etotMin_orig)silver
+          // NOTE: E(orig) line(eldtMin/eibtMin/eobtMin/etotMin)silver
           //       JSONwithout saving to final Eline(eldtMin/eibtMin/eobtMin/etotMin)save only.
           const orderedKeys = [
             'id',
@@ -908,15 +908,15 @@
             'noWayArr',
             'noWayDep',
             // S (orig): SLDT, SIBT, SOBT, STOT
-            'sldtMin_orig',
-            'sibtMin_orig',
-            'sobtMin_orig',
-            'stotMin_orig',
-            // S (d): SLDT(d), SIBT(d), SOBT(d), STOT(d)
-            'sldtMin_d',
-            'sibtMin_d',
-            'sobtMin_d',
-            'stotMin_d',
+            'sldtMin',
+            'sibtMin',
+            'sobtMin',
+            'stotMin',
+            // S (d): SLDT, SIBT, SOBT, STOT
+            'sldtMin',
+            'sibtMin',
+            'sobtMin',
+            'stotMin',
             // S (final): SLDT, SIBT, SOBT, STOT
             'sldtMin',
             'sibtMin',
@@ -928,16 +928,14 @@
             'eobtMin',
             'etotMin',
             // Other indicators
-            'vttADelayMin',
             'arrRotSec',
-            'eOverlapPushed',
             'sampledArrRet',
             'sampledRetName',
             'arrRetFailed'
           ];
           orderedKeys.forEach(function(k) {
             // sibtMinis explicitly final SIBTto leave a,
-            // If there is no original field sibtMin_dMake a copy of.
+            // If there is no original field sibtMinMake a copy of.
             if (k === 'sibtMin') {
               if (
                 Object.prototype.hasOwnProperty.call(f, 'sibtMin') &&
@@ -945,10 +943,10 @@
               ) {
                 copy.sibtMin = f.sibtMin;
               } else if (
-                Object.prototype.hasOwnProperty.call(f, 'sibtMin_d') &&
-                f.sibtMin_d != null
+                Object.prototype.hasOwnProperty.call(f, 'sibtMin') &&
+                f.sibtMin != null
               ) {
-                copy.sibtMin = f.sibtMin_d;
+                copy.sibtMin = f.sibtMin;
               }
               return;
             }
@@ -1728,7 +1726,7 @@
         if (f.standId !== standId) return;
         if (!f.timeline || !f.timeline.length) return;
         const end = f.timeline[f.timeline.length - 1].t;
-        const dwellMin = (f.sobtMin_d != null && f.sibtMin_d != null) ? (f.sobtMin_d - f.sibtMin_d) : (f.dwellMin || 0);
+        const dwellMin = (f.sobtMin != null && f.sibtMin != null) ? (f.sobtMin - f.sibtMin) : (f.dwellMin || 0);
         const dwellSec = Math.max(0, dwellMin * 60);
         const start = Math.max(0, end - dwellSec);
         if (end > start) intervals.push({ start, end });
@@ -1810,14 +1808,14 @@
       }
       f.standId = standId;
       if (f.token) f.token.apronId = standId;
-      delete f.sobtMin_orig;
-      delete f.sldtMin_orig;
-      delete f.sibtMin_orig;
-      delete f.stotMin_orig;
-      delete f.eldtMin_orig;
-      delete f.eibtMin_orig;
-      delete f.eobtMin_orig;
-      delete f.etotMin_orig;
+      delete f.sobtMin;
+      delete f.sldtMin;
+      delete f.sibtMin;
+      delete f.stotMin;
+      delete f.eldtMin;
+      delete f.eibtMin;
+      delete f.eobtMin;
+      delete f.etotMin;
       if (typeof renderFlightGantt === 'function') renderFlightGantt();
       if (typeof renderFlightList === 'function') renderFlightList();
       if (typeof draw === 'function') draw();
@@ -1868,8 +1866,8 @@
 
     function buildArrivalTimelineFromPts(flight, pts) {
       if (!pts || pts.length < 2) return null;
-      const sibtMin_d = flight.sibtMin_d != null ? flight.sibtMin_d : (flight.timeMin != null ? flight.timeMin : 0);
-      const baseT = sibtMin_d * 60;
+      const sibtMin = flight.sibtMin != null ? flight.sibtMin : (flight.timeMin != null ? flight.timeMin : 0);
+      const baseT = sibtMin * 60;
       const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
       const timeline = [];
       let tAcc = baseT;
@@ -1882,10 +1880,10 @@
         tAcc += dt;
         timeline.push({ t: tAcc, x: x2, y: y2 });
       }
-      const sobtMin_d = flight.sobtMin_d != null ? flight.sobtMin_d : (sibtMin_d + (flight.dwellMin != null ? flight.dwellMin : 0));
-      const dwellSec = Math.max(0, (sobtMin_d - sibtMin_d) * 60);
+      const sobtMin = flight.sobtMin != null ? flight.sobtMin : (sibtMin + (flight.dwellMin != null ? flight.dwellMin : 0));
+      const dwellSec = Math.max(0, (sobtMin - sibtMin) * 60);
       if (dwellSec > 0) {
-        tAcc = sobtMin_d * 60;
+        tAcc = sobtMin * 60;
         const last = timeline[timeline.length - 1];
         timeline.push({ t: tAcc, x: last.x, y: last.y });
       }
@@ -1894,8 +1892,8 @@
 
     function buildDepartureTimelineFromPts(flight, pts) {
       if (!pts || pts.length < 2) return null;
-      const sobtMin_d = flight.sobtMin_d != null ? flight.sobtMin_d : (flight.timeMin != null ? flight.timeMin + (flight.dwellMin != null ? flight.dwellMin : 0) : 0);
-      const baseT = sobtMin_d * 60;
+      const sobtMin = flight.sobtMin != null ? flight.sobtMin : (flight.timeMin != null ? flight.timeMin + (flight.dwellMin != null ? flight.dwellMin : 0) : 0);
+      const baseT = sobtMin * 60;
       const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
       const timeline = [];
       let tAcc = baseT;
@@ -2029,8 +2027,8 @@
       return dist / v / 60;
     }
 
-    // By runway SLDT(d)The earliest arrival flight is ELDT = SLDT(d).
-    // renderFlightListat SIBT−VTTas SLDT(d)After adjusting again, call Flight Schedule·Save·JSONMake sure this matches.
+    // By runway SLDTThe earliest arrival flight is ELDT = SLDT.
+    // renderFlightListat SIBT−VTTas SLDTAfter adjusting again, call Flight Schedule·Save·JSONMake sure this matches.
     function pinEarliestEldtToSldtPerRunway(flights) {
       if (!Array.isArray(flights)) return;
       const byRwy = {};
@@ -2038,7 +2036,7 @@
         if (!f || f.noWayArr) return;
         const rwy = f.arrRunwayId || (f.token && (f.token.arrRunwayId != null ? f.token.arrRunwayId : f.token.runwayId));
         if (rwy == null || rwy === '') return;
-        const sldt = f.sldtMin_d;
+        const sldt = f.sldtMin;
         if (sldt == null || !isFinite(sldt)) return;
         if (!byRwy[rwy]) byRwy[rwy] = [];
         byRwy[rwy].push(f);
@@ -2048,10 +2046,10 @@
         let minS = Infinity;
         let chosen = null;
         list.forEach(function(f) {
-          const s = f.sldtMin_d;
+          const s = f.sldtMin;
           if (s != null && isFinite(s) && s < minS) { minS = s; chosen = f; }
         });
-        if (chosen) chosen.eldtMin = chosen.sldtMin_d;
+        if (chosen) chosen.eldtMin = chosen.sldtMin;
       });
     }
 
@@ -2070,13 +2068,13 @@
       }
       // Alignment uses display copies only. state.flights Maintain the order Allocation bar chart/Ensure that the parking lot layout does not change when route is updated.
       const flightsSorted = state.flights.slice();
-      flightsSorted.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin_d != null ? b.sibtMin_d : (b.timeMin != null ? b.timeMin : 0)));
+      flightsSorted.sort((a, b) => (a.sibtMin != null ? a.sibtMin : (a.timeMin != null ? a.timeMin : 0)) - (b.sibtMin != null ? b.sibtMin : (b.timeMin != null ? b.timeMin : 0)));
       flightsSorted.forEach(f => {
         if (typeof getPathForFlight === 'function') getPathForFlight(f);
         if (typeof getPathForFlightDeparture === 'function') getPathForFlightDeparture(f);
         if (f.noWayArr || f.noWayDep) f.timeline = null;
       });
-      // the first S(d) line(SLDT(d)/SIBT(d)/SOBT(d)/STOT(d)) Just perform calculations
+      // the first S(d) line(SLDT/SIBT/SOBT/STOT) Just perform calculations
       // E line(ELDT/ETOT)is the separate logic(computeSeparationAdjustedTimes)Calculate only at/renew and,
       // No additional recalculation is performed here..
       if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
@@ -2090,10 +2088,10 @@
           '<th class="flight-td-sibt flight-col-s">SIBT</th>' +
           '<th class="flight-col-s">SOBT</th>' +
           '<th class="flight-col-s flight-col-s-last">STOT</th>' +
-          '<th class="flight-col-sd flight-col-sd-start">SLDT(d)</th>' +
-          '<th class="flight-col-sd">SIBT(d)</th>' +
-          '<th class="flight-col-sd">SOBT(d)</th>' +
-          '<th class="flight-col-sd flight-col-sd-last">STOT(d)</th>' +
+          '<th class="flight-col-s flight-col-s-start">SLDT</th>' +
+          '<th class="flight-col-s">SIBT</th>' +
+          '<th class="flight-col-s">SOBT</th>' +
+          '<th class="flight-col-s flight-col-s-last">STOT</th>' +
           '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
           '<th class="flight-col-e">EIBT</th>' +
           '<th class="flight-col-e">EOBT</th>' +
@@ -2224,13 +2222,13 @@
         const dwell = f.dwellMin != null ? f.dwellMin : 0;
         const tDepMin = tArrMin + dwell;
         // RET Based on the current route, including sampling, VTT(Arr)Calculate once and,
-        // SLDT(orig)·SLDT(d)are the same VTT(Arr)sync to use
+        // SLDT(orig)·SLDTare the same VTT(Arr)sync to use
         const vttArrMin = getBaseVttArrMinutes(f);
         const vttDepMin = getBaseVttDepMinutes(f);
-        // SLDT(orig)/SLDT(d)is always SIBT - VTT(Arr)Use the same value calculated with
+        // SLDT(orig)/SLDTis always SIBT - VTT(Arr)Use the same value calculated with
         const sldtCalc = Math.max(0, tArrMin - vttArrMin);
-        f.sldtMin_orig = sldtCalc;
-        f.sldtMin_d = sldtCalc;
+        f.sldtMin = sldtCalc;
+        f.sldtMin = sldtCalc;
         f.sldtMin = sldtCalc;
       });
       pinEarliestEldtToSldtPerRunway(flightsSorted);
@@ -2248,36 +2246,34 @@
         const tDepMin = tArrMin + dwell;
         const vttArrMin = getBaseVttArrMinutes(f);
         const vttDepMin = getBaseVttDepMinutes(f);
-        const sldtCalc = (f.sldtMin_d != null ? f.sldtMin_d : Math.max(0, tArrMin - vttArrMin));
-        const sldtOrig = f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc;
-        const sobtOrig = (f.sobtMin_orig != null) ? f.sobtMin_orig : tDepMin;
-        const stotOrig = (f.stotMin_orig != null) ? f.stotMin_orig : (tDepMin + vttDepMin);
-        const sldtStr = formatMinutesToHHMMSS(f.sldtMin_orig != null ? f.sldtMin_orig : sldtCalc);
-        const stotStr = formatMinutesToHHMMSS(stotOrig);
-        const sldtStr_d = formatMinutesToHHMMSS(f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
-        const sibtStr_d = formatMinutesToHHMMSS(f.sibtMin_d != null ? f.sibtMin_d : tArrMin);
-        const sobtStr_d = formatMinutesToHHMMSS(f.sobtMin_d != null ? f.sobtMin_d : tDepMin);
-        const stotStr_d = formatMinutesToHHMMSS(f.stotMin_d != null ? f.stotMin_d : stotOrig);
-        const eldtMin = f.eldtMin != null ? f.eldtMin : (f.sldtMin_d != null ? f.sldtMin_d : sldtOrig);
-        const etotMin = f.etotMin != null ? f.etotMin : (f.stotMin_d != null ? f.stotMin_d : stotOrig);
+        const sldtCalc = (f.sldtMin != null ? f.sldtMin : Math.max(0, tArrMin - vttArrMin));
+        const sldtOrig = f.sldtMin != null ? f.sldtMin : sldtCalc;
+        const sobtOrig = (f.sobtMin != null) ? f.sobtMin : tDepMin;
+        const stotOrig = (f.stotMin != null) ? f.stotMin : (tDepMin + vttDepMin);
+        const sldtStr = formatMinutesToHHMMSS(f.sldtMin != null ? f.sldtMin : sldtOrig);
+        const sibtStr = formatMinutesToHHMMSS(f.sibtMin != null ? f.sibtMin : tArrMin);
+        const sobtStr = formatMinutesToHHMMSS(f.sobtMin != null ? f.sobtMin : tDepMin);
+        const stotStr = formatMinutesToHHMMSS(f.stotMin != null ? f.stotMin : stotOrig);
+        const eldtMin = f.eldtMin != null ? f.eldtMin : (f.sldtMin != null ? f.sldtMin : sldtOrig);
+        const etotMin = f.etotMin != null ? f.etotMin : (f.stotMin != null ? f.stotMin : stotOrig);
         f.eldtMin = eldtMin;
         f.etotMin = etotMin;
 
         const tArr = formatMinutesToHHMMSS(tArrMin);
         const tDep = formatMinutesToHHMMSS(tDepMin);
-        const vttADelayMin = f.vttADelayMin != null ? f.vttADelayMin : 0;
-        const eibtMin = eldtMin + vttArrMin + vttADelayMin;
+        const standDelayMin = 0;
+        const eibtMin = eldtMin + vttArrMin + standDelayMin;
         const eobtMin = etotMin - vttDepMin;
-        // Flight Schedule Original standard S/E Save the series time, and then GanttIn *_orig Reference as standard
-        if (f.sobtMin_orig == null) {
-          f.sldtMin_orig = sldtOrig;
-          f.sibtMin_orig = tArrMin;
-          f.sobtMin_orig = sobtOrig;
-          f.stotMin_orig = stotOrig;
-          f.eldtMin_orig = eldtMin;
-          f.eibtMin_orig = eibtMin;
-          f.eobtMin_orig = eobtMin;
-          f.etotMin_orig = etotMin;
+        // Flight Schedule Original standard S/E Save the series time, and then GanttIn plain S reference
+        if (f.sobtMin == null) {
+          f.sldtMin = sldtOrig;
+          f.sibtMin = tArrMin;
+          f.sobtMin = sobtOrig;
+          f.stotMin = stotOrig;
+          f.eldtMin = eldtMin;
+          f.eibtMin = eibtMin;
+          f.eobtMin = eobtMin;
+          f.etotMin = etotMin;
         }
         // Flight to object EIBT/EOBT save (Apron Gantt Direct reference from etc.)
         f.eibtMin = eibtMin;
@@ -2290,7 +2286,7 @@
         const dwellS = dwell;
         const dwellE = Math.max(0, eobtMin - eibtMin);
         const vttArrStr = formatMinutesToHHMMSS(vttArrMin);
-        const vttADelayStr = formatMinutesToHHMMSS(vttADelayMin);
+        const standDelayStr = formatMinutesToHHMMSS(standDelayMin);
         const vttDepStr = formatMinutesToHHMMSS(vttDepMin);
         // Arr Runway / options / No Way badge (arrRunwayId, acabove RET Already defined in the sampling step)
         const arrOpt = buildRunwayOptionsHtml(arrRunwayId);
@@ -2312,17 +2308,17 @@
             '<td class="flight-td-time flight-td-sibt flight-col-s">' + tArr + '</td>' +
             '<td class="flight-td-time flight-col-s">' + tDep + '</td>' +
             '<td class="flight-td-time flight-col-s flight-col-s-last">' + stotStr + '</td>' +
-            '<td class="flight-td-time flight-col-sd flight-col-sd-start">' + sldtStr_d + '</td>' +
-            '<td class="flight-td-time flight-col-sd">' + sibtStr_d + '</td>' +
-            '<td class="flight-td-time flight-col-sd">' + sobtStr_d + '</td>' +
-            '<td class="flight-td-time flight-col-sd flight-col-sd-last">' + stotStr_d + '</td>' +
+            '<td class="flight-td-time flight-col-s flight-col-s-start">' + sldtStr + '</td>' +
+            '<td class="flight-td-time flight-col-s">' + sibtStr + '</td>' +
+            '<td class="flight-td-time flight-col-s">' + sobtStr + '</td>' +
+            '<td class="flight-td-time flight-col-s flight-col-s-last">' + stotStr + '</td>' +
             '<td class="flight-td-time flight-col-e flight-col-e-start">' + eldtStr + '</td>' +
             '<td class="flight-td-time flight-col-e">' + eibtStr + '</td>' +
             '<td class="flight-td-time flight-col-e">' + eobtStr + '</td>' +
             '<td class="flight-td-time flight-col-e">' + etotStr + '</td>' +
             '<td class="flight-td-time flight-col-e">' + (f.arrRotSec != null && isFinite(f.arrRotSec) ? (Math.round(f.arrRotSec) + ' s') : '—') + '</td>' +
             '<td class="flight-td-time">' + vttArrStr + '</td>' +
-            '<td class="flight-td-time">' + vttADelayStr + '</td>' +
+            '<td class="flight-td-time">' + standDelayStr + '</td>' +
             '<td class="flight-td-time">' + vttDepStr + '</td>' +
             '<td>' + escapeHtml(aircraftTypeLabel) + '</td>' +
             '<td>' + escapeHtml(codeIcao) + '</td>' +
@@ -2758,7 +2754,7 @@
           // Flight Schedule column index:
           // 0 Reg, 1 Airline, 2 FlightNo,
           // 3 SLDT, 4 SIBT, 5 SOBT, 6 STOT,
-          // 7 SLDT(d), 8 SIBT(d), 9 SOBT(d), 10 STOT(d),
+          // 7 SLDT, 8 SIBT, 9 SOBT, 10 STOT,
           // 11 ELDT, 12 EIBT, 13 EOBT, 14 ETOT, ...
           const getMin = (idx) => {
             const txt = (tds[idx] && tds[idx].textContent || '').trim();
@@ -2769,20 +2765,20 @@
               return 0;
             }
           };
-          const sldt_d = getMin(7);
-          const sibt_d = getMin(8);
-          const sobt_d = getMin(9);
-          const stot_d = getMin(10);
+          const sldt0 = getMin(7);
+          const sibt = getMin(8);
+          const sobt = getMin(9);
+          const stot0 = getMin(10);
           const eldt   = getMin(11);
           const eibt   = getMin(12);
           const eobt   = getMin(13);
           const etot   = getMin(14);
-          const t0 = sibt_d;
-          const t1 = sobt_d || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-          const sldt = sldt_d || t0;
-          const stot = stot_d || t1;
+          const t0 = sibt;
+          const t1 = sobt || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
+          const sldt = sldt0 || t0;
+          const stot = stot0 || t1;
           const sldtOrig = sldt;
-          const sobtOrig = sobt_d || t1;
+          const sobtOrig = sobt || t1;
           const stotOrig = stot;
           intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig });
         });
@@ -2790,16 +2786,16 @@
       if (!intervals.length) {
         // If the table cannot be found or parsing fails, the existing state with based logic fallback
         intervals = flights.map(f => {
-          const t0 = f.sibtMin_d != null ? f.sibtMin_d : (f.timeMin != null ? f.timeMin : 0);
-          const t1 = f.sobtMin_d != null ? f.sobtMin_d : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-          const sldt = f.sldtMin_d != null ? f.sldtMin_d : t0;
-          const stot = f.stotMin_d != null ? f.stotMin_d : t1;
+          const t0 = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+          const t1 = f.sobtMin != null ? f.sobtMin : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
+          const sldt = f.sldtMin != null ? f.sldtMin : t0;
+          const stot = f.stotMin != null ? f.stotMin : t1;
           const eibt = f.eibtMin != null ? f.eibtMin : t0;
           const eobt = f.eobtMin != null ? f.eobtMin : t1;
           const eldt = f.eldtMin != null ? f.eldtMin : sldt;
           const etot = f.etotMin != null ? f.etotMin : stot;
           const sldtOrig = sldt;
-          const sobtOrig = f.sobtMin_d != null ? f.sobtMin_d : t1;
+          const sobtOrig = f.sobtMin != null ? f.sobtMin : t1;
           const stotOrig = stot;
           return { f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig };
         });
@@ -2955,8 +2951,7 @@
               );
             }
           }
-          const hasOverlap = (f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed;
-          const ovlpBadgeHtml = hasOverlap ? '<span class="alloc-flight-ovlp-badge">OVLP</span>' : '';
+          const ovlpBadgeHtml = "";
           if (showEldtBars && e2Bars) {
             // ELDT~EIBT (pre-block, Center aligned thin hot pink bar)
             if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) {
@@ -3026,7 +3021,7 @@
             }
           }
           if (showSDots && sDots) {
-            // S-Point: auxiliary bar(sBars)same as S(d) series time(SLDT(d)/STOT(d))Show only circles
+            // S-Point: auxiliary bar(sBars)same as S(d) series time(SLDT/STOT)Show only circles
             pushDot(sDots, sldt, 'alloc-time-dot-s');
             pushDot(sDots, stot, 'alloc-time-dot-s');
           }
@@ -3075,22 +3070,12 @@
               );
             }
           }
-        // The black vertical dotted line is SOBT(orig)It is placed in,
-        // "OVERLAP"Although it is an aircraft SOBT(orig) ≠ SOBT(d) Show only if
-        if (sLines && ((f.vttADelayMin != null && f.vttADelayMin > 0) || f.eOverlapPushed) && isFinite(sobtOrig)) {
-          const sobtD = (f.sobtMin_d != null ? f.sobtMin_d : t1);
-          if (!isNaN(sobtD) && Math.abs(sobtOrig - sobtD) > 1e-6) {
-            const sx = ((sobtOrig - baseMinT) / baseSpan) * 100 * zoom;
-            sLines.push('<div class="alloc-s-line-orig" style="left:' + sx + '%;"></div>');
-          }
-        }
           return '' +
             '<div class="alloc-flight' + conflictClass + selectedClass + sbarDimClass + '" draggable="true" data-flight-id="' + f.id + '" ' +
               'style="left:' + leftPct + '%;width:' + widthPct + '%;min-width:4px;"' +
               ' title="' + barTitle + '">' +
               '<div class="alloc-flight-reg">' + regSafe + noWayLabel + '</div>' +
               '<div class="alloc-flight-meta">' + meta + '</div>' +
-              ovlpBadgeHtml +
             '</div>';
         }).join('');
         const sidAttr = standId ? String(standId) : '';
@@ -3596,13 +3581,12 @@
       return cellCol + ',' + cellRow;
     }
 
-    // S(d) Series: First S(d)=S(Original), Takes precedence when the same parking lot overlaps SOBT(d)-trailing SIBT(d) trailing as much as S(d) push. SLDT(d)=SLDT, SOBT(d)to Min Dwell reflect.
+    // S(d) Series: First S(d)=S(Original), Takes precedence when the same parking lot overlaps SOBT-trailing SIBT trailing as much as S(d) push. SLDT=SLDT, SOBTto Min Dwell reflect.
     // Original S The series is not referenced anywhere after being copied in this function. All calculations are S(d)use only.
     function computeScheduledDisplayTimes(flights) {
       if (!flights || !flights.length) return;
       flights.forEach(f => {
         if (f.noWayArr || f.noWayDep) return;
-        f.vttADelayMin = 0;
         const tArrMin = f.timeMin != null ? f.timeMin : 0;
         let dwell = f.dwellMin != null ? f.dwellMin : 0;
         let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
@@ -3618,15 +3602,15 @@
         const sobtOrig = tArrMin + dwell;
         const stotOrig = sobtOrig + vttDepMin;
         // SLDT/SIBT/SOBT/STOT(orig)is always updated with the internal calculated value.,
-        // SLDT(d)Is SLDT(orig)Copy and use as is (JSON Ignore the initial value)
-        f.sldtMin_orig = sldtOrig;
-        f.sibtMin_orig = tArrMin;
-        f.sobtMin_orig = sobtOrig;
-        f.stotMin_orig = stotOrig;
-        f.sldtMin_d = f.sldtMin_orig;
-        f.sibtMin_d = tArrMin;
-        f.sobtMin_d = sobtOrig;
-        f.stotMin_d = stotOrig;
+        // SLDTIs SLDT(orig)Copy and use as is (JSON Ignore the initial value)
+        f.sldtMin = sldtOrig;
+        f.sibtMin = tArrMin;
+        f.sobtMin = sobtOrig;
+        f.stotMin = stotOrig;
+        f.sldtMin = f.sldtMin;
+        f.sibtMin = tArrMin;
+        f.sobtMin = sobtOrig;
+        f.stotMin = stotOrig;
       });
       const standToFlights = {};
       flights.forEach(f => {
@@ -3637,47 +3621,44 @@
       });
       Object.keys(standToFlights).forEach(standId => {
         const list = standToFlights[standId];
-        list.sort((a, b) => (a.sibtMin_d != null ? a.sibtMin_d : 0) - (b.sibtMin_d != null ? b.sibtMin_d : 0));
+        list.sort((a, b) => (a.sibtMin != null ? a.sibtMin : 0) - (b.sibtMin != null ? b.sibtMin : 0));
         let prevSOBT = -1e9;
         list.forEach(f => {
           const vttDepMin = getBaseVttDepMinutes(f);
-          const sibt0 = (f.sibtMin_d != null ? f.sibtMin_d : 0);
-          const overlap = Math.max(0, prevSOBT - sibt0);
-          f.vttADelayMin = overlap;
-          // OVLP after reflection SIBT(d)
-          f.sibtMin_d = sibt0 + overlap;
-          // existing SOBT(d) candidate (yes: separation Value pushed out of logic)If you have it, keep it,
-          // Min dwell Minimum required as standard SOBT(d)Use a larger value compared to
+          const sibt0 = (f.sibtMin != null ? f.sibtMin : 0);
+          f.sibtMin = sibt0;
+          // existing SOBT candidate (yes: separation Value pushed out of logic)If you have it, keep it,
+          // Min dwell Minimum required as standard SOBTUse a larger value compared to
           const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
           const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-          const minSobtByDwell = f.sibtMin_d + minDwell;
-          const sobtCandidate = (f.sobtMin_d != null ? f.sobtMin_d : (f.sibtMin_d + dwell));
-          f.sobtMin_d = Math.max(sobtCandidate, minSobtByDwell);
-          f.stotMin_d = f.sobtMin_d + vttDepMin;
-          prevSOBT = f.sobtMin_d;
+          const minSobtByDwell = f.sibtMin + minDwell;
+          const sobtCandidate = (f.sobtMin != null ? f.sobtMin : (f.sibtMin + dwell));
+          f.sobtMin = Math.max(sobtCandidate, minSobtByDwell);
+          f.stotMin = f.sobtMin + vttDepMin;
+          prevSOBT = f.sobtMin;
         });
       });
-      // OVLP For all stand assigned flights, regardless of whether
+      //  For all stand assigned flights, regardless of whether
       // Min dwell By enforcing the constraint once more, regular flights are corrected to follow the same rules.
       flights.forEach(f => {
         if (!f || f.noWayArr || f.noWayDep || !f.standId) return;
         const dwell = f.dwellMin != null ? f.dwellMin : SCHED_DWELL_FLOOR_MIN;
         const minDwell = f.minDwellMin != null ? f.minDwellMin : SCHED_DWELL_FLOOR_MIN;
-        const sibt = (f.sibtMin_d != null ? f.sibtMin_d
-                     : (f.sibtMin_orig != null ? f.sibtMin_orig : 0));
+        const sibt = (f.sibtMin != null ? f.sibtMin
+                     : (f.sibtMin != null ? f.sibtMin : 0));
         const minSobtByDwell = sibt + minDwell;
-        const sobtCurrent = (f.sobtMin_d != null ? f.sobtMin_d : (sibt + dwell));
+        const sobtCurrent = (f.sobtMin != null ? f.sobtMin : (sibt + dwell));
         if (sobtCurrent < minSobtByDwell) {
           const delta = minSobtByDwell - sobtCurrent;
-          f.sobtMin_d = minSobtByDwell;
-          if (typeof f.stotMin_d === 'number') f.stotMin_d += delta;
+          f.sobtMin = minSobtByDwell;
+          if (typeof f.stotMin === 'number') f.stotMin += delta;
         }
       });
       flights.forEach(f => {
         if (f.noWayArr || f.noWayDep) return;
-        f.sldtMin = f.sldtMin_d;
-        f.stotMin = f.stotMin_d;
-        f.sobtMin = f.sobtMin_d;
+        f.sldtMin = f.sldtMin;
+        f.stotMin = f.stotMin;
+        f.sobtMin = f.sobtMin;
       });
     }
 
@@ -3707,8 +3688,8 @@
           let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
           let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
           const etotSep = Math.max(ev.time, minFromArr, minFromDep);
-          const vttADelay = ev.flight.vttADelayMin != null ? ev.flight.vttADelayMin : 0;
-          const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + (ev.vttArrMin || 0) + vttADelay;
+          const vttADelay = ev.flight.standDelayMin != null ? ev.flight.standDelayMin : 0;
+          const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + (ev.vttArrMin || 0) + standDelay;
           const vttDep = ev.vttDepMin || 0;
           const etotMin = etotSep;
           const eobtMin = etotMin - vttDep;
@@ -3748,14 +3729,14 @@
         if (arrRwy !== rwy.id && depRwy !== rwy.id) return;
         const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
         const cat = stdKey === 'ICAO' ? (ac && ac.icaoJHL ? ac.icaoJHL : 'M') : (ac && ac.recatEu ? ac.recatEu : 'D');
-        const sldtMin_d = f.sldtMin_d != null ? f.sldtMin_d : 0;
-        const stotMin_d = f.stotMin_d != null ? f.stotMin_d : 0;
-        const sobtMin_d = f.sobtMin_d != null ? f.sobtMin_d : 0;
+        const sldtMin = f.sldtMin != null ? f.sldtMin : 0;
+        const stotMin = f.stotMin != null ? f.stotMin : 0;
+        const sobtMin = f.sobtMin != null ? f.sobtMin : 0;
         const vttArrMin = getBaseVttArrMinutes(f);
         const vttDepMin = getBaseVttDepMinutes(f);
-        if (arrRwy === rwy.id) events.push({ time: sldtMin_d, type: 'arr', flight: f, cat: cat, vttArrMin, index: eventIndex++ });
+        if (arrRwy === rwy.id) events.push({ time: sldtMin, type: 'arr', flight: f, cat: cat, vttArrMin, index: eventIndex++ });
         if (depRwy === rwy.id) {
-          events.push({ time: stotMin_d, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, sobtMin: sobtMin_d, index: eventIndex++ });
+          events.push({ time: stotMin, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, sobtMin: sobtMin, index: eventIndex++ });
         }
       });
       return { cfg, events };
@@ -3798,7 +3779,7 @@
     function computeSeparationAdjustedTimes() {
       const flights = state.flights || [];
       // E line(ELDT/ETOT) When recalculating, the already calculated S(d) Use the series as is.
-      // SOBT(d)·STOT(d) Coordination logic is the first S(d) calculation function(computeScheduledDisplayTimes)Perform only in.
+      // SOBT·STOT Coordination logic is the first S(d) calculation function(computeScheduledDisplayTimes)Perform only in.
       flights.forEach(f => { delete f.eldtMin; delete f.etotMin; });
       const runwaysRaw = (state.taxiways || []).filter(t => t.pathType === 'runway');
       if (!runwaysRaw.length) return {};
@@ -3839,54 +3820,16 @@
 
       const byRunway = {};
       runSeparationPass(runways, flights, byRunway, 'initial');
-      // Eline Apron Overlap: 1st RW result EBy parking lot EIBT After aligning the criteria, if they overlap, push them back, and then RWto final E confirmed
       flights.forEach(f => {
         if (f.noWayArr || f.noWayDep) return;
         const vttArrMin = getBaseVttArrMinutes(f);
         const vttDepMin = getBaseVttDepMinutes(f);
-        const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
-        f.eibtMin = (f.eldtMin != null ? f.eldtMin : 0) + vttArrMin + vttADelay;
+        f.eibtMin = (f.eldtMin != null ? f.eldtMin : 0) + vttArrMin;
         f.eobtMin = (f.etotMin != null ? f.etotMin : 0) - vttDepMin;
-      });
-      const standToFlightsE = {};
-      flights.forEach(f => { if (f && !f.noWayArr && !f.noWayDep) f.eOverlapPushed = false; });
-      flights.forEach(f => {
-        if (f.noWayArr || f.noWayDep || !f.standId) return;
-        const sid = f.standId;
-        if (!standToFlightsE[sid]) standToFlightsE[sid] = [];
-        standToFlightsE[sid].push(f);
-      });
-      Object.keys(standToFlightsE).forEach(standId => {
-        const list = standToFlightsE[standId];
-        list.sort((a, b) => (a.eibtMin != null ? a.eibtMin : 0) - (b.eibtMin != null ? b.eibtMin : 0));
-        let prevEOBT = -1e9;
-        list.forEach(f => {
-          const vttDepMin = getBaseVttDepMinutes(f);
-          const vttArrMin = getBaseVttArrMinutes(f);
-          const vttADelay = f.vttADelayMin != null ? f.vttADelayMin : 0;
-          const eibtMin = f.eibtMin != null ? f.eibtMin : 0;
-          const overlap = Math.max(0, prevEOBT - eibtMin);
-          f.eOverlapPushed = overlap > 0;
-          f.eibtMin = eibtMin + overlap;
-          // S(d) Follows the dwell of the series.: dwellSd = SOBT(d) - SIBT(d)
-          const dwellSd = (f.sobtMin_d != null && f.sibtMin_d != null)
-            ? Math.max(0, f.sobtMin_d - f.sibtMin_d)
-            : (f.dwellMin != null ? f.dwellMin : 0);
-          const runwayEtot = f.etotMin != null ? f.etotMin : (f.eobtMin + vttDepMin);
-          f.eobtMin = f.eibtMin + dwellSd;        // ✅ EOBT = EIBT + S(d) dwell
-          f.eldtMin = f.eibtMin - vttArrMin - vttADelay;
-          // ELDTis physically SLDT(d)Hard clamp to prevent it from getting ahead of you
-          const sldtBase = (f.sldtMin_d != null ? f.sldtMin_d
-                           : (f.sldtMin_orig != null ? f.sldtMin_orig : 0));
-          if (f.eldtMin < sldtBase) f.eldtMin = sldtBase;
-          // IMPORTANT: keep ETOT fixed to the runway-based value, do not let apron overlap/dwell push ETOT further
-          f.etotMin = runwayEtot;
-          prevEOBT = f.eobtMin;
-        });
       });
       // 2car RW: back EUse the series as the event time and perform the same as the original logic one more time.
       runSeparationPass(runways, flights, byRunway, 'refine');
-      // SLDT(d)is the smallest(early) Flights are always ELDT = SLDT(d). Applies to only one arrival per runway.
+      // SLDTis the smallest(early) Flights are always ELDT = SLDT. Applies to only one arrival per runway.
       runways.forEach(rwy => {
         const data = byRunway[rwy.id];
         if (!data || !data.events) return;
@@ -3894,11 +3837,11 @@
         if (!arrEvs.length) return;
         let minSldt = Infinity, earliestArrFlight = null;
         arrEvs.forEach(ev => {
-          const sldt = (ev.flight.sldtMin_d != null ? ev.flight.sldtMin_d : (ev.flight.sldtMin_orig != null ? ev.flight.sldtMin_orig : Infinity));
+          const sldt = (ev.flight.sldtMin != null ? ev.flight.sldtMin : (ev.flight.sldtMin != null ? ev.flight.sldtMin : Infinity));
           if (sldt < minSldt) { minSldt = sldt; earliestArrFlight = ev.flight; }
         });
         if (earliestArrFlight) {
-          const sldtBase = earliestArrFlight.sldtMin_d != null ? earliestArrFlight.sldtMin_d : (earliestArrFlight.sldtMin_orig != null ? earliestArrFlight.sldtMin_orig : 0);
+          const sldtBase = earliestArrFlight.sldtMin != null ? earliestArrFlight.sldtMin : (earliestArrFlight.sldtMin != null ? earliestArrFlight.sldtMin : 0);
           earliestArrFlight.eldtMin = sldtBase;
         }
       });
@@ -4869,12 +4812,12 @@
 
       function randomAirlineCode() { return DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)]; }
       function randomFlightNumber(airlineCode) { return (airlineCode || randomAirlineCode()) + String(Math.floor(1000 + Math.random() * 9000)); }
-      // Currently already created Flightfield SIBT(d) The maximum value of + 10Minutes are basic SIBTused as
+      // Currently already created Flightfield SIBT The maximum value of + 10Minutes are basic SIBTused as
       function getDefaultSibtMinutes() {
         let maxT = 0;
         (state.flights || []).forEach(f => {
           if (!f) return;
-          const sibt = f.sibtMin_d != null ? f.sibtMin_d : (typeof f.timeMin === 'number' ? f.timeMin : 0);
+          const sibt = f.sibtMin != null ? f.sibtMin : (typeof f.timeMin === 'number' ? f.timeMin : 0);
           if (isFinite(sibt) && sibt > maxT) maxT = sibt;
         });
         return maxT + 10;
@@ -5357,10 +5300,10 @@
             const n = parseFloat(txt);
             return isNaN(n) ? null : n;
           };
-          // Column order: 7=SLDT(d), 8=SIBT(d), 9=SOBT(d), 10=STOT(d)
+          // Column order: 7=SLDT, 8=SIBT, 9=SOBT, 10=STOT
           //            11=ELDT,  12=EIBT,   13=EOBT,   14=ETOT
           const map = {
-            sldtMin_d: 7, sibtMin_d: 8, sobtMin_d: 9,  stotMin_d: 10,
+            sldtMin: 7, sibtMin: 8, sobtMin: 9,  stotMin: 10,
             eldtMin:  11, eibtMin:  12, eobtMin:  13, etotMin:   14
           };
           Object.keys(map).forEach(function(key) {
@@ -5981,8 +5924,8 @@
             '<br>Start point: ' + startStr + '<br>End point: ' + endStr;
         } else if (state.selectedObject.type === 'flight') {
           const dir = o.arrDep === 'Dep' ? 'Departure' : 'Arrival';
-          const sibt = formatMinutesToHHMMSS(o.sibtMin_d != null ? o.sibtMin_d : (o.timeMin != null ? o.timeMin : 0));
-          const sobt = formatMinutesToHHMMSS(o.sobtMin_d != null ? o.sobtMin_d : ((o.timeMin != null ? o.timeMin : 0) + (o.dwellMin != null ? o.dwellMin : 0)));
+          const sibt = formatMinutesToHHMMSS(o.sibtMin != null ? o.sibtMin : (o.timeMin != null ? o.timeMin : 0));
+          const sobt = formatMinutesToHHMMSS(o.sobtMin != null ? o.sobtMin : ((o.timeMin != null ? o.timeMin : 0) + (o.dwellMin != null ? o.dwellMin : 0)));
           const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(o.aircraftType) : null;
           const acName = ac ? (ac.name || ac.id || '') : (o.aircraftType || '—');
           const codeIcao = (ac && ac.icao) ? ac.icao : (o.code || '—');

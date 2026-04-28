@@ -108,9 +108,9 @@
     const v = Number(_schedAlgo.dwellFloorMin);
     return (isFinite(v) && v >= 0) ? v : 20;
   })();
-  /** Dispatched schedule (d): SLDT(d) = SIBT(d) − this many minutes; STOT(d) = SOBT(d) + SCHED_SD_STOT_PLUS_SOBD_MIN. */
-  const SCHED_SD_SIBT_MINUS_SLD_MIN = 5;
-  const SCHED_SD_STOT_PLUS_SOBD_MIN = 5;
+  /** Dispatched schedule (d): SLDT = SIBT − this many minutes; STOT = SOBT + SCHED_STOT_MINUS_SOBT_MIN. */
+  const SCHED_SIBT_MINUS_SLDT_MIN = 5;
+  const SCHED_STOT_MINUS_SOBT_MIN = 5;
   const RSEP_MISSING_MATRIX_SEC = (function() {
     const v = Number(_schedAlgo.rsepMissingMatrixSeparationSec);
     return (isFinite(v) && v >= 0) ? v : 90;

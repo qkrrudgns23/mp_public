@@ -9839,14 +9839,6 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 10.166666666666666,
-      "sibtMin_orig": 10.166666666666666,
-      "sobtMin_orig": 70.16666666666667,
-      "stotMin_orig": 70.5,
-      "sldtMin_d": 7.166666666666666,
-      "sibtMin_d": 10.166666666666666,
-      "sobtMin_d": 70.16666666666667,
-      "stotMin_d": 73.16666666666667,
       "arrTdDistM": 415.14349198032966,
       "arrVTdMs": 66.88432487557249,
       "arrDecelMs2": 1.5259012975642232,
@@ -10214,7 +10206,11 @@
       "sldtDateTime_d": "2026-03-31 00:07:00",
       "sibtDateTime_d": "2026-03-31 00:10:00",
       "sobtDateTime_d": "2026-03-31 01:10:00",
-      "stotDateTime_d": "2026-03-31 01:13:00"
+      "stotDateTime_d": "2026-03-31 01:13:00",
+      "sldtMin": 10.166666666666666,
+      "sibtMin": 10.166666666666666,
+      "sobtMin": 70.16666666666667,
+      "stotMin": 70.5
     },
     {
       "id": "id_d3sul5ts2",
@@ -10230,14 +10226,6 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 10.166666666666666,
-      "sibtMin_orig": 10.166666666666666,
-      "sobtMin_orig": 70.16666666666667,
-      "stotMin_orig": 70.5,
-      "sldtMin_d": 7.166666666666666,
-      "sibtMin_d": 10.166666666666666,
-      "sobtMin_d": 70.16666666666667,
-      "stotMin_d": 73.16666666666667,
       "arrTdDistM": 401.152043763883,
       "arrVTdMs": 68.22921269834362,
       "arrDecelMs2": 1.7078168800765654,
@@ -10503,7 +10491,11 @@
       "sldtDateTime_d": "2026-03-31 00:07:00",
       "sibtDateTime_d": "2026-03-31 00:10:00",
       "sobtDateTime_d": "2026-03-31 01:10:00",
-      "stotDateTime_d": "2026-03-31 01:13:00"
+      "stotDateTime_d": "2026-03-31 01:13:00",
+      "sldtMin": 10.166666666666666,
+      "sibtMin": 10.166666666666666,
+      "sobtMin": 70.16666666666667,
+      "stotMin": 70.5
     },
     {
       "id": "id_kpc2h0amv",
@@ -10519,14 +10511,6 @@
       "noWayDep": false,
       "arrRetFailed": false,
       "serviceDate": "2026-03-31",
-      "sldtMin_orig": 70.16666666666667,
-      "sibtMin_orig": 70.16666666666667,
-      "sobtMin_orig": 130.16666666666669,
-      "stotMin_orig": 130.50000000000003,
-      "sldtMin_d": 67.16666666666667,
-      "sibtMin_d": 70.16666666666667,
-      "sobtMin_d": 130.16666666666669,
-      "stotMin_d": 133.16666666666669,
       "arrTdDistM": 407.15803486374944,
       "arrVTdMs": 64.73306639596224,
       "arrDecelMs2": 1.8399999999999999,
@@ -10798,7 +10782,11 @@
       "sldtDateTime_d": "2026-03-31 01:07:00",
       "sibtDateTime_d": "2026-03-31 01:10:00",
       "sobtDateTime_d": "2026-03-31 02:10:00",
-      "stotDateTime_d": "2026-03-31 02:13:00"
+      "stotDateTime_d": "2026-03-31 02:13:00",
+      "sldtMin": 70.16666666666667,
+      "sibtMin": 70.16666666666667,
+      "sobtMin": 130.16666666666669,
+      "stotMin": 130.50000000000003
     }
   ],
   "simPathGraph": {

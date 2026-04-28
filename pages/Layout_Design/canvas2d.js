@@ -486,10 +486,9 @@
     const t0 = eldtS - rawApprDur;
     const airTl = polylineTimelineBySegmentSpeeds(apprPts, t0, eldtS, function() { return vTd; });
     const rotS = (typeof f.arrRotSec === 'number' && isFinite(f.arrRotSec)) ? Math.max(0, f.arrRotSec) : 0;
-    const vttDelayS = (typeof f.vttADelayMin === 'number' && isFinite(f.vttADelayMin) ? f.vttADelayMin : 0) * 60;
     const tAfterRot = eldtS + rotS;
     const runwayEndT = Math.min(tAfterRot, eibtS);
-    let tTaxiStart = Math.min(tAfterRot + vttDelayS, eibtS);
+    let tTaxiStart = Math.min(tAfterRot, eibtS);
     if (tTaxiStart < runwayEndT) tTaxiStart = runwayEndT;
 
 

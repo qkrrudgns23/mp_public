@@ -683,7 +683,7 @@
       const win = getFlightAirsideWindowSec(f);
       if (!win) return;
       const end = win.t1;
-      const dwellMin = (f.sobtMin_d != null && f.sibtMin_d != null) ? (f.sobtMin_d - f.sibtMin_d) : (f.dwellMin || 0);
+      const dwellMin = (f.sobtMin != null && f.sibtMin != null) ? (f.sobtMin - f.sibtMin) : (f.dwellMin || 0);
       const dwellSec = Math.max(0, dwellMin * 60);
       const start = Math.max(0, end - dwellSec);
       if (end > start) intervals.push({ start, end });
@@ -800,14 +800,14 @@
     const prevStandForSched = f.standId || null;
     f.standId = standId;
     if (f.token) f.token.apronId = standId;
-    delete f.sobtMin_orig;
-    delete f.sldtMin_orig;
-    delete f.sibtMin_orig;
-    delete f.stotMin_orig;
-    delete f.eldtMin_orig;
-    delete f.eibtMin_orig;
-    delete f.eobtMin_orig;
-    delete f.etotMin_orig;
+    delete f.sobtMin;
+    delete f.sldtMin;
+    delete f.sibtMin;
+    delete f.stotMin;
+    delete f.eldtMin;
+    delete f.eibtMin;
+    delete f.eobtMin;
+    delete f.etotMin;
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     const touchedSt = [];
     if (prevStandForSched) touchedSt.push(prevStandForSched);
@@ -871,8 +871,8 @@
 
   function buildArrivalTimelineFromPts(flight, pts) {
     if (!pts || pts.length < 2) return null;
-    const sibtMin_d = flight.sibtMin_d != null ? flight.sibtMin_d : (flight.timeMin != null ? flight.timeMin : 0);
-    const baseT = sibtMin_d * 60;
+    const sibtMin = flight.sibtMin != null ? flight.sibtMin : (flight.timeMin != null ? flight.timeMin : 0);
+    const baseT = sibtMin * 60;
     const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
     const timeline = [];
     let tAcc = baseT;
@@ -885,10 +885,10 @@
       tAcc += dt;
       timeline.push({ t: tAcc, x: x2, y: y2 });
     }
-    const sobtMin_d = flight.sobtMin_d != null ? flight.sobtMin_d : (sibtMin_d + (flight.dwellMin != null ? flight.dwellMin : 0));
-    const dwellSec = Math.max(0, (sobtMin_d - sibtMin_d) * 60);
+    const sobtMin = flight.sobtMin != null ? flight.sobtMin : (sibtMin + (flight.dwellMin != null ? flight.dwellMin : 0));
+    const dwellSec = Math.max(0, (sobtMin - sibtMin) * 60);
     if (dwellSec > 0) {
-      tAcc = sobtMin_d * 60;
+      tAcc = sobtMin * 60;
       const last = timeline[timeline.length - 1];
       timeline.push({ t: tAcc, x: last.x, y: last.y });
     }
@@ -897,8 +897,8 @@
 
   function buildDepartureTimelineFromPts(flight, pts) {
     if (!pts || pts.length < 2) return null;
-    const sobtMin_d = flight.sobtMin_d != null ? flight.sobtMin_d : (flight.timeMin != null ? flight.timeMin + (flight.dwellMin != null ? flight.dwellMin : 0) : 0);
-    const baseT = sobtMin_d * 60;
+    const sobtMin = flight.sobtMin != null ? flight.sobtMin : (flight.timeMin != null ? flight.timeMin + (flight.dwellMin != null ? flight.dwellMin : 0) : 0);
+    const baseT = sobtMin * 60;
     const v = Math.max(1, typeof getTaxiwayAvgMoveVelocityForPath === 'function' ? getTaxiwayAvgMoveVelocityForPath(null) : 10);
     const timeline = [];
     let tAcc = baseT;

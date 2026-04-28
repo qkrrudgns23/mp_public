@@ -570,10 +570,6 @@
           delete f.eibtMin;
           delete f.eobtMin;
           delete f.etotMin;
-          delete f.eldtMin_orig;
-          delete f.eibtMin_orig;
-          delete f.eobtMin_orig;
-          delete f.etotMin_orig;
         } else {
           const tlNorm = rawTl.map(function(p) {
             const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
@@ -612,10 +608,6 @@
             delete f.eibtMin;
             delete f.eobtMin;
             delete f.etotMin;
-            delete f.eldtMin_orig;
-            delete f.eibtMin_orig;
-            delete f.eobtMin_orig;
-            delete f.etotMin_orig;
           }
         }
         delete f.cachedArrPathPts;
@@ -700,10 +692,6 @@
       delete f.eibtMin;
       delete f.eobtMin;
       delete f.etotMin;
-      delete f.eldtMin_orig;
-      delete f.eibtMin_orig;
-      delete f.eobtMin_orig;
-      delete f.etotMin_orig;
       f.arrRotSec = null;
       delete f.proSimVttArrSec;
       delete f.proSimVttDepSec;

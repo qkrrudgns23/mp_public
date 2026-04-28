@@ -464,17 +464,12 @@
           'minDwellMin',
           'noWayArr',
           'noWayDep',
-          'eOverlapPushed',
           'arrRetFailed',
           'serviceDate',
-          'sldtMin_orig',
-          'sibtMin_orig',
-          'sobtMin_orig',
-          'stotMin_orig',
-          'sldtMin_d',
-          'sibtMin_d',
-          'sobtMin_d',
-          'stotMin_d',
+          'sldtMin',
+          'sibtMin',
+          'sobtMin',
+          'stotMin',
           'arrRunwayDirUsed',
           'depRunwayDirUsed',
           'arrTdDistM',
@@ -482,14 +477,6 @@
           'arrDecelMs2',
           'arrDep',
           'intDom',
-          'eldtMin',
-          'eibtMin',
-          'eobtMin',
-          'etotMin',
-          'eldtMin_orig',
-          'eibtMin_orig',
-          'eobtMin_orig',
-          'etotMin_orig',
           'arrRotSec',
           'proSimVttArrSec',
           'proSimDttArrSec',
@@ -558,10 +545,8 @@
         const schedExport = flightScheduleMinutesForRow(f);
         copy.sibtDateTime = formatFlightScheduleDateTime(f, schedExport.sibt);
         copy.sobtDateTime = formatFlightScheduleDateTime(f, schedExport.sobt);
-        copy.sldtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sldt_d);
-        copy.sibtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sibt_d);
-        copy.sobtDateTime_d = formatFlightScheduleDateTime(f, schedExport.sobt_d);
-        copy.stotDateTime_d = formatFlightScheduleDateTime(f, schedExport.stot_d);
+        copy.sldtDateTime = formatFlightScheduleDateTime(f, schedExport.sldt);
+        copy.stotDateTime = formatFlightScheduleDateTime(f, schedExport.stot);
         if (state.hasSimulationResult && Array.isArray(f.timeline) && f.timeline.length >= 2) {
           copy.timeline = f.timeline.map(function(p) {
             const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
