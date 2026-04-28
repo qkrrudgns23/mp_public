@@ -1180,3 +1180,110 @@
     };
   }
 
+  function getPushbackRearWheelOnPathPoseForDraw(flight, tSec, pose) {
+    if (!pose || !flight) return pose;
+    const tl = flight.timeline;
+    if (!tl || tl.length < 2) return pose;
+    const t = Number(tSec);
+    if (!isFinite(t)) return pose;
+    const tKey = Math.round(t);
+    let inPushback = false;
+    for (let i = 0; i < tl.length; i++) {
+      const w = tl[i];
+      if (!w) continue;
+      const tt = Math.round(Number(w.t));
+      if (isFinite(tt) && tt === tKey && String(w.phase || '') === 'Pushback') {
+        inPushback = true;
+        break;
+      }
+    }
+    if (!inPushback) return pose;
+    let segIdx = -1;
+    for (let i = 0; i < tl.length - 1; i++) {
+      const a = tl[i], b = tl[i + 1];
+      if (t + 1e-9 >= a.t && t - 1e-9 <= b.t) {
+        segIdx = i;
+        if (i + 1 < tl.length - 1 && Math.abs(t - b.t) < 1e-5) {
+          const n = tl[i + 1];
+          if (n && String(n.phase || '') === 'Pushback') segIdx = i + 1;
+        }
+        break;
+      }
+    }
+    if (segIdx < 0) return pose;
+    const { lenM } = getSimAircraftWorldDimsM(flight);
+    const wheelBaseM = 0.55 * lenM;
+    const rear = walkPushbackPolylineFromFront(tl, segIdx, pose.x, pose.y, wheelBaseM);
+    if (!rear) return pose;
+    const dx = pose.x - rear.x;
+    const dy = pose.y - rear.y;
+    const dl = Math.hypot(dx, dy);
+    if (dl < Math.max(0.005 * lenM, 0.04)) return pose;
+    return { x: pose.x, y: pose.y, dx: dx / dl, dy: dy / dl, deadlockGhost: !!pose.deadlockGhost };
+  }
+
+  function walkPushbackPolylineFromFront(tl, segIndex, fx, fy, distM) {
+    const eps = 1e-6;
+    const motionEps = 0.08;
+    if (!tl || tl.length < 2 || !(distM > eps)) return null;
+    let rem = distM;
+    let x = fx, y = fy;
+    let s = segIndex;
+    let lastUx = null;
+    let lastUy = null;
+    while (rem > eps && s <= tl.length - 2) {
+      const a = tl[s];
+      const b = tl[s + 1];
+      if (String(a.phase || '') !== 'Pushback' && String(b.phase || '') !== 'Pushback') break;
+      const ddx = b.x - x;
+      const ddy = b.y - y;
+      const dlen = Math.hypot(ddx, ddy);
+      if (dlen < eps) {
+        const sx = b.x - a.x;
+        const sy = b.y - a.y;
+        const sl = Math.hypot(sx, sy);
+        if (sl > motionEps) {
+          lastUx = sx / sl;
+          lastUy = sy / sl;
+        }
+        x = b.x;
+        y = b.y;
+        s++;
+        continue;
+      }
+      const ux = ddx / dlen;
+      const uy = ddy / dlen;
+      if (dlen > motionEps) {
+        lastUx = ux;
+        lastUy = uy;
+      }
+      const step = Math.min(rem, dlen);
+      x += ux * step;
+      y += uy * step;
+      rem -= step;
+      if (rem < eps) return { x, y };
+      if (dlen - step < eps) {
+        x = b.x;
+        y = b.y;
+        s++;
+      }
+    }
+    if (lastUx == null || lastUy == null) {
+      for (let j = Math.min(segIndex, tl.length - 2); j >= 0; j--) {
+        const a = tl[j];
+        const b = tl[j + 1];
+        if (String(a.phase || '') !== 'Pushback' && String(b.phase || '') !== 'Pushback') continue;
+        const sx = b.x - a.x;
+        const sy = b.y - a.y;
+        const sl = Math.hypot(sx, sy);
+        if (sl > motionEps) {
+          lastUx = sx / sl;
+          lastUy = sy / sl;
+          break;
+        }
+      }
+    }
+    if (lastUx == null || lastUy == null) return null;
+    return { x: x + lastUx * rem, y: y + lastUy * rem };
+  }
+
