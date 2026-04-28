@@ -1181,6 +1181,12 @@
     simSliderScrubbing: false,
     simSpeed: _dc.defaultSimSpeed,
     hasSimulationResult: false,
+    /** Last Pro Sim ``payload.positions`` — keeps x,y playback samples off flights when Play is blocked (lighter pan/zoom). */
+    simPlaybackPositionsByFlightId: null,
+    /** Copy of ``payload.schedule`` for timeline_meta / E-fields when rehydrating from ``simPlaybackPositionsByFlightId``. */
+    simPlaybackScheduleSnapshot: null,
+    /** True when timelines were evicted from flights but ``simPlaybackPositionsByFlightId`` still holds data. */
+    simPlaybackTimelinesEvictedForMemory: false,
     simPlaybackDockVisible: false,
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
@@ -1628,12 +1634,24 @@
     if (playDock) {
       playDock.disabled = !allowPlay;
     }
+    let playbackMemSync = false;
     if (!allowPlay) {
+      if (typeof evictFlightPlaybackTimelinesWhenPlayBlocked === 'function') {
+        playbackMemSync = evictFlightPlaybackTimelinesWhenPlayBlocked();
+      }
       state.simPlaybackDockVisible = false;
       state.simPlaying = false;
       state.simSliderScrubbing = false;
       if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
       if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    } else {
+      if (typeof rehydrateFlightPlaybackTimelinesAfterPlayAllowed === 'function') {
+        playbackMemSync = rehydrateFlightPlaybackTimelinesAfterPlayAllowed();
+      }
+    }
+    if (playbackMemSync) {
+      if (typeof draw === 'function') draw();
+      if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
     }
     if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
   }
@@ -2330,6 +2348,9 @@
       state.layoutMarkers = [];
     }
     if (Array.isArray(obj.flights)) {
+      state.simPlaybackPositionsByFlightId = null;
+      state.simPlaybackScheduleSnapshot = null;
+      state.simPlaybackTimelinesEvictedForMemory = false;
       state.flights = obj.flights.slice();
       state.flights.forEach(f => {
         const rawTl = Array.isArray(f.timeline) ? f.timeline : null;
@@ -2471,11 +2492,15 @@
     if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
     state.simPlaying = false;
     state.layoutPathDrawPointer = null;
-    let playbackFlightCount = 0;
-    (state.flights || []).forEach(function(f) {
-      if (f && f.timeline && f.timeline.length >= 2) playbackFlightCount++;
-    });
-    state.hasSimulationResult = playbackFlightCount > 0;
+    if (typeof refreshHasSimulationResultFromPlaybackSources === 'function') {
+      refreshHasSimulationResultFromPlaybackSources();
+    } else {
+      let playbackFlightCount = 0;
+      (state.flights || []).forEach(function(f) {
+        if (f && f.timeline && f.timeline.length >= 2) playbackFlightCount++;
+      });
+      state.hasSimulationResult = playbackFlightCount > 0;
+    }
     if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
       state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
     }
@@ -2571,6 +2596,120 @@
     if (isFinite(depRotS)) f.proSimDepLineupSec = depRotS;
     else delete f.proSimDepLineupSec;
   }
+  function buildFlightTimelineFromPlaybackPoints(rawPts) {
+    const pts = Array.isArray(rawPts) ? rawPts : [];
+    if (pts.length < 2) return null;
+    const tl = pts.map(function(p) {
+      const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+      const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+      const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
+      const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
+      if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
+      if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+      if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
+      return o;
+    }).filter(function(k) {
+      return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+    }).sort(function(a, b) { return a.t - b.t; });
+    return tl.length >= 2 ? tl : null;
+  }
+  function refreshHasSimulationResultFromPlaybackSources() {
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (f && f.timeline && f.timeline.length >= 2) {
+        state.hasSimulationResult = true;
+        return;
+      }
+    }
+    const pos = state.simPlaybackPositionsByFlightId;
+    if (pos && typeof pos === 'object') {
+      for (const k in pos) {
+        if (!Object.prototype.hasOwnProperty.call(pos, k)) continue;
+        const arr = pos[k];
+        if (Array.isArray(arr) && arr.length >= 2) {
+          state.hasSimulationResult = true;
+          return;
+        }
+      }
+    }
+    state.hasSimulationResult = false;
+  }
+  function evictFlightPlaybackTimelinesWhenPlayBlocked() {
+    if (!state.simPlaybackPositionsByFlightId || typeof state.simPlaybackPositionsByFlightId !== 'object') return false;
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f) continue;
+      f.timeline = null;
+      delete f.timeline_meta;
+    }
+    state.simPlaybackTimelinesEvictedForMemory = true;
+    _lazyTimelineLastEvictSimSec = NaN;
+    refreshHasSimulationResultFromPlaybackSources();
+    return true;
+  }
+  function rehydrateFlightPlaybackTimelinesAfterPlayAllowed() {
+    if (!state.simPlaybackTimelinesEvictedForMemory) return false;
+    const positions = state.simPlaybackPositionsByFlightId;
+    const scheduleList = Array.isArray(state.simPlaybackScheduleSnapshot) ? state.simPlaybackScheduleSnapshot : [];
+    const schedById = {};
+    for (let si = 0; si < scheduleList.length; si++) {
+      const s = scheduleList[si];
+      if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
+    }
+    if (!positions || typeof positions !== 'object') {
+      state.simPlaybackTimelinesEvictedForMemory = false;
+      refreshHasSimulationResultFromPlaybackSources();
+      return true;
+    }
+    let mergedTimelines = 0;
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f || f.id == null) continue;
+      const srec = schedById[String(f.id)] || null;
+      const rawPts = positions[f.id];
+      if (rawPts != null) {
+        const tl = buildFlightTimelineFromPlaybackPoints(rawPts);
+        if (tl) {
+          mergedTimelines++;
+          f.timeline = tl;
+        }
+      }
+      if (srec && f.timeline && f.timeline.length >= 2) {
+        const eldtS = srec.ELDT != null ? Number(srec.ELDT) : NaN;
+        const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
+        const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
+        const etotS = srec.ETOT != null ? Number(srec.ETOT) : NaN;
+        const prevMeta = f.timeline_meta || {};
+        const builtDep = (typeof buildDepartureSurfaceTimelineSegments === 'function' && f.arrDep === 'Dep'
+          && isFinite(eobtS) && isFinite(etotS))
+          ? buildDepartureSurfaceTimelineSegments(f, eobtS, etotS)
+          : null;
+        const builtDepMeta = (builtDep && builtDep.meta) ? builtDep.meta : null;
+        f.timeline_meta = Object.assign(
+          {},
+          prevMeta,
+          builtDepMeta || {},
+          {
+            playbackSource: 'des_result',
+            eldtSec: isFinite(eldtS) ? eldtS : undefined,
+            eibtSec: isFinite(eibtS) ? eibtS : undefined,
+            eobtSec: isFinite(eobtS) ? eobtS : undefined,
+            etotSec: isFinite(etotS) ? etotS : undefined,
+          }
+        );
+      } else {
+        delete f.timeline_meta;
+      }
+      applyAirsideScheduleRowToFlight(f, srec);
+    }
+    state.hasSimulationResult = mergedTimelines > 0;
+    state.simPlaybackTimelinesEvictedForMemory = false;
+    refreshHasSimulationResultFromPlaybackSources();
+    return true;
+  }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
     const truncCap = (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true)
@@ -2629,24 +2768,10 @@
       if (hasPositions) {
         const rawPts = positions[f.id];
         if (rawPts != null) {
-          const pts = Array.isArray(rawPts) ? rawPts : [];
-          if (pts.length >= 2) {
-            const tl = pts.map(function(p) {
-              const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
-              const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-              const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
-              const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
-              if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
-              if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
-              if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
-              return o;
-            }).filter(function(k) {
-              return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
-            }).sort(function(a, b) { return a.t - b.t; });
-            if (tl.length >= 2) {
-              mergedTimelines++;
-              f.timeline = tl;
-            }
+          const tl = buildFlightTimelineFromPlaybackPoints(rawPts);
+          if (tl) {
+            mergedTimelines++;
+            f.timeline = tl;
           }
         }
       }
@@ -2679,6 +2804,9 @@
       applyAirsideScheduleRowToFlight(f, srec);
     });
     state.hasSimulationResult = mergedTimelines > 0;
+    state.simPlaybackPositionsByFlightId = hasPositions ? positions : null;
+    state.simPlaybackScheduleSnapshot = scheduleList.length ? scheduleList.slice() : null;
+    state.simPlaybackTimelinesEvictedForMemory = false;
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
     } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();

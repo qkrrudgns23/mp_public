@@ -1,3 +1,357 @@
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+    ctx.closePath();
+    const hairW = layoutHairlineStrokeWidthWorld();
+    if (sf) {
+      if (monoFillP) {
+        ctx.fillStyle = c2dLayerMonoFillDarkAsphaltRgba(0.5);
+        ctx.fill();
+        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, monoLp, hairW);
+      } else {
+        ctx.fillStyle = sel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.14)';
+        ctx.fill();
+        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.4)', hairW);
+      }
+    }
+    if (sl) {
+      ctx.beginPath();
+      ctx.moveTo(poly[0][0], poly[0][1]);
+      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
+      ctx.closePath();
+      ctx.strokeStyle = monoLineP ? monoLp : 'rgba(255,255,255,0.88)';
+      ctx.lineWidth = hairW;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function pointInPolygon(p, verts) {
+    let inside = false;
+    const n = verts.length;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const vi = cellToPixel(verts[i].col, verts[i].row);
+      const vj = cellToPixel(verts[j].col, verts[j].row);
+      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
+    }
+    return inside;
+  }
+
+  function getApronLinkStandEndPx(lk) {
+    if (!lk || !lk.pbbId) return null;
+    const stand = findStandById(lk.pbbId);
+    if (!stand) return null;
+    return getStandApronTaxiwayAttachWorldPx(stand);
+  }
+  function getApronLinkPolylineWorldPts(lk) {
+    if (!lk || lk.tx == null || lk.ty == null) return [];
+    const a = getApronLinkStandEndPx(lk);
+    if (!a) return [];
+    const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) {
+      if (v && isFinite(Number(v.x)) && isFinite(Number(v.y))) return [Number(v.x), Number(v.y)];
+      return cellToPixel(Number(v.col), Number(v.row));
+    });
+    const b = [Number(lk.tx), Number(lk.ty)];
+    const forward = [a].concat(mids).concat([b]);
+    if (String(lk.apronDrawFirstEndpoint || 'stand') === 'taxiway' && forward.length >= 2) {
+      return forward.slice().reverse();
+    }
+    return forward;
+  }
+  function hitTestApronLink(wx, wy) {
+    const click = [wx, wy];
+    const hitD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
+    const list = state.apronLinks || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const lk = list[i];
+      const poly = getApronLinkPolylineWorldPts(lk);
+      if (poly.length < 2) continue;
+      for (let j = 0; j < poly.length - 1; j++) {
+        const near = closestPointOnSegment(poly[j], poly[j + 1], click);
+        if (!near) continue;
+        if (dist2(near, click) < hitD2) return { type: 'apronLink', id: lk.id, obj: lk };
+      }
+    }
+    return null;
+  }
+
+  function getDefaultHoldingPointLabel() {
+    let maxN = 0;
+    (state.holdingPoints || []).forEach(function(h) {
+      const m = /^Position(\d+)$/i.exec(String(h && h.name || '').trim());
+      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+    });
+    return 'Position' + (maxN + 1);
+  }
+  function snapHoldingPointOnAllowedTaxiways(wx, wy) {
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    (state.taxiways || []).forEach(function(tw) {
+      const pt = tw.pathType || 'taxiway';
+      if (pt !== 'taxiway' && pt !== 'runway_exit') return;
+      if (!tw.vertices || tw.vertices.length < 2) return;
+      for (let i = 0; i < tw.vertices.length - 1; i++) {
+        const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+        const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
+        const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2) { bestD2 = d2; best = { x: near[0], y: near[1], pathType: pt }; }
+      }
+    });
+    return best;
+  }
+  function snapTempStandOnTaxiwayCenterlines(wx, wy) {
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    const allowPt = { taxiway: 1, runway_exit: 1, runway_taxiway: 1, general_queue_taxiway: 1 };
+    (state.taxiways || []).forEach(function(tw) {
+      const pt = tw.pathType || 'taxiway';
+      if (!allowPt[pt]) return;
+      if (!tw.vertices || tw.vertices.length < 2) return;
+      for (let i = 0; i < tw.vertices.length - 1; i++) {
+        const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
+        const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
+        const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2) { bestD2 = d2; best = { x: near[0], y: near[1], pathType: pt }; }
+      }
+    });
+    return best;
+  }
+  function hitTestHoldingPoint(wx, wy) {
+    const hitPadSq = Math.pow(Math.max(5, CELL_SIZE * 0.22), 2);
+    const lineW = c2dHoldingPointMarkingLineWidthWorld();
+    const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
+    const pts = state.holdingPoints || [];
+    for (let i = pts.length - 1; i >= 0; i--) {
+      const hp = pts[i];
+      if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) continue;
+      const g = findHoldingPointPathGeometry(hp);
+      const perp = holdingPointPerpFromTangent(g.ux, g.uy);
+      const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM);
+      const cx = hp.x, cy = hp.y;
+      const nearOfs = function(ofs) {
+        const x0 = cx - perp.px * halfLen + g.ux * ofs, y0 = cy - perp.py * halfLen + g.uy * ofs;
+        const x1 = cx + perp.px * halfLen + g.ux * ofs, y1 = cy + perp.py * halfLen + g.uy * ofs;
+        return distPointToSegmentSq(wx, wy, x0, y0, x1, y1) <= hitPadSq;
+      };
+      if (nearOfs(-pairHalf) || nearOfs(pairHalf)) return { type: 'holdingPoint', id: hp.id, obj: hp };
+    }
+    return null;
+  }
+  function tryPlaceHoldingPointAt(x, y, pathType) {
+    const hpKind = pathTypeToHpKind(pathType || 'taxiway');
+    const nameInput = document.getElementById('holdingPointName');
+    const manual = nameInput && nameInput.value && String(nameInput.value).trim();
+    let baseName = manual ? String(nameInput.value).trim() : getDefaultHoldingPointLabel();
+    if (findDuplicateLayoutName('holdingPoint', null, baseName)) { alertDuplicateLayoutName(); return false; }
+    pushUndo();
+    state.holdingPoints.push({ id: id(), name: baseName, x: x, y: y, hpKind: hpKind });
+    return true;
+  }
+
+  function layerIslandAreaFillEffective() {
+    if (state.isPanning) return false;
+    if (state.markerDrawing && getMarkerSubKindFromPanel() === 'island') return true;
+    if (state.markerDrawing && getMarkerSubKindFromPanel() === 'area') return true;
+    return !!state.layers.islandAreaFill;
+  }
+  function layerIslandContourLinesEffective() {
+    if (settingModeSelect && settingModeSelect.value === 'marker') return true;
+    return !!state.layers.islandAreaLines;
+  }
+  function layoutMarkersVisible() {
+    if (settingModeSelect && settingModeSelect.value === 'marker') return true;
+    if (state.markerDrawing) return true;
+    return !!(state.layers.textRuler || state.layers.dummyFlight || state.layers.islandAreaLines || state.layers.islandAreaFill);
+  }
+  function getMarkerSubKindFromPanel() {
+    const tab = document.querySelector('.marker-tool-tab[aria-selected="true"]');
+    const v = tab && tab.getAttribute('data-marker-sub');
+    return v === 'ruler' || v === 'flight' || v === 'island' || v === 'area' || v === 'navaid' ? v : 'text';
+  }
+  function getMarkerNavaidTypeFromPanel() {
+    const sel = document.getElementById('markerNavaidType');
+    const v = String(sel && sel.value || '').trim().toLowerCase();
+    return v === 'ils' ? 'ils' : 'papi';
+  }
+  function syncMarkerNavaidRowVisibility() {
+    const row = document.getElementById('markerNavaidRow');
+    if (!row) return;
+    const show = getMarkerSubKindFromPanel() === 'navaid';
+    row.hidden = !show;
+    row.style.display = show ? '' : 'none';
+  }
+  function getMarkerFlightAircraftTypeFromPanel() {
+    const sel = document.getElementById('markerFlightAircraftType');
+    const v = String(sel && sel.value || '').trim();
+    if (v && AIRCRAFT_BY_ID[v]) return v;
+    return (AIRCRAFT_TYPES[0] && (AIRCRAFT_TYPES[0].id || AIRCRAFT_TYPES[0].name)) || 'A320';
+  }
+  function populateMarkerFlightAircraftSelect() {
+    const sel = document.getElementById('markerFlightAircraftType');
+    if (!sel) return;
+    const html = AIRCRAFT_TYPES.map(function(a) {
+      const id = String(a.id || a.name || '').trim();
+      if (!id) return '';
+      const name = String(a.name || a.id || id).trim();
+      const icao = String(a.icao || 'C').toUpperCase();
+      return '<option value="' + escapeAttr(id) + '">' + escapeHtml(name + ' (ICAO ' + icao + ')') + '</option>';
+    }).filter(Boolean).join('');
+    sel.innerHTML = html || '<option value="A320">Airbus A320 (ICAO C)</option>';
+    if (sel.options.length) sel.value = sel.options[0].value;
+  }
+  function syncMarkerFlightAircraftRowVisibility() {
+    const row = document.getElementById('markerFlightAircraftRow');
+    if (!row) return;
+    const show = getMarkerSubKindFromPanel() === 'flight';
+    row.hidden = !show;
+    row.style.display = show ? '' : 'none';
+  }
+  function syncMarkerIslandWidthRowVisibility() {
+    const row = document.getElementById('markerIslandWidthRow');
+    if (!row) return;
+    const show = getMarkerSubKindFromPanel() === 'island';
+    row.hidden = !show;
+    row.style.display = show ? '' : 'none';
+  }
+  function setMarkerSubKindTab(sub) {
+    const allowed = { ruler: 1, flight: 1, island: 1, area: 1, navaid: 1 };
+    const next = allowed[sub] ? sub : 'text';
+    document.querySelectorAll('.marker-tool-tab').forEach(function(btn) {
+      const on = (btn.getAttribute('data-marker-sub') || '') === next;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    syncMarkerFlightAircraftRowVisibility();
+    syncMarkerIslandWidthRowVisibility();
+    syncMarkerNavaidRowVisibility();
+  }
+  function syncMarkerSubKindTabFromSelectedLayoutMarker() {
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return;
+    const kind = String(sel.obj.kind || '').trim();
+    if (kind !== 'text' && kind !== 'ruler' && kind !== 'island' && kind !== 'area' && kind !== 'flight' && kind !== 'navaid') return;
+    setMarkerSubKindTab(kind);
+    if (kind === 'navaid') {
+      const sel2 = document.getElementById('markerNavaidType');
+      if (sel2) {
+        const sub = (sel.obj.subType === 'ils') ? 'ils' : 'papi';
+        sel2.value = sub;
+      }
+    }
+  }
+  function isMarkerFlightAllowedPathType(pt) {
+    return pt === 'runway' || pt === 'runway_exit' || pt === 'taxiway' || pt === 'general_queue_taxiway';
+  }
+  function snapWorldToMarkerFlightTaxiway(wx, wy, opts) {
+    const click = [wx, wy];
+    const o = opts || {};
+    const lockTaxiwayId = o.taxiwayId != null ? String(o.taxiwayId) : null;
+    const allowFar = o.allowFar === true;
+    let best = null;
+    let bestD2 = Infinity;
+    const maxD2 = allowFar ? Infinity : Math.pow(CELL_SIZE * HIT_TW_SEG_CF, 2);
+    (state.taxiways || []).forEach(function(tw) {
+      if (!tw || !isMarkerFlightAllowedPathType(tw.pathType || 'taxiway')) return;
+      if (lockTaxiwayId && String(tw.id) !== lockTaxiwayId) return;
+      const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
+      if (!pts || pts.length < 2) return;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const near = closestPointOnSegment(pts[i], pts[i + 1], click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2 && d2 <= maxD2) {
+          bestD2 = d2;
+          const ax = pts[i][0], ay = pts[i][1], bx = pts[i + 1][0], by = pts[i + 1][1];
+          const dx = bx - ax, dy = by - ay;
+          const segLen2 = dx * dx + dy * dy;
+          const t = segLen2 < 1e-12 ? 0.5 : Math.max(0, Math.min(1, ((near[0] - ax) * dx + (near[1] - ay) * dy) / segLen2));
+          best = { taxiwayId: tw.id, segIndex: i, t: t };
+        }
+      }
+    });
+    return best;
+  }
+  function resolveMarkerFlightPose(m) {
+    if (!m || m.kind !== 'flight') return null;
+    const tw = (state.taxiways || []).find(function(x) { return x && x.id === m.taxiwayId; });
+    if (!tw) return null;
+    const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
+    if (!pts || pts.length < 2) return null;
+    let si = typeof m.segIndex === 'number' && isFinite(m.segIndex) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
+    si = Math.max(0, Math.min(si, pts.length - 2));
+    let t = Number(m.t);
+    if (!isFinite(t)) t = 0.5;
+    t = Math.max(0, Math.min(1, t));
+    const a = pts[si], b = pts[si + 1];
+    const x = a[0] + t * (b[0] - a[0]);
+    const y = a[1] + t * (b[1] - a[1]);
+    let ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    if (m.headingReversed === true) ang += Math.PI;
+    return { x: x, y: y, ang: ang };
+  }
+  function getMarkerFlightWingtipWorldPoints(m) {
+    if (!m || m.kind !== 'flight') return null;
+    const pose = resolveMarkerFlightPose(m);
+    if (!pose) return null;
+    const ac = getAircraftInfoByType(m.aircraftType);
+    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
+    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
+    const silhouette2D = getApronAircraftDetailedSilhouettePoints();
+    let leftLocal = [0, -spanM];
+    let rightLocal = [0, spanM];
+    if (_ac2d.useDetailedSilhouette === true && silhouette2D.length >= 3) {
+      let minY = Infinity, maxY = -Infinity;
+      let minPt = null, maxPt = null;
+      for (let i = 0; i < silhouette2D.length; i++) {
+        const p = silhouette2D[i];
+        if (!p || p.length < 2) continue;
+        const lx = Number(p[0]) * lenM;
+        const ly = Number(p[1]) * spanM;
+        if (!isFinite(lx) || !isFinite(ly)) continue;
+        if (ly < minY) { minY = ly; minPt = [lx, ly]; }
+        if (ly > maxY) { maxY = ly; maxPt = [lx, ly]; }
+      }
+      if (minPt && maxPt) {
+        leftLocal = minPt;
+        rightLocal = maxPt;
+      }
+    }
+    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
+    function localToWorld(pt) {
+      return {
+        x: pose.x + pt[0] * cs - pt[1] * sn,
+        y: pose.y + pt[0] * sn + pt[1] * cs,
+      };
+    }
+    return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
+  }
+  function ensureMarkerFlightBlazerState(m) {
+    if (!m || m.kind !== 'flight') return;
+    if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
+    if (typeof m.headingReversed !== 'boolean') m.headingReversed = false;
+    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) < 0) m.blazerColor = MARKER_BLAZER_COLOR_OPTIONS[0];
+    if (!Array.isArray(m.blazerLeftTrail)) m.blazerLeftTrail = [];
+    if (!Array.isArray(m.blazerRightTrail)) m.blazerRightTrail = [];
+  }
+  function appendMarkerFlightBlazerTrail(m) {
+    if (!m || m.kind !== 'flight') return;
+    ensureMarkerFlightBlazerState(m);
+    if (!m.blazerEnabled) return;
+    const tips = getMarkerFlightWingtipWorldPoints(m);
+    if (!tips || !tips.left || !tips.right) return;
+    const minStep = Math.max(0.25, CELL_SIZE * 0.03);
+    const minStep2 = minStep * minStep;
+    function append(trail, pt) {
+      const last = trail.length ? trail[trail.length - 1] : null;
+      if (!last || dist2([last.x, last.y], [pt.x, pt.y]) >= minStep2) trail.push({ x: pt.x, y: pt.y });
       if (trail.length > 4000) trail.splice(0, trail.length - 4000);
     }
     append(m.blazerLeftTrail, tips.left);
@@ -504,357 +858,3 @@
       const closeRa = CELL_SIZE * TERM_CLOSE_POLY_CF;
       const closeRa2 = closeRa * closeRa;
       if (listA.length >= 3) {
-        const c0a = listA[0];
-        const dxa = px - c0a.x, dya = py - c0a.y;
-        if (dxa * dxa + dya * dya <= closeRa2) {
-          pushUndo();
-          state.layoutMarkers = normalizeLayoutMarkerAreaZOrder((state.layoutMarkers || []).concat([{
-            kind: 'area',
-            id: id(),
-            points: listA.map(function(p) { return { x: Number(p.x), y: Number(p.y) }; }),
-          }]));
-          state.markerAreaDraft = null;
-          state.markerAreaHoverWorld = null;
-          syncPanelFromState();
-          return;
-        }
-      }
-      listA.push({ x: px, y: py });
-      state.markerAreaHoverWorld = [px, py];
-      return;
-    }
-    if (sub === 'flight') {
-      const snap = snapWorldToMarkerFlightTaxiway(wx, wy);
-      if (!snap) return;
-      pushUndo();
-      state.layoutMarkers.push({
-        kind: 'flight',
-        id: id(),
-        taxiwayId: snap.taxiwayId,
-        segIndex: snap.segIndex,
-        t: snap.t,
-        aircraftType: getMarkerFlightAircraftTypeFromPanel(),
-        blazerEnabled: false,
-        headingReversed: false,
-        blazerColor: MARKER_BLAZER_COLOR_OPTIONS[0],
-        blazerLeftTrail: [],
-        blazerRightTrail: [],
-      });
-      syncPanelFromState();
-      return;
-    }
-    if (sub === 'navaid') {
-      pushUndo();
-      state.layoutMarkers.push({
-        kind: 'navaid',
-        id: id(),
-        subType: getMarkerNavaidTypeFromPanel(),
-        x: px,
-        y: py,
-      });
-      syncPanelFromState();
-      return;
-    }
-  }
-
-  function hitTest(wx, wy) {
-    const click = [wx, wy];
-    if (layoutMarkersVisible()) {
-      // Marker flights are drawn on top; prioritize marker picking so clicks don't fall through.
-      const mkTopHit = hitTestLayoutMarker(wx, wy, { skipKind: 'area' });
-      if (mkTopHit) return mkTopHit;
-    }
-    const temps = state.tempStands || [];
-    for (let i = temps.length - 1; i >= 0; i--) {
-      const st = temps[i];
-      if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
-        return { type: 'tempStand', id: st.id, obj: st };
-    }
-    for (let i = state.remoteStands.length - 1; i >= 0; i--) {
-      const st = state.remoteStands[i];
-      if (pointInPolygonXY([wx, wy], getRemoteStandCorners(st)))
-        return { type: 'remote', id: st.id, obj: st };
-    }
-    for (let i = state.pbbStands.length - 1; i >= 0; i--) {
-      const pbb = state.pbbStands[i];
-      const corners = getPBBStandCorners(pbb);
-      if (pointInPolygonXY(click, corners))
-        return { type: 'pbb', id: pbb.id, obj: pbb };
-    }
-    for (let i = state.terminals.length - 1; i >= 0; i--) {
-      const t = state.terminals[i];
-      if (t.closed && t.vertices.length >= 3 && pointInPolygon(click, t.vertices))
-        return { type: 'terminal', id: t.id, obj: t };
-    }
-    const hpHit = hitTestHoldingPoint(wx, wy);
-    if (hpHit) return hpHit;
-    const apronLkHit = hitTestApronLink(wx, wy);
-    if (apronLkHit) return apronLkHit;
-    if (!state.taxiwayDrawingId) {
-      const pathCenterlineHitRadiusWorld = 10 / Math.max(state.scale, 0.08);
-      const pathCenterlineHitD2 = pathCenterlineHitRadiusWorld * pathCenterlineHitRadiusWorld;
-      for (let i = state.taxiways.length - 1; i >= 0; i--) {
-        const tw = state.taxiways[i];
-        if (tw.vertices.length < 2) continue;
-        for (let j = 0; j < tw.vertices.length - 1; j++) {
-          const [x1, y1] = cellToPixel(tw.vertices[j].col, tw.vertices[j].row);
-          const [x2, y2] = cellToPixel(tw.vertices[j + 1].col, tw.vertices[j + 1].row);
-          const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-          if (near && dist2(near, click) < pathCenterlineHitD2) return { type: 'taxiway', id: tw.id, obj: tw };
-        }
-      }
-    }
-    if (layoutMarkersVisible()) {
-      const arHit = hitTestLayoutMarker(wx, wy, { onlyKind: 'area' });
-      if (arHit) return arHit;
-    }
-    return null;
-  }
-
-  function hitTestSimFlightAtWorld(wx, wy) {
-    if (!state.hasSimulationResult || !state.flights || !state.flights.length) return null;
-    const tSec = state.simTimeSec;
-    let best = null;
-    let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
-    const flights = state.flights;
-    for (let i = 0; i < flights.length; i++) {
-      const f = flights[i];
-      if (!f || flightBlockedLikeNoWay(f)) continue;
-      const pose = getFlightPoseAtTimeForDraw(f, tSec);
-      if (!pose) continue;
-      const dx = pose.x - wx, dy = pose.y - wy;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = f;
-      }
-    }
-    return best;
-  }
-
-  function hitTestTerminalVertex(wx, wy) {
-    const maxD2 = (CELL_SIZE * HIT_TERM_VTX_CF) ** 2;
-    const cands = [];
-    state.terminals.forEach(t => {
-      t.vertices.forEach((v, idx) => {
-        cands.push({ terminalId: t.id, index: idx, v });
-      });
-    });
-    const best = findNearestItem(cands, c => cellToPixel(c.v.col, c.v.row), wx, wy, maxD2);
-    return best ? { terminalId: best.terminalId, index: best.index } : null;
-  }
-
-  function hitTestTaxiwayVertex(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'taxiway') return null;
-    const tw = state.selectedObject.obj;
-    if (!tw || !tw.vertices || tw.vertices.length === 0) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    tw.vertices.forEach((v, idx) => {
-      const [vx, vy] = cellToPixel(v.col, v.row);
-      const d2 = dist2([vx, vy], click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = { taxiwayId: tw.id, index: idx };
-      }
-    });
-    return best;
-  }
-  function hitTestPbbEditablePoint(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'pbb') return null;
-    const pbb = state.selectedObject.obj;
-    if (!pbb || pbb.id !== state.selectedObject.id) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    (Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : []).forEach(function(bridge, bridgeIdx) {
-      (Array.isArray(bridge.points) ? bridge.points : []).forEach(function(pt, ptIdx) {
-        if (ptIdx === 1) return;
-        const d2 = dist2([Number(pt.x) || 0, Number(pt.y) || 0], click);
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = { type: 'bridge', bridgeIndex: bridgeIdx, pointIndex: ptIdx };
-        }
-      });
-    });
-    const apronPt = getStandAircraftMarkerWorldPxForPbb(pbb);
-    const apronD2 = dist2(apronPt, click);
-    if (apronD2 < bestD2) best = { type: 'apronSite' };
-    return best;
-  }
-  function hitTestRemoteStandDragPoint(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'remote') return null;
-    const st = state.selectedObject.obj;
-    if (!st || st.id !== state.selectedObject.id) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
-    const mk = getStandAircraftMarkerWorldPxForRemoteLike(st);
-    if (dist2(mk, click) <= maxD2) return { type: 'remoteCenter' };
-    return null;
-  }
-  function findInsertSegment(vertices, closed, wx, wy) {
-    if (!Array.isArray(vertices) || vertices.length < 2) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * INSERT_VERTEX_HIT_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    const lastSeg = closed ? vertices.length : (vertices.length - 1);
-    function vertexToPixel(v) {
-      if (Array.isArray(v) && v.length >= 2) return [Number(v[0]) || 0, Number(v[1]) || 0];
-      if (v && v.x != null && v.y != null) return [Number(v.x) || 0, Number(v.y) || 0];
-      return cellToPixel(v.col, v.row);
-    }
-    for (let i = 0; i < lastSeg; i++) {
-      const curr = vertices[i];
-      const next = vertices[(i + 1) % vertices.length];
-      const p1 = vertexToPixel(curr);
-      const p2 = vertexToPixel(next);
-      const near = closestPointOnSegment(p1, p2, click);
-      if (!near) continue;
-      const d2 = dist2(near, click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = { insertIndex: i + 1, near: near };
-      }
-    }
-    return best;
-  }
-  const PATH_ARC_MIN_BULGE_PX = 2;
-  const PATH_ARC_MAX_BULGE_FRAC = 0.45;
-  function pathArcAngleDiffCCW(t0, t1) {
-    let d = t1 - t0;
-    while (d < 0) d += 2 * Math.PI;
-    while (d >= 2 * Math.PI) d -= 2 * Math.PI;
-    return d;
-  }
-  function pathArcPointBetweenAnglesCCW(tStart, tProbe, spanCCW) {
-    return pathArcAngleDiffCCW(tStart, tProbe) <= spanCCW + 1e-10;
-  }
-  function pathArcCircumcircle(ax, ay, bx, by, cx, cy) {
-    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-    if (Math.abs(d) < 1e-12) return null;
-    const a2 = ax * ax + ay * ay;
-    const b2 = bx * bx + by * by;
-    const c2 = cx * cx + cy * cy;
-    const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
-    const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
-    const r = Math.hypot(ax - ux, ay - uy);
-    if (!(r > 1e-9)) return null;
-    return { ox: ux, oy: uy, r: r };
-  }
-  /** Endpoints A,B and point C on arc; returns world px polyline A→B along the circle through C. */
-  function pathArcSampleThreePointWorldPx(ax, ay, bx, by, cx, cy, maxChordStepPx) {
-    const cc = pathArcCircumcircle(ax, ay, bx, by, cx, cy);
-    if (!cc) return [[ax, ay], [bx, by]];
-    const ta = Math.atan2(ay - cc.oy, ax - cc.ox);
-    const tb = Math.atan2(by - cc.oy, bx - cc.ox);
-    const tc = Math.atan2(cy - cc.oy, cx - cc.ox);
-    const spanAB = pathArcAngleDiffCCW(ta, tb);
-    let tStart, span, reverseOrder;
-    if (pathArcPointBetweenAnglesCCW(ta, tc, spanAB)) {
-      tStart = ta;
-      span = spanAB;
-      reverseOrder = false;
-    } else {
-      tStart = tb;
-      span = pathArcAngleDiffCCW(tb, ta);
-      reverseOrder = true;
-    }
-    const arcLen = cc.r * span;
-    const mcs = Math.max(3, typeof maxChordStepPx === 'number' && maxChordStepPx > 0 ? maxChordStepPx : CELL_SIZE * 0.28);
-    const n = Math.max(8, Math.min(96, Math.ceil(arcLen / mcs)));
-    const pts = [];
-    for (let i = 0; i <= n; i++) {
-      const ang = tStart + (span * i) / n;
-      pts.push([cc.ox + cc.r * Math.cos(ang), cc.oy + cc.r * Math.sin(ang)]);
-    }
-    if (reverseOrder) pts.reverse();
-    pts[0] = [ax, ay];
-    pts[pts.length - 1] = [bx, by];
-    return pts;
-  }
-  /** Subdivide polyline so each segment length ≤ maxStepPx (smoother grid snap for arcs). */
-  function pathArcDensifyPolylinePx(pts, maxStepPx) {
-    if (!pts || pts.length < 2) return pts ? pts.slice() : [];
-    const m = Math.max(1e-6, maxStepPx);
-    const out = [[pts[0][0], pts[0][1]]];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const x0 = pts[i][0], y0 = pts[i][1], x1 = pts[i + 1][0], y1 = pts[i + 1][1];
-      const len = Math.hypot(x1 - x0, y1 - y0);
-      const steps = Math.max(1, Math.ceil(len / m));
-      for (let s = 1; s <= steps; s++) {
-        const t = s / steps;
-        out.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
-      }
-    }
-    return out;
-  }
-  function pathArcComputePreviewWorldPxFromAB(Ax, Ay, Bx, By, wx, wy) {
-    const dx = Bx - Ax, dy = By - Ay;
-    const chordLen = Math.hypot(dx, dy) || 1;
-    const ex = dx / chordLen, ey = dy / chordLen;
-    const nx = -ey, ny = ex;
-    const M = [(Ax + Bx) * 0.5, (Ay + By) * 0.5];
-    let h = (wx - M[0]) * nx + (wy - M[1]) * ny;
-    const maxH = chordLen * PATH_ARC_MAX_BULGE_FRAC;
-    h = Math.max(-maxH, Math.min(maxH, h));
-    if (Math.abs(h) < PATH_ARC_MIN_BULGE_PX) return [[Ax, Ay], [Bx, By]];
-    const Cx = M[0] + nx * h, Cy = M[1] + ny * h;
-    return pathArcSampleThreePointWorldPx(Ax, Ay, Bx, By, Cx, Cy, Math.max(CELL_SIZE * 0.28, chordLen / 28));
-  }
-  function pathArcComputePreviewWorldPx(tw, vertexIndex, wx, wy) {
-    if (!tw || tw.pathType === 'runway') return null;
-    const verts = tw.vertices;
-    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return null;
-    const A = cellToPixel(verts[vertexIndex - 1].col, verts[vertexIndex - 1].row);
-    const B = cellToPixel(verts[vertexIndex + 1].col, verts[vertexIndex + 1].row);
-    return pathArcComputePreviewWorldPxFromAB(A[0], A[1], B[0], B[1], wx, wy);
-  }
-  function pathArcCommitIslandVertexFromPreview(mk, vertexIndex, previewPx, snapToGrid) {
-    if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !previewPx || previewPx.length < 2) return;
-    const verts = mk.points;
-    const n = verts ? verts.length : 0;
-    if (!verts || n < 3 || vertexIndex < 0 || vertexIndex >= n) return;
-    const prev = verts[(vertexIndex - 1 + n) % n];
-    const next = verts[(vertexIndex + 1) % n];
-    const Apx = [Number(prev.x), Number(prev.y)];
-    const Bpx = [Number(next.x), Number(next.y)];
-    const workPx = previewPx.map(function(p, j) {
-      if (j === 0) return [Apx[0], Apx[1]];
-      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
-      return [p[0], p[1]];
-    });
-    const cells = [];
-    if (previewPx.length > 2) {
-      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
-      for (let k = 0; k < densePx.length; k++) {
-        const snap = worldPointToPixel(densePx[k][0], densePx[k][1], snapToGrid);
-        const c = { x: snap[0], y: snap[1] };
-        if (cells.length && cells[cells.length - 1].x === c.x && cells[cells.length - 1].y === c.y) continue;
-        if (c.x === prev.x && c.y === prev.y) continue;
-        cells.push(c);
-      }
-      while (cells.length && cells[cells.length - 1].x === next.x && cells[cells.length - 1].y === next.y) cells.pop();
-    }
-    if (!cells.length) {
-      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
-      const snap = worldPointToPixel(M[0], M[1], snapToGrid);
-      cells.push({ x: snap[0], y: snap[1] });
-    }
-    const newArr = verts.slice();
-    newArr.splice(vertexIndex, 1, ...cells);
-    mk.points = newArr;
-    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
-    state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: midSel };
-  }
-  function pathArcCommitFromPreview(tw, vertexIndex, previewPx, snapToGrid) {
-    if (!tw || tw.pathType === 'runway') return;
-    if (!previewPx || previewPx.length < 2) return;
-    const verts = tw.vertices;
-    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return;
-    const prev = verts[vertexIndex - 1], next = verts[vertexIndex + 1];
-    const Apx = cellToPixel(prev.col, prev.row);
-    const Bpx = cellToPixel(next.col, next.row);

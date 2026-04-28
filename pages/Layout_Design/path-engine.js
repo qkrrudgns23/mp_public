@@ -1,3 +1,46 @@
+    state.layoutPathDrawPointer = null;
+    state.previewPbb = null;
+    state.previewRemote = null;
+    state.previewTempStand = null;
+    state.markerDrawing = false;
+    state.markerRulerDraft = null;
+    state.markerRulerHoverWorld = null;
+    state.markerIslandDraft = null;
+    state.markerIslandHoverWorld = null;
+    state.markerAreaDraft = null;
+    state.markerAreaHoverWorld = null;
+    state.markerFlightHoverSnap = null;
+    if (state.markerTextDraft && state.markerTextDraft.active) {
+      state.markerTextDraft = null;
+      hideMarkerTextDraftEditor();
+    }
+    state.dragLayoutMarkerHandle = null;
+    syncDrawToggleButton('btnMarkerDraw', false);
+  }
+  function syncDrawToggleButton(elementId, isDrawing) {
+    const btn = document.getElementById(elementId);
+    if (!btn) return;
+    btn.textContent = isDrawing ? 'Drawing' : 'Draw';
+    btn.classList.toggle('drawing', isDrawing);
+  }
+  function syncLayerPopoverFromState() {
+    const panel = document.getElementById('layerPopoverPanel');
+    if (panel) {
+      panel.querySelectorAll('input[data-layer-key]').forEach(function(inp) {
+        const k = inp.getAttribute('data-layer-key');
+        if (k && typeof state.layers[k] === 'boolean') inp.checked = !!state.layers[k];
+      });
+      panel.querySelectorAll('input[data-layer-mono]').forEach(function(inp) {
+        const mk = inp.getAttribute('data-layer-mono');
+        if (mk && state.layerMono && typeof state.layerMono[mk] === 'boolean') inp.checked = !!state.layerMono[mk];
+      });
+    }
+    const allOn = LAYER_STATE_KEYS.every(function(k) { return !!state.layers[k]; });
+    const btnAll = document.getElementById('btnLayerPopoverAll');
+    if (btnAll) {
+      btnAll.classList.toggle('active', allOn);
+      btnAll.setAttribute('aria-pressed', allOn ? 'true' : 'false');
+      btnAll.title = allOn ? 'Turn all layers off' : 'Turn all layers on';
     }
     if (panel) {
       panel.querySelectorAll('input[data-layer-section-parent]').forEach(function(parentInp) {
@@ -40,6 +83,31 @@
     } else {
       panel.setAttribute('hidden', '');
     }
+  }
+  function syncMapTypePopoverFromState() {
+    const btnHt = document.getElementById('btnHeatmapToggle');
+    const heatOk = !!state.hasSimulationResult;
+    const failedRegs = typeof getArrRetFailedRegsForProSimUi === 'function' ? getArrRetFailedRegsForProSimUi() : [];
+    const hasRetFail = failedRegs.length > 0;
+    const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
+    const heatmapAllowed = heatOk && proSimUiFresh;
+    if (!heatmapAllowed && state.mapTypeMode === 'heatmap') state.mapTypeMode = 'normal';
+    if (!heatOk && state.mapTypeMode !== 'normal') state.mapTypeMode = 'normal';
+    const mode = state.mapTypeMode || 'normal';
+    const heatOn = heatmapAllowed && mode === 'heatmap';
+    if (btnHt) {
+      btnHt.disabled = !heatmapAllowed;
+      btnHt.classList.toggle('active', heatOn);
+      btnHt.setAttribute('aria-pressed', heatOn ? 'true' : 'false');
+    }
+    if (typeof syncHeatmapTrafficLegend === 'function') syncHeatmapTrafficLegend();
+  }
+  /** After layout load: restore heatmap on/off from `designerPersist` when timelines exist. */
+  function applyDesignerPersistMapTypeAfterLoad(dp) {
+    if (!dp || dp.v !== 1) return;
+    const m = String(dp.mapTypeMode || '');
+    const wantHeat = m === 'heatmap' || m === 'heatmap_traffic' || m === 'heatmap_queue';
+    state.mapTypeMode = (state.hasSimulationResult && wantHeat) ? 'heatmap' : 'normal';
   }
   function clampLayoutImageOpacity(value) {
     const n = Number(value);
@@ -510,6 +578,9 @@
       state.layoutMarkers = [];
     }
     if (Array.isArray(obj.flights)) {
+      state.simPlaybackPositionsByFlightId = null;
+      state.simPlaybackScheduleSnapshot = null;
+      state.simPlaybackTimelinesEvictedForMemory = false;
       state.flights = obj.flights.slice();
       state.flights.forEach(f => {
         const rawTl = Array.isArray(f.timeline) ? f.timeline : null;
@@ -556,6 +627,12 @@
         }
         if (!restorePlaybackFlight) {
           f.arrRotSec = null;
+          delete f.proSimVttArrSec;
+          delete f.proSimVttDepSec;
+          delete f.proSimDttArrSec;
+          delete f.proSimPushbackSec;
+          delete f.proSimDttDepSec;
+          delete f.proSimDepLineupSec;
           f.arrRunwayIdUsed = null;
           f.arrTdDistM = null;
           f.arrRetDistM = null;
@@ -566,6 +643,10 @@
           f.timeline = null;
           delete f.timeline_meta;
           delete f.proSimEdgeList;
+          delete f.eldtMin;
+          delete f.eibtMin;
+          delete f.eobtMin;
+          delete f.etotMin;
           delete f.eldtMin;
           delete f.eibtMin;
           delete f.eobtMin;
@@ -594,6 +675,12 @@
             }
           } else {
             f.arrRotSec = null;
+            delete f.proSimVttArrSec;
+            delete f.proSimVttDepSec;
+            delete f.proSimDttArrSec;
+            delete f.proSimPushbackSec;
+            delete f.proSimDttDepSec;
+            delete f.proSimDepLineupSec;
             f.arrRunwayIdUsed = null;
             f.arrTdDistM = null;
             f.arrRetDistM = null;
@@ -604,6 +691,10 @@
             f.timeline = null;
             delete f.timeline_meta;
             delete f.proSimEdgeList;
+            delete f.eldtMin;
+            delete f.eibtMin;
+            delete f.eobtMin;
+            delete f.etotMin;
             delete f.eldtMin;
             delete f.eibtMin;
             delete f.eobtMin;
@@ -631,222 +722,11 @@
     if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
     state.simPlaying = false;
     state.layoutPathDrawPointer = null;
-    let playbackFlightCount = 0;
-    (state.flights || []).forEach(function(f) {
-      if (f && f.timeline && f.timeline.length >= 2) playbackFlightCount++;
-    });
-    state.hasSimulationResult = playbackFlightCount > 0;
-    if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
-      state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
-    }
-    if (typeof applyDesignerPersistMapTypeAfterLoad === 'function') {
-      applyDesignerPersistMapTypeAfterLoad(dp);
-    } else if (dp && dp.v === 1) {
-      const pk = ['rotArr', 'vttArr', 'vttDep', 'rotDep'];
-      if (dp.heatmapTrafficPhases && typeof dp.heatmapTrafficPhases === 'object' && state.heatmapTrafficPhases) {
-        for (let i = 0; i < pk.length; i++) {
-          const k = pk[i];
-          if (typeof dp.heatmapTrafficPhases[k] === 'boolean') state.heatmapTrafficPhases[k] = dp.heatmapTrafficPhases[k];
-        }
-      }
-      const m = String(dp.mapTypeMode || '');
-      const wantHeat = m === 'heatmap' || m === 'heatmap_traffic' || m === 'heatmap_queue';
-      state.mapTypeMode = (state.hasSimulationResult && wantHeat) ? 'heatmap' : 'normal';
-    }
-    if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
-    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
-    else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-    else draw();
-    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.layers && state.layers.junction) {
-      try {
-        if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
-        if (typeof draw === 'function') draw();
-      } catch (ePg) {
-        console.warn('applyLayoutObject: path graph sync', ePg);
-      }
-    }
-    if (restoreProSimSyncUi) {
-      state.globalUpdateFresh = true;
-      if (dp.designerPageUpdateFresh === true) {
-        if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
-      } else {
-        state.designerPageUpdateFresh = false;
-        const ddot = document.getElementById('designerPageUpdateSyncDot');
-        if (ddot) {
-          ddot.classList.remove('fresh');
-          ddot.classList.add('stale');
-          ddot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
-        }
-      }
-      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
-    }
-    if (typeof renderFlightList === 'function') renderFlightList(false, false);
-    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
-  }
-  /** E-series minutes; duration seconds from ``airside_sim`` schedule row. */
-  function applyAirsideScheduleRowToFlight(f, srec) {
-    if (!f) return;
-    if (!srec || typeof srec !== 'object') {
-      delete f.eldtMin;
-      delete f.eibtMin;
-      delete f.eobtMin;
-      delete f.etotMin;
-      f.arrRotSec = null;
-      delete f.proSimVttArrSec;
-      delete f.proSimVttDepSec;
-      delete f.proSimDttArrSec;
-      delete f.proSimPushbackSec;
-      delete f.proSimDttDepSec;
-      delete f.proSimDepLineupSec;
-      return;
-    }
-    function secOpt(key) {
-      if (srec[key] == null || srec[key] === '') return NaN;
-      const n = Number(srec[key]);
-      return isFinite(n) ? n : NaN;
-    }
-    const eldtS = secOpt('ELDT');
-    const eibtS = secOpt('EIBT');
-    const eobtS = secOpt('EOBT');
-    const etotS = secOpt('ETOT');
-    if (isFinite(eldtS)) f.eldtMin = eldtS / 60;
-    else delete f.eldtMin;
-    if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
-    else delete f.eibtMin;
-    if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
-    else delete f.eobtMin;
-    if (isFinite(etotS)) f.etotMin = etotS / 60;
-    else delete f.etotMin;
-    const rotS = secOpt('ARR_ROT_SEC');
-    if (isFinite(rotS)) f.arrRotSec = rotS;
-    else f.arrRotSec = null;
-    const vttArrS = secOpt('VTT_ARR_SEC');
-    if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
-    else delete f.proSimVttArrSec;
-    const pushbackS = secOpt('PUSHBACK_SEC');
-    if (isFinite(pushbackS)) f.proSimPushbackSec = pushbackS;
-    else delete f.proSimPushbackSec;
-    const vttDepS = secOpt('VTT_DEP_SEC');
-    if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
-    else delete f.proSimVttDepSec;
-    const dttArrS = secOpt('DTT_ARR_SEC');
-    if (isFinite(dttArrS)) f.proSimDttArrSec = dttArrS;
-    else delete f.proSimDttArrSec;
-    const dttDepS = secOpt('DTT_DEP_SEC');
-    if (isFinite(dttDepS)) f.proSimDttDepSec = dttDepS;
-    else delete f.proSimDttDepSec;
-    const depRotS = secOpt('DEP_ROT_SEC');
-    if (isFinite(depRotS)) f.proSimDepLineupSec = depRotS;
-    else delete f.proSimDepLineupSec;
-  }
-  function applyAirsideSimulationResultPayload(payload) {
-    if (!payload || typeof payload !== 'object') return;
-    const truncCap = (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true)
-      ? (function() {
-        const rawCap = payload.simulation_playback_end_abs_sec;
-        const c = Number(rawCap);
-        return isFinite(c) ? c : null;
-      })()
-      : null;
-    const flightsDetail = Array.isArray(payload.flights_detail) ? payload.flights_detail : null;
-    if (flightsDetail) {
-      const byId = {};
-      flightsDetail.forEach(function(row) {
-        if (!row || row.flight_id == null) return;
-        const fid = String(row.flight_id);
-        const fin = row.edge_list_finished;
-        const planned = row.edge_list;
-        if (Array.isArray(fin) && fin.length) {
-          byId[fid] = fin.slice();
-        } else if (Array.isArray(planned) && planned.length) {
-          byId[fid] = planned.slice();
-        } else {
-          byId[fid] = [];
-        }
-      });
+    if (typeof refreshHasSimulationResultFromPlaybackSources === 'function') {
+      refreshHasSimulationResultFromPlaybackSources();
+    } else {
+      let playbackFlightCount = 0;
       (state.flights || []).forEach(function(f) {
-        if (!f || f.id == null) return;
-        const raw = byId[String(f.id)];
-        if (Array.isArray(raw) && raw.length) {
-          f.edge_list = raw.slice();
-          f.proSimEdgeList = f.edge_list.slice();
-        } else {
-          delete f.edge_list;
-          delete f.proSimEdgeList;
-        }
+        if (f && f.timeline && f.timeline.length >= 2) playbackFlightCount++;
       });
-    }
-    const positions = payload.positions;
-    const hasPositions = positions && typeof positions === 'object' && Object.keys(positions).length > 0;
-    const scheduleList = Array.isArray(payload.schedule) ? payload.schedule : [];
-    const layout = payload.layout;
-    if (layout && typeof layout === 'object') {
-      applyLayoutObject(layout);
-    }
-    if (truncCap != null) {
-      state.simPlaybackEndCapSec = truncCap;
-    }
-    const schedById = {};
-    scheduleList.forEach(function(s) {
-      if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
-    });
-    let mergedTimelines = 0;
-    (state.flights || []).forEach(function(f) {
-      if (!f || f.id == null) return;
-      const srec = schedById[String(f.id)] || null;
-      if (hasPositions) {
-        const rawPts = positions[f.id];
-        if (rawPts != null) {
-          const pts = Array.isArray(rawPts) ? rawPts : [];
-          if (pts.length >= 2) {
-            const tl = pts.map(function(p) {
-              const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
-              const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-              const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
-              const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
-              if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
-              if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
-              return o;
-            }).filter(function(k) {
-              return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
-            }).sort(function(a, b) { return a.t - b.t; });
-            if (tl.length >= 2) {
-              mergedTimelines++;
-              f.timeline = tl;
-            }
-          }
-        }
-      }
-      if (srec && f.timeline && f.timeline.length >= 2) {
-        const eldtS = srec.ELDT != null ? Number(srec.ELDT) : NaN;
-        const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
-        const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
-        const etotS = srec.ETOT != null ? Number(srec.ETOT) : NaN;
-        const prevMeta = f.timeline_meta || {};
-        const builtDep = (typeof buildDepartureSurfaceTimelineSegments === 'function' && f.arrDep === 'Dep'
-          && isFinite(eobtS) && isFinite(etotS))
-          ? buildDepartureSurfaceTimelineSegments(f, eobtS, etotS)
-          : null;
-        const builtDepMeta = (builtDep && builtDep.meta) ? builtDep.meta : null;
-        f.timeline_meta = Object.assign(
-          {},
-          prevMeta,
-          builtDepMeta || {},
-          {
-            playbackSource: 'des_result',
-            eldtSec: isFinite(eldtS) ? eldtS : undefined,
-            eibtSec: isFinite(eibtS) ? eibtS : undefined,
-            eobtSec: isFinite(eobtS) ? eobtS : undefined,
-            etotSec: isFinite(etotS) ? etotS : undefined,
-          }
-        );
-      } else {
-        delete f.timeline_meta;
-      }
-      applyAirsideScheduleRowToFlight(f, srec);
-    });
-    state.hasSimulationResult = mergedTimelines > 0;
-    if (state.hasSimulationResult) {
-      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
-    } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      state.hasSimulationResult = playbackFlightCount > 0;

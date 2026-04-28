@@ -1,3 +1,16 @@
+    if (Array.isArray(g.connectedJunctions)) g.connectedJunctions = filt(g.connectedJunctions);
+    if (Array.isArray(g.junctions)) g.junctions = filt(g.junctions);
+    if (Array.isArray(g.disconnectedValidJunctions)) g.disconnectedValidJunctions = filt(g.disconnectedValidJunctions);
+  }
+  function markPathGraphJunctionStaleShellAfterLayoutEdit() {
+    cancelPathGraphRebuildTimer();
+    state.pathGraphCache = {
+      __junctionStale: true,
+      validJunctions: [],
+      connectedJunctions: [],
+      disconnectedValidJunctions: [],
+      junctions: [],
+      nodes: [],
       edges: [],
       adj: [],
       edgeMap: {},
@@ -107,11 +120,7 @@
    * Pro Sim: allowed only when Update is fresh (green) and no arrival Runway exit (RET) failures
    * (`arrRetFailed` on non-departure legs). RET failure banner is in `#gridLeftFloatingStack`, separate from `#object-info-dock`.
    */
-  function syncProSimButtonFromDesignerPageState() {
-    const btn = document.getElementById('btnGlobalUpdate');
-    const dot = document.getElementById('globalUpdateSyncDot');
-    const ban = document.getElementById('arrRetFailedBanner');
-    const banT = document.getElementById('arrRetFailedBannerText');
+  function getArrRetFailedRegsForProSimUi() {
     const failedRegs = [];
     (state.flights || []).forEach(function(f) {
       if (!f || f.arrDep === 'Dep') return;
@@ -120,6 +129,14 @@
         if (failedRegs.indexOf(r) < 0) failedRegs.push(r);
       }
     });
+    return failedRegs;
+  }
+  function syncProSimButtonFromDesignerPageState() {
+    const btn = document.getElementById('btnGlobalUpdate');
+    const dot = document.getElementById('globalUpdateSyncDot');
+    const ban = document.getElementById('arrRetFailedBanner');
+    const banT = document.getElementById('arrRetFailedBannerText');
+    const failedRegs = getArrRetFailedRegsForProSimUi();
     const hasRetFail = failedRegs.length > 0;
     if (ban && banT) {
       if (hasRetFail) {
@@ -164,14 +181,29 @@
     const playDock = document.getElementById('btnShowPlayDock');
     const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
     const allowPlay = !!state.hasSimulationResult && proSimUiFresh;
-    if (playDock) playDock.disabled = !allowPlay;
+    if (playDock) {
+      playDock.disabled = !allowPlay;
+    }
+    let playbackMemSync = false;
     if (!allowPlay) {
+      if (typeof evictFlightPlaybackTimelinesWhenPlayBlocked === 'function') {
+        playbackMemSync = evictFlightPlaybackTimelinesWhenPlayBlocked();
+      }
       state.simPlaybackDockVisible = false;
       state.simPlaying = false;
       state.simSliderScrubbing = false;
       if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
       if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    } else {
+      if (typeof rehydrateFlightPlaybackTimelinesAfterPlayAllowed === 'function') {
+        playbackMemSync = rehydrateFlightPlaybackTimelinesAfterPlayAllowed();
+      }
     }
+    if (playbackMemSync) {
+      if (typeof draw === 'function') draw();
+      if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+    }
+    if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
   }
   function redrawLayoutAfterEdit() {
     if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
@@ -286,46 +318,3 @@
     state.apronLinkTemp = null;
     state.apronLinkMidpoints = [];
     state.apronLinkPointerWorld = null;
-    state.layoutPathDrawPointer = null;
-    state.previewPbb = null;
-    state.previewRemote = null;
-    state.previewTempStand = null;
-    state.markerDrawing = false;
-    state.markerRulerDraft = null;
-    state.markerRulerHoverWorld = null;
-    state.markerIslandDraft = null;
-    state.markerIslandHoverWorld = null;
-    state.markerAreaDraft = null;
-    state.markerAreaHoverWorld = null;
-    state.markerFlightHoverSnap = null;
-    if (state.markerTextDraft && state.markerTextDraft.active) {
-      state.markerTextDraft = null;
-      hideMarkerTextDraftEditor();
-    }
-    state.dragLayoutMarkerHandle = null;
-    syncDrawToggleButton('btnMarkerDraw', false);
-  }
-  function syncDrawToggleButton(elementId, isDrawing) {
-    const btn = document.getElementById(elementId);
-    if (!btn) return;
-    btn.textContent = isDrawing ? 'Drawing' : 'Draw';
-    btn.classList.toggle('drawing', isDrawing);
-  }
-  function syncLayerPopoverFromState() {
-    const panel = document.getElementById('layerPopoverPanel');
-    if (panel) {
-      panel.querySelectorAll('input[data-layer-key]').forEach(function(inp) {
-        const k = inp.getAttribute('data-layer-key');
-        if (k && typeof state.layers[k] === 'boolean') inp.checked = !!state.layers[k];
-      });
-      panel.querySelectorAll('input[data-layer-mono]').forEach(function(inp) {
-        const mk = inp.getAttribute('data-layer-mono');
-        if (mk && state.layerMono && typeof state.layerMono[mk] === 'boolean') inp.checked = !!state.layerMono[mk];
-      });
-    }
-    const allOn = LAYER_STATE_KEYS.every(function(k) { return !!state.layers[k]; });
-    const btnAll = document.getElementById('btnLayerPopoverAll');
-    if (btnAll) {
-      btnAll.classList.toggle('active', allOn);
-      btnAll.setAttribute('aria-pressed', allOn ? 'true' : 'false');
-      btnAll.title = allOn ? 'Turn all layers off' : 'Turn all layers on';

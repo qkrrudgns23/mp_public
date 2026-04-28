@@ -1,3 +1,315 @@
+      const sub = document.createElement('div');
+      sub.className = 'layout-toast-sub';
+      sub.textContent = String(subText);
+      el.appendChild(sub);
+    }
+    stack.appendChild(el);
+    requestAnimationFrame(function() { el.classList.add('is-visible'); });
+    const lifeMs = kind === 'error' ? 4200 : 2600;
+    setTimeout(function() {
+      el.classList.remove('is-visible');
+      setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
+    }, lifeMs);
+  }
+  /**
+   * Render apron site anchor as a 5m × 1m rectangle. Long side (5m) is aligned
+   * with the stand's stopbar direction (local Y = perpendicular to the stand
+   * depth axis), so it matches the dashed stopbar line drawn near the nose.
+   * ``standAngleRad`` is the stand's depth-axis angle (same as ctx.rotate used
+   * when drawing the stand footprint). When omitted, the 5m side falls back to
+   * world horizontal.
+   */
+  function drawApronSiteMarker(ctx, cx, cy, fillStyle, strokeStyle, selected, standAngleRad) {
+    const w = APRON_SITE_MARKER_WIDTH_M;
+    const h = APRON_SITE_MARKER_HEIGHT_M;
+    const angle = (typeof standAngleRad === 'number' && isFinite(standAngleRad))
+      ? standAngleRad + Math.PI / 2
+      : 0;
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (angle) ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.rect(-w / 2, -h / 2, w, h);
+    if (fillStyle) {
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+    }
+    if (strokeStyle) {
+      const baseLw = Math.max(0.18, 0.24 / Math.max(state.scale, 0.1));
+      ctx.lineWidth = selected ? baseLw * 1.5 : baseLw;
+      ctx.strokeStyle = strokeStyle;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  /** Apron–taxiway UI attach point: PBB = aircraft marker; remote/temp = same local xBendEnd offset as Contact (getStandAircraftMarkerWorldPxFor*). */
+  function getStandApronTaxiwayAttachWorldPx(stand) {
+    if (!stand) return [0, 0];
+    const isPbb = (state.pbbStands || []).some(function(s) { return s && s.id === stand.id; });
+    if (isPbb) return getStandConnectionPx(stand);
+    return getStandAircraftMarkerWorldPxForRemoteLike(stand);
+  }
+  function getStandBoundsRect(cx, cy, sizeM) {
+    const h = sizeM / 2;
+    return { left: cx - h, right: cx + h, top: cy - h, bottom: cy + h };
+  }
+  function normalizeAngleDeg(deg) {
+    let a = Number(deg);
+    if (!isFinite(a)) a = 0;
+    while (a > 180) a -= 360;
+    while (a <= -180) a += 360;
+    return a;
+  }
+  function getRemoteStandCenterPx(st) {
+    if (!st) return [0, 0];
+    if (st.apronSiteX != null && st.apronSiteY != null) {
+      return [Number(st.apronSiteX), Number(st.apronSiteY)];
+    }
+    if (typeof st.x === 'number' && isFinite(st.x) && typeof st.y === 'number' && isFinite(st.y)) {
+      return [Number(st.x), Number(st.y)];
+    }
+    return cellToPixel(st.col || 0, st.row || 0);
+  }
+  /** Temp stand: taxiway centerline snap (sim_input junctionX/Y); defaults to stand x,y. */
+  function getTempStandTaxiwayJunctionPx(st) {
+    if (!st) return [0, 0];
+    const jx = st.junctionX != null ? Number(st.junctionX) : NaN;
+    const jy = st.junctionY != null ? Number(st.junctionY) : NaN;
+    if (Number.isFinite(jx) && Number.isFinite(jy)) return [jx, jy];
+    return getRemoteStandCenterPx(st);
+  }
+  function getRemoteStandAngleRad(st) {
+    const deg = normalizeAngleDeg(st && st.angleDeg != null ? st.angleDeg : 0);
+    return deg * Math.PI / 180;
+  }
+  function getRemoteStandCorners(stLike) {
+    const [cx, cy] = getRemoteStandCenterPx(stLike);
+    const cat = (stLike && stLike.category) || 'C';
+    const dep = getStandDepthMeters(cat);
+    const halfD = dep / 2;
+    const halfW = getStandWidthMeters(cat) / 2;
+    const angle = getRemoteStandAngleRad(stLike);
+    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    return [
+      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
+      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
+    ];
+  }
+  function rectsOverlap(a, b) {
+    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+  }
+  function getPbbAnchorPx(pbb) {
+    const x1 = Number(pbb && pbb.x1);
+    const y1 = Number(pbb && pbb.y1);
+    if (Number.isFinite(x1) && Number.isFinite(y1)) return [x1, y1];
+    const bridges = Array.isArray(pbb && pbb.pbbBridges) ? pbb.pbbBridges : [];
+    const starts = bridges.map(function(bridge) {
+      const pts = Array.isArray(bridge.points) ? bridge.points : [];
+      return pts.length ? [Number(pts[0].x) || 0, Number(pts[0].y) || 0] : null;
+    }).filter(Boolean);
+    if (starts.length) {
+      let sx = 0, sy = 0;
+      starts.forEach(function(pt) { sx += pt[0]; sy += pt[1]; });
+      return [sx / starts.length, sy / starts.length];
+    }
+    return [0, 0];
+  }
+  function getPBBStandAngle(pbb) {
+    if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg) * Math.PI / 180;
+    const anchor = getPbbAnchorPx(pbb);
+    const center = getStandConnectionPx(pbb);
+    return Math.atan2(center[1] - anchor[1], center[0] - anchor[0]);
+  }
+  function getPBBStandCorners(pbb) {
+    const center = getStandConnectionPx(pbb);
+    const cx = center[0], cy = center[1];
+    const cat = pbb.category || 'C';
+    const dep = getStandDepthMeters(cat);
+    const halfD = dep / 2;
+    const halfW = getStandWidthMeters(cat) / 2;
+    const angle = getPBBStandAngle(pbb);
+    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    return [
+      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
+      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
+      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
+    ];
+  }
+  function pointInPolygonXY(p, verts) {
+    let inside = false;
+    const n = verts.length;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const vi = verts[i], vj = verts[j];
+      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
+    }
+    return inside;
+  }
+  function segIntersect(a1, a2, b1, b2) {
+    const [ax1,ay1]=a1,[ax2,ay2]=a2,[bx1,by1]=b1,[bx2,by2]=b2;
+    const dax = ax2-ax1, day = ay2-ay1, dbx = bx2-bx1, dby = by2-by1;
+    const den = dax*dby - day*dbx;
+    if (Math.abs(den) < 1e-10) return false;
+    const t = ((bx1-ax1)*dby - (by1-ay1)*dbx) / den;
+    const s = ((bx1-ax1)*day - (by1-ay1)*dax) / den;
+    return t >= 0 && t <= 1 && s >= 0 && s <= 1;
+  }
+  function rotatedRectsOverlap(cornersA, cornersB) {
+    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersA[i], cornersB)) return true;
+    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersB[i], cornersA)) return true;
+    for (let i = 0; i < 4; i++) {
+      const a1 = cornersA[i], a2 = cornersA[(i+1)%4];
+      for (let j = 0; j < 4; j++) {
+        if (segIntersect(a1, a2, cornersB[j], cornersB[(j+1)%4])) return true;
+      }
+    }
+    return false;
+  }
+  function distPointToSegment(px, py, ax, ay, bx, by) {
+    const vx = bx - ax, vy = by - ay;
+    const wx = px - ax, wy = py - ay;
+    const c1 = vx * wx + vy * wy;
+    if (c1 <= 0) return Math.hypot(px - ax, py - ay);
+    const c2 = vx * vx + vy * vy;
+    if (c2 <= c1) return Math.hypot(px - bx, py - by);
+    const t = c1 / c2;
+    const projx = ax + t * vx, projy = ay + t * vy;
+    return Math.hypot(px - projx, py - projy);
+  }
+  function minDistanceConvexQuads(quadA, quadB) {
+    if (rotatedRectsOverlap(quadA, quadB)) return 0;
+    let minD = Infinity;
+    for (let i = 0; i < 4; i++) {
+      const p = quadA[i];
+      for (let j = 0; j < 4; j++) {
+        const q1 = quadB[j], q2 = quadB[(j + 1) % 4];
+        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
+      }
+    }
+    for (let i = 0; i < 4; i++) {
+      const p = quadB[i];
+      for (let j = 0; j < 4; j++) {
+        const q1 = quadA[j], q2 = quadA[(j + 1) % 4];
+        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
+      }
+    }
+    return minD;
+  }
+  function standFootprintsTooClose(cornersA, catA, cornersB, catB) {
+    const need = getStandSpacingMeters(catA, catB);
+    if (need <= 0) return rotatedRectsOverlap(cornersA, cornersB);
+    return minDistanceConvexQuads(cornersA, cornersB) < need;
+  }
+  function buildStandSafetyPolygonLocalPoints(depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return null;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return null;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const eps = 0.08;
+    if (noseHalf >= halfW - eps) return null;
+    const xNose = -halfD;
+    const xStop = -halfD + nc;
+    if (xStop <= xNose + eps || xStop >= halfD - eps) return null;
+    const latRun = halfW - noseHalf;
+    if (latRun <= eps) return null;
+    const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return null;
+    const pts = [];
+    pts.push([xNose, -noseHalf]);
+    pts.push([xNose, noseHalf]);
+    pts.push([xStop, noseHalf]);
+    pts.push([Math.min(xBendEnd, halfD), halfW]);
+    if (xBendEnd < halfD - eps) {
+      pts.push([halfD, halfW]);
+      pts.push([halfD, -halfW]);
+      pts.push([xBendEnd, -halfW]);
+    } else {
+      pts.push([halfD, -halfW]);
+    }
+    pts.push([xStop, -noseHalf]);
+    return pts;
+  }
+  function standOuterContourWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
+    const polyLocal = buildStandSafetyPolygonLocalPoints(depM, widM, category);
+    if (polyLocal && polyLocal.length >= 3) {
+      return polyLocal.map(function(p) { return standFootprintLocalToWorld(cx, cy, angleRad, p[0], p[1]); });
+    }
+    return [
+      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, -widM / 2),
+      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, -widM / 2),
+      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, widM / 2),
+      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, widM / 2),
+    ];
+  }
+  function standGapSegmentsWorldForSpec(cx, cy, angleRad, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return [];
+    const g = Number(r.gap), ws = Number(r.wingspan);
+    const halfD = depM / 2, halfW = widM / 2;
+    const eps = 0.12;
+    if (!(isFinite(g) && g > eps && isFinite(ws) && ws > 0)) return [];
+    const yLim = halfW - g;
+    if (!(yLim > eps && yLim < halfW - eps)) return [];
+    const a0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, yLim);
+    const a1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, yLim);
+    const b0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, -yLim);
+    const b1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, -yLim);
+    return [[a0, a1], [b0, b1]];
+  }
+  function standGapSegmentsIntersectOuterPolygon(gapSegs, polygon) {
+    if (!Array.isArray(gapSegs) || !gapSegs.length || !Array.isArray(polygon) || polygon.length < 2) return false;
+    for (let i = 0; i < gapSegs.length; i++) {
+      const seg = gapSegs[i];
+      if (!seg || seg.length < 2) continue;
+      const g0 = seg[0], g1 = seg[1];
+      for (let j = 0; j < polygon.length; j++) {
+        const p0 = polygon[j], p1 = polygon[(j + 1) % polygon.length];
+        if (segIntersect(g0, g1, p0, p1)) return true;
+      }
+    }
+    return false;
+  }
+  function standGapLineHitsExistingOuterContours(candidateCenter, candidateAngleRad, candidateCategory) {
+    const depC = getStandDepthMeters(candidateCategory || 'C');
+    const widC = getStandWidthMeters(candidateCategory || 'C');
+    const gapSegs = standGapSegmentsWorldForSpec(candidateCenter[0], candidateCenter[1], candidateAngleRad, depC, widC, candidateCategory || 'C');
+    if (!gapSegs.length) return false;
+    function hitWithPolygon(poly) { return standGapSegmentsIntersectOuterPolygon(gapSegs, poly); }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const o = state.remoteStands[i];
+      const oc = getRemoteStandCenterPx(o);
+      const oa = getRemoteStandAngleRad(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    const temps = state.tempStands || [];
+    for (let i = 0; i < temps.length; i++) {
+      const o = temps[i];
+      const oc = getRemoteStandCenterPx(o);
+      const oa = getRemoteStandAngleRad(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const o = state.pbbStands[i];
+      const oc = getStandConnectionPx(o);
+      const oa = getPBBStandAngle(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    return false;
+  }
+  function pbbStandOverlapsTerminal(pbb) {
+    const corners = getPBBStandCorners(pbb);
     for (let t = 0; t < state.terminals.length; t++) {
       const term = state.terminals[t];
       if (!term.closed || term.vertices.length < 3) continue;
@@ -1045,357 +1357,3 @@
     const monoLp = c2dLayerMonoLineStrokeCss();
     if (!sl && !sf) return;
     ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(poly[0][0], poly[0][1]);
-    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
-    ctx.closePath();
-    const hairW = layoutHairlineStrokeWidthWorld();
-    if (sf) {
-      if (monoFillP) {
-        ctx.fillStyle = c2dLayerMonoFillDarkAsphaltRgba(0.5);
-        ctx.fill();
-        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, monoLp, hairW);
-      } else {
-        ctx.fillStyle = sel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.14)';
-        ctx.fill();
-        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.4)', hairW);
-      }
-    }
-    if (sl) {
-      ctx.beginPath();
-      ctx.moveTo(poly[0][0], poly[0][1]);
-      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
-      ctx.closePath();
-      ctx.strokeStyle = monoLineP ? monoLp : 'rgba(255,255,255,0.88)';
-      ctx.lineWidth = hairW;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  function pointInPolygon(p, verts) {
-    let inside = false;
-    const n = verts.length;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const vi = cellToPixel(verts[i].col, verts[i].row);
-      const vj = cellToPixel(verts[j].col, verts[j].row);
-      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
-    }
-    return inside;
-  }
-
-  function getApronLinkStandEndPx(lk) {
-    if (!lk || !lk.pbbId) return null;
-    const stand = findStandById(lk.pbbId);
-    if (!stand) return null;
-    return getStandApronTaxiwayAttachWorldPx(stand);
-  }
-  function getApronLinkPolylineWorldPts(lk) {
-    if (!lk || lk.tx == null || lk.ty == null) return [];
-    const a = getApronLinkStandEndPx(lk);
-    if (!a) return [];
-    const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) {
-      if (v && isFinite(Number(v.x)) && isFinite(Number(v.y))) return [Number(v.x), Number(v.y)];
-      return cellToPixel(Number(v.col), Number(v.row));
-    });
-    const b = [Number(lk.tx), Number(lk.ty)];
-    const forward = [a].concat(mids).concat([b]);
-    if (String(lk.apronDrawFirstEndpoint || 'stand') === 'taxiway' && forward.length >= 2) {
-      return forward.slice().reverse();
-    }
-    return forward;
-  }
-  function hitTestApronLink(wx, wy) {
-    const click = [wx, wy];
-    const hitD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
-    const list = state.apronLinks || [];
-    for (let i = list.length - 1; i >= 0; i--) {
-      const lk = list[i];
-      const poly = getApronLinkPolylineWorldPts(lk);
-      if (poly.length < 2) continue;
-      for (let j = 0; j < poly.length - 1; j++) {
-        const near = closestPointOnSegment(poly[j], poly[j + 1], click);
-        if (!near) continue;
-        if (dist2(near, click) < hitD2) return { type: 'apronLink', id: lk.id, obj: lk };
-      }
-    }
-    return null;
-  }
-
-  function getDefaultHoldingPointLabel() {
-    let maxN = 0;
-    (state.holdingPoints || []).forEach(function(h) {
-      const m = /^Position(\d+)$/i.exec(String(h && h.name || '').trim());
-      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
-    });
-    return 'Position' + (maxN + 1);
-  }
-  function snapHoldingPointOnAllowedTaxiways(wx, wy) {
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    (state.taxiways || []).forEach(function(tw) {
-      const pt = tw.pathType || 'taxiway';
-      if (pt !== 'taxiway' && pt !== 'runway_exit') return;
-      if (!tw.vertices || tw.vertices.length < 2) return;
-      for (let i = 0; i < tw.vertices.length - 1; i++) {
-        const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
-        const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-        if (!near) continue;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2) { bestD2 = d2; best = { x: near[0], y: near[1], pathType: pt }; }
-      }
-    });
-    return best;
-  }
-  function snapTempStandOnTaxiwayCenterlines(wx, wy) {
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    const allowPt = { taxiway: 1, runway_exit: 1, runway_taxiway: 1, general_queue_taxiway: 1 };
-    (state.taxiways || []).forEach(function(tw) {
-      const pt = tw.pathType || 'taxiway';
-      if (!allowPt[pt]) return;
-      if (!tw.vertices || tw.vertices.length < 2) return;
-      for (let i = 0; i < tw.vertices.length - 1; i++) {
-        const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
-        const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-        if (!near) continue;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2) { bestD2 = d2; best = { x: near[0], y: near[1], pathType: pt }; }
-      }
-    });
-    return best;
-  }
-  function hitTestHoldingPoint(wx, wy) {
-    const hitPadSq = Math.pow(Math.max(5, CELL_SIZE * 0.22), 2);
-    const lineW = c2dHoldingPointMarkingLineWidthWorld();
-    const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
-    const pts = state.holdingPoints || [];
-    for (let i = pts.length - 1; i >= 0; i--) {
-      const hp = pts[i];
-      if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) continue;
-      const g = findHoldingPointPathGeometry(hp);
-      const perp = holdingPointPerpFromTangent(g.ux, g.uy);
-      const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM);
-      const cx = hp.x, cy = hp.y;
-      const nearOfs = function(ofs) {
-        const x0 = cx - perp.px * halfLen + g.ux * ofs, y0 = cy - perp.py * halfLen + g.uy * ofs;
-        const x1 = cx + perp.px * halfLen + g.ux * ofs, y1 = cy + perp.py * halfLen + g.uy * ofs;
-        return distPointToSegmentSq(wx, wy, x0, y0, x1, y1) <= hitPadSq;
-      };
-      if (nearOfs(-pairHalf) || nearOfs(pairHalf)) return { type: 'holdingPoint', id: hp.id, obj: hp };
-    }
-    return null;
-  }
-  function tryPlaceHoldingPointAt(x, y, pathType) {
-    const hpKind = pathTypeToHpKind(pathType || 'taxiway');
-    const nameInput = document.getElementById('holdingPointName');
-    const manual = nameInput && nameInput.value && String(nameInput.value).trim();
-    let baseName = manual ? String(nameInput.value).trim() : getDefaultHoldingPointLabel();
-    if (findDuplicateLayoutName('holdingPoint', null, baseName)) { alertDuplicateLayoutName(); return false; }
-    pushUndo();
-    state.holdingPoints.push({ id: id(), name: baseName, x: x, y: y, hpKind: hpKind });
-    return true;
-  }
-
-  function layerIslandAreaFillEffective() {
-    if (state.isPanning) return false;
-    if (state.markerDrawing && getMarkerSubKindFromPanel() === 'island') return true;
-    if (state.markerDrawing && getMarkerSubKindFromPanel() === 'area') return true;
-    return !!state.layers.islandAreaFill;
-  }
-  function layerIslandContourLinesEffective() {
-    if (settingModeSelect && settingModeSelect.value === 'marker') return true;
-    return !!state.layers.islandAreaLines;
-  }
-  function layoutMarkersVisible() {
-    if (settingModeSelect && settingModeSelect.value === 'marker') return true;
-    if (state.markerDrawing) return true;
-    return !!(state.layers.textRuler || state.layers.dummyFlight || state.layers.islandAreaLines || state.layers.islandAreaFill);
-  }
-  function getMarkerSubKindFromPanel() {
-    const tab = document.querySelector('.marker-tool-tab[aria-selected="true"]');
-    const v = tab && tab.getAttribute('data-marker-sub');
-    return v === 'ruler' || v === 'flight' || v === 'island' || v === 'area' || v === 'navaid' ? v : 'text';
-  }
-  function getMarkerNavaidTypeFromPanel() {
-    const sel = document.getElementById('markerNavaidType');
-    const v = String(sel && sel.value || '').trim().toLowerCase();
-    return v === 'ils' ? 'ils' : 'papi';
-  }
-  function syncMarkerNavaidRowVisibility() {
-    const row = document.getElementById('markerNavaidRow');
-    if (!row) return;
-    const show = getMarkerSubKindFromPanel() === 'navaid';
-    row.hidden = !show;
-    row.style.display = show ? '' : 'none';
-  }
-  function getMarkerFlightAircraftTypeFromPanel() {
-    const sel = document.getElementById('markerFlightAircraftType');
-    const v = String(sel && sel.value || '').trim();
-    if (v && AIRCRAFT_BY_ID[v]) return v;
-    return (AIRCRAFT_TYPES[0] && (AIRCRAFT_TYPES[0].id || AIRCRAFT_TYPES[0].name)) || 'A320';
-  }
-  function populateMarkerFlightAircraftSelect() {
-    const sel = document.getElementById('markerFlightAircraftType');
-    if (!sel) return;
-    const html = AIRCRAFT_TYPES.map(function(a) {
-      const id = String(a.id || a.name || '').trim();
-      if (!id) return '';
-      const name = String(a.name || a.id || id).trim();
-      const icao = String(a.icao || 'C').toUpperCase();
-      return '<option value="' + escapeAttr(id) + '">' + escapeHtml(name + ' (ICAO ' + icao + ')') + '</option>';
-    }).filter(Boolean).join('');
-    sel.innerHTML = html || '<option value="A320">Airbus A320 (ICAO C)</option>';
-    if (sel.options.length) sel.value = sel.options[0].value;
-  }
-  function syncMarkerFlightAircraftRowVisibility() {
-    const row = document.getElementById('markerFlightAircraftRow');
-    if (!row) return;
-    const show = getMarkerSubKindFromPanel() === 'flight';
-    row.hidden = !show;
-    row.style.display = show ? '' : 'none';
-  }
-  function syncMarkerIslandWidthRowVisibility() {
-    const row = document.getElementById('markerIslandWidthRow');
-    if (!row) return;
-    const show = getMarkerSubKindFromPanel() === 'island';
-    row.hidden = !show;
-    row.style.display = show ? '' : 'none';
-  }
-  function setMarkerSubKindTab(sub) {
-    const allowed = { ruler: 1, flight: 1, island: 1, area: 1, navaid: 1 };
-    const next = allowed[sub] ? sub : 'text';
-    document.querySelectorAll('.marker-tool-tab').forEach(function(btn) {
-      const on = (btn.getAttribute('data-marker-sub') || '') === next;
-      btn.classList.toggle('active', on);
-      btn.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    syncMarkerFlightAircraftRowVisibility();
-    syncMarkerIslandWidthRowVisibility();
-    syncMarkerNavaidRowVisibility();
-  }
-  function syncMarkerSubKindTabFromSelectedLayoutMarker() {
-    const sel = state.selectedObject;
-    if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return;
-    const kind = String(sel.obj.kind || '').trim();
-    if (kind !== 'text' && kind !== 'ruler' && kind !== 'island' && kind !== 'area' && kind !== 'flight' && kind !== 'navaid') return;
-    setMarkerSubKindTab(kind);
-    if (kind === 'navaid') {
-      const sel2 = document.getElementById('markerNavaidType');
-      if (sel2) {
-        const sub = (sel.obj.subType === 'ils') ? 'ils' : 'papi';
-        sel2.value = sub;
-      }
-    }
-  }
-  function isMarkerFlightAllowedPathType(pt) {
-    return pt === 'runway' || pt === 'runway_exit' || pt === 'taxiway' || pt === 'general_queue_taxiway';
-  }
-  function snapWorldToMarkerFlightTaxiway(wx, wy, opts) {
-    const click = [wx, wy];
-    const o = opts || {};
-    const lockTaxiwayId = o.taxiwayId != null ? String(o.taxiwayId) : null;
-    const allowFar = o.allowFar === true;
-    let best = null;
-    let bestD2 = Infinity;
-    const maxD2 = allowFar ? Infinity : Math.pow(CELL_SIZE * HIT_TW_SEG_CF, 2);
-    (state.taxiways || []).forEach(function(tw) {
-      if (!tw || !isMarkerFlightAllowedPathType(tw.pathType || 'taxiway')) return;
-      if (lockTaxiwayId && String(tw.id) !== lockTaxiwayId) return;
-      const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
-      if (!pts || pts.length < 2) return;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const near = closestPointOnSegment(pts[i], pts[i + 1], click);
-        if (!near) continue;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2 && d2 <= maxD2) {
-          bestD2 = d2;
-          const ax = pts[i][0], ay = pts[i][1], bx = pts[i + 1][0], by = pts[i + 1][1];
-          const dx = bx - ax, dy = by - ay;
-          const segLen2 = dx * dx + dy * dy;
-          const t = segLen2 < 1e-12 ? 0.5 : Math.max(0, Math.min(1, ((near[0] - ax) * dx + (near[1] - ay) * dy) / segLen2));
-          best = { taxiwayId: tw.id, segIndex: i, t: t };
-        }
-      }
-    });
-    return best;
-  }
-  function resolveMarkerFlightPose(m) {
-    if (!m || m.kind !== 'flight') return null;
-    const tw = (state.taxiways || []).find(function(x) { return x && x.id === m.taxiwayId; });
-    if (!tw) return null;
-    const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
-    if (!pts || pts.length < 2) return null;
-    let si = typeof m.segIndex === 'number' && isFinite(m.segIndex) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
-    si = Math.max(0, Math.min(si, pts.length - 2));
-    let t = Number(m.t);
-    if (!isFinite(t)) t = 0.5;
-    t = Math.max(0, Math.min(1, t));
-    const a = pts[si], b = pts[si + 1];
-    const x = a[0] + t * (b[0] - a[0]);
-    const y = a[1] + t * (b[1] - a[1]);
-    let ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
-    if (m.headingReversed === true) ang += Math.PI;
-    return { x: x, y: y, ang: ang };
-  }
-  function getMarkerFlightWingtipWorldPoints(m) {
-    if (!m || m.kind !== 'flight') return null;
-    const pose = resolveMarkerFlightPose(m);
-    if (!pose) return null;
-    const ac = getAircraftInfoByType(m.aircraftType);
-    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
-    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
-    const silhouette2D = getApronAircraftDetailedSilhouettePoints();
-    let leftLocal = [0, -spanM];
-    let rightLocal = [0, spanM];
-    if (_ac2d.useDetailedSilhouette === true && silhouette2D.length >= 3) {
-      let minY = Infinity, maxY = -Infinity;
-      let minPt = null, maxPt = null;
-      for (let i = 0; i < silhouette2D.length; i++) {
-        const p = silhouette2D[i];
-        if (!p || p.length < 2) continue;
-        const lx = Number(p[0]) * lenM;
-        const ly = Number(p[1]) * spanM;
-        if (!isFinite(lx) || !isFinite(ly)) continue;
-        if (ly < minY) { minY = ly; minPt = [lx, ly]; }
-        if (ly > maxY) { maxY = ly; maxPt = [lx, ly]; }
-      }
-      if (minPt && maxPt) {
-        leftLocal = minPt;
-        rightLocal = maxPt;
-      }
-    }
-    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
-    function localToWorld(pt) {
-      return {
-        x: pose.x + pt[0] * cs - pt[1] * sn,
-        y: pose.y + pt[0] * sn + pt[1] * cs,
-      };
-    }
-    return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
-  }
-  function ensureMarkerFlightBlazerState(m) {
-    if (!m || m.kind !== 'flight') return;
-    if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
-    if (typeof m.headingReversed !== 'boolean') m.headingReversed = false;
-    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) < 0) m.blazerColor = MARKER_BLAZER_COLOR_OPTIONS[0];
-    if (!Array.isArray(m.blazerLeftTrail)) m.blazerLeftTrail = [];
-    if (!Array.isArray(m.blazerRightTrail)) m.blazerRightTrail = [];
-  }
-  function appendMarkerFlightBlazerTrail(m) {
-    if (!m || m.kind !== 'flight') return;
-    ensureMarkerFlightBlazerState(m);
-    if (!m.blazerEnabled) return;
-    const tips = getMarkerFlightWingtipWorldPoints(m);
-    if (!tips || !tips.left || !tips.right) return;
-    const minStep = Math.max(0.25, CELL_SIZE * 0.03);
-    const minStep2 = minStep * minStep;
-    function append(trail, pt) {
-      const last = trail.length ? trail[trail.length - 1] : null;
-      if (!last || dist2([last.x, last.y], [pt.x, pt.y]) >= minStep2) trail.push({ x: pt.x, y: pt.y });

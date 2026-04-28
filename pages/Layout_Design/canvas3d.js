@@ -1,3 +1,492 @@
+    hop1.forEach(function(a) {
+      for (let ti = 0; ti < list.length; ti++) {
+        const b = list[ti];
+        if (!b || b.pathType !== 'runway_exit' || b.id === a.id) continue;
+        if (ids.has(b.id)) continue;
+        if (rtxPolylinesTouch(a, b)) ids.add(b.id);
+      }
+    });
+    return { hop1: hop1, allIds: ids };
+  }
+  function holdingPointWorldXY(hp) {
+    if (!hp) return null;
+    if (typeof hp.x === 'number' && isFinite(hp.x) && typeof hp.y === 'number' && isFinite(hp.y)) return [hp.x, hp.y];
+    return null;
+  }
+  function runwayHoldingNearRtxCandidateSet(hp, candIds) {
+    const p = holdingPointWorldXY(hp);
+    if (!p || normalizeHoldingPointKind(hp.hpKind) !== 'runway_holding') return false;
+    const tolD2 = lineupHoldingTolD2(1.15);
+    const list = state.taxiways || [];
+    for (let ti = 0; ti < list.length; ti++) {
+      const tx = list[ti];
+      if (tx.pathType !== 'runway_exit' || !candIds.has(tx.id)) continue;
+      const rtxPts = getOrderedPoints(tx);
+      if (rtxPts && rtxPts.length >= 2 && pointNearPolylineSq(p, rtxPts, tolD2)) return true;
+    }
+    return false;
+  }
+  function cumulativeDistAlongPolylineToPoint(pts, q) {
+    if (!pts || pts.length < 2 || !q) return null;
+    let best = null;
+    let acc = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const segLen = pathDist(a, b);
+      if (segLen < 1e-9) continue;
+      const pr = projectOnSegment(a, b, q);
+      const t = Math.max(0, Math.min(1, pr.t));
+      const d = dist2(pr.p, q);
+      const cand = { distAlong: acc + t * segLen, d2: d, proj: pr.p };
+      if (!best || d < best.d2) best = cand;
+      acc += segLen;
+    }
+    return best;
+  }
+  function taxiTimeAtCumulativeDistanceM(pts, tStart, tEnd, sTarget, velForSeg) {
+    if (!pts || pts.length < 2 || !(sTarget > 1e-6) || tEnd <= tStart + 1e-9) return tStart;
+    const lengths = [];
+    for (let i = 0; i < pts.length - 1; i++) lengths.push(pathDist(pts[i], pts[i + 1]));
+    const rawDts = [];
+    for (let i = 0; i < lengths.length; i++) {
+      const v = Math.max(1, velForSeg(i, pts[i], pts[i + 1]));
+      rawDts.push(lengths[i] < 1e-9 ? 0 : lengths[i] / v);
+    }
+    const rawTotal = rawDts.reduce(function(s, x) { return s + x; }, 0);
+    if (rawTotal < 1e-9) return tStart;
+    const totalLen = lengths.reduce(function(s, l) { return s + l; }, 0);
+    const sClamped = Math.min(sTarget, totalLen);
+    if (sClamped >= totalLen - 1e-6) return tEnd;
+    const scale = (tEnd - tStart) / rawTotal;
+    let distAcc = 0;
+    let rawAcc = 0;
+    for (let i = 0; i < lengths.length; i++) {
+      if (distAcc + lengths[i] >= sClamped) {
+        const u = (sClamped - distAcc) / (lengths[i] || 1);
+        return tStart + (rawAcc + u * rawDts[i]) * scale;
+      }
+      distAcc += lengths[i];
+      rawAcc += rawDts[i];
+    }
+    return tEnd;
+  }
+  function depNoseExitsApronCumulativeM(f, pathPts) {
+    if (!pathPts || pathPts.length < 2) return 0;
+    const standId = f && (f.standId != null && f.standId !== '' ? f.standId : (f.token && f.token.apronId));
+    if (standId == null || standId === '') return 0;
+    const links = state.apronLinks || [];
+    const lk = links.find(function(l) { return l && String(l.pbbId) === String(standId); });
+    if (!lk || lk.tx == null || lk.ty == null) return 0;
+    const jx = Number(lk.tx), jy = Number(lk.ty);
+    if (!isFinite(jx) || !isFinite(jy)) return 0;
+    const cum = cumulativeDistAlongPolylineToPoint(pathPts, [jx, jy]);
+    if (!cum) return 0;
+    if (cum.d2 > 35 * 35) return 0;
+    const L = polylineTotalLength(pathPts);
+    return Math.min(cum.distAlong, Math.max(0, L - 1e-3));
+  }
+  function findLastRunwayHoldingOnDeparturePath(toLineup, candIds) {
+    if (!toLineup || toLineup.length < 2) return null;
+    const hps = state.holdingPoints || [];
+    let best = null;
+    for (let hi = 0; hi < hps.length; hi++) {
+      const hp = hps[hi];
+      if (!hp || normalizeHoldingPointKind(hp.hpKind) !== 'runway_holding') continue;
+      if (!runwayHoldingNearRtxCandidateSet(hp, candIds)) continue;
+      const p = holdingPointWorldXY(hp);
+      if (!p) continue;
+      const tolD2 = lineupHoldingTolD2(1.3);
+      if (!pointNearPolylineSq(p, toLineup, tolD2)) continue;
+      const cum = cumulativeDistAlongPolylineToPoint(toLineup, p);
+      if (!cum) continue;
+      if (!best || cum.distAlong > best.distAlong) best = { hp: hp, distAlong: cum.distAlong, proj: cum.proj };
+    }
+    return best;
+  }
+  function polylineDurationSecTaxi(pts) {
+    if (!pts || pts.length < 2) return 0;
+    const carry = { lastTaxiwayMs: null };
+    let sec = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const len = pathDist(pts[i], pts[i + 1]);
+      if (len < 1e-9) continue;
+      const v = taxiSegmentVelocityMsForPolylineSegment(pts[i], pts[i + 1], carry);
+      sec += len / Math.max(0.1, v);
+    }
+    return sec;
+  }
+  function depTakeoffAccelMs2ForFlight(f) {
+    const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f && f.aircraftType) : null;
+    const mtow = typeof ac.mtow_kg === 'number' && isFinite(ac.mtow_kg) ? ac.mtow_kg : 100000;
+    if (mtow <= DEP_MTOW_REF_SMALL_KG) return DEP_TAKEOFF_ACCEL_SMALL_MS2;
+    if (mtow >= DEP_MTOW_REF_LARGE_KG) return DEP_TAKEOFF_ACCEL_LARGE_MS2;
+    const t = (mtow - DEP_MTOW_REF_SMALL_KG) / (DEP_MTOW_REF_LARGE_KG - DEP_MTOW_REF_SMALL_KG);
+    return DEP_TAKEOFF_ACCEL_SMALL_MS2 + t * (DEP_TAKEOFF_ACCEL_LARGE_MS2 - DEP_TAKEOFF_ACCEL_SMALL_MS2);
+  }
+  function takeoffRollSecForRunwayTailLenM(lenM, accelMs2) {
+    const L = Math.max(0, lenM);
+    const a = Math.max(0.1, accelMs2);
+    if (L < 1e-6) return 0;
+    return Math.sqrt(2 * L / a);
+  }
+  function polylineTotalLenM(pts) {
+    if (!pts || pts.length < 2) return 0;
+    let s = 0;
+    for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
+    return s;
+  }
+  function rtxSetHasRunwayHoldingHp(candIds) {
+    const hps = state.holdingPoints || [];
+    for (let i = 0; i < hps.length; i++) {
+      const hp = hps[i];
+      if (!hp || normalizeHoldingPointKind(hp.hpKind) !== 'runway_holding') continue;
+      if (runwayHoldingNearRtxCandidateSet(hp, candIds)) return true;
+    }
+    return false;
+  }
+  function computeDepHoldToLineupSecForFlight(f) {
+    if (!f || f.arrDep !== 'Dep' || f.noWayDep) return 0;
+    const toLineup = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, { onlyToLineup: true }) : null;
+    if (!toLineup || toLineup.length < 2) return 0;
+    const runwayId = f.depRunwayId || (f.token && (f.token.depRunwayId != null ? f.token.depRunwayId : f.token.runwayId)) || f.arrRunwayId;
+    const rwTw = (state.taxiways || []).find(function(t) { return t && t.id === runwayId && t.pathType === 'runway'; });
+    const lineupPt = toLineup[toLineup.length - 1];
+    const exp = rwTw ? expandRtxCandidateIdsTouchingLineup(rwTw, lineupPt) : { allIds: new Set() };
+    const holdPick = findLastRunwayHoldingOnDeparturePath(toLineup, exp.allIds);
+    if (!holdPick || !(holdPick.distAlong > 1e-3)) return 0;
+    const spl = polylineSplitAtDistance(toLineup, holdPick.distAlong);
+    const holdToLineup = spl.second && spl.second.length >= 2 ? spl.second : null;
+    if (!holdToLineup) return 0;
+    return polylineDurationSecTaxi(holdToLineup);
+  }
+  function computeDepRollAndLineupOnlySec(f) {
+    const split = (typeof splitDeparturePathLineupAndRunwayTail === 'function') ? splitDeparturePathLineupAndRunwayTail(f) : null;
+    const a = depTakeoffAccelMs2ForFlight(f);
+    const tailLen = split && split.runwayTail ? polylineTotalLenM(split.runwayTail) : 0;
+    return DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(tailLen, a);
+  }
+  function computeDepRotSecondsForFlight(f) {
+    return computeDepHoldToLineupSecForFlight(f) + computeDepRollAndLineupOnlySec(f);
+  }
+  function dedupePathPoints(pts) {
+    const out = [];
+    (pts || []).forEach(function(p) {
+      if (!p || p.length < 2) return;
+      if (!out.length || dist2(out[out.length - 1], p) > SPLIT_TOL_D2) out.push([p[0], p[1]]);
+    });
+    return out;
+  }
+  function polylineDistanceBetweenAlong(pts, startAlong, endAlong) {
+    if (!pts || pts.length < 2) return 0;
+    const a0 = Math.max(0, Number(startAlong) || 0);
+    const a1 = Math.max(a0, Number(endAlong) || 0);
+    let dist = 0;
+    for (let seg = Math.floor(a0); seg <= Math.min(pts.length - 2, Math.floor(a1)); seg++) {
+      const segStart = Math.max(seg, a0);
+      const segEnd = Math.min(seg + 1, a1);
+      if (segEnd <= segStart) continue;
+      const segLen = pathDist(pts[seg], pts[seg + 1]);
+      if (!(segLen > 1e-9)) continue;
+      dist += segLen * (segEnd - segStart);
+    }
+    return dist;
+  }
+  function polylinePointsBetweenAlong(pts, startAlong, endAlong) {
+    if (!pts || pts.length < 2) return [];
+    const a0 = Math.max(0, Number(startAlong) || 0);
+    const a1 = Math.max(a0, Number(endAlong) || 0);
+    const startSeg = Math.max(0, Math.min(pts.length - 2, Math.floor(a0)));
+    const endSeg = Math.max(0, Math.min(pts.length - 2, Math.floor(a1)));
+    const startT = a0 - startSeg;
+    const endT = a1 - endSeg;
+    const startPt = [
+      pts[startSeg][0] + (pts[startSeg + 1][0] - pts[startSeg][0]) * startT,
+      pts[startSeg][1] + (pts[startSeg + 1][1] - pts[startSeg][1]) * startT
+    ];
+    const endPt = [
+      pts[endSeg][0] + (pts[endSeg + 1][0] - pts[endSeg][0]) * endT,
+      pts[endSeg][1] + (pts[endSeg + 1][1] - pts[endSeg][1]) * endT
+    ];
+    const out = [[startPt[0], startPt[1]]];
+    for (let i = startSeg + 1; i <= endSeg; i++) out.push([pts[i][0], pts[i][1]]);
+    out.push([endPt[0], endPt[1]]);
+    return dedupePathPoints(out);
+  }
+  /** p1 indices are on g1; p2 on gFull. buildPathFromIndices must use one graph — remap g1 nodes into gFull index space. */
+  function retSplitPathIndicesOnGFull(g1, gFull, p1, p2, pivotIdx, pivotIdxFull) {
+    if (!g1 || !gFull || !p1 || !p2 || p1.length < 2 || p2.length < 2) return null;
+    const p1Seg = (pivotIdx === pivotIdxFull) ? p1 : p1.slice(0, -1);
+    const part1 = [];
+    for (let i = 0; i < p1Seg.length; i++) {
+      const wp = g1.nodes[p1Seg[i]];
+      if (!wp) return null;
+      const ni = nearestPathNode(gFull, wp);
+      if (!part1.length || part1[part1.length - 1] !== ni) part1.push(ni);
+    }
+    const p2Tail = (pivotIdx === pivotIdxFull) ? p2.slice(1) : p2;
+    const merged = part1.concat(p2Tail);
+    const out = [];
+    for (let i = 0; i < merged.length; i++) {
+      if (!out.length || out[out.length - 1] !== merged[i]) out.push(merged[i]);
+    }
+    return out.length >= 2 ? out : null;
+  }
+
+  function buildPathFromIndices(g, pathIndices) {
+    if (!g || !Array.isArray(pathIndices) || pathIndices.length < 2) return null;
+    const out = [];
+    for (let i = 0; i < pathIndices.length - 1; i++) {
+      const key = pathIndices[i] + ':' + pathIndices[i + 1];
+      const edge = g.edgeMap ? g.edgeMap[key] : null;
+      const pts = (edge && Array.isArray(edge.pts) && edge.pts.length >= 2)
+        ? edge.pts
+        : [g.nodes[pathIndices[i]], g.nodes[pathIndices[i + 1]]];
+      pts.forEach(function(p) {
+        if (!p || p.length < 2) return;
+        if (!out.length || dist2(out[out.length - 1], p) > SPLIT_TOL_D2) out.push([p[0], p[1]]);
+      });
+    }
+    return out;
+  }
+
+  /** F2: operational runway direction vs RET "Available RW direction" only (arrival sample — no extra geometry gate). */
+  function arrivalRetPassesFilter2RunwayAvailableDir(rw, exitTw) {
+    if (!rw || !exitTw || rw.pathType !== 'runway' || exitTw.pathType !== 'runway_exit') return false;
+    const rd = getRunwayOperationalDirForArrivalRetFilter2(rw);
+    if (rd === 'clockwise') return isRunwayExitDirAllowedForArrivalFilter2(exitTw, 'clockwise');
+    return isRunwayExitDirAllowedForArrivalFilter2(exitTw, 'counter_clockwise');
+  }
+
+  function isPointOnRunwayPolyline2D(rVerts, q) {
+    if (!rVerts || rVerts.length < 2 || !q) return false;
+    for (let i = 0; i < rVerts.length - 1; i++) {
+      if (pointOnSegmentStrict(rVerts[i], rVerts[i + 1], q)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Arrival: if RET path direction (Runway exit mode) is not "both", require at least one edge
+   * (fromIdx -> toIdx) to match: CCW — from off runway, to on; CW — from on, to off.
+   */
+  function arrivalRunwayExitPassPathDirEdgeToRunwayFilter(rw, exitTw, rVerts) {
+    if (!exitTw || exitTw.pathType !== 'runway_exit' || !rVerts) return true;
+    const pathDir = normalizeRwDirectionValue(getTaxiwayDirection(exitTw));
+    if (pathDir === 'both') return true;
+    const verts = exitTw.vertices;
+    if (!Array.isArray(verts) || verts.length < 2) return false;
+    for (let ei = 0; ei < verts.length - 1; ei++) {
+      const f = [verts[ei].col, verts[ei].row];
+      const t = [verts[ei + 1].col, verts[ei + 1].row];
+      const onF = isPointOnRunwayPolyline2D(rVerts, f);
+      const onT = isPointOnRunwayPolyline2D(rVerts, t);
+      if (pathDir === 'counter_clockwise' && !onF && onT) return true;
+      if (pathDir === 'clockwise' && onF && !onT) return true;
+    }
+    return false;
+  }
+
+  function computeRunwayExitDistances() {
+    const taxiways = state.taxiways || [];
+    const runways = taxiways.filter(t => t.pathType === 'runway' && Array.isArray(t.vertices) && t.vertices.length >= 2);
+    const exits = taxiways.filter(t => t.pathType === 'runway_exit' && Array.isArray(t.vertices) && t.vertices.length >= 2);
+    const results = [];
+    if (!runways.length || !exits.length) return results;
+
+    runways.forEach(rw => {
+      let rVerts = rw.vertices.map(v => [v.col, v.row]);
+      if (rVerts.length < 2) return;
+      const prefixDist = [0];
+      for (let i = 1; i < rVerts.length; i++) {
+        prefixDist[i] = prefixDist[i - 1] + pathDist(rVerts[i - 1], rVerts[i]);
+      }
+      exits.forEach(tw => {
+        let best = null;
+        const exitName = (tw.name && tw.name.trim()) ? tw.name.trim() : ('Exit ' + String(results.length + 1));
+        function considerRunwayHit(distCells) {
+          const dCells = Math.max(0, distCells);
+          const distM = dCells * CELL_SIZE;
+          const maxExitVelRaw = (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0)
+            ? tw.maxExitVelocity
+            : 30;
+          const minExitVelRaw = (typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
+            ? tw.minExitVelocity
+            : 15;
+          const maxExitVel = maxExitVelRaw;
+          const minExitVel = Math.min(minExitVelRaw, maxExitVel);
+          if (!best || distM < best.distM) {
+            best = { runway: rw, exit: tw, name: exitName, distM, maxExitVelocity: maxExitVel, minExitVelocity: minExitVel };
+          }
+        }
+        tw.vertices.forEach(v => {
+          const q = [v.col, v.row];
+          for (let i = 0; i < rVerts.length - 1; i++) {
+            const a = rVerts[i], b = rVerts[i + 1];
+            if (!pointOnSegmentStrict(a, b, q)) continue;
+            const segLen = pathDist(a, b);
+            if (!(segLen > 1e-6)) continue;
+            const proj = projectOnSegment(a, b, q);
+            const t = Math.max(0, Math.min(1, segLen > 0 ? pathDist(a, proj.p) / segLen : 0));
+            const distCells = prefixDist[i] + segLen * t;
+            considerRunwayHit(distCells);
+          }
+        });
+        let ev = tw.vertices.map(v => [v.col, v.row]);
+        for (let ei = 0; ei < ev.length - 1; ei++) {
+          const ea = ev[ei], eb = ev[ei + 1];
+          for (let i = 0; i < rVerts.length - 1; i++) {
+            const ra = rVerts[i], rb = rVerts[i + 1];
+            const segLen = pathDist(ra, rb);
+            if (!(segLen > 1e-6)) continue;
+            function distFromRunwayPoint(q) {
+              const proj = projectOnSegment(ra, rb, q);
+              if (proj.t < -1e-9 || proj.t > 1 + 1e-9) return;
+              if (dist2(proj.p, q) > SPLIT_TOL_D2 * 4) return;
+              const t = Math.max(0, Math.min(1, segLen > 0 ? pathDist(ra, proj.p) / segLen : 0));
+              considerRunwayHit(prefixDist[i] + segLen * t);
+            }
+            const isec = segmentSegmentIntersection(ea, eb, ra, rb);
+            if (isec) distFromRunwayPoint(isec.p);
+            const ovRw = collinearSegmentOverlapOnAB(ra, rb, ea, eb);
+            if (ovRw) {
+              const rax = ra[0], ray = ra[1], rbx = rb[0], rby = rb[1];
+              const rdx = rbx - rax, rdy = rby - ray;
+              distFromRunwayPoint([rax + ovRw.t0 * rdx, ray + ovRw.t0 * rdy]);
+              distFromRunwayPoint([rax + ovRw.t1 * rdx, ray + ovRw.t1 * rdy]);
+            }
+          }
+        }
+        if (best) {
+          if (!arrivalRetPassesFilter2RunwayAvailableDir(rw, tw)) best = null;
+        }
+        if (best && !arrivalRunwayExitPassPathDirEdgeToRunwayFilter(rw, tw, rVerts)) {
+          best = null;
+        }
+        if (best) results.push(best);
+      });
+    });
+
+    results.sort((a, b) => a.distM - b.distM);
+    return results;
+  }
+
+  
+  function mergeNearbyPathPointsForDraw(points, radiusM) {
+    if (!points || !points.length) return [];
+    const r = (typeof radiusM === 'number' && isFinite(radiusM) && radiusM > 0) ? radiusM : PATH_JUNCTION_MERGE_RADIUS_PX;
+    const n = points.length;
+    const parent = [];
+    for (let i = 0; i < n; i++) parent[i] = i;
+    function dsFind(i) {
+      if (parent[i] !== i) parent[i] = dsFind(parent[i]);
+      return parent[i];
+    }
+    function dsUnion(i, j) {
+      const ri = dsFind(i), rj = dsFind(j);
+      if (ri !== rj) parent[Math.max(ri, rj)] = Math.min(ri, rj);
+    }
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (pathDist(points[i], points[j]) <= r) dsUnion(i, j);
+      }
+    }
+    const buckets = {};
+    for (let i = 0; i < n; i++) {
+      const root = dsFind(i);
+      if (!buckets[root]) buckets[root] = [];
+      buckets[root].push(points[i]);
+    }
+    const out = [];
+    Object.keys(buckets).forEach(function(k) {
+      const g = buckets[k];
+      let sx = 0, sy = 0;
+      for (let t = 0; t < g.length; t++) { sx += g[t][0]; sy += g[t][1]; }
+      out.push([sx / g.length, sy / g.length]);
+    });
+    return out;
+  }
+
+  
+  function computeConnectedRunwayExitIds(seedId, pathList) {
+    const out = new Set();
+    if (seedId == null) return out;
+    const rex = (pathList || []).filter(function(tw) {
+      return tw && tw.pathType === 'runway_exit' && getOrderedPoints(tw) && getOrderedPoints(tw).length >= 2;
+    });
+    const idToTw = {};
+    rex.forEach(function(tw) { idToTw[tw.id] = tw; });
+    const touchD2 = Math.max(SPLIT_TOL_D2, Math.pow(CELL_SIZE * 0.2, 2));
+    function twPairTouch(twA, twB) {
+      const p1 = getOrderedPoints(twA);
+      const p2 = getOrderedPoints(twB);
+      if (!p1 || !p2 || p1.length < 2 || p2.length < 2) return false;
+      let i, s, pr;
+      for (i = 0; i < p1.length; i++) {
+        for (s = 0; s < p2.length - 1; s++) {
+          pr = projectOnSegment(p2[s], p2[s + 1], p1[i]);
+          if (dist2(pr.p, p1[i]) <= touchD2) return true;
+        }
+      }
+      for (i = 0; i < p2.length; i++) {
+        for (s = 0; s < p1.length - 1; s++) {
+          pr = projectOnSegment(p1[s], p1[s + 1], p2[i]);
+          if (dist2(pr.p, p2[i]) <= touchD2) return true;
+        }
+      }
+      return false;
+    }
+    if (!idToTw[seedId]) {
+      out.add(seedId);
+      return out;
+    }
+    const queue = [seedId];
+    out.add(seedId);
+    while (queue.length) {
+      const curId = queue.shift();
+      const curTw = idToTw[curId];
+      if (!curTw) continue;
+      rex.forEach(function(tw) {
+        if (out.has(tw.id)) return;
+        if (twPairTouch(tw, curTw)) {
+          out.add(tw.id);
+          queue.push(tw.id);
+        }
+      });
+    }
+    return out;
+  }
+
+  function queueTaxiwayAutoJunctionMarkersAlong(tw, spacingM) {
+    const verts = tw && tw.vertices;
+    if (!verts || verts.length < 2 || !isFinite(spacingM) || spacingM < 1e-6) return [];
+    if (String(tw.pathType || '') !== 'general_queue_taxiway') return [];
+    const out = [];
+    let alongM = 0;
+    let nextMark = spacingM;
+    for (let i = 0; i < verts.length - 1; i++) {
+      const v0 = verts[i], v1 = verts[i + 1];
+      const dc = Number(v1.col) - Number(v0.col);
+      const dr = Number(v1.row) - Number(v0.row);
+      const segM = Math.hypot(dc, dr) * CELL_SIZE;
+      if (segM < 1e-12) continue;
+      while (alongM + segM >= nextMark - 1e-9) {
+        const intoSegM = nextMark - alongM;
+        const u = intoSegM / segM;
+        const pu = Math.max(0, Math.min(1, u));
+        const col = Number(v0.col) + pu * dc;
+        const row = Number(v0.row) + pu * dr;
+        const p = cellToPixel(col, row);
+        out.push({ tAlong: i + pu, p });
+        nextMark += spacingM;
+      }
+      alongM += segM;
+    }
+    return out;
+  }
+
+  function layoutWorldViewportAabbWorldM() {
+    if (!layoutDrawCanvas) return { minWx: -Infinity, maxWx: Infinity, minWy: -Infinity, maxWy: Infinity, marginWorld: 0 };
+    const w = layoutDrawCanvas.width / dpr;
     const h = layoutDrawCanvas.height / dpr;
     const s = state.scale || 1;
     const marginWorld = CELL_SIZE * Math.max(6, 96 / Math.max(s, 0.06));
@@ -893,14 +1382,15 @@
     }
   }
 
-  function rebuildDerivedGraphEdges() {
+  function rebuildDerivedGraphEdges(opt) {
+    const forHeatmap = !!(opt && opt.forHeatmap);
     state.derivedGraphEdges = [];
     if (!state.taxiways || !state.taxiways.length) return;
     const graphSig = computeTaxiwaysGraphSig();
     let g = null;
     if (state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === graphSig) {
       g = state.pathGraphCache;
-    } else if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+    } else if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && !forHeatmap) {
       return;
     } else {
       try {
@@ -980,6 +1470,489 @@
       }
     });
     return best;
+  }
+
+  function closestLayoutEdgeToPoint(wx, wy, maxDistSq) {
+    if (!state.derivedGraphEdges || !state.derivedGraphEdges.length) return null;
+    const click = [wx, wy];
+    const lim = maxDistSq != null && isFinite(maxDistSq) ? maxDistSq : Infinity;
+    let best = null;
+    let bestD2 = lim;
+    state.derivedGraphEdges.forEach(function(ed) {
+      const pts = (ed.pts && ed.pts.length >= 2) ? ed.pts : [[ed.x1, ed.y1], [ed.x2, ed.y2]];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const near = closestPointOnSegment(pts[i], pts[i + 1], click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          best = ed;
+        }
+      }
+    });
+    return best;
+  }
+
+  /** Prefer Pro Sim ``edgeId`` on timeline samples; fall back to nearest graph edge (wider snap than picking). */
+  function resolveLayoutGraphEdgeForHeatmap(a, b, mx, my, maxDistSq) {
+    const raw = (b && b.edgeId != null && String(b.edgeId).trim()) ? String(b.edgeId).trim()
+      : ((a && a.edgeId != null && String(a.edgeId).trim()) ? String(a.edgeId).trim() : '');
+    if (raw) {
+      const edges = state.derivedGraphEdges || [];
+      for (let i = 0; i < edges.length; i++) {
+        if (edges[i].id === raw) return edges[i];
+      }
+    }
+    return closestLayoutEdgeToPoint(mx, my, maxDistSq);
+  }
+
+  function proSimPhaseToHeatCategory(phaseRaw) {
+    const p = (phaseRaw != null && String(phaseRaw).trim()) ? String(phaseRaw).trim() : '';
+    const q = p.toLowerCase().replace(/[\s-]+/g, '_');
+    if (q === 'landing') return 'rotArr';
+    if (q === 'arr_taxi' || q === 'arr_taxi_occupied') return 'vttArr';
+    if (q === 'dep_taxi' || q === 'holding_lineup') return 'vttDep';
+    if (q === 'lineup_departure') return 'rotDep';
+    return null;
+  }
+  /** Heatmap: displayU=0 최소(네온 녹) → 1 최대(빨강), 선형 보간. displayU는 아래 왜곡 함수로부터 온다. */
+  function heatmapTrafficGreenToRed(displayU) {
+    const t = Math.max(0, Math.min(1, displayU));
+    const r0 = 0x39, g0 = 0xff, b0 = 0x14;
+    const r1 = 0xff, g1 = 0x22, b1 = 0x33;
+    const r = Math.round(r0 + (r1 - r0) * t);
+    const g = Math.round(g0 + (g1 - g0) * t);
+    const b = Math.round(b0 + (b1 - b0) * t);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+  /**
+   * 랭크 u∈[0,1](적게 지남→많이 지남)을 색 축으로 연속 재매핑.
+   * 통과량 하위 HEATMAP_TRAFFIC_GREEN_BIAS 비율은 녹~중간(그라데이션 전반부), 나머지는 중간~빨(후반부)만 사용해 빨간 비중을 줄임.
+   */
+  const HEATMAP_TRAFFIC_GREEN_BIAS = 0.75;
+  /** 히트맵 색·분할 기준: 월드 좌표(m) 150m 격자. 셀 단위 클립·집계. */
+  const HEATMAP_GRID_STEP_M = 150;
+  function heatmapTrafficRankToDisplayU(uRank) {
+    const t = Math.max(0, Math.min(1, Number(uRank) || 0));
+    const g = HEATMAP_TRAFFIC_GREEN_BIAS;
+    if (g >= 1 - 1e-9) return t * 0.5;
+    if (g <= 1e-9) return 0.5 + t * 0.5;
+    if (t <= g) return (t / g) * 0.5;
+    return 0.5 + ((t - g) / (1 - g)) * 0.5;
+  }
+  let _heatmapTrafficLegendDomSig = '';
+  /** Heatmap uses full scenario [0, T]; independent of playback scrubber. */
+  function heatmapClipSecFullScenarioStatic() {
+    let maxT = isFinite(state.simDurationSec) ? Math.max(0, Number(state.simDurationSec)) : 0;
+    (state.flights || []).forEach(function(f) {
+      const tl = f && f.timeline;
+      if (!tl || !tl.length) return;
+      const last = tl[tl.length - 1];
+      const tt = Number(last && last.t);
+      if (isFinite(tt) && tt > maxT) maxT = tt;
+    });
+    return maxT;
+  }
+  /** Left legend: 5-quantile of segment-hit counts (150m cells), same colors as map. */
+  function syncHeatmapTrafficLegend() {
+    const root = document.getElementById('heatmap-traffic-legend');
+    if (!root) return;
+    const heatOk = !!state.hasSimulationResult;
+    const mode = state.mapTypeMode || 'normal';
+    if (!heatOk || mode !== 'heatmap') {
+      _heatmapTrafficLegendDomSig = '';
+      root.setAttribute('hidden', '');
+      root.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    const edgeN = (state.derivedGraphEdges || []).length;
+    const domSig = layoutHeatmapBakeContentSignature() + '|e' + String(edgeN);
+    root.removeAttribute('hidden');
+    root.removeAttribute('aria-hidden');
+    const titleEl = root.querySelector('.heatmap-traffic-legend__title');
+    if (titleEl) {
+      titleEl.textContent = 'Segment Dwell';
+    }
+    if (domSig === _heatmapTrafficLegendDomSig) return;
+    const rowsEl = document.getElementById('heatmapTrafficLegendRows');
+    if (!rowsEl) return;
+    const pack = buildHeatmapTrafficWeights();
+    const gmap = pack.gridWeights || {};
+    const rankU = heatmapTrafficRankUFromWeights(gmap);
+    const items = [];
+    Object.keys(gmap).forEach(function(k) {
+      const w = gmap[k];
+      if (w > 0) items.push({ id: k, w: w });
+    });
+    const n = items.length;
+    rowsEl.innerHTML = '';
+    if (n === 0) {
+      const row = document.createElement('div');
+      row.className = 'heatmap-traffic-legend__row heatmap-traffic-legend__row--empty';
+      row.textContent = 'No heatmap data';
+      rowsEl.appendChild(row);
+      _heatmapTrafficLegendDomSig = domSig;
+      return;
+    }
+    items.sort(function(a, b) {
+      if (a.w !== b.w) return a.w - b.w;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    const fracs = [1, 0.75, 0.5, 0.25, 0];
+    const hints = ['High', '', '', '', 'Low'];
+    for (let i = 0; i < fracs.length; i++) {
+      const idx = Math.round(fracs[i] * (n - 1));
+      const it = items[idx];
+      const cnt = Math.max(0, Math.round(Number(it.w) || 0));
+      const uR = rankU[it.id];
+      const col = heatmapTrafficGreenToRed(heatmapTrafficRankToDisplayU(uR));
+      const row = document.createElement('div');
+      row.className = 'heatmap-traffic-legend__row';
+      const dot = document.createElement('span');
+      dot.className = 'heatmap-traffic-legend__dot';
+      dot.style.background = col;
+      dot.setAttribute('aria-hidden', 'true');
+      const lab = document.createElement('span');
+      lab.className = 'heatmap-traffic-legend__label';
+      const num = document.createElement('strong');
+      num.className = 'heatmap-traffic-legend__num';
+      num.textContent = String(cnt);
+      lab.appendChild(num);
+      lab.appendChild(document.createTextNode(' hits'));
+      if (hints[i]) {
+        const hint = document.createElement('span');
+        hint.className = 'heatmap-traffic-legend__hint';
+        hint.textContent = ' · ' + hints[i];
+        lab.appendChild(hint);
+      }
+      row.appendChild(dot);
+      row.appendChild(lab);
+      rowsEl.appendChild(row);
+    }
+    _heatmapTrafficLegendDomSig = domSig;
+  }
+  /**
+   * 체크된 phase에서 가중치 > 0 인 항목만 모아 랭크 후 u에 매핑.
+   * 최소 u=0(녹), 최대 u=1(빨); 동점은 같은 구간의 중간 u.
+   */
+  function heatmapTrafficRankUFromWeights(weights) {
+    const rankU = Object.create(null);
+    const items = [];
+    Object.keys(weights).forEach(function(k) {
+      const w = weights[k];
+      if (w > 0) items.push({ id: k, w: w });
+    });
+    const n = items.length;
+    if (n === 0) return rankU;
+    items.sort(function(a, b) {
+      if (a.w !== b.w) return a.w - b.w;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+    for (let i = 0; i < n; ) {
+      let j = i + 1;
+      while (j < n && items[j].w === items[i].w) j++;
+      const mid = (i + j - 1) / 2;
+      const u = n > 1 ? mid / (n - 1) : 0.5;
+      for (let k = i; k < j; k++) rankU[items[k].id] = u;
+      i = j;
+    }
+    return rankU;
+  }
+  /**
+   * Edge·격자 셀별 세그먼트 히트: 전체 시나리오 [0, T] 안에서 타임라인 인접 샘플 한 쌍이 조건을 만족할 때마다 +1 (Δt·체류 가중 없음).
+   * 재생 슬라이더와 무관하게 항상 전체 타임라인을 사용.
+   */
+  function buildHeatmapTrafficWeights() {
+    const weights = Object.create(null);
+    const gridWeights = Object.create(null);
+    const edges = state.derivedGraphEdges || [];
+    if (!edges.length) return { weights: weights, gridWeights: gridWeights };
+    const gw = HEATMAP_GRID_STEP_M;
+    const maxD2 = Math.pow(Math.max(CELL_SIZE * 2.8, 80), 2);
+    const flights = state.flights || [];
+    const tMax = heatmapClipSecFullScenarioStatic();
+    if (tMax <= 1e-9) return { weights: weights, gridWeights: gridWeights };
+    for (let fi = 0; fi < flights.length; fi++) {
+      const f = flights[fi];
+      if (!f) continue;
+      const tl = f.timeline;
+      if (!tl || tl.length < 2) continue;
+      for (let i = 0; i < tl.length - 1; i++) {
+        const a = tl[i];
+        const b = tl[i + 1];
+        if (!a || !b) continue;
+        const t1 = Number(b.t);
+        const t0 = Number(a.t);
+        if (!isFinite(t0) || !isFinite(t1)) continue;
+        const lo = Math.max(t0, 0);
+        const hi = Math.min(t1, tMax);
+        if (hi <= lo + 1e-9) continue;
+        const ph = (a.phase != null && String(a.phase).trim()) ? String(a.phase).trim() : ((b.phase != null && String(b.phase).trim()) ? String(b.phase).trim() : 'Landing');
+        const cat = proSimPhaseToHeatCategory(ph);
+        if (!cat) continue;
+        const mx = (Number(a.x) + Number(b.x)) * 0.5;
+        const my = (Number(a.y) + Number(b.y)) * 0.5;
+        if (!isFinite(mx) || !isFinite(my)) continue;
+        const ed = resolveLayoutGraphEdgeForHeatmap(a, b, mx, my, maxD2);
+        if (!ed || !ed.id) continue;
+        const id = ed.id;
+        weights[id] = (weights[id] || 0) + 1;
+        const gkx = Math.floor(mx / gw);
+        const gky = Math.floor(my / gw);
+        const gkey = gkx + ',' + gky;
+        gridWeights[gkey] = (gridWeights[gkey] || 0) + 1;
+      }
+    }
+    return { weights: weights, gridWeights: gridWeights };
+  }
+  /** Liang–Barsky: 선분을 축정렬 사각형 [xmin,xmax]×[ymin,ymax] 으로 클립. */
+  function clipHeatmapSegmentToAxisRect(x0, y0, x1, y1, xmin, xmax, ymin, ymax) {
+    let t0 = 0, t1 = 1;
+    const dx = x1 - x0, dy = y1 - y0;
+    const te = 1e-10;
+    function clip(p, q) {
+      if (Math.abs(p) < te) return q >= -1e-8;
+      const r = q / p;
+      if (p < 0) {
+        if (r > t1 + te) return false;
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0 - te) return false;
+        if (r < t1) t1 = r;
+      }
+      return true;
+    }
+    if (!clip(-dx, x0 - xmin)) return null;
+    if (!clip(dx, xmax - x0)) return null;
+    if (!clip(-dy, y0 - ymin)) return null;
+    if (!clip(dy, ymax - y0)) return null;
+    if (t1 < t0 - 1e-9) return null;
+    return [x0 + t0 * dx, y0 + t0 * dy, x0 + t1 * dx, y0 + t1 * dy];
+  }
+  function heatmapPolylineBboxIntersectsRect(pts, xmin, xmax, ymin, ymax) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const x = pts[i][0], y = pts[i][1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return !(maxX < xmin || minX > xmax || maxY < ymin || minY > ymax);
+  }
+  /** 폴리라인을 한 격자 셀 안에 들어가는 연속 선분 체인들로 분해. */
+  function clipHeatmapPolylineToRectChains(pts, xmin, xmax, ymin, ymax) {
+    const chains = [];
+    let cur = [];
+    function flush() {
+      if (cur.length >= 2) chains.push(cur);
+      cur = [];
+    }
+    function appendSeg(p0x, p0y, p1x, p1y) {
+      if (!cur.length) {
+        cur.push([p0x, p0y]);
+        cur.push([p1x, p1y]);
+        return;
+      }
+      const L = cur[cur.length - 1];
+      if (Math.hypot(L[0] - p0x, L[1] - p0y) < 1e-5) {
+        if (Math.hypot(L[0] - p1x, L[1] - p1y) > 1e-5) cur.push([p1x, p1y]);
+      } else {
+        flush();
+        cur.push([p0x, p0y]);
+        cur.push([p1x, p1y]);
+      }
+    }
+    for (let i = 0; i < pts.length - 1; i++) {
+      const ax = pts[i][0], ay = pts[i][1], bx = pts[i + 1][0], by = pts[i + 1][1];
+      const seg = clipHeatmapSegmentToAxisRect(ax, ay, bx, by, xmin, xmax, ymin, ymax);
+      if (!seg) {
+        flush();
+        continue;
+      }
+      appendSeg(seg[0], seg[1], seg[2], seg[3]);
+    }
+    flush();
+    return chains;
+  }
+  function layoutHeatmapEdgeIntersectsViewport(ed, vb) {
+    if (!vb || !ed) return true;
+    const pts = (ed.pts && ed.pts.length >= 2) ? ed.pts : [[ed.x1, ed.y1], [ed.x2, ed.y2]];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const x = pts[i][0], y = pts[i][1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const pad = CELL_SIZE * 6;
+    return !(maxX + pad < vb.minWx || minX - pad > vb.maxWx || maxY + pad < vb.minWy || minY - pad > vb.maxWy);
+  }
+  function layoutHeatmapHashStr(str) {
+    const s = str == null ? '' : String(str);
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(36);
+  }
+  /** Fingerprint of timeline geometry/timing so cache invalidates when sim payload changes. */
+  function layoutHeatmapFlightsDataSig() {
+    const flights = state.flights || [];
+    let tlPts = 0;
+    let h = 2166136261;
+    for (let fi = 0; fi < flights.length; fi++) {
+      const f = flights[fi];
+      if (!f) continue;
+      const tl = f.timeline;
+      if (!tl || !tl.length) continue;
+      tlPts += tl.length;
+      const step = Math.max(1, Math.floor(tl.length / 16));
+      for (let j = 0; j < tl.length; j += step) {
+        const s = tl[j];
+        if (!s) continue;
+        const x = Math.round(Number(s.x) * 10), y = Math.round(Number(s.y) * 10), tt = Math.round(Number(s.t) * 1000);
+        h = Math.imul(h ^ x, 16777619);
+        h = Math.imul(h ^ y, 16777619);
+        h = Math.imul(h ^ tt, 16777619);
+      }
+    }
+    return String(flights.length) + ':' + String(tlPts) + ':' + String(h >>> 0);
+  }
+  /**
+   * 히트맵 SVG 재구축 조건: 맵 타입·레이아웃·항공기 지문(svg1).
+   * pan/줌·tClip 제외 — 경로는 캐시, 매 프레임 matrix만 갱신.
+   */
+  function layoutHeatmapBakeContentSignature() {
+    const mode = state.mapTypeMode || 'normal';
+    if (mode === 'normal') return '';
+    const graphH = layoutHeatmapHashStr(computeTaxiwaysGraphSig());
+    const flightsSig = layoutHeatmapFlightsDataSig();
+    return ['svg2', 'cellclip', 'staticfull', 'segcnt', 'gb' + String(HEATMAP_TRAFFIC_GREEN_BIAS), 'g' + String(HEATMAP_GRID_STEP_M), mode, graphH, flightsSig].join('|');
+  }
+  function ensureLayoutHeatmapSvgRefs() {
+    if (!_layoutHeatmapSvg) _layoutHeatmapSvg = document.getElementById('layout-heatmap-svg');
+    if (!_layoutHeatmapSvgG) _layoutHeatmapSvgG = document.getElementById('layout-heatmap-world-g');
+  }
+  function syncLayoutHeatmapSvgViewBox() {
+    ensureLayoutHeatmapSvgRefs();
+    if (!_layoutHeatmapSvg || !layoutDrawCanvas) return;
+    const w = layoutDrawCanvas.width / dpr;
+    const h = layoutDrawCanvas.height / dpr;
+    _layoutHeatmapSvg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+  }
+  function syncLayoutHeatmapSvgWorldMatrix() {
+    ensureLayoutHeatmapSvgRefs();
+    if (!_layoutHeatmapSvgG) return;
+    const s = state.scale || 1;
+    const px = state.panX;
+    const py = state.panY;
+    _layoutHeatmapSvgG.setAttribute('transform', 'matrix(' + s + ',0,0,' + s + ',' + px + ',' + py + ')');
+  }
+  function hideLayoutHeatmapSvg() {
+    ensureLayoutHeatmapSvgRefs();
+    if (_layoutHeatmapSvg) _layoutHeatmapSvg.style.display = 'none';
+  }
+  function rebuildLayoutHeatmapSvgDom() {
+    ensureLayoutHeatmapSvgRefs();
+    if (!_layoutHeatmapSvgG) return;
+    const ns = 'http://www.w3.org/2000/svg';
+    while (_layoutHeatmapSvgG.firstChild) {
+      _layoutHeatmapSvgG.removeChild(_layoutHeatmapSvgG.firstChild);
+    }
+    const mode = state.mapTypeMode || 'normal';
+    const heatmapPathStrokeWidthM = 20;
+    if (mode === 'heatmap') {
+      const pack = buildHeatmapTrafficWeights();
+      const wmap = pack.weights;
+      const gridW = pack.gridWeights || {};
+      const rankG = heatmapTrafficRankUFromWeights(gridW);
+      const gStep = HEATMAP_GRID_STEP_M;
+      const edges = state.derivedGraphEdges || [];
+      /** 동일 geometry+색 중복(겹치는 엣지 등) 제거 */
+      const seenHeatmapStroke = new Set();
+      Object.keys(gridW).forEach(function(gkey) {
+        if (!(gridW[gkey] > 0)) return;
+        const parts = gkey.split(',');
+        const gx = parseInt(parts[0], 10);
+        const gy = parseInt(parts[1], 10);
+        if (!isFinite(gx) || !isFinite(gy)) return;
+        const xmin = gx * gStep;
+        const xmax = (gx + 1) * gStep;
+        const ymin = gy * gStep;
+        const ymax = (gy + 1) * gStep;
+        const uRank = rankG[gkey] != null ? rankG[gkey] : 0;
+        const col = heatmapTrafficGreenToRed(heatmapTrafficRankToDisplayU(uRank));
+        for (let ei = 0; ei < edges.length; ei++) {
+          const ed = edges[ei];
+          if (!(wmap[ed.id] > 0)) continue;
+          const pts = (ed.pts && ed.pts.length >= 2) ? ed.pts : [[ed.x1, ed.y1], [ed.x2, ed.y2]];
+          if (!heatmapPolylineBboxIntersectsRect(pts, xmin, xmax, ymin, ymax)) continue;
+          const chains = clipHeatmapPolylineToRectChains(pts, xmin, xmax, ymin, ymax);
+          for (let ci = 0; ci < chains.length; ci++) {
+            const ch = chains[ci];
+            if (ch.length < 2) continue;
+            let ptStr = '';
+            for (let j = 0; j < ch.length; j++) {
+              if (j) ptStr += ' ';
+              ptStr += Number(ch[j][0]).toFixed(4) + ',' + Number(ch[j][1]).toFixed(4);
+            }
+            const sig = ptStr + '|' + col;
+            if (seenHeatmapStroke.has(sig)) continue;
+            seenHeatmapStroke.add(sig);
+            const pl = document.createElementNS(ns, 'polyline');
+            pl.setAttribute('points', ptStr);
+            pl.setAttribute('fill', 'none');
+            pl.setAttribute('stroke', col);
+            pl.setAttribute('stroke-width', String(heatmapPathStrokeWidthM));
+            pl.setAttribute('stroke-linecap', 'round');
+            pl.setAttribute('stroke-linejoin', 'round');
+            pl.setAttribute('stroke-opacity', '0.88');
+            pl.setAttribute('shape-rendering', 'geometricPrecision');
+            _layoutHeatmapSvgG.appendChild(pl);
+          }
+        }
+      });
+    }
+  }
+  function ensureDerivedGraphEdgesForHeatmap() {
+    if (state.derivedGraphEdges && state.derivedGraphEdges.length) return;
+    if (typeof rebuildDerivedGraphEdges === 'function') rebuildDerivedGraphEdges({ forHeatmap: true });
+  }
+  /** 벡터 SVG + 월드 matrix: export/오프스크린 draw 시에는 건너뜀. */
+  function drawLayoutHeatmapOverlays() {
+    if (layoutDrawCanvas !== canvas) return;
+    if (!state.hasSimulationResult) {
+      hideLayoutHeatmapSvg();
+      return;
+    }
+    const mode = state.mapTypeMode || 'normal';
+    if (mode === 'normal') {
+      hideLayoutHeatmapSvg();
+      return;
+    }
+    ensureLayoutHeatmapSvgRefs();
+    if (!_layoutHeatmapSvg || !_layoutHeatmapSvgG) return;
+    const contentSig = layoutHeatmapBakeContentSignature();
+    if (!contentSig) return;
+    if (contentSig !== _layoutHeatmapSvgContentSig) {
+      ensureDerivedGraphEdgesForHeatmap();
+      const ghNow = layoutHeatmapHashStr(computeTaxiwaysGraphSig());
+      if (ghNow !== _layoutHeatmapBakedGraphHash || !(state.derivedGraphEdges || []).length) {
+        if (typeof rebuildDerivedGraphEdges === 'function') rebuildDerivedGraphEdges({ forHeatmap: true });
+        _layoutHeatmapBakedGraphHash = ghNow;
+      } else {
+        ensureDerivedGraphEdgesForHeatmap();
+      }
+      rebuildLayoutHeatmapSvgDom();
+      _layoutHeatmapSvgContentSig = contentSig;
+    }
+    syncLayoutHeatmapSvgViewBox();
+    syncLayoutHeatmapSvgWorldMatrix();
+    _layoutHeatmapSvg.style.display = 'block';
+    if (typeof syncHeatmapTrafficLegend === 'function') syncHeatmapTrafficLegend();
   }
 
   class MinHeap {
@@ -2591,6 +3564,7 @@
           const m = (msg && String(msg)) || 'Pro Sim failed';
           console.error('Pro Sim:', m);
           if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
+          if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
           if (typeof alert === 'function') alert(m);
         }
         const base = proSimApiBase();
@@ -2602,12 +3576,7 @@
           failProSim('먼저 Update로 경로 그래프·뷰를 동기화하세요.');
           return;
         }
-        const arrRetFailRegs = [];
-        (state.flights || []).forEach(function(f) {
-          if (!f || f.arrDep === 'Dep' || !f.arrRetFailed) return;
-          const r = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
-          if (arrRetFailRegs.indexOf(r) < 0) arrRetFailRegs.push(r);
-        });
+        const arrRetFailRegs = typeof getArrRetFailedRegsForProSimUi === 'function' ? getArrRetFailedRegsForProSimUi() : [];
         if (arrRetFailRegs.length) {
           const n = arrRetFailRegs.length;
           const errMsg = n > 5
@@ -3069,6 +4038,7 @@
         ensureSimLoop._lastTs = null;
         ensureSimLoop._playKick = true;
         ensureSimLoop();
+        if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
         try { draw(); } catch(e) {}
         update3DSceneWhenVisible();
       });
@@ -3077,6 +4047,9 @@
       pauseBtn.addEventListener('click', function() {
         state.simPlaying = false;
         if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+        if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
+        try { draw(); } catch(e) {}
+        update3DSceneWhenVisible();
       });
     }
     if (resetBtn) {
@@ -3086,6 +4059,7 @@
         state.simTimeSec = snapSimTimeSecForSlider(state.simStartSec);
         if (simSlider) simSlider.value = state.simTimeSec;
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+        if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
         try { draw(); } catch(e) {}
         update3DSceneWhenVisible();
       });
@@ -4854,8 +5828,15 @@
     canvas.height = h * dpr;
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
+    if (overlayCanvas && overlayCtx) {
+      overlayCanvas.width = w * dpr;
+      overlayCanvas.height = h * dpr;
+      overlayCanvas.style.width = w + 'px';
+      overlayCanvas.style.height = h + 'px';
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     invalidateGridUnderlay();
+    syncLayoutHeatmapSvgViewBox();
     safeDraw({ bypassSimScrubGuard: true });
     syncMarkerTextDraftInputPosition();
   }
@@ -6789,6 +7770,11 @@
   /** Offscreen bitmap: grid → holding points (no sim-time stand fill / flights). Used during sim playback. */
   let _simPlaybackBgCanvas = null;
   let _simPlaybackBgSig = '';
+  /** Baked heatmap in world space; redraw bitmap only when sim/phase/layout/tClip changes. */
+  let _layoutHeatmapSvg = null;
+  let _layoutHeatmapSvgG = null;
+  let _layoutHeatmapSvgContentSig = '';
+  let _layoutHeatmapBakedGraphHash = null;
   function ensureSimPlaybackBgCanvasBuffer(w, h) {
     if (!_simPlaybackBgCanvas) _simPlaybackBgCanvas = document.createElement('canvas');
     if (_simPlaybackBgCanvas.width !== w || _simPlaybackBgCanvas.height !== h) {
@@ -7392,11 +8378,11 @@
   }
   function draw(drawOpts) {
     if (!ctx || !layoutDrawCanvas) return;
+    if (overlayCanvas && !overlayCtx) overlayCtx = overlayCanvas.getContext('2d');
     if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
     const interactiveLite = layoutViewSkipsTaxiDetail(drawOpts);
     const simPlaybackSkipHeavyPathOverlays = !!(state.simPlaying && state.hasSimulationResult && !(drawOpts && drawOpts.forceFullLayoutDraw));
     const skipPathGeometryOverlays = !!(drawOpts && drawOpts.skipPathGeometryOverlays);
-    if (!state.simPlaying) _simPlaybackBgSig = '';
     function drawSimPlaybackBackgroundLayers() {
       drawGrid(interactiveLite);
       drawLayoutAreaMarkers2DFloor();
@@ -7408,8 +8394,11 @@
       drawPathArcPreview();
       drawHoldingPoints2D(interactiveLite);
     }
-    const simPlaybackBgCache = !!(state.simPlaying && state.hasSimulationResult && !interactiveLite && !(drawOpts && drawOpts.forceFullLayoutDraw));
-    if (simPlaybackBgCache) {
+    const nowPerfDraw = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const viewRoughInteraction = !!(state.isPanning || nowPerfDraw < _layoutDetailSuppressUntil);
+    /** 시뮬 재생 여부와 무관: 결과가 있고 뷰가 안정일 때 그리드~홀딩포인트까지 비트맵으로 재사용. 팬/휠 중에는 직접 그려 오프스크린 이중 작업 방지. */
+    const layoutBgBitmapCache = !!(state.hasSimulationResult && !interactiveLite && !(drawOpts && drawOpts.forceFullLayoutDraw) && !viewRoughInteraction);
+    if (layoutBgBitmapCache) {
       const w = layoutDrawCanvas.width, h = layoutDrawCanvas.height;
       ensureSimPlaybackBgCanvasBuffer(w, h);
       const sig = simPlaybackBackgroundCacheSignature(interactiveLite);
@@ -7433,31 +8422,45 @@
     } else {
       drawSimPlaybackBackgroundLayers();
     }
-    drawPBBs(interactiveLite);
-    drawRemoteStands(interactiveLite);
-    drawTempStands(interactiveLite);
-    if (!interactiveLite || state.isPanning) drawApronTaxiwayLinks();
-    drawStandPreview(interactiveLite);
-    drawSelectedLayoutEdge();
-    {
-      const sel = state.selectedObject;
-      const rid = state.flightPathRevealFlightId;
-      if (sel && sel.type === 'flight' && rid != null && String(sel.id) === String(rid)) {
-        drawFlightPathHighlight();
-        drawDeparturePathHighlight();
-      }
+    drawLayoutHeatmapOverlays();
+    const wPxDraw = layoutDrawCanvas.width;
+    const hPxDraw = layoutDrawCanvas.height;
+    const useFg = layoutUseForegroundOverlay();
+    if (useFg) {
+      overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+      overlayCtx.clearRect(0, 0, wPxDraw, hPxDraw);
     }
-    if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawProSimFlightPathEdges();
-    drawHoldingQueueGhostFlights2D();
-    drawFlights2D();
-    if (!interactiveLite) {
-      if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawPathJunctions();
-      if (!skipPathGeometryOverlays) {
-        drawTaxiwayDanglingEndpointMarks();
-        drawQueueTaxiwayLaneMarkers();
+    const savedCtxDraw = ctx;
+    if (useFg) ctx = overlayCtx;
+    try {
+      drawPBBs(interactiveLite);
+      drawRemoteStands(interactiveLite);
+      drawTempStands(interactiveLite);
+      if (!interactiveLite || state.isPanning) drawApronTaxiwayLinks();
+      drawStandPreview(interactiveLite);
+      drawSelectedLayoutEdge();
+      {
+        const sel = state.selectedObject;
+        const rid = state.flightPathRevealFlightId;
+        if (sel && sel.type === 'flight' && rid != null && String(sel.id) === String(rid)) {
+          drawFlightPathHighlight();
+          drawDeparturePathHighlight();
+        }
       }
+      if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawProSimFlightPathEdges();
+      drawHoldingQueueGhostFlights2D();
+      drawFlights2D();
+      if (!interactiveLite) {
+        if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawPathJunctions();
+        if (!skipPathGeometryOverlays) {
+          drawTaxiwayDanglingEndpointMarks();
+          drawQueueTaxiwayLaneMarkers();
+        }
+      }
+      drawLayoutMarkers2D(interactiveLite);
+    } finally {
+      ctx = savedCtxDraw;
     }
-    drawLayoutMarkers2D(interactiveLite);
     syncMarkerTextDraftInputPosition();
     syncMarkerFlightBlazerOverlayButton();
     updatePathArcHud();
@@ -8902,6 +9905,7 @@
     });
   }
   syncLayerPopoverFromState();
+  syncMapTypePopoverFromState();
   if (layerPopoverPanel) {
     layerPopoverPanel.querySelectorAll('input[data-layer-key]').forEach(function(inp) {
       inp.addEventListener('change', function() {
@@ -8979,6 +9983,17 @@
       if (!layerPopoverWrap || layerPopoverPanel.hasAttribute('hidden')) return;
       if (layerPopoverWrap.contains(ev.target)) return;
       setLayerPopoverOpen(false);
+    });
+  }
+  const btnHeatmapToggle = document.getElementById('btnHeatmapToggle');
+  if (btnHeatmapToggle) {
+    btnHeatmapToggle.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      if (!state.hasSimulationResult) return;
+      state.mapTypeMode = (state.mapTypeMode === 'heatmap') ? 'normal' : 'heatmap';
+      syncMapTypePopoverFromState();
+      safeDraw({ bypassSimScrubGuard: true });
+      if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
     });
   }
   const colorPopoverBtn = document.getElementById('btnColorPopover');

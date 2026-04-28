@@ -108,7 +108,7 @@
     const v = Number(_schedAlgo.dwellFloorMin);
     return (isFinite(v) && v >= 0) ? v : 20;
   })();
-  /** Dispatched schedule (d): SLDT = SIBT − this many minutes; STOT = SOBT + SCHED_STOT_MINUS_SOBT_MIN. */
+  /** Single S schedule: SLDT = SIBT − this many minutes; STOT = SOBT + SCHED_STOT_MINUS_SOBT_MIN. */
   const SCHED_SIBT_MINUS_SLDT_MIN = 5;
   const SCHED_STOT_MINUS_SOBT_MIN = 5;
   const RSEP_MISSING_MATRIX_SEC = (function() {
@@ -145,6 +145,8 @@
     return (isFinite(v) && v >= 0) ? v : def;
   }
   const GANTT_PAD_MIN = _taNum('apronGanttPadMin', 20);
+  /** Apron Gantt SIBT/SOBT resize handles snap to this many minutes. */
+  const GANTT_SIBT_SOBT_HANDLE_SNAP_MIN = 5;
   const RWY_SEP_TIMELINE_PAD_MIN = _taNum('runwaySepTimelinePadMin', 10);
   const TICK_STEP_SPAN_LE60 = _taNum('tickStepWhenSpanLe60Min', 10);
   const TICK_STEP_SPAN_LE240 = _taNum('tickStepWhenSpanLe240Min', 30);
@@ -237,6 +239,13 @@
     }
   }
   const container = document.getElementById('canvas-container');
+  let overlayCanvas = document.getElementById('grid-canvas-overlay');
+  if (!overlayCanvas && container) {
+    overlayCanvas = document.createElement('canvas');
+    overlayCanvas.id = 'grid-canvas-overlay';
+    container.appendChild(overlayCanvas);
+  }
+  let overlayCtx = (overlayCanvas && typeof overlayCanvas.getContext === 'function') ? overlayCanvas.getContext('2d') : null;
   const coordEl = document.getElementById('coord');
   const cursorPixelReadoutEl = document.getElementById('cursor-pixel-readout');
   const objectInfoEl = document.getElementById('object-info');
@@ -552,6 +561,12 @@
     simSliderScrubbing: false,
     simSpeed: _dc.defaultSimSpeed,
     hasSimulationResult: false,
+    /** Last Pro Sim ``payload.positions`` — keeps x,y playback samples off flights when Play is blocked (lighter pan/zoom). */
+    simPlaybackPositionsByFlightId: null,
+    /** Copy of ``payload.schedule`` for timeline_meta / E-fields when rehydrating from ``simPlaybackPositionsByFlightId``. */
+    simPlaybackScheduleSnapshot: null,
+    /** True when timelines were evicted from flights but ``simPlaybackPositionsByFlightId`` still holds data. */
+    simPlaybackTimelinesEvictedForMemory: false,
     simPlaybackDockVisible: false,
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
@@ -630,6 +645,9 @@
     flightColorMode: 'all',
     /** Layer popover: monotone overrides per section (Lines / Fill / ETC). */
     layerMono: Object.assign({}, DEFAULT_LAYER_MONO),
+    /** Map Type: normal | heatmap (overlays when hasSimulationResult). */
+    mapTypeMode: 'normal',
+    heatmapTrafficPhases: { rotArr: true, vttArr: true, vttDep: true, rotDep: true },
   };
   const LAYER_STATE_KEYS = [
     'grid', 'image', 'pathLines', 'pathFill', 'standLines', 'standFill',
@@ -810,16 +828,3 @@
       return arr.filter(function(pt) { return !pointNearDeletedTw(pt); });
     }
     if (Array.isArray(g.validJunctions)) g.validJunctions = filt(g.validJunctions);
-    if (Array.isArray(g.connectedJunctions)) g.connectedJunctions = filt(g.connectedJunctions);
-    if (Array.isArray(g.junctions)) g.junctions = filt(g.junctions);
-    if (Array.isArray(g.disconnectedValidJunctions)) g.disconnectedValidJunctions = filt(g.disconnectedValidJunctions);
-  }
-  function markPathGraphJunctionStaleShellAfterLayoutEdit() {
-    cancelPathGraphRebuildTimer();
-    state.pathGraphCache = {
-      __junctionStale: true,
-      validJunctions: [],
-      connectedJunctions: [],
-      disconnectedValidJunctions: [],
-      junctions: [],
-      nodes: [],
