@@ -1703,60 +1703,81 @@ def _world_xy_chain_from_graph_path(
     return chain
 
 
-def _pushback_endpoint_from_departure_chain(
-    apron_point: Tuple[float, float],
-    to_lineup_pts: List[Tuple[float, float]],
-    pixels_per_meter: float,
-    pushback_m: float = 10.0,
-) -> Optional[Tuple[float, float]]:
-    """Straight pushback endpoint: 10m opposite the initial departure taxi direction."""
-    if len(to_lineup_pts) < 2:
-        return None
-    px, py = float(apron_point[0]), float(apron_point[1])
-    start_idx = 0
-    best_d2: Optional[float] = None
-    for i, (x, y) in enumerate(to_lineup_pts):
-        d2 = (float(x) - px) ** 2 + (float(y) - py) ** 2
-        if best_d2 is None or d2 < best_d2:
-            start_idx = i
-            best_d2 = d2
-    sx, sy = to_lineup_pts[start_idx]
-    for x, y in to_lineup_pts[start_idx + 1 :]:
-        dx = float(x) - float(sx)
-        dy = float(y) - float(sy)
-        mag = math.hypot(dx, dy)
-        if mag <= 1e-9:
-            continue
-        dist_px = max(0.0, float(pushback_m)) * max(float(pixels_per_meter), 1e-9)
-        ux, uy = dx / mag, dy / mag
-        return (px - ux * dist_px, py - uy * dist_px)
-    return None
+def _pushback_is_apron_link_rec(rec: DirectedEdgeRecord) -> bool:
+    return str(rec.path_type or "").strip() == "apron_link"
 
 
-def _snap_pushback_endpoint_to_existing_graph_node(
+def _pushback_is_taxiway_rec(rec: DirectedEdgeRecord) -> bool:
+    pt = str(rec.path_type or "").strip()
+    return bool(pt) and pt != "apron_link" and not pt.startswith("runway")
+
+
+def _pushback_apron_plus_one_taxi_node_path(
     g: PathGraph,
-    apron_point: Tuple[float, float],
-    desired_pushback_point: Tuple[float, float],
     path_nodes: List[int],
-) -> Optional[Tuple[float, float]]:
-    """Use an existing graph node so pushback expands to resource-backed layout-edge ids."""
-    if not g.nodes:
+) -> Optional[List[int]]:
+    """
+    Pushback is the stand-side apron-link prefix plus at most one taxiway branch.
+
+    From the normal stand → lineup path, keep every leading ``apron_link`` hop. At the
+    first departure taxi junction, prefer the opposite/branch taxiway edge (e.g. ``090``
+    when departure would continue on ``088``). If such taxiway edge does not exist, use
+    only the apron-link prefix.
+    """
+    if len(path_nodes) < 2:
         return None
-    px, py = float(apron_point[0]), float(apron_point[1])
-    sx = int(g.nearest_path_node((px, py)))
-    allowed: set[int] = {
-        int(i) for i in path_nodes if 0 <= int(i) < len(g.nodes) and int(i) != sx
-    }
-    if not allowed:
-        allowed = {i for i in range(len(g.nodes)) if i != sx}
-    if not allowed:
-        return None
-    tx, ty = float(desired_pushback_point[0]), float(desired_pushback_point[1])
-    best_i = min(
-        allowed,
-        key=lambda i: (float(g.nodes[i][0]) - tx) ** 2 + (float(g.nodes[i][1]) - ty) ** 2,
-    )
-    return (float(g.nodes[best_i][0]), float(g.nodes[best_i][1]))
+
+    first_taxi_i: Optional[int] = None
+    for i in range(len(path_nodes) - 1):
+        u, v = int(path_nodes[i]), int(path_nodes[i + 1])
+        rec = g.edge_map.get(f"{u}:{v}")
+        if rec is None:
+            return None
+        if not _pushback_is_apron_link_rec(rec):
+            first_taxi_i = i
+            break
+
+    if first_taxi_i is None:
+        return [int(n) for n in path_nodes]
+
+    u = int(path_nodes[first_taxi_i])
+    dep_head = int(path_nodes[first_taxi_i + 1])
+    prev = int(path_nodes[first_taxi_i - 1]) if first_taxi_i > 0 else None
+    forced = [int(n) for n in path_nodes[: first_taxi_i + 1]]
+    if not forced:
+        forced = [u]
+
+    cand: List[int] = []
+    for rec in g.edge_map.values():
+        if rec.from_idx != u:
+            continue
+        if rec.to_idx == dep_head or (prev is not None and rec.to_idx == prev):
+            continue
+        if _pushback_is_taxiway_rec(rec):
+            cand.append(int(rec.to_idx))
+    if not cand:
+        return forced if len(forced) >= 2 else None
+
+    if len(cand) == 1:
+        return forced + [cand[0]]
+
+    n_g = len(g.nodes)
+    if u < 0 or u >= n_g or dep_head < 0 or dep_head >= n_g:
+        return forced + [cand[0]]
+    nu, nd = g.nodes[u], g.nodes[dep_head]
+    dx, dy = float(nd[0]) - float(nu[0]), float(nd[1]) - float(nu[1])
+    best_w: Optional[int] = None
+    best_cross = -1.0
+    for w in cand:
+        if w < 0 or w >= n_g:
+            continue
+        nw = g.nodes[w]
+        wx, wy = float(nw[0]) - float(nu[0]), float(nw[1]) - float(nu[1])
+        cross = abs(dx * wy - dy * wx)
+        if cross > best_cross + 1e-9:
+            best_cross = cross
+            best_w = w
+    return forced + [best_w if best_w is not None else cand[0]]
 
 
 def _dep_runway_far_end_xy(
@@ -1771,6 +1792,72 @@ def _dep_runway_far_end_xy(
         return None
     last = coords[-1]
     return (float(last[0]), float(last[1]))
+
+
+def _pushback_apron_plus_one_taxi_route(
+    flight: Dict[str, Any],
+    layout: Dict[str, Any],
+    cell_size: float,
+    information: Dict[str, Any],
+    pair_index: Dict[Tuple[int, int], str],
+    reverse_cost: float,
+    merge_r: float,
+    taxiway_h: float,
+    leg_ex: float,
+    leg_ey: float,
+) -> Optional[Tuple[List[str], List[int], PathGraph]]:
+    """
+    Force pushback to the apron-link prefix plus at most one taxiway edge instead of
+    letting shortest-path add extra taxiway edges or shortcut through another apron link.
+    """
+    token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
+    dep_rwy = flight.get("depRunwayId") or token.get("depRunwayId")
+    stand_id = flight.get("standId")
+    if stand_id is None:
+        stand_id = token.get("apronId")
+    if stand_id is None or str(stand_id).strip() == "" or not dep_rwy:
+        return None
+    apron_point = _apron_token_xy(layout, cell_size, str(stand_id))
+    dep_rw_lineup_point = _dep_lineup_token_xy(
+        layout,
+        cell_size,
+        str(dep_rwy),
+        _flight_rw_dir_for_leg(flight, 3, layout),
+    )
+    if apron_point is None or dep_rw_lineup_point is None:
+        return None
+    px, py = apron_point
+    lx, ly = dep_rw_lineup_point
+    _e, dv_apron, path_apron, g_apron = _flight_route_impl(
+        layout,
+        cell_size,
+        pair_index,
+        reverse_cost,
+        merge_r,
+        taxiway_h,
+        information,
+        _flight_rw_dir_for_leg(flight, 3, layout),
+        RouteEndpoint(token_pixel_xy=(float(px), float(py))),
+        RouteEndpoint(token_pixel_xy=(float(lx), float(ly))),
+    )
+    if dv_apron or path_apron is None or g_apron is None or len(path_apron) < 2:
+        return None
+    fp = _pushback_apron_plus_one_taxi_node_path(g_apron, path_apron)
+    if fp is None or len(fp) < 2:
+        return None
+    end_i = int(fp[-1])
+    if end_i < 0 or end_i >= len(g_apron.nodes):
+        return None
+    nw = g_apron.nodes[end_i]
+    if (float(nw[0]) - float(leg_ex)) ** 2 + (float(nw[1]) - float(leg_ey)) ** 2 > 4.0:
+        return None
+    for i in range(len(fp) - 1):
+        if g_apron.edge_map.get(f"{int(fp[i])}:{int(fp[i + 1])}") is None:
+            return None
+    eids = _path_to_edge_ids(fp, pair_index)
+    if len(eids) + 1 != len(fp):
+        return None
+    return (eids, fp, g_apron)
 
 
 def extract_point_to_paths(
@@ -1871,22 +1958,14 @@ def extract_point_to_paths(
     to_lineup_pts = _world_xy_chain_from_graph_path(g_apron, path_apron, pair_index)
     if len(to_lineup_pts) < 2:
         return []
-    pushback_point = _pushback_endpoint_from_departure_chain(
-        (float(px), float(py)),
-        to_lineup_pts,
-        _layout_pixels_per_meter(info),
-    )
-    if pushback_point is None:
+    pushback_nodes = _pushback_apron_plus_one_taxi_node_path(g_apron, path_apron)
+    if pushback_nodes is None or len(pushback_nodes) < 2:
         return []
-    pushback_node = _snap_pushback_endpoint_to_existing_graph_node(
-        g_apron,
-        (float(px), float(py)),
-        pushback_point,
-        path_apron,
-    )
-    if pushback_node is None:
+    pushback_end_i = int(pushback_nodes[-1])
+    if pushback_end_i < 0 or pushback_end_i >= len(g_apron.nodes):
         return []
-    pbx, pby = float(pushback_node[0]), float(pushback_node[1])
+    pushback_end = g_apron.nodes[pushback_end_i]
+    pbx, pby = float(pushback_end[0]), float(pushback_end[1])
 
     runway_tw = _layout_runway_object_for_lineup_expansion(layout, str(dep_rwy))
     cand_ids = _expand_rtx_candidate_ids_touching_lineup(
@@ -2485,20 +2564,38 @@ def prepare_flight_path(
             )
         else:
             start_ep = RouteEndpoint(token_pixel_xy=(sx, sy))
-        edges, dv, path, g = _flight_route_impl(
-            layout,
-            cell_size,
-            pair_index,
-            reverse_cost,
-            merge_r,
-            taxiway_h,
-            information,
-            rw_leg,
-            start_ep,
-            RouteEndpoint(token_pixel_xy=(ex, ey)),
-            apron_transit_extra=ap_extra,
-            apron_allowed_link_ids=ap_ids if ap_ids else None,
-        )
+        forced_pb: Optional[Tuple[List[str], List[int], PathGraph]] = None
+        if str(phase) == PHASE_PUSHBACK:
+            forced_pb = _pushback_apron_plus_one_taxi_route(
+                flight,
+                layout,
+                cell_size,
+                information,
+                pair_index,
+                reverse_cost,
+                merge_r,
+                taxiway_h,
+                float(ex),
+                float(ey),
+            )
+        if forced_pb is not None:
+            edges, path, g = forced_pb
+            dv = False
+        else:
+            edges, dv, path, g = _flight_route_impl(
+                layout,
+                cell_size,
+                pair_index,
+                reverse_cost,
+                merge_r,
+                taxiway_h,
+                information,
+                rw_leg,
+                start_ep,
+                RouteEndpoint(token_pixel_xy=(ex, ey)),
+                apron_transit_extra=ap_extra,
+                apron_allowed_link_ids=ap_ids if ap_ids else None,
+            )
         if dv:
             logical_edge_list = []
             direction_violation = True
@@ -6763,6 +6860,7 @@ def _try_reroute_agent_off_path_block(
     # these phases so the aircraft stays on its RTX polyline to the lineup point.
     if str(agent.edge_phases[0]) in (
         PHASE_LANDING,
+        PHASE_PUSHBACK,
         PHASE_HOLDING_LINEUP,
         PHASE_LINEUP_DEPARTURE,
     ):
