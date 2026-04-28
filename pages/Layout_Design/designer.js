@@ -8591,7 +8591,8 @@
         segIdx = i;
         if (i + 1 < tl.length - 1 && Math.abs(t - b.t) < 1e-5) {
           const n = tl[i + 1];
-          if (n && String(n.phase || '') === 'Pushback') segIdx = i + 1;
+          const nn = tl[i + 2];
+          if (n && nn && String(n.phase || '') === 'Pushback' && String(nn.phase || '') === 'Pushback') segIdx = i + 1;
         }
         break;
       }
@@ -8620,7 +8621,7 @@
     while (rem > eps && s <= tl.length - 2) {
       const a = tl[s];
       const b = tl[s + 1];
-      if (String(a.phase || '') !== 'Pushback' && String(b.phase || '') !== 'Pushback') break;
+      if (String(a.phase || '') !== 'Pushback' || String(b.phase || '') !== 'Pushback') break;
       const ddx = b.x - x;
       const ddy = b.y - y;
       const dlen = Math.hypot(ddx, ddy);
@@ -8658,7 +8659,7 @@
       for (let j = Math.min(segIndex, tl.length - 2); j >= 0; j--) {
         const a = tl[j];
         const b = tl[j + 1];
-        if (String(a.phase || '') !== 'Pushback' && String(b.phase || '') !== 'Pushback') continue;
+        if (String(a.phase || '') !== 'Pushback' || String(b.phase || '') !== 'Pushback') continue;
         const sx = b.x - a.x;
         const sy = b.y - a.y;
         const sl = Math.hypot(sx, sy);
