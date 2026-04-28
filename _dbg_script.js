@@ -3134,49 +3134,8 @@
           '</div>';
         return { labelHtml, trackHtml };
       }
-      // Unassigned Above: All flights SLDT/STOT·ELDT/ETOT Only dots (S/E Same class as point·Coordinate formula, existing row logic unchanged)
-      function buildRunwayLegendPair() {
-        const gridLines = tickPositions.map(function(tp) {
-          return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
-        }).join('');
-        function pushLegendDot(arr, t, cls) {
-          if (!isFinite(t) || t < baseMinT || t > baseMaxT) return;
-          const leftPct = ((t - baseMinT) / baseSpan) * 100 * zoom;
-          arr.push('<div class="alloc-time-dot ' + cls + '" style="left:' + leftPct + '%;"></div>');
-        }
-        const sDotsHtml = [];
-        const eDotsHtml = [];
-        intervals.forEach(function(it) {
-          pushLegendDot(sDotsHtml, it.sldt, 'alloc-time-dot-s');
-          pushLegendDot(sDotsHtml, it.stot, 'alloc-time-dot-s');
-          pushLegendDot(eDotsHtml, it.eldt, 'alloc-time-dot-e');
-          pushLegendDot(eDotsHtml, it.etot, 'alloc-time-dot-e');
-        });
-        const sLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('S(LDT, TOT)') + '</div>';
-        const sTrackHtml =
-          '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
-            '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
-              gridLines + sDotsHtml.join('') +
-            '</div>' +
-          '</div>';
-        const eLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('E(LDT, TOT)') + '</div>';
-        const eTrackHtml =
-          '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
-            '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
-              gridLines + eDotsHtml.join('') +
-            '</div>' +
-          '</div>';
-        return { sLabelHtml: sLabelHtml, sTrackHtml: sTrackHtml, eLabelHtml: eLabelHtml, eTrackHtml: eTrackHtml };
-      }
       const labelRows = [];
       const trackRows = [];
-      (function() {
-        const rw = buildRunwayLegendPair();
-        labelRows.push(rw.sLabelHtml);
-        trackRows.push(rw.sTrackHtml);
-        labelRows.push(rw.eLabelHtml);
-        trackRows.push(rw.eTrackHtml);
-      })();
       // Unassigned line
       (function() {
         const row = buildRowHtml('Unassigned', null);
@@ -3313,11 +3272,16 @@
       ganttEl.innerHTML = rootHtml;
       const newScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
       const newLabelCol = ganttEl.querySelector('.alloc-gantt-label-col');
-      // DOM Horizontal after reconstruction/Restore vertical scroll position
-      if (newScrollCol) {
-        if (prevScrollLeft > 0) newScrollCol.scrollLeft = prevScrollLeft;
-        if (prevScrollTop > 0) newScrollCol.scrollTop = prevScrollTop;
+      function syncAllocLabelToScrollCol() {
+        if (newScrollCol && newLabelCol) {
+          newLabelCol.scrollTop = newScrollCol.scrollTop;
+        }
       }
+      if (newScrollCol) {
+        newScrollCol.scrollLeft = prevScrollLeft;
+        newScrollCol.scrollTop = prevScrollTop;
+      }
+      syncAllocLabelToScrollCol();
       // Left label column ↔ Synchronize vertical scrolling of right timeline column (Make the horizontal scrollbar always visible at the bottom of the viewport)
       if (newScrollCol && newLabelCol) {
         newScrollCol.addEventListener('scroll', function() { newLabelCol.scrollTop = newScrollCol.scrollTop; });
@@ -3407,6 +3371,8 @@
           }
         });
       }
+      syncAllocLabelToScrollCol();
+      requestAnimationFrame(syncAllocLabelToScrollCol);
       // Ctrl + Supports horizontal scrolling with wheel (Apron chart only)
       if (newScrollCol && !newScrollCol._allocWheelBound) {
         newScrollCol._allocWheelBound = true;

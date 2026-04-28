@@ -135,11 +135,6 @@
     if (!isFinite(v) || v < 0) return 20;
     return v;
   })();
-  const GANTT_LEGEND_MAX_INTERVALS = (function() {
-    const v = Math.floor(Number(DOM_OPT_CFG.ganttLegendMaxIntervals));
-    if (!isFinite(v) || v < 1) return 100;
-    return v;
-  })();
   const KPI_ROLLING_TABLE_VISIBLE_ROWS = (function() {
     const v = Math.floor(Number(DOM_OPT_CFG.kpiRollingTableVisibleRows));
     if (!isFinite(v) || v < 1) return 24;

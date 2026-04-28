@@ -513,6 +513,43 @@
     if (minDwell > dwell) minDwell = dwell;
     return { dwell, minDwell };
   }
+
+  function _ganttApplySibtHandleSnappedMinutes(f, mSnapped, dragCtx) {
+    if (!f || !dragCtx || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return false;
+    const mClamped = Math.max(0, Number(mSnapped));
+    if (!isFinite(mClamped)) return false;
+    const anchor = dragCtx.anchorSobt;
+    const startS = dragCtx.startSibt;
+    const minD = dragCtx.minDwell0;
+    const d0 = dragCtx.dwell0;
+    if (!(typeof anchor === 'number' && isFinite(anchor)) || !(typeof startS === 'number' && isFinite(startS))) return false;
+    const atMinDwell = !(d0 > minD + 1e-9);
+    if (atMinDwell) {
+      if (typeof applyScheduledGateTimingFromSField === 'function') applyScheduledGateTimingFromSField(f, 'sibt', mClamped);
+      const ds = mClamped - startS;
+      if (dragCtx.startEobt != null && isFinite(dragCtx.startEobt)) f.eobtMin = dragCtx.startEobt + ds;
+      if (dragCtx.startEtot != null && isFinite(dragCtx.startEtot)) f.etotMin = dragCtx.startEtot + ds;
+      return true;
+    }
+    let newDwell = anchor - mClamped;
+    let sibtU = mClamped;
+    if (newDwell < minD) {
+      newDwell = minD;
+      sibtU = anchor - minD;
+    }
+    f.timeMin = sibtU;
+    f.sibtMin_orig = sibtU;
+    f.sldtMin_orig = scheduledSldtFromSibtMinutes(f, sibtU);
+    f.sobtMin_orig = anchor;
+    f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, newDwell);
+    if (f.minDwellMin != null) {
+      f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
+    }
+    f.stotMin_orig = scheduledStotFromSobtMinutes(f, anchor);
+    const deibt = sibtU - startS;
+    if (dragCtx.startEibt != null && isFinite(dragCtx.startEibt)) f.eibtMin = dragCtx.startEibt + deibt;
+    return true;
+  }
   
   function applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotRunwayCandidateMin) {
     if (!f) return;
@@ -1634,10 +1671,19 @@
     const baseSpan = baseMaxT - baseMinT;
     const dataSpan = Math.max(1e-9, baseSpan);
     const visibleSpan = Math.min(GANTT_VISIBLE_WINDOW_MIN, dataSpan);
+    const maxWinStart = Math.max(baseMinT, baseMaxT - visibleSpan);
     let winStart = state.allocGanttWindowStartMin;
     if (winStart == null || !isFinite(winStart)) winStart = baseMinT;
-    const maxWinStart = Math.max(baseMinT, baseMaxT - visibleSpan);
-    winStart = Math.min(Math.max(winStart, baseMinT), maxWinStart);
+    const vpPin = state._allocGanttHandleDragViewportPin;
+    if (vpPin && vpPin.active) {
+      let w = vpPin.winStart0;
+      if (w == null || !isFinite(w)) w = winStart;
+      if (w > maxWinStart) w = maxWinStart;
+      if (w + visibleSpan < baseMinT - 1e-6) w = Math.min(maxWinStart, baseMinT);
+      winStart = w;
+    } else {
+      winStart = Math.min(Math.max(winStart, baseMinT), maxWinStart);
+    }
     state.allocGanttWindowStartMin = winStart;
     const winEnd = winStart + visibleSpan;
     state._allocGanttClamp = { baseMinT: baseMinT, baseMaxT: baseMaxT, visibleSpan: visibleSpan };
@@ -1759,6 +1805,8 @@
         const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
         const sibtLabel = formatFlightScheduleDateTime(f, t0);
         const sobtLabel = formatFlightScheduleDateTime(f, t1);
+        const handleHoverSibt = escapeHtml('SIBT: ' + sibtLabel);
+        const handleHoverSobt = escapeHtml('SOBT: ' + sobtLabel);
         const barTitle =
           'SIBT: ' + sibtLabel +
           '\\nSOBT: ' + sobtLabel +
@@ -1802,10 +1850,15 @@
           sLines.push('<div class="alloc-s-line-orig" style="left:' + sx + '%;"></div>');
         }
       }
+        const handleHtml = (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f)) ? '' : (
+          '<button type="button" class="alloc-flight-handle alloc-flight-handle--sibt" data-handle-role="sibt" tabindex="-1" aria-label="Adjust SIBT (5 min)" title="' + handleHoverSibt + '"></button>' +
+          '<button type="button" class="alloc-flight-handle alloc-flight-handle--sobt" data-handle-role="sobt" tabindex="-1" aria-label="Adjust SOBT (5 min)" title="' + handleHoverSobt + '"></button>'
+        );
         return '' +
           '<div class="alloc-flight' + conflictClass + selectedClass + sbarDimClass + '" draggable="true" data-flight-id="' + f.id + '" ' +
             'style="left:' + leftPct + '%;width:' + widthPct + '%;min-width:4px;"' +
             ' title="' + barTitle + '">' +
+            handleHtml +
             '<div class="alloc-flight-reg">' + regSafe + '</div>' +
             metaHtml +
             ovlpBadgeHtml +
@@ -1850,42 +1903,8 @@
         '</div>';
       return { labelHtml, trackHtml };
     }
-    function buildRunwayLegendPair() {
-      const sDotsHtml = [];
-      const eDotsHtml = [];
-      const cap = GANTT_LEGEND_MAX_INTERVALS;
-      const lim = (cap > 0 && intervals.length > cap) ? intervals.slice(0, cap) : intervals;
-      lim.forEach(function(it) {
-        pushAllocDot(sDotsHtml, it.sldt, 'alloc-time-dot-s');
-        pushAllocDot(sDotsHtml, it.stot, 'alloc-time-dot-s');
-        pushAllocDot(eDotsHtml, it.eldt, 'alloc-time-dot-e');
-        pushAllocDot(eDotsHtml, it.etot, 'alloc-time-dot-e');
-      });
-      const sLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('S(LDT, TOT)') + '</div>';
-      const sTrackHtml =
-        '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
-          '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
-            sDotsHtml.join('') +
-          '</div>' +
-        '</div>';
-      const eLabelHtml = '<div class="alloc-row-label alloc-runway-legend-label" data-stand-id="" data-runway-legend="1">' + escapeHtml('E(LDT, TOT)') + '</div>';
-      const eTrackHtml =
-        '<div class="alloc-row" data-stand-id="" data-runway-legend="1">' +
-          '<div class="alloc-row-track" data-stand-id="" data-runway-legend="1" style="background:transparent;border:none;">' +
-            eDotsHtml.join('') +
-          '</div>' +
-        '</div>';
-      return { sLabelHtml: sLabelHtml, sTrackHtml: sTrackHtml, eLabelHtml: eLabelHtml, eTrackHtml: eTrackHtml };
-    }
     const labelRows = [];
     const trackRows = [];
-    (function() {
-      const rw = buildRunwayLegendPair();
-      labelRows.push(rw.sLabelHtml);
-      trackRows.push(rw.sTrackHtml);
-      labelRows.push(rw.eLabelHtml);
-      trackRows.push(rw.eTrackHtml);
-    })();
     (function() {
       const row = buildRowHtml('Unassigned', null);
       labelRows.push(row.labelHtml);
@@ -2070,10 +2089,16 @@
     }
     const newScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
     const newLabelCol = ganttEl.querySelector('.alloc-gantt-label-col');
-    if (newScrollCol) {
-      if (prevScrollLeft > 0) newScrollCol.scrollLeft = prevScrollLeft;
-      if (prevScrollTop > 0) newScrollCol.scrollTop = prevScrollTop;
+    function syncAllocLabelToScrollCol() {
+      if (newScrollCol && newLabelCol) {
+        newLabelCol.scrollTop = newScrollCol.scrollTop;
+      }
     }
+    if (newScrollCol) {
+      newScrollCol.scrollLeft = prevScrollLeft;
+      newScrollCol.scrollTop = prevScrollTop;
+    }
+    syncAllocLabelToScrollCol();
     if (newScrollCol && newLabelCol) {
       newScrollCol.addEventListener('scroll', function() { newLabelCol.scrollTop = newScrollCol.scrollTop; });
       newLabelCol.addEventListener('scroll', function() { newScrollCol.scrollTop = newLabelCol.scrollTop; });
@@ -2120,6 +2145,8 @@
         }
       });
     }
+    syncAllocLabelToScrollCol();
+    requestAnimationFrame(syncAllocLabelToScrollCol);
     if (newScrollCol && !newScrollCol._allocWheelBound) {
       newScrollCol._allocWheelBound = true;
       newScrollCol.addEventListener('wheel', function(ev) {
@@ -2147,6 +2174,33 @@
       }
     }
     return null;
+  }
+
+  function _ganttClientXToMinutes(clientX, ganttEl) {
+    const scrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
+    const inner = scrollCol && scrollCol.querySelector('.alloc-gantt-inner');
+    if (!scrollCol || !inner) return null;
+    const rect = inner.getBoundingClientRect();
+    const x = clientX - rect.left + scrollCol.scrollLeft;
+    const w = inner.scrollWidth;
+    if (!(w > 0)) return null;
+    const frac = Math.max(0, Math.min(1, x / w));
+    const c = state._allocGanttClamp;
+    const winStart = state.allocGanttWindowStartMin;
+    if (!c || winStart == null || !isFinite(winStart)) return null;
+    return winStart + frac * c.visibleSpan;
+  }
+
+  function _ganttEnsureSibtSobtTooltipEl() {
+    let el = document.getElementById('allocGanttSibtSobtTooltip');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'allocGanttSibtSobtTooltip';
+      el.className = 'alloc-gantt-sibt-sobt-tooltip';
+      el.setAttribute('hidden', '');
+      document.body.appendChild(el);
+    }
+    return el;
   }
 
   var _allocGanttPreviewTimer = null;
@@ -2306,6 +2360,10 @@
     }
     ganttEl.querySelectorAll('.alloc-flight').forEach(function(el) {
       el.addEventListener('dragstart', function(ev) {
+        if (ev.target && ev.target.closest && ev.target.closest('.alloc-flight-handle')) {
+          ev.preventDefault();
+          return;
+        }
         var flightId = this.getAttribute('data-flight-id') || '';
         ev.dataTransfer.setData('text/plain', flightId);
         ev.dataTransfer.effectAllowed = 'move';
@@ -2323,6 +2381,7 @@
         }
       });
       el.addEventListener('click', function(ev) {
+        if (ev.target && ev.target.closest && ev.target.closest('.alloc-flight-handle')) return;
         ev.stopPropagation();
         const flightId = this.getAttribute('data-flight-id');
         if (!flightId) return;
@@ -2342,6 +2401,7 @@
         if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
       });
       el.addEventListener('dblclick', function(ev) {
+        if (ev.target && ev.target.closest && ev.target.closest('.alloc-flight-handle')) return;
         ev.stopPropagation();
         ev.preventDefault();
         const flightId = this.getAttribute('data-flight-id');
@@ -2385,6 +2445,97 @@
         st._allocGanttDropHandled = true;
       });
     });
+    if (!ganttEl._ganttSibtSobtPointerBound) {
+      ganttEl._ganttSibtSobtPointerBound = true;
+      ganttEl.addEventListener('pointerdown', function(ev) {
+        const h = ev.target && ev.target.closest ? ev.target.closest('.alloc-flight-handle') : null;
+        if (!h) return;
+        const flightEl = h.closest('.alloc-flight');
+        if (!flightEl) return;
+        const fid = flightEl.getAttribute('data-flight-id');
+        if (!fid) return;
+        const f = st.flights.find(function(x) { return String(x.id) === String(fid); });
+        if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return;
+        const role = h.getAttribute('data-handle-role');
+        if (role !== 'sibt' && role !== 'sobt') return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        st._allocGanttHandleDragViewportPin = {
+          active: true,
+          winStart0: (st.allocGanttWindowStartMin != null && isFinite(st.allocGanttWindowStartMin)) ? st.allocGanttWindowStartMin : null
+        };
+        const tip = _ganttEnsureSibtSobtTooltipEl();
+        const pid = ev.pointerId;
+        const snapMin = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && isFinite(GANTT_SIBT_SOBT_HANDLE_SNAP_MIN) && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0) ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN : 5;
+        const b0 = (typeof getNormalizedStandDwellBounds === 'function') ? getNormalizedStandDwellBounds(f) : { dwell: 0, minDwell: 0 };
+        const startSibt0 = (f.sibtMin_d != null && isFinite(f.sibtMin_d)) ? f.sibtMin_d : (f.timeMin != null ? f.timeMin : 0);
+        let anchorSobt0 = (f.sobtMin_d != null && isFinite(f.sobtMin_d)) ? f.sobtMin_d : (f.sobtMin_orig != null && isFinite(f.sobtMin_orig) ? f.sobtMin_orig : (startSibt0 + b0.dwell));
+        const dragSibtCtx = {
+          anchorSobt: anchorSobt0,
+          startSibt: startSibt0,
+          startEibt: f.eibtMin,
+          startEobt: f.eobtMin,
+          startEtot: f.etotMin,
+          dwell0: b0.dwell,
+          minDwell0: b0.minDwell
+        };
+        let rafPending = null;
+        function flushUi() {
+          rafPending = null;
+          const touched = [];
+          if (f.standId) touched.push(f.standId);
+          if (typeof renderFlightList === 'function') {
+            renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touched, skipGanttRefresh: true });
+          }
+          if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+        }
+        function applyAtClientX(cx, tipX, tipY) {
+          const rawM = _ganttClientXToMinutes(cx, ganttEl);
+          if (rawM == null || !isFinite(rawM)) return;
+          let m = Math.max(0, Math.round(rawM / snapMin) * snapMin);
+          if (role === 'sibt') {
+            if (typeof _ganttApplySibtHandleSnappedMinutes === 'function') _ganttApplySibtHandleSnappedMinutes(f, m, dragSibtCtx);
+          } else {
+            if (typeof applyScheduledGateTimingFromSField === 'function') applyScheduledGateTimingFromSField(f, 'sobt', m);
+          }
+          if (typeof computeScheduledDisplayTimesIncremental === 'function') {
+            const tset = new Set();
+            if (f.standId) tset.add(f.standId);
+            computeScheduledDisplayTimesIncremental(st.flights, new Set([f.id]), tset);
+          }
+          if (role === 'sibt') {
+            tip.textContent = 'SIBT: ' + formatFlightScheduleDateTime(f, f.timeMin);
+          } else {
+            const sobtShow = f.sobtMin_orig != null ? f.sobtMin_orig : (f.sobtMin_d != null ? f.sobtMin_d : m);
+            tip.textContent = 'SOBT: ' + formatFlightScheduleDateTime(f, sobtShow);
+          }
+          tip.removeAttribute('hidden');
+          tip.style.left = Math.min(window.innerWidth - 200, Math.max(8, tipX + 12)) + 'px';
+          tip.style.top = Math.min(window.innerHeight - 40, Math.max(8, tipY + 12)) + 'px';
+          if (rafPending == null) rafPending = requestAnimationFrame(flushUi);
+        }
+        applyAtClientX(ev.clientX, ev.clientX, ev.clientY);
+        function onMove(e) {
+          if (e.pointerId !== pid) return;
+          applyAtClientX(e.clientX, e.clientX, e.clientY);
+        }
+        function onUp() {
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
+          st._allocGanttHandleDragViewportPin = null;
+          if (rafPending != null) {
+            cancelAnimationFrame(rafPending);
+            rafPending = null;
+          }
+          flushUi();
+          tip.setAttribute('hidden', '');
+        }
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
+      }, true);
+    }
   }
 
   function validateNetworkInfrastructureOnly() {

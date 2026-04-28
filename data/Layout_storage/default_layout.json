@@ -40,2038 +40,8 @@
       "topLeftRow": 0
     }
   },
-  "networkJunctions": [
-    {
-      "x": 1165,
-      "y": 3960
-    },
-    {
-      "x": 1474.307500566508,
-      "y": 3783.8314072059825
-    },
-    {
-      "x": 2091.5819999155674,
-      "y": 3432.2577152690387
-    },
-    {
-      "x": 2364.6113168577735,
-      "y": 3276.751655864967
-    },
-    {
-      "x": 2556.4704222642686,
-      "y": 3167.4767480393366
-    },
-    {
-      "x": 2845.228994937248,
-      "y": 3003.0119636036625
-    },
-    {
-      "x": 3424.1583657784295,
-      "y": 2673.2780502604037
-    },
-    {
-      "x": 3866.645696516155,
-      "y": 2421.255806239571
-    },
-    {
-      "x": 4159.4820518784445,
-      "y": 2254.4684876371543
-    },
-    {
-      "x": 3063.370582079842,
-      "y": 2698.5329252137926
-    },
-    {
-      "x": 3026.0741206030134,
-      "y": 2661.381909547737
-    },
-    {
-      "x": 3020.585236118137,
-      "y": 2655.914430183414
-    },
-    {
-      "x": 2651.6867897791954,
-      "y": 2288.4545850279674
-    },
-    {
-      "x": 2383.194441467127,
-      "y": 2021.0092820853608
-    },
-    {
-      "x": 2343.239439431446,
-      "y": 1981.2100934280925
-    },
-    {
-      "x": 2105.248042560226,
-      "y": 1744.146796711802
-    },
-    {
-      "x": 2046.2684686184873,
-      "y": 1685.397226679585
-    },
-    {
-      "x": 1748.6091433700594,
-      "y": 1388.8986898861651
-    },
-    {
-      "x": 1428.4864124334142,
-      "y": 1070.0243484294956
-    },
-    {
-      "x": 1439.0872932757384,
-      "y": 3724.3973074028086
-    },
-    {
-      "x": 1395.3492385786801,
-      "y": 3650.589340101523
-    },
-    {
-      "x": 976.2672209026128,
-      "y": 3890.749406175772
-    },
-    {
-      "x": 975.803041922002,
-      "y": 3956.606083844004
-    },
-    {
-      "x": 3834.061899284983,
-      "y": 2366.831521136088
-    },
-    {
-      "x": 3815.3523623516535,
-      "y": 2335.588410917324
-    },
-    {
-      "x": 2987.376593574707,
-      "y": 2783.0140234574196
-    },
-    {
-      "x": 2981.055205464221,
-      "y": 2744.8988514221596
-    },
-    {
-      "x": 3021.3745879843623,
-      "y": 2722.663220163681
-    },
-    {
-      "x": 3114.7831855842296,
-      "y": 2668.9919817637574
-    },
-    {
-      "x": 3163.284014503063,
-      "y": 2641.1241021639858
-    },
-    {
-      "x": 3829.5800000000004,
-      "y": 2260.56
-    },
-    {
-      "x": 4198.954454011105,
-      "y": 2150.2996982366444
-    },
-    {
-      "x": 4115.1,
-      "y": 2098.7
-    },
-    {
-      "x": 2404.8481655924643,
-      "y": 1961.7299206742687
-    },
-    {
-      "x": 2464.45,
-      "y": 1947.15
-    },
-    {
-      "x": 2419.609057301294,
-      "y": 1902.1560073937153
-    },
-    {
-      "x": 2111.5525890334766,
-      "y": 1673.7749473044778
-    },
-    {
-      "x": 2181.3878132738473,
-      "y": 1665.445445949647
-    },
-    {
-      "x": 2128.244638602065,
-      "y": 1613.8415409054808
-    },
-    {
-      "x": 2572.247446373851,
-      "y": 2359.7778345250254
-    },
-    {
-      "x": 2732.922033319917,
-      "y": 2215.5189174527063
-    },
-    {
-      "x": 3535.120752019767,
-      "y": 2545.2932070278325
-    },
-    {
-      "x": 3521.750468244509,
-      "y": 2436.554912310574
-    },
-    {
-      "x": 3738.549205378974,
-      "y": 2312.5304095354522
-    },
-    {
-      "x": 1841.708092485549,
-      "y": 3480.034682080925
-    },
-    {
-      "x": 1801.4709494165754,
-      "y": 3485.324350815251
-    },
-    {
-      "x": 2319.509173017217,
-      "y": 3203.7291372659706
-    },
-    {
-      "x": 2299.2445547703624,
-      "y": 3170.919755342492
-    },
-    {
-      "x": 2282.1457504263785,
-      "y": 3143.2359768808037
-    },
-    {
-      "x": 2274.6750542543805,
-      "y": 3209.1215570484424
-    },
-    {
-      "x": 2973.5,
-      "y": 2850
-    },
-    {
-      "x": 1815,
-      "y": 3458.25
-    },
-    {
-      "x": 1466.4130487403763,
-      "y": 3513.1782503945287
-    },
-    {
-      "x": 1478.168004924055,
-      "y": 3506.543260741946
-    },
-    {
-      "x": 1596.5468708561987,
-      "y": 3439.7252702474507
-    },
-    {
-      "x": 1609.020767389188,
-      "y": 3432.6844805472997
-    },
-    {
-      "x": 1651.7869897947853,
-      "y": 3408.5454332631275
-    },
-    {
-      "x": 1665.3084742363847,
-      "y": 3400.9133410668046
-    },
-    {
-      "x": 1676.7791558959334,
-      "y": 3394.4388078631123
-    },
-    {
-      "x": 1722.648493936561,
-      "y": 3368.5482321336212
-    },
-    {
-      "x": 1747.8881814107688,
-      "y": 3354.301895302667
-    },
-    {
-      "x": 1794.7339346020194,
-      "y": 3327.8601899628416
-    },
-    {
-      "x": 1853.9536852900985,
-      "y": 3294.4340821233677
-    },
-    {
-      "x": 1861.5108510584814,
-      "y": 3290.168501214977
-    },
-    {
-      "x": 1923.4624331609266,
-      "y": 3257.5886692548615
-    },
-    {
-      "x": 1950.4740157243086,
-      "y": 3239.953964657338
-    },
-    {
-      "x": 2025.5879989118444,
-      "y": 3197.5564862298506
-    },
-    {
-      "x": 2146.742390024064,
-      "y": 3129.171873064668
-    },
-    {
-      "x": 2214.089405612094,
-      "y": 3091.1583964870742
-    },
-    {
-      "x": 2272.604351356096,
-      "y": 3057.7456003686475
-    },
-    {
-      "x": 2421.096122619152,
-      "y": 2972.731227508119
-    },
-    {
-      "x": 2478.4423988413937,
-      "y": 2939.8993899763013
-    },
-    {
-      "x": 2769.021394716054,
-      "y": 2773.537369437374
-    },
-    {
-      "x": 2916.142149024625,
-      "y": 2712.591141669332
-    },
-    {
-      "x": 1917.9466378388977,
-      "y": 3287.1425664820003
-    },
-    {
-      "x": 1445,
-      "y": 3180
-    },
-    {
-      "x": 1359.1859708879308,
-      "y": 3193.4385922229067
-    },
-    {
-      "x": 1348.5484136804835,
-      "y": 3202.5244979469853
-    },
-    {
-      "x": 1332.299609909697,
-      "y": 3258.759629832053
-    },
-    {
-      "x": 1330.5920377263374,
-      "y": 3276.594272636032
-    },
-    {
-      "x": 1327.6352090335647,
-      "y": 3307.476705649435
-    },
-    {
-      "x": 1324.1202802367827,
-      "y": 3351.71467550113
-    },
-    {
-      "x": 1319.8380170496232,
-      "y": 3431.241869286221
-    },
-    {
-      "x": 1317.1813631088626,
-      "y": 3451.609549498721
-    },
-    {
-      "x": 1317.5526161185742,
-      "y": 3505.5626289110937
-    },
-    {
-      "x": 1333.7179494247857,
-      "y": 3534.5575918254094
-    },
-    {
-      "x": 1355.8351409978309,
-      "y": 3575.5867678958784
-    },
-    {
-      "x": 1565.0456950020653,
-      "y": 934.9541227040436
-    },
-    {
-      "x": 1912.4775923417524,
-      "y": 1281.005495948341
-    },
-    {
-      "x": 2019.0623916403383,
-      "y": 1387.0420307084203
-    },
-    {
-      "x": 2070.718196163617,
-      "y": 1438.4278571592777
-    },
-    {
-      "x": 2124.2141855165473,
-      "y": 1491.6442507490392
-    },
-    {
-      "x": 2174.9217541839935,
-      "y": 1542.0867972805931
-    },
-    {
-      "x": 2190.3717760461113,
-      "y": 1557.4560698995292
-    },
-    {
-      "x": 2228.4207747335636,
-      "y": 1595.4957175531656
-    },
-    {
-      "x": 2236.3556943609183,
-      "y": 1603.4577651108705
-    },
-    {
-      "x": 2289.250178246128,
-      "y": 1656.5330848384228
-    },
-    {
-      "x": 2342.343261172933,
-      "y": 1709.807682578653
-    },
-    {
-      "x": 2394.142558142078,
-      "y": 1761.7840711613674
-    },
-    {
-      "x": 2445.8432024598383,
-      "y": 1813.6614698186756
-    },
-    {
-      "x": 2450.956312568368,
-      "y": 1818.792060645525
-    },
-    {
-      "x": 2478.784189291112,
-      "y": 1846.7150754083468
-    },
-    {
-      "x": 2505.4630228496585,
-      "y": 1873.362038117633
-    },
-    {
-      "x": 2519.275162925416,
-      "y": 1886.958363504707
-    },
-    {
-      "x": 2559.8959344039445,
-      "y": 1926.944435428883
-    },
-    {
-      "x": 2612.6524868779406,
-      "y": 1978.8766667704729
-    },
-    {
-      "x": 2667.69695106637,
-      "y": 2033.0610612059577
-    },
-    {
-      "x": 2716.653737875804,
-      "y": 2081.252898221494
-    },
-    {
-      "x": 2784.923365890308,
-      "y": 2148.455813298272
-    },
-    {
-      "x": 3257.390764038049,
-      "y": 2587.787716068324
-    },
-    {
-      "x": 2169.4620651139703,
-      "y": 1653.608530178298
-    },
-    {
-      "x": 1853.0438545874208,
-      "y": 1292.0196191575305
-    },
-    {
-      "x": 2183.663535911602,
-      "y": 1602.907182320442
-    },
-    {
-      "x": 2476.1858407079644,
-      "y": 1892.504424778761
-    },
-    {
-      "x": 1490.5904741502668,
-      "y": 3595.0605572388454
-    },
-    {
-      "x": 1574.204563821765,
-      "y": 3547.3331247901906
-    },
-    {
-      "x": 1647.875249261613,
-      "y": 3505.281448133894
-    },
-    {
-      "x": 1770.2462185626064,
-      "y": 3435.431352367314
-    },
-    {
-      "x": 1822.9221480354427,
-      "y": 3405.363610489573
-    },
-    {
-      "x": 1871.5581544795489,
-      "y": 3377.6018813210417
-    },
-    {
-      "x": 1900.5351740803724,
-      "y": 3361.0616217667593
-    },
-    {
-      "x": 1987.6814982547212,
-      "y": 3311.317968316477
-    },
-    {
-      "x": 2044.3947028544976,
-      "y": 3278.945725168021
-    },
-    {
-      "x": 2138.3836910409022,
-      "y": 3225.2962373579167
-    },
-    {
-      "x": 2217.9881975572616,
-      "y": 3179.857499433546
-    },
-    {
-      "x": 2248.459585529892,
-      "y": 3162.4642452966627
-    },
-    {
-      "x": 2313.645855186611,
-      "y": 3125.2555249261613
-    },
-    {
-      "x": 2458.140086867431,
-      "y": 3042.7452997889613
-    },
-    {
-      "x": 2515.1177767366917,
-      "y": 3010.206233526275
-    },
-    {
-      "x": 2932.810623308844,
-      "y": 2771.668391026034
-    },
-    {
-      "x": 3274.560834764053,
-      "y": 2577.9651981304746
-    },
-    {
-      "x": 3493.76839106595,
-      "y": 2452.562677182993
-    },
-    {
-      "x": 3560.882427732908,
-      "y": 2414.168611161805
-    },
-    {
-      "x": 3726.15557439852,
-      "y": 2319.620459690937
-    },
-    {
-      "x": 2260.5642857142857,
-      "y": 3107.192857142857
-    },
-    {
-      "x": 2468.725,
-      "y": 2987.05
-    }
-  ],
-  "Edge": [
-    {
-      "id": "layout-edge-001",
-      "label": "001",
-      "name": "Edge 001",
-      "fromIdx": 0,
-      "toIdx": 1
-    },
-    {
-      "id": "layout-edge-002",
-      "label": "002",
-      "name": "Edge 002",
-      "fromIdx": 1,
-      "toIdx": 2
-    },
-    {
-      "id": "layout-edge-003",
-      "label": "003",
-      "name": "Edge 003",
-      "fromIdx": 1,
-      "toIdx": 22
-    },
-    {
-      "id": "layout-edge-004",
-      "label": "004",
-      "name": "Edge 004",
-      "fromIdx": 2,
-      "toIdx": 3
-    },
-    {
-      "id": "layout-edge-005",
-      "label": "005",
-      "name": "Edge 005",
-      "fromIdx": 2,
-      "toIdx": 49
-    },
-    {
-      "id": "layout-edge-006",
-      "label": "006",
-      "name": "Edge 006",
-      "fromIdx": 3,
-      "toIdx": 4
-    },
-    {
-      "id": "layout-edge-007",
-      "label": "007",
-      "name": "Edge 007",
-      "fromIdx": 3,
-      "toIdx": 52
-    },
-    {
-      "id": "layout-edge-008",
-      "label": "008",
-      "name": "Edge 008",
-      "fromIdx": 4,
-      "toIdx": 5
-    },
-    {
-      "id": "layout-edge-009",
-      "label": "009",
-      "name": "Edge 009",
-      "fromIdx": 5,
-      "toIdx": 6
-    },
-    {
-      "id": "layout-edge-010",
-      "label": "010",
-      "name": "Edge 010",
-      "fromIdx": 6,
-      "toIdx": 7
-    },
-    {
-      "id": "layout-edge-011",
-      "label": "011",
-      "name": "Edge 011",
-      "fromIdx": 6,
-      "toIdx": 44
-    },
-    {
-      "id": "layout-edge-012",
-      "label": "012",
-      "name": "Edge 012",
-      "fromIdx": 7,
-      "toIdx": 8
-    },
-    {
-      "id": "layout-edge-013",
-      "label": "013",
-      "name": "Edge 013",
-      "fromIdx": 7,
-      "toIdx": 26
-    },
-    {
-      "id": "layout-edge-014",
-      "label": "014",
-      "name": "Edge 014",
-      "fromIdx": 8,
-      "toIdx": 9
-    },
-    {
-      "id": "layout-edge-015",
-      "label": "015",
-      "name": "Edge 015",
-      "fromIdx": 8,
-      "toIdx": 34
-    },
-    {
-      "id": "layout-edge-016",
-      "label": "016",
-      "name": "Edge 016",
-      "fromIdx": 10,
-      "toIdx": 11
-    },
-    {
-      "id": "layout-edge-017",
-      "label": "017",
-      "name": "Edge 017",
-      "fromIdx": 11,
-      "toIdx": 12
-    },
-    {
-      "id": "layout-edge-018",
-      "label": "018",
-      "name": "Edge 018",
-      "fromIdx": 11,
-      "toIdx": 31
-    },
-    {
-      "id": "layout-edge-019",
-      "label": "019",
-      "name": "Edge 019",
-      "fromIdx": 12,
-      "toIdx": 13
-    },
-    {
-      "id": "layout-edge-020",
-      "label": "020",
-      "name": "Edge 020",
-      "fromIdx": 13,
-      "toIdx": 14
-    },
-    {
-      "id": "layout-edge-021",
-      "label": "021",
-      "name": "Edge 021",
-      "fromIdx": 14,
-      "toIdx": 15
-    },
-    {
-      "id": "layout-edge-022",
-      "label": "022",
-      "name": "Edge 022",
-      "fromIdx": 14,
-      "toIdx": 43
-    },
-    {
-      "id": "layout-edge-023",
-      "label": "023",
-      "name": "Edge 023",
-      "fromIdx": 15,
-      "toIdx": 16
-    },
-    {
-      "id": "layout-edge-024",
-      "label": "024",
-      "name": "Edge 024",
-      "fromIdx": 15,
-      "toIdx": 36
-    },
-    {
-      "id": "layout-edge-025",
-      "label": "025",
-      "name": "Edge 025",
-      "fromIdx": 16,
-      "toIdx": 17
-    },
-    {
-      "id": "layout-edge-026",
-      "label": "026",
-      "name": "Edge 026",
-      "fromIdx": 16,
-      "toIdx": 36
-    },
-    {
-      "id": "layout-edge-027",
-      "label": "027",
-      "name": "Edge 027",
-      "fromIdx": 17,
-      "toIdx": 18
-    },
-    {
-      "id": "layout-edge-028",
-      "label": "028",
-      "name": "Edge 028",
-      "fromIdx": 17,
-      "toIdx": 39
-    },
-    {
-      "id": "layout-edge-029",
-      "label": "029",
-      "name": "Edge 029",
-      "fromIdx": 18,
-      "toIdx": 19
-    },
-    {
-      "id": "layout-edge-030",
-      "label": "030",
-      "name": "Edge 030",
-      "fromIdx": 18,
-      "toIdx": 39
-    },
-    {
-      "id": "layout-edge-031",
-      "label": "031",
-      "name": "Edge 031",
-      "fromIdx": 19,
-      "toIdx": 20
-    },
-    {
-      "id": "layout-edge-032",
-      "label": "032",
-      "name": "Edge 032",
-      "fromIdx": 19,
-      "toIdx": 47
-    },
-    {
-      "id": "layout-edge-033",
-      "label": "033",
-      "name": "Edge 033",
-      "fromIdx": 20,
-      "toIdx": 21
-    },
-    {
-      "id": "layout-edge-034",
-      "label": "034",
-      "name": "Edge 034",
-      "fromIdx": 20,
-      "toIdx": 48
-    },
-    {
-      "id": "layout-edge-035",
-      "label": "035",
-      "name": "Edge 035",
-      "fromIdx": 22,
-      "toIdx": 23
-    },
-    {
-      "id": "layout-edge-036",
-      "label": "036",
-      "name": "Edge 036",
-      "fromIdx": 23,
-      "toIdx": 24
-    },
-    {
-      "id": "layout-edge-037",
-      "label": "037",
-      "name": "Edge 037",
-      "fromIdx": 23,
-      "toIdx": 127
-    },
-    {
-      "id": "layout-edge-038",
-      "label": "038",
-      "name": "Edge 038",
-      "fromIdx": 24,
-      "toIdx": 25
-    },
-    {
-      "id": "layout-edge-039",
-      "label": "039",
-      "name": "Edge 039",
-      "fromIdx": 25,
-      "toIdx": 0
-    },
-    {
-      "id": "layout-edge-040",
-      "label": "040",
-      "name": "Edge 040",
-      "fromIdx": 26,
-      "toIdx": 27
-    },
-    {
-      "id": "layout-edge-041",
-      "label": "041",
-      "name": "Edge 041",
-      "fromIdx": 27,
-      "toIdx": 33
-    },
-    {
-      "id": "layout-edge-042",
-      "label": "042",
-      "name": "Edge 042",
-      "fromIdx": 27,
-      "toIdx": 46
-    },
-    {
-      "id": "layout-edge-043",
-      "label": "043",
-      "name": "Edge 043",
-      "fromIdx": 28,
-      "toIdx": 29
-    },
-    {
-      "id": "layout-edge-044",
-      "label": "044",
-      "name": "Edge 044",
-      "fromIdx": 28,
-      "toIdx": 58
-    },
-    {
-      "id": "layout-edge-045",
-      "label": "045",
-      "name": "Edge 045",
-      "fromIdx": 29,
-      "toIdx": 30
-    },
-    {
-      "id": "layout-edge-046",
-      "label": "046",
-      "name": "Edge 046",
-      "fromIdx": 30,
-      "toIdx": 11
-    },
-    {
-      "id": "layout-edge-047",
-      "label": "047",
-      "name": "Edge 047",
-      "fromIdx": 31,
-      "toIdx": 32
-    },
-    {
-      "id": "layout-edge-048",
-      "label": "048",
-      "name": "Edge 048",
-      "fromIdx": 32,
-      "toIdx": 43
-    },
-    {
-      "id": "layout-edge-049",
-      "label": "049",
-      "name": "Edge 049",
-      "fromIdx": 32,
-      "toIdx": 121
-    },
-    {
-      "id": "layout-edge-050",
-      "label": "050",
-      "name": "Edge 050",
-      "fromIdx": 33,
-      "toIdx": 35
-    },
-    {
-      "id": "layout-edge-051",
-      "label": "051",
-      "name": "Edge 051",
-      "fromIdx": 34,
-      "toIdx": 35
-    },
-    {
-      "id": "layout-edge-052",
-      "label": "052",
-      "name": "Edge 052",
-      "fromIdx": 36,
-      "toIdx": 37
-    },
-    {
-      "id": "layout-edge-053",
-      "label": "053",
-      "name": "Edge 053",
-      "fromIdx": 36,
-      "toIdx": 38
-    },
-    {
-      "id": "layout-edge-054",
-      "label": "054",
-      "name": "Edge 054",
-      "fromIdx": 37,
-      "toIdx": 38
-    },
-    {
-      "id": "layout-edge-055",
-      "label": "055",
-      "name": "Edge 055",
-      "fromIdx": 38,
-      "toIdx": 40
-    },
-    {
-      "id": "layout-edge-056",
-      "label": "056",
-      "name": "Edge 056",
-      "fromIdx": 39,
-      "toIdx": 40
-    },
-    {
-      "id": "layout-edge-057",
-      "label": "057",
-      "name": "Edge 057",
-      "fromIdx": 39,
-      "toIdx": 41
-    },
-    {
-      "id": "layout-edge-058",
-      "label": "058",
-      "name": "Edge 058",
-      "fromIdx": 40,
-      "toIdx": 123
-    },
-    {
-      "id": "layout-edge-059",
-      "label": "059",
-      "name": "Edge 059",
-      "fromIdx": 41,
-      "toIdx": 47
-    },
-    {
-      "id": "layout-edge-060",
-      "label": "060",
-      "name": "Edge 060",
-      "fromIdx": 42,
-      "toIdx": 14
-    },
-    {
-      "id": "layout-edge-061",
-      "label": "061",
-      "name": "Edge 061",
-      "fromIdx": 43,
-      "toIdx": 37
-    },
-    {
-      "id": "layout-edge-062",
-      "label": "062",
-      "name": "Edge 062",
-      "fromIdx": 43,
-      "toIdx": 120
-    },
-    {
-      "id": "layout-edge-063",
-      "label": "063",
-      "name": "Edge 063",
-      "fromIdx": 44,
-      "toIdx": 45
-    },
-    {
-      "id": "layout-edge-064",
-      "label": "064",
-      "name": "Edge 064",
-      "fromIdx": 45,
-      "toIdx": 139
-    },
-    {
-      "id": "layout-edge-065",
-      "label": "065",
-      "name": "Edge 065",
-      "fromIdx": 46,
-      "toIdx": 33
-    },
-    {
-      "id": "layout-edge-066",
-      "label": "066",
-      "name": "Edge 066",
-      "fromIdx": 47,
-      "toIdx": 100
-    },
-    {
-      "id": "layout-edge-067",
-      "label": "067",
-      "name": "Edge 067",
-      "fromIdx": 48,
-      "toIdx": 100
-    },
-    {
-      "id": "layout-edge-068",
-      "label": "068",
-      "name": "Edge 068",
-      "fromIdx": 49,
-      "toIdx": 50
-    },
-    {
-      "id": "layout-edge-069",
-      "label": "069",
-      "name": "Edge 069",
-      "fromIdx": 49,
-      "toIdx": 59
-    },
-    {
-      "id": "layout-edge-070",
-      "label": "070",
-      "name": "Edge 070",
-      "fromIdx": 50,
-      "toIdx": 51
-    },
-    {
-      "id": "layout-edge-071",
-      "label": "071",
-      "name": "Edge 071",
-      "fromIdx": 51,
-      "toIdx": 98
-    },
-    {
-      "id": "layout-edge-072",
-      "label": "072",
-      "name": "Edge 072",
-      "fromIdx": 52,
-      "toIdx": 4
-    },
-    {
-      "id": "layout-edge-073",
-      "label": "073",
-      "name": "Edge 073",
-      "fromIdx": 52,
-      "toIdx": 53
-    },
-    {
-      "id": "layout-edge-074",
-      "label": "074",
-      "name": "Edge 074",
-      "fromIdx": 53,
-      "toIdx": 54
-    },
-    {
-      "id": "layout-edge-075",
-      "label": "075",
-      "name": "Edge 075",
-      "fromIdx": 54,
-      "toIdx": 134
-    },
-    {
-      "id": "layout-edge-076",
-      "label": "076",
-      "name": "Edge 076",
-      "fromIdx": 55,
-      "toIdx": 56
-    },
-    {
-      "id": "layout-edge-077",
-      "label": "077",
-      "name": "Edge 077",
-      "fromIdx": 55,
-      "toIdx": 132
-    },
-    {
-      "id": "layout-edge-078",
-      "label": "078",
-      "name": "Edge 078",
-      "fromIdx": 56,
-      "toIdx": 52
-    },
-    {
-      "id": "layout-edge-079",
-      "label": "079",
-      "name": "Edge 079",
-      "fromIdx": 57,
-      "toIdx": 28
-    },
-    {
-      "id": "layout-edge-080",
-      "label": "080",
-      "name": "Edge 080",
-      "fromIdx": 57,
-      "toIdx": 29
-    },
-    {
-      "id": "layout-edge-081",
-      "label": "081",
-      "name": "Edge 081",
-      "fromIdx": 58,
-      "toIdx": 5
-    },
-    {
-      "id": "layout-edge-082",
-      "label": "082",
-      "name": "Edge 082",
-      "fromIdx": 59,
-      "toIdx": 60
-    },
-    {
-      "id": "layout-edge-083",
-      "label": "083",
-      "name": "Edge 083",
-      "fromIdx": 60,
-      "toIdx": 129
-    },
-    {
-      "id": "layout-edge-084",
-      "label": "084",
-      "name": "Edge 084",
-      "fromIdx": 61,
-      "toIdx": 23
-    },
-    {
-      "id": "layout-edge-085",
-      "label": "085",
-      "name": "Edge 085",
-      "fromIdx": 61,
-      "toIdx": 62
-    },
-    {
-      "id": "layout-edge-086",
-      "label": "086",
-      "name": "Edge 086",
-      "fromIdx": 62,
-      "toIdx": 63
-    },
-    {
-      "id": "layout-edge-087",
-      "label": "087",
-      "name": "Edge 087",
-      "fromIdx": 62,
-      "toIdx": 145
-    },
-    {
-      "id": "layout-edge-088",
-      "label": "088",
-      "name": "Edge 088",
-      "fromIdx": 63,
-      "toIdx": 64
-    },
-    {
-      "id": "layout-edge-089",
-      "label": "089",
-      "name": "Edge 089",
-      "fromIdx": 64,
-      "toIdx": 65
-    },
-    {
-      "id": "layout-edge-090",
-      "label": "090",
-      "name": "Edge 090",
-      "fromIdx": 64,
-      "toIdx": 144
-    },
-    {
-      "id": "layout-edge-091",
-      "label": "091",
-      "name": "Edge 091",
-      "fromIdx": 65,
-      "toIdx": 66
-    },
-    {
-      "id": "layout-edge-092",
-      "label": "092",
-      "name": "Edge 092",
-      "fromIdx": 66,
-      "toIdx": 67
-    },
-    {
-      "id": "layout-edge-093",
-      "label": "093",
-      "name": "Edge 093",
-      "fromIdx": 66,
-      "toIdx": 143
-    },
-    {
-      "id": "layout-edge-094",
-      "label": "094",
-      "name": "Edge 094",
-      "fromIdx": 67,
-      "toIdx": 68
-    },
-    {
-      "id": "layout-edge-095",
-      "label": "095",
-      "name": "Edge 095",
-      "fromIdx": 68,
-      "toIdx": 69
-    },
-    {
-      "id": "layout-edge-096",
-      "label": "096",
-      "name": "Edge 096",
-      "fromIdx": 68,
-      "toIdx": 143
-    },
-    {
-      "id": "layout-edge-097",
-      "label": "097",
-      "name": "Edge 097",
-      "fromIdx": 69,
-      "toIdx": 70
-    },
-    {
-      "id": "layout-edge-098",
-      "label": "098",
-      "name": "Edge 098",
-      "fromIdx": 70,
-      "toIdx": 71
-    },
-    {
-      "id": "layout-edge-099",
-      "label": "099",
-      "name": "Edge 099",
-      "fromIdx": 70,
-      "toIdx": 129
-    },
-    {
-      "id": "layout-edge-100",
-      "label": "100",
-      "name": "Edge 100",
-      "fromIdx": 71,
-      "toIdx": 72
-    },
-    {
-      "id": "layout-edge-101",
-      "label": "101",
-      "name": "Edge 101",
-      "fromIdx": 72,
-      "toIdx": 73
-    },
-    {
-      "id": "layout-edge-102",
-      "label": "102",
-      "name": "Edge 102",
-      "fromIdx": 73,
-      "toIdx": 74
-    },
-    {
-      "id": "layout-edge-103",
-      "label": "103",
-      "name": "Edge 103",
-      "fromIdx": 74,
-      "toIdx": 75
-    },
-    {
-      "id": "layout-edge-104",
-      "label": "104",
-      "name": "Edge 104",
-      "fromIdx": 74,
-      "toIdx": 86
-    },
-    {
-      "id": "layout-edge-105",
-      "label": "105",
-      "name": "Edge 105",
-      "fromIdx": 75,
-      "toIdx": 76
-    },
-    {
-      "id": "layout-edge-106",
-      "label": "106",
-      "name": "Edge 106",
-      "fromIdx": 75,
-      "toIdx": 130
-    },
-    {
-      "id": "layout-edge-107",
-      "label": "107",
-      "name": "Edge 107",
-      "fromIdx": 76,
-      "toIdx": 77
-    },
-    {
-      "id": "layout-edge-108",
-      "label": "108",
-      "name": "Edge 108",
-      "fromIdx": 77,
-      "toIdx": 78
-    },
-    {
-      "id": "layout-edge-109",
-      "label": "109",
-      "name": "Edge 109",
-      "fromIdx": 78,
-      "toIdx": 79
-    },
-    {
-      "id": "layout-edge-110",
-      "label": "110",
-      "name": "Edge 110",
-      "fromIdx": 78,
-      "toIdx": 141
-    },
-    {
-      "id": "layout-edge-111",
-      "label": "111",
-      "name": "Edge 111",
-      "fromIdx": 79,
-      "toIdx": 80
-    },
-    {
-      "id": "layout-edge-112",
-      "label": "112",
-      "name": "Edge 112",
-      "fromIdx": 79,
-      "toIdx": 141
-    },
-    {
-      "id": "layout-edge-113",
-      "label": "113",
-      "name": "Edge 113",
-      "fromIdx": 80,
-      "toIdx": 81
-    },
-    {
-      "id": "layout-edge-114",
-      "label": "114",
-      "name": "Edge 114",
-      "fromIdx": 80,
-      "toIdx": 142
-    },
-    {
-      "id": "layout-edge-115",
-      "label": "115",
-      "name": "Edge 115",
-      "fromIdx": 81,
-      "toIdx": 82
-    },
-    {
-      "id": "layout-edge-116",
-      "label": "116",
-      "name": "Edge 116",
-      "fromIdx": 81,
-      "toIdx": 142
-    },
-    {
-      "id": "layout-edge-117",
-      "label": "117",
-      "name": "Edge 117",
-      "fromIdx": 82,
-      "toIdx": 42
-    },
-    {
-      "id": "layout-edge-118",
-      "label": "118",
-      "name": "Edge 118",
-      "fromIdx": 82,
-      "toIdx": 83
-    },
-    {
-      "id": "layout-edge-119",
-      "label": "119",
-      "name": "Edge 119",
-      "fromIdx": 83,
-      "toIdx": 29
-    },
-    {
-      "id": "layout-edge-120",
-      "label": "120",
-      "name": "Edge 120",
-      "fromIdx": 83,
-      "toIdx": 42
-    },
-    {
-      "id": "layout-edge-121",
-      "label": "121",
-      "name": "Edge 121",
-      "fromIdx": 84,
-      "toIdx": 85
-    },
-    {
-      "id": "layout-edge-122",
-      "label": "122",
-      "name": "Edge 122",
-      "fromIdx": 84,
-      "toIdx": 130
-    },
-    {
-      "id": "layout-edge-123",
-      "label": "123",
-      "name": "Edge 123",
-      "fromIdx": 85,
-      "toIdx": 74
-    },
-    {
-      "id": "layout-edge-124",
-      "label": "124",
-      "name": "Edge 124",
-      "fromIdx": 87,
-      "toIdx": 88
-    },
-    {
-      "id": "layout-edge-125",
-      "label": "125",
-      "name": "Edge 125",
-      "fromIdx": 87,
-      "toIdx": 146
-    },
-    {
-      "id": "layout-edge-126",
-      "label": "126",
-      "name": "Edge 126",
-      "fromIdx": 88,
-      "toIdx": 89
-    },
-    {
-      "id": "layout-edge-127",
-      "label": "127",
-      "name": "Edge 127",
-      "fromIdx": 89,
-      "toIdx": 90
-    },
-    {
-      "id": "layout-edge-128",
-      "label": "128",
-      "name": "Edge 128",
-      "fromIdx": 89,
-      "toIdx": 147
-    },
-    {
-      "id": "layout-edge-129",
-      "label": "129",
-      "name": "Edge 129",
-      "fromIdx": 90,
-      "toIdx": 91
-    },
-    {
-      "id": "layout-edge-130",
-      "label": "130",
-      "name": "Edge 130",
-      "fromIdx": 91,
-      "toIdx": 92
-    },
-    {
-      "id": "layout-edge-131",
-      "label": "131",
-      "name": "Edge 131",
-      "fromIdx": 91,
-      "toIdx": 148
-    },
-    {
-      "id": "layout-edge-132",
-      "label": "132",
-      "name": "Edge 132",
-      "fromIdx": 92,
-      "toIdx": 93
-    },
-    {
-      "id": "layout-edge-133",
-      "label": "133",
-      "name": "Edge 133",
-      "fromIdx": 92,
-      "toIdx": 149
-    },
-    {
-      "id": "layout-edge-134",
-      "label": "134",
-      "name": "Edge 134",
-      "fromIdx": 93,
-      "toIdx": 94
-    },
-    {
-      "id": "layout-edge-135",
-      "label": "135",
-      "name": "Edge 135",
-      "fromIdx": 93,
-      "toIdx": 150
-    },
-    {
-      "id": "layout-edge-136",
-      "label": "136",
-      "name": "Edge 136",
-      "fromIdx": 94,
-      "toIdx": 95
-    },
-    {
-      "id": "layout-edge-137",
-      "label": "137",
-      "name": "Edge 137",
-      "fromIdx": 94,
-      "toIdx": 151
-    },
-    {
-      "id": "layout-edge-138",
-      "label": "138",
-      "name": "Edge 138",
-      "fromIdx": 95,
-      "toIdx": 96
-    },
-    {
-      "id": "layout-edge-139",
-      "label": "139",
-      "name": "Edge 139",
-      "fromIdx": 95,
-      "toIdx": 152
-    },
-    {
-      "id": "layout-edge-140",
-      "label": "140",
-      "name": "Edge 140",
-      "fromIdx": 96,
-      "toIdx": 97
-    },
-    {
-      "id": "layout-edge-141",
-      "label": "141",
-      "name": "Edge 141",
-      "fromIdx": 96,
-      "toIdx": 153
-    },
-    {
-      "id": "layout-edge-142",
-      "label": "142",
-      "name": "Edge 142",
-      "fromIdx": 97,
-      "toIdx": 61
-    },
-    {
-      "id": "layout-edge-143",
-      "label": "143",
-      "name": "Edge 143",
-      "fromIdx": 97,
-      "toIdx": 154
-    },
-    {
-      "id": "layout-edge-144",
-      "label": "144",
-      "name": "Edge 144",
-      "fromIdx": 98,
-      "toIdx": 60
-    },
-    {
-      "id": "layout-edge-145",
-      "label": "145",
-      "name": "Edge 145",
-      "fromIdx": 98,
-      "toIdx": 69
-    },
-    {
-      "id": "layout-edge-146",
-      "label": "146",
-      "name": "Edge 146",
-      "fromIdx": 99,
-      "toIdx": 48
-    },
-    {
-      "id": "layout-edge-147",
-      "label": "147",
-      "name": "Edge 147",
-      "fromIdx": 100,
-      "toIdx": 101
-    },
-    {
-      "id": "layout-edge-148",
-      "label": "148",
-      "name": "Edge 148",
-      "fromIdx": 101,
-      "toIdx": 102
-    },
-    {
-      "id": "layout-edge-149",
-      "label": "149",
-      "name": "Edge 149",
-      "fromIdx": 101,
-      "toIdx": 158
-    },
-    {
-      "id": "layout-edge-150",
-      "label": "150",
-      "name": "Edge 150",
-      "fromIdx": 102,
-      "toIdx": 103
-    },
-    {
-      "id": "layout-edge-151",
-      "label": "151",
-      "name": "Edge 151",
-      "fromIdx": 102,
-      "toIdx": 157
-    },
-    {
-      "id": "layout-edge-152",
-      "label": "152",
-      "name": "Edge 152",
-      "fromIdx": 103,
-      "toIdx": 104
-    },
-    {
-      "id": "layout-edge-153",
-      "label": "153",
-      "name": "Edge 153",
-      "fromIdx": 103,
-      "toIdx": 156
-    },
-    {
-      "id": "layout-edge-154",
-      "label": "154",
-      "name": "Edge 154",
-      "fromIdx": 104,
-      "toIdx": 105
-    },
-    {
-      "id": "layout-edge-155",
-      "label": "155",
-      "name": "Edge 155",
-      "fromIdx": 104,
-      "toIdx": 155
-    },
-    {
-      "id": "layout-edge-156",
-      "label": "156",
-      "name": "Edge 156",
-      "fromIdx": 105,
-      "toIdx": 106
-    },
-    {
-      "id": "layout-edge-157",
-      "label": "157",
-      "name": "Edge 157",
-      "fromIdx": 105,
-      "toIdx": 125
-    },
-    {
-      "id": "layout-edge-158",
-      "label": "158",
-      "name": "Edge 158",
-      "fromIdx": 106,
-      "toIdx": 107
-    },
-    {
-      "id": "layout-edge-159",
-      "label": "159",
-      "name": "Edge 159",
-      "fromIdx": 106,
-      "toIdx": 125
-    },
-    {
-      "id": "layout-edge-160",
-      "label": "160",
-      "name": "Edge 160",
-      "fromIdx": 107,
-      "toIdx": 108
-    },
-    {
-      "id": "layout-edge-161",
-      "label": "161",
-      "name": "Edge 161",
-      "fromIdx": 107,
-      "toIdx": 163
-    },
-    {
-      "id": "layout-edge-162",
-      "label": "162",
-      "name": "Edge 162",
-      "fromIdx": 108,
-      "toIdx": 109
-    },
-    {
-      "id": "layout-edge-163",
-      "label": "163",
-      "name": "Edge 163",
-      "fromIdx": 108,
-      "toIdx": 162
-    },
-    {
-      "id": "layout-edge-164",
-      "label": "164",
-      "name": "Edge 164",
-      "fromIdx": 109,
-      "toIdx": 110
-    },
-    {
-      "id": "layout-edge-165",
-      "label": "165",
-      "name": "Edge 165",
-      "fromIdx": 109,
-      "toIdx": 161
-    },
-    {
-      "id": "layout-edge-166",
-      "label": "166",
-      "name": "Edge 166",
-      "fromIdx": 110,
-      "toIdx": 111
-    },
-    {
-      "id": "layout-edge-167",
-      "label": "167",
-      "name": "Edge 167",
-      "fromIdx": 110,
-      "toIdx": 160
-    },
-    {
-      "id": "layout-edge-168",
-      "label": "168",
-      "name": "Edge 168",
-      "fromIdx": 111,
-      "toIdx": 112
-    },
-    {
-      "id": "layout-edge-169",
-      "label": "169",
-      "name": "Edge 169",
-      "fromIdx": 111,
-      "toIdx": 159
-    },
-    {
-      "id": "layout-edge-170",
-      "label": "170",
-      "name": "Edge 170",
-      "fromIdx": 112,
-      "toIdx": 113
-    },
-    {
-      "id": "layout-edge-171",
-      "label": "171",
-      "name": "Edge 171",
-      "fromIdx": 112,
-      "toIdx": 159
-    },
-    {
-      "id": "layout-edge-172",
-      "label": "172",
-      "name": "Edge 172",
-      "fromIdx": 113,
-      "toIdx": 114
-    },
-    {
-      "id": "layout-edge-173",
-      "label": "173",
-      "name": "Edge 173",
-      "fromIdx": 113,
-      "toIdx": 126
-    },
-    {
-      "id": "layout-edge-174",
-      "label": "174",
-      "name": "Edge 174",
-      "fromIdx": 114,
-      "toIdx": 115
-    },
-    {
-      "id": "layout-edge-175",
-      "label": "175",
-      "name": "Edge 175",
-      "fromIdx": 114,
-      "toIdx": 164
-    },
-    {
-      "id": "layout-edge-176",
-      "label": "176",
-      "name": "Edge 176",
-      "fromIdx": 115,
-      "toIdx": 116
-    },
-    {
-      "id": "layout-edge-177",
-      "label": "177",
-      "name": "Edge 177",
-      "fromIdx": 115,
-      "toIdx": 126
-    },
-    {
-      "id": "layout-edge-178",
-      "label": "178",
-      "name": "Edge 178",
-      "fromIdx": 116,
-      "toIdx": 117
-    },
-    {
-      "id": "layout-edge-179",
-      "label": "179",
-      "name": "Edge 179",
-      "fromIdx": 116,
-      "toIdx": 165
-    },
-    {
-      "id": "layout-edge-180",
-      "label": "180",
-      "name": "Edge 180",
-      "fromIdx": 117,
-      "toIdx": 118
-    },
-    {
-      "id": "layout-edge-181",
-      "label": "181",
-      "name": "Edge 181",
-      "fromIdx": 117,
-      "toIdx": 166
-    },
-    {
-      "id": "layout-edge-182",
-      "label": "182",
-      "name": "Edge 182",
-      "fromIdx": 118,
-      "toIdx": 119
-    },
-    {
-      "id": "layout-edge-183",
-      "label": "183",
-      "name": "Edge 183",
-      "fromIdx": 118,
-      "toIdx": 167
-    },
-    {
-      "id": "layout-edge-184",
-      "label": "184",
-      "name": "Edge 184",
-      "fromIdx": 119,
-      "toIdx": 120
-    },
-    {
-      "id": "layout-edge-185",
-      "label": "185",
-      "name": "Edge 185",
-      "fromIdx": 119,
-      "toIdx": 168
-    },
-    {
-      "id": "layout-edge-186",
-      "label": "186",
-      "name": "Edge 186",
-      "fromIdx": 120,
-      "toIdx": 121
-    },
-    {
-      "id": "layout-edge-187",
-      "label": "187",
-      "name": "Edge 187",
-      "fromIdx": 120,
-      "toIdx": 124
-    },
-    {
-      "id": "layout-edge-188",
-      "label": "188",
-      "name": "Edge 188",
-      "fromIdx": 121,
-      "toIdx": 137
-    },
-    {
-      "id": "layout-edge-189",
-      "label": "189",
-      "name": "Edge 189",
-      "fromIdx": 122,
-      "toIdx": 32
-    },
-    {
-      "id": "layout-edge-190",
-      "label": "190",
-      "name": "Edge 190",
-      "fromIdx": 123,
-      "toIdx": 41
-    },
-    {
-      "id": "layout-edge-191",
-      "label": "191",
-      "name": "Edge 191",
-      "fromIdx": 125,
-      "toIdx": 41
-    },
-    {
-      "id": "layout-edge-192",
-      "label": "192",
-      "name": "Edge 192",
-      "fromIdx": 125,
-      "toIdx": 123
-    },
-    {
-      "id": "layout-edge-193",
-      "label": "193",
-      "name": "Edge 193",
-      "fromIdx": 126,
-      "toIdx": 37
-    },
-    {
-      "id": "layout-edge-194",
-      "label": "194",
-      "name": "Edge 194",
-      "fromIdx": 126,
-      "toIdx": 38
-    },
-    {
-      "id": "layout-edge-195",
-      "label": "195",
-      "name": "Edge 195",
-      "fromIdx": 127,
-      "toIdx": 128
-    },
-    {
-      "id": "layout-edge-196",
-      "label": "196",
-      "name": "Edge 196",
-      "fromIdx": 128,
-      "toIdx": 51
-    },
-    {
-      "id": "layout-edge-197",
-      "label": "197",
-      "name": "Edge 197",
-      "fromIdx": 129,
-      "toIdx": 84
-    },
-    {
-      "id": "layout-edge-198",
-      "label": "198",
-      "name": "Edge 198",
-      "fromIdx": 130,
-      "toIdx": 131
-    },
-    {
-      "id": "layout-edge-199",
-      "label": "199",
-      "name": "Edge 199",
-      "fromIdx": 131,
-      "toIdx": 55
-    },
-    {
-      "id": "layout-edge-200",
-      "label": "200",
-      "name": "Edge 200",
-      "fromIdx": 132,
-      "toIdx": 133
-    },
-    {
-      "id": "layout-edge-201",
-      "label": "201",
-      "name": "Edge 201",
-      "fromIdx": 133,
-      "toIdx": 54
-    },
-    {
-      "id": "layout-edge-202",
-      "label": "202",
-      "name": "Edge 202",
-      "fromIdx": 134,
-      "toIdx": 135
-    },
-    {
-      "id": "layout-edge-203",
-      "label": "203",
-      "name": "Edge 203",
-      "fromIdx": 135,
-      "toIdx": 136
-    },
-    {
-      "id": "layout-edge-204",
-      "label": "204",
-      "name": "Edge 204",
-      "fromIdx": 136,
-      "toIdx": 57
-    },
-    {
-      "id": "layout-edge-205",
-      "label": "205",
-      "name": "Edge 205",
-      "fromIdx": 137,
-      "toIdx": 138
-    },
-    {
-      "id": "layout-edge-206",
-      "label": "206",
-      "name": "Edge 206",
-      "fromIdx": 138,
-      "toIdx": 45
-    },
-    {
-      "id": "layout-edge-207",
-      "label": "207",
-      "name": "Edge 207",
-      "fromIdx": 139,
-      "toIdx": 140
-    },
-    {
-      "id": "layout-edge-208",
-      "label": "208",
-      "name": "Edge 208",
-      "fromIdx": 140,
-      "toIdx": 46
-    },
-    {
-      "id": "layout-edge-209",
-      "label": "209",
-      "name": "Edge 209",
-      "fromIdx": 141,
-      "toIdx": 133
-    },
-    {
-      "id": "layout-edge-210",
-      "label": "210",
-      "name": "Edge 210",
-      "fromIdx": 141,
-      "toIdx": 134
-    },
-    {
-      "id": "layout-edge-211",
-      "label": "211",
-      "name": "Edge 211",
-      "fromIdx": 142,
-      "toIdx": 135
-    },
-    {
-      "id": "layout-edge-212",
-      "label": "212",
-      "name": "Edge 212",
-      "fromIdx": 142,
-      "toIdx": 136
-    }
-  ],
+  "networkJunctions": [],
+  "Edge": [],
   "terminals": [
     {
       "id": "id_9w386mq9t",
@@ -5790,7 +3760,8 @@
       },
       "lineupDistM_CW": 0,
       "lineupDistM_CCW": 70,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway"
     },
     {
       "id": "id_bo1ng9zhh",
@@ -5897,7 +3868,8 @@
       },
       "lineupDistM_CW": 120,
       "lineupDistM_CCW": 120,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway"
     }
   ],
   "runwayTaxiways": [
@@ -5919,7 +3891,8 @@
       "maxExitVelocity": 30,
       "minExitVelocity": 15,
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_oke2cx2ec",
@@ -5979,7 +3952,8 @@
         "clockwise",
         "counter_clockwise"
       ],
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_holzos55b",
@@ -6007,7 +3981,8 @@
         "clockwise",
         "counter_clockwise"
       ],
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_ieaumpya9",
@@ -6035,7 +4010,8 @@
       "maxExitVelocity": 30,
       "minExitVelocity": 15,
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_v4l2u1bqm",
@@ -6063,7 +4039,8 @@
       "maxExitVelocity": 30,
       "minExitVelocity": 15,
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_8ah2xknsh",
@@ -6135,7 +4112,8 @@
         "clockwise",
         "counter_clockwise"
       ],
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_vmx7p7lo0",
@@ -6172,7 +4150,8 @@
       "minExitVelocity": 15,
       "allowedRwDirections": [],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_npiyk8tjp",
@@ -6211,7 +4190,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_q5ohgqzlk",
@@ -6259,7 +4239,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_qq7zu0u45",
@@ -6306,7 +4287,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_ekhlus2ps",
@@ -6330,7 +4312,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_6jclwcmft",
@@ -6389,7 +4372,8 @@
         "clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_a3ufw26pc",
@@ -6413,7 +4397,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_7yq3u5ssp",
@@ -6449,7 +4434,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_a23o3sauj",
@@ -6470,7 +4456,8 @@
       "minExitVelocity": 15,
       "allowedRwDirections": [],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_l9mr9uq2g",
@@ -6494,7 +4481,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_q4j5c3yud",
@@ -6529,7 +4517,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_ufl92zcn3",
@@ -6553,7 +4542,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_7av9w9hnl",
@@ -6584,7 +4574,8 @@
         "counter_clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_3jvb8zivh",
@@ -6651,7 +4642,8 @@
         "clockwise"
       ],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     },
     {
       "id": "id_zhahap26a",
@@ -6796,7 +4788,8 @@
       "minExitVelocity": 15,
       "allowedRwDirections": [],
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "runway_exit"
     }
   ],
   "taxiways": [
@@ -7670,7 +5663,8 @@
       "width": 20,
       "direction": "both",
       "avgMoveVelocity": 10,
-      "pavement": "asphalt"
+      "pavement": "asphalt",
+      "pathType": "general_queue_taxiway"
     },
     {
       "id": "id_tv9wyyxdy",
@@ -101332,7 +99326,7 @@
   ],
   "designerPersist": {
     "v": 1,
-    "globalUpdateFresh": true,
+    "globalUpdateFresh": false,
     "designerPageUpdateFresh": true,
     "hasSimulationPlayback": true,
     "simPlaybackEndCapSec": null,

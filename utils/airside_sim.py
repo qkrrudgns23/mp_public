@@ -12,8 +12,8 @@ E times (ELDT/EIBT/EOBT/ETOT); ``EIBT`` is **only** from simulation: first time 
 the stand token on ``Arr_taxi`` (any path type except pure ``runway``) with speed below ``standStoppedVelocityMaxMs``, only when
 ``PROCEED`` (not ``WAIT``/``YIELD``) and the destination stand pipeline has capacity (no cooldown). Phase-change
 fallback if stand px is missing. No schedule/path nominal fill-in for EIBT. ``EOBT`` is first pushback/taxi-out motion after
-``dep_taxi_start_abs_sec`` (set at in-blocks + dwell) with speed above a small threshold, else path timing + ``dwellMin`` when not
-recorded.
+``dep_taxi_start_abs_sec`` (set at in-blocks + on-stand dwell) with speed above a small threshold; if not recorded, nominal
+``EOBT`` = ``EIBT`` + ``SOBT_sd - SIBT_sd`` (Sd minute fields) when both are set, else ``dwellMin``.
 ``ETOT`` (when the path includes a ``Lineup_departure`` / takeoff-roll leg) is **only** the simulated time when the flight
 finishes the last path segment (``path_completed_abs_sec``); no nominal EOBT+leg projection. If the sim never completes that path,
 ``ETOT`` is omitted (null).
@@ -27,7 +27,8 @@ consecutive ``positions`` intervals inside each VTT window whose start sample ha
 ``LINEUP_DEPARTURE_SEC`` remains as the ``Lineup_departure`` phase duration for playback diagnostics.
 
 ``positions`` timelines use ``t`` = absolute schedule seconds (day base, same as ELDT scale);
-``Dep_taxi`` pushback/taxi-out is gated until **physical** in-blocks at stand + ``dwell_sec`` (not ELDT+nominal taxi-in).
+``Dep_taxi`` pushback/taxi-out is gated until **physical** in-blocks at stand + on-stand ``dwell_sec``
+(Sd ``sobtMin_d - sibtMin_d`` when both set, else ``dwellMin``), not ELDT+nominal taxi-in.
 Between heavy control ticks, a full reservation rebook runs every ``LIGHT_RESERVATION_RETRY_INTERVAL_SEC`` so agents
 re-check stand pipeline and departure-runway resources and regain ``PROCEED`` when slots free (same rules as ``can_reserve_path``).
 Per-flight lookahead / billed reservation depth by regime (runway, Dep_taxi, Arr_taxi, Arr_taxi stand-busy after ELDT);
@@ -3432,6 +3433,23 @@ def _dwell_sec_from_flight(fobj: Dict[str, Any]) -> float:
     return dwell_sec
 
 
+def _stand_dwell_sec_from_flight(fobj: Dict[str, Any]) -> float:
+    """
+    Seconds on stand for ``dep_taxi_start`` gating and nominal ``EOBT`` = ``EIBT`` + this value.
+
+    Prefer Sim Sd scheduled block: ``(sobtMin_d - sibtMin_d)`` minutes → seconds when both inputs
+    are finite and the difference is non-negative. Otherwise ``dwellMin`` (minutes) via
+    ``_dwell_sec_from_flight``.
+    """
+    sobt_m = _safe_float(fobj.get("sobtMin_d"), float("nan"))
+    sibt_m = _safe_float(fobj.get("sibtMin_d"), float("nan"))
+    if math.isfinite(sobt_m) and math.isfinite(sibt_m):
+        delta_m = float(sobt_m) - float(sibt_m)
+        if delta_m >= 0.0 and math.isfinite(delta_m):
+            return float(delta_m) * 60.0
+    return _dwell_sec_from_flight(fobj)
+
+
 def _backfill_actual_apron_offblocks_from_history(ag: Flight) -> None:
     """If loop never stamped off-blocks, use first post-gate motion sample (same rule as main loop)."""
     if ag.actual_apron_offblocks_abs_sec is not None:
@@ -3656,11 +3674,12 @@ def _build_schedule_row(
     S series from ``*_Min_orig``; Sd echo from ``*_Min_d``; E series from path timing + dwell.
     ``eldt_schedule_sec``가 있으면 동일 활주로 간격 조정된 ELDT를 쓰고, 없으면 ``_sd_eldt_sec``만 쓴다.
     ``EIBT`` is measured only (near stand on Arr_taxi apron segment, or phase-transition fallback); no ``ELDT``+taxi-in estimate.
-    ``EOBT`` = measured off-blocks when set; else ``EIBT``+dwell when EIBT known; else path/nominal chain.
+    ``EOBT`` = measured off-blocks when set; else ``EIBT`` + scheduled on-stand duration
+    (``SOBT_sd - SIBT_sd`` from Sd minutes when both set, else ``dwellMin``-based dwell).
     ``ETOT`` with a takeoff leg in ``prep`` uses ``path_completed_abs_sec`` only; otherwise nominal ``E_LINEUP``+takeoff duration
     when that chain is available.
     """
-    dwell_sec = _dwell_sec_from_flight(fobj)
+    dwell_sec = _stand_dwell_sec_from_flight(fobj)
 
     eldt_sec = (
         int(eldt_schedule_sec)
@@ -7600,7 +7619,7 @@ def run_simulation(
                 anchor_use = float(anchor_raw) if anchor_raw is not None else None
             rot_opt = _arr_rot_sec_from_prep(prep, ppm)
             rot_sec = float(rot_opt) if rot_opt is not None else 0.0
-            dwell_s = _dwell_sec_from_flight(fobj if isinstance(fobj, dict) else {})
+            dwell_s = _stand_dwell_sec_from_flight(fobj if isinstance(fobj, dict) else {})
             _arr_rid = str(arr_rwy_o).strip() if arr_rwy_o else ""
             dep_rwy_o = fobj.get("depRunwayId") or token_o.get("depRunwayId")
             _dep_rid = str(dep_rwy_o).strip() if dep_rwy_o else ""
