@@ -1187,16 +1187,24 @@
     const t = Number(tSec);
     if (!isFinite(t)) return pose;
     const tKey = Math.round(t);
-    let inPushback = false;
+    const byT = Object.create(null);
+    let transitionStartT = null;
     for (let i = 0; i < tl.length; i++) {
       const w = tl[i];
       if (!w) continue;
       const tt = Math.round(Number(w.t));
-      if (isFinite(tt) && tt === tKey && String(w.phase || '') === 'Pushback') {
-        inPushback = true;
-        break;
+      if (isFinite(tt)) byT[tt] = w;
+      if (i > 0 && String(w.phase || '') === 'Dep_taxi' && String(tl[i - 1].phase || '') === 'Pushback') {
+        transitionStartT = Number(w.t);
       }
     }
+    const curPhase = String((byT[tKey] && byT[tKey].phase) || '');
+    const prevPhase = String((byT[tKey - 1] && byT[tKey - 1].phase) || '');
+    const PUSHBACK_TO_DEP_TAXI_BLEND_SEC = 1.0;
+    const inBlend = transitionStartT != null
+      && t + 1e-9 >= transitionStartT
+      && t <= transitionStartT + PUSHBACK_TO_DEP_TAXI_BLEND_SEC + 1e-9;
+    const inPushback = curPhase === 'Pushback' || (curPhase === 'Dep_taxi' && prevPhase === 'Pushback') || inBlend;
     if (!inPushback) return pose;
     let segIdx = -1;
     for (let i = 0; i < tl.length - 1; i++) {
@@ -1220,7 +1228,28 @@
     const dy = pose.y - rear.y;
     const dl = Math.hypot(dx, dy);
     if (dl < Math.max(0.005 * lenM, 0.04)) return pose;
-    return { x: pose.x, y: pose.y, dx: dx / dl, dy: dy / dl, deadlockGhost: !!pose.deadlockGhost };
+    const pushPose = { x: pose.x, y: pose.y, dx: dx / dl, dy: dy / dl, deadlockGhost: !!pose.deadlockGhost };
+    if (!inBlend || transitionStartT == null || curPhase === 'Pushback') return pushPose;
+    const alpha = Math.max(0, Math.min(1, (t - transitionStartT) / PUSHBACK_TO_DEP_TAXI_BLEND_SEC));
+    return blendPoseHeading(pushPose, pose, alpha);
+  }
+
+  function blendPoseHeading(fromPose, toPose, alpha) {
+    if (!fromPose || !toPose) return fromPose || toPose || null;
+    const a = Math.max(0, Math.min(1, Number(alpha) || 0));
+    const a0 = Math.atan2(fromPose.dy, fromPose.dx);
+    const a1 = Math.atan2(toPose.dy, toPose.dx);
+    let da = a1 - a0;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    const th = a0 + da * a;
+    return {
+      x: toPose.x,
+      y: toPose.y,
+      dx: Math.cos(th),
+      dy: Math.sin(th),
+      deadlockGhost: !!(fromPose.deadlockGhost || toPose.deadlockGhost),
+    };
   }
 
   function walkPushbackPolylineFromFront(tl, segIndex, fx, fy, distM) {
