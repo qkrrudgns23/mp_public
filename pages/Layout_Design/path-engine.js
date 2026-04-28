@@ -690,8 +690,7 @@
       if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
     }
     if (typeof renderFlightList === 'function') renderFlightList(false, false);
-    const playDockBtnApplyLayout = document.getElementById('btnShowPlayDock');
-    if (playDockBtnApplyLayout) playDockBtnApplyLayout.disabled = !state.hasSimulationResult;
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
   /** E-series minutes; duration seconds from ``airside_sim`` schedule row. */
   function applyAirsideScheduleRowToFlight(f, srec) {

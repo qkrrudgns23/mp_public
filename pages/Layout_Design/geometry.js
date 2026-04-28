@@ -161,6 +161,17 @@
         dot.setAttribute('title', 'Layout or schedule changed — run Pro Sim again to refresh (results apply when done)');
       }
     }
+    const playDock = document.getElementById('btnShowPlayDock');
+    const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
+    const allowPlay = !!state.hasSimulationResult && proSimUiFresh;
+    if (playDock) playDock.disabled = !allowPlay;
+    if (!allowPlay) {
+      state.simPlaybackDockVisible = false;
+      state.simPlaying = false;
+      state.simSliderScrubbing = false;
+      if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+      if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    }
   }
   function redrawLayoutAfterEdit() {
     if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();

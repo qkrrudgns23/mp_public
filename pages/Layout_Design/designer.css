@@ -860,6 +860,7 @@
     .flight-schedule-table .flight-sched-dot--green { background:#22c55e; }
     .flight-schedule-table .flight-sched-dot--red { background:#ef4444; }
     .flight-schedule-table .flight-sched-dot--pink { background:#ff1493; }
+    .flight-schedule-table .flight-sched-dot--pushback { background:#3f3f46; }
     .flight-schedule-table .flight-sched-dot--vttarr {
       background:linear-gradient(90deg, #3b82f6 0%, #3b82f6 50%, #a855f7 50%, #a855f7 100%);
       box-shadow:0 0 0 1px rgba(0,0,0,0.35);

@@ -1626,9 +1626,17 @@
       }
     }
     const playDock = document.getElementById('btnShowPlayDock');
+    const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
+    const allowPlay = !!state.hasSimulationResult && proSimUiFresh;
     if (playDock) {
-      const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
-      playDock.disabled = !state.hasSimulationResult || !proSimUiFresh;
+      playDock.disabled = !allowPlay;
+    }
+    if (!allowPlay) {
+      state.simPlaybackDockVisible = false;
+      state.simPlaying = false;
+      state.simSliderScrubbing = false;
+      if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+      if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
     }
     if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
   }
@@ -4173,10 +4181,11 @@
     (list || []).forEach(function(tw) {
       const ser = serializeTaxiwayWithEndpoints(tw);
       const pt = tw.pathType || 'taxiway';
-      delete ser.pathType;
       if (pt === 'runway') runwayPaths.push(ser);
       else if (pt === 'runway_exit') runwayTaxiways.push(ser);
       else {
+        if (pt === 'general_queue_taxiway') ser.pathType = pt;
+        else delete ser.pathType;
         taxiways.push(ser);
       }
     });
@@ -8002,7 +8011,7 @@
     const wrap = document.getElementById('sim-controls-wrap');
     const inner = document.getElementById('sim-controls-container');
     const hideBtn = document.getElementById('btnHideSimPlaybackBar');
-    const hasSim = state.hasSimulationResult && state.flights.length > 0;
+    const hasSim = state.hasSimulationResult && state.globalUpdateFresh && state.flights.length > 0;
     if (!wrap) return;
     if (!hasSim || !state.simPlaybackDockVisible) {
       wrap.style.display = 'none';
@@ -9518,6 +9527,7 @@
     if (dotKind === 'vttarr') dotClass = 'flight-sched-dot--vttarr';
     else if (dotKind === 'dttarr') dotClass = 'flight-sched-dot--dttarr';
     else if (dotKind === 'dttdep') dotClass = 'flight-sched-dot--dttdep';
+    else if (dotKind === 'pushback') dotClass = 'flight-sched-dot--pushback';
     else if (dotKind === 'red') dotClass = 'flight-sched-dot--red';
     else if (dotKind === 'pink') dotClass = 'flight-sched-dot--pink';
     return '<span class="flight-sched-cell-inner">' +
@@ -9608,7 +9618,7 @@
     const rotArrCell = flightScheduleProSimTimedCell(rotArrStr, 'green');
     const vttArrCell = flightScheduleProSimTimedCell(vttArrStr, 'vttarr');
     const dttArrCell = flightScheduleProSimTimedCell(dttArrStr, 'dttarr');
-    const pushbackCell = flightScheduleProSimTimedCell(pushbackStr, 'pink');
+    const pushbackCell = flightScheduleProSimTimedCell(pushbackStr, 'pushback');
     const dttDepCell = flightScheduleProSimTimedCell(dttDepStr, 'dttdep');
     const vttDepCell = flightScheduleProSimTimedCell(vttDepStr, 'red');
     const rotDepCell = flightScheduleProSimTimedCell(rotDepStr, 'pink');
@@ -16577,7 +16587,7 @@
   }
 
   function drawFlights2D() {
-    if (!state.hasSimulationResult || !state.flights.length) return;
+    if (!state.hasSimulationResult || !state.globalUpdateFresh || !state.flights.length) return;
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

@@ -367,10 +367,11 @@
     (list || []).forEach(function(tw) {
       const ser = serializeTaxiwayWithEndpoints(tw);
       const pt = tw.pathType || 'taxiway';
-      delete ser.pathType;
       if (pt === 'runway') runwayPaths.push(ser);
       else if (pt === 'runway_exit') runwayTaxiways.push(ser);
       else {
+        if (pt === 'general_queue_taxiway') ser.pathType = pt;
+        else delete ser.pathType;
         taxiways.push(ser);
       }
     });

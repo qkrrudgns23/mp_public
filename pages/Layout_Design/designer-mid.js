@@ -813,6 +813,7 @@
     if (dotKind === 'vttarr') dotClass = 'flight-sched-dot--vttarr';
     else if (dotKind === 'dttarr') dotClass = 'flight-sched-dot--dttarr';
     else if (dotKind === 'dttdep') dotClass = 'flight-sched-dot--dttdep';
+    else if (dotKind === 'pushback') dotClass = 'flight-sched-dot--pushback';
     else if (dotKind === 'red') dotClass = 'flight-sched-dot--red';
     else if (dotKind === 'pink') dotClass = 'flight-sched-dot--pink';
     return '<span class="flight-sched-cell-inner">' +
@@ -900,7 +901,7 @@
     const rotArrCell = flightScheduleProSimTimedCell(rotArrStr, 'green');
     const vttArrCell = flightScheduleProSimTimedCell(vttArrStr, 'vttarr');
     const dttArrCell = flightScheduleProSimTimedCell(dttArrStr, 'dttarr');
-    const pushbackCell = flightScheduleProSimTimedCell(pushbackStr, 'pink');
+    const pushbackCell = flightScheduleProSimTimedCell(pushbackStr, 'pushback');
     const dttDepCell = flightScheduleProSimTimedCell(dttDepStr, 'dttdep');
     const vttDepCell = flightScheduleProSimTimedCell(vttDepStr, 'red');
     const rotDepCell = flightScheduleProSimTimedCell(rotDepStr, 'pink');

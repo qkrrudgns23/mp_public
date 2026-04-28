@@ -616,7 +616,7 @@
     const wrap = document.getElementById('sim-controls-wrap');
     const inner = document.getElementById('sim-controls-container');
     const hideBtn = document.getElementById('btnHideSimPlaybackBar');
-    const hasSim = state.hasSimulationResult && state.flights.length > 0;
+    const hasSim = state.hasSimulationResult && state.globalUpdateFresh && state.flights.length > 0;
     if (!wrap) return;
     if (!hasSim || !state.simPlaybackDockVisible) {
       wrap.style.display = 'none';

@@ -1933,7 +1933,7 @@
   }
 
   function drawFlights2D() {
-    if (!state.hasSimulationResult || !state.flights.length) return;
+    if (!state.hasSimulationResult || !state.globalUpdateFresh || !state.flights.length) return;
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
