@@ -4305,6 +4305,24 @@ def _overlay_schedule_timing_from_playback_positions(
         row["E_PUSH_FINISHED_dt"] = _sec_to_datetime_str(e_push_finished, base_date)
         row["EOBT"] = _sim_sec_optional(eobt) if eobt is not None else None
         row["EOBT_dt"] = _sec_to_datetime_str(eobt, base_date)
+        eibt_list = row.get("EIBT_LIST")
+        eobt_list = row.get("EOBT_LIST")
+        epush_list = row.get("E_PUSH_FINISHED_LIST")
+        if isinstance(eibt_list, list):
+            first_eibt = next((x for x in eibt_list if x is not None), None)
+            if first_eibt is not None:
+                row["EIBT"] = first_eibt
+                row["EIBT_dt"] = _sec_to_datetime_str(float(first_eibt), base_date)
+        if isinstance(eobt_list, list):
+            last_eobt = next((x for x in reversed(eobt_list) if x is not None), None)
+            if last_eobt is not None:
+                row["EOBT"] = last_eobt
+                row["EOBT_dt"] = _sec_to_datetime_str(float(last_eobt), base_date)
+        if isinstance(epush_list, list):
+            last_epush = next((x for x in reversed(epush_list) if x is not None), None)
+            if last_epush is not None:
+                row["E_PUSH_FINISHED"] = last_epush
+                row["E_PUSH_FINISHED_dt"] = _sec_to_datetime_str(float(last_epush), base_date)
 
         etot: Optional[float] = None
         if pts:
@@ -8299,29 +8317,50 @@ def run_simulation(
             ),
             information=information,
         )
-        eibt_raw = sched_row.get("EIBT")
-        eobt_raw = sched_row.get("EOBT")
-        if eibt_raw is None or eobt_raw is None:
-            continue
-        parked_stand_id = _resolve_parked_stand_id(
-            ag.apron_stand_id,
-            ag.history,
-            float(eibt_raw),
-            float(eobt_raw),
-        )
-        parked_nose_heading_deg = _stand_nose_heading_deg(
-            layout,
-            float(cell_size),
-            parked_stand_id,
-        )
-        ag.history = _compress_agent_history_for_dwell_export(
-            ag.history,
-            ag.eldt_anchor_sec,
-            float(eibt_raw),
-            float(eobt_raw),
-            ag.dep_taxi_start_abs_sec,
-            parked_nose_heading_deg,
-        )
+        eibt_list_raw = sched_row.get("EIBT_LIST")
+        eobt_list_raw = sched_row.get("EOBT_LIST")
+        eibt_vals = eibt_list_raw if isinstance(eibt_list_raw, list) else [sched_row.get("EIBT")]
+        eobt_vals = eobt_list_raw if isinstance(eobt_list_raw, list) else [sched_row.get("EOBT")]
+        segments = ag.apron_segments or _apron_stay_segments_from_flight(fobj if isinstance(fobj, dict) else {})
+        for _di, (eibt_raw, eobt_raw) in enumerate(zip(eibt_vals, eobt_vals)):
+            if eibt_raw is None or eobt_raw is None:
+                continue
+            try:
+                eibt_f = float(eibt_raw)
+                eobt_f = float(eobt_raw)
+            except (TypeError, ValueError):
+                continue
+            if eobt_f <= eibt_f + 1e-9:
+                continue
+            seg_sid = None
+            if _di < len(segments) and isinstance(segments[_di], dict):
+                raw_sid = segments[_di].get("standId")
+                if raw_sid is not None and str(raw_sid).strip():
+                    seg_sid = str(raw_sid).strip()
+            parked_stand_id = _resolve_parked_stand_id(
+                seg_sid or ag.apron_stand_id,
+                ag.history,
+                eibt_f,
+                eobt_f,
+            )
+            parked_nose_heading_deg = _stand_nose_heading_deg(
+                layout,
+                float(cell_size),
+                parked_stand_id,
+            )
+            dep_gate = (
+                ag.dep_taxi_start_abs_sec_list[_di]
+                if _di < len(ag.dep_taxi_start_abs_sec_list)
+                else ag.dep_taxi_start_abs_sec
+            )
+            ag.history = _compress_agent_history_for_dwell_export(
+                ag.history,
+                ag.eldt_anchor_sec,
+                eibt_f,
+                eobt_f,
+                dep_gate,
+                parked_nose_heading_deg,
+            )
 
     positions: Dict[str, List[Dict[str, Any]]] = {}
     for ag in agents:
@@ -8423,6 +8462,9 @@ def run_simulation(
                     ag.actual_apron_offblocks_abs_sec if ag else None
                 ),
                 pushback_finished_abs_sec=(ag.pushback_finished_abs_sec if ag else None),
+                actual_apron_inblocks_abs_sec_list=(ag.actual_apron_inblocks_abs_sec_list if ag else None),
+                actual_apron_offblocks_abs_sec_list=(ag.actual_apron_offblocks_abs_sec_list if ag else None),
+                pushback_finished_abs_sec_list=(ag.pushback_finished_abs_sec_list if ag else None),
                 path_completed_abs_sec=(
                     ag.path_completed_abs_sec if ag is not None else None
                 ),
