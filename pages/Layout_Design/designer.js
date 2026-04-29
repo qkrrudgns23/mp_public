@@ -8471,13 +8471,23 @@
     if (!standId || !simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed()) return false;
     const t = Number(tSec);
     if (!isFinite(t)) return false;
+    return getSimStandOccupancySetAtSec(t).has(String(standId));
+  }
+
+  function getSimStandOccupancySetAtSec(tSec) {
+    const t = Number(tSec);
+    const empty = new Set();
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed() || !isFinite(t)) return empty;
+    const key = String((state.pathPolylineCacheRev | 0)) + '|' + String((state.flights || []).length) + '|' + t.toFixed(3);
+    if (_simStandOccupancyCache && _simStandOccupancyCache.key === key) return _simStandOccupancyCache.set;
+    const set = new Set();
     const flights = state.flights || [];
     for (let i = 0; i < flights.length; i++) {
       const f = flights[i];
-      if (!f || f.standId !== standId) continue;
+      if (!f || !f.standId) continue;
       const m = f.timeline_meta;
       if (m && typeof m.eibtSec === 'number' && typeof m.eobtSec === 'number') {
-        if (t + 1e-3 >= m.eibtSec && t <= m.eobtSec + 1e-3) return true;
+        if (t + 1e-3 >= m.eibtSec && t <= m.eobtSec + 1e-3) set.add(String(f.standId));
         continue;
       }
       if (f.arrDep !== 'Dep' && (f.noWayArr || f.arrRetFailed)) {
@@ -8486,10 +8496,11 @@
         const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], eibtMin + (typeof f.dwellMin === 'number' && isFinite(f.dwellMin) ? f.dwellMin : 45));
         const eibtS = eibtMin * 60;
         const eobtS = eobtMin * 60;
-        if (t + 1e-3 >= eibtS && t <= eobtS + 1e-3) return true;
+        if (t + 1e-3 >= eibtS && t <= eobtS + 1e-3) set.add(String(f.standId));
       }
     }
-    return false;
+    _simStandOccupancyCache = { key: key, set: set };
+    return set;
   }
 
   function findStandAvailableArrivalTime(standId, desiredArrival, dwellSec) {
@@ -17406,6 +17417,7 @@
         if (dt < 0) dt = 0;
         if (dt > 0.25) dt = 0.25;
       }
+      const forceUiSync = !!(state.simPlaying && ensureSimLoop._playKick);
       if (state.simPlaying && ensureSimLoop._playKick) {
         ensureSimLoop._playKick = false;
         dt = Math.max(dt, 1 / 60);
@@ -17420,9 +17432,12 @@
         } else {
           state.simTimeSec = lo;
         }
-        const slider = document.getElementById('flightSimSlider');
-        if (slider) slider.value = String(state.simTimeSec);
-        updateFlightSimPlaybackLabelsDom();
+        if (forceUiSync || !ensureSimLoop._lastUiTs || ts - ensureSimLoop._lastUiTs >= 90 || state.simTimeSec >= hi - 1e-3) {
+          ensureSimLoop._lastUiTs = ts;
+          const slider = document.getElementById('flightSimSlider');
+          if (slider) slider.value = String(state.simTimeSec);
+          updateFlightSimPlaybackLabelsDom();
+        }
         try { draw(); } catch(e) {}
         update3DSceneWhenVisible();
       }
@@ -18386,11 +18401,10 @@
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
         state.simPlaying = true;
         ensureSimLoop._lastTs = null;
+        ensureSimLoop._lastUiTs = 0;
         ensureSimLoop._playKick = true;
         ensureSimLoop();
         if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
-        try { draw(); } catch(e) {}
-        update3DSceneWhenVisible();
       });
     }
     if (pauseBtn) {
@@ -21786,54 +21800,58 @@
     const dx = b.x - a.x, dy = b.y - a.y;
     return dx * dx + dy * dy < 0.64;
   }
-  function countFlightsWaitingAtHoldingPoint2D(hp, tSec) {
-    if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return 0;
-    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed()) return 0;
-    if (typeof getFlightPoseAtTimeForDraw !== 'function') return 0;
+  function holdingPointWaitCacheKey(hp) {
+    if (!hp) return '';
+    if (hp.id != null && hp.id !== '') return String(hp.id);
+    return String(Number(hp.x).toFixed(2)) + ',' + String(Number(hp.y).toFixed(2));
+  }
+  function getHoldingPointWaitCacheAtSimSec(tSec) {
+    const empty = { counts: {}, first: {} };
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed()) return empty;
+    if (typeof getFlightPoseAtTimeForDraw !== 'function') return empty;
     const t = Number(tSec);
-    if (!isFinite(t)) return 0;
-    const hx = hp.x, hy = hp.y;
+    if (!isFinite(t)) return empty;
+    const flights = state.flights || [];
+    const hps = state.holdingPoints || [];
+    if (!flights.length || !hps.length) return empty;
+    const key = String((state.pathPolylineCacheRev | 0)) + '|' + String(flights.length) + '|' + String(hps.length) + '|' + t.toFixed(3);
+    if (_simHoldingWaitCache && _simHoldingWaitCache.key === key) return _simHoldingWaitCache;
+    const counts = {};
+    const first = {};
     const dia = typeof c2dHoldingPointDiameterM === 'function' ? c2dHoldingPointDiameterM() : 24;
     const rad = Math.max(10, dia * 0.55);
     const rad2 = rad * rad;
-    let n = 0;
-    const flights = state.flights || [];
     for (let i = 0; i < flights.length; i++) {
       const f = flights[i];
       if (!f || flightBlockedLikeNoWay(f)) continue;
       const pose = getFlightPoseAtTimeForDraw(f, t);
       if (!pose) continue;
-      const dx = pose.x - hx, dy = pose.y - hy;
-      if (dx * dx + dy * dy > rad2) continue;
       const seg = flightTimelineSegmentAtSimTime(f, t);
       if (!seg || !isTimelineSegmentStationaryWorld(seg.a, seg.b)) continue;
-      n++;
+      for (let h = 0; h < hps.length; h++) {
+        const hp = hps[h];
+        if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) continue;
+        const dx = pose.x - hp.x, dy = pose.y - hp.y;
+        if (dx * dx + dy * dy > rad2) continue;
+        const k = holdingPointWaitCacheKey(hp);
+        counts[k] = (counts[k] || 0) + 1;
+        if (!first[k]) first[k] = f;
+      }
     }
-    return n;
+    _simHoldingWaitCache = { key: key, counts: counts, first: first };
+    return _simHoldingWaitCache;
+  }
+  function countFlightsWaitingAtHoldingPoint2D(hp, tSec) {
+    if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return 0;
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed()) return 0;
+    const cache = getHoldingPointWaitCacheAtSimSec(tSec);
+    return cache.counts[holdingPointWaitCacheKey(hp)] || 0;
   }
   function firstFlightWaitingAtHoldingPoint2D(hp, tSec) {
     if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return null;
     if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed()) return null;
-    if (typeof getFlightPoseAtTimeForDraw !== 'function') return null;
-    const t = Number(tSec);
-    if (!isFinite(t)) return null;
-    const hx = hp.x, hy = hp.y;
-    const dia = typeof c2dHoldingPointDiameterM === 'function' ? c2dHoldingPointDiameterM() : 24;
-    const rad = Math.max(10, dia * 0.55);
-    const rad2 = rad * rad;
-    const flights = state.flights || [];
-    for (let i = 0; i < flights.length; i++) {
-      const f = flights[i];
-      if (!f || flightBlockedLikeNoWay(f)) continue;
-      const pose = getFlightPoseAtTimeForDraw(f, t);
-      if (!pose) continue;
-      const dx = pose.x - hx, dy = pose.y - hy;
-      if (dx * dx + dy * dy > rad2) continue;
-      const seg = flightTimelineSegmentAtSimTime(f, t);
-      if (!seg || !isTimelineSegmentStationaryWorld(seg.a, seg.b)) continue;
-      return f;
-    }
-    return null;
+    const cache = getHoldingPointWaitCacheAtSimSec(tSec);
+    return cache.first[holdingPointWaitCacheKey(hp)] || null;
   }
   function polylineTangentForwardAtDistance(pts, sAlong) {
     if (!pts || pts.length < 2) return [1, 0];
@@ -22117,6 +22135,8 @@
   /** While panning or shortly after wheel zoom, skip heavy path layers for smoother interaction. */
   let _layoutDetailSuppressUntil = 0;
   let _layoutDetailSuppressTimer = 0;
+  let _simStandOccupancyCache = null;
+  let _simHoldingWaitCache = null;
   /** Offscreen bitmap: grid → holding points (no sim-time stand fill / flights). Used during sim playback. */
   let _simPlaybackBgCanvas = null;
   let _simPlaybackBgSig = '';
