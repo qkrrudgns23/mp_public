@@ -1615,10 +1615,12 @@
       return segTimeCell(seg, 'sobtMin', 'flight-col-s' + (idx === k - 1 ? ' flight-col-s-last' : ''));
     }).join('');
     const eibtCells = segCells.map(function(_seg, idx) {
-      return eSeriesCell(idx === 0 ? f.eibtMin : null, idx + 1);
+      const eibtList = flightEMinListForSchedule(f, 'eibtMinList', 'eibtSecList', 'eibtMin');
+      return eSeriesCell(eibtList[idx] != null ? eibtList[idx] : null, idx + 1);
     }).join('');
     const eobtCells = segCells.map(function(_seg, idx) {
-      return eSeriesCell(idx === 0 ? f.eobtMin : null, idx + 1);
+      const eobtList = flightEMinListForSchedule(f, 'eobtMinList', 'eobtSecList', 'eobtMin');
+      return eSeriesCell(eobtList[idx] != null ? eobtList[idx] : null, idx + 1);
     }).join('');
     const apCells = segCells.map(function(seg) {
       const lab = seg ? flightScheduleStandLabelById(seg.standId) : '—';

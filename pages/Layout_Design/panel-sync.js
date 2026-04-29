@@ -46,6 +46,9 @@
       delete f.eibtMin;
       delete f.eobtMin;
       delete f.etotMin;
+      delete f.eibtMinList;
+      delete f.eobtMinList;
+      delete f.ePushFinishedMinList;
       f.arrRotSec = null;
       delete f.proSimVttArrSec;
       delete f.proSimVttDepSec;
@@ -72,6 +75,24 @@
     else delete f.eobtMin;
     if (isFinite(etotS)) f.etotMin = etotS / 60;
     else delete f.etotMin;
+    function secListToMinList(key) {
+      const raw = srec[key];
+      if (!Array.isArray(raw)) return null;
+      const out = raw.map(function(v) {
+        const n = Number(v);
+        return isFinite(n) ? n / 60 : null;
+      });
+      return out.length ? out : null;
+    }
+    const eibtList = secListToMinList('EIBT_LIST');
+    const eobtList = secListToMinList('EOBT_LIST');
+    const epushList = secListToMinList('E_PUSH_FINISHED_LIST');
+    if (eibtList) f.eibtMinList = eibtList;
+    else delete f.eibtMinList;
+    if (eobtList) f.eobtMinList = eobtList;
+    else delete f.eobtMinList;
+    if (epushList) f.ePushFinishedMinList = epushList;
+    else delete f.ePushFinishedMinList;
     const rotS = secOpt('ARR_ROT_SEC');
     if (isFinite(rotS)) f.arrRotSec = rotS;
     else f.arrRotSec = null;
@@ -93,6 +114,21 @@
     const depRotS = secOpt('DEP_ROT_SEC');
     if (isFinite(depRotS)) f.proSimDepLineupSec = depRotS;
     else delete f.proSimDepLineupSec;
+  }
+  function flightEMinListForSchedule(f, listKey, metaSecListKey, scalarKey) {
+    const raw = f && Array.isArray(f[listKey]) ? f[listKey] : null;
+    if (raw && raw.length) return raw.map(function(v) {
+      const n = Number(v);
+      return isFinite(n) ? n : null;
+    });
+    const meta = f && f.timeline_meta && typeof f.timeline_meta === 'object' ? f.timeline_meta : null;
+    const mraw = meta && Array.isArray(meta[metaSecListKey]) ? meta[metaSecListKey] : null;
+    if (mraw && mraw.length) return mraw.map(function(v) {
+      const n = Number(v);
+      return isFinite(n) ? n / 60 : null;
+    });
+    const scalar = f && f[scalarKey] != null ? Number(f[scalarKey]) : NaN;
+    return isFinite(scalar) ? [scalar] : [];
   }
   function buildFlightTimelineFromPlaybackPoints(rawPts) {
     const pts = Array.isArray(rawPts) ? rawPts : [];
@@ -196,6 +232,9 @@
             eibtSec: isFinite(eibtS) ? eibtS : undefined,
             eobtSec: isFinite(eobtS) ? eobtS : undefined,
             etotSec: isFinite(etotS) ? etotS : undefined,
+            eibtSecList: Array.isArray(srec.EIBT_LIST) ? srec.EIBT_LIST.slice() : undefined,
+            eobtSecList: Array.isArray(srec.EOBT_LIST) ? srec.EOBT_LIST.slice() : undefined,
+            ePushFinishedSecList: Array.isArray(srec.E_PUSH_FINISHED_LIST) ? srec.E_PUSH_FINISHED_LIST.slice() : undefined,
           }
         );
       } else {
@@ -294,6 +333,9 @@
             eibtSec: isFinite(eibtS) ? eibtS : undefined,
             eobtSec: isFinite(eobtS) ? eobtS : undefined,
             etotSec: isFinite(etotS) ? etotS : undefined,
+            eibtSecList: Array.isArray(srec.EIBT_LIST) ? srec.EIBT_LIST.slice() : undefined,
+            eobtSecList: Array.isArray(srec.EOBT_LIST) ? srec.EOBT_LIST.slice() : undefined,
+            ePushFinishedSecList: Array.isArray(srec.E_PUSH_FINISHED_LIST) ? srec.E_PUSH_FINISHED_LIST.slice() : undefined,
           }
         );
       } else {
