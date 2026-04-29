@@ -2281,6 +2281,201 @@
     }
     return areas.concat(rest);
   }
+  function _flightApronFallbackStandId(f) {
+    if (!f) return null;
+    const t = f.token && typeof f.token === 'object' ? f.token : {};
+    const raw = f.depApronId != null ? f.depApronId
+      : (f.standId != null ? f.standId
+        : (t.apronId != null ? t.apronId
+          : (f.arrApronId != null ? f.arrApronId : null)));
+    return raw != null && String(raw).trim() !== '' ? String(raw) : null;
+  }
+  function _flightApronBaseSibtMin(f) {
+    const v = f && f.sibtMin != null ? Number(f.sibtMin) : (f && f.timeMin != null ? Number(f.timeMin) : 0);
+    return isFinite(v) ? Math.max(0, v) : 0;
+  }
+  function _flightApronBaseSobtMin(f, sibtMin) {
+    const raw = f && f.sobtMin != null ? Number(f.sobtMin) : NaN;
+    if (isFinite(raw) && raw > sibtMin) return raw;
+    const dwell = f && f.dwellMin != null && isFinite(Number(f.dwellMin)) ? Math.max(0, Number(f.dwellMin)) : 0;
+    return Math.max(sibtMin, sibtMin + dwell);
+  }
+  function normalizeFlightApronStaySegments(f) {
+    if (!f) return [];
+    const fallbackStandId = _flightApronFallbackStandId(f);
+    const rawSegs = Array.isArray(f.apronStaySegments) ? f.apronStaySegments : [];
+    let segs = rawSegs.map(function(seg) {
+      if (!seg || typeof seg !== 'object') return null;
+      const sibt = Number(seg.sibtMin);
+      const sobt = Number(seg.sobtMin);
+      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return null;
+      const sidRaw = seg.standId != null ? seg.standId : fallbackStandId;
+      return {
+        standId: sidRaw != null && String(sidRaw).trim() !== '' ? String(sidRaw) : null,
+        sibtMin: Math.max(0, sibt),
+        sobtMin: Math.max(0, sobt)
+      };
+    }).filter(Boolean);
+    if (!segs.length) {
+      const sibt = _flightApronBaseSibtMin(f);
+      segs = [{
+        standId: fallbackStandId,
+        sibtMin: sibt,
+        sobtMin: _flightApronBaseSobtMin(f, sibt)
+      }];
+    }
+    segs.sort(function(a, b) {
+      if (a.sibtMin !== b.sibtMin) return a.sibtMin - b.sibtMin;
+      return a.sobtMin - b.sobtMin;
+    });
+    f.apronStaySegments = segs;
+    return segs;
+  }
+  function mergeAdjacentSameStandApronSegments(segs) {
+    const out = [];
+    (segs || []).forEach(function(seg) {
+      if (!seg) return;
+      const sid = seg.standId != null && String(seg.standId).trim() !== '' ? String(seg.standId) : null;
+      const sibt = Number(seg.sibtMin);
+      const sobt = Number(seg.sobtMin);
+      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return;
+      const prev = out.length ? out[out.length - 1] : null;
+      if (prev && String(prev.standId || '') === String(sid || '') && sibt <= prev.sobtMin + 1e-6) {
+        prev.sobtMin = Math.max(prev.sobtMin, sobt);
+      } else {
+        out.push({ standId: sid, sibtMin: sibt, sobtMin: sobt });
+      }
+    });
+    return out;
+  }
+  function syncFlightApronStayAggregate(f) {
+    if (!f) return [];
+    const segs = normalizeFlightApronStaySegments(f);
+    if (!segs.length) return segs;
+    const first = segs[0];
+    const last = segs[segs.length - 1];
+    f.arrApronId = first.standId || null;
+    f.depApronId = last.standId || null;
+    f.standId = f.depApronId || null;
+    if (f.token && typeof f.token === 'object') f.token.apronId = f.depApronId || null;
+    f.sibtMin = first.sibtMin;
+    f.timeMin = first.sibtMin;
+    f.sobtMin = last.sobtMin;
+    let dwell = 0;
+    for (let i = 0; i < segs.length; i++) dwell += Math.max(0, segs[i].sobtMin - segs[i].sibtMin);
+    f.dwellMin = dwell;
+    if (typeof SCHED_SIBT_MINUS_SLDT_MIN === 'number') f.sldtMin = Math.max(0, f.sibtMin - SCHED_SIBT_MINUS_SLDT_MIN);
+    if (typeof SCHED_STOT_MINUS_SOBT_MIN === 'number') f.stotMin = f.sobtMin + SCHED_STOT_MINUS_SOBT_MIN;
+    return segs;
+  }
+  function serializableApronStaySegmentsForFlight(f) {
+    const segs = syncFlightApronStayAggregate(f).map(function(seg) {
+      return { standId: seg.standId, sibtMin: seg.sibtMin, sobtMin: seg.sobtMin };
+    });
+    return mergeAdjacentSameStandApronSegments(segs);
+  }
+  const APRON_STAY_SPLIT_MIN_PART_MIN = 20;
+  function splitFlightApronStaySegmentAtMinute(f, segIdx, cutMin) {
+    if (!f || flightBlockedLikeNoWay(f)) return false;
+    const segs = normalizeFlightApronStaySegments(f);
+    const idx = Math.max(0, parseInt(segIdx, 10) || 0);
+    if (idx >= segs.length) return false;
+    const seg = segs[idx];
+    const cut = Number(cutMin);
+    if (!isFinite(cut)) return false;
+    const snap = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0)
+      ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN
+      : 1;
+    const t = Math.max(0, Math.round(cut / snap) * snap);
+    if (t - seg.sibtMin < APRON_STAY_SPLIT_MIN_PART_MIN || seg.sobtMin - t < APRON_STAY_SPLIT_MIN_PART_MIN) {
+      return false;
+    }
+    const left = { standId: seg.standId || null, sibtMin: seg.sibtMin, sobtMin: t };
+    const right = { standId: seg.standId || null, sibtMin: t, sobtMin: seg.sobtMin };
+    segs.splice(idx, 1, left, right);
+    f.apronStaySegments = segs;
+    syncFlightApronStayAggregate(f);
+    return true;
+  }
+  function _sameApronStayStand(a, b) {
+    const sa = a && a.standId != null ? String(a.standId) : '';
+    const sb = b && b.standId != null ? String(b.standId) : '';
+    return sa === sb;
+  }
+  function applyApronStaySegmentHandleMinute(f, segIdx, role, minutes) {
+    if (!f || flightBlockedLikeNoWay(f)) return false;
+    const segs = normalizeFlightApronStaySegments(f);
+    const idx = Math.max(0, parseInt(segIdx, 10) || 0);
+    if (idx >= segs.length) return false;
+    const raw = Number(minutes);
+    if (!isFinite(raw)) return false;
+    const snap = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0)
+      ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN
+      : 1;
+    const tRaw = Math.max(0, Math.round(raw / snap) * snap);
+    if (role === 'sibt') {
+      if (idx === 0) {
+        segs[0].sibtMin = Math.min(tRaw, segs[0].sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN);
+      } else {
+        const prev = segs[idx - 1];
+        const cur = segs[idx];
+        if (_sameApronStayStand(prev, cur)) return false;
+        const lo = prev.sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN;
+        const hi = cur.sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN;
+        if (hi < lo) return false;
+        const t = Math.max(lo, Math.min(hi, tRaw));
+        prev.sobtMin = t;
+        cur.sibtMin = t;
+      }
+    } else if (role === 'sobt') {
+      if (idx >= segs.length - 1) {
+        segs[idx].sobtMin = Math.max(tRaw, segs[idx].sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN);
+      } else {
+        const cur = segs[idx];
+        const next = segs[idx + 1];
+        if (_sameApronStayStand(cur, next)) return false;
+        const lo = cur.sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN;
+        const hi = next.sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN;
+        if (hi < lo) return false;
+        const t = Math.max(lo, Math.min(hi, tRaw));
+        cur.sobtMin = t;
+        next.sibtMin = t;
+      }
+    } else {
+      return false;
+    }
+    f.apronStaySegments = segs;
+    syncFlightApronStayAggregate(f);
+    return true;
+  }
+  function buildApronStayGanttIntervalsForFlight(f, eSer) {
+    const segs = normalizeFlightApronStaySegments(f);
+    if (!segs.length) return [];
+    syncFlightApronStayAggregate(f);
+    const first = segs[0];
+    const last = segs[segs.length - 1];
+    const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, first.sibtMin - SCHED_SIBT_MINUS_SLDT_MIN);
+    const stot = f.stotMin != null ? f.stotMin : (last.sobtMin + SCHED_STOT_MINUS_SOBT_MIN);
+    return segs.map(function(seg, idx) {
+      return {
+        f: f,
+        t0: seg.sibtMin,
+        t1: seg.sobtMin,
+        sldt: sldt,
+        stot: stot,
+        eibt: eSer.eibt,
+        eobt: eSer.eobt,
+        eldt: eSer.eldt,
+        etot: eSer.etot,
+        sldtOrig: sldt,
+        sobtOrig: last.sobtMin,
+        stotOrig: stot,
+        segmentIdx: idx,
+        segmentCount: segs.length,
+        segmentStandId: seg.standId || null
+      };
+    });
+  }
   function applyLayoutObject(obj) {
     if (!obj || typeof obj !== 'object') return;
     state.simPlaybackEndCapSec = null;
@@ -2369,7 +2564,7 @@
         f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
         f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
         f.terminalId = f.terminalId || t.terminalId || null;
-        const apronId = t.apronId != null ? t.apronId : (f.standId != null ? f.standId : null);
+        const apronId = f.depApronId != null ? f.depApronId : (t.apronId != null ? t.apronId : (f.standId != null ? f.standId : f.arrApronId || null));
         f.standId = apronId;
         f.token = {
           nodes: Array.isArray(t.nodes) ? t.nodes.slice() : ['runway','taxiway','apron','terminal'],
@@ -2485,6 +2680,7 @@
           const idRaw = String(f.intDom || '').trim();
           f.intDom = (idRaw.toLowerCase() === 'dom') ? 'Dom' : 'Int';
         }
+        if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
       });
     } else {
       state.flights = [];
@@ -4409,6 +4605,8 @@
           'sibtMin',
           'sobtMin',
           'stotMin',
+          'arrApronId',
+          'depApronId',
           'arrRunwayDirUsed',
           'depRunwayDirUsed',
           'arrTdDistM',
@@ -4433,12 +4631,25 @@
             copy[k] = f[k];
           }
         });
+        const apronStaySegments = (typeof serializableApronStaySegmentsForFlight === 'function')
+          ? serializableApronStaySegmentsForFlight(f)
+          : [];
+        if (apronStaySegments.length) {
+          copy.apronStaySegments = apronStaySegments.map(function(seg) {
+            const out = { sibtMin: seg.sibtMin, sobtMin: seg.sobtMin };
+            if (seg.standId != null) out.standId = seg.standId;
+            return out;
+          });
+          copy.arrApronId = copy.apronStaySegments[0].standId || null;
+          copy.depApronId = copy.apronStaySegments[copy.apronStaySegments.length - 1].standId || null;
+          copy.standId = copy.depApronId || null;
+        }
         if (Array.isArray(f.edge_list) && f.edge_list.length) {
           copy.edge_list = f.edge_list.slice();
         }
         const t = f.token || {};
         const arrRwyId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
-        const apronId = (f.standId != null ? f.standId : (t.apronId != null ? t.apronId : null));
+        const apronId = (copy.depApronId != null ? copy.depApronId : (f.standId != null ? f.standId : (t.apronId != null ? t.apronId : null)));
         const termId = f.terminalId || t.terminalId || null;
         const depRwyId = f.depRunwayId || t.depRunwayId || null;
         const exitTwId = (f.sampledArrRet != null && f.sampledArrRet !== '') ? f.sampledArrRet : (t.ExitTaxiwayId != null ? t.ExitTaxiwayId : null);
@@ -8292,7 +8503,7 @@
     return ft === standTermId;
   }
 
-  function assignStandToFlight(f, standId) {
+  function assignStandToFlight(f, standId, segmentIdx) {
     if (!f) return false;
     if (standId) {
       const allStands = allStandsForFlightAssignment();
@@ -8308,8 +8519,25 @@
       }
     }
     const prevStandForSched = f.standId || null;
-    f.standId = standId;
-    if (f.token) f.token.apronId = standId;
+    const segIdx = segmentIdx != null && isFinite(Number(segmentIdx)) ? Math.max(0, parseInt(segmentIdx, 10) || 0) : null;
+    if (segIdx != null) {
+      const segs = normalizeFlightApronStaySegments(f);
+      if (segIdx < segs.length) {
+        segs[segIdx].standId = standId || null;
+        f.apronStaySegments = segs;
+      }
+    } else {
+      f.standId = standId;
+      if (f.token) f.token.apronId = standId;
+      f.arrApronId = standId || null;
+      f.depApronId = standId || null;
+      f.apronStaySegments = [{
+        standId: standId || null,
+        sibtMin: (f.sibtMin != null && isFinite(f.sibtMin)) ? Number(f.sibtMin) : (f.timeMin != null ? Number(f.timeMin) : 0),
+        sobtMin: (f.sobtMin != null && isFinite(f.sobtMin)) ? Number(f.sobtMin) : ((f.timeMin != null ? Number(f.timeMin) : 0) + (f.dwellMin != null ? Number(f.dwellMin) : 0))
+      }];
+    }
+    if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
     if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     const touchedSt = [];
     if (prevStandForSched) touchedSt.push(prevStandForSched);
@@ -8327,6 +8555,7 @@
 
   function flightScheduleStandWindowMinutes(f) {
     if (!f) return null;
+    if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
     const sibt = (f.sibtMin != null && isFinite(f.sibtMin)) ? Number(f.sibtMin) : (f.timeMin != null ? Number(f.timeMin) : 0);
     const dwell = (f.dwellMin != null && isFinite(f.dwellMin)) ? Number(f.dwellMin) : 0;
     const sobt = (f.sobtMin != null && isFinite(f.sobtMin)) ? Number(f.sobtMin) : (sibt + dwell);
@@ -9237,8 +9466,45 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  const FLIGHT_SCHED_TABLE_COL_COUNT = 22;
-  /** tbody td index alignment with `_buildFlightListRowHtml` (0-based). SLDT/STOT are derived from SIBT/SOBT. */
+  /** Flight schedule dynamic AP columns: base 11 columns through Dep Rw, then S/E groups. */
+  const FLIGHT_SCHED_BASE_COL_COUNT = 11;
+  const FLIGHT_SCHED_TRAILING_METRIC_COL_COUNT = 7;
+  function flightScheduleLogicalSegmentCount(f) {
+    if (!f) return 1;
+    const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+    if (!segs.length) return 1;
+    let n = 0;
+    let prev = null;
+    for (let i = 0; i < segs.length; i++) {
+      const sid = segs[i].standId != null ? String(segs[i].standId) : '';
+      if (i === 0 || sid !== prev) n++;
+      prev = sid;
+    }
+    return Math.max(1, n);
+  }
+  function flightScheduleColumnK() {
+    const flights = state.flights || [];
+    let k = 1;
+    for (let i = 0; i < flights.length; i++) k = Math.max(k, flightScheduleLogicalSegmentCount(flights[i]));
+    return k;
+  }
+  function flightSchedColIndex(field, k) {
+    const n = Math.max(1, Number(k) || flightScheduleColumnK());
+    const base = FLIGHT_SCHED_BASE_COL_COUNT;
+    if (field === 'sibt') return base;
+    if (field === 'sobt') return base + n;
+    if (field === 'eldt') return base + n * 2;
+    if (field === 'eibt') return base + n * 2 + 1;
+    if (field === 'eobt') return base + n * 3 + 1;
+    if (field === 'etot') return base + n * 4 + 1;
+    if (field === 'ap') return base + n * 4 + 2;
+    if (field === 'metrics') return base + n * 5 + 2;
+    return base;
+  }
+  function flightScheduleTableColCount(k) {
+    return flightSchedColIndex('metrics', k) + FLIGHT_SCHED_TRAILING_METRIC_COL_COUNT + 1;
+  }
+  /** Backward-compatible aliases for N=1 call sites. Dynamic code should use `flightSchedColIndex`. */
   const FLIGHT_SCHED_TD_SIBT = 11;
   const FLIGHT_SCHED_TD_SOBT = 12;
   const FLIGHT_SCHED_TD_ELDT = 13;
@@ -9277,24 +9543,26 @@
     const topPad = start * rowH;
     const botPad = Math.max(0, (total - end) * rowH);
     const parts = [];
-    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + topPad + 'px\"><td colspan=\"' + FLIGHT_SCHED_TABLE_COL_COUNT + '\"></td></tr>');
+    const colCount = flightScheduleTableColCount(vs.apronK || flightScheduleColumnK());
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + topPad + 'px\"><td colspan=\"' + colCount + '\"></td></tr>');
     for (let i = start; i < end; i++) {
-      parts.push(_buildFlightListRowHtml(flightsSorted[i], retStatsAll));
+      parts.push(_buildFlightListRowHtml(flightsSorted[i], retStatsAll, vs.apronK));
     }
-    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"' + FLIGHT_SCHED_TABLE_COL_COUNT + '\"></td></tr>');
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"' + colCount + '\"></td></tr>');
     tbody.innerHTML = parts.join('');
     _flightListWireEvents(listEl, state);
   }
   function _flightListTeardownVirtual(listEl) {
     listEl._flightVirtState = null;
   }
-  function _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow) {
+  function _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow, apronK) {
     const prevScroll = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]') ? (listEl.scrollTop || 0) : 0;
     listEl._flightVirtState = {
       flightsSorted: flightsSorted,
       retStatsAll: retStatsAll,
       rowH: DOM_OPT_FLIGHT_VIRT_ROW_H,
       overscan: DOM_OPT_FLIGHT_VIRT_OVERSCAN,
+      apronK: apronK,
       raf: null
     };
     listEl.innerHTML = headerRow + '</tbody></table>';
@@ -9695,7 +9963,20 @@
       '<span class="flight-sched-cell-text">' + (has ? escapeHtml(text) : d) + '</span></span>';
   }
 
-  function _buildFlightListHeaderHtml() {
+  function _buildFlightListHeaderHtml(apronK) {
+    const k = Math.max(1, Number(apronK) || flightScheduleColumnK());
+    const sibtHeads = [];
+    const sobtHeads = [];
+    const eibtHeads = [];
+    const eobtHeads = [];
+    const apHeads = [];
+    for (let i = 1; i <= k; i++) {
+      sibtHeads.push('<th class="flight-col-s' + (i === 1 ? ' flight-col-s-start flight-td-sibt' : '') + '">SIBT' + i + '</th>');
+      sobtHeads.push('<th class="flight-col-s' + (i === k ? ' flight-col-s-last' : '') + '">SOBT' + i + '</th>');
+      eibtHeads.push('<th class="flight-col-e">EIBT' + i + '</th>');
+      eobtHeads.push('<th class="flight-col-e">EOBT' + i + '</th>');
+      apHeads.push('<th class="flight-th-mixed">AP' + i + '</th>');
+    }
     return '' +
       '<table class="flight-schedule-table">' +
       '<thead><tr>' +
@@ -9710,12 +9991,13 @@
         '<th>Building</th>' +
         '<th>Apron</th>' +
         '<th>Dep Rw</th>' +
-        '<th class="flight-col-s flight-col-s-start flight-td-sibt">SIBT</th>' +
-        '<th class="flight-col-s flight-col-s-last">SOBT</th>' +
+        sibtHeads.join('') +
+        sobtHeads.join('') +
         '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
-        '<th class="flight-col-e">EIBT</th>' +
-        '<th class="flight-col-e">EOBT</th>' +
+        eibtHeads.join('') +
+        eobtHeads.join('') +
         '<th class="flight-col-e">ETOT</th>' +
+        apHeads.join('') +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
         '<th class="flight-th-mixed">VTT(Arr)</th>' +
         '<th class="flight-th-mixed">DTT(Arr)</th>' +
@@ -9728,7 +10010,22 @@
       '<tbody>';
   }
 
-  function _buildFlightListRowHtml(f, retStatsAll) {
+  function flightScheduleSegmentsForDisplay(f, apronK) {
+    const raw = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+    const merged = mergeAdjacentSameStandApronSegments(raw);
+    const k = Math.max(1, Number(apronK) || flightScheduleColumnK());
+    const out = [];
+    for (let i = 0; i < k; i++) out.push(merged[i] || null);
+    return out;
+  }
+  function flightScheduleStandLabelById(standId) {
+    if (standId == null || standId === '') return '—';
+    const st = typeof findStandById === 'function' ? findStandById(standId) : null;
+    if (!st) return String(standId);
+    return (st.name && String(st.name).trim()) || String(st.id || standId);
+  }
+  function _buildFlightListRowHtml(f, retStatsAll, apronK) {
+    const k = Math.max(1, Number(apronK) || flightScheduleColumnK());
     const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
     const arrRetFailed = isFlightCountedInArrivalConfigFailedRow(f, retStatsAll);
@@ -9753,6 +10050,7 @@
     const schedM = flightScheduleMinutesForRow(f);
     const sibtDisp = formatFlightScheduleDateTime(f, schedM.sibt);
     const sobtDisp = formatFlightScheduleDateTime(f, schedM.sobt);
+    const segCells = flightScheduleSegmentsForDisplay(f, k);
     function fmtFlightESchedCell(minVal) {
       if (!(typeof minVal === 'number' && isFinite(minVal))) return '—';
       return formatFlightScheduleDateTime(f, minVal);
@@ -9781,6 +10079,32 @@
     const arrRwRead = escapeHtml(getRunwayDisplayLabelById(arrRunwayId));
     const buildingRead = escapeHtml(getTerminalDisplayLabelById(termId));
     const depRwRead = escapeHtml(getRunwayDisplayLabelById(depRunwayId));
+    function segTimeCell(seg, key, cls) {
+      if (!seg) return '<td class="flight-td-time ' + cls + '" data-empty="1">—</td>';
+      const m = Number(seg[key]);
+      const txt = isFinite(m) ? formatFlightScheduleDateTime(f, m) : '—';
+      return '<td class="flight-td-time ' + cls + '" data-sched-min="' + (isFinite(m) ? m : '') + '">' + escapeHtml(txt) + '</td>';
+    }
+    function eSeriesCell(minVal, labelIdx) {
+      const txt = fmtFlightESchedCell(minVal);
+      return '<td class="flight-td-time flight-col-e" data-e-series-index="' + labelIdx + '">' + escapeHtml(txt) + '</td>';
+    }
+    const sibtCells = segCells.map(function(seg, idx) {
+      return segTimeCell(seg, 'sibtMin', 'flight-col-s' + (idx === 0 ? ' flight-col-s-start flight-td-sibt' : ''));
+    }).join('');
+    const sobtCells = segCells.map(function(seg, idx) {
+      return segTimeCell(seg, 'sobtMin', 'flight-col-s' + (idx === k - 1 ? ' flight-col-s-last' : ''));
+    }).join('');
+    const eibtCells = segCells.map(function(_seg, idx) {
+      return eSeriesCell(idx === 0 ? f.eibtMin : null, idx + 1);
+    }).join('');
+    const eobtCells = segCells.map(function(_seg, idx) {
+      return eSeriesCell(idx === 0 ? f.eobtMin : null, idx + 1);
+    }).join('');
+    const apCells = segCells.map(function(seg) {
+      const lab = seg ? flightScheduleStandLabelById(seg.standId) : '—';
+      return '<td class="flight-td-readonly" data-empty="' + (seg ? '0' : '1') + '">' + escapeHtml(lab) + '</td>';
+    }).join('');
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
     const intDomVal = (String(f.intDom || '').trim().toLowerCase() === 'dom') ? 'Dom' : 'Int';
@@ -9797,12 +10121,13 @@
         '<td class="flight-td-readonly">' + buildingRead + '</td>' +
         '<td class="flight-td-reg">' + (function() { var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); })() + '</td>' +
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
-        '<td class="flight-td-time flight-col-s flight-col-s-start flight-td-sibt" data-sched-min="' + schedM.sibt + '">' + escapeHtml(sibtDisp) + '</td>' +
-        '<td class="flight-td-time flight-col-s flight-col-s-last" data-sched-min="' + schedM.sobt + '">' + escapeHtml(sobtDisp) + '</td>' +
+        sibtCells +
+        sobtCells +
         '<td class="flight-td-time flight-col-e flight-col-e-start">' + escapeHtml(eldtStr) + '</td>' +
-        '<td class="flight-td-time flight-col-e">' + escapeHtml(eibtStr) + '</td>' +
-        '<td class="flight-td-time flight-col-e">' + escapeHtml(eobtStr) + '</td>' +
+        eibtCells +
+        eobtCells +
         '<td class="flight-td-time flight-col-e">' + escapeHtml(etotStr) + '</td>' +
+        apCells +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
         '<td class="flight-td-time">' + vttArrCell + '</td>' +
         '<td class="flight-td-time">' + dttArrCell + '</td>' +
@@ -9814,9 +10139,9 @@
       '</tr>';
   }
 
-  function _buildFlightListRowsHtml(flightsSorted, retStatsAll) {
+  function _buildFlightListRowsHtml(flightsSorted, retStatsAll, apronK) {
     return flightsSorted.map(function(f) {
-      return _buildFlightListRowHtml(f, retStatsAll);
+      return _buildFlightListRowHtml(f, retStatsAll, apronK);
     });
   }
 
@@ -9824,7 +10149,8 @@
   const FLIGHT_LIST_ASYNC_PATH_MIN = 8;
   function _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, domOpt) {
     const skipGanttRefresh = domOpt && domOpt.skipGanttRefresh;
-    const headerRow = _buildFlightListHeaderHtml();
+    const apronK = flightScheduleColumnK();
+    const headerRow = _buildFlightListHeaderHtml(apronK);
     const dirtyIds = [];
     dirtySet.forEach(function(id) { if (id != null && id !== '') dirtyIds.push(id); });
     const deferOnlyDirty = false;
@@ -9851,10 +10177,10 @@
     _updateFlightSchedulePagerUI(flightsSorted.length);
     const useVirt = !usePagination && DOM_OPT_FLIGHT_VIRT_ENABLE && flightsSorted.length >= DOM_OPT_FLIGHT_VIRT_MIN;
     if (useVirt) {
-      _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow);
+      _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow, apronK);
     } else {
       _flightListTeardownVirtual(listEl);
-      const dataRows = _buildFlightListRowsHtml(flightsForDom, retStatsAll);
+      const dataRows = _buildFlightListRowsHtml(flightsForDom, retStatsAll, apronK);
       listEl.innerHTML = headerRow + dataRows.join('') + '</tbody></table>';
       const tbl0 = listEl.querySelector('.flight-schedule-table');
       if (tbl0) {
@@ -10428,7 +10754,14 @@
         const f = flightById.get(String(id));
         if (!f) return;
         const tds = Array.from(row.querySelectorAll('td'));
-        if (tds.length <= FLIGHT_SCHED_TD_ETOT) return;
+        const k = flightScheduleColumnK();
+        const sibtIdx = flightSchedColIndex('sibt', k);
+        const sobtIdx = flightSchedColIndex('sobt', k);
+        const eldtIdx = flightSchedColIndex('eldt', k);
+        const eibtIdx = flightSchedColIndex('eibt', k);
+        const eobtIdx = flightSchedColIndex('eobt', k);
+        const etotIdx = flightSchedColIndex('etot', k);
+        if (tds.length <= etotIdx) return;
         const getMin = (idx) => {
           const td = tds[idx];
           if (!td) return 0;
@@ -10445,30 +10778,38 @@
             return 0;
           }
         };
-        const sibt = getMin(FLIGHT_SCHED_TD_SIBT);
-        const sobt = getMin(FLIGHT_SCHED_TD_SOBT);
+        const sibt = getMin(sibtIdx);
+        const sobt = getMin(sobtIdx);
         const sldt = Math.max(0, sibt - SCHED_SIBT_MINUS_SLDT_MIN);
         const stot = sobt + SCHED_STOT_MINUS_SOBT_MIN;
         const eSer = ganttESeriesMinutesFromTimelineMeta(f);
-        const eldt = eSer.eldt;
-        const eibt = eSer.eibt;
-        const eobt = eSer.eobt;
-        const etot = eSer.etot;
-        const t0 = sibt;
-        const t1 = sobt || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-        const sldtOrig = sldt;
-        const sobtOrig = sobt || t1;
-        const stotOrig = stot;
-        intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig });
+        const eldt = eSer.eldt != null ? eSer.eldt : getMin(eldtIdx);
+        const eibt = eSer.eibt != null ? eSer.eibt : getMin(eibtIdx);
+        const eobt = eSer.eobt != null ? eSer.eobt : getMin(eobtIdx);
+        const etot = eSer.etot != null ? eSer.etot : getMin(etotIdx);
+        if (Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1 && typeof buildApronStayGanttIntervalsForFlight === 'function') {
+          buildApronStayGanttIntervalsForFlight(f, eSer).forEach(function(it) { intervals.push(it); });
+        } else {
+          const t0 = sibt;
+          const t1 = sobt || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
+          const sldtOrig = sldt;
+          const sobtOrig = sobt || t1;
+          const stotOrig = stot;
+          intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig, segmentIdx: 0, segmentCount: 1, segmentStandId: f.standId || null });
+        }
       });
     }
     if (!intervals.length) {
-      intervals = flights.map(f => {
+      flights.forEach(f => {
         const t0 = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
         const t1 = f.sobtMin != null ? f.sobtMin : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
         const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, t0 - SCHED_SIBT_MINUS_SLDT_MIN);
         const stot = f.stotMin != null ? f.stotMin : (t1 + SCHED_STOT_MINUS_SOBT_MIN);
         const eSer2 = ganttESeriesMinutesFromTimelineMeta(f);
+        if (Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1 && typeof buildApronStayGanttIntervalsForFlight === 'function') {
+          buildApronStayGanttIntervalsForFlight(f, eSer2).forEach(function(it) { intervals.push(it); });
+          return;
+        }
         const eibt = eSer2.eibt;
         const eobt = eSer2.eobt;
         const eldt = eSer2.eldt;
@@ -10476,7 +10817,7 @@
         const sldtOrig = sldt;
         const sobtOrig = f.sobtMin != null ? f.sobtMin : t1;
         const stotOrig = stot;
-        return { f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig };
+        intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig, segmentIdx: 0, segmentCount: 1, segmentStandId: f.standId || null });
       });
     }
 
@@ -10552,7 +10893,7 @@
       const o = { __unassigned: [] };
       for (let gi = 0; gi < intervals.length; gi++) {
         const it = intervals[gi];
-        const raw = it.f && it.f.standId;
+        const raw = it.segmentStandId != null ? it.segmentStandId : (it.f && it.f.standId);
         if (raw == null || raw === '') o.__unassigned.push(it);
         else {
           const sid = String(raw);
@@ -10586,6 +10927,7 @@
         for (let j = i + 1; j < rowFlights.length; j++) {
           const a = rowFlights[i];
           const b = rowFlights[j];
+          if (a.f && b.f && a.f.id === b.f.id) continue;
           if (a.t0 < b.t1 && b.t0 < a.t1) { // Section overlap
             conflictMap[a.f.id] = true;
             conflictMap[b.f.id] = true;
@@ -10633,55 +10975,74 @@
         const conflictClass = (conflictMap[f.id] || flightBlockedLikeNoWay(f)) ? ' conflict' : '';
         const selectedClass = (state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id) ? ' alloc-flight-selected' : '';
         const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
+        const segIdx = it.segmentIdx != null ? Number(it.segmentIdx) : 0;
+        const segCount = it.segmentCount != null ? Number(it.segmentCount) : 1;
+        const isFirstSeg = segIdx === 0;
+        const isLastSeg = segIdx >= segCount - 1;
+        const segName = segCount > 1 ? ('AP' + (segIdx + 1)) : '';
         const sibtLabel = formatFlightScheduleDateTime(f, t0);
         const sobtLabel = formatFlightScheduleDateTime(f, t1);
-        const handleHoverSibt = escapeAttr('SIBT: ' + sibtLabel);
-        const handleHoverSobt = escapeAttr('SOBT: ' + sobtLabel);
+        const handleHoverSibt = escapeAttr((segCount > 1 ? ('SIBT' + (segIdx + 1)) : 'SIBT') + ': ' + sibtLabel);
+        const handleHoverSobt = escapeAttr((segCount > 1 ? ('SOBT' + (segIdx + 1)) : 'SOBT') + ': ' + sobtLabel);
         const barTitle =
-          'SIBT: ' + sibtLabel +
-          '\\nSOBT: ' + sobtLabel +
+          (segName ? (segName + '\\n') : '') +
+          (segCount > 1 ? ('SIBT' + (segIdx + 1)) : 'SIBT') + ': ' + sibtLabel +
+          '\\n' + (segCount > 1 ? ('SOBT' + (segIdx + 1)) : 'SOBT') + ': ' + sobtLabel +
           '\\nReg: ' + (f.reg || '') +
           '\\nAirline: ' + (f.airlineCode || '') + ' ' + (f.flightNumber || '');
-        if (showEibtBars && eBars && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {
+        if (showEibtBars && eBars && isFirstSeg && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {
           pushAllocSpan(eBars, eibt, eobt, 'alloc-e-bar', 2);
         }
-        if (showEldtBars && e2Bars) {
+        if (showEldtBars && e2Bars && isFirstSeg) {
           if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) pushAllocSpan(e2Bars, eldt, eibt, 'alloc-e2-bar', 0.5);
           if (isFinite(eobt) && isFinite(etot) && etot >= eobt) pushAllocSpan(e2Bars, eobt, etot, 'alloc-e2-bar', 0.5);
         }
         if (showAuxBars && sBars) {
-          if (isFinite(sldt) && sldt <= t0) pushAllocSpan(sBars, sldt, t0, 'alloc-s-bar', 0.5);
-          if (isFinite(stot) && stot >= t1) pushAllocSpan(sBars, t1, stot, 'alloc-s-bar', 0.5);
+          if (isFirstSeg && isFinite(sldt) && sldt <= t0) pushAllocSpan(sBars, sldt, t0, 'alloc-s-bar', 0.5);
+          if (isLastSeg && isFinite(stot) && stot >= t1) pushAllocSpan(sBars, t1, stot, 'alloc-s-bar', 0.5);
         }
         if (showSDots && sDots) {
-          pushAllocDot(sDots, sldt, 'alloc-time-dot-s');
-          pushAllocDot(sDots, stot, 'alloc-time-dot-s');
+          if (isFirstSeg) pushAllocDot(sDots, sldt, 'alloc-time-dot-s');
+          if (isLastSeg) pushAllocDot(sDots, stot, 'alloc-time-dot-s');
         }
         if (showSdDots && sdDots) {
-          pushAllocDot(sdDots, sldt, 'alloc-time-dot-sd');
-          pushAllocDot(sdDots, stot, 'alloc-time-dot-sd');
+          if (isFirstSeg) pushAllocDot(sdDots, sldt, 'alloc-time-dot-sd');
+          if (isLastSeg) pushAllocDot(sdDots, stot, 'alloc-time-dot-sd');
         }
-        if (showEDots && eDots) {
+        if (showEDots && eDots && isFirstSeg) {
           pushAllocDot(eDots, eldt, 'alloc-time-dot-e');
           pushAllocDot(eDots, etot, 'alloc-time-dot-e');
           pushAllocTriangle(eTrisDown, eldt, 'alloc-e-tri alloc-e-tri-down');
           pushAllocTriangle(eTrisUp, etot, 'alloc-e-tri alloc-e-tri-up');
         }
         if (showSPoints) {
-          pushAllocTriangle(sTrisDown, sldt, 'alloc-s-tri alloc-s-tri-down');
-          pushAllocTriangle(sTrisUp, stot, 'alloc-s-tri alloc-s-tri-up');
+          if (isFirstSeg) pushAllocTriangle(sTrisDown, sldt, 'alloc-s-tri alloc-s-tri-down');
+          if (isLastSeg) pushAllocTriangle(sTrisUp, stot, 'alloc-s-tri alloc-s-tri-up');
         }
-        const handleHtml = (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f)) ? '' : (
-          '<button type="button" class="alloc-flight-handle alloc-flight-handle--sibt" data-handle-role="sibt" tabindex="-1" aria-label="Adjust SIBT (5 min)" title="' + handleHoverSibt + '"></button>' +
-          '<button type="button" class="alloc-flight-handle alloc-flight-handle--sobt" data-handle-role="sobt" tabindex="-1" aria-label="Adjust SOBT (5 min)" title="' + handleHoverSobt + '"></button>'
-        );
+        const blocked = typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f);
+        const handleParts = [];
+        if (!blocked) {
+          const segsForHandles = Array.isArray(f.apronStaySegments) ? f.apronStaySegments : [];
+          const leftUnlocked = isFirstSeg || !(_sameApronStayStand(segsForHandles[segIdx - 1], segsForHandles[segIdx]));
+          const rightUnlocked = isLastSeg || !(_sameApronStayStand(segsForHandles[segIdx], segsForHandles[segIdx + 1]));
+          if (leftUnlocked) handleParts.push('<button type="button" class="alloc-flight-handle alloc-flight-handle--sibt" data-handle-role="sibt" data-segment-idx="' + segIdx + '" tabindex="-1" aria-label="Adjust SIBT (5 min)" title="' + handleHoverSibt + '"></button>');
+          else handleParts.push('<span class="alloc-flight-junction alloc-flight-junction--left alloc-flight-junction--locked" title="Move to a different stand to enable timing edits"></span>');
+          if (rightUnlocked) handleParts.push('<button type="button" class="alloc-flight-handle alloc-flight-handle--sobt" data-handle-role="sobt" data-segment-idx="' + segIdx + '" tabindex="-1" aria-label="Adjust SOBT (5 min)" title="' + handleHoverSobt + '"></button>');
+          else handleParts.push('<span class="alloc-flight-junction alloc-flight-junction--right alloc-flight-junction--locked" title="Move to a different stand to enable timing edits"></span>');
+        }
+        const splitHtml = (!blocked && (t1 - t0) >= (APRON_STAY_SPLIT_MIN_PART_MIN * 2))
+          ? '<button type="button" class="alloc-flight-split-btn" data-segment-idx="' + segIdx + '" title="Split apron stay">Split</button>'
+          : '';
+        const segBadgeHtml = segName ? '<span class="alloc-flight-ap-badge">' + escapeHtml(segName) + '</span>' : '';
         return '' +
-          '<div class="alloc-flight' + conflictClass + selectedClass + sbarDimClass + '" draggable="true" data-flight-id="' + f.id + '" ' +
+          '<div class="alloc-flight' + conflictClass + selectedClass + sbarDimClass + '" draggable="true" data-flight-id="' + f.id + '" data-segment-idx="' + segIdx + '" ' +
             'style="left:' + leftPct + '%;width:' + widthPct + '%;min-width:4px;"' +
             ' title="' + barTitle + '">' +
-            handleHtml +
+            handleParts.join('') +
             '<div class="alloc-flight-reg">' + regSafe + '</div>' +
             metaHtml +
+            segBadgeHtml +
+            splitHtml +
           '</div>';
       }).join('');
       const sidAttr = standId ? String(standId) : '';
@@ -11045,11 +11406,20 @@
       if (!f) return;
       var sid = candStandId || null;
       if (!_allocGanttDragStandPreviewAllowed(f, sid)) return;
-      var key = ctx.flightId + '|' + (sid || '');
+      var key = ctx.flightId + '|' + (ctx.segmentIdx != null ? ctx.segmentIdx : '') + '|' + (sid || '');
       if (key === _allocGanttPreviewLastKey) return;
       _allocGanttPreviewLastKey = key;
-      f.standId = sid;
-      if (f.token) f.token.apronId = sid;
+      if (ctx.segmentIdx != null && typeof normalizeFlightApronStaySegments === 'function') {
+        var segs = normalizeFlightApronStaySegments(f);
+        if (segs[ctx.segmentIdx]) {
+          segs[ctx.segmentIdx].standId = sid;
+          f.apronStaySegments = segs;
+          if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
+        }
+      } else {
+        f.standId = sid;
+        if (f.token) f.token.apronId = sid;
+      }
       var touched = [];
       if (ctx.prevStandId) touched.push(ctx.prevStandId);
       if (sid) touched.push(sid);
@@ -11076,7 +11446,15 @@
         return;
       }
       var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
-      if (f) {
+      if (f && ctx.prevApronSegmentsJson) {
+        try {
+          var prevSegs = JSON.parse(ctx.prevApronSegmentsJson);
+          if (Array.isArray(prevSegs)) {
+            f.apronStaySegments = prevSegs;
+            if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
+          }
+        } catch (eRestore) {}
+      } else if (f) {
         f.standId = ctx.prevStandId || null;
         if (f.token) f.token.apronId = ctx.prevApron != null ? ctx.prevApron : (ctx.prevStandId || null);
       }
@@ -11162,7 +11540,8 @@
         if (!flightId) return;
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
-        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null)) return;
+        const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
+        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null, segIdx)) return;
         st._allocGanttDropHandled = true;
       }, true);
     }
@@ -11178,22 +11557,76 @@
         if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
       }, { passive: false });
     }
+    if (!ganttEl._allocSplitBound) {
+      ganttEl._allocSplitBound = true;
+      function applySplitAtEvent(ev, btn) {
+        const flightEl = btn ? btn.closest('.alloc-flight') : (ev.target && ev.target.closest ? ev.target.closest('.alloc-flight') : null);
+        if (!flightEl) return;
+        const flightId = flightEl.getAttribute('data-flight-id');
+        const f = st.flights.find(function(x) { return String(x.id) === String(flightId); });
+        if (!f) return;
+        const segIdx = parseInt((btn && btn.getAttribute('data-segment-idx')) || flightEl.getAttribute('data-segment-idx') || '0', 10) || 0;
+        let rawM = null;
+        if (btn) {
+          const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+          const seg = segs[segIdx];
+          if (seg && isFinite(seg.sibtMin) && isFinite(seg.sobtMin)) rawM = (seg.sibtMin + seg.sobtMin) * 0.5;
+        } else {
+          rawM = _ganttClientXToMinutes(ev.clientX, ganttEl);
+        }
+        if (rawM == null || !isFinite(rawM)) return;
+        if (!splitFlightApronStaySegmentAtMinute(f, segIdx, rawM)) return;
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        const touched = [];
+        (f.apronStaySegments || []).forEach(function(seg) {
+          if (seg && seg.standId) touched.push(seg.standId);
+        });
+        if (typeof renderFlightList === 'function') {
+          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touched, skipGanttRefresh: true });
+        }
+        if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+      }
+      ganttEl.addEventListener('click', function(ev) {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('.alloc-flight-split-btn') : null;
+        if (!btn) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        applySplitAtEvent(ev, btn);
+      }, true);
+      ganttEl.addEventListener('click', function(ev) {
+        if (!ev.altKey) return;
+        const flightEl = ev.target && ev.target.closest ? ev.target.closest('.alloc-flight') : null;
+        if (!flightEl || ev.target.closest('.alloc-flight-handle')) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        applySplitAtEvent(ev, null);
+      }, true);
+    }
     ganttEl.querySelectorAll('.alloc-flight').forEach(function(el) {
       el.addEventListener('dragstart', function(ev) {
-        if (ev.target && ev.target.closest && ev.target.closest('.alloc-flight-handle')) {
+        if (ev.target && ev.target.closest && (ev.target.closest('.alloc-flight-handle') || ev.target.closest('.alloc-flight-split-btn'))) {
           ev.preventDefault();
           return;
         }
         var flightId = this.getAttribute('data-flight-id') || '';
+        var segIdx = parseInt(this.getAttribute('data-segment-idx') || '0', 10) || 0;
         ev.dataTransfer.setData('text/plain', flightId);
         ev.dataTransfer.effectAllowed = 'move';
         var fDrag = st.flights.find(function(x) { return x.id === flightId; });
         if (fDrag) {
+          var prevSegsJson = '';
+          if (typeof normalizeFlightApronStaySegments === 'function') {
+            prevSegsJson = JSON.stringify(normalizeFlightApronStaySegments(fDrag).map(function(seg) {
+              return { standId: seg.standId || null, sibtMin: seg.sibtMin, sobtMin: seg.sobtMin };
+            }));
+          }
           st._allocGanttDragSeq = (st._allocGanttDragSeq || 0) + 1;
           st._allocGanttDrag = {
             flightId: flightId,
+            segmentIdx: segIdx,
             prevStandId: fDrag.standId || null,
             prevApron: (fDrag.token && fDrag.token.apronId) ? fDrag.token.apronId : null,
+            prevApronSegmentsJson: prevSegsJson,
             seq: st._allocGanttDragSeq
           };
           st._allocGanttDropHandled = false;
@@ -11261,7 +11694,8 @@
         if (!flightId) return;
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
-        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null)) return;
+        const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
+        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null, segIdx)) return;
         st._allocGanttDropHandled = true;
       });
     });
@@ -11278,6 +11712,7 @@
         if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return;
         const role = h.getAttribute('data-handle-role');
         if (role !== 'sibt' && role !== 'sobt') return;
+        const handleSegIdx = parseInt(h.getAttribute('data-segment-idx') || flightEl.getAttribute('data-segment-idx') || '0', 10) || 0;
         ev.preventDefault();
         ev.stopPropagation();
         st._allocGanttHandleDragViewportPin = {
@@ -11313,7 +11748,10 @@
           if (rawM == null || !isFinite(rawM)) return;
           const snap = GANTT_SIBT_SOBT_HANDLE_SNAP_MIN;
           let m = Math.max(0, Math.round(rawM / snap) * snap);
-          if (role === 'sibt') {
+          const hasMultiSegments = Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1;
+          if (hasMultiSegments && typeof applyApronStaySegmentHandleMinute === 'function') {
+            applyApronStaySegmentHandleMinute(f, handleSegIdx, role, m);
+          } else if (role === 'sibt') {
             if (typeof _ganttApplySibtHandleSnappedMinutes === 'function') _ganttApplySibtHandleSnappedMinutes(f, m, dragSibtCtx);
           } else {
             if (typeof applyScheduledGateTimingFromSField === 'function') applyScheduledGateTimingFromSField(f, 'sobt', m);
@@ -11324,10 +11762,15 @@
             computeScheduledDisplayTimesIncremental(st.flights, new Set([f.id]), tset);
           }
           if (role === 'sibt') {
-            tip.textContent = 'SIBT: ' + formatFlightScheduleDateTime(f, f.timeMin);
+            const showVal = hasMultiSegments && f.apronStaySegments && f.apronStaySegments[handleSegIdx]
+              ? f.apronStaySegments[handleSegIdx].sibtMin
+              : f.timeMin;
+            tip.textContent = (hasMultiSegments ? ('SIBT' + (handleSegIdx + 1)) : 'SIBT') + ': ' + formatFlightScheduleDateTime(f, showVal);
           } else {
-            const sobtShow = f.sobtMin != null ? f.sobtMin : m;
-            tip.textContent = 'SOBT: ' + formatFlightScheduleDateTime(f, sobtShow);
+            const sobtShow = hasMultiSegments && f.apronStaySegments && f.apronStaySegments[handleSegIdx]
+              ? f.apronStaySegments[handleSegIdx].sobtMin
+              : (f.sobtMin != null ? f.sobtMin : m);
+            tip.textContent = (hasMultiSegments ? ('SOBT' + (handleSegIdx + 1)) : 'SOBT') + ': ' + formatFlightScheduleDateTime(f, sobtShow);
           }
           tip.removeAttribute('hidden');
           tip.style.left = Math.min(window.innerWidth - 200, Math.max(8, tipX + 12)) + 'px';
@@ -17968,7 +18411,9 @@
         const f = state.flights.find(function(ff) { return ff && ff.id === fid; });
         if (!f) return;
         const tds = Array.from(row.querySelectorAll('td'));
-        if (tds.length <= FLIGHT_SCHED_TD_ETOT) return;
+        const k = flightScheduleColumnK();
+        const etotIdx = flightSchedColIndex('etot', k);
+        if (tds.length <= etotIdx) return;
         const getMin = function(idx) {
           const td = tds[idx];
           if (!td) return null;
@@ -17983,12 +18428,12 @@
           return isFinite(parsed) ? parsed : null;
         };
         const map = {
-          sibtMin: FLIGHT_SCHED_TD_SIBT,
-          sobtMin: FLIGHT_SCHED_TD_SOBT,
-          eldtMin: FLIGHT_SCHED_TD_ELDT,
-          eibtMin: FLIGHT_SCHED_TD_EIBT,
-          eobtMin: FLIGHT_SCHED_TD_EOBT,
-          etotMin: FLIGHT_SCHED_TD_ETOT
+          sibtMin: flightSchedColIndex('sibt', k),
+          sobtMin: flightSchedColIndex('sobt', k),
+          eldtMin: flightSchedColIndex('eldt', k),
+          eibtMin: flightSchedColIndex('eibt', k),
+          eobtMin: flightSchedColIndex('eobt', k),
+          etotMin: etotIdx
         };
         Object.keys(map).forEach(function(key) {
           const v = getMin(map[key]);

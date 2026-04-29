@@ -36,11 +36,20 @@
       if (!f) return;
       var sid = candStandId || null;
       if (!_allocGanttDragStandPreviewAllowed(f, sid)) return;
-      var key = ctx.flightId + '|' + (sid || '');
+      var key = ctx.flightId + '|' + (ctx.segmentIdx != null ? ctx.segmentIdx : '') + '|' + (sid || '');
       if (key === _allocGanttPreviewLastKey) return;
       _allocGanttPreviewLastKey = key;
-      f.standId = sid;
-      if (f.token) f.token.apronId = sid;
+      if (ctx.segmentIdx != null && typeof normalizeFlightApronStaySegments === 'function') {
+        var segs = normalizeFlightApronStaySegments(f);
+        if (segs[ctx.segmentIdx]) {
+          segs[ctx.segmentIdx].standId = sid;
+          f.apronStaySegments = segs;
+          if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
+        }
+      } else {
+        f.standId = sid;
+        if (f.token) f.token.apronId = sid;
+      }
       var touched = [];
       if (ctx.prevStandId) touched.push(ctx.prevStandId);
       if (sid) touched.push(sid);
@@ -67,7 +76,15 @@
         return;
       }
       var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
-      if (f) {
+      if (f && ctx.prevApronSegmentsJson) {
+        try {
+          var prevSegs = JSON.parse(ctx.prevApronSegmentsJson);
+          if (Array.isArray(prevSegs)) {
+            f.apronStaySegments = prevSegs;
+            if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
+          }
+        } catch (eRestore) {}
+      } else if (f) {
         f.standId = ctx.prevStandId || null;
         if (f.token) f.token.apronId = ctx.prevApron != null ? ctx.prevApron : (ctx.prevStandId || null);
       }
@@ -153,7 +170,8 @@
         if (!flightId) return;
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
-        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null)) return;
+        const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
+        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null, segIdx)) return;
         st._allocGanttDropHandled = true;
       }, true);
     }
@@ -169,22 +187,76 @@
         if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
       }, { passive: false });
     }
+    if (!ganttEl._allocSplitBound) {
+      ganttEl._allocSplitBound = true;
+      function applySplitAtEvent(ev, btn) {
+        const flightEl = btn ? btn.closest('.alloc-flight') : (ev.target && ev.target.closest ? ev.target.closest('.alloc-flight') : null);
+        if (!flightEl) return;
+        const flightId = flightEl.getAttribute('data-flight-id');
+        const f = st.flights.find(function(x) { return String(x.id) === String(flightId); });
+        if (!f) return;
+        const segIdx = parseInt((btn && btn.getAttribute('data-segment-idx')) || flightEl.getAttribute('data-segment-idx') || '0', 10) || 0;
+        let rawM = null;
+        if (btn) {
+          const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+          const seg = segs[segIdx];
+          if (seg && isFinite(seg.sibtMin) && isFinite(seg.sobtMin)) rawM = (seg.sibtMin + seg.sobtMin) * 0.5;
+        } else {
+          rawM = _ganttClientXToMinutes(ev.clientX, ganttEl);
+        }
+        if (rawM == null || !isFinite(rawM)) return;
+        if (!splitFlightApronStaySegmentAtMinute(f, segIdx, rawM)) return;
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        const touched = [];
+        (f.apronStaySegments || []).forEach(function(seg) {
+          if (seg && seg.standId) touched.push(seg.standId);
+        });
+        if (typeof renderFlightList === 'function') {
+          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: touched, skipGanttRefresh: true });
+        }
+        if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+      }
+      ganttEl.addEventListener('click', function(ev) {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('.alloc-flight-split-btn') : null;
+        if (!btn) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        applySplitAtEvent(ev, btn);
+      }, true);
+      ganttEl.addEventListener('click', function(ev) {
+        if (!ev.altKey) return;
+        const flightEl = ev.target && ev.target.closest ? ev.target.closest('.alloc-flight') : null;
+        if (!flightEl || ev.target.closest('.alloc-flight-handle')) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        applySplitAtEvent(ev, null);
+      }, true);
+    }
     ganttEl.querySelectorAll('.alloc-flight').forEach(function(el) {
       el.addEventListener('dragstart', function(ev) {
-        if (ev.target && ev.target.closest && ev.target.closest('.alloc-flight-handle')) {
+        if (ev.target && ev.target.closest && (ev.target.closest('.alloc-flight-handle') || ev.target.closest('.alloc-flight-split-btn'))) {
           ev.preventDefault();
           return;
         }
         var flightId = this.getAttribute('data-flight-id') || '';
+        var segIdx = parseInt(this.getAttribute('data-segment-idx') || '0', 10) || 0;
         ev.dataTransfer.setData('text/plain', flightId);
         ev.dataTransfer.effectAllowed = 'move';
         var fDrag = st.flights.find(function(x) { return x.id === flightId; });
         if (fDrag) {
+          var prevSegsJson = '';
+          if (typeof normalizeFlightApronStaySegments === 'function') {
+            prevSegsJson = JSON.stringify(normalizeFlightApronStaySegments(fDrag).map(function(seg) {
+              return { standId: seg.standId || null, sibtMin: seg.sibtMin, sobtMin: seg.sobtMin };
+            }));
+          }
           st._allocGanttDragSeq = (st._allocGanttDragSeq || 0) + 1;
           st._allocGanttDrag = {
             flightId: flightId,
+            segmentIdx: segIdx,
             prevStandId: fDrag.standId || null,
             prevApron: (fDrag.token && fDrag.token.apronId) ? fDrag.token.apronId : null,
+            prevApronSegmentsJson: prevSegsJson,
             seq: st._allocGanttDragSeq
           };
           st._allocGanttDropHandled = false;
@@ -252,7 +324,8 @@
         if (!flightId) return;
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
-        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null)) return;
+        const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
+        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null, segIdx)) return;
         st._allocGanttDropHandled = true;
       });
     });
@@ -269,6 +342,7 @@
         if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return;
         const role = h.getAttribute('data-handle-role');
         if (role !== 'sibt' && role !== 'sobt') return;
+        const handleSegIdx = parseInt(h.getAttribute('data-segment-idx') || flightEl.getAttribute('data-segment-idx') || '0', 10) || 0;
         ev.preventDefault();
         ev.stopPropagation();
         st._allocGanttHandleDragViewportPin = {
@@ -304,7 +378,10 @@
           if (rawM == null || !isFinite(rawM)) return;
           const snap = GANTT_SIBT_SOBT_HANDLE_SNAP_MIN;
           let m = Math.max(0, Math.round(rawM / snap) * snap);
-          if (role === 'sibt') {
+          const hasMultiSegments = Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1;
+          if (hasMultiSegments && typeof applyApronStaySegmentHandleMinute === 'function') {
+            applyApronStaySegmentHandleMinute(f, handleSegIdx, role, m);
+          } else if (role === 'sibt') {
             if (typeof _ganttApplySibtHandleSnappedMinutes === 'function') _ganttApplySibtHandleSnappedMinutes(f, m, dragSibtCtx);
           } else {
             if (typeof applyScheduledGateTimingFromSField === 'function') applyScheduledGateTimingFromSField(f, 'sobt', m);
@@ -315,10 +392,15 @@
             computeScheduledDisplayTimesIncremental(st.flights, new Set([f.id]), tset);
           }
           if (role === 'sibt') {
-            tip.textContent = 'SIBT: ' + formatFlightScheduleDateTime(f, f.timeMin);
+            const showVal = hasMultiSegments && f.apronStaySegments && f.apronStaySegments[handleSegIdx]
+              ? f.apronStaySegments[handleSegIdx].sibtMin
+              : f.timeMin;
+            tip.textContent = (hasMultiSegments ? ('SIBT' + (handleSegIdx + 1)) : 'SIBT') + ': ' + formatFlightScheduleDateTime(f, showVal);
           } else {
-            const sobtShow = f.sobtMin != null ? f.sobtMin : m;
-            tip.textContent = 'SOBT: ' + formatFlightScheduleDateTime(f, sobtShow);
+            const sobtShow = hasMultiSegments && f.apronStaySegments && f.apronStaySegments[handleSegIdx]
+              ? f.apronStaySegments[handleSegIdx].sobtMin
+              : (f.sobtMin != null ? f.sobtMin : m);
+            tip.textContent = (hasMultiSegments ? ('SOBT' + (handleSegIdx + 1)) : 'SOBT') + ': ' + formatFlightScheduleDateTime(f, sobtShow);
           }
           tip.removeAttribute('hidden');
           tip.style.left = Math.min(window.innerWidth - 200, Math.max(8, tipX + 12)) + 'px';

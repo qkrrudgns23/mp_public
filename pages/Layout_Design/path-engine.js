@@ -511,6 +511,201 @@
     }
     return areas.concat(rest);
   }
+  function _flightApronFallbackStandId(f) {
+    if (!f) return null;
+    const t = f.token && typeof f.token === 'object' ? f.token : {};
+    const raw = f.depApronId != null ? f.depApronId
+      : (f.standId != null ? f.standId
+        : (t.apronId != null ? t.apronId
+          : (f.arrApronId != null ? f.arrApronId : null)));
+    return raw != null && String(raw).trim() !== '' ? String(raw) : null;
+  }
+  function _flightApronBaseSibtMin(f) {
+    const v = f && f.sibtMin != null ? Number(f.sibtMin) : (f && f.timeMin != null ? Number(f.timeMin) : 0);
+    return isFinite(v) ? Math.max(0, v) : 0;
+  }
+  function _flightApronBaseSobtMin(f, sibtMin) {
+    const raw = f && f.sobtMin != null ? Number(f.sobtMin) : NaN;
+    if (isFinite(raw) && raw > sibtMin) return raw;
+    const dwell = f && f.dwellMin != null && isFinite(Number(f.dwellMin)) ? Math.max(0, Number(f.dwellMin)) : 0;
+    return Math.max(sibtMin, sibtMin + dwell);
+  }
+  function normalizeFlightApronStaySegments(f) {
+    if (!f) return [];
+    const fallbackStandId = _flightApronFallbackStandId(f);
+    const rawSegs = Array.isArray(f.apronStaySegments) ? f.apronStaySegments : [];
+    let segs = rawSegs.map(function(seg) {
+      if (!seg || typeof seg !== 'object') return null;
+      const sibt = Number(seg.sibtMin);
+      const sobt = Number(seg.sobtMin);
+      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return null;
+      const sidRaw = seg.standId != null ? seg.standId : fallbackStandId;
+      return {
+        standId: sidRaw != null && String(sidRaw).trim() !== '' ? String(sidRaw) : null,
+        sibtMin: Math.max(0, sibt),
+        sobtMin: Math.max(0, sobt)
+      };
+    }).filter(Boolean);
+    if (!segs.length) {
+      const sibt = _flightApronBaseSibtMin(f);
+      segs = [{
+        standId: fallbackStandId,
+        sibtMin: sibt,
+        sobtMin: _flightApronBaseSobtMin(f, sibt)
+      }];
+    }
+    segs.sort(function(a, b) {
+      if (a.sibtMin !== b.sibtMin) return a.sibtMin - b.sibtMin;
+      return a.sobtMin - b.sobtMin;
+    });
+    f.apronStaySegments = segs;
+    return segs;
+  }
+  function mergeAdjacentSameStandApronSegments(segs) {
+    const out = [];
+    (segs || []).forEach(function(seg) {
+      if (!seg) return;
+      const sid = seg.standId != null && String(seg.standId).trim() !== '' ? String(seg.standId) : null;
+      const sibt = Number(seg.sibtMin);
+      const sobt = Number(seg.sobtMin);
+      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return;
+      const prev = out.length ? out[out.length - 1] : null;
+      if (prev && String(prev.standId || '') === String(sid || '') && sibt <= prev.sobtMin + 1e-6) {
+        prev.sobtMin = Math.max(prev.sobtMin, sobt);
+      } else {
+        out.push({ standId: sid, sibtMin: sibt, sobtMin: sobt });
+      }
+    });
+    return out;
+  }
+  function syncFlightApronStayAggregate(f) {
+    if (!f) return [];
+    const segs = normalizeFlightApronStaySegments(f);
+    if (!segs.length) return segs;
+    const first = segs[0];
+    const last = segs[segs.length - 1];
+    f.arrApronId = first.standId || null;
+    f.depApronId = last.standId || null;
+    f.standId = f.depApronId || null;
+    if (f.token && typeof f.token === 'object') f.token.apronId = f.depApronId || null;
+    f.sibtMin = first.sibtMin;
+    f.timeMin = first.sibtMin;
+    f.sobtMin = last.sobtMin;
+    let dwell = 0;
+    for (let i = 0; i < segs.length; i++) dwell += Math.max(0, segs[i].sobtMin - segs[i].sibtMin);
+    f.dwellMin = dwell;
+    if (typeof SCHED_SIBT_MINUS_SLDT_MIN === 'number') f.sldtMin = Math.max(0, f.sibtMin - SCHED_SIBT_MINUS_SLDT_MIN);
+    if (typeof SCHED_STOT_MINUS_SOBT_MIN === 'number') f.stotMin = f.sobtMin + SCHED_STOT_MINUS_SOBT_MIN;
+    return segs;
+  }
+  function serializableApronStaySegmentsForFlight(f) {
+    const segs = syncFlightApronStayAggregate(f).map(function(seg) {
+      return { standId: seg.standId, sibtMin: seg.sibtMin, sobtMin: seg.sobtMin };
+    });
+    return mergeAdjacentSameStandApronSegments(segs);
+  }
+  const APRON_STAY_SPLIT_MIN_PART_MIN = 20;
+  function splitFlightApronStaySegmentAtMinute(f, segIdx, cutMin) {
+    if (!f || flightBlockedLikeNoWay(f)) return false;
+    const segs = normalizeFlightApronStaySegments(f);
+    const idx = Math.max(0, parseInt(segIdx, 10) || 0);
+    if (idx >= segs.length) return false;
+    const seg = segs[idx];
+    const cut = Number(cutMin);
+    if (!isFinite(cut)) return false;
+    const snap = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0)
+      ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN
+      : 1;
+    const t = Math.max(0, Math.round(cut / snap) * snap);
+    if (t - seg.sibtMin < APRON_STAY_SPLIT_MIN_PART_MIN || seg.sobtMin - t < APRON_STAY_SPLIT_MIN_PART_MIN) {
+      return false;
+    }
+    const left = { standId: seg.standId || null, sibtMin: seg.sibtMin, sobtMin: t };
+    const right = { standId: seg.standId || null, sibtMin: t, sobtMin: seg.sobtMin };
+    segs.splice(idx, 1, left, right);
+    f.apronStaySegments = segs;
+    syncFlightApronStayAggregate(f);
+    return true;
+  }
+  function _sameApronStayStand(a, b) {
+    const sa = a && a.standId != null ? String(a.standId) : '';
+    const sb = b && b.standId != null ? String(b.standId) : '';
+    return sa === sb;
+  }
+  function applyApronStaySegmentHandleMinute(f, segIdx, role, minutes) {
+    if (!f || flightBlockedLikeNoWay(f)) return false;
+    const segs = normalizeFlightApronStaySegments(f);
+    const idx = Math.max(0, parseInt(segIdx, 10) || 0);
+    if (idx >= segs.length) return false;
+    const raw = Number(minutes);
+    if (!isFinite(raw)) return false;
+    const snap = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0)
+      ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN
+      : 1;
+    const tRaw = Math.max(0, Math.round(raw / snap) * snap);
+    if (role === 'sibt') {
+      if (idx === 0) {
+        segs[0].sibtMin = Math.min(tRaw, segs[0].sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN);
+      } else {
+        const prev = segs[idx - 1];
+        const cur = segs[idx];
+        if (_sameApronStayStand(prev, cur)) return false;
+        const lo = prev.sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN;
+        const hi = cur.sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN;
+        if (hi < lo) return false;
+        const t = Math.max(lo, Math.min(hi, tRaw));
+        prev.sobtMin = t;
+        cur.sibtMin = t;
+      }
+    } else if (role === 'sobt') {
+      if (idx >= segs.length - 1) {
+        segs[idx].sobtMin = Math.max(tRaw, segs[idx].sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN);
+      } else {
+        const cur = segs[idx];
+        const next = segs[idx + 1];
+        if (_sameApronStayStand(cur, next)) return false;
+        const lo = cur.sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN;
+        const hi = next.sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN;
+        if (hi < lo) return false;
+        const t = Math.max(lo, Math.min(hi, tRaw));
+        cur.sobtMin = t;
+        next.sibtMin = t;
+      }
+    } else {
+      return false;
+    }
+    f.apronStaySegments = segs;
+    syncFlightApronStayAggregate(f);
+    return true;
+  }
+  function buildApronStayGanttIntervalsForFlight(f, eSer) {
+    const segs = normalizeFlightApronStaySegments(f);
+    if (!segs.length) return [];
+    syncFlightApronStayAggregate(f);
+    const first = segs[0];
+    const last = segs[segs.length - 1];
+    const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, first.sibtMin - SCHED_SIBT_MINUS_SLDT_MIN);
+    const stot = f.stotMin != null ? f.stotMin : (last.sobtMin + SCHED_STOT_MINUS_SOBT_MIN);
+    return segs.map(function(seg, idx) {
+      return {
+        f: f,
+        t0: seg.sibtMin,
+        t1: seg.sobtMin,
+        sldt: sldt,
+        stot: stot,
+        eibt: eSer.eibt,
+        eobt: eSer.eobt,
+        eldt: eSer.eldt,
+        etot: eSer.etot,
+        sldtOrig: sldt,
+        sobtOrig: last.sobtMin,
+        stotOrig: stot,
+        segmentIdx: idx,
+        segmentCount: segs.length,
+        segmentStandId: seg.standId || null
+      };
+    });
+  }
   function applyLayoutObject(obj) {
     if (!obj || typeof obj !== 'object') return;
     state.simPlaybackEndCapSec = null;
@@ -599,7 +794,7 @@
         f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
         f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
         f.terminalId = f.terminalId || t.terminalId || null;
-        const apronId = t.apronId != null ? t.apronId : (f.standId != null ? f.standId : null);
+        const apronId = f.depApronId != null ? f.depApronId : (t.apronId != null ? t.apronId : (f.standId != null ? f.standId : f.arrApronId || null));
         f.standId = apronId;
         f.token = {
           nodes: Array.isArray(t.nodes) ? t.nodes.slice() : ['runway','taxiway','apron','terminal'],
@@ -715,6 +910,7 @@
           const idRaw = String(f.intDom || '').trim();
           f.intDom = (idRaw.toLowerCase() === 'dom') ? 'Dom' : 'Int';
         }
+        if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
       });
     } else {
       state.flights = [];

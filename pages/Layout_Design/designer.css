@@ -961,6 +961,14 @@
     .alloc-flight-handle:focus { outline:2px solid var(--style-gantt-selected, #fbbf24); outline-offset:1px; }
     .alloc-flight-handle--sibt { left:0; transform:translate(-50%, -50%); }
     .alloc-flight-handle--sobt { right:0; transform:translate(50%, -50%); }
+    .alloc-flight-junction { position:absolute; top:50%; z-index:4; width:7px; height:7px; margin:0; padding:0; border-radius:50%; border:1px solid #7f1d1d; background:#ef4444; box-shadow:0 0 0 1px rgba(255,255,255,0.22), 0 1px 2px rgba(0,0,0,0.45); pointer-events:none; transform:translate(-50%, -50%); }
+    .alloc-flight-junction--left { left:0; }
+    .alloc-flight-junction--right { right:0; transform:translate(50%, -50%); }
+    .alloc-flight-junction--locked { opacity:0.65; box-shadow:0 0 0 1px rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.4); }
+    .alloc-flight-split-btn { position:absolute; right:4px; top:50%; transform:translateY(-50%); z-index:5; height:16px; padding:0 6px; border-radius:4px; border:1px solid rgba(15,23,42,0.86); background:rgba(244,244,245,0.96); color:#0f172a; font-size:9px; font-weight:600; line-height:14px; cursor:pointer; opacity:0; pointer-events:none; transition:opacity 0.12s ease-out, background 0.12s ease-out, border-color 0.12s ease-out; }
+    .alloc-flight:hover .alloc-flight-split-btn, .alloc-flight:focus-within .alloc-flight-split-btn { opacity:1; pointer-events:auto; }
+    .alloc-flight-split-btn:hover { background:#fff; border-color:#fbbf24; }
+    .alloc-flight-ap-badge { flex:0 0 auto; min-width:14px; padding:0 3px; border-radius:9999px; border:1px solid rgba(15,23,42,0.4); background:rgba(15,23,42,0.12); color:#0f172a; font-size:7px; font-weight:700; line-height:10px; text-align:center; }
     .alloc-gantt-sibt-sobt-tooltip { position:fixed; z-index:10050; padding:5px 9px; font-size:11px; line-height:1.25; color:#e4e4e7; background:#18181b; border:1px solid #3f3f46; border-radius:4px; pointer-events:none; box-shadow:0 4px 14px rgba(0,0,0,0.45); max-width:min(280px, calc(100vw - 16px)); white-space:nowrap; }
     .alloc-flight.conflict {
       background:repeating-linear-gradient(135deg, var(--style-gantt-conflict, #7f1d1d) 0, var(--style-gantt-conflict, #7f1d1d) 6px, var(--style-gantt-conflict-stripe2, #111827) 6px, var(--style-gantt-conflict-stripe2, #111827) 12px);

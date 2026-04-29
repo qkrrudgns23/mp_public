@@ -782,6 +782,8 @@
           'sibtMin',
           'sobtMin',
           'stotMin',
+          'arrApronId',
+          'depApronId',
           'arrRunwayDirUsed',
           'depRunwayDirUsed',
           'arrTdDistM',
@@ -806,12 +808,25 @@
             copy[k] = f[k];
           }
         });
+        const apronStaySegments = (typeof serializableApronStaySegmentsForFlight === 'function')
+          ? serializableApronStaySegmentsForFlight(f)
+          : [];
+        if (apronStaySegments.length) {
+          copy.apronStaySegments = apronStaySegments.map(function(seg) {
+            const out = { sibtMin: seg.sibtMin, sobtMin: seg.sobtMin };
+            if (seg.standId != null) out.standId = seg.standId;
+            return out;
+          });
+          copy.arrApronId = copy.apronStaySegments[0].standId || null;
+          copy.depApronId = copy.apronStaySegments[copy.apronStaySegments.length - 1].standId || null;
+          copy.standId = copy.depApronId || null;
+        }
         if (Array.isArray(f.edge_list) && f.edge_list.length) {
           copy.edge_list = f.edge_list.slice();
         }
         const t = f.token || {};
         const arrRwyId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
-        const apronId = (f.standId != null ? f.standId : (t.apronId != null ? t.apronId : null));
+        const apronId = (copy.depApronId != null ? copy.depApronId : (f.standId != null ? f.standId : (t.apronId != null ? t.apronId : null)));
         const termId = f.terminalId || t.terminalId || null;
         const depRwyId = f.depRunwayId || t.depRunwayId || null;
         const exitTwId = (f.sampledArrRet != null && f.sampledArrRet !== '') ? f.sampledArrRet : (t.ExitTaxiwayId != null ? t.ExitTaxiwayId : null);

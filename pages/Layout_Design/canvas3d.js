@@ -4130,7 +4130,9 @@
         const f = state.flights.find(function(ff) { return ff && ff.id === fid; });
         if (!f) return;
         const tds = Array.from(row.querySelectorAll('td'));
-        if (tds.length <= FLIGHT_SCHED_TD_ETOT) return;
+        const k = typeof flightScheduleColumnK === 'function' ? flightScheduleColumnK() : 1;
+        const etotIdx = typeof flightSchedColIndex === 'function' ? flightSchedColIndex('etot', k) : FLIGHT_SCHED_TD_ETOT;
+        if (tds.length <= etotIdx) return;
         const getMin = function(idx) {
           const td = tds[idx];
           if (!td) return null;
@@ -4145,12 +4147,12 @@
           return isFinite(parsed) ? parsed : null;
         };
         const map = {
-          sibtMin: FLIGHT_SCHED_TD_SIBT,
-          sobtMin: FLIGHT_SCHED_TD_SOBT,
-          eldtMin: FLIGHT_SCHED_TD_ELDT,
-          eibtMin: FLIGHT_SCHED_TD_EIBT,
-          eobtMin: FLIGHT_SCHED_TD_EOBT,
-          etotMin: FLIGHT_SCHED_TD_ETOT
+          sibtMin: typeof flightSchedColIndex === 'function' ? flightSchedColIndex('sibt', k) : FLIGHT_SCHED_TD_SIBT,
+          sobtMin: typeof flightSchedColIndex === 'function' ? flightSchedColIndex('sobt', k) : FLIGHT_SCHED_TD_SOBT,
+          eldtMin: typeof flightSchedColIndex === 'function' ? flightSchedColIndex('eldt', k) : FLIGHT_SCHED_TD_ELDT,
+          eibtMin: typeof flightSchedColIndex === 'function' ? flightSchedColIndex('eibt', k) : FLIGHT_SCHED_TD_EIBT,
+          eobtMin: typeof flightSchedColIndex === 'function' ? flightSchedColIndex('eobt', k) : FLIGHT_SCHED_TD_EOBT,
+          etotMin: etotIdx
         };
         Object.keys(map).forEach(function(key) {
           const v = getMin(map[key]);
