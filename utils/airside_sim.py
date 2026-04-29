@@ -94,6 +94,18 @@ _EXTRACT_LEG_PHASES: Tuple[str, ...] = (
     PHASE_HOLDING_LINEUP,
     PHASE_LINEUP_DEPARTURE,
 )
+
+
+def _phase_for_extracted_leg_index(leg_i: int) -> str:
+    """Phase contract for path legs returned by ``_extract_point_to_path_legs``.
+
+    Kept as a helper so multi-apron stays can replace the static six-leg contract
+    without changing callers that only need point pairs.
+    """
+
+    if 0 <= int(leg_i) < len(_EXTRACT_LEG_PHASES):
+        return _EXTRACT_LEG_PHASES[int(leg_i)]
+    return PHASE_DEP_TAXI
 SIM_MAX_TIME_SEC = 200_000.0
 # After max scheduled STOT (S / ``stotMin``), advance sim time only this much (absolute seconds).
 STOT_POST_BUFFER_SEC = 3_600.0
@@ -614,6 +626,13 @@ class Flight:
     actual_apron_offblocks_abs_sec: Optional[float] = None
     pushback_finished_abs_sec: Optional[float] = None
     apron_stand_id: Optional[str] = None
+    apron_segments: List[Dict[str, Any]] = field(default_factory=list)
+    current_apron_segment_idx: int = 0
+    dwell_sec_list: List[float] = field(default_factory=list)
+    actual_apron_inblocks_abs_sec_list: List[Optional[float]] = field(default_factory=list)
+    actual_apron_offblocks_abs_sec_list: List[Optional[float]] = field(default_factory=list)
+    pushback_finished_abs_sec_list: List[Optional[float]] = field(default_factory=list)
+    dep_taxi_start_abs_sec_list: List[Optional[float]] = field(default_factory=list)
     dep_taxi_start_sim_time: Optional[float] = None
     dep_taxi_start_abs_sec: Optional[float] = None
     arr_runway_id: Optional[str] = None
@@ -1849,15 +1868,15 @@ def _pushback_apron_plus_one_taxi_route(
     return (eids, fp, g_apron)
 
 
-def extract_point_to_paths(
+def _extract_point_to_path_legs(
     flight: Dict[str, Any],
     layout: Dict[str, Any],
     cell_size: float,
     *,
     information: Optional[Dict[str, Any]] = None,
-) -> List[List[float]]:
+) -> List[Tuple[List[float], str, Optional[str]]]:
     """
-    Token pixels as path legs: touchdown → RET exit junction ``A`` → apron → runway holding
+    Token pixels as phased path legs: touchdown → RET exit junction ``A`` → apron → runway holding
     (RTX·lineup) → lineup → rwy end.
 
     ``A`` is the first ``networkJunction`` on ``ExitTaxiwayId`` along the runway-leave direction
@@ -1865,16 +1884,20 @@ def extract_point_to_paths(
 
     Leg phases: ``Landing``, ``Arr_taxi``, ``Pushback``, ``Dep_taxi``, ``Holding_lineup``, ``Lineup_departure``.
     Requires a ``runway_holding`` on the apron→lineup route near lineup-connected RET; else ``[]``.
+
+    PR5 deliberately preserves the N=1 leg sequence and only makes the phase
+    contract explicit. Multi-apron stay support will extend this builder.
     """
     token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
     arr_rwy = flight.get("arrRunwayId") or token.get("arrRunwayId")
     arr_ret_tw = flight.get("ExitTaxiwayId") or token.get("ExitTaxiwayId")
     dep_rwy = flight.get("depRunwayId") or token.get("depRunwayId")
-    stand_id = flight.get("standId")
-    if stand_id is None:
-        stand_id = token.get("apronId")
-    if stand_id is None or str(stand_id).strip() == "":
+    apron_segments = _apron_stay_segments_from_flight(flight)
+    stand_ids = [str(seg.get("standId") or "").strip() for seg in apron_segments]
+    stand_ids = [sid for sid in stand_ids if sid]
+    if not stand_ids:
         return []
+    stand_id = stand_ids[-1]
 
     td_point = (
         _arr_touchdown_point_xy(flight, layout, cell_size, str(arr_rwy)) if arr_rwy else None
@@ -1887,7 +1910,10 @@ def extract_point_to_paths(
         if arr_rwy
         else None
     )
-    apron_point = _apron_token_xy(layout, cell_size, str(stand_id))
+    apron_points = [_apron_token_xy(layout, cell_size, sid) for sid in stand_ids]
+    if any(p is None for p in apron_points):
+        return []
+    apron_point = apron_points[-1]
     dep_rw_lineup_point = (
         _dep_lineup_token_xy(
             layout,
@@ -1905,7 +1931,6 @@ def extract_point_to_paths(
         td_point is None
         or ret_on_rw is None
         or point_a is None
-        or apron_point is None
         or dep_rw_lineup_point is None
     ):
         return []
@@ -1977,13 +2002,72 @@ def extract_point_to_paths(
     wx, wy = td_point
     ax, ay = point_a
     ex, ey = rw_end
+    phased: List[Tuple[List[float], str, Optional[str]]] = [
+        ([float(wx), float(wy), float(ax), float(ay)], PHASE_LANDING, None)
+    ]
+    first_px, first_py = apron_points[0]  # type: ignore[index]
+    phased.append(([float(ax), float(ay), float(first_px), float(first_py)], PHASE_ARR_TAXI, stand_ids[0]))
+
+    # Intermediate apron transfers. Each previous stand gets a pushback segment, then
+    # the next stand becomes the Arr_taxi target. N=1 skips this block and preserves
+    # the historical six-leg shape below.
+    for i in range(max(0, len(stand_ids) - 1)):
+        from_xy = apron_points[i]
+        to_xy = apron_points[i + 1]
+        if from_xy is None or to_xy is None:
+            return []
+        fx, fy = float(from_xy[0]), float(from_xy[1])
+        tx, ty = float(to_xy[0]), float(to_xy[1])
+        _e_mid, dv_mid, path_mid, g_mid = _flight_route_impl(
+            layout,
+            cell_size,
+            pair_index,
+            reverse_cost,
+            merge_r,
+            taxiway_h,
+            info,
+            _flight_rw_dir_for_leg(flight, 2, layout),
+            RouteEndpoint(token_pixel_xy=(fx, fy)),
+            RouteEndpoint(token_pixel_xy=(tx, ty)),
+        )
+        if dv_mid or path_mid is None or g_mid is None or len(path_mid) < 2:
+            return []
+        pb_nodes_mid = _pushback_apron_plus_one_taxi_node_path(g_mid, path_mid)
+        if pb_nodes_mid is None or len(pb_nodes_mid) < 2:
+            return []
+        pb_i = int(pb_nodes_mid[-1])
+        if pb_i < 0 or pb_i >= len(g_mid.nodes):
+            return []
+        pb_mid = g_mid.nodes[pb_i]
+        pmx, pmy = float(pb_mid[0]), float(pb_mid[1])
+        phased.append(([fx, fy, pmx, pmy], PHASE_PUSHBACK, stand_ids[i]))
+        phased.append(([pmx, pmy, tx, ty], PHASE_ARR_TAXI, stand_ids[i + 1]))
+
+    phased.extend(
+        [
+            ([float(px), float(py), float(pbx), float(pby)], PHASE_PUSHBACK, stand_ids[-1]),
+            ([float(pbx), float(pby), float(hx), float(hy)], PHASE_DEP_TAXI, None),
+            ([float(hx), float(hy), float(lx), float(ly)], PHASE_HOLDING_LINEUP, None),
+            ([float(lx), float(ly), float(ex), float(ey)], PHASE_LINEUP_DEPARTURE, None),
+        ]
+    )
+    return phased
+
+
+def extract_point_to_paths(
+    flight: Dict[str, Any],
+    layout: Dict[str, Any],
+    cell_size: float,
+    *,
+    information: Optional[Dict[str, Any]] = None,
+) -> List[List[float]]:
+    """Backward-compatible coordinate-only wrapper for phased path-leg extraction."""
+
     return [
-        [float(wx), float(wy), float(ax), float(ay)],
-        [float(ax), float(ay), float(px), float(py)],
-        [float(px), float(py), float(pbx), float(pby)],
-        [float(pbx), float(pby), float(hx), float(hy)],
-        [float(hx), float(hy), float(lx), float(ly)],
-        [float(lx), float(ly), float(ex), float(ey)],
+        leg
+        for leg, _phase, _stand_id in _extract_point_to_path_legs(
+            flight, layout, cell_size, information=information
+        )
     ]
 
 
@@ -2502,8 +2586,10 @@ def prepare_flight_path(
     ``token_pixel_xy`` 끝점만으로 ``flight_route``, 역주행 패널티 구간이면 전체 ``edge_list`` 비움.
     재생용 세그먼트는 각 레그의 노드 경로를 ``_expand_geometry_from_graph_path``로 확장한다.
     """
-    paths = extract_point_to_paths(flight, layout, cell_size, information=information)
-    if not paths:
+    path_legs = _extract_point_to_path_legs(
+        flight, layout, cell_size, information=information
+    )
+    if not path_legs:
         return PreparedFlightPath()
     pair_index = _pair_index_from_layout_edge(layout)
     if not pair_index:
@@ -2528,16 +2614,20 @@ def prepare_flight_path(
     token_f = flight.get("token") if isinstance(flight.get("token"), dict) else {}
     arr_rwy_f = flight.get("arrRunwayId") or token_f.get("arrRunwayId")
 
-    for leg_i, leg in enumerate(paths):
+    for leg_i, (leg, phase, leg_stand_id) in enumerate(path_legs):
         if len(leg) < 4:
             return PreparedFlightPath()
-        phase = (
-            _EXTRACT_LEG_PHASES[leg_i] if leg_i < len(_EXTRACT_LEG_PHASES) else PHASE_DEP_TAXI
-        )
         sx, sy, ex, ey = float(leg[0]), float(leg[1]), float(leg[2]), float(leg[3])
         rw_leg = _flight_rw_dir_for_leg(flight, leg_i, layout)
+        flight_for_leg = flight
+        if leg_stand_id:
+            flight_for_leg = dict(flight)
+            tok_leg = dict(flight.get("token") if isinstance(flight.get("token"), dict) else {})
+            tok_leg["apronId"] = str(leg_stand_id)
+            flight_for_leg["token"] = tok_leg
+            flight_for_leg["standId"] = str(leg_stand_id)
         ap_ids = (
-            _apron_link_ids_for_assigned_stand(layout, flight)
+            _apron_link_ids_for_assigned_stand(layout, flight_for_leg)
             if str(phase) == PHASE_ARR_TAXI
             else set()
         )
@@ -2556,7 +2646,7 @@ def prepare_flight_path(
         forced_pb: Optional[Tuple[List[str], List[int], PathGraph]] = None
         if str(phase) == PHASE_PUSHBACK:
             forced_pb = _pushback_apron_plus_one_taxi_route(
-                flight,
+                flight_for_leg,
                 layout,
                 cell_size,
                 information,
@@ -2735,6 +2825,77 @@ def _snap_agent_to_first_segment(agent: Flight) -> None:
     agent.edge_s_along_px = float(t) * seg_len_px
 
 
+def _ensure_agent_apron_lists(agent: Flight) -> None:
+    n = max(1, len(agent.apron_segments), len(agent.dwell_sec_list) or 1)
+    if not agent.dwell_sec_list:
+        agent.dwell_sec_list = [float(agent.dwell_sec)] * n
+    while len(agent.dwell_sec_list) < n:
+        agent.dwell_sec_list.append(float(agent.dwell_sec_list[-1] if agent.dwell_sec_list else agent.dwell_sec))
+    for attr in (
+        "actual_apron_inblocks_abs_sec_list",
+        "actual_apron_offblocks_abs_sec_list",
+        "pushback_finished_abs_sec_list",
+        "dep_taxi_start_abs_sec_list",
+    ):
+        arr = getattr(agent, attr)
+        while len(arr) < n:
+            arr.append(None)
+
+
+def _agent_current_apron_index(agent: Flight) -> int:
+    _ensure_agent_apron_lists(agent)
+    n = max(1, len(agent.dwell_sec_list))
+    return max(0, min(int(agent.current_apron_segment_idx), n - 1))
+
+
+def _agent_set_current_apron_index(agent: Flight, idx: int) -> None:
+    _ensure_agent_apron_lists(agent)
+    n = max(1, len(agent.dwell_sec_list))
+    agent.current_apron_segment_idx = max(0, min(int(idx), n - 1))
+    if agent.apron_segments:
+        sid = agent.apron_segments[agent.current_apron_segment_idx].get("standId")
+        agent.apron_stand_id = str(sid).strip() if sid is not None and str(sid).strip() else agent.apron_stand_id
+    ci = agent.current_apron_segment_idx
+    if ci < len(agent.actual_apron_inblocks_abs_sec_list):
+        agent.actual_apron_inblocks_abs_sec = agent.actual_apron_inblocks_abs_sec_list[ci]
+    if ci < len(agent.dep_taxi_start_abs_sec_list):
+        agent.dep_taxi_start_abs_sec = agent.dep_taxi_start_abs_sec_list[ci]
+        if agent.dep_taxi_start_abs_sec is not None and agent.eldt_anchor_sec is not None:
+            agent.dep_taxi_start_sim_time = float(agent.dep_taxi_start_abs_sec) - float(agent.eldt_anchor_sec)
+        else:
+            agent.dep_taxi_start_sim_time = None
+    if ci < len(agent.actual_apron_offblocks_abs_sec_list):
+        agent.actual_apron_offblocks_abs_sec = agent.actual_apron_offblocks_abs_sec_list[ci]
+
+
+def _agent_stamp_current_inblocks(agent: Flight, t_abs: float) -> None:
+    _ensure_agent_apron_lists(agent)
+    idx = _agent_current_apron_index(agent)
+    if agent.actual_apron_inblocks_abs_sec_list[idx] is None:
+        agent.actual_apron_inblocks_abs_sec_list[idx] = float(t_abs)
+    dwell = float(agent.dwell_sec_list[idx] if idx < len(agent.dwell_sec_list) else agent.dwell_sec)
+    gate = float(agent.actual_apron_inblocks_abs_sec_list[idx]) + dwell
+    agent.dep_taxi_start_abs_sec_list[idx] = gate
+    _agent_set_current_apron_index(agent, idx)
+
+
+def _agent_stamp_current_offblocks(agent: Flight, t_abs: float) -> None:
+    _ensure_agent_apron_lists(agent)
+    idx = _agent_current_apron_index(agent)
+    if agent.actual_apron_offblocks_abs_sec_list[idx] is None:
+        agent.actual_apron_offblocks_abs_sec_list[idx] = float(t_abs)
+    _agent_set_current_apron_index(agent, idx)
+
+
+def _agent_stamp_current_pushback_finished(agent: Flight, t_abs: float) -> None:
+    _ensure_agent_apron_lists(agent)
+    idx = _agent_current_apron_index(agent)
+    if agent.pushback_finished_abs_sec_list[idx] is None:
+        agent.pushback_finished_abs_sec_list[idx] = float(t_abs)
+    if idx >= len(agent.dwell_sec_list) - 1:
+        agent.pushback_finished_abs_sec = float(agent.pushback_finished_abs_sec_list[idx])
+
+
 def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None) -> None:
     old_ph = str(agent.edge_phases[0]) if agent.edge_phases else ""
     eid = agent.edge_ids.pop(0)
@@ -2785,24 +2946,18 @@ def _finish_edge_segment(agent: Flight, *, sim_time_abs: Optional[float] = None)
         sim_time_abs is not None
         and old_ph == PHASE_ARR_TAXI
         and new_ph in (PHASE_PUSHBACK, PHASE_DEP_TAXI)
-        and agent.actual_apron_inblocks_abs_sec is None
     ):
         # Fallback EIBT if stand token / radius never matched during Arr_taxi.
-        t_in = float(sim_time_abs)
-        agent.actual_apron_inblocks_abs_sec = t_in
-        agent.dep_taxi_start_abs_sec = t_in + float(agent.dwell_sec)
-        if agent.eldt_anchor_sec is not None:
-            agent.dep_taxi_start_sim_time = float(agent.dep_taxi_start_abs_sec) - float(
-                agent.eldt_anchor_sec
-            )
+        _agent_stamp_current_inblocks(agent, float(sim_time_abs))
 
     if (
         sim_time_abs is not None
         and old_ph == PHASE_PUSHBACK
-        and new_ph == PHASE_DEP_TAXI
-        and agent.pushback_finished_abs_sec is None
+        and new_ph in (PHASE_ARR_TAXI, PHASE_DEP_TAXI)
     ):
-        agent.pushback_finished_abs_sec = float(sim_time_abs)
+        _agent_stamp_current_pushback_finished(agent, float(sim_time_abs))
+        if new_ph == PHASE_ARR_TAXI:
+            _agent_set_current_apron_index(agent, _agent_current_apron_index(agent) + 1)
 
 
 def move_agent(
@@ -3421,6 +3576,59 @@ def _dwell_sec_from_flight(fobj: Dict[str, Any]) -> float:
     return dwell_sec
 
 
+def _apron_stay_segments_from_flight(fobj: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Normalized logical apron stays for simulation.
+
+    Adjacent same-stand segments are merged so a visual split without stand move remains N=1.
+    """
+
+    tok = fobj.get("token") if isinstance(fobj.get("token"), dict) else {}
+    fallback_sid = (
+        fobj.get("depApronId")
+        or fobj.get("standId")
+        or fobj.get("apronId")
+        or tok.get("apronId")
+        or fobj.get("arrApronId")
+    )
+    fallback_sid_s = str(fallback_sid).strip() if fallback_sid is not None else ""
+    raw = fobj.get("apronStaySegments")
+    out: List[Dict[str, Any]] = []
+    if isinstance(raw, list):
+        for seg in raw:
+            if not isinstance(seg, dict):
+                continue
+            sibt = _safe_float(seg.get("sibtMin"), float("nan"))
+            sobt = _safe_float(seg.get("sobtMin"), float("nan"))
+            if not (math.isfinite(sibt) and math.isfinite(sobt) and sobt > sibt):
+                continue
+            sid_raw = seg.get("standId") or fallback_sid_s
+            sid = str(sid_raw).strip() if sid_raw is not None else ""
+            out.append({"standId": sid or None, "sibtMin": float(sibt), "sobtMin": float(sobt)})
+    if not out:
+        sibt = _safe_float(fobj.get("sibtMin"), _safe_float(fobj.get("timeMin"), 0.0))
+        sobt = _safe_float(fobj.get("sobtMin"), float("nan"))
+        if not math.isfinite(sobt) or sobt <= sibt:
+            sobt = float(sibt) + max(0.0, _dwell_sec_from_flight(fobj) / 60.0)
+        out = [{"standId": fallback_sid_s or None, "sibtMin": float(sibt), "sobtMin": float(sobt)}]
+    out.sort(key=lambda s: (float(s.get("sibtMin", 0.0)), float(s.get("sobtMin", 0.0))))
+    merged: List[Dict[str, Any]] = []
+    for seg in out:
+        sid = str(seg.get("standId") or "")
+        if merged and str(merged[-1].get("standId") or "") == sid and float(seg["sibtMin"]) <= float(merged[-1]["sobtMin"]) + 1e-9:
+            merged[-1]["sobtMin"] = max(float(merged[-1]["sobtMin"]), float(seg["sobtMin"]))
+        else:
+            merged.append(dict(seg))
+    return merged
+
+
+def _apron_stay_dwell_sec_list(fobj: Dict[str, Any]) -> List[float]:
+    segs = _apron_stay_segments_from_flight(fobj)
+    vals: List[float] = []
+    for seg in segs:
+        vals.append(max(0.0, (float(seg["sobtMin"]) - float(seg["sibtMin"])) * 60.0))
+    return vals or [_stand_dwell_sec_from_flight(fobj)]
+
+
 def _stand_dwell_sec_from_flight(fobj: Dict[str, Any]) -> float:
     """
     Seconds on stand for ``dep_taxi_start`` gating and nominal ``EOBT`` = ``EIBT`` + this value.
@@ -3655,6 +3863,9 @@ def _build_schedule_row(
     actual_apron_inblocks_abs_sec: Optional[float] = None,
     actual_apron_offblocks_abs_sec: Optional[float] = None,
     pushback_finished_abs_sec: Optional[float] = None,
+    actual_apron_inblocks_abs_sec_list: Optional[List[Optional[float]]] = None,
+    actual_apron_offblocks_abs_sec_list: Optional[List[Optional[float]]] = None,
+    pushback_finished_abs_sec_list: Optional[List[Optional[float]]] = None,
     path_completed_abs_sec: Optional[float] = None,
     information: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -3668,6 +3879,7 @@ def _build_schedule_row(
     when that chain is available.
     """
     dwell_sec = _stand_dwell_sec_from_flight(fobj)
+    apron_segments = _apron_stay_segments_from_flight(fobj)
 
     eldt_sec = (
         int(eldt_schedule_sec)
@@ -3706,6 +3918,31 @@ def _build_schedule_row(
         eobt_sec = float(actual_apron_offblocks_abs_sec)
     elif eibt_sec is not None:
         eobt_sec = float(eibt_sec) + float(dwell_sec)
+    dwell_sec_list = _apron_stay_dwell_sec_list(fobj)
+    eibt_vals: List[Optional[float]] = list(actual_apron_inblocks_abs_sec_list or [])
+    eobt_vals: List[Optional[float]] = list(actual_apron_offblocks_abs_sec_list or [])
+    epush_vals: List[Optional[float]] = list(pushback_finished_abs_sec_list or [])
+    n_ap = max(len(apron_segments), len(dwell_sec_list), len(eibt_vals), len(eobt_vals), len(epush_vals), 1)
+    while len(eibt_vals) < n_ap:
+        eibt_vals.append(None)
+    while len(eobt_vals) < n_ap:
+        eobt_vals.append(None)
+    while len(epush_vals) < n_ap:
+        epush_vals.append(None)
+    while len(dwell_sec_list) < n_ap:
+        dwell_sec_list.append(float(dwell_sec_list[-1] if dwell_sec_list else dwell_sec))
+    for i in range(n_ap):
+        if eobt_vals[i] is None and eibt_vals[i] is not None:
+            eobt_vals[i] = float(eibt_vals[i]) + float(dwell_sec_list[i])
+    first_eibt = next((float(x) for x in eibt_vals if x is not None), None)
+    last_eobt = next((float(x) for x in reversed(eobt_vals) if x is not None), None)
+    last_epush = next((float(x) for x in reversed(epush_vals) if x is not None), None)
+    if eibt_sec is None and first_eibt is not None:
+        eibt_sec = first_eibt
+    if last_eobt is not None:
+        eobt_sec = last_eobt
+    if pushback_finished_abs_sec is None and last_epush is not None:
+        pushback_finished_abs_sec = last_epush
     if eobt_sec is not None and t_dep2 is not None:
         e_hold_sec = float(eobt_sec) + float(t_dep2)
     if e_hold_sec is not None and t_dep3 is not None:
@@ -3728,6 +3965,20 @@ def _build_schedule_row(
         else None
     )
 
+    def _list_secs(vals: Optional[List[Optional[float]]]) -> List[Optional[int]]:
+        if not vals:
+            return []
+        out_l: List[Optional[int]] = []
+        for v in vals:
+            out_l.append(_sim_sec_optional(v) if v is not None else None)
+        return out_l
+
+    sibt_list = [_schedule_s_sec({"sibtMin": seg.get("sibtMin")}, "sibtMin") for seg in apron_segments]
+    sobt_list = [_schedule_s_sec({"sobtMin": seg.get("sobtMin")}, "sobtMin") for seg in apron_segments]
+    eibt_list = _list_secs(eibt_vals)
+    eobt_list = _list_secs(eobt_vals)
+    epush_list = _list_secs(epush_vals)
+
     return {
         "flight_id": fid,
         "reg": _flight_opt_str(fobj, "reg"),
@@ -3743,6 +3994,9 @@ def _build_schedule_row(
         "SIBT_dt": _sec_to_datetime_str(_sf(sibt_s), base_date),
         "SOBT": sobt_s,
         "SOBT_dt": _sec_to_datetime_str(_sf(sobt_s), base_date),
+        "STANDS": [str(seg.get("standId")) if seg.get("standId") is not None else None for seg in apron_segments],
+        "SIBT_LIST": sibt_list,
+        "SOBT_LIST": sobt_list,
         "STOT": stot_s,
         "STOT_dt": _sec_to_datetime_str(_sf(stot_s), base_date),
         "ELDT": eldt_sec,
@@ -3759,12 +4013,15 @@ def _build_schedule_row(
         "EXIT_RUNWAY_dt": _sec_to_datetime_str(exit_runway_abs_sec, base_date),
         "EIBT": _sim_sec_optional(eibt_sec) if eibt_sec is not None else None,
         "EIBT_dt": _sec_to_datetime_str(eibt_sec, base_date),
+        "EIBT_LIST": eibt_list,
         "E_PUSH_FINISHED": _sim_sec_optional(pushback_finished_abs_sec)
         if pushback_finished_abs_sec is not None
         else None,
         "E_PUSH_FINISHED_dt": _sec_to_datetime_str(pushback_finished_abs_sec, base_date),
+        "E_PUSH_FINISHED_LIST": epush_list,
         "EOBT": _sim_sec_optional(eobt_sec) if eobt_sec is not None else None,
         "EOBT_dt": _sec_to_datetime_str(eobt_sec, base_date),
+        "EOBT_LIST": eobt_list,
         "E_HOLD": _sim_sec_optional(e_hold_sec) if e_hold_sec is not None else None,
         "E_HOLD_dt": _sec_to_datetime_str(e_hold_sec, base_date),
         "E_LINEUP": _sim_sec_optional(e_lineup_sec) if e_lineup_sec is not None else None,
@@ -4128,6 +4385,11 @@ def _edge_direction_mode_from_graph_rec(rec: DirectedEdgeRecord) -> str:
 
 
 def _flight_apron_stand_id_from_fobj(fobj: Dict[str, Any]) -> Optional[str]:
+    segs = _apron_stay_segments_from_flight(fobj)
+    if segs:
+        raw_last = segs[-1].get("standId")
+        if raw_last is not None and str(raw_last).strip():
+            return str(raw_last).strip()
     tok = fobj.get("token") if isinstance(fobj.get("token"), dict) else {}
     raw = (
         fobj.get("standId")
@@ -5231,7 +5493,9 @@ def _agent_occupies_apron_stand_slot(
     st0 = control_state.agent_states.get(ag.id)
     if st0 is not None and _agent_deadlock_ghost_at_time(st0, tt):
         return None
-    ob = ag.actual_apron_offblocks_abs_sec
+    _ensure_agent_apron_lists(ag)
+    idx = _agent_current_apron_index(ag)
+    ob = ag.actual_apron_offblocks_abs_sec_list[idx] if idx < len(ag.actual_apron_offblocks_abs_sec_list) else ag.actual_apron_offblocks_abs_sec
     if ob is not None and tt + 1e-9 >= float(ob):
         return None
     if not ag.edge_phases or not ag.edge_ids:
@@ -5251,7 +5515,8 @@ def _agent_occupies_apron_stand_slot(
         ):
             return None
         return sid
-    if ag.actual_apron_inblocks_abs_sec is not None:
+    ib = ag.actual_apron_inblocks_abs_sec_list[idx] if idx < len(ag.actual_apron_inblocks_abs_sec_list) else ag.actual_apron_inblocks_abs_sec
+    if ib is not None:
         return sid
     return None
 
@@ -5267,7 +5532,9 @@ def _try_stamp_actual_apron_inblocks_from_stand_position(
     agents: List[Flight],
 ) -> None:
     """EIBT: first time near stand token on Arr_taxi with negligible speed (any link except pure runway)."""
-    if ag.actual_apron_inblocks_abs_sec is not None:
+    _ensure_agent_apron_lists(ag)
+    idx = _agent_current_apron_index(ag)
+    if idx < len(ag.actual_apron_inblocks_abs_sec_list) and ag.actual_apron_inblocks_abs_sec_list[idx] is not None:
         return
     sid = str(ag.apron_stand_id or "").strip()
     if not sid:
@@ -5299,13 +5566,7 @@ def _try_stamp_actual_apron_inblocks_from_stand_position(
         ag, control_state, agents, float(t_abs)
     ):
         return
-    t_in = float(t_abs)
-    ag.actual_apron_inblocks_abs_sec = t_in
-    ag.dep_taxi_start_abs_sec = t_in + float(ag.dwell_sec)
-    if ag.eldt_anchor_sec is not None:
-        ag.dep_taxi_start_sim_time = float(ag.dep_taxi_start_abs_sec) - float(
-            ag.eldt_anchor_sec
-        )
+    _agent_stamp_current_inblocks(ag, float(t_abs))
 
 
 def refresh_agent_edge_fsm(agents: Iterable[Flight]) -> None:
@@ -5520,13 +5781,23 @@ def _stand_pushback_clearance_cooldown_active(
     for oth in agents:
         if str(oth.id) == ex:
             continue
-        if str(oth.apron_stand_id or "").strip() != sid:
-            continue
-        ob = oth.actual_apron_offblocks_abs_sec
-        if ob is None:
-            continue
-        if t + 1e-9 < float(ob) + delay:
-            return True
+        _ensure_agent_apron_lists(oth)
+        matched = False
+        for i, seg in enumerate(oth.apron_segments or []):
+            if str(seg.get("standId") or "").strip() != sid:
+                continue
+            ob = (
+                oth.actual_apron_offblocks_abs_sec_list[i]
+                if i < len(oth.actual_apron_offblocks_abs_sec_list)
+                else None
+            )
+            if ob is not None and t + 1e-9 < float(ob) + delay:
+                return True
+            matched = True
+        if not matched and str(oth.apron_stand_id or "").strip() == sid:
+            ob = oth.actual_apron_offblocks_abs_sec
+            if ob is not None and t + 1e-9 < float(ob) + delay:
+                return True
     return False
 
 
@@ -7594,7 +7865,10 @@ def run_simulation(
                 anchor_use = float(anchor_raw) if anchor_raw is not None else None
             rot_opt = _arr_rot_sec_from_prep(prep, ppm)
             rot_sec = float(rot_opt) if rot_opt is not None else 0.0
-            dwell_s = _stand_dwell_sec_from_flight(fobj if isinstance(fobj, dict) else {})
+            _fobj_dict = fobj if isinstance(fobj, dict) else {}
+            _apron_segments = _apron_stay_segments_from_flight(_fobj_dict)
+            _dwell_list = _apron_stay_dwell_sec_list(_fobj_dict)
+            dwell_s = float(_dwell_list[-1] if _dwell_list else _stand_dwell_sec_from_flight(_fobj_dict))
             _arr_rid = str(arr_rwy_o).strip() if arr_rwy_o else ""
             dep_rwy_o = fobj.get("depRunwayId") or token_o.get("depRunwayId")
             _dep_rid = str(dep_rwy_o).strip() if dep_rwy_o else ""
@@ -7611,9 +7885,18 @@ def run_simulation(
                 eldt_anchor_sec=anchor_use,
                 eldt_raw_sec=float(anchor_raw) if anchor_raw is not None else None,
                 dwell_sec=float(dwell_s),
-                apron_stand_id=_flight_apron_stand_id_from_fobj(
-                    fobj if isinstance(fobj, dict) else {}
+                apron_stand_id=(
+                    str(_apron_segments[0].get("standId")).strip()
+                    if _apron_segments and _apron_segments[0].get("standId") is not None and str(_apron_segments[0].get("standId")).strip()
+                    else _flight_apron_stand_id_from_fobj(_fobj_dict)
                 ),
+                apron_segments=list(_apron_segments),
+                current_apron_segment_idx=0,
+                dwell_sec_list=list(_dwell_list),
+                actual_apron_inblocks_abs_sec_list=[None] * max(1, len(_dwell_list)),
+                actual_apron_offblocks_abs_sec_list=[None] * max(1, len(_dwell_list)),
+                pushback_finished_abs_sec_list=[None] * max(1, len(_dwell_list)),
+                dep_taxi_start_abs_sec_list=[None] * max(1, len(_dwell_list)),
                 segment_v0_ms=list(v0_rem),
                 segment_accel_ms2=list(acc_rem),
                 segment_path_types=path_rem,
@@ -7842,19 +8125,36 @@ def run_simulation(
                 if ag.segment_path_types and len(ag.segment_path_types) == len(ag.edge_ids)
                 else ""
             )
+            _ensure_agent_apron_lists(ag)
+            _ai = _agent_current_apron_index(ag)
+            _ib_cur = (
+                ag.actual_apron_inblocks_abs_sec_list[_ai]
+                if _ai < len(ag.actual_apron_inblocks_abs_sec_list)
+                else ag.actual_apron_inblocks_abs_sec
+            )
+            _ob_cur = (
+                ag.actual_apron_offblocks_abs_sec_list[_ai]
+                if _ai < len(ag.actual_apron_offblocks_abs_sec_list)
+                else ag.actual_apron_offblocks_abs_sec
+            )
+            _gate_cur = (
+                ag.dep_taxi_start_abs_sec_list[_ai]
+                if _ai < len(ag.dep_taxi_start_abs_sec_list)
+                else ag.dep_taxi_start_abs_sec
+            )
             if (
-                ag.actual_apron_offblocks_abs_sec is None
-                and ag.actual_apron_inblocks_abs_sec is not None
+                _ob_cur is None
+                and _ib_cur is not None
                 and ag.edge_phases
                 and (
                     str(ag.edge_phases[0]) == PHASE_PUSHBACK
                     or (str(ag.edge_phases[0]) == PHASE_DEP_TAXI and _pt_eobt == "apron_link")
                 )
-                and ag.dep_taxi_start_abs_sec is not None
-                and float(current_time_abs) > float(ag.dep_taxi_start_abs_sec) + 1e-9
+                and _gate_cur is not None
+                and float(current_time_abs) > float(_gate_cur) + 1e-9
                 and abs(float(ag.velocity_ms)) > 0.01
             ):
-                ag.actual_apron_offblocks_abs_sec = float(current_time_abs)
+                _agent_stamp_current_offblocks(ag, float(current_time_abs))
             st_h = control_state.agent_states.get(ag.id)
             _gh = (
                 _agent_deadlock_ghost_at_time(st_h, float(current_time_abs))
@@ -7977,12 +8277,23 @@ def run_simulation(
             has_landing_leg=any(str(p) == PHASE_LANDING for p in prep_i.segment_phases),
             has_lineup_departure_leg=_flight_path_has_lineup_departure(prep_i),
             actual_apron_inblocks_abs_sec=(
-                ag.actual_apron_inblocks_abs_sec if ag else None
+                next((x for x in ag.actual_apron_inblocks_abs_sec_list if x is not None), None)
+                if ag and ag.actual_apron_inblocks_abs_sec_list
+                else (ag.actual_apron_inblocks_abs_sec if ag else None)
             ),
             actual_apron_offblocks_abs_sec=(
-                ag.actual_apron_offblocks_abs_sec if ag else None
+                next((x for x in reversed(ag.actual_apron_offblocks_abs_sec_list) if x is not None), None)
+                if ag and ag.actual_apron_offblocks_abs_sec_list
+                else (ag.actual_apron_offblocks_abs_sec if ag else None)
             ),
-            pushback_finished_abs_sec=(ag.pushback_finished_abs_sec if ag else None),
+            pushback_finished_abs_sec=(
+                next((x for x in reversed(ag.pushback_finished_abs_sec_list) if x is not None), None)
+                if ag and ag.pushback_finished_abs_sec_list
+                else (ag.pushback_finished_abs_sec if ag else None)
+            ),
+            actual_apron_inblocks_abs_sec_list=(ag.actual_apron_inblocks_abs_sec_list if ag else None),
+            actual_apron_offblocks_abs_sec_list=(ag.actual_apron_offblocks_abs_sec_list if ag else None),
+            pushback_finished_abs_sec_list=(ag.pushback_finished_abs_sec_list if ag else None),
             path_completed_abs_sec=(
                 ag.path_completed_abs_sec if ag is not None else None
             ),
