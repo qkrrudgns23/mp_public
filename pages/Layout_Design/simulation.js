@@ -1,3 +1,274 @@
+      const remoteNameInputIdle = document.getElementById('remoteName');
+      if (remoteNameInputIdle && rm === 'remote' && !(state.selectedObject && state.selectedObject.type === 'remote')) remoteNameInputIdle.value = '';
+      const taxiwayNameInputIdle = document.getElementById('taxiwayName');
+      if (taxiwayNameInputIdle && isPathLayoutMode(rm) && !(state.selectedObject && state.selectedObject.type === 'taxiway')) taxiwayNameInputIdle.value = '';
+      const apronLinkNameInput = document.getElementById('apronLinkName');
+      if (apronLinkNameInput && rm === 'apronTaxiway') apronLinkNameInput.value = '';
+      const edgeNameInput = document.getElementById('edgeName');
+      if (edgeNameInput && rm === 'edge') edgeNameInput.value = '';
+      const holdingPointNameInput = document.getElementById('holdingPointName');
+      if (holdingPointNameInput && rm === 'holdingPoint') holdingPointNameInput.value = getDefaultHoldingPointLabel();
+    }
+    syncDrawToggleButton('btnTaxiwayDraw', !!state.taxiwayDrawingId);
+    syncDrawToggleButton('btnApronLinkDraw', !!state.apronLinkDrawing);
+    syncDrawToggleButton('btnPbbDraw', !!state.pbbDrawing);
+    syncDrawToggleButton('btnRemoteDraw', !!state.remoteDrawing);
+    syncDrawToggleButton('btnTempStandDraw', !!state.tempStandDrawing);
+    syncDrawToggleButton('btnHoldingPointDraw', !!state.holdingPointDrawing);
+    syncDrawToggleButton('btnMarkerDraw', !!state.markerDrawing);
+    renderObjectList();
+  }
+
+  function syncStateFromPanel() {
+    var el = function(id) { return document.getElementById(id); };
+    if (el('gridCellSize')) CELL_SIZE = Math.max(5, Number(el('gridCellSize').value) || 5);
+    if (el('gridCols')) GRID_COLS = Math.max(5, Math.min(1000, parseInt(el('gridCols').value, 10) || 200));
+    if (el('gridRows')) GRID_ROWS = Math.max(5, Math.min(1000, parseInt(el('gridRows').value, 10) || 200));
+    if (state.layoutImageOverlay) {
+      state.layoutImageOverlay.opacity = clampLayoutImageOpacity(el('gridLayoutImageOpacity') ? el('gridLayoutImageOpacity').value : state.layoutImageOverlay.opacity);
+      state.layoutImageOverlay.widthM = clampLayoutImageSize(el('gridLayoutImageWidthM') ? el('gridLayoutImageWidthM').value : state.layoutImageOverlay.widthM, state.layoutImageOverlay.widthM);
+      state.layoutImageOverlay.heightM = clampLayoutImageSize(el('gridLayoutImageHeightM') ? el('gridLayoutImageHeightM').value : state.layoutImageOverlay.heightM, state.layoutImageOverlay.heightM);
+      state.layoutImageOverlay.topLeftCol = clampLayoutImagePoint(el('gridLayoutImageCol') ? el('gridLayoutImageCol').value : state.layoutImageOverlay.topLeftCol, state.layoutImageOverlay.topLeftCol);
+      state.layoutImageOverlay.topLeftRow = clampLayoutImagePoint(el('gridLayoutImageRow') ? el('gridLayoutImageRow').value : state.layoutImageOverlay.topLeftRow, state.layoutImageOverlay.topLeftRow);
+    }
+    var t = getCurrentTerminal();
+    if (t) {
+      if (el('terminalName')) {
+        const rawTn = (el('terminalName').value || '').trim();
+        if (rawTn && findDuplicateLayoutName('terminal', t.id, rawTn)) {
+          alertDuplicateLayoutName();
+          el('terminalName').value = t.name || '';
+        } else {
+          t.name = rawTn || t.name;
+        }
+      }
+      if (el('buildingType')) t.buildingType = normalizeBuildingType(el('buildingType').value || t.buildingType);
+      if (el('terminalFloors')) t.floors = Math.max(1, parseInt(el('terminalFloors').value, 10) || 1);
+      if (el('terminalFloorToFloor')) t.floorToFloor = Math.max(0.5, Number(el('terminalFloorToFloor').value) || 4);
+      t.floorHeight = (t.floors || 1) * (t.floorToFloor || 4);
+      if (el('terminalDepartureCapacity')) t.departureCapacity = Math.max(0, parseInt(el('terminalDepartureCapacity').value, 10) || 0);
+      if (el('terminalArrivalCapacity')) t.arrivalCapacity = Math.max(0, parseInt(el('terminalArrivalCapacity').value, 10) || 0);
+    }
+    if (state.selectedObject && state.selectedObject.type === 'pbb') {
+      var pbb = state.selectedObject.obj;
+      if (el('standName')) {
+        const rawSn = (el('standName').value || '').trim();
+        if (rawSn && findDuplicateLayoutName('pbb', pbb.id, rawSn)) {
+          alertDuplicateLayoutName();
+          el('standName').value = pbb.name || '';
+        } else {
+          pbb.name = rawSn;
+        }
+      }
+      applyUnifiedStandConstraintFromPanelToObject(pbb, 'standIcaoCategories', 'standAircraftAccess');
+    }
+    if (state.selectedObject && state.selectedObject.type === 'remote') {
+      var st = state.selectedObject.obj;
+      if (el('remoteName')) {
+        const rawRn = (el('remoteName').value || '').trim();
+        if (rawRn && findDuplicateLayoutName('remote', st.id, rawRn)) {
+          alertDuplicateLayoutName();
+          el('remoteName').value = st.name || '';
+        } else {
+          st.name = rawRn;
+        }
+      }
+      applyUnifiedStandConstraintFromPanelToObject(st, 'remoteIcaoCategories', 'remoteAircraftAccess');
+      const accWrap = document.getElementById('remoteTerminalAccess');
+      if (accWrap) {
+        const checks = accWrap.querySelectorAll('.remote-term-check');
+        const allowed = [];
+        checks.forEach(function(ch) {
+          if (ch.checked) {
+            const id = ch.getAttribute('data-item-id');
+            if (id) allowed.push(id);
+          }
+        });
+        st.allowedTerminals = allowed;
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'tempStand') {
+      var tst = state.selectedObject.obj;
+      if (el('tempStandName')) {
+        const rawTn = (el('tempStandName').value || '').trim();
+        if (rawTn && findDuplicateLayoutName('tempStand', tst.id, rawTn)) {
+          alertDuplicateLayoutName();
+          el('tempStandName').value = tst.name || '';
+        } else {
+          tst.name = rawTn;
+        }
+      }
+      applyUnifiedStandConstraintFromPanelToObject(tst, 'tempStandIcaoCategories', 'tempStandAircraftAccess');
+      const tempAccWrap = document.getElementById('tempStandTerminalAccess');
+      if (tempAccWrap) {
+        const checks = tempAccWrap.querySelectorAll('.remote-term-check');
+        const allowed = [];
+        checks.forEach(function(ch) {
+          if (ch.checked) {
+            const id = ch.getAttribute('data-item-id');
+            if (id) allowed.push(id);
+          }
+        });
+        tst.allowedTerminals = allowed;
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'holdingPoint') {
+      var hpo = state.selectedObject.obj;
+      if (el('holdingPointName')) {
+        const rawHp = (el('holdingPointName').value || '').trim();
+        if (rawHp && findDuplicateLayoutName('holdingPoint', hpo.id, rawHp)) {
+          alertDuplicateLayoutName();
+          el('holdingPointName').value = hpo.name || '';
+        } else {
+          hpo.name = rawHp;
+        }
+      }
+    }
+    if (state.selectedObject && state.selectedObject.type === 'taxiway') {
+      var tw = state.selectedObject.obj;
+      if (el('taxiwayName')) {
+        const rawTw = (el('taxiwayName').value || '').trim();
+        if (rawTw && findDuplicateLayoutName('taxiway', tw.id, rawTw)) {
+          alertDuplicateLayoutName();
+          el('taxiwayName').value = tw.name || '';
+        } else {
+          tw.name = rawTw;
+        }
+      }
+      if (el('taxiwayWidth')) {
+        const pathType = tw.pathType || 'taxiway';
+        const fb = pathType === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pathType === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+        tw.width = clampTaxiwayWidthM(pathType, el('taxiwayWidth').value, fb);
+      }
+      if (document.getElementById('pathPavement')) {
+        tw.pavement = getPathPavementFromPanelForPathType(tw.pathType || 'taxiway');
+      }
+      if (el('taxiwayMaxExitVel')) {
+        const mv = Number(el('taxiwayMaxExitVel').value);
+        if (tw.pathType === 'runway_exit') tw.maxExitVelocity = isFinite(mv) && mv > 0 ? mv : null;
+        else delete tw.maxExitVelocity;
+      }
+      if (el('taxiwayMinExitVel') && tw.pathType === 'runway_exit') {
+        const mv2 = Number(el('taxiwayMinExitVel').value);
+        let v = isFinite(mv2) && mv2 > 0 ? mv2 : 15;
+        if (typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && v > tw.maxExitVelocity) v = tw.maxExitVelocity;
+        tw.minExitVelocity = v;
+        tw.allowedRwDirections = getRunwayExitAllowedDirectionsFromPanel();
+      } else if (tw.pathType !== 'runway_exit') {
+        delete tw.minExitVelocity;
+        delete tw.allowedRwDirections;
+      }
+      if (el('taxiwayDirectionMode')) {
+        let dirVal = el('taxiwayDirectionMode').value || '';
+        if (tw.pathType === 'runway') {
+          runwayReverseVerticesIfDirectionChanged(tw, dirVal);
+          tw.direction = (dirVal === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+        } else tw.direction = dirVal || 'both';
+      }
+      if (el('taxiwayPathTypeKind')) {
+        const ptCur = tw.pathType || 'taxiway';
+        if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
+          const kind = String(el('taxiwayPathTypeKind').value || 'normal');
+          tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+        }
+      }
+      if (el('taxiwayAvgMoveVelocity')) {
+        var v = Number(el('taxiwayAvgMoveVelocity').value);
+        tw.avgMoveVelocity = (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
+      }
+      if (el('runwayMinArrVelocity')) {
+        const mav = Number(el('runwayMinArrVelocity').value);
+        if (tw.pathType === 'runway') {
+          tw.minArrVelocity = (typeof mav === 'number' && isFinite(mav) && mav > 0) ? Math.max(1, Math.min(150, mav)) : 15;
+        } else {
+          delete tw.minArrVelocity;
+        }
+      }
+      if (tw.pathType === 'runway') {
+        const cwEl = el('runwayLineupDistM_CW');
+        const ccwEl = el('runwayLineupDistM_CCW');
+        const lxCw = cwEl ? Number(cwEl.value) : NaN;
+        const lxCcw = ccwEl ? Number(ccwEl.value) : NaN;
+        tw.lineupDistM_CW = (typeof lxCw === 'number' && isFinite(lxCw) && lxCw >= 0) ? lxCw : 0;
+        tw.lineupDistM_CCW = (typeof lxCcw === 'number' && isFinite(lxCcw) && lxCcw >= 0) ? lxCcw : 0;
+        tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
+      } else if (tw.pathType !== 'runway') {
+        delete tw.lineupDistM;
+        delete tw.lineupDistM_CW;
+        delete tw.lineupDistM_CCW;
+      }
+      if (tw.pathType === 'runway') {
+        const startDisp = Number(el('runwayStartDisplacedThresholdM') ? el('runwayStartDisplacedThresholdM').value : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
+        const startBlast = Number(el('runwayStartBlastPadM') ? el('runwayStartBlastPadM').value : RUNWAY_START_BLAST_PAD_DEFAULT_M);
+        const endDisp = Number(el('runwayEndDisplacedThresholdM') ? el('runwayEndDisplacedThresholdM').value : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
+        const endBlast = Number(el('runwayEndBlastPadM') ? el('runwayEndBlastPadM').value : RUNWAY_END_BLAST_PAD_DEFAULT_M);
+        tw.startDisplacedThresholdM = (typeof startDisp === 'number' && isFinite(startDisp) && startDisp >= 0) ? startDisp : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
+        tw.startBlastPadM = (typeof startBlast === 'number' && isFinite(startBlast) && startBlast >= 0) ? startBlast : RUNWAY_START_BLAST_PAD_DEFAULT_M;
+        tw.endDisplacedThresholdM = (typeof endDisp === 'number' && isFinite(endDisp) && endDisp >= 0) ? endDisp : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
+        tw.endBlastPadM = (typeof endBlast === 'number' && isFinite(endBlast) && endBlast >= 0) ? endBlast : RUNWAY_END_BLAST_PAD_DEFAULT_M;
+      } else {
+        delete tw.startDisplacedThresholdM;
+        delete tw.startBlastPadM;
+        delete tw.endDisplacedThresholdM;
+        delete tw.endBlastPadM;
+      }
+    }
+  }
+
+  function syncSettingsPaneToMode() {
+    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
+    if (layoutModeTabs) {
+      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+      });
+    }
+    document.querySelectorAll('.settings-pane').forEach(el => { el.style.display = 'none'; });
+    const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
+    const pane = document.getElementById('settings-' + paneKey);
+    if (pane) pane.style.display = 'block';
+    if (mode === 'marker') {
+      syncMarkerFlightAircraftRowVisibility();
+      syncMarkerIslandWidthRowVisibility();
+      syncMarkerNavaidRowVisibility();
+    }
+    if (isPathLayoutMode(mode)) {
+      const pt = pathTypeFromLayoutMode(mode);
+      syncPathFieldVisibilityForPathType(pt);
+      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
+        const nameInput = document.getElementById('taxiwayName');
+        if (nameInput) nameInput.value = '';
+        const widthInput = document.getElementById('taxiwayWidth');
+        if (widthInput) {
+          widthInput.value = pt === 'runway'
+            ? RUNWAY_PATH_DEFAULT_WIDTH
+            : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+        }
+        syncPathPavementRadiosToValue(pathPavementDefaultForPathType(pt));
+        if (pt === 'runway') {
+          const startDispInput = document.getElementById('runwayStartDisplacedThresholdM');
+          if (startDispInput) startDispInput.value = String(RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
+          const startBlastInput = document.getElementById('runwayStartBlastPadM');
+          if (startBlastInput) startBlastInput.value = String(RUNWAY_START_BLAST_PAD_DEFAULT_M);
+          const endDispInput = document.getElementById('runwayEndDisplacedThresholdM');
+          if (endDispInput) endDispInput.value = String(RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
+          const endBlastInput = document.getElementById('runwayEndBlastPadM');
+          if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
+        }
+      }
+    }
+    if (typeof renderObjectList === 'function') renderObjectList();
+  }
+
+  settingModeSelect.addEventListener('change', function() {
+    cancelActiveLayoutDrawingState();
+    state.selectedObject = null;
+    syncSettingsPaneToMode();
+  });
+  if (layoutModeTabs && settingModeSelect) {
+    layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const mode = this.getAttribute('data-mode') || 'grid';
+        if (settingModeSelect.value === mode) {
           cancelActiveLayoutDrawingState();
           syncSettingsPaneToMode();
           return;
@@ -846,274 +1117,3 @@
     const v = tw.minArrVelocity;
     if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, Math.min(150, v));
     return 15;
-  }
-  
-  function runwayArrSpeedAndTimeToRet(v0, a, distM, vFloorIn) {
-    const vf0 = Math.max(1, Math.min(150, vFloorIn));
-    const vf = Math.min(vf0, v0);
-    if (!(a > 0) || distM <= 0) return { vAtRet: v0, tSec: 0 };
-    if (v0 <= vf) return { vAtRet: v0, tSec: distM / Math.max(v0, 1e-6) };
-    const dStop = (v0 * v0 - vf * vf) / (2 * a);
-    if (distM < dStop) {
-      const vEnd = Math.sqrt(Math.max(0, v0 * v0 - 2 * a * distM));
-      return { vAtRet: vEnd, tSec: (v0 - vEnd) / a };
-    }
-    const tDecel = (v0 - vf) / a;
-    const tCruise = (distM - dStop) / vf;
-    return { vAtRet: vf, tSec: tDecel + tCruise };
-  }
-  function parseTimeToMinutes(val) {
-    if (!val) return 0;
-    const s = String(val).trim();
-    if (!s) return 0;
-    const isoDt = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-    if (isoDt) {
-      const h = parseInt(isoDt[4], 10) || 0;
-      const m = parseInt(isoDt[5], 10) || 0;
-      const sec = isoDt[6] ? (parseInt(isoDt[6], 10) || 0) : 0;
-      return Math.max(0, h * 60 + m + sec / 60);
-    }
-    if (s.includes(':')) {
-      const parts = s.split(':');
-      const h = parseInt(parts[0], 10) || 0;
-      const m = parseInt(parts[1], 10) || 0;
-      const sec = (parts.length >= 3) ? (parseInt(parts[2], 10) || 0) : 0;
-      return Math.max(0, h * 60 + m + sec / 60);
-    }
-    const num = parseFloat(s);
-    return isNaN(num) ? 0 : Math.max(0, num);
-  }
-
-  function snapSimTimeSecForSlider(tSec) {
-    const lo = state.simStartSec;
-    const hi = state.simDurationSec;
-    const step = SIM_TIME_SLIDER_SNAP_SEC;
-    const t = Number(tSec);
-    if (!isFinite(t)) return lo;
-    if (!isFinite(lo) || !isFinite(hi) || hi < lo) return t;
-    const clamped = Math.max(lo, Math.min(hi, t));
-    if (!(step > 0)) return clamped;
-    let snapped = lo + Math.round((clamped - lo) / step) * step;
-    if (snapped < lo) snapped = lo;
-    if (snapped > hi) snapped = hi;
-    return snapped;
-  }
-  function updateFlightSimPlaybackLabelsDom() {
-    const label = document.getElementById('flightSimTimeLabel');
-    const t = state.simTimeSec;
-    if (label) label.textContent = formatSecondsToHHMMSS(t);
-  }
-  
-  function minFirstArrivalTouchdownSecAmongFlights() {
-    let minS = Infinity;
-    (state.flights || []).forEach(function(f) {
-      if (!f || f.arrDep === 'Dep') return;
-      if (arrivalAirsideBlocked(f)) return;
-      const w = getFlightAirsideWindowSec(f);
-      if (!w) return;
-      const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], NaN));
-      if (!isFinite(eldtMin)) return;
-      const eldtS = eldtMin * 60;
-      if (eldtS < minS) minS = eldtS;
-    });
-    return (isFinite(minS) && minS < Infinity) ? minS : null;
-  }
-  function recomputeSimDuration() {
-    let minT = Infinity;
-    let maxT = -Infinity;
-    (state.flights || []).forEach(function(f) {
-      if (!f) return;
-      const w = getFlightAirsideWindowSec(f);
-      if (!w) return;
-      if (w.t0 < minT) minT = w.t0;
-      if (w.t1 > maxT) maxT = w.t1;
-    });
-    if (!isFinite(minT) || !isFinite(maxT)) {
-      minT = 0;
-      maxT = 0;
-    }
-    let simLo = minT;
-    if (PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC > 0) {
-      const firstTdS = minFirstArrivalTouchdownSecAmongFlights();
-      if (firstTdS != null) {
-        simLo = Math.max(0, firstTdS - PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC);
-      }
-    }
-    let durSec = Math.max(maxT, minT);
-    const capAbs = state.simPlaybackEndCapSec;
-    if (capAbs != null && isFinite(Number(capAbs))) {
-      durSec = Math.min(durSec, Number(capAbs));
-    }
-    state.simDurationSec = durSec;
-    if (simLo > state.simDurationSec - 1e-6) {
-      simLo = Math.max(0, state.simDurationSec - 1);
-    }
-    state.simStartSec = simLo;
-    if ((state.flights || []).length > 0 && isFinite(minT) && isFinite(maxT) && state.simDurationSec <= state.simStartSec) {
-      state.simDurationSec = state.simStartSec + 1;
-    }
-    state.simTimeSec = Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simTimeSec));
-    state.simTimeSec = snapSimTimeSecForSlider(state.simTimeSec);
-    const slider = document.getElementById('flightSimSlider');
-    if (slider) {
-      slider.min = state.simStartSec;
-      slider.max = state.simDurationSec;
-      slider.step = String(SIM_TIME_SLIDER_SNAP_SEC);
-      slider.value = state.simTimeSec;
-      if (state.simDurationSec <= state.simStartSec) slider.disabled = true;
-      else slider.disabled = false;
-    }
-    updateFlightSimPlaybackLabelsDom();
-    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
-  }
-  function applySimPlaybackBarDomVisibility() {
-    const wrap = document.getElementById('sim-controls-wrap');
-    const inner = document.getElementById('sim-controls-container');
-    const hideBtn = document.getElementById('btnHideSimPlaybackBar');
-    const hasSim = state.hasSimulationResult && state.globalUpdateFresh && state.flights.length > 0;
-    if (!wrap) return;
-    if (!hasSim || !state.simPlaybackDockVisible) {
-      wrap.style.display = 'none';
-      return;
-    }
-    wrap.style.display = 'flex';
-    if (inner) inner.style.display = 'flex';
-    if (hideBtn) hideBtn.setAttribute('aria-expanded', 'true');
-  }
-  function syncSimulationPlaybackAfterTimelines() {
-    if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-    if (!state.hasSimulationResult) return;
-    const simSliderAfter = document.getElementById('flightSimSlider');
-    state.simTimeSec = snapSimTimeSecForSlider(Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simStartSec)));
-    if (simSliderAfter) simSliderAfter.value = state.simTimeSec;
-    updateFlightSimPlaybackLabelsDom();
-  }
-
-  function formatTotalSecondsToHHMMSS(totalSec) {
-    const parts = _splitTotalSeconds(totalSec);
-    return parts.hh + ':' + parts.mm + ':' + parts.ss;
-  }
-  function formatMinutesToHHMMSS(minsRaw) {
-    return formatTotalSecondsToHHMMSS(_normalizeTimeToSeconds(minsRaw, 'minutes', 'round'));
-  }
-  function flightScheduleBaseDateIso(f) {
-    if (!f) return DEFAULT_SIBT_DATE;
-    const raw = f.sibtDate != null ? f.sibtDate : (f.serviceDate != null ? f.serviceDate : null);
-    const d = (raw == null ? '' : String(raw)).trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-    return DEFAULT_SIBT_DATE;
-  }
-  function formatFlightScheduleDateTime(f, minsRaw) {
-    const base = flightScheduleBaseDateIso(f);
-    const sec = _normalizeTimeToSeconds(minsRaw, 'minutes', 'round');
-    const minTotal = sec / 60;
-    const ps = base.split('-');
-    const Y = parseInt(ps[0], 10);
-    const Mo = parseInt(ps[1], 10) - 1;
-    const D = parseInt(ps[2], 10);
-    if (!isFinite(Y) || !isFinite(Mo) || !isFinite(D)) return formatMinutesToHHMMSS(minsRaw);
-    const t0 = new Date(Y, Mo, D, 0, 0, 0);
-    t0.setMinutes(t0.getMinutes() + minTotal);
-    const pad = function(n) { return (n < 10 ? '0' : '') + n; };
-    return t0.getFullYear() + '-' + pad(t0.getMonth() + 1) + '-' + pad(t0.getDate()) + ' ' + pad(t0.getHours()) + ':' + pad(t0.getMinutes()) + ':' + pad(t0.getSeconds());
-  }
-  function formatSignedMinutesToHHMMSS(minsRaw) {
-    const n = Number(minsRaw);
-    if (!isFinite(n)) return '—';
-    const sign = n < 0 ? '-' : '';
-    return sign + formatMinutesToHHMMSS(Math.abs(n));
-  }
-  function formatSecondsToHHMMSS(secRaw) {
-    return formatTotalSecondsToHHMMSS(_normalizeTimeToSeconds(secRaw, 'seconds', 'floor'));
-  }
-
-  function getStandBusyIntervals(standId, ignoreFlightId) {
-    const intervals = [];
-    if (!standId) return intervals;
-    (state.flights || []).forEach(f => {
-      if (!f || f.id === ignoreFlightId) return;
-      if (f.arrDep !== 'Arr') return;
-      if (f.standId !== standId) return;
-      const win = getFlightAirsideWindowSec(f);
-      if (!win) return;
-      const end = win.t1;
-      const dwellMin = (f.sobtMin != null && f.sibtMin != null) ? (f.sobtMin - f.sibtMin) : (f.dwellMin || 0);
-      const dwellSec = Math.max(0, dwellMin * 60);
-      const start = Math.max(0, end - dwellSec);
-      if (end > start) intervals.push({ start, end });
-    });
-    intervals.sort((a, b) => a.start - b.start);
-    return intervals;
-  }
-
-  function isStandOccupiedAtSimSec(standId, tSec) {
-    if (!standId || !state.hasSimulationResult) return false;
-    const t = Number(tSec);
-    if (!isFinite(t)) return false;
-    const flights = state.flights || [];
-    for (let i = 0; i < flights.length; i++) {
-      const f = flights[i];
-      if (!f || f.standId !== standId) continue;
-      const m = f.timeline_meta;
-      if (m && typeof m.eibtSec === 'number' && typeof m.eobtSec === 'number') {
-        if (t + 1e-3 >= m.eibtSec && t <= m.eobtSec + 1e-3) return true;
-        continue;
-      }
-      if (f.arrDep !== 'Dep' && (f.noWayArr || f.arrRetFailed)) {
-        const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
-        const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
-        const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], eibtMin + (typeof f.dwellMin === 'number' && isFinite(f.dwellMin) ? f.dwellMin : 45));
-        const eibtS = eibtMin * 60;
-        const eobtS = eobtMin * 60;
-        if (t + 1e-3 >= eibtS && t <= eobtS + 1e-3) return true;
-      }
-    }
-    return false;
-  }
-
-  function findStandAvailableArrivalTime(standId, desiredArrival, dwellSec) {
-    let s = Math.max(0, desiredArrival);
-    const intervals = getStandBusyIntervals(standId, null);
-    for (let i = 0; i < intervals.length; i++) {
-      const iv = intervals[i];
-      if (s + dwellSec <= iv.start) return s;
-      if (s < iv.end) s = iv.end;
-    }
-    return s;
-  }
-
-  function getTerminalForStand(stand) {
-    if (!stand || !state.terminals.length) return null;
-    const [px, py] = getStandConnectionPx(stand);
-    let nearest = null;
-    let nearestD2 = Infinity;
-    for (let i = 0; i < state.terminals.length; i++) {
-      const t = state.terminals[i];
-      if (!t.vertices || t.vertices.length < 1) continue;
-      const termPix = t.vertices.map(v => cellToPixel(v.col, v.row));
-      if (t.closed && termPix.length >= 3 && pointInPolygonXY([px, py], termPix)) return t;
-      let cx = 0, cy = 0;
-      termPix.forEach(p => { cx += p[0]; cy += p[1]; });
-      cx /= termPix.length;
-      cy /= termPix.length;
-      const dx = px - cx, dy = py - cy;
-      const d2 = dx*dx + dy*dy;
-      if (d2 < nearestD2) {
-        nearestD2 = d2;
-        nearest = t;
-      }
-    }
-    return nearest;
-  }
-
-  function allStandsForFlightAssignment() {
-    return (state.pbbStands || []).concat(state.remoteStands || []).concat(state.tempStands || []);
-  }
-
-  function flightCanUseStand(f, stand) {
-    if (!stand) return true;
-    const mode = getStandCategoryMode(stand);
-    const allowedTypes = getStandAllowedAircraftTypes(stand);
-    if (allowedTypes.length) {
-      const flightType = String(f.aircraftType || '').trim();
-      if (!flightType || allowedTypes.indexOf(flightType) < 0) return false;

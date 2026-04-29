@@ -1,4 +1,3 @@
-      ctx.shadowBlur = 0;
     }
     function strokeBarAtOffset(ofs) {
       const sx = cx - px * halfLen + g.ux * ofs;

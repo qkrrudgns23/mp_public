@@ -706,6 +706,20 @@
       };
     });
   }
+  /** If E minute fields were omitted from persist but Pro Sim left them on ``timeline_meta``, fill them for schedule UI. */
+  function hydrateEMinutesFromTimelineMetaIfMissing(f) {
+    if (!f || !f.timeline_meta || typeof f.timeline_meta !== 'object') return;
+    const m = f.timeline_meta;
+    function setMin(minKey, secKey) {
+      if (f[minKey] != null && isFinite(Number(f[minKey]))) return;
+      const n = m[secKey] != null ? Number(m[secKey]) : NaN;
+      if (isFinite(n)) f[minKey] = n / 60;
+    }
+    setMin('eldtMin', 'eldtSec');
+    setMin('eibtMin', 'eibtSec');
+    setMin('eobtMin', 'eobtSec');
+    setMin('etotMin', 'etotSec');
+  }
   function applyLayoutObject(obj) {
     if (!obj || typeof obj !== 'object') return;
     state.simPlaybackEndCapSec = null;
@@ -716,213 +730,3 @@
       if (typeof obj.grid.rows === 'number') GRID_ROWS = obj.grid.rows;
       if (typeof obj.grid.cellSize === 'number') CELL_SIZE = obj.grid.cellSize;
     }
-    hydrateLayersFromGridObject(obj.grid || null, obj);
-    state.layoutImageOverlay = normalizeLayoutImageOverlay(
-      (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
-    );
-    invalidateGridUnderlay();
-    syncLayoutImageBitmap();
-    syncLayerPopoverFromState();
-    if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
-    if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
-    if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
-    if (Array.isArray(obj.tempStands)) state.tempStands = obj.tempStands.map(normalizeTempStandObject);
-    else state.tempStands = [];
-    state.taxiways = mergeTaxiwaysFromLayoutObject(obj);
-    invalidatePathGraphCache(true);
-    if (Array.isArray(obj.holdingPoints)) {
-      state.holdingPoints = obj.holdingPoints.map(function(h) {
-        const hx = Number(h && h.x);
-        const hy = Number(h && h.y);
-        let hpKind = null;
-        if (h && h.hpKind != null) hpKind = normalizeHoldingPointKind(h.hpKind);
-        if (!hpKind) {
-          const snap = snapHoldingPointOnAllowedTaxiways(hx, hy);
-          hpKind = (snap && snap.pathType) ? pathTypeToHpKind(snap.pathType) : 'intermediate';
-        }
-        return {
-          id: (h && h.id) ? h.id : id(),
-          name: h && h.name != null ? String(h.name) : '',
-          x: hx,
-          y: hy,
-          hpKind: hpKind
-        };
-      }).filter(function(h) { return h && isFinite(h.x) && isFinite(h.y); });
-    } else state.holdingPoints = [];
-    if (Array.isArray(obj.apronLinks)) {
-      const csAL = _layoutCellSizeForPersistLoad();
-      state.apronLinks = obj.apronLinks.map(function(lk) {
-        const copy = Object.assign({}, lk);
-        if (Array.isArray(copy.midVertices)) {
-          copy.midVertices = copy.midVertices.map(function(v) {
-            if (!v || typeof v !== 'object') return { col: 0, row: 0 };
-            const x = Number(v.x), y = Number(v.y);
-            if (isFinite(x) && isFinite(y)) return { col: x / csAL, row: y / csAL };
-            return { col: Number(v.col) || 0, row: Number(v.row) || 0 };
-          });
-        }
-        return copy;
-      });
-    }
-    if (Array.isArray(obj.directionModes) && obj.directionModes.length) {
-      state.directionModes = obj.directionModes.slice();
-    }
-    if (Array.isArray(obj.layoutMarkers)) {
-      state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(obj.layoutMarkers.map(normalizeLayoutMarkerFromLoad).filter(Boolean));
-    } else if (!Array.isArray(state.layoutMarkers)) {
-      state.layoutMarkers = [];
-    }
-    if (Array.isArray(obj.flights)) {
-      state.simPlaybackPositionsByFlightId = null;
-      state.simPlaybackScheduleSnapshot = null;
-      state.simPlaybackTimelinesEvictedForMemory = false;
-      state.flights = obj.flights.slice();
-      state.flights.forEach(f => {
-        const rawTl = Array.isArray(f.timeline) ? f.timeline : null;
-        const rawMeta = f.timeline_meta;
-        const rawProSimEl = Array.isArray(f.proSimEdgeList) ? f.proSimEdgeList.slice() : null;
-        const restorePlaybackFlight = !!(rawTl && rawTl.length >= 2);
-        const t = f.token || {};
-        const exitTwPersist = (t.ExitTaxiwayId != null && t.ExitTaxiwayId !== '') ? t.ExitTaxiwayId : null;
-        const arrRetFailedPersist = f.arrRetFailed === true;
-        if (f.aircraftType && typeof getCodeForAircraft === 'function') {
-          f.code = getCodeForAircraft(f.aircraftType);
-        } else if (f.code && typeof AIRCRAFT_TYPES !== 'undefined') {
-          const match = AIRCRAFT_TYPES.find(a => a.icao === f.code);
-          f.aircraftType = match ? match.id : (AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320';
-        }
-        f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
-        f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
-        f.terminalId = f.terminalId || t.terminalId || null;
-        const apronId = f.depApronId != null ? f.depApronId : (t.apronId != null ? t.apronId : (f.standId != null ? f.standId : f.arrApronId || null));
-        f.standId = apronId;
-        f.token = {
-          nodes: Array.isArray(t.nodes) ? t.nodes.slice() : ['runway','taxiway','apron','terminal'],
-          runwayId: f.arrRunwayId || null,
-          apronId: apronId,
-          terminalId: f.terminalId || null,
-          depRunwayId: f.depRunwayId || null,
-        };
-        if (exitTwPersist) f.token.ExitTaxiwayId = exitTwPersist;
-        f.noWayArr = false;
-        f.noWayDep = false;
-        delete f._noWayArrDetail;
-        delete f._noWayDepDetail;
-        if (restoreProSimSyncUi && f.arrDep !== 'Dep') {
-          if (exitTwPersist) {
-            f.sampledArrRet = exitTwPersist;
-            f.arrRetFailed = arrRetFailedPersist;
-          } else {
-            f.sampledArrRet = null;
-            f.arrRetFailed = false;
-          }
-        } else {
-          f.arrRetFailed = false;
-          f.sampledArrRet = null;
-        }
-        if (!restorePlaybackFlight) {
-          f.arrRotSec = null;
-          delete f.proSimVttArrSec;
-          delete f.proSimVttDepSec;
-          delete f.proSimDttArrSec;
-          delete f.proSimPushbackSec;
-          delete f.proSimDttDepSec;
-          delete f.proSimDepLineupSec;
-          f.arrRunwayIdUsed = null;
-          f.arrTdDistM = null;
-          f.arrRetDistM = null;
-          f.arrVTdMs = null;
-          f.arrDecelMs2 = null;
-          f.arrVRetInMs = null;
-          f.arrVRetOutMs = null;
-          f.timeline = null;
-          delete f.timeline_meta;
-          delete f.proSimEdgeList;
-          delete f.eldtMin;
-          delete f.eibtMin;
-          delete f.eobtMin;
-          delete f.etotMin;
-          delete f.eldtMin;
-          delete f.eibtMin;
-          delete f.eobtMin;
-          delete f.etotMin;
-        } else {
-          const tlNorm = rawTl.map(function(p) {
-            const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
-            const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-            const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
-            const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
-            if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
-            if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
-            if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
-            return o;
-          }).filter(function(k) {
-            return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
-          }).sort(function(a, b) { return a.t - b.t; });
-          if (tlNorm.length >= 2) {
-            f.timeline = tlNorm;
-            if (rawMeta && typeof rawMeta === 'object') f.timeline_meta = Object.assign({}, rawMeta);
-            else delete f.timeline_meta;
-            if (rawProSimEl && rawProSimEl.length) {
-              f.proSimEdgeList = rawProSimEl;
-            } else if (Array.isArray(f.edge_list) && f.edge_list.length) {
-              f.proSimEdgeList = f.edge_list.slice();
-            }
-          } else {
-            f.arrRotSec = null;
-            delete f.proSimVttArrSec;
-            delete f.proSimVttDepSec;
-            delete f.proSimDttArrSec;
-            delete f.proSimPushbackSec;
-            delete f.proSimDttDepSec;
-            delete f.proSimDepLineupSec;
-            f.arrRunwayIdUsed = null;
-            f.arrTdDistM = null;
-            f.arrRetDistM = null;
-            f.arrVTdMs = null;
-            f.arrDecelMs2 = null;
-            f.arrVRetInMs = null;
-            f.arrVRetOutMs = null;
-            f.timeline = null;
-            delete f.timeline_meta;
-            delete f.proSimEdgeList;
-            delete f.eldtMin;
-            delete f.eibtMin;
-            delete f.eobtMin;
-            delete f.etotMin;
-            delete f.eldtMin;
-            delete f.eibtMin;
-            delete f.eobtMin;
-            delete f.etotMin;
-          }
-        }
-        delete f.cachedArrPathPts;
-        delete f.cachedDepPathPts;
-        delete f._pathPolylineCacheRev;
-        delete f._pathPolylineArrRetKey;
-        f.__schedRetRotRev = null;
-        f.__schedVttArrRev = null;
-        f.__schedVttArrMin = null;
-        if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
-        if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
-        if (!String(f.reg || '').trim()) f.reg = randomRegNumber();
-        {
-          const idRaw = String(f.intDom || '').trim();
-          f.intDom = (idRaw.toLowerCase() === 'dom') ? 'Dom' : 'Int';
-        }
-        if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
-      });
-    } else {
-      state.flights = [];
-    }
-    if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
-    state.simPlaying = false;
-    state.layoutPathDrawPointer = null;
-    if (typeof refreshHasSimulationResultFromPlaybackSources === 'function') {
-      refreshHasSimulationResultFromPlaybackSources();
-    } else {
-      let playbackFlightCount = 0;
-      (state.flights || []).forEach(function(f) {
-        if (f && f.timeline && f.timeline.length >= 2) playbackFlightCount++;
-      });
-      state.hasSimulationResult = playbackFlightCount > 0;

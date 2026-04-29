@@ -1,4 +1,3 @@
-  /** Strip alpha from rgba for solid road surface when showRoadWidth is on. */
   function c2dCssColorToOpaque(css) {
     const s = String(css || '').trim();
     const ra = s.match(/^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/i);
@@ -288,3 +287,4 @@
       ctx.shadowColor = c2dObjectSelectedGlow();
       ctx.shadowBlur = c2dObjectSelectedGlowBlur();
     } else {
+      ctx.shadowBlur = 0;

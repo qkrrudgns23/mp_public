@@ -1,3 +1,256 @@
+    const step = snapToGrid ? GRID_SNAP_STEP_CELL : FREE_DRAW_STEP_CELL;
+    const col = roundToStep(wx / cs, step);
+    const row = roundToStep(wy / cs, step);
+    const clamped = clampToGridBounds(col, row);
+    return { col: clamped[0], row: clamped[1] };
+  }
+  function worldPointToPixel(wx, wy, snapToGrid) {
+    const pt = worldPointToCellPoint(wx, wy, snapToGrid);
+    return cellToPixel(pt.col, pt.row);
+  }
+  const ICAO_STAND_SIZE_M = (function() {
+    const m = _layoutTier.standSizesMByIcaoCategory;
+    if (m && typeof m === 'object') {
+      const o = {};
+      Object.keys(m).forEach(k => { o[k] = Number(m[k]); });
+      return o;
+    }
+    return { A: 20, B: 30, C: 40, D: 50, E: 60, F: 80 };
+  })();
+  function getStandSizeMeters(cat) { return ICAO_STAND_SIZE_M[cat] || 40; }
+  const STAND_CONFIG_ROW_BY_CODE = (function() {
+    const raw = _layoutTier.standConfig;
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    Object.keys(raw).forEach(function(k) {
+      if (k === 'description') return;
+      const row = raw[k];
+      if (!row || typeof row !== 'object') return;
+      const ws = Number(row.wingspan), g = Number(row.gap), rd = Number(row.road);
+      const ln = Number(row.length), nc = Number(row.nose_clear), pb = Number(row.pushback);
+      const dp = Number(row.depth);
+      if (![ws, g, rd, ln, nc, pb, dp].every(isFinite)) return;
+      const rowOut = { wingspan: ws, gap: g, road: rd, length: ln, nose_clear: nc, pushback: pb, depth: dp };
+      const og = Number(row.outer_gear), nsc = Number(row.nose_side_clear), nw = Number(row.nose_width);
+      if (isFinite(og)) rowOut.outer_gear = og;
+      if (isFinite(nsc)) rowOut.nose_side_clear = nsc;
+      if (isFinite(nw)) rowOut.nose_width = nw;
+      out[String(k).toUpperCase().slice(0, 1)] = rowOut;
+    });
+    return out;
+  })();
+  function standConfigRowForIcaoCat(cat) {
+    const s = String(cat == null ? 'C' : cat).toUpperCase();
+    let c = 'C';
+    for (let i = 0; i < s.length; i++) {
+      const ch = s.charAt(i);
+      if (ch >= 'A' && ch <= 'F') {
+        c = ch;
+        break;
+      }
+    }
+    return STAND_CONFIG_ROW_BY_CODE[c] || null;
+  }
+  function getStandWidthMeters(cat) {
+    const r = standConfigRowForIcaoCat(cat);
+    if (r) return r.wingspan + r.gap * 2;
+    return getStandSizeMeters(cat);
+  }
+  function getStandDepthMeters(cat) {
+    const r = standConfigRowForIcaoCat(cat);
+    if (r) return r.depth;
+    return getStandSizeMeters(cat);
+  }
+  function getStandSpacingMeters(catA, catB) {
+    const ra = standConfigRowForIcaoCat(catA);
+    const rb = standConfigRowForIcaoCat(catB);
+    if (ra && rb) return Math.max(ra.road, rb.road);
+    return 0;
+  }
+  function standFootprintLocalToWorld(cx, cy, angleRad, lx, ly) {
+    const cos = Math.cos(angleRad), sin = Math.sin(angleRad);
+    return [cx + lx * cos - ly * sin, cy + lx * sin + ly * cos];
+  }
+  function standStopbarCenterShiftLocalX(depM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || depM <= 0) return 0;
+    const nc = Number(r.nose_clear);
+    if (!isFinite(nc) || nc <= 0) return 0;
+    const halfD = depM / 2;
+    const xStopOld = -halfD + nc;
+    if (!(xStopOld > -halfD && xStopOld < halfD)) return 0;
+    return -xStopOld;
+  }
+  /** Nose (−X) width = nose_width; stop bar at nose_clear from nose edge; 45° flare to full stand width (±halfW), then rectangle to tail (+halfD). */
+  function buildStandSafetyPolygonPath(ctx, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return false;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return false;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const eps = 0.08;
+    if (noseHalf >= halfW - eps) return false;
+    const xNose = -halfD;
+    const xStop = -halfD + nc;
+    if (xStop <= xNose + eps || xStop >= halfD - eps) return false;
+    const latRun = halfW - noseHalf;
+    if (latRun <= eps) return false;
+    const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return false;
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    ctx.beginPath();
+    ctx.moveTo(xNose + shiftX, -noseHalf);
+    ctx.lineTo(xNose + shiftX, noseHalf);
+    ctx.lineTo(xStop + shiftX, noseHalf);
+    ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
+    if (xBendEnd < halfD - eps) {
+      ctx.lineTo(halfD + shiftX, halfW);
+      ctx.lineTo(halfD + shiftX, -halfW);
+      ctx.lineTo(xBendEnd + shiftX, -halfW);
+    } else {
+      ctx.lineTo(halfD + shiftX, -halfW);
+    }
+    ctx.lineTo(xStop + shiftX, -noseHalf);
+    ctx.closePath();
+    return true;
+  }
+  /** Stand-local +X = tail/apron-open, −X = nose/terminal-ward. Red dashed: stop bar (nose_clear), pushback (pushback), lateral gap bounds (wingspan ± vs stand width). Clipped to safety footprint when nose geometry applies. */
+  function drawStandApronMarkingsInLocalAxes(ctx, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return;
+    const halfD = depM / 2, halfW = widM / 2;
+    const eps = 0.12;
+    ctx.save();
+    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
+      ctx.clip();
+    }
+    ctx.strokeStyle = layerMonoLinesOn() ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
+    ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
+    ctx.setLineDash([2, 2.5]);
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    const nc = Number(r.nose_clear), pb = Number(r.pushback);
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    if (isFinite(nc) && isFinite(pb)) {
+      const xStop = 0;
+      const xPush = (halfD - pb) + shiftX;
+      const xMin = (-halfD) + shiftX;
+      const xMax = (halfD) + shiftX;
+      if (xStop > -halfD + eps && xStop < halfD - eps) {
+        ctx.beginPath();
+        ctx.moveTo(xStop, -halfW);
+        ctx.lineTo(xStop, halfW);
+        ctx.stroke();
+      }
+      if (xPush < xMax - eps && xPush > xMin + eps) {
+        ctx.beginPath();
+        ctx.moveTo(xPush, -halfW);
+        ctx.lineTo(xPush, halfW);
+        ctx.stroke();
+      }
+    }
+    const g = Number(r.gap), ws = Number(r.wingspan);
+    if (isFinite(g) && g > eps && isFinite(ws) && ws > 0) {
+      const yLim = halfW - g;
+      if (yLim > eps && yLim < halfW - eps) {
+        ctx.beginPath();
+        ctx.moveTo(-halfD + shiftX, yLim);
+        ctx.lineTo(halfD + shiftX, yLim);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-halfD + shiftX, -yLim);
+        ctx.lineTo(halfD + shiftX, -yLim);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  function fillStandSafetyFootprintInLocalAxes(ctx, depM, widM, category) {
+    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
+      ctx.fill();
+      return;
+    }
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    ctx.beginPath();
+    ctx.rect((-depM / 2) + shiftX, -widM / 2, depM, widM);
+    ctx.fill();
+  }
+  function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
+    if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
+    ctx.save();
+    ctx.strokeStyle = (!selected && layerMonoLinesOn()) ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
+    const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
+    ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
+    ctx.setLineDash([]);
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'butt';
+    if (selected) {
+      ctx.shadowColor = c2dObjectSelectedGlow();
+      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  /** Local +X from stand box center to end of 45° flare (full-width main body); 0 if nose geometry unused. */
+  function standSafetyAircraftCenterLocalXM(depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return 0;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return 0;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const eps = 0.08;
+    if (noseHalf >= halfW - eps) return 0;
+    const xNose = -halfD;
+    const xStop = -halfD + nc;
+    if (xStop <= xNose + eps || xStop >= halfD - eps) return 0;
+    const latRun = halfW - noseHalf;
+    if (latRun <= eps) return 0;
+    const xBendEnd = xStop + latRun;
+    if (xBendEnd > halfD + eps) return 0;
+    return xBendEnd;
+  }
+  function getStandAircraftMarkerWorldPxForPbb(pbb) {
+    const cxy = getStandConnectionPx(pbb);
+    return [cxy[0], cxy[1]];
+  }
+  function getStandAircraftMarkerWorldPxForRemoteLike(st) {
+    const cxy = getStandConnectionPx(st);
+    return [cxy[0], cxy[1]];
+  }
+  const APRON_SITE_MARKER_WIDTH_M = 5;
+  const APRON_SITE_MARKER_HEIGHT_M = 1;
+  function _ensureLayoutToastStack() {
+    let stack = document.getElementById('layout-toast-stack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.id = 'layout-toast-stack';
+      stack.className = 'layout-toast-stack';
+      document.body.appendChild(stack);
+    }
+    return stack;
+  }
+  function _formatToastTimestamp(d) {
+    const pad = function(n) { return String(n).padStart(2, '0'); };
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  function showLayoutSavedToast(layoutName, kind, subText) {
+    const stack = _ensureLayoutToastStack();
+    const el = document.createElement('div');
+    const variant = kind === 'error' ? 'is-error' : 'is-success';
+    el.className = 'layout-toast ' + variant;
+    const title = document.createElement('div');
+    title.className = 'layout-toast-title';
+    const ts = _formatToastTimestamp(new Date());
+    const name = String(layoutName || '').trim() || 'layout';
+    if (kind === 'error') {
+      title.textContent = ts + ' · save failed · ' + name;
+    } else {
+      title.textContent = ts + ' · saved · ' + name;
+    }
+    el.appendChild(title);
+    if (subText) {
       const sub = document.createElement('div');
       sub.className = 'layout-toast-sub';
       sub.textContent = String(subText);
@@ -778,6 +1031,10 @@
           'sibtMin',
           'sobtMin',
           'stotMin',
+          'eldtMin',
+          'eibtMin',
+          'eobtMin',
+          'etotMin',
           'arrApronId',
           'depApronId',
           'eibtMinList',
@@ -1100,274 +1357,3 @@
           try {
             w.close();
           } catch (eClose) { /* ignore */ }
-          alert('Could not open the 3D viewer window.');
-          return;
-        }
-      }
-    }
-    let payload;
-    try {
-      payload = typeof buildLayout3DViewerPayload === 'function' ? buildLayout3DViewerPayload() : null;
-    } catch (e) {
-      console.error('buildLayout3DViewerPayload failed:', e);
-      try {
-        w.close();
-      } catch (eClose2) { /* ignore */ }
-      alert('Could not serialize layout for 3D: ' + (e && e.message ? e.message : e));
-      return;
-    }
-    if (!payload || !payload.layout) {
-      try {
-        w.close();
-      } catch (eClose3) { /* ignore */ }
-      alert('Could not serialize layout for 3D.');
-      return;
-    }
-    function sendGrid3dInit() {
-      try {
-        w.postMessage({ kind: 'grid3dViewerInit', payload: payload }, '*');
-      } catch (e4) {
-        console.error('postMessage to 3D viewer failed:', e4);
-        alert('Could not send layout data to the 3D window. Try again or check the browser console.');
-      }
-    }
-    if (!openedViaReceiverShell) {
-      try {
-        w.document.open();
-        w.document.write(tpl);
-        w.document.close();
-      } catch (e3) {
-        console.error(e3);
-        try {
-          w.close();
-        } catch (eClose4) { /* ignore */ }
-        alert('Could not write the 3D viewer document.');
-        return;
-      }
-      setTimeout(sendGrid3dInit, 0);
-    } else {
-      function onShellReady() {
-        setTimeout(sendGrid3dInit, 0);
-      }
-      try {
-        if (w.document && w.document.readyState === 'complete') {
-          onShellReady();
-        } else {
-          w.addEventListener('load', function grid3dShellLoad() {
-            w.removeEventListener('load', grid3dShellLoad);
-            onShellReady();
-          });
-        }
-      } catch (eReady) {
-        setTimeout(sendGrid3dInit, 150);
-      }
-    }
-  }
-  function getExistingStandBounds() {
-    const list = [];
-    state.remoteStands.forEach(st => {
-      const corners = getRemoteStandCorners(st);
-      let left = corners[0][0], right = corners[0][0], top = corners[0][1], bottom = corners[0][1];
-      for (let k = 1; k < 4; k++) {
-        left = Math.min(left, corners[k][0]); right = Math.max(right, corners[k][0]);
-        top = Math.min(top, corners[k][1]); bottom = Math.max(bottom, corners[k][1]);
-      }
-      list.push({ left, right, top, bottom });
-    });
-    state.pbbStands.forEach(pbb => {
-      const corners = getPBBStandCorners(pbb);
-      let left = corners[0][0], right = corners[0][0], top = corners[0][1], bottom = corners[0][1];
-      for (let k = 1; k < 4; k++) {
-        left = Math.min(left, corners[k][0]); right = Math.max(right, corners[k][0]);
-        top = Math.min(top, corners[k][1]); bottom = Math.max(bottom, corners[k][1]);
-      }
-      list.push({ left, right, top, bottom });
-    });
-    return list;
-  }
-  function standOverlapsExisting(bounds) {
-    const existing = getExistingStandBounds();
-    for (let i = 0; i < existing.length; i++) if (rectsOverlap(bounds, existing[i])) return true;
-    return false;
-  }
-  function dist2(a, b) { const dx = a[0]-b[0], dy = a[1]-b[1]; return dx*dx+dy*dy; }
-  function _normalizeTimeToSeconds(value, unit, roundingMode) {
-    const raw = Number(value || 0);
-    const scaled = unit === 'minutes' ? raw * 60 : raw;
-    const rounded = roundingMode === 'round' ? Math.round(scaled) : Math.floor(scaled);
-    return Math.max(0, rounded);
-  }
-  function _splitTotalSeconds(totalSec) {
-    const safeSec = Math.max(0, Math.floor(totalSec || 0));
-    const h = Math.floor(safeSec / 3600);
-    const m = Math.floor((safeSec % 3600) / 60);
-    const s = safeSec % 60;
-    return {
-      h,
-      m,
-      s,
-      hh: (h < 10 ? '0' : '') + h,
-      mm: (m < 10 ? '0' : '') + m,
-      ss: (s < 10 ? '0' : '') + s,
-    };
-  }
-  function formatMinutesToHHMM(m) {
-    const parts = _splitTotalSeconds(_normalizeTimeToSeconds(m, 'minutes', 'floor'));
-    return parts.h + ':' + parts.mm;
-  }
-  function findNearestItem(candidates, getPoint, wx, wy, maxD2) {
-    const click = [wx, wy];
-    let best = null;
-    let bestD2 = maxD2;
-    for (let i = 0; i < candidates.length; i++) {
-      const c = candidates[i];
-      const pt = getPoint(c);
-      if (!pt || pt.length < 2) continue;
-      const d2 = dist2(pt, click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = c;
-      }
-    }
-    return best;
-  }
-  function closestPointOnSegment(p1, p2, p) {
-    const [x1,y1]=p1,[x2,y2]=p2,[px,py]=p;
-    const dx=x2-x1,dy=y2-y1,len2=dx*dx+dy*dy;
-    if (len2===0) return null;
-    let t = ((px-x1)*dx+(py-y1)*dy)/len2;
-    t = Math.max(0,Math.min(1,t));
-    return [x1+t*dx,y1+t*dy];
-  }
-  function getClosestTerminalEdgePoint(wx, wy) {
-    const click = [wx, wy];
-    let best = null;
-    let bestD2 = Infinity;
-    (state.terminals || []).forEach(function(term) {
-      if (!term || !term.closed || !Array.isArray(term.vertices) || term.vertices.length < 2) return;
-      for (let i = 0; i < term.vertices.length; i++) {
-        const v1 = term.vertices[i];
-        const v2 = term.vertices[(i + 1) % term.vertices.length];
-        const p1 = cellToPixel(v1.col, v1.row);
-        const p2 = cellToPixel(v2.col, v2.row);
-        const near = closestPointOnSegment(p1, p2, click);
-        if (!near) continue;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = { point: near, term: term, edgeIndex: i };
-        }
-      }
-    });
-    return best;
-  }
-  function getPbbBoardingWidthM(pbb) {
-    const w = Number(pbb && pbb.boardingWidthM);
-    if (isFinite(w) && w > 0) return w;
-    return 5;
-  }
-  function getPbbBoardingHeightM(pbb) {
-    const h = Number(pbb && pbb.boardingHeightM);
-    if (isFinite(h) && h > 0) return h;
-    return 15;
-  }
-  function getPbbTerminalContactSetbackM(pbb) {
-    const v = Number(pbb && pbb.terminalContactSetbackM);
-    if (isFinite(v) && v >= 0) return v;
-    return 0;
-  }
-  function getPbbTerminalFrameFromEdge(term, edgeIndex, wallX, wallY) {
-    const v1 = term.vertices[edgeIndex], v2 = term.vertices[(edgeIndex + 1) % term.vertices.length];
-    const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-    const edx = p2[0] - p1[0], edy = p2[1] - p1[1];
-    const el = Math.hypot(edx, edy) || 1;
-    const tx = edx / el, ty = edy / el;
-    let nx = -ty, ny = tx;
-    let tcx = 0, tcy = 0;
-    term.vertices.forEach(function(v) {
-      const q = cellToPixel(v.col, v.row);
-      tcx += q[0];
-      tcy += q[1];
-    });
-    tcx /= term.vertices.length;
-    tcy /= term.vertices.length;
-    const inX = tcx - wallX, inY = tcy - wallY;
-    if (nx * inX + ny * inY > 0) {
-      nx = -nx;
-      ny = -ny;
-    }
-    return { tx: tx, ty: ty, nx: nx, ny: ny };
-  }
-  function getPbbTerminalFrameAtWorld(wx, wy) {
-    const proj = getClosestTerminalEdgePoint(wx, wy);
-    if (!proj || !proj.term) return null;
-    const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-    return { mpx: proj.point[0], mpy: proj.point[1], term: proj.term, edgeIndex: proj.edgeIndex, tx: fr.tx, ty: fr.ty, nx: fr.nx, ny: fr.ny };
-  }
-  function ensurePbbBoardingWallGeometry(pbb) {
-    if (!pbb || !Array.isArray(pbb.pbbBridges) || !pbb.pbbBridges.length) return;
-    const Tsrcx = Number.isFinite(Number(pbb.x1)) ? Number(pbb.x1) : Number(pbb.pbbBridges[0].points[0].x) || 0;
-    const Tsrcy = Number.isFinite(Number(pbb.y1)) ? Number(pbb.y1) : Number(pbb.pbbBridges[0].points[0].y) || 0;
-    const proj = getClosestTerminalEdgePoint(Tsrcx, Tsrcy);
-    if (!proj || !proj.term) return;
-    const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-    const wx = proj.point[0], wy = proj.point[1];
-    const Tx = wx, Ty = wy;
-    const depthM = getPbbBoardingHeightM(pbb);
-    const Bx = Tx + fr.nx * depthM, By = Ty + fr.ny * depthM;
-    pbb.pbbBridges.forEach(function(bridge) {
-      if (!bridge.points || bridge.points.length < 3) return;
-      bridge.points[0].x = Tx;
-      bridge.points[0].y = Ty;
-      bridge.points[1].x = Bx;
-      bridge.points[1].y = By;
-    });
-    pbb.x1 = Tx;
-    pbb.y1 = Ty;
-    pbb.x2 = Bx;
-    pbb.y2 = By;
-  }
-  function applyPbbArmLengthToBridgeEnds(pbb, armLenM) {
-    if (!pbb || !Array.isArray(pbb.pbbBridges)) return;
-    ensurePbbBoardingWallGeometry(pbb);
-    const len = Math.max(3, Number(armLenM) || 15);
-    pbb.pbbBridges.forEach(function(bridge) {
-      const pts = bridge.points;
-      if (!pts || pts.length < 3) return;
-      const bx = Number(pts[1].x), by = Number(pts[1].y);
-      const px = Number(pts[2].x), py = Number(pts[2].y);
-      let vx = px - bx, vy = py - by;
-      const hl = Math.hypot(vx, vy) || 1;
-      vx /= hl;
-      vy /= hl;
-      pts[2].x = bx + vx * len;
-      pts[2].y = by + vy * len;
-    });
-    bumpPathPolylineCacheRev();
-  }
-  function getPbbBoardingRectangleCornersWorldPx(pbb) {
-    ensurePbbBoardingWallGeometry(pbb);
-    const proj = getClosestTerminalEdgePoint(Number(pbb.x1) || 0, Number(pbb.y1) || 0);
-    if (!proj || !proj.term) return null;
-    const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-    const wx = proj.point[0], wy = proj.point[1];
-    const Tx = wx, Ty = wy;
-    const halfW = getPbbBoardingWidthM(pbb) * 0.5;
-    const depthM = getPbbBoardingHeightM(pbb);
-    const c0 = [Tx - fr.tx * halfW, Ty - fr.ty * halfW];
-    const c1 = [Tx + fr.tx * halfW, Ty + fr.ty * halfW];
-    const c2 = [c1[0] + fr.nx * depthM, c1[1] + fr.ny * depthM];
-    const c3 = [c0[0] + fr.nx * depthM, c0[1] + fr.ny * depthM];
-    return [c0, c1, c2, c3];
-  }
-  function drawPbbBoardingRectangle(ctx, pbb, sel) {
-    const poly = getPbbBoardingRectangleCornersWorldPx(pbb);
-    if (!poly || poly.length < 4) return;
-    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
-    const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
-    const monoFillP = layerMonoFillOn() && !sel;
-    const monoLineP = layerMonoLinesOn() && !sel;
-    const monoLp = c2dLayerMonoLineStrokeCss();
-    if (!sl && !sf) return;
-    ctx.save();

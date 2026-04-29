@@ -1,3 +1,214 @@
+    hydrateLayersFromGridObject(obj.grid || null, obj);
+    state.layoutImageOverlay = normalizeLayoutImageOverlay(
+      (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
+    );
+    invalidateGridUnderlay();
+    syncLayoutImageBitmap();
+    syncLayerPopoverFromState();
+    if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
+    if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
+    if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
+    if (Array.isArray(obj.tempStands)) state.tempStands = obj.tempStands.map(normalizeTempStandObject);
+    else state.tempStands = [];
+    state.taxiways = mergeTaxiwaysFromLayoutObject(obj);
+    invalidatePathGraphCache(true);
+    if (Array.isArray(obj.holdingPoints)) {
+      state.holdingPoints = obj.holdingPoints.map(function(h) {
+        const hx = Number(h && h.x);
+        const hy = Number(h && h.y);
+        let hpKind = null;
+        if (h && h.hpKind != null) hpKind = normalizeHoldingPointKind(h.hpKind);
+        if (!hpKind) {
+          const snap = snapHoldingPointOnAllowedTaxiways(hx, hy);
+          hpKind = (snap && snap.pathType) ? pathTypeToHpKind(snap.pathType) : 'intermediate';
+        }
+        return {
+          id: (h && h.id) ? h.id : id(),
+          name: h && h.name != null ? String(h.name) : '',
+          x: hx,
+          y: hy,
+          hpKind: hpKind
+        };
+      }).filter(function(h) { return h && isFinite(h.x) && isFinite(h.y); });
+    } else state.holdingPoints = [];
+    if (Array.isArray(obj.apronLinks)) {
+      const csAL = _layoutCellSizeForPersistLoad();
+      state.apronLinks = obj.apronLinks.map(function(lk) {
+        const copy = Object.assign({}, lk);
+        if (Array.isArray(copy.midVertices)) {
+          copy.midVertices = copy.midVertices.map(function(v) {
+            if (!v || typeof v !== 'object') return { col: 0, row: 0 };
+            const x = Number(v.x), y = Number(v.y);
+            if (isFinite(x) && isFinite(y)) return { col: x / csAL, row: y / csAL };
+            return { col: Number(v.col) || 0, row: Number(v.row) || 0 };
+          });
+        }
+        return copy;
+      });
+    }
+    if (Array.isArray(obj.directionModes) && obj.directionModes.length) {
+      state.directionModes = obj.directionModes.slice();
+    }
+    if (Array.isArray(obj.layoutMarkers)) {
+      state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(obj.layoutMarkers.map(normalizeLayoutMarkerFromLoad).filter(Boolean));
+    } else if (!Array.isArray(state.layoutMarkers)) {
+      state.layoutMarkers = [];
+    }
+    if (Array.isArray(obj.flights)) {
+      state.simPlaybackPositionsByFlightId = null;
+      state.simPlaybackScheduleSnapshot = null;
+      state.simPlaybackTimelinesEvictedForMemory = false;
+      state.flights = obj.flights.slice();
+      state.flights.forEach(f => {
+        const rawTl = Array.isArray(f.timeline) ? f.timeline : null;
+        const rawMeta = f.timeline_meta;
+        const rawProSimEl = Array.isArray(f.proSimEdgeList) ? f.proSimEdgeList.slice() : null;
+        const restorePlaybackFlight = !!(rawTl && rawTl.length >= 2);
+        const t = f.token || {};
+        const exitTwPersist = (t.ExitTaxiwayId != null && t.ExitTaxiwayId !== '') ? t.ExitTaxiwayId : null;
+        const arrRetFailedPersist = f.arrRetFailed === true;
+        if (f.aircraftType && typeof getCodeForAircraft === 'function') {
+          f.code = getCodeForAircraft(f.aircraftType);
+        } else if (f.code && typeof AIRCRAFT_TYPES !== 'undefined') {
+          const match = AIRCRAFT_TYPES.find(a => a.icao === f.code);
+          f.aircraftType = match ? match.id : (AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320';
+        }
+        f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
+        f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
+        f.terminalId = f.terminalId || t.terminalId || null;
+        const apronId = f.depApronId != null ? f.depApronId : (t.apronId != null ? t.apronId : (f.standId != null ? f.standId : f.arrApronId || null));
+        f.standId = apronId;
+        f.token = {
+          nodes: Array.isArray(t.nodes) ? t.nodes.slice() : ['runway','taxiway','apron','terminal'],
+          runwayId: f.arrRunwayId || null,
+          apronId: apronId,
+          terminalId: f.terminalId || null,
+          depRunwayId: f.depRunwayId || null,
+        };
+        if (exitTwPersist) f.token.ExitTaxiwayId = exitTwPersist;
+        f.noWayArr = false;
+        f.noWayDep = false;
+        delete f._noWayArrDetail;
+        delete f._noWayDepDetail;
+        if (restoreProSimSyncUi && f.arrDep !== 'Dep') {
+          if (exitTwPersist) {
+            f.sampledArrRet = exitTwPersist;
+            f.arrRetFailed = arrRetFailedPersist;
+          } else {
+            f.sampledArrRet = null;
+            f.arrRetFailed = false;
+          }
+        } else {
+          f.arrRetFailed = false;
+          f.sampledArrRet = null;
+        }
+        if (!restorePlaybackFlight) {
+          f.arrRotSec = null;
+          delete f.proSimVttArrSec;
+          delete f.proSimVttDepSec;
+          delete f.proSimDttArrSec;
+          delete f.proSimPushbackSec;
+          delete f.proSimDttDepSec;
+          delete f.proSimDepLineupSec;
+          f.arrRunwayIdUsed = null;
+          f.arrTdDistM = null;
+          f.arrRetDistM = null;
+          f.arrVTdMs = null;
+          f.arrDecelMs2 = null;
+          f.arrVRetInMs = null;
+          f.arrVRetOutMs = null;
+          f.timeline = null;
+          delete f.timeline_meta;
+          delete f.proSimEdgeList;
+          delete f.eldtMin;
+          delete f.eibtMin;
+          delete f.eobtMin;
+          delete f.etotMin;
+          delete f.eldtMin;
+          delete f.eibtMin;
+          delete f.eobtMin;
+          delete f.etotMin;
+        } else {
+          const tlNorm = rawTl.map(function(p) {
+            const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+            const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+            const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
+            const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
+            if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
+            if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
+            return o;
+          }).filter(function(k) {
+            return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+          }).sort(function(a, b) { return a.t - b.t; });
+          if (tlNorm.length >= 2) {
+            f.timeline = tlNorm;
+            if (rawMeta && typeof rawMeta === 'object') f.timeline_meta = Object.assign({}, rawMeta);
+            else delete f.timeline_meta;
+            if (rawProSimEl && rawProSimEl.length) {
+              f.proSimEdgeList = rawProSimEl;
+            } else if (Array.isArray(f.edge_list) && f.edge_list.length) {
+              f.proSimEdgeList = f.edge_list.slice();
+            }
+            hydrateEMinutesFromTimelineMetaIfMissing(f);
+          } else {
+            f.arrRotSec = null;
+            delete f.proSimVttArrSec;
+            delete f.proSimVttDepSec;
+            delete f.proSimDttArrSec;
+            delete f.proSimPushbackSec;
+            delete f.proSimDttDepSec;
+            delete f.proSimDepLineupSec;
+            f.arrRunwayIdUsed = null;
+            f.arrTdDistM = null;
+            f.arrRetDistM = null;
+            f.arrVTdMs = null;
+            f.arrDecelMs2 = null;
+            f.arrVRetInMs = null;
+            f.arrVRetOutMs = null;
+            f.timeline = null;
+            delete f.timeline_meta;
+            delete f.proSimEdgeList;
+            delete f.eldtMin;
+            delete f.eibtMin;
+            delete f.eobtMin;
+            delete f.etotMin;
+            delete f.eldtMin;
+            delete f.eibtMin;
+            delete f.eobtMin;
+            delete f.etotMin;
+          }
+        }
+        delete f.cachedArrPathPts;
+        delete f.cachedDepPathPts;
+        delete f._pathPolylineCacheRev;
+        delete f._pathPolylineArrRetKey;
+        f.__schedRetRotRev = null;
+        f.__schedVttArrRev = null;
+        f.__schedVttArrMin = null;
+        if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
+        if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
+        if (!String(f.reg || '').trim()) f.reg = randomRegNumber();
+        {
+          const idRaw = String(f.intDom || '').trim();
+          f.intDom = (idRaw.toLowerCase() === 'dom') ? 'Dom' : 'Int';
+        }
+        if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
+      });
+    } else {
+      state.flights = [];
+    }
+    if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
+    state.simPlaying = false;
+    state.layoutPathDrawPointer = null;
+    if (typeof refreshHasSimulationResultFromPlaybackSources === 'function') {
+      refreshHasSimulationResultFromPlaybackSources();
+    } else {
+      let playbackFlightCount = 0;
+      (state.flights || []).forEach(function(f) {
+        if (f && f.timeline && f.timeline.length >= 2) playbackFlightCount++;
+      });
+      state.hasSimulationResult = playbackFlightCount > 0;
     }
     if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
       state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
@@ -462,256 +673,3 @@
     }
     if (objectKind === 'terminal') {
       const arr = state.terminals || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'terminal', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'pbb') {
-      const arr = state.pbbStands || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'pbb', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'remote') {
-      const arr = state.remoteStands || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'remote', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'tempStand') {
-      const arr = state.tempStands || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'tempStand', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'holdingPoint') {
-      const arr = state.holdingPoints || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'holdingPoint', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'taxiway') {
-      const arr = state.taxiways || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'taxiway', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'apronLink') {
-      const arr = state.apronLinks || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = getApronLinkDisplayName(o);
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'apronLink', existing: disp };
-      }
-      return null;
-    }
-    if (objectKind === 'layoutEdge') {
-      const map = state.layoutEdgeNames || {};
-      const edgeIds = Object.keys(map);
-      for (let ki = 0; ki < edgeIds.length; ki++) {
-        const kid = edgeIds[ki];
-        if (!isOther(kid)) continue;
-        const disp = map[kid];
-        if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
-      }
-      return null;
-    }
-    return null;
-  }
-  function alertDuplicateLayoutName() {
-    alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
-  }
-  function ensureDefaultDirectionModes() {
-    if (state.directionModes.length === 0) {
-      state.directionModes = [
-        { id: id(), name: 'Mode A', direction: 'clockwise' },
-        { id: id(), name: 'Mode B', direction: 'counter_clockwise' },
-        { id: id(), name: 'Mode C', direction: 'both' }
-      ];
-    }
-  }
-  const undoStack = [];
-  const maxUndoLevels = _interactionConfigNum('maxUndoLevels', 50);
-  function pushUndo() {
-    const snap = {
-      terminals: JSON.parse(JSON.stringify(state.terminals || [])),
-      pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
-      remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
-      tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
-      holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
-      taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
-      apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
-      layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
-      layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
-      directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
-      flights: cloneFlightsWithoutPathPolylineCache(state.flights),
-      layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))
-    };
-    undoStack.push(snap);
-    if (undoStack.length > maxUndoLevels) undoStack.shift();
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-  }
-  function undo() {
-    if (!undoStack.length) return;
-    const snap = undoStack.pop();
-    state.terminals = snap.terminals;
-    state.pbbStands = snap.pbbStands;
-    state.remoteStands = snap.remoteStands;
-    state.tempStands = snap.tempStands || [];
-    state.holdingPoints = snap.holdingPoints || [];
-    state.taxiways = snap.taxiways;
-    state.apronLinks = snap.apronLinks;
-    state.apronLinkJunctionOverlayDirtyIds = null;
-    state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
-    syncLayoutImageBitmap();
-    state.layoutEdgeNames = snap.layoutEdgeNames || {};
-    state.directionModes = snap.directionModes;
-    state.flights = snap.flights;
-    state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(Array.isArray(snap.layoutMarkers) ? snap.layoutMarkers : []);
-    state.pathArcDrag = null;
-    state.selectedObject = null;
-    state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
-    state.terminalDrawingId = null;
-    state.taxiwayDrawingId = null;
-    state.layoutPathDrawPointer = null;
-    syncPanelFromState();
-    updateObjectInfo();
-    renderObjectList();
-    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-  }
-  function getTaxiwayDirection(tw) {
-    if (!tw) return 'both';
-    if (tw.direction != null) {
-      const d = tw.direction;
-      if (d === 'topToBottom') return 'clockwise';
-      if (d === 'bottomToTop') return 'counter_clockwise';
-      return d || 'both';
-    }
-    if (tw.directionModeId) {
-      const m = state.directionModes.find(d => d.id === tw.directionModeId);
-      if (m && m.direction) return m.direction;
-    }
-    return 'both';
-  }
-  function normalizeRwDirectionValue(dir) {
-    if (dir == null) return 'both';
-    const s0 = String(dir).trim();
-    if (!s0) return 'both';
-    const s = s0.toLowerCase().replace(/[\s-]+/g, '_');
-    if (s === 'clockwise' || s === 'cw') return 'clockwise';
-    if (s === 'counter_clockwise' || s === 'ccw' || s === 'counterclockwise') return 'counter_clockwise';
-    if (s === 'top_tobottom' || s === 'toptobottom' || s === 'ttb') return 'clockwise';
-    if (s === 'bottom_totop' || s === 'bottomtotop' || s === 'btt') return 'counter_clockwise';
-    return 'both';
-  }
-  function normalizeAllowedRunwayDirections(raw) {
-    const out = [];
-    const src = Array.isArray(raw) ? raw : [];
-    src.forEach(function(v) {
-      const d = normalizeRwDirectionValue(v);
-      if (d === 'clockwise' && out.indexOf('clockwise') < 0) out.push('clockwise');
-      if (d === 'counter_clockwise' && out.indexOf('counter_clockwise') < 0) out.push('counter_clockwise');
-    });
-    return out;
-  }
-  function getTaxiwayAllowedRunwayDirections(tw) {
-    if (!tw || tw.pathType !== 'runway_exit') return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
-    const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
-    if (!arr.length) return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
-    return arr;
-  }
-  function isRunwayExitDirectionAllowed(tw, runwayDir) {
-    const d = normalizeRwDirectionValue(runwayDir);
-    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
-    const allow = getTaxiwayAllowedRunwayDirections(tw);
-    return allow.indexOf(d) >= 0;
-  }
-  /**
-   * Arrival RET sampling (F2): runways in the property panel are always stored as CW or CCW;
-   * legacy data may still have direction "both". The panel coerces "both" to the CW option for display,
-   * so we use CW as the operational match for "Available RW direction" vs the runway.
-   */
-  function getRunwayOperationalDirForArrivalRetFilter2(rw) {
-    if (!rw || rw.pathType !== 'runway') return 'clockwise';
-    const raw = getTaxiwayDirection(rw);
-    const d = normalizeRwDirectionValue(raw);
-    if (d === 'clockwise' || d === 'counter_clockwise') return d;
-    return 'clockwise';
-  }
-  /**
-   * F2: same semantics as checkboxes, but an explicit `allowedRwDirections: []` (both unchecked) means
-   * "no use" — do not re-expand to the default both-way list (pathfinding may still do that for legacy).
-   */
-  function isRunwayExitDirAllowedForArrivalFilter2(exitTw, runwayDir) {
-    const d = normalizeRwDirectionValue(runwayDir);
-    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
-    if (!exitTw || exitTw.pathType !== 'runway_exit') return false;
-    if (Object.prototype.hasOwnProperty.call(exitTw, 'allowedRwDirections')) {
-      const arr = normalizeAllowedRunwayDirections(exitTw.allowedRwDirections);
-      if (arr.length === 0) return false;
-      return arr.indexOf(d) >= 0;
-    }
-    return isRunwayExitDirectionAllowed(exitTw, d);
-  }
-  function getRunwayExitAllowedDirectionsFromPanel() {
-    const out = [];
-    const container = document.getElementById('runwayExitAllowedDirection');
-    if (!container) return out;
-    container.querySelectorAll('.runway-exit-dir-check').forEach(function(ch) {
-      if (!ch.checked) return;
-      const value = String(ch.getAttribute('data-item-id') || '').trim();
-      if (value === 'clockwise' || value === 'counter_clockwise') out.push(value);
-    });
-    return out;
-  }
-
-  const _rwy = _tiers.runway || {};
-  const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
-  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
-  const RSEP_COLOR_THRESHOLDS = (function() {
-    const arr = _sepUi.inputColorThresholdsSec;
-    if (Array.isArray(arr) && arr.length) {
-      return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
-    }
-    return [90, 120, 150];
-  })();
-  const RSEP_LEGEND_LAB = (_sepUi.legendLabels && typeof _sepUi.legendLabels === 'object') ? _sepUi.legendLabels : {};
-  function rsepLegendFmt(tpl, a0, a1) {
-    let s = String(tpl || '');
-    if (a1 != null && s.indexOf('{1}') >= 0) return s.replace('{0}', String(a0)).replace('{1}', String(a1));
-    return s.replace('{0}', String(a0));
-  }
-  const RSEP_COLOR_STYLES = [
-    { bg: '#0d2018', color: '#68d391', border: '#68d39155' },
-    { bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' },
-    { bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' },
-    { bg: '#280d0d', color: '#fc8181', border: '#fc818155' },
-  ];
-  const _stds = _rwy.standards || {};
-  const RSEP_STD_CATS = {

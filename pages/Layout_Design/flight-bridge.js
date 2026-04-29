@@ -1,3 +1,256 @@
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'terminal', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'pbb') {
+      const arr = state.pbbStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'pbb', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'remote') {
+      const arr = state.remoteStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'remote', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'tempStand') {
+      const arr = state.tempStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'tempStand', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'holdingPoint') {
+      const arr = state.holdingPoints || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'holdingPoint', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'taxiway') {
+      const arr = state.taxiways || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'taxiway', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'apronLink') {
+      const arr = state.apronLinks || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = getApronLinkDisplayName(o);
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'apronLink', existing: disp };
+      }
+      return null;
+    }
+    if (objectKind === 'layoutEdge') {
+      const map = state.layoutEdgeNames || {};
+      const edgeIds = Object.keys(map);
+      for (let ki = 0; ki < edgeIds.length; ki++) {
+        const kid = edgeIds[ki];
+        if (!isOther(kid)) continue;
+        const disp = map[kid];
+        if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
+      }
+      return null;
+    }
+    return null;
+  }
+  function alertDuplicateLayoutName() {
+    alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
+  }
+  function ensureDefaultDirectionModes() {
+    if (state.directionModes.length === 0) {
+      state.directionModes = [
+        { id: id(), name: 'Mode A', direction: 'clockwise' },
+        { id: id(), name: 'Mode B', direction: 'counter_clockwise' },
+        { id: id(), name: 'Mode C', direction: 'both' }
+      ];
+    }
+  }
+  const undoStack = [];
+  const maxUndoLevels = _interactionConfigNum('maxUndoLevels', 50);
+  function pushUndo() {
+    const snap = {
+      terminals: JSON.parse(JSON.stringify(state.terminals || [])),
+      pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
+      remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+      tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
+      holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
+      taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
+      apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
+      layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
+      layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
+      directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
+      flights: cloneFlightsWithoutPathPolylineCache(state.flights),
+      layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))
+    };
+    undoStack.push(snap);
+    if (undoStack.length > maxUndoLevels) undoStack.shift();
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    const snap = undoStack.pop();
+    state.terminals = snap.terminals;
+    state.pbbStands = snap.pbbStands;
+    state.remoteStands = snap.remoteStands;
+    state.tempStands = snap.tempStands || [];
+    state.holdingPoints = snap.holdingPoints || [];
+    state.taxiways = snap.taxiways;
+    state.apronLinks = snap.apronLinks;
+    state.apronLinkJunctionOverlayDirtyIds = null;
+    state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
+    syncLayoutImageBitmap();
+    state.layoutEdgeNames = snap.layoutEdgeNames || {};
+    state.directionModes = snap.directionModes;
+    state.flights = snap.flights;
+    state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(Array.isArray(snap.layoutMarkers) ? snap.layoutMarkers : []);
+    state.pathArcDrag = null;
+    state.selectedObject = null;
+    state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
+    state.terminalDrawingId = null;
+    state.taxiwayDrawingId = null;
+    state.layoutPathDrawPointer = null;
+    syncPanelFromState();
+    updateObjectInfo();
+    renderObjectList();
+    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+  }
+  function getTaxiwayDirection(tw) {
+    if (!tw) return 'both';
+    if (tw.direction != null) {
+      const d = tw.direction;
+      if (d === 'topToBottom') return 'clockwise';
+      if (d === 'bottomToTop') return 'counter_clockwise';
+      return d || 'both';
+    }
+    if (tw.directionModeId) {
+      const m = state.directionModes.find(d => d.id === tw.directionModeId);
+      if (m && m.direction) return m.direction;
+    }
+    return 'both';
+  }
+  function normalizeRwDirectionValue(dir) {
+    if (dir == null) return 'both';
+    const s0 = String(dir).trim();
+    if (!s0) return 'both';
+    const s = s0.toLowerCase().replace(/[\s-]+/g, '_');
+    if (s === 'clockwise' || s === 'cw') return 'clockwise';
+    if (s === 'counter_clockwise' || s === 'ccw' || s === 'counterclockwise') return 'counter_clockwise';
+    if (s === 'top_tobottom' || s === 'toptobottom' || s === 'ttb') return 'clockwise';
+    if (s === 'bottom_totop' || s === 'bottomtotop' || s === 'btt') return 'counter_clockwise';
+    return 'both';
+  }
+  function normalizeAllowedRunwayDirections(raw) {
+    const out = [];
+    const src = Array.isArray(raw) ? raw : [];
+    src.forEach(function(v) {
+      const d = normalizeRwDirectionValue(v);
+      if (d === 'clockwise' && out.indexOf('clockwise') < 0) out.push('clockwise');
+      if (d === 'counter_clockwise' && out.indexOf('counter_clockwise') < 0) out.push('counter_clockwise');
+    });
+    return out;
+  }
+  function getTaxiwayAllowedRunwayDirections(tw) {
+    if (!tw || tw.pathType !== 'runway_exit') return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
+    const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
+    if (!arr.length) return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
+    return arr;
+  }
+  function isRunwayExitDirectionAllowed(tw, runwayDir) {
+    const d = normalizeRwDirectionValue(runwayDir);
+    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
+    const allow = getTaxiwayAllowedRunwayDirections(tw);
+    return allow.indexOf(d) >= 0;
+  }
+  /**
+   * Arrival RET sampling (F2): runways in the property panel are always stored as CW or CCW;
+   * legacy data may still have direction "both". The panel coerces "both" to the CW option for display,
+   * so we use CW as the operational match for "Available RW direction" vs the runway.
+   */
+  function getRunwayOperationalDirForArrivalRetFilter2(rw) {
+    if (!rw || rw.pathType !== 'runway') return 'clockwise';
+    const raw = getTaxiwayDirection(rw);
+    const d = normalizeRwDirectionValue(raw);
+    if (d === 'clockwise' || d === 'counter_clockwise') return d;
+    return 'clockwise';
+  }
+  /**
+   * F2: same semantics as checkboxes, but an explicit `allowedRwDirections: []` (both unchecked) means
+   * "no use" — do not re-expand to the default both-way list (pathfinding may still do that for legacy).
+   */
+  function isRunwayExitDirAllowedForArrivalFilter2(exitTw, runwayDir) {
+    const d = normalizeRwDirectionValue(runwayDir);
+    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
+    if (!exitTw || exitTw.pathType !== 'runway_exit') return false;
+    if (Object.prototype.hasOwnProperty.call(exitTw, 'allowedRwDirections')) {
+      const arr = normalizeAllowedRunwayDirections(exitTw.allowedRwDirections);
+      if (arr.length === 0) return false;
+      return arr.indexOf(d) >= 0;
+    }
+    return isRunwayExitDirectionAllowed(exitTw, d);
+  }
+  function getRunwayExitAllowedDirectionsFromPanel() {
+    const out = [];
+    const container = document.getElementById('runwayExitAllowedDirection');
+    if (!container) return out;
+    container.querySelectorAll('.runway-exit-dir-check').forEach(function(ch) {
+      if (!ch.checked) return;
+      const value = String(ch.getAttribute('data-item-id') || '').trim();
+      if (value === 'clockwise' || value === 'counter_clockwise') out.push(value);
+    });
+    return out;
+  }
+
+  const _rwy = _tiers.runway || {};
+  const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
+  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
+  const RSEP_COLOR_THRESHOLDS = (function() {
+    const arr = _sepUi.inputColorThresholdsSec;
+    if (Array.isArray(arr) && arr.length) {
+      return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
+    }
+    return [90, 120, 150];
+  })();
+  const RSEP_LEGEND_LAB = (_sepUi.legendLabels && typeof _sepUi.legendLabels === 'object') ? _sepUi.legendLabels : {};
+  function rsepLegendFmt(tpl, a0, a1) {
+    let s = String(tpl || '');
+    if (a1 != null && s.indexOf('{1}') >= 0) return s.replace('{0}', String(a0)).replace('{1}', String(a1));
+    return s.replace('{0}', String(a0));
+  }
+  const RSEP_COLOR_STYLES = [
+    { bg: '#0d2018', color: '#68d391', border: '#68d39155' },
+    { bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' },
+    { bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' },
+    { bg: '#280d0d', color: '#fc8181', border: '#fc818155' },
+  ];
+  const _stds = _rwy.standards || {};
+  const RSEP_STD_CATS = {
     'ICAO': (_stds.ICAO && _stds.ICAO.categories) ? _stds.ICAO.categories : ['J','H','M','L'],
     'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categories) ? _stds['RECAT-EU'].categories : ['A','B','C','D','E','F'],
   };
@@ -195,256 +448,3 @@
   }
   function worldPointToCellPoint(wx, wy, snapToGrid) {
     const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-    const step = snapToGrid ? GRID_SNAP_STEP_CELL : FREE_DRAW_STEP_CELL;
-    const col = roundToStep(wx / cs, step);
-    const row = roundToStep(wy / cs, step);
-    const clamped = clampToGridBounds(col, row);
-    return { col: clamped[0], row: clamped[1] };
-  }
-  function worldPointToPixel(wx, wy, snapToGrid) {
-    const pt = worldPointToCellPoint(wx, wy, snapToGrid);
-    return cellToPixel(pt.col, pt.row);
-  }
-  const ICAO_STAND_SIZE_M = (function() {
-    const m = _layoutTier.standSizesMByIcaoCategory;
-    if (m && typeof m === 'object') {
-      const o = {};
-      Object.keys(m).forEach(k => { o[k] = Number(m[k]); });
-      return o;
-    }
-    return { A: 20, B: 30, C: 40, D: 50, E: 60, F: 80 };
-  })();
-  function getStandSizeMeters(cat) { return ICAO_STAND_SIZE_M[cat] || 40; }
-  const STAND_CONFIG_ROW_BY_CODE = (function() {
-    const raw = _layoutTier.standConfig;
-    const out = {};
-    if (!raw || typeof raw !== 'object') return out;
-    Object.keys(raw).forEach(function(k) {
-      if (k === 'description') return;
-      const row = raw[k];
-      if (!row || typeof row !== 'object') return;
-      const ws = Number(row.wingspan), g = Number(row.gap), rd = Number(row.road);
-      const ln = Number(row.length), nc = Number(row.nose_clear), pb = Number(row.pushback);
-      const dp = Number(row.depth);
-      if (![ws, g, rd, ln, nc, pb, dp].every(isFinite)) return;
-      const rowOut = { wingspan: ws, gap: g, road: rd, length: ln, nose_clear: nc, pushback: pb, depth: dp };
-      const og = Number(row.outer_gear), nsc = Number(row.nose_side_clear), nw = Number(row.nose_width);
-      if (isFinite(og)) rowOut.outer_gear = og;
-      if (isFinite(nsc)) rowOut.nose_side_clear = nsc;
-      if (isFinite(nw)) rowOut.nose_width = nw;
-      out[String(k).toUpperCase().slice(0, 1)] = rowOut;
-    });
-    return out;
-  })();
-  function standConfigRowForIcaoCat(cat) {
-    const s = String(cat == null ? 'C' : cat).toUpperCase();
-    let c = 'C';
-    for (let i = 0; i < s.length; i++) {
-      const ch = s.charAt(i);
-      if (ch >= 'A' && ch <= 'F') {
-        c = ch;
-        break;
-      }
-    }
-    return STAND_CONFIG_ROW_BY_CODE[c] || null;
-  }
-  function getStandWidthMeters(cat) {
-    const r = standConfigRowForIcaoCat(cat);
-    if (r) return r.wingspan + r.gap * 2;
-    return getStandSizeMeters(cat);
-  }
-  function getStandDepthMeters(cat) {
-    const r = standConfigRowForIcaoCat(cat);
-    if (r) return r.depth;
-    return getStandSizeMeters(cat);
-  }
-  function getStandSpacingMeters(catA, catB) {
-    const ra = standConfigRowForIcaoCat(catA);
-    const rb = standConfigRowForIcaoCat(catB);
-    if (ra && rb) return Math.max(ra.road, rb.road);
-    return 0;
-  }
-  function standFootprintLocalToWorld(cx, cy, angleRad, lx, ly) {
-    const cos = Math.cos(angleRad), sin = Math.sin(angleRad);
-    return [cx + lx * cos - ly * sin, cy + lx * sin + ly * cos];
-  }
-  function standStopbarCenterShiftLocalX(depM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || depM <= 0) return 0;
-    const nc = Number(r.nose_clear);
-    if (!isFinite(nc) || nc <= 0) return 0;
-    const halfD = depM / 2;
-    const xStopOld = -halfD + nc;
-    if (!(xStopOld > -halfD && xStopOld < halfD)) return 0;
-    return -xStopOld;
-  }
-  /** Nose (−X) width = nose_width; stop bar at nose_clear from nose edge; 45° flare to full stand width (±halfW), then rectangle to tail (+halfD). */
-  function buildStandSafetyPolygonPath(ctx, depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return false;
-    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
-    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return false;
-    const halfD = depM / 2, halfW = widM / 2;
-    const noseHalf = nw / 2;
-    const eps = 0.08;
-    if (noseHalf >= halfW - eps) return false;
-    const xNose = -halfD;
-    const xStop = -halfD + nc;
-    if (xStop <= xNose + eps || xStop >= halfD - eps) return false;
-    const latRun = halfW - noseHalf;
-    if (latRun <= eps) return false;
-    const xBendEnd = xStop + latRun;
-    if (xBendEnd > halfD + eps) return false;
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    ctx.beginPath();
-    ctx.moveTo(xNose + shiftX, -noseHalf);
-    ctx.lineTo(xNose + shiftX, noseHalf);
-    ctx.lineTo(xStop + shiftX, noseHalf);
-    ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
-    if (xBendEnd < halfD - eps) {
-      ctx.lineTo(halfD + shiftX, halfW);
-      ctx.lineTo(halfD + shiftX, -halfW);
-      ctx.lineTo(xBendEnd + shiftX, -halfW);
-    } else {
-      ctx.lineTo(halfD + shiftX, -halfW);
-    }
-    ctx.lineTo(xStop + shiftX, -noseHalf);
-    ctx.closePath();
-    return true;
-  }
-  /** Stand-local +X = tail/apron-open, −X = nose/terminal-ward. Red dashed: stop bar (nose_clear), pushback (pushback), lateral gap bounds (wingspan ± vs stand width). Clipped to safety footprint when nose geometry applies. */
-  function drawStandApronMarkingsInLocalAxes(ctx, depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return;
-    const halfD = depM / 2, halfW = widM / 2;
-    const eps = 0.12;
-    ctx.save();
-    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
-      ctx.clip();
-    }
-    ctx.strokeStyle = layerMonoLinesOn() ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
-    ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
-    ctx.setLineDash([2, 2.5]);
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'miter';
-    const nc = Number(r.nose_clear), pb = Number(r.pushback);
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    if (isFinite(nc) && isFinite(pb)) {
-      const xStop = 0;
-      const xPush = (halfD - pb) + shiftX;
-      const xMin = (-halfD) + shiftX;
-      const xMax = (halfD) + shiftX;
-      if (xStop > -halfD + eps && xStop < halfD - eps) {
-        ctx.beginPath();
-        ctx.moveTo(xStop, -halfW);
-        ctx.lineTo(xStop, halfW);
-        ctx.stroke();
-      }
-      if (xPush < xMax - eps && xPush > xMin + eps) {
-        ctx.beginPath();
-        ctx.moveTo(xPush, -halfW);
-        ctx.lineTo(xPush, halfW);
-        ctx.stroke();
-      }
-    }
-    const g = Number(r.gap), ws = Number(r.wingspan);
-    if (isFinite(g) && g > eps && isFinite(ws) && ws > 0) {
-      const yLim = halfW - g;
-      if (yLim > eps && yLim < halfW - eps) {
-        ctx.beginPath();
-        ctx.moveTo(-halfD + shiftX, yLim);
-        ctx.lineTo(halfD + shiftX, yLim);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-halfD + shiftX, -yLim);
-        ctx.lineTo(halfD + shiftX, -yLim);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
-  function fillStandSafetyFootprintInLocalAxes(ctx, depM, widM, category) {
-    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
-      ctx.fill();
-      return;
-    }
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    ctx.beginPath();
-    ctx.rect((-depM / 2) + shiftX, -widM / 2, depM, widM);
-    ctx.fill();
-  }
-  function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
-    if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
-    ctx.save();
-    ctx.strokeStyle = (!selected && layerMonoLinesOn()) ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
-    const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
-    ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
-    ctx.setLineDash([]);
-    ctx.lineJoin = 'miter';
-    ctx.lineCap = 'butt';
-    if (selected) {
-      ctx.shadowColor = c2dObjectSelectedGlow();
-      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-  /** Local +X from stand box center to end of 45° flare (full-width main body); 0 if nose geometry unused. */
-  function standSafetyAircraftCenterLocalXM(depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return 0;
-    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
-    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return 0;
-    const halfD = depM / 2, halfW = widM / 2;
-    const noseHalf = nw / 2;
-    const eps = 0.08;
-    if (noseHalf >= halfW - eps) return 0;
-    const xNose = -halfD;
-    const xStop = -halfD + nc;
-    if (xStop <= xNose + eps || xStop >= halfD - eps) return 0;
-    const latRun = halfW - noseHalf;
-    if (latRun <= eps) return 0;
-    const xBendEnd = xStop + latRun;
-    if (xBendEnd > halfD + eps) return 0;
-    return xBendEnd;
-  }
-  function getStandAircraftMarkerWorldPxForPbb(pbb) {
-    const cxy = getStandConnectionPx(pbb);
-    return [cxy[0], cxy[1]];
-  }
-  function getStandAircraftMarkerWorldPxForRemoteLike(st) {
-    const cxy = getStandConnectionPx(st);
-    return [cxy[0], cxy[1]];
-  }
-  const APRON_SITE_MARKER_WIDTH_M = 5;
-  const APRON_SITE_MARKER_HEIGHT_M = 1;
-  function _ensureLayoutToastStack() {
-    let stack = document.getElementById('layout-toast-stack');
-    if (!stack) {
-      stack = document.createElement('div');
-      stack.id = 'layout-toast-stack';
-      stack.className = 'layout-toast-stack';
-      document.body.appendChild(stack);
-    }
-    return stack;
-  }
-  function _formatToastTimestamp(d) {
-    const pad = function(n) { return String(n).padStart(2, '0'); };
-    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-  }
-  function showLayoutSavedToast(layoutName, kind, subText) {
-    const stack = _ensureLayoutToastStack();
-    const el = document.createElement('div');
-    const variant = kind === 'error' ? 'is-error' : 'is-success';
-    el.className = 'layout-toast ' + variant;
-    const title = document.createElement('div');
-    title.className = 'layout-toast-title';
-    const ts = _formatToastTimestamp(new Date());
-    const name = String(layoutName || '').trim() || 'layout';
-    if (kind === 'error') {
-      title.textContent = ts + ' · save failed · ' + name;
-    } else {
-      title.textContent = ts + ' · saved · ' + name;
-    }
-    el.appendChild(title);
-    if (subText) {

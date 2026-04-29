@@ -249,7 +249,6 @@
   }
   const FLIGHT_TRAIL_LENGTH_M = Math.max(0, Number(_algoSimTier.trailLengthM) || 300);
   const PRE_TOUCHDOWN_HALO_ENABLED = (_algoSimTier.preTouchdownHaloEnabled !== false);
-  const PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC = Math.max(0, Number(_algoSimTier.playbackLeadBeforeFirstTouchdownSec) || 0);
   const MAX_LAZY_TIMELINE_BUILDS_PER_FRAME = Math.max(1, Math.min(64, Number(_algoSimTier.maxLazyTimelineBuildsPerFrame) || 6));
   const _pathSearchTier = (_algoTier.pathSearch && typeof _algoTier.pathSearch === 'object') ? _algoTier.pathSearch : {};
   const _junctionMergeRadiusRaw = Number(_pathSearchTier.junctionMergeRadiusPx);
@@ -2477,6 +2476,20 @@
       };
     });
   }
+  /** If E minute fields were omitted from persist but Pro Sim left them on ``timeline_meta``, fill them for schedule UI. */
+  function hydrateEMinutesFromTimelineMetaIfMissing(f) {
+    if (!f || !f.timeline_meta || typeof f.timeline_meta !== 'object') return;
+    const m = f.timeline_meta;
+    function setMin(minKey, secKey) {
+      if (f[minKey] != null && isFinite(Number(f[minKey]))) return;
+      const n = m[secKey] != null ? Number(m[secKey]) : NaN;
+      if (isFinite(n)) f[minKey] = n / 60;
+    }
+    setMin('eldtMin', 'eldtSec');
+    setMin('eibtMin', 'eibtSec');
+    setMin('eobtMin', 'eobtSec');
+    setMin('etotMin', 'etotSec');
+  }
   function applyLayoutObject(obj) {
     if (!obj || typeof obj !== 'object') return;
     state.simPlaybackEndCapSec = null;
@@ -2639,6 +2652,7 @@
             } else if (Array.isArray(f.edge_list) && f.edge_list.length) {
               f.proSimEdgeList = f.edge_list.slice();
             }
+            hydrateEMinutesFromTimelineMetaIfMissing(f);
           } else {
             f.arrRotSec = null;
             delete f.proSimVttArrSec;
@@ -4644,6 +4658,10 @@
           'sibtMin',
           'sobtMin',
           'stotMin',
+          'eldtMin',
+          'eibtMin',
+          'eobtMin',
+          'etotMin',
           'arrApronId',
           'depApronId',
           'eibtMinList',
@@ -8337,11 +8355,9 @@
       maxT = 0;
     }
     let simLo = minT;
-    if (PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC > 0) {
-      const firstTdS = minFirstArrivalTouchdownSecAmongFlights();
-      if (firstTdS != null) {
-        simLo = Math.max(0, firstTdS - PLAYBACK_LEAD_BEFORE_FIRST_TD_SEC);
-      }
+    const firstTdS = minFirstArrivalTouchdownSecAmongFlights();
+    if (firstTdS != null) {
+      simLo = Math.max(0, firstTdS - 10);
     }
     let durSec = Math.max(maxT, minT);
     const capAbs = state.simPlaybackEndCapSec;
