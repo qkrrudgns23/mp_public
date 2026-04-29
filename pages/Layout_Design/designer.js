@@ -1656,6 +1656,7 @@
     if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
   }
   function redrawLayoutAfterEdit() {
+    bumpPathPolylineCacheRev();
     if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
     // Full reset rebuilds junctions in draw(); manual-sync mode keeps last graph for display until Update / Pro Sim.
     if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
@@ -22734,7 +22735,7 @@
     const nowPerfDraw = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     const viewRoughInteraction = !!(state.isPanning || nowPerfDraw < _layoutDetailSuppressUntil);
     /** 시뮬 재생 여부와 무관: 결과가 있고 뷰가 안정일 때 그리드~홀딩포인트까지 비트맵으로 재사용. 팬/휠 중에는 직접 그려 오프스크린 이중 작업 방지. */
-    const layoutBgBitmapCache = !!(state.hasSimulationResult && !interactiveLite && !(drawOpts && drawOpts.forceFullLayoutDraw) && !viewRoughInteraction);
+    const layoutBgBitmapCache = !!(state.hasSimulationResult && !interactiveLite && !(drawOpts && drawOpts.forceFullLayoutDraw) && !viewRoughInteraction && !state.taxiwayDrawingId && !state.terminalDrawingId && !layoutViewIsDragging() && !state.pathArcDrag);
     if (layoutBgBitmapCache) {
       const w = layoutDrawCanvas.width, h = layoutDrawCanvas.height;
       ensureSimPlaybackBgCanvasBuffer(w, h);
