@@ -6224,7 +6224,7 @@
   }
 
   function hitTestSimFlightAtWorld(wx, wy) {
-    if (!state.hasSimulationResult || !state.flights || !state.flights.length) return null;
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed() || !state.flights || !state.flights.length) return null;
     const tSec = state.simTimeSec;
     let best = null;
     let bestD2 = (CELL_SIZE * FLIGHT_TOOLTIP_CF) ** 2;
@@ -8468,7 +8468,7 @@
   }
 
   function isStandOccupiedAtSimSec(standId, tSec) {
-    if (!standId || !state.hasSimulationResult) return false;
+    if (!standId || !simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed()) return false;
     const t = Number(tSec);
     if (!isFinite(t)) return false;
     const flights = state.flights || [];
@@ -8783,18 +8783,39 @@
     const tl = flight.timeline;
     if (!tl || !tl.length) return null;
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
-    for (let i = 0; i < tl.length - 1; i++) {
-      const a = tl[i], b = tl[i+1];
-      if (tSec >= a.t && tSec <= b.t) {
-        const span = b.t - a.t || 1;
-        const u = (tSec - a.t) / span;
-        return {
-          x: a.x + (b.x - a.x) * u,
-          y: a.y + (b.y - a.y) * u
-        };
-      }
+    const i = timelineSegmentIndexAtTime(tl, tSec, false);
+    if (i < 0) return null;
+    const a = tl[i], b = tl[i+1];
+    const span = b.t - a.t || 1;
+    const u = (tSec - a.t) / span;
+    return {
+      x: a.x + (b.x - a.x) * u,
+      y: a.y + (b.y - a.y) * u
+    };
+  }
+
+  function timelineSegmentIndexAtTime(tl, tSec, clampEnd) {
+    if (!tl || tl.length < 2) return -1;
+    let t = Number(tSec);
+    if (!isFinite(t)) return -1;
+    const firstT = Number(tl[0].t);
+    const lastT = Number(tl[tl.length - 1].t);
+    if (!isFinite(firstT) || !isFinite(lastT)) return -1;
+    if (t + 1e-9 < firstT) return -1;
+    if (t > lastT) {
+      if (!clampEnd) return -1;
+      t = lastT;
     }
-    return null;
+    let lo = 0, hi = tl.length - 1;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (Number(tl[mid].t) <= t + 1e-9) lo = mid;
+      else hi = mid - 1;
+    }
+    let idx = Math.min(lo, tl.length - 2);
+    while (idx > 0 && Number(tl[idx].t) > t + 1e-9) idx--;
+    while (idx < tl.length - 2 && Number(tl[idx + 1].t) < t - 1e-9) idx++;
+    return (t + 1e-9 >= Number(tl[idx].t) && t - 1e-9 <= Number(tl[idx + 1].t)) ? idx : -1;
   }
 
   function getFlightPoseAtTime(flight, tSec) {
@@ -8849,40 +8870,38 @@
       if (vl < bmin) return null;
       return { x, y, dx: vdx / vl, dy: vdy / vl, deadlockGhost: dg };
     }
-    for (let i = 0; i < tl.length - 1; i++) {
+    const idxAtTime = timelineSegmentIndexAtTime(tl, tSec, false);
+    if (idxAtTime >= 0) {
+      let i = idxAtTime;
       let a = tl[i], b = tl[i+1];
-      if (tSec >= a.t && tSec <= b.t) {
-        let useI = i;
-        // At a time-key at the end of [a,b], the first matching segment is the *incoming* leg.
-        // The bicycle (rear on polyline) + that chord can show nose 180° off next-second motion.
-        // Prefer the *outgoing* segment [b, next] (same (x,y) at t=b.t, u=0) so F/R wheels stay
-        // consistent with time-forward motion. Last segment has no outgoing — keep i.
-        if (i + 1 < tl.length - 1) {
-          const a2 = tl[i+1], b2 = tl[i+2];
-          if (a2 && b2 && b2.t > a2.t && Math.abs(tSec - b.t) < 1e-5) {
-            if (Math.abs(b.t - a2.t) < 1e-5) {
-              useI = i + 1;
-              a = a2;
-              b = b2;
-            }
+      let useI = i;
+      // At a time-key at the end of [a,b], prefer the outgoing segment so F/R wheels
+      // stay consistent with time-forward motion. Last segment has no outgoing.
+      if (i + 1 < tl.length - 1) {
+        const a2 = tl[i+1], b2 = tl[i+2];
+        if (a2 && b2 && b2.t > a2.t && Math.abs(tSec - b.t) < 1e-5) {
+          if (Math.abs(b.t - a2.t) < 1e-5) {
+            useI = i + 1;
+            a = a2;
+            b = b2;
           }
         }
-        const span = b.t - a.t || 1;
-        const u = (tSec - a.t) / span;
-        const x = a.x + (b.x - a.x) * u;
-        const y = a.y + (b.y - a.y) * u;
-        const h = headingForInterval(useI);
-        const dg = !!(a.deadlockGhost || b.deadlockGhost);
-        const { lenM } = getSimAircraftWorldDimsM(flight);
-        const wheelBaseM = 0.55 * lenM;
-        const bicycleMin = Math.max(0.15 * motionChordEps, 0.005 * lenM, 0.04);
-        let out = frBicyclePose(
-          walkTimelinePolylineFromPoint(tl, useI, x, y, wheelBaseM, false), x, y, lenM, bicycleMin, dg);
-        if (!out) {
-          out = { x, y, dx: h.dx, dy: h.dy, deadlockGhost: dg };
-        }
-        return out;
       }
+      const span = b.t - a.t || 1;
+      const u = (tSec - a.t) / span;
+      const x = a.x + (b.x - a.x) * u;
+      const y = a.y + (b.y - a.y) * u;
+      const h = headingForInterval(useI);
+      const dg = !!(a.deadlockGhost || b.deadlockGhost);
+      const { lenM } = getSimAircraftWorldDimsM(flight);
+      const wheelBaseM = 0.55 * lenM;
+      const bicycleMin = Math.max(0.15 * motionChordEps, 0.005 * lenM, 0.04);
+      let out = frBicyclePose(
+        walkTimelinePolylineFromPoint(tl, useI, x, y, wheelBaseM, false), x, y, lenM, bicycleMin, dg);
+      if (!out) {
+        out = { x, y, dx: h.dx, dy: h.dy, deadlockGhost: dg };
+      }
+      return out;
     }
     return null;
   }
@@ -9187,22 +9206,17 @@
     if (!tl || tl.length < 2 || !(maxDistM > 0)) return [];
     const tMin = tl[0].t, tMax = tl[tl.length - 1].t;
     let t = Math.min(Math.max(tEnd, tMin), tMax);
-    let seg = 0;
-    for (let i = 0; i < tl.length - 1; i++) {
-      if (t >= tl[i].t && t <= tl[i + 1].t) { seg = i; break; }
-      if (t > tl[i + 1].t) seg = i;
-    }
+    let seg = Math.max(0, timelineSegmentIndexAtTime(tl, t, true));
     const pts = [];
     function xyAt(T) {
       if (T <= tMin) return [tl[0].x, tl[0].y];
       if (T >= tMax) return [tl[tl.length - 1].x, tl[tl.length - 1].y];
-      for (let i = 0; i < tl.length - 1; i++) {
+      const i = timelineSegmentIndexAtTime(tl, T, true);
+      if (i >= 0) {
         const a = tl[i], b = tl[i + 1];
-        if (T >= a.t && T <= b.t) {
-          const sp = b.t - a.t || 1;
-          const uu = (T - a.t) / sp;
-          return [a.x + (b.x - a.x) * uu, a.y + (b.y - a.y) * uu];
-        }
+        const sp = b.t - a.t || 1;
+        const uu = (T - a.t) / sp;
+        return [a.x + (b.x - a.x) * uu, a.y + (b.y - a.y) * uu];
       }
       return [tl[tl.length - 1].x, tl[tl.length - 1].y];
     }
@@ -17242,7 +17256,7 @@
   }
 
   function drawFlights2D() {
-    if (!state.hasSimulationResult || !state.globalUpdateFresh || !state.flights.length) return;
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed() || !state.flights.length) return;
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -21765,11 +21779,8 @@
     if (!isFinite(t)) return null;
     if (t + 1e-9 < tl[0].t) return null;
     if (t > tl[tl.length - 1].t) t = tl[tl.length - 1].t;
-    for (let i = 0; i < tl.length - 1; i++) {
-      const a = tl[i], b = tl[i + 1];
-      if (t >= a.t && t <= b.t) return { a: a, b: b };
-    }
-    return null;
+    const i = timelineSegmentIndexAtTime(tl, t, true);
+    return i >= 0 ? { a: tl[i], b: tl[i + 1] } : null;
   }
   function isTimelineSegmentStationaryWorld(a, b) {
     const dx = b.x - a.x, dy = b.y - a.y;
@@ -21777,7 +21788,7 @@
   }
   function countFlightsWaitingAtHoldingPoint2D(hp, tSec) {
     if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return 0;
-    if (!state.hasSimulationResult) return 0;
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed()) return 0;
     if (typeof getFlightPoseAtTimeForDraw !== 'function') return 0;
     const t = Number(tSec);
     if (!isFinite(t)) return 0;
@@ -21802,7 +21813,7 @@
   }
   function firstFlightWaitingAtHoldingPoint2D(hp, tSec) {
     if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) return null;
-    if (!state.hasSimulationResult) return null;
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed()) return null;
     if (typeof getFlightPoseAtTimeForDraw !== 'function') return null;
     const t = Number(tSec);
     if (!isFinite(t)) return null;
@@ -21847,7 +21858,7 @@
   }
   function drawHoldingQueueGhostFlights2D() {
     if (!ctx) return;
-    if (!state.hasSimulationResult) return;
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed()) return;
     if (!state.flights || !state.flights.length) return;
     if (typeof getFlightPoseAtTimeForDraw !== 'function') return;
     if (typeof graphPathDeparture !== 'function' || typeof cumulativeDistAlongPolylineToPoint !== 'function') return;
@@ -22105,6 +22116,7 @@
   let _drawRafId = 0;
   /** While panning or shortly after wheel zoom, skip heavy path layers for smoother interaction. */
   let _layoutDetailSuppressUntil = 0;
+  let _layoutDetailSuppressTimer = 0;
   /** Offscreen bitmap: grid → holding points (no sim-time stand fill / flights). Used during sim playback. */
   let _simPlaybackBgCanvas = null;
   let _simPlaybackBgSig = '';
@@ -22169,6 +22181,14 @@
     if (!wideViewport) return false;
     return !!state.isPanning || layoutViewIsDragging() || now < _layoutDetailSuppressUntil;
   }
+  function simPlaybackVisualsActive() {
+    return !!(state.hasSimulationResult && state.globalUpdateFresh);
+  }
+  function simPlaybackHeavyVisualsSuppressed() {
+    if (!simPlaybackVisualsActive()) return true;
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    return !!(state.isPanning || layoutViewIsDragging() || now < _layoutDetailSuppressUntil);
+  }
   function safeDraw(drawOpts) { try { draw(drawOpts); _safeDrawErrLogged = false; } catch(e) { if (!_safeDrawErrLogged) { console.error('safeDraw: draw() error', e); _safeDrawErrLogged = true; } } }
   function flushDrawNow() {
     if (_drawRafId) {
@@ -22183,6 +22203,13 @@
       _drawRafId = 0;
       safeDraw();
     });
+  }
+  function scheduleLayoutDetailRestoreDraw(delayMs) {
+    if (_layoutDetailSuppressTimer) clearTimeout(_layoutDetailSuppressTimer);
+    _layoutDetailSuppressTimer = setTimeout(function() {
+      _layoutDetailSuppressTimer = 0;
+      scheduleDraw();
+    }, Math.max(0, Number(delayMs) || 0));
   }
   const LAYOUT_ISLAND_WIDTH_DEFAULT_M = 2;
   const LAYOUT_ISLAND_WIDTH_MAX_M = 200;
@@ -24686,6 +24713,7 @@
     state.panY = my - wy * state.scale;
     const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     _layoutDetailSuppressUntil = nowPerf + 200;
+    scheduleLayoutDetailRestoreDraw(220);
     scheduleDraw();
   }, { passive: false });
 
