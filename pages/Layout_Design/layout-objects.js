@@ -219,6 +219,7 @@
   const HIT_PBB_END_CF = _interactionConfigNum('hitPbbEndCellFactor', 0.8);
   const TRY_PBB_MAX_EDGE_CF = _interactionConfigNum('tryPlacePbbMaxEdgeCellFactor', 1.0);
   const PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M = 50;
+  const PBB_NEW_CONTACT_STAND_SITE_OFFSET_M = 40;
   const FLIGHT_TOOLTIP_CF = _interactionConfigNum('flightTooltipCellFactor', 1.2);
   const FLIGHT_TOOLTIP_SCAN_MIN_MS = _interactionConfigNum('flightTooltipScanMinIntervalMs', 50);
   const TERM_CLOSE_POLY_CF = _interactionConfigNum('terminalClosePolygonCellFactor', 0.6);

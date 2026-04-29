@@ -839,6 +839,7 @@
   const HIT_PBB_END_CF = _interactionConfigNum('hitPbbEndCellFactor', 0.8);
   const TRY_PBB_MAX_EDGE_CF = _interactionConfigNum('tryPlacePbbMaxEdgeCellFactor', 1.0);
   const PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M = 50;
+  const PBB_NEW_CONTACT_STAND_SITE_OFFSET_M = 40;
   const FLIGHT_TOOLTIP_CF = _interactionConfigNum('flightTooltipCellFactor', 1.2);
   const FLIGHT_TOOLTIP_SCAN_MIN_MS = _interactionConfigNum('flightTooltipScanMinIntervalMs', 50);
   const TERM_CLOSE_POLY_CF = _interactionConfigNum('terminalClosePolygonCellFactor', 0.6);
@@ -4256,11 +4257,7 @@
     const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
     const wallX = ex, wallY = ey;
     const bxOut = wallX + nx * boardingH, byOut = wallY + ny * boardingH;
-    const cfgRow = standConfigRowForIcaoCat(category);
-    const noseClear = cfgRow ? Number(cfgRow.nose_clear) : NaN;
-    const offM = (Number.isFinite(noseClear) && noseClear > 0)
-      ? noseClear
-      : PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
+    const offM = PBB_NEW_CONTACT_STAND_SITE_OFFSET_M;
     const newPbb = {
       x1: wallX, y1: wallY, x2: bxOut, y2: byOut, category,
       angleDeg: standAngleDeg,
@@ -9537,10 +9534,10 @@
     const n = Math.max(1, Number(k) || flightScheduleColumnK());
     const base = FLIGHT_SCHED_BASE_COL_COUNT;
     if (field === 'sibt') return base;
-    if (field === 'sobt') return base + n;
+    if (field === 'sobt') return base + 1;
     if (field === 'eldt') return base + n * 2;
     if (field === 'eibt') return base + n * 2 + 1;
-    if (field === 'eobt') return base + n * 3 + 1;
+    if (field === 'eobt') return base + n * 2 + 2;
     if (field === 'etot') return base + n * 4 + 1;
     if (field === 'ap') return base + n * 4 + 2;
     if (field === 'metrics') return base + n * 5 + 2;
@@ -10010,16 +10007,14 @@
 
   function _buildFlightListHeaderHtml(apronK) {
     const k = Math.max(1, Number(apronK) || flightScheduleColumnK());
-    const sibtHeads = [];
-    const sobtHeads = [];
-    const eibtHeads = [];
-    const eobtHeads = [];
+    const sHeads = [];
+    const eHeads = [];
     const apHeads = [];
     for (let i = 1; i <= k; i++) {
-      sibtHeads.push('<th class="flight-col-s' + (i === 1 ? ' flight-col-s-start flight-td-sibt' : '') + '">SIBT' + i + '</th>');
-      sobtHeads.push('<th class="flight-col-s' + (i === k ? ' flight-col-s-last' : '') + '">SOBT' + i + '</th>');
-      eibtHeads.push('<th class="flight-col-e">EIBT' + i + '</th>');
-      eobtHeads.push('<th class="flight-col-e">EOBT' + i + '</th>');
+      sHeads.push('<th class="flight-col-s' + (i === 1 ? ' flight-col-s-start flight-td-sibt' : '') + '">SIBT' + i + '</th>');
+      sHeads.push('<th class="flight-col-s' + (i === k ? ' flight-col-s-last' : '') + '">SOBT' + i + '</th>');
+      eHeads.push('<th class="flight-col-e">EIBT' + i + '</th>');
+      eHeads.push('<th class="flight-col-e">EOBT' + i + '</th>');
       apHeads.push('<th class="flight-th-mixed">AP' + i + '</th>');
     }
     return '' +
@@ -10036,11 +10031,9 @@
         '<th>Building</th>' +
         '<th>Apron</th>' +
         '<th>Dep Rw</th>' +
-        sibtHeads.join('') +
-        sobtHeads.join('') +
+        sHeads.join('') +
         '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
-        eibtHeads.join('') +
-        eobtHeads.join('') +
+        eHeads.join('') +
         '<th class="flight-col-e">ETOT</th>' +
         apHeads.join('') +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
@@ -10134,19 +10127,19 @@
       const txt = fmtFlightESchedCell(minVal);
       return '<td class="flight-td-time flight-col-e" data-e-series-index="' + labelIdx + '">' + escapeHtml(txt) + '</td>';
     }
-    const sibtCells = segCells.map(function(seg, idx) {
-      return segTimeCell(seg, 'sibtMin', 'flight-col-s' + (idx === 0 ? ' flight-col-s-start flight-td-sibt' : ''));
+    const sCells = segCells.map(function(seg, idx) {
+      return [
+        segTimeCell(seg, 'sibtMin', 'flight-col-s' + (idx === 0 ? ' flight-col-s-start flight-td-sibt' : '')),
+        segTimeCell(seg, 'sobtMin', 'flight-col-s' + (idx === k - 1 ? ' flight-col-s-last' : ''))
+      ].join('');
     }).join('');
-    const sobtCells = segCells.map(function(seg, idx) {
-      return segTimeCell(seg, 'sobtMin', 'flight-col-s' + (idx === k - 1 ? ' flight-col-s-last' : ''));
-    }).join('');
-    const eibtCells = segCells.map(function(_seg, idx) {
+    const eCells = segCells.map(function(_seg, idx) {
       const eibtList = flightEMinListForSchedule(f, 'eibtMinList', 'eibtSecList', 'eibtMin');
-      return eSeriesCell(eibtList[idx] != null ? eibtList[idx] : null, idx + 1);
-    }).join('');
-    const eobtCells = segCells.map(function(_seg, idx) {
       const eobtList = flightEMinListForSchedule(f, 'eobtMinList', 'eobtSecList', 'eobtMin');
-      return eSeriesCell(eobtList[idx] != null ? eobtList[idx] : null, idx + 1);
+      return [
+        eSeriesCell(eibtList[idx] != null ? eibtList[idx] : null, idx + 1),
+        eSeriesCell(eobtList[idx] != null ? eobtList[idx] : null, idx + 1)
+      ].join('');
     }).join('');
     const apCells = segCells.map(function(seg) {
       const lab = seg ? flightScheduleStandLabelById(seg.standId) : '—';
@@ -10168,11 +10161,9 @@
         '<td class="flight-td-readonly">' + buildingRead + '</td>' +
         '<td class="flight-td-reg">' + (function() { var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); })() + '</td>' +
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
-        sibtCells +
-        sobtCells +
+        sCells +
         '<td class="flight-td-time flight-col-e flight-col-e-start">' + escapeHtml(eldtStr) + '</td>' +
-        eibtCells +
-        eobtCells +
+        eCells +
         '<td class="flight-td-time flight-col-e">' + escapeHtml(etotStr) + '</td>' +
         apCells +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
@@ -23745,11 +23736,7 @@
         const previewBh = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
         const wallX = ex, wallY = ey;
         const px2 = wallX + nx * previewBh, py2 = wallY + ny * previewBh;
-        const cfgRow = standConfigRowForIcaoCat(category);
-        const noseClear = cfgRow ? Number(cfgRow.nose_clear) : NaN;
-        const offM = (Number.isFinite(noseClear) && noseClear > 0)
-          ? noseClear
-          : PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
+        const offM = PBB_NEW_CONTACT_STAND_SITE_OFFSET_M;
         const previewAng = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
         const preview = {
           x1: wallX, y1: wallY, x2: px2, y2: py2, category,

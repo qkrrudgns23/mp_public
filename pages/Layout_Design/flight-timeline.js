@@ -391,11 +391,7 @@
     const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
     const wallX = ex, wallY = ey;
     const bxOut = wallX + nx * boardingH, byOut = wallY + ny * boardingH;
-    const cfgRow = standConfigRowForIcaoCat(category);
-    const noseClear = cfgRow ? Number(cfgRow.nose_clear) : NaN;
-    const offM = (Number.isFinite(noseClear) && noseClear > 0)
-      ? noseClear
-      : PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
+    const offM = PBB_NEW_CONTACT_STAND_SITE_OFFSET_M;
     const newPbb = {
       x1: wallX, y1: wallY, x2: bxOut, y2: byOut, category,
       angleDeg: standAngleDeg,

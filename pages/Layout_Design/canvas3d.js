@@ -9417,11 +9417,7 @@
         const previewBh = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
         const wallX = ex, wallY = ey;
         const px2 = wallX + nx * previewBh, py2 = wallY + ny * previewBh;
-        const cfgRow = standConfigRowForIcaoCat(category);
-        const noseClear = cfgRow ? Number(cfgRow.nose_clear) : NaN;
-        const offM = (Number.isFinite(noseClear) && noseClear > 0)
-          ? noseClear
-          : PBB_STAND_CENTER_OFFSET_FROM_TERMINAL_WALL_M;
+        const offM = PBB_NEW_CONTACT_STAND_SITE_OFFSET_M;
         const previewAng = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
         const preview = {
           x1: wallX, y1: wallY, x2: px2, y2: py2, category,
