@@ -291,7 +291,8 @@
     }
     #view-toggle .layer-popover-row:hover { color: var(--ui-accent); }
     #view-toggle .layer-popover-row input { cursor: pointer; accent-color: var(--ui-accent); width: 12px; height: 12px; flex-shrink: 0; }
-    .global-update-wrap { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; vertical-align: middle; }
+    .global-update-wrap { display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; vertical-align: middle; }
+    #view-toggle .global-update-wrap .tool-btn { padding-left: 6px; }
     .global-update-sync-dot {
       align-self: center;
       width: 8px;

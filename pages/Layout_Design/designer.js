@@ -1584,6 +1584,7 @@
   function syncProSimButtonFromDesignerPageState() {
     const btn = document.getElementById('btnGlobalUpdate');
     const dot = document.getElementById('globalUpdateSyncDot');
+    const playDot = document.getElementById('playbackFreshSyncDot');
     const ban = document.getElementById('arrRetFailedBanner');
     const banT = document.getElementById('arrRetFailedBannerText');
     const failedRegs = getArrRetFailedRegsForProSimUi();
@@ -1629,10 +1630,32 @@
       }
     }
     const playDock = document.getElementById('btnShowPlayDock');
-    const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
-    const allowPlay = !!state.hasSimulationResult && proSimUiFresh;
+    const playbackFresh = !hasRetFail && !!state.globalUpdateFresh;
+    const allowPlay = !!state.hasSimulationResult && !hasRetFail;
     if (playDock) {
       playDock.disabled = !allowPlay;
+      if (!state.hasSimulationResult) {
+        playDock.setAttribute('title', '시뮬레이션 결과가 있을 때 재생 바를 엽니다');
+      } else if (hasRetFail) {
+        playDock.setAttribute('title', 'Runway exit failure가 있어 재생을 막았습니다');
+      } else if (playbackFresh) {
+        playDock.setAttribute('title', '최신 Pro Sim 결과를 재생합니다');
+      } else {
+        playDock.setAttribute('title', '이전 Pro Sim 결과를 재생합니다 — 레이아웃 변경으로 최신 상태는 아닙니다');
+      }
+    }
+    if (playDot) {
+      if (playbackFresh) {
+        playDot.classList.remove('stale');
+        playDot.classList.add('fresh');
+        playDot.setAttribute('title', 'Playback result matches the latest layout');
+      } else {
+        playDot.classList.remove('fresh');
+        playDot.classList.add('stale');
+        playDot.setAttribute('title', state.hasSimulationResult
+          ? 'Playback uses an older Pro Sim result — run Pro Sim to refresh'
+          : 'No playback result loaded');
+      }
     }
     let playbackMemSync = false;
     if (!allowPlay) {
@@ -8391,7 +8414,7 @@
     const wrap = document.getElementById('sim-controls-wrap');
     const inner = document.getElementById('sim-controls-container');
     const hideBtn = document.getElementById('btnHideSimPlaybackBar');
-    const hasSim = state.hasSimulationResult && state.globalUpdateFresh && state.flights.length > 0;
+    const hasSim = state.hasSimulationResult && state.flights.length > 0;
     if (!wrap) return;
     if (!hasSim || !state.simPlaybackDockVisible) {
       wrap.style.display = 'none';
@@ -17267,7 +17290,8 @@
   }
 
   function drawFlights2D() {
-    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed() || !state.flights.length) return;
+    if (!simPlaybackVisualsActive() || !state.flights.length) return;
+    const suppressHeavyFlightDetails = simPlaybackHeavyVisualsSuppressed();
     const vb = layoutWorldViewportAabbWithBufferM(LAYOUT_RENDER_VIEWPORT_BUFFER_M);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -17323,9 +17347,8 @@
       const isFlightSel = state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id;
       const isDeadlockGhost = pose.deadlockGhost === true;
       const glyphFillCss = resolveFlightSim2DGlyphFillRgba(f, isDeadlockGhost, fcKeyIdx, fcPal, fcOver, fcMode);
-      const trailGrad = simFlightTrailGradientFromFillCss(glyphFillCss);
-      const preTdHalo = simPreTouchdownHaloFromFillCss(glyphFillCss);
-      if (FLIGHT_TRAIL_LENGTH_M > 0 && !isFlightTrailHiddenAtSimTime(f, tSecDraw)) {
+      if (!suppressHeavyFlightDetails && FLIGHT_TRAIL_LENGTH_M > 0 && !isFlightTrailHiddenAtSimTime(f, tSecDraw)) {
+        const trailGrad = simFlightTrailGradientFromFillCss(glyphFillCss);
         const trailPts = getFlightTrailPolylineBackward(f, tSecDraw, FLIGHT_TRAIL_LENGTH_M);
         if (trailPts.length >= 2) {
           ctx.save();
@@ -17349,7 +17372,8 @@
           ctx.restore();
         }
       }
-      if (isFlightPreTouchdownForDraw(f, tSecDraw)) {
+      if (!suppressHeavyFlightDetails && isFlightPreTouchdownForDraw(f, tSecDraw)) {
+        const preTdHalo = simPreTouchdownHaloFromFillCss(glyphFillCss);
         const rH = Math.max(sizeRef * 0.58, 8);
         ctx.save();
         ctx.beginPath();
@@ -22202,7 +22226,7 @@
     return !!state.isPanning || layoutViewIsDragging() || now < _layoutDetailSuppressUntil;
   }
   function simPlaybackVisualsActive() {
-    return !!(state.hasSimulationResult && state.globalUpdateFresh);
+    return !!state.hasSimulationResult;
   }
   function simPlaybackHeavyVisualsSuppressed() {
     if (!simPlaybackVisualsActive()) return true;
