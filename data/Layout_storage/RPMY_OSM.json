@@ -1,0 +1,286 @@
+{
+  "grid": {
+    "cols": 400,
+    "rows": 400,
+    "cellSize": 10.0,
+    "showGrid": false,
+    "showImage": false,
+    "showRoadWidth": true,
+    "showLayoutMarkers": true,
+    "layers": {
+      "grid": false,
+      "image": false,
+      "pathLines": true,
+      "pathFill": true,
+      "standLines": true,
+      "standFill": true,
+      "islandAreaLines": true,
+      "islandAreaFill": true,
+      "buildingLines": true,
+      "buildingFill": true,
+      "textRuler": true,
+      "dummyFlight": true,
+      "junction": true
+    },
+    "layoutImageOverlay": null
+  },
+  "networkJunctions": [],
+  "Edge": [],
+  "terminals": [],
+  "pbbStands": [],
+  "remoteStands": [],
+  "tempStands": [],
+  "holdingPoints": [],
+  "runwayPaths": [],
+  "runwayTaxiways": [],
+  "taxiways": [],
+  "apronLinks": [],
+  "directionModes": [
+    {
+      "id": "dm_cw",
+      "name": "CW",
+      "direction": "clockwise"
+    },
+    {
+      "id": "dm_ccw",
+      "name": "CCW",
+      "direction": "counter_clockwise"
+    },
+    {
+      "id": "dm_both",
+      "name": "Both",
+      "direction": "both"
+    }
+  ],
+  "layoutMarkers": [
+    {
+      "kind": "island",
+      "id": "contour-4efe299a37a1",
+      "points": [
+        {
+          "x": 1586.1,
+          "y": 3853.08
+        },
+        {
+          "x": 1771.38,
+          "y": 3837.8
+        },
+        {
+          "x": 1792.39,
+          "y": 3842.28
+        },
+        {
+          "x": 1810.91,
+          "y": 3857.27
+        },
+        {
+          "x": 1821.77,
+          "y": 3880.0
+        },
+        {
+          "x": 1831.42,
+          "y": 3879.53
+        },
+        {
+          "x": 1841.86,
+          "y": 3879.02
+        },
+        {
+          "x": 1846.78,
+          "y": 3878.78
+        },
+        {
+          "x": 1854.03,
+          "y": 3854.98
+        },
+        {
+          "x": 1868.79,
+          "y": 3836.96
+        },
+        {
+          "x": 1879.85,
+          "y": 3829.96
+        },
+        {
+          "x": 1889.72,
+          "y": 3828.04
+        },
+        {
+          "x": 2039.63,
+          "y": 3815.68
+        },
+        {
+          "x": 2178.73,
+          "y": 3804.2
+        },
+        {
+          "x": 2165.31,
+          "y": 3631.25
+        },
+        {
+          "x": 2160.51,
+          "y": 3579.09
+        },
+        {
+          "x": 2153.28,
+          "y": 3483.45
+        },
+        {
+          "x": 2291.29,
+          "y": 3389.11
+        },
+        {
+          "x": 2723.78,
+          "y": 3356.5
+        },
+        {
+          "x": 2812.93,
+          "y": 3282.77
+        },
+        {
+          "x": 3037.73,
+          "y": 3265.51
+        },
+        {
+          "x": 3023.91,
+          "y": 3100.77
+        },
+        {
+          "x": 3410.46,
+          "y": 3070.26
+        },
+        {
+          "x": 3408.58,
+          "y": 3046.29
+        },
+        {
+          "x": 3385.96,
+          "y": 3048.08
+        },
+        {
+          "x": 3386.46,
+          "y": 3054.42
+        },
+        {
+          "x": 3024.82,
+          "y": 3082.96
+        },
+        {
+          "x": 3021.13,
+          "y": 3079.55
+        },
+        {
+          "x": 3009.99,
+          "y": 2895.67
+        },
+        {
+          "x": 2795.22,
+          "y": 2915.45
+        },
+        {
+          "x": 2677.58,
+          "y": 2924.6
+        },
+        {
+          "x": 2378.38,
+          "y": 2944.67
+        },
+        {
+          "x": 2335.57,
+          "y": 2978.03
+        },
+        {
+          "x": 1237.73,
+          "y": 3066.15
+        },
+        {
+          "x": 1163.56,
+          "y": 3023.79
+        },
+        {
+          "x": 1109.53,
+          "y": 3026.45
+        },
+        {
+          "x": 1041.34,
+          "y": 3083.28
+        },
+        {
+          "x": 120.0,
+          "y": 3155.35
+        },
+        {
+          "x": 147.21,
+          "y": 3561.67
+        },
+        {
+          "x": 1243.12,
+          "y": 3474.89
+        },
+        {
+          "x": 1385.27,
+          "y": 3543.0
+        },
+        {
+          "x": 1390.54,
+          "y": 3614.15
+        },
+        {
+          "x": 1391.37,
+          "y": 3629.04
+        },
+        {
+          "x": 1395.92,
+          "y": 3682.72
+        },
+        {
+          "x": 1397.17,
+          "y": 3703.56
+        },
+        {
+          "x": 1422.97,
+          "y": 3701.51
+        },
+        {
+          "x": 1470.72,
+          "y": 3698.09
+        },
+        {
+          "x": 1478.61,
+          "y": 3801.78
+        },
+        {
+          "x": 1483.54,
+          "y": 3861.54
+        }
+      ],
+      "widthM": 2.0
+    }
+  ],
+  "flights": [],
+  "_osmImport": {
+    "icao": "RPMY",
+    "converter": "osm_to_layout.py",
+    "rulesVersion": 2,
+    "lonLatOrigin": {
+      "lon": 124.45801665,
+      "lat": 8.610565699999999
+    },
+    "gridOriginShiftM": {
+      "x": -1765.23,
+      "y": -612.17
+    },
+    "gridYSpanM": 4000.0,
+    "counts": {
+      "runwayPaths": 0,
+      "runwayTaxiways": 0,
+      "taxiways": 0,
+      "terminals": 0,
+      "pbbStands": 0,
+      "remoteStands": 0,
+      "txeIslands": 1,
+      "holdingPoints": 0,
+      "apronLinks": 0
+    }
+  }
+}
