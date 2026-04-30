@@ -77,6 +77,7 @@ _INFORMATION_PATH = (_ROOT / "data" / "Info_storage" / "Information.json").resol
 Point = Tuple[float, float]
 DestinationStandHistorySnap = Tuple[str, int, int, int, bool, bool]
 StandCooldownIndex = Dict[str, List[Tuple[str, float]]]
+TouchdownArrivalPrefixIndex = Dict[Any, Tuple[bool, bool, float]]
 PHASE_LANDING = "Landing"
 PHASE_ARR_TAXI = "Arr_taxi"
 PHASE_ARR_TAXI_TEMP = "Arr_taxi_occupied"
@@ -3292,6 +3293,44 @@ def _agents_by_arr_runway(agents: List[Flight]) -> Dict[str, List[Flight]]:
     return out
 
 
+def _touchdown_arrival_prefix_index(
+    agents_by_arr_runway: Dict[str, List[Flight]],
+) -> TouchdownArrivalPrefixIndex:
+    """For each arrival flight, aggregate predecessors on the same runway.
+
+    Preserves the legacy predecessor rule exactly: a predecessor is counted only
+    when ``other.eldt_anchor_sec + 1e-9 < my_eldt_anchor_sec``.
+    """
+
+    out: TouchdownArrivalPrefixIndex = {}
+    eps = 1e-9
+    for group in agents_by_arr_runway.values():
+        rows: List[Tuple[float, Any, Optional[float]]] = []
+        for ag in group:
+            if ag.eldt_anchor_sec is None:
+                continue
+            rows.append((float(ag.eldt_anchor_sec), ag.id, ag.exit_runway_abs_sec))
+        if not rows:
+            continue
+        rows.sort(key=lambda x: x[0])
+        j = 0
+        pred_count = 0
+        pred_missing_count = 0
+        max_exit = 0.0
+        n_rows = len(rows)
+        for anch, fid, _ex in rows:
+            while j < n_rows and rows[j][0] + eps < anch:
+                _a0, _fid0, ex0 = rows[j]
+                pred_count += 1
+                if ex0 is None:
+                    pred_missing_count += 1
+                else:
+                    max_exit = max(max_exit, float(ex0))
+                j += 1
+            out[fid] = (pred_count > 0, pred_missing_count > 0, max_exit)
+    return out
+
+
 def _compute_arr_touchdown_motion_abs_sec(
     agent: Flight,
     agents: List[Flight],
@@ -3299,6 +3338,7 @@ def _compute_arr_touchdown_motion_abs_sec(
     *,
     dep_window_rows_by_runway: Optional[Dict[str, List[Tuple[float, Optional[float], Any]]]] = None,
     agents_by_arr_runway: Optional[Dict[str, List[Flight]]] = None,
+    arrival_prefix_by_id: Optional[TouchdownArrivalPrefixIndex] = None,
 ) -> Optional[float]:
     """
     실제 착륙 롤(위치·점유·승인)이 시작될 최소 절대 시각.
@@ -3353,24 +3393,34 @@ def _compute_arr_touchdown_motion_abs_sec(
             if fid == agent.id:
                 continue
             dep_windows.append((float(dep_entry), dep_end))
-        scan_agents: Iterable[Flight] = agents
-        if agents_by_arr_runway is not None:
-            scan_agents = agents_by_arr_runway.get(rw, ())
-        for o in scan_agents:
-            if o.id == agent.id:
-                continue
-            if agents_by_arr_runway is None and str(o.arr_runway_id or "").strip() != rw:
-                continue
-            if o.eldt_anchor_sec is None:
-                continue
-            if float(o.eldt_anchor_sec) + 1e-9 >= my:
-                continue
-            any_pred = True
-            ex = o.exit_runway_abs_sec
-            if ex is None:
-                pred_missing_exit = True
-                continue
-            need_exit = max(need_exit, float(ex))
+        prefix = (
+            arrival_prefix_by_id.get(agent.id)
+            if arrival_prefix_by_id is not None
+            else None
+        )
+        if prefix is None and arrival_prefix_by_id is not None:
+            prefix = arrival_prefix_by_id.get(str(agent.id))
+        if prefix is not None:
+            any_pred, pred_missing_exit, need_exit = prefix
+        else:
+            scan_agents: Iterable[Flight] = agents
+            if agents_by_arr_runway is not None:
+                scan_agents = agents_by_arr_runway.get(rw, ())
+            for o in scan_agents:
+                if o.id == agent.id:
+                    continue
+                if agents_by_arr_runway is None and str(o.arr_runway_id or "").strip() != rw:
+                    continue
+                if o.eldt_anchor_sec is None:
+                    continue
+                if float(o.eldt_anchor_sec) + 1e-9 >= my:
+                    continue
+                any_pred = True
+                ex = o.exit_runway_abs_sec
+                if ex is None:
+                    pred_missing_exit = True
+                    continue
+                need_exit = max(need_exit, float(ex))
     if not any_pred:
         base = max(raw, anch_f)
     else:
@@ -3400,6 +3450,7 @@ def _refresh_touchdown_motion_cache(
     lag = float(runway_release_lag_sec)
     dep_rows = _touchdown_dep_window_rows_by_runway(agents, dep_release_buffer_sec=20.0)
     arr_by_rw = _agents_by_arr_runway(agents)
+    arr_prefix = _touchdown_arrival_prefix_index(arr_by_rw)
     control_state.touchdown_motion_by_id = {
         str(ag.id): _compute_arr_touchdown_motion_abs_sec(
             ag,
@@ -3407,6 +3458,7 @@ def _refresh_touchdown_motion_cache(
             lag,
             dep_window_rows_by_runway=dep_rows,
             agents_by_arr_runway=arr_by_rw,
+            arrival_prefix_by_id=arr_prefix,
         )
         for ag in agents
     }
@@ -7918,6 +7970,7 @@ def apply_movement_controls(
     _apply_same_direction_following_caps(control_state, agents, ppm, t_end)
     dep_rows = _touchdown_dep_window_rows_by_runway(agents, dep_release_buffer_sec=20.0)
     arr_by_rw = _agents_by_arr_runway(agents)
+    arr_prefix = _touchdown_arrival_prefix_index(arr_by_rw)
     for ag in agents:
         # Do not use touchdown cache: prior agents may have moved / exited runway this tick.
         td = _compute_arr_touchdown_motion_abs_sec(
@@ -7926,6 +7979,7 @@ def apply_movement_controls(
             rw_lag,
             dep_window_rows_by_runway=dep_rows,
             agents_by_arr_runway=arr_by_rw,
+            arrival_prefix_by_id=arr_prefix,
         )
         if td is not None and t_end + 1e-12 < float(td):
             continue

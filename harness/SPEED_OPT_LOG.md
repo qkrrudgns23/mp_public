@@ -159,3 +159,41 @@
 
 - A3: `_compute_arr_touchdown_motion_abs_sec`의 arrival predecessor도 runway별 누적 상태로 줄이기.
 - C1: `_lookahead_depth_billed_count_pts`는 `Sequence[str] -> int` pure-ish kernel이라 Cython/Rust 후보. 다만 먼저 Python 배열/정수 코드로 안정화 권장.
+
+### Phase A3 — touchdown arrival prefix index
+
+**현상**: A1/A2 후 `_compute_arr_touchdown_motion_abs_sec`가 여전히 top self-time. 각 flight마다 같은 runway의 선행 arrival를 반복 스캔.
+
+**대안**:
+
+1. 기존 `agents_by_arr_runway` bucket만 유지 — 이미 적용되어 추가 효과 제한.
+2. **선택**: runway별 ELDT 정렬 prefix index를 만들고, `agent_id -> (any_pred, pred_missing_exit, max_exit)`로 선행 arrival 집계를 조회.
+3. touchdown 전체 vector화 — dep runway window 반복 조정까지 얽혀 리스크 큼.
+
+**변경**:
+
+- `TouchdownArrivalPrefixIndex` 타입 추가.
+- `_touchdown_arrival_prefix_index(agents_by_arr_runway)` 추가.
+- `_compute_arr_touchdown_motion_abs_sec(..., arrival_prefix_by_id=...)` fast path 추가.
+- `_refresh_touchdown_motion_cache`, `apply_movement_controls`에서 prefix index를 생성/전달.
+
+**검증**:
+
+| pair | result |
+| ---- | ------ |
+| default_layout | PASS |
+| large_flight | PASS |
+| MNL_OSM | PASS |
+
+**profile 확인** (`large_flight`, cProfile):
+
+- `_compute_arr_touchdown_motion_abs_sec` self: A1/A2 profile 약 51s → A3 profile 약 30s.
+- 전체 profile wall은 측정 부하 영향으로 명확한 개선이라고 단정하지 않음.
+
+### Rejected A4 — one-pass lookahead depth reach
+
+**시도**: `get_lookahead_edges`에서 prefix depth를 매 k 재계산하지 않고 single pass로 첫 depth 도달 index를 찾도록 변경.
+
+**결과**: `default_layout`에서 `deadlock_resolve_event_count`가 `0 -> 2`로 바뀌어 골든 실패.
+
+**조치**: 즉시 원복. 현재 코드에는 A4 변경 없음.
