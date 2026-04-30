@@ -1037,6 +1037,9 @@
           'etotMin',
           'arrApronId',
           'depApronId',
+          'terminalId',
+          'arrTerminalId',
+          'depTerminalId',
           'eibtMinList',
           'eobtMinList',
           'ePushFinishedMinList',
@@ -1084,6 +1087,8 @@
         const arrRwyId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
         const apronId = (copy.depApronId != null ? copy.depApronId : (f.standId != null ? f.standId : (t.apronId != null ? t.apronId : null)));
         const termId = f.terminalId || t.terminalId || null;
+        const arrTermId = f.arrTerminalId || t.arrTerminalId || termId || null;
+        const depTermId = f.depTerminalId || t.depTerminalId || termId || null;
         const depRwyId = f.depRunwayId || t.depRunwayId || null;
         const exitTwId = (f.sampledArrRet != null && f.sampledArrRet !== '') ? f.sampledArrRet : (t.ExitTaxiwayId != null ? t.ExitTaxiwayId : null);
         copy.token = {
@@ -1091,6 +1096,8 @@
           ExitTaxiwayId: exitTwId || null,
           apronId: apronId || null,
           terminalId: termId || null,
+          arrTerminalId: arrTermId || null,
+          depTerminalId: depTermId || null,
           depRunwayId: depRwyId || null,
         };
         function _twNameById(id) {
@@ -1123,6 +1130,8 @@
           ExitTaxiwayId: exitTwId ? _twNameById(exitTwId) : null,
           apronId: apronId ? _standNameById(apronId) : null,
           terminalId: _labelOrId(termId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
+          arrTerminalId: _labelOrId(arrTermId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
+          depTerminalId: _labelOrId(depTermId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
           depRunwayId: _labelOrId(depRwyId, typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById : null),
         };
         const schedExport = flightScheduleMinutesForRow(f);
@@ -1144,12 +1153,12 @@
           }).filter(function(k) {
             return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
           });
-          if (copy.timeline.length >= 2 && f.timeline_meta && typeof f.timeline_meta === 'object') {
-            try {
-              copy.timeline_meta = JSON.parse(JSON.stringify(f.timeline_meta));
-            } catch (eMeta) {
-              copy.timeline_meta = Object.assign({}, f.timeline_meta);
-            }
+        }
+        if (state.hasSimulationResult && f.timeline_meta && typeof f.timeline_meta === 'object') {
+          try {
+            copy.timeline_meta = JSON.parse(JSON.stringify(f.timeline_meta));
+          } catch (eMeta) {
+            copy.timeline_meta = Object.assign({}, f.timeline_meta);
           }
         }
         if (state.hasSimulationResult && Array.isArray(f.proSimEdgeList) && f.proSimEdgeList.length) {

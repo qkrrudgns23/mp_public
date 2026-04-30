@@ -1041,7 +1041,8 @@
   function syncFlightAssignInputDisplay(el, f) {
     const role = el.getAttribute('data-role');
     if (role === 'arr') el.value = resolveArrivalRunwayIdForFlight(f) || '';
-    else if (role === 'term') el.value = f.terminalId || (f.token && f.token.terminalId) || '';
+    else if (role === 'term' || role === 'arrterm') el.value = resolveFlightArrTerminalId(f) || '';
+    else if (role === 'depterm') el.value = resolveFlightDepTerminalId(f) || '';
     else if (role === 'dep') el.value = f.depRunwayId || (f.token && f.token.depRunwayId) || '';
     else if (role === 'intdom') el.value = (f && String(f.intDom || '').trim().toLowerCase() === 'dom') ? 'Dom' : 'Int';
   }
@@ -1056,6 +1057,28 @@
     const terms = makeUniqueNamedCopy(state.terminals || [], 'name');
     const t = terms.find(function(x) { return x.id === termId; });
     return t ? ((t.name || '').trim() || 'Building') : '—';
+  }
+  function resolveFlightBaseTerminalId(f) {
+    if (!f) return null;
+    return f.terminalId || (f.token && f.token.terminalId) || null;
+  }
+  function resolveFlightArrTerminalId(f) {
+    if (!f) return null;
+    return f.arrTerminalId || (f.token && f.token.arrTerminalId) || resolveFlightBaseTerminalId(f);
+  }
+  function resolveFlightDepTerminalId(f) {
+    if (!f) return null;
+    return f.depTerminalId || (f.token && f.token.depTerminalId) || resolveFlightBaseTerminalId(f);
+  }
+  function ensureFlightSplitTerminalDefaults(f) {
+    if (!f) return;
+    const base = resolveFlightBaseTerminalId(f);
+    if (!f.arrTerminalId && base) f.arrTerminalId = base;
+    if (!f.depTerminalId && base) f.depTerminalId = base;
+    if (f.token) {
+      if (!f.token.arrTerminalId && f.arrTerminalId) f.token.arrTerminalId = f.arrTerminalId;
+      if (!f.token.depTerminalId && f.depTerminalId) f.token.depTerminalId = f.depTerminalId;
+    }
   }
   function flightColorGroupKeyForSim(f, mode) {
     if (mode === 'all') return '*';
@@ -1135,9 +1158,11 @@
   }
   function syncFlightAssignStripFromFlight(f) {
     const arrEl = document.getElementById('flightAssignStripArr');
-    const termEl = document.getElementById('flightAssignStripTerm');
+    const arrTermEl = document.getElementById('flightAssignStripArrTerm');
+    const depTermEl = document.getElementById('flightAssignStripDepTerm');
     const depEl = document.getElementById('flightAssignStripDep');
     const intDomEl = document.getElementById('flightAssignStripIntDom');
+    if (f) ensureFlightSplitTerminalDefaults(f);
     if (arrEl) {
       const sid = f ? (resolveArrivalRunwayIdForFlight(f) || '') : '';
       arrEl.innerHTML = buildRunwayOptionsHtml(sid);
@@ -1146,10 +1171,15 @@
     if (intDomEl) {
       intDomEl.value = (f && String(f.intDom || '').trim().toLowerCase() === 'dom') ? 'Dom' : 'Int';
     }
-    if (termEl) {
-      const tid = f ? (f.terminalId || (f.token && f.token.terminalId) || '') : '';
-      termEl.innerHTML = buildTerminalOptionsHtml(tid);
-      termEl.value = tid;
+    if (arrTermEl) {
+      const tid = f ? (resolveFlightArrTerminalId(f) || '') : '';
+      arrTermEl.innerHTML = buildTerminalOptionsHtml(tid);
+      arrTermEl.value = tid;
+    }
+    if (depTermEl) {
+      const tid = f ? (resolveFlightDepTerminalId(f) || '') : '';
+      depTermEl.innerHTML = buildTerminalOptionsHtml(tid);
+      depTermEl.value = tid;
     }
     if (depEl) {
       const did = f ? (f.depRunwayId || (f.token && f.token.depRunwayId) || '') : '';
@@ -1159,14 +1189,15 @@
   }
   function syncFlightAssignStrip() {
     const arrEl = document.getElementById('flightAssignStripArr');
-    const termEl = document.getElementById('flightAssignStripTerm');
+    const arrTermEl = document.getElementById('flightAssignStripArrTerm');
+    const depTermEl = document.getElementById('flightAssignStripDepTerm');
     const depEl = document.getElementById('flightAssignStripDep');
     const intDomEl = document.getElementById('flightAssignStripIntDom');
     const sel = state.selectedObject;
     const hasFlight = sel && sel.type === 'flight' && sel.id;
     const f = hasFlight ? state.flights.find(function(x) { return x.id === sel.id; }) : null;
     const dis = !f;
-    [arrEl, termEl, depEl, intDomEl].forEach(function(el) {
+    [arrEl, arrTermEl, depTermEl, depEl, intDomEl].forEach(function(el) {
       if (el) el.disabled = dis;
     });
     if (!f) {
@@ -1199,7 +1230,7 @@
         return;
       }
       val = r === undefined ? null : r;
-    } else if (role === 'term') {
+    } else if (role === 'term' || role === 'arrterm' || role === 'depterm') {
       const r = resolveTerminalIdFromInput(raw);
       if ((raw || '').trim() && r === undefined) {
         syncFlightAssignStripFromFlight(f);
@@ -1209,27 +1240,35 @@
     } else return;
     var prevArr = f.arrRunwayId || null;
     var prevDep = f.depRunwayId || (f.token && f.token.depRunwayId) || null;
-    var prevTerm = f.terminalId || (f.token && f.token.terminalId) || null;
+    var prevArrTerm = resolveFlightArrTerminalId(f) || null;
+    var prevDepTerm = resolveFlightDepTerminalId(f) || null;
     if (role === 'arr' && val === prevArr) return;
     if (role === 'dep' && val === prevDep) return;
-    if (role === 'term' && val === prevTerm) return;
+    if ((role === 'term' || role === 'arrterm') && val === prevArrTerm) return;
+    if (role === 'depterm' && val === prevDepTerm) return;
     var prevStand = f.standId || null;
-    if (!f.token) f.token = { nodes: ['runway','taxiway','apron','terminal'], runwayId: null, apronId: null, terminalId: null };
+    if (!f.token) f.token = { nodes: ['runway','taxiway','apron','terminal'], runwayId: null, apronId: null, terminalId: null, arrTerminalId: null, depTerminalId: null };
     if (role === 'arr') {
       f.arrRunwayId = val;
       f.token.runwayId = val;
-    } else if (role === 'term') {
+    } else if (role === 'term' || role === 'arrterm') {
+      f.arrTerminalId = val;
+      f.token.arrTerminalId = val;
+      if (!f.depTerminalId) {
+        f.depTerminalId = val;
+        f.token.depTerminalId = val;
+      }
       f.terminalId = val;
       f.token.terminalId = val;
-      if (f.standId) {
-        var allStands = (st.pbbStands || []).concat(st.remoteStands || []).concat(st.tempStands || []);
-        var stand = allStands.find(function(s) { return s.id === f.standId; });
-        if (stand) {
-          var term = getTerminalForStand(stand);
-          var standTermId = term ? term.id : null;
-          if (!val || !standTermId || val !== standTermId) f.standId = null;
-        }
+    } else if (role === 'depterm') {
+      f.depTerminalId = val;
+      f.token.depTerminalId = val;
+      if (!f.arrTerminalId) {
+        f.arrTerminalId = val;
+        f.token.arrTerminalId = val;
       }
+      f.terminalId = f.arrTerminalId || val;
+      f.token.terminalId = f.terminalId || null;
     } else if (role === 'dep') {
       f.depRunwayId = val;
       f.token.depRunwayId = val;
@@ -1255,8 +1294,8 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  /** Flight schedule dynamic AP columns: base 11 columns through Dep Rw, then S/E groups. */
-  const FLIGHT_SCHED_BASE_COL_COUNT = 11;
+  /** Flight schedule dynamic AP columns: 10 fixed cells, AP cells, Dep Rw, then S/E groups. */
+  const FLIGHT_SCHED_FIXED_BEFORE_AP_COL_COUNT = 10;
   const FLIGHT_SCHED_TRAILING_METRIC_COL_COUNT = 7;
   function flightScheduleLogicalSegmentCount(f) {
     if (!f) return 1;
@@ -1279,27 +1318,29 @@
   }
   function flightSchedColIndex(field, k) {
     const n = Math.max(1, Number(k) || flightScheduleColumnK());
-    const base = FLIGHT_SCHED_BASE_COL_COUNT;
+    const apStart = FLIGHT_SCHED_FIXED_BEFORE_AP_COL_COUNT;
+    const base = apStart + n + 1;
+    if (field === 'ap') return apStart;
+    if (field === 'depRunway') return apStart + n;
     if (field === 'sibt') return base;
     if (field === 'sobt') return base + 1;
     if (field === 'eldt') return base + n * 2;
     if (field === 'eibt') return base + n * 2 + 1;
     if (field === 'eobt') return base + n * 2 + 2;
     if (field === 'etot') return base + n * 4 + 1;
-    if (field === 'ap') return base + n * 4 + 2;
-    if (field === 'metrics') return base + n * 5 + 2;
+    if (field === 'metrics') return base + n * 4 + 2;
     return base;
   }
   function flightScheduleTableColCount(k) {
     return flightSchedColIndex('metrics', k) + FLIGHT_SCHED_TRAILING_METRIC_COL_COUNT + 1;
   }
   /** Backward-compatible aliases for N=1 call sites. Dynamic code should use `flightSchedColIndex`. */
-  const FLIGHT_SCHED_TD_SIBT = 11;
-  const FLIGHT_SCHED_TD_SOBT = 12;
-  const FLIGHT_SCHED_TD_ELDT = 13;
-  const FLIGHT_SCHED_TD_EIBT = 14;
-  const FLIGHT_SCHED_TD_EOBT = 15;
-  const FLIGHT_SCHED_TD_ETOT = 16;
+  const FLIGHT_SCHED_TD_SIBT = 12;
+  const FLIGHT_SCHED_TD_SOBT = 13;
+  const FLIGHT_SCHED_TD_ELDT = 14;
+  const FLIGHT_SCHED_TD_EIBT = 15;
+  const FLIGHT_SCHED_TD_EOBT = 16;
+  const FLIGHT_SCHED_TD_ETOT = 17;
   function ensureFlightAssignStripWired() {
     if (window.__flightAssignStripWired) return;
     const wrap = document.getElementById('flightAssignStrip');
@@ -1770,19 +1811,19 @@
         '<th>Reg</th>' +
         '<th class="flight-th-mixed">Airline</th>' +
         '<th class="flight-th-mixed">Flight Num</th>' +
-        '<th>Aircraft Type</th>' +
-        '<th class="flight-th-mixed">Code(ICAO)</th>' +
+        '<th>ICAO Code</th>' +
+        '<th class="flight-th-mixed">ICAO CAT</th>' +
         '<th>Int/Dom</th>' +
         '<th>Arr Rw</th>' +
         '<th>Arr RET</th>' +
-        '<th>Building</th>' +
-        '<th>Apron</th>' +
+        '<th>Arr Building</th>' +
+        '<th>Dep Building</th>' +
+        apHeads.join('') +
         '<th>Dep Rw</th>' +
         sHeads.join('') +
         '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
         eHeads.join('') +
         '<th class="flight-col-e">ETOT</th>' +
-        apHeads.join('') +
         '<th class="flight-col-e flight-col-rot flight-th-mixed">ROT(arr)</th>' +
         '<th class="flight-th-mixed">VTT(Arr)</th>' +
         '<th class="flight-th-mixed">DTT(Arr)</th>' +
@@ -1860,9 +1901,12 @@
     const vttDepCell = flightScheduleProSimTimedCell(vttDepStr, 'red');
     const rotDepCell = flightScheduleProSimTimedCell(rotDepStr, 'pink');
     const depRunwayId = f.depRunwayId || (f.token && f.token.depRunwayId);
-    const termId = f.terminalId || (f.token && f.token.terminalId);
+    ensureFlightSplitTerminalDefaults(f);
+    const arrTermId = resolveFlightArrTerminalId(f);
+    const depTermId = resolveFlightDepTerminalId(f);
     const arrRwRead = escapeHtml(getRunwayDisplayLabelById(arrRunwayId));
-    const buildingRead = escapeHtml(getTerminalDisplayLabelById(termId));
+    const arrBuildingRead = escapeHtml(getTerminalDisplayLabelById(arrTermId));
+    const depBuildingRead = escapeHtml(getTerminalDisplayLabelById(depTermId));
     const depRwRead = escapeHtml(getRunwayDisplayLabelById(depRunwayId));
     function segTimeCell(seg, key, cls) {
       if (!seg) return '<td class="flight-td-time ' + cls + '" data-empty="1">—</td>';
@@ -1905,14 +1949,14 @@
         '<td class="flight-td-readonly" title="Edit in Int/Dom above when flight is selected">' + escapeHtml(intDomVal) + '</td>' +
         '<td class="flight-td-readonly">' + arrRwRead + '</td>' +
         '<td class="flight-td-arr-ret' + (arrRetFailed ? ' flight-td-arr-ret-failed' : '') + '">' + (arrRetFailed ? 'Failed' : escapeHtml(sampledRetName)) + '</td>' +
-        '<td class="flight-td-readonly">' + buildingRead + '</td>' +
-        '<td class="flight-td-reg">' + (function() { var st = findStandById(f.standId); return escapeHtml(st ? ((st.name && st.name.trim()) || st.id || '—') : '—'); })() + '</td>' +
+        '<td class="flight-td-readonly">' + arrBuildingRead + '</td>' +
+        '<td class="flight-td-readonly">' + depBuildingRead + '</td>' +
+        apCells +
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
         sCells +
         '<td class="flight-td-time flight-col-e flight-col-e-start">' + escapeHtml(eldtStr) + '</td>' +
         eCells +
         '<td class="flight-td-time flight-col-e">' + escapeHtml(etotStr) + '</td>' +
-        apCells +
         '<td class="flight-td-time flight-col-e flight-col-rot">' + rotArrCell + '</td>' +
         '<td class="flight-td-time">' + vttArrCell + '</td>' +
         '<td class="flight-td-time">' + dttArrCell + '</td>' +

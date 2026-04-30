@@ -131,13 +131,89 @@
     });
     return failedRegs;
   }
+  function flightApronIntervalsForProSimBlock(f) {
+    if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return [];
+    const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+    const out = [];
+    if (segs.length) {
+      const count = segs.length;
+      for (let i = 0; i < segs.length; i++) {
+        const seg = segs[i];
+        const standId = seg && seg.standId != null ? String(seg.standId) : '';
+        const t0 = Number(seg && seg.sibtMin);
+        const t1 = Number(seg && seg.sobtMin);
+        if (!standId || !isFinite(t0) || !isFinite(t1) || t1 <= t0) continue;
+        out.push({ f: f, standId: standId, t0: t0, t1: t1, segmentIdx: i, segmentCount: count });
+      }
+      return out;
+    }
+    const standId = f.standId != null ? String(f.standId) : '';
+    const t0 = f.sibtMin != null ? Number(f.sibtMin) : Number(f.timeMin || 0);
+    const t1 = f.sobtMin != null ? Number(f.sobtMin) : (t0 + Number(f.dwellMin || 0));
+    return standId && isFinite(t0) && isFinite(t1) && t1 > t0
+      ? [{ f: f, standId: standId, t0: t0, t1: t1, segmentIdx: 0, segmentCount: 1 }]
+      : [];
+  }
+  function getApronDuplicatedRegsForProSimUi() {
+    const issues = [];
+    const seen = new Set();
+    const intervalsByStand = {};
+    function addIssue(f, reason) {
+      if (!f) return;
+      const reg = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
+      const key = reg + '|' + reason;
+      if (seen.has(key)) return;
+      seen.add(key);
+      issues.push({ reg: reg, reason: reason });
+    }
+    (state.flights || []).forEach(function(f) {
+      const intervals = flightApronIntervalsForProSimBlock(f);
+      intervals.forEach(function(it) {
+        const stand = typeof findStandById === 'function' ? findStandById(it.standId) : null;
+        if (stand && typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, stand, it.segmentIdx, it.segmentCount)) {
+          addIssue(f, 'Invalid apron/building assignment.');
+        }
+        if (!intervalsByStand[it.standId]) intervalsByStand[it.standId] = [];
+        intervalsByStand[it.standId].push(it);
+      });
+    });
+    Object.keys(intervalsByStand).forEach(function(standId) {
+      const arr = intervalsByStand[standId];
+      for (let i = 0; i < arr.length; i++) {
+        for (let j = i + 1; j < arr.length; j++) {
+          const a = arr[i], b = arr[j];
+          if (a.f && b.f && a.f.id === b.f.id) continue;
+          if (a.t0 < b.t1 && b.t0 < a.t1) {
+            addIssue(a.f, 'Duplicated apron time window.');
+            addIssue(b.f, 'Duplicated apron time window.');
+          }
+        }
+      }
+    });
+    return issues;
+  }
+  function formatApronDuplicatedBannerEnglish(issues) {
+    const n = (issues && issues.length) || 0;
+    if (n < 1) return '';
+    if (n <= 5) {
+      return issues.map(function(it) {
+        return String(it.reg) + ': ' + String(it.reason || 'Apron duplicated.');
+      }).join('\n');
+    }
+    const head = issues.slice(0, 3).map(function(it) { return it.reg; }).join(', ');
+    return head + ', etc. — ' + n + ' apron assignment issue(s).';
+  }
   function syncProSimButtonFromDesignerPageState() {
     const btn = document.getElementById('btnGlobalUpdate');
     const dot = document.getElementById('globalUpdateSyncDot');
     const ban = document.getElementById('arrRetFailedBanner');
     const banT = document.getElementById('arrRetFailedBannerText');
+    const apronBan = document.getElementById('apronDuplicatedBanner');
+    const apronBanT = document.getElementById('apronDuplicatedBannerText');
     const failedRegs = getArrRetFailedRegsForProSimUi();
     const hasRetFail = failedRegs.length > 0;
+    const apronIssues = getApronDuplicatedRegsForProSimUi();
+    const hasApronDuplicated = apronIssues.length > 0;
     if (ban && banT) {
       if (hasRetFail) {
         ban.hidden = false;
@@ -147,6 +223,17 @@
         ban.hidden = true;
         ban.setAttribute('aria-hidden', 'true');
         banT.textContent = '';
+      }
+    }
+    if (apronBan && apronBanT) {
+      if (hasApronDuplicated) {
+        apronBan.hidden = false;
+        apronBan.setAttribute('aria-hidden', 'false');
+        apronBanT.textContent = formatApronDuplicatedBannerEnglish(apronIssues);
+      } else {
+        apronBan.hidden = true;
+        apronBan.setAttribute('aria-hidden', 'true');
+        apronBanT.textContent = '';
       }
     }
     const dlBan = document.getElementById('deadlockGhostBanner');
@@ -164,16 +251,21 @@
         dlBanT.textContent = '';
       }
     }
-    const allow = !!state.designerPageUpdateFresh && !hasRetFail;
+    const allow = !!state.designerPageUpdateFresh && !hasRetFail && !hasApronDuplicated;
     if (btn) {
       btn.disabled = !allow;
       btn.classList.toggle('global-update-blocked-arr-ret', hasRetFail);
+      btn.classList.toggle('global-update-blocked-apron', hasApronDuplicated);
       if (!state.designerPageUpdateFresh) {
         btn.setAttribute('title', 'Run Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
       } else if (hasRetFail) {
         const n = failedRegs.length;
         const shortList = n > 5 ? (failedRegs.slice(0, 3).join(', ') + ', etc. (' + n + ' total)') : failedRegs.join(', ');
         btn.setAttribute('title', 'Pro Sim is disabled: no valid runway exit. ' + shortList);
+      } else if (hasApronDuplicated) {
+        const n = apronIssues.length;
+        const shortList = n > 5 ? (apronIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' total)') : apronIssues.map(function(it) { return it.reg; }).join(', ');
+        btn.setAttribute('title', 'Pro Sim is disabled: Apron duplicated. ' + shortList);
       } else {
         btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
       }
@@ -183,6 +275,10 @@
         dot.classList.remove('fresh');
         dot.classList.add('stale');
         dot.setAttribute('title', 'Runway exit failure — resolve all arrival RET issues before Pro Sim.');
+      } else if (hasApronDuplicated) {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Apron duplicated — resolve all red Apron Gantt bars before Pro Sim.');
       } else if (state.globalUpdateFresh) {
         dot.classList.remove('stale');
         dot.classList.add('fresh');
@@ -194,7 +290,7 @@
       }
     }
     const playDock = document.getElementById('btnShowPlayDock');
-    const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
+    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !!state.globalUpdateFresh;
     const allowPlay = !!state.hasSimulationResult && proSimUiFresh;
     if (playDock) {
       playDock.disabled = !allowPlay;

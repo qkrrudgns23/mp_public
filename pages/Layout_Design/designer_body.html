@@ -155,6 +155,14 @@
             <span class="arr-ret-failed-banner__text" id="arrRetFailedBannerText"></span>
           </div>
         </div>
+        <div id="apronDuplicatedBanner" class="arr-ret-failed-banner apron-duplicated-banner" role="alert" hidden aria-hidden="true">
+          <svg class="arr-ret-failed-banner__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.63-1.516 2.63H3.72c-1.347 0-2.189-1.463-1.515-2.63L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+          <div class="arr-ret-failed-banner__content">
+            <div class="arr-ret-failed-banner__title">Apron duplicated</div>
+            <p class="arr-ret-failed-banner__warn">Apron Gantt has invalid or duplicated apron assignments, so Pro Sim cannot run. Resolve all red apron bars first.</p>
+            <span class="arr-ret-failed-banner__text" id="apronDuplicatedBannerText"></span>
+          </div>
+        </div>
         <div id="deadlockGhostBanner" class="deadlock-ghost-banner" role="alert" hidden aria-hidden="true">
           <svg class="deadlock-ghost-banner__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.63-1.516 2.63H3.72c-1.347 0-2.189-1.463-1.515-2.63L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
           <div class="deadlock-ghost-banner__content">
@@ -570,7 +578,7 @@
               <label>Min dwell (min)</label>
               <input type="number" id="flightMinDwell" min="0" max="__UI_FLIGHT_DWELL_MAX__" value="__UI_FLIGHT_MIN_DWELL__" step="__UI_FLIGHT_DWELL_STEP__" title="In case of delayed arrival EOBT = EIBT + Min Dwell Adjust to (0Not applicable to this side)" />
             </div>
-            <div id="flightAssignStrip" class="flight-assign-strip-wrap" aria-label="Arrival runway, Int/Dom, building, departure runway for selected flight">
+            <div id="flightAssignStrip" class="flight-assign-strip-wrap" aria-label="Arrival runway, Int/Dom, arrival building, departure building, departure runway for selected flight">
               <div class="flight-assign-strip-row">
                 <div class="compact-field">
                   <label for="flightAssignStripArr">Arr Rw</label>
@@ -588,9 +596,15 @@
                   <select id="flightAssignStripDep" class="flight-assign-select flight-assign-strip-select" data-role="dep" disabled title="Select a flight row first"></select>
                 </div>
               </div>
-              <div class="compact-field wide">
-                <label for="flightAssignStripTerm">Building</label>
-                <select id="flightAssignStripTerm" class="flight-assign-select flight-assign-strip-select" data-role="term" disabled title="Select a flight row first"></select>
+              <div class="flight-assign-strip-row">
+                <div class="compact-field">
+                  <label for="flightAssignStripArrTerm">Arr Building</label>
+                  <select id="flightAssignStripArrTerm" class="flight-assign-select flight-assign-strip-select" data-role="arrterm" disabled title="Select a flight row first"></select>
+                </div>
+                <div class="compact-field">
+                  <label for="flightAssignStripDepTerm">Dep Building</label>
+                  <select id="flightAssignStripDepTerm" class="flight-assign-select flight-assign-strip-select" data-role="depterm" disabled title="Select a flight row first"></select>
+                </div>
               </div>
             </div>
             <button class="small" id="btnAddFlight">+ Add Flight</button>

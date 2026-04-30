@@ -4082,9 +4082,6 @@
           failProSim(errMsg);
           return;
         }
-        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-        const playDockBtnEl = document.getElementById('btnShowPlayDock');
-        if (playDockBtnEl) playDockBtnEl.disabled = true;
         try {
           if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
           if (typeof syncTableToFlightState === 'function') syncTableToFlightState();
@@ -4092,6 +4089,19 @@
           failProSim(e0 && e0.message);
           return;
         }
+        const apronIssues = typeof getApronDuplicatedRegsForProSimUi === 'function' ? getApronDuplicatedRegsForProSimUi() : [];
+        if (apronIssues.length) {
+          const n = apronIssues.length;
+          const regs = apronIssues.map(function(it) { return String(it.reg); });
+          const errMsg = n > 5
+            ? (regs.slice(0, 3).join(', ') + ', etc. — ' + n + ' apron assignment issue(s).')
+            : ('Apron duplicated: ' + regs.join(' · '));
+          failProSim(errMsg);
+          return;
+        }
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        const playDockBtnEl = document.getElementById('btnShowPlayDock');
+        if (playDockBtnEl) playDockBtnEl.disabled = true;
         const layoutName = (state.currentLayoutName && String(state.currentLayoutName).trim()) || INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout';
         let layoutPayload;
         let didProSimPathGraphSync = false;

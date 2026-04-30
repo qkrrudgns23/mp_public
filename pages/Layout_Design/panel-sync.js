@@ -76,6 +76,8 @@
         f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
         f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
         f.terminalId = f.terminalId || t.terminalId || null;
+        f.arrTerminalId = f.arrTerminalId || t.arrTerminalId || f.terminalId || null;
+        f.depTerminalId = f.depTerminalId || t.depTerminalId || f.terminalId || null;
         const apronId = f.depApronId != null ? f.depApronId : (t.apronId != null ? t.apronId : (f.standId != null ? f.standId : f.arrApronId || null));
         f.standId = apronId;
         f.token = {
@@ -83,6 +85,8 @@
           runwayId: f.arrRunwayId || null,
           apronId: apronId,
           terminalId: f.terminalId || null,
+          arrTerminalId: f.arrTerminalId || null,
+          depTerminalId: f.depTerminalId || null,
           depRunwayId: f.depRunwayId || null,
         };
         if (exitTwPersist) f.token.ExitTaxiwayId = exitTwPersist;
@@ -103,31 +107,15 @@
           f.sampledArrRet = null;
         }
         if (!restorePlaybackFlight) {
-          f.arrRotSec = null;
-          delete f.proSimVttArrSec;
-          delete f.proSimVttDepSec;
-          delete f.proSimDttArrSec;
-          delete f.proSimPushbackSec;
-          delete f.proSimDttDepSec;
-          delete f.proSimDepLineupSec;
-          f.arrRunwayIdUsed = null;
-          f.arrTdDistM = null;
-          f.arrRetDistM = null;
-          f.arrVTdMs = null;
-          f.arrDecelMs2 = null;
-          f.arrVRetInMs = null;
-          f.arrVRetOutMs = null;
           f.timeline = null;
-          delete f.timeline_meta;
-          delete f.proSimEdgeList;
-          delete f.eldtMin;
-          delete f.eibtMin;
-          delete f.eobtMin;
-          delete f.etotMin;
-          delete f.eldtMin;
-          delete f.eibtMin;
-          delete f.eobtMin;
-          delete f.etotMin;
+          if (rawMeta && typeof rawMeta === 'object') {
+            f.timeline_meta = Object.assign({}, rawMeta);
+            hydrateEMinutesFromTimelineMetaIfMissing(f);
+          } else {
+            delete f.timeline_meta;
+          }
+          if (rawProSimEl && rawProSimEl.length) f.proSimEdgeList = rawProSimEl;
+          else delete f.proSimEdgeList;
         } else {
           const tlNorm = rawTl.map(function(p) {
             const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
@@ -152,31 +140,15 @@
             }
             hydrateEMinutesFromTimelineMetaIfMissing(f);
           } else {
-            f.arrRotSec = null;
-            delete f.proSimVttArrSec;
-            delete f.proSimVttDepSec;
-            delete f.proSimDttArrSec;
-            delete f.proSimPushbackSec;
-            delete f.proSimDttDepSec;
-            delete f.proSimDepLineupSec;
-            f.arrRunwayIdUsed = null;
-            f.arrTdDistM = null;
-            f.arrRetDistM = null;
-            f.arrVTdMs = null;
-            f.arrDecelMs2 = null;
-            f.arrVRetInMs = null;
-            f.arrVRetOutMs = null;
             f.timeline = null;
-            delete f.timeline_meta;
-            delete f.proSimEdgeList;
-            delete f.eldtMin;
-            delete f.eibtMin;
-            delete f.eobtMin;
-            delete f.etotMin;
-            delete f.eldtMin;
-            delete f.eibtMin;
-            delete f.eobtMin;
-            delete f.etotMin;
+            if (rawMeta && typeof rawMeta === 'object') {
+              f.timeline_meta = Object.assign({}, rawMeta);
+              hydrateEMinutesFromTimelineMetaIfMissing(f);
+            } else {
+              delete f.timeline_meta;
+            }
+            if (rawProSimEl && rawProSimEl.length) f.proSimEdgeList = rawProSimEl;
+            else delete f.proSimEdgeList;
           }
         }
         delete f.cachedArrPathPts;

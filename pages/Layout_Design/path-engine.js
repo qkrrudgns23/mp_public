@@ -89,7 +89,9 @@
     const heatOk = !!state.hasSimulationResult;
     const failedRegs = typeof getArrRetFailedRegsForProSimUi === 'function' ? getArrRetFailedRegsForProSimUi() : [];
     const hasRetFail = failedRegs.length > 0;
-    const proSimUiFresh = !hasRetFail && !!state.globalUpdateFresh;
+    const apronIssues = typeof getApronDuplicatedRegsForProSimUi === 'function' ? getApronDuplicatedRegsForProSimUi() : [];
+    const hasApronDuplicated = apronIssues.length > 0;
+    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !!state.globalUpdateFresh;
     const heatmapAllowed = heatOk && proSimUiFresh;
     if (!heatmapAllowed && state.mapTypeMode === 'heatmap') state.mapTypeMode = 'normal';
     if (!heatOk && state.mapTypeMode !== 'normal') state.mapTypeMode = 'normal';

@@ -19,6 +19,7 @@
     .grid-left-floating-stack .deadlock-ghost-banner,
     .grid-left-floating-stack .object-info-dock { pointer-events: auto; }
     .arr-ret-failed-banner[hidden] { display: none !important; }
+    .apron-duplicated-banner[hidden] { display: none !important; }
     .deadlock-ghost-banner[hidden] { display: none !important; }
     #object-info-dock { position: relative; max-height: min(40vh, 320px); display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding: 3px 7px; border-radius: 6px; font-size: 10px; line-height: 1.25; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; color: var(--ui-text-secondary); background: color-mix(in srgb, var(--ui-bg-elevated) 88%, transparent); border: 1px solid var(--ui-border-subtle); box-shadow: 0 2px 8px rgba(0,0,0,0.35); overflow: hidden; }
     #object-info-dock .object-info-panel { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; }
@@ -34,7 +35,8 @@
     .deadlock-ghost-banner__content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
     .deadlock-ghost-banner__title { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: #fff; }
     .deadlock-ghost-banner__text { white-space: pre-line; }
-    .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-arr-ret:disabled { opacity: 1; cursor: not-allowed; pointer-events: none; color: #fecdd3; border-color: rgba(248, 113, 113, 0.5); background: rgba(127, 29, 29, 0.45); }
+    .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-arr-ret:disabled,
+    .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-apron:disabled { opacity: 1; cursor: not-allowed; pointer-events: none; color: #fecdd3; border-color: rgba(248, 113, 113, 0.5); background: rgba(127, 29, 29, 0.45); }
     #grid-canvas {
       position: absolute;
       left: 0;
@@ -989,6 +991,12 @@
       color:var(--style-gantt-conflict-text, #fee2e2);
       border:1px solid var(--style-gantt-conflict-border, #f87171);
     }
+    .alloc-flight.alloc-invalid {
+      background:repeating-linear-gradient(135deg, #991b1b 0, #991b1b 6px, #450a0a 6px, #450a0a 12px);
+      color:#fee2e2;
+      border:1px solid #f87171;
+      box-shadow:0 0 0 1px rgba(248,113,113,0.35), 0 1px 4px rgba(127,29,29,0.55);
+    }
     
     .alloc-flight.alloc-flight-sbar-dim { opacity:var(--style-gantt-flight-dim-opacity, 0.4); }
     .alloc-flight.alloc-flight-selected { outline:1px solid var(--style-gantt-selected, #fbbf24); outline-offset:1px; box-shadow:0 0 0 1px var(--style-gantt-selected-ring, #0f172a), 0 1px 4px var(--style-gantt-selected-glow, rgba(251,191,36,0.4)); z-index:2; }
@@ -1002,6 +1010,51 @@
     @container allocflight (min-width: 100px) {
       .alloc-flight-type, .alloc-flight-type-sep { display:inline; }
     }
+    .alloc-constraint-modal {
+      position:fixed;
+      inset:0;
+      z-index:10080;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      background:rgba(13,13,15,0.58);
+      backdrop-filter:blur(2px);
+    }
+    .alloc-constraint-modal.is-open { display:flex; }
+    .alloc-constraint-modal__panel {
+      width:min(360px, calc(100vw - 32px));
+      padding:16px;
+      border-radius:12px;
+      border:1px solid rgba(248,113,113,0.38);
+      background:#18181b;
+      color:#f4f4f5;
+      box-shadow:0 12px 36px rgba(0,0,0,0.58);
+    }
+    .alloc-constraint-modal__title {
+      font-size:14px;
+      font-weight:700;
+      color:#fecaca;
+      margin-bottom:8px;
+    }
+    .alloc-constraint-modal__message {
+      font-size:13px;
+      line-height:1.5;
+      color:#d4d4d8;
+      margin-bottom:14px;
+    }
+    .alloc-constraint-modal__button {
+      height:32px;
+      min-width:72px;
+      padding:0 12px;
+      border-radius:8px;
+      border:1px solid rgba(248,113,113,0.42);
+      background:rgba(127,29,29,0.5);
+      color:#fee2e2;
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .alloc-constraint-modal__button:hover { background:rgba(153,27,27,0.68); }
     
     .alloc-s-bar {
       position:absolute;

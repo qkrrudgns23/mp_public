@@ -384,6 +384,7 @@
     }
 
     _ganttWireInteractions(ganttEl, state);
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
 
   function _ganttFindTrackAtPoint(scrollCol, clientX, clientY) {
