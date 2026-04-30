@@ -9739,10 +9739,10 @@
   function drawFlightTugCar2D(ctx, x, y, nx, ny, lenM, wingM) {
     void lenM;
     void wingM;
-    const tugLen = 10;
+    const tugLen = 8;
     const tugWid = 3;
-    const cx = x + nx * 7;
-    const cy = y + ny * 7;
+    const cx = x + nx * 3.4;
+    const cy = y + ny * 3.4;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(Math.atan2(ny, nx));

@@ -4340,11 +4340,13 @@ _POSITIONS_COMPACT_FORMAT_V2 = "compact_v2"
 _POSITIONS_META_KEYS_V2 = ("phase", "pathType", "edgeId")
 
 
-def _phase_requires_tug(phase: str) -> bool:
+def _phase_requires_tug(phase: str, *, after_first_parking: bool = False) -> bool:
     ph = str(phase or "").strip().lower().replace("-", "_").replace(" ", "_")
     if not ph:
         return False
-    if ph in {"landing", "arr_taxi", "dep_taxi", "lineup_departure"}:
+    if ph == "arr_taxi":
+        return bool(after_first_parking)
+    if ph in {"landing", "dep_taxi", "lineup_departure"}:
         return False
     if "holding" in ph or ph == "departure":
         return False
@@ -4376,6 +4378,13 @@ def _time_in_windows(t: float, windows: List[Tuple[float, float]]) -> bool:
     return any(float(s) - 1e-9 <= float(t) <= float(e) + 1e-9 for s, e in windows)
 
 
+def _after_first_parking_window(t: float, windows: List[Tuple[float, float]]) -> bool:
+    if not windows:
+        return False
+    first_end = min(float(e) for _s, e in windows)
+    return math.isfinite(first_end) and float(t) > first_end + 1e-9
+
+
 def _tug_intervals_from_positions(
     plist: List[Dict[str, Any]], schedule_row: Optional[Dict[str, Any]] = None
 ) -> List[Dict[str, int]]:
@@ -4395,7 +4404,13 @@ def _tug_intervals_from_positions(
             continue
         if not (math.isfinite(t0) and math.isfinite(t1)) or t1 <= t0:
             continue
-        need = _phase_requires_tug(str(p0.get("phase") or "")) and not _time_in_windows(t0, parked)
+        need = (
+            _phase_requires_tug(
+                str(p0.get("phase") or ""),
+                after_first_parking=_after_first_parking_window(t0, parked),
+            )
+            and not _time_in_windows(t0, parked)
+        )
         if need:
             if cur_start is None:
                 cur_start = t0
