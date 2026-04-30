@@ -4424,26 +4424,68 @@
     const r = standConfigRowForIcaoCat(category);
     if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return null;
     const g = Number(r.gap), ws = Number(r.wingspan), pb = Number(r.pushback);
-    if (!isFinite(g) || !isFinite(ws) || !isFinite(pb) || g <= 0 || ws <= 0) return null;
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(g) || !isFinite(ws) || !isFinite(pb) || !isFinite(nw) || !isFinite(nc) || g <= 0 || ws <= 0 || nw <= 0 || nc <= 0) return null;
     const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
     const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    const xNose = -halfD + shiftX;
     const xStop = 0;
+    const xBendEnd = xStop + (halfW - noseHalf);
     const xPush = (halfD - pb) + shiftX;
     const yLim = halfW - g;
     const xMin = (-halfD) + shiftX;
     const xMax = halfD + shiftX;
     const eps = 0.12;
+    if (!(noseHalf < halfW - eps)) return null;
+    if (!(xBendEnd <= xMax + eps)) return null;
     if (!(yLim > eps && yLim < halfW - eps)) return null;
     if (!(xStop > xMin + eps && xStop < xMax - eps)) return null;
     const xA = Math.max(xMin, Math.min(xMax, Math.min(xStop, xPush)));
     const xB = Math.max(xMin, Math.min(xMax, Math.max(xStop, xPush)));
     if (!(xB > xA + eps)) return null;
-    return [
-      [xA, -yLim],
-      [xB, -yLim],
-      [xB, yLim],
-      [xA, yLim],
+    const contour = [
+      [xNose, -noseHalf],
+      [xNose, noseHalf],
+      [xStop, noseHalf],
+      [Math.min(xBendEnd, xMax), halfW],
+      [xMax, halfW],
+      [xMax, -halfW],
+      [Math.min(xBendEnd, xMax), -halfW],
+      [xStop, -noseHalf],
     ];
+    return clipPolygonToAxisAlignedBox(contour, xA, xB, -yLim, yLim);
+  }
+  function clipPolygonToAxisAlignedBox(poly, minX, maxX, minY, maxY) {
+    if (!Array.isArray(poly) || poly.length < 3) return null;
+    function clip(input, axis, keepGreater, value) {
+      const out = [];
+      for (let i = 0; i < input.length; i++) {
+        const a = input[i];
+        const b = input[(i + 1) % input.length];
+        const av = axis === 'x' ? a[0] : a[1];
+        const bv = axis === 'x' ? b[0] : b[1];
+        const ain = keepGreater ? av >= value - 1e-9 : av <= value + 1e-9;
+        const bin = keepGreater ? bv >= value - 1e-9 : bv <= value + 1e-9;
+        if (ain && bin) {
+          out.push(b);
+        } else if (ain !== bin) {
+          const denom = bv - av;
+          if (Math.abs(denom) > 1e-12) {
+            const t = (value - av) / denom;
+            out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+          }
+          if (!ain && bin) out.push(b);
+        }
+      }
+      return out;
+    }
+    let out = poly.slice();
+    out = clip(out, 'x', true, minX);
+    out = clip(out, 'x', false, maxX);
+    out = clip(out, 'y', true, minY);
+    out = clip(out, 'y', false, maxY);
+    return out.length >= 3 ? out : null;
   }
   function standDuplicateSafetyWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
     const polyLocal = buildStandDuplicateSafetyPolygonLocalPoints(depM, widM, category);
