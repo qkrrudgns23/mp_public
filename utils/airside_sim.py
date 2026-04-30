@@ -3233,10 +3233,42 @@ def _reroute_penalized_edges_from_wait(
     return {e for e in out if e}
 
 
+def _touchdown_dep_window_rows_by_runway(
+    agents: List[Flight],
+    *,
+    dep_release_buffer_sec: float = 20.0,
+) -> Dict[str, List[Tuple[float, Optional[float], Any]]]:
+    """Per arrival-runway id: departure occupancy windows from other flights' dep paths.
+
+    Each row is ``(runway_entry_abs_sec, path_completed+buffer | None, flight_id)``.
+    Used to avoid re-scanning all agents for the dep-window half of
+    ``_compute_arr_touchdown_motion_abs_sec`` when computing for every flight.
+    """
+
+    buf = float(dep_release_buffer_sec)
+    out: Dict[str, List[Tuple[float, Optional[float], Any]]] = {}
+    for o in agents:
+        dep_rw = str(o.dep_runway_id or "").strip()
+        if not dep_rw:
+            continue
+        dep_entry = o.runway_entry_abs_sec
+        if dep_entry is None:
+            continue
+        dep_end = (
+            float(o.path_completed_abs_sec) + buf
+            if o.path_completed_abs_sec is not None
+            else None
+        )
+        out.setdefault(dep_rw, []).append((float(dep_entry), dep_end, o.id))
+    return out
+
+
 def _compute_arr_touchdown_motion_abs_sec(
     agent: Flight,
     agents: List[Flight],
     runway_release_lag_sec: float,
+    *,
+    dep_window_rows_by_runway: Optional[Dict[str, List[Tuple[float, Optional[float], Any]]]] = None,
 ) -> Optional[float]:
     """
     실제 착륙 롤(위치·점유·승인)이 시작될 최소 절대 시각.
@@ -3260,31 +3292,52 @@ def _compute_arr_touchdown_motion_abs_sec(
     any_pred = False
     pred_missing_exit = False
     dep_windows: List[Tuple[float, Optional[float]]] = []
-    for o in agents:
-        if o.id == agent.id:
-            continue
-        dep_rw = str(o.dep_runway_id or "").strip()
-        if dep_rw == rw:
-            dep_entry = o.runway_entry_abs_sec
-            if dep_entry is not None:
-                dep_end = (
-                    float(o.path_completed_abs_sec) + float(dep_release_buffer_sec)
-                    if o.path_completed_abs_sec is not None
-                    else None
-                )
-                dep_windows.append((float(dep_entry), dep_end))
-        if str(o.arr_runway_id or "").strip() != rw:
-            continue
-        if o.eldt_anchor_sec is None:
-            continue
-        if float(o.eldt_anchor_sec) + 1e-9 >= my:
-            continue
-        any_pred = True
-        ex = o.exit_runway_abs_sec
-        if ex is None:
-            pred_missing_exit = True
-            continue
-        need_exit = max(need_exit, float(ex))
+    if dep_window_rows_by_runway is None:
+        for o in agents:
+            if o.id == agent.id:
+                continue
+            dep_rw = str(o.dep_runway_id or "").strip()
+            if dep_rw == rw:
+                dep_entry = o.runway_entry_abs_sec
+                if dep_entry is not None:
+                    dep_end = (
+                        float(o.path_completed_abs_sec) + float(dep_release_buffer_sec)
+                        if o.path_completed_abs_sec is not None
+                        else None
+                    )
+                    dep_windows.append((float(dep_entry), dep_end))
+            if str(o.arr_runway_id or "").strip() != rw:
+                continue
+            if o.eldt_anchor_sec is None:
+                continue
+            if float(o.eldt_anchor_sec) + 1e-9 >= my:
+                continue
+            any_pred = True
+            ex = o.exit_runway_abs_sec
+            if ex is None:
+                pred_missing_exit = True
+                continue
+            need_exit = max(need_exit, float(ex))
+    else:
+        for dep_entry, dep_end, fid in dep_window_rows_by_runway.get(rw, ()):
+            if fid == agent.id:
+                continue
+            dep_windows.append((float(dep_entry), dep_end))
+        for o in agents:
+            if o.id == agent.id:
+                continue
+            if str(o.arr_runway_id or "").strip() != rw:
+                continue
+            if o.eldt_anchor_sec is None:
+                continue
+            if float(o.eldt_anchor_sec) + 1e-9 >= my:
+                continue
+            any_pred = True
+            ex = o.exit_runway_abs_sec
+            if ex is None:
+                pred_missing_exit = True
+                continue
+            need_exit = max(need_exit, float(ex))
     if not any_pred:
         base = max(raw, anch_f)
     else:
@@ -3312,8 +3365,11 @@ def _refresh_touchdown_motion_cache(
     runway_release_lag_sec: float,
 ) -> None:
     lag = float(runway_release_lag_sec)
+    dep_rows = _touchdown_dep_window_rows_by_runway(agents, dep_release_buffer_sec=20.0)
     control_state.touchdown_motion_by_id = {
-        str(ag.id): _compute_arr_touchdown_motion_abs_sec(ag, agents, lag)
+        str(ag.id): _compute_arr_touchdown_motion_abs_sec(
+            ag, agents, lag, dep_window_rows_by_runway=dep_rows
+        )
         for ag in agents
     }
 
@@ -7734,9 +7790,12 @@ def apply_movement_controls(
                     st.clearance = "WAIT"
                     st.wait_reason = f"runway_occupied:{er0.runway_id}"
     _apply_same_direction_following_caps(control_state, agents, ppm, t_end)
+    dep_rows = _touchdown_dep_window_rows_by_runway(agents, dep_release_buffer_sec=20.0)
     for ag in agents:
         # Do not use touchdown cache: prior agents may have moved / exited runway this tick.
-        td = _compute_arr_touchdown_motion_abs_sec(ag, agents, rw_lag)
+        td = _compute_arr_touchdown_motion_abs_sec(
+            ag, agents, rw_lag, dep_window_rows_by_runway=dep_rows
+        )
         if td is not None and t_end + 1e-12 < float(td):
             continue
         eldt_eff = float(td) if td is not None else t_end
