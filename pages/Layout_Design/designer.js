@@ -1879,11 +1879,20 @@
       const n = sec != null ? Number(sec) : NaN;
       return (isFinite(n) ? n / 60 : NaN);
     };
+    const toMinList = function(list) {
+      if (!Array.isArray(list)) return [];
+      return list.map(function(sec) {
+        const n = sec != null ? Number(sec) : NaN;
+        return isFinite(n) ? n / 60 : NaN;
+      });
+    };
     return {
       eldt: toMin(m.eldtSec),
       eibt: toMin(m.eibtSec),
       eobt: toMin(m.eobtSec),
       etot: toMin(m.etotSec),
+      eibtList: toMinList(m.eibtSecList),
+      eobtList: toMinList(m.eobtSecList),
     };
   }
   function settingModeValueForHit(hit) {
@@ -2641,17 +2650,23 @@
     const last = segs[segs.length - 1];
     const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, first.sibtMin - SCHED_SIBT_MINUS_SLDT_MIN);
     const stot = f.stotMin != null ? f.stotMin : (last.sobtMin + SCHED_STOT_MINUS_SOBT_MIN);
+    const eibtList = Array.isArray(eSer && eSer.eibtList) ? eSer.eibtList : [];
+    const eobtList = Array.isArray(eSer && eSer.eobtList) ? eSer.eobtList : [];
+    const hasSegmentEList = eibtList.length >= segs.length && eobtList.length >= segs.length;
     return segs.map(function(seg, idx) {
+      const segEibt = hasSegmentEList ? eibtList[idx] : eSer.eibt;
+      const segEobt = hasSegmentEList ? eobtList[idx] : eSer.eobt;
       return {
         f: f,
         t0: seg.sibtMin,
         t1: seg.sobtMin,
         sldt: sldt,
         stot: stot,
-        eibt: eSer.eibt,
-        eobt: eSer.eobt,
+        eibt: segEibt,
+        eobt: segEobt,
         eldt: eSer.eldt,
         etot: eSer.etot,
+        eBarSegmented: hasSegmentEList,
         sldtOrig: sldt,
         sobtOrig: last.sobtMin,
         stotOrig: stot,
@@ -11731,7 +11746,7 @@
           '\\n' + (segCount > 1 ? ('SOBT' + (segIdx + 1)) : 'SOBT') + ': ' + sobtLabel +
           '\\nReg: ' + (f.reg || '') +
           '\\nAirline: ' + (f.airlineCode || '') + ' ' + (f.flightNumber || '');
-        if (showEibtBars && eBars && isFirstSeg && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {
+        if (showEibtBars && eBars && (it.eBarSegmented || isFirstSeg) && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {
           pushAllocSpan(eBars, eibt, eobt, 'alloc-e-bar', 2);
         }
         if (showEldtBars && e2Bars && isFirstSeg) {
