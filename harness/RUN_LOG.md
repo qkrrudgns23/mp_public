@@ -1,5 +1,25 @@
 ## Run Notes (최근 실행 결과 요약)
 
+### RUN 20260501 td_compute_aid_aa_bucket — **미채택(원복)**
+
+- **패치**: `_compute_arr_touchdown_motion_abs_sec`에 `aid` 로컬, `deps` 합의 `float(20.0)` 제거, `agents_by_arr_runway`를 `aa`·`bucket`으로 조회.
+- **golden**: `golden_opt_cycle --tag td_compute_aid_aa_bucket_v1` PASS.
+- **opt_repeat**: 8 reps median **33.51 s** — 동일 세션 패치 전 4 reps baseline median **33.33 s** 대비 악화 → **시간 줄이기** 미충족으로 **원복**.
+- **note**: 이후 `golden_opt_cycle --tag revert_verify_td_compute` 로 원복 트리 PASS 확인.
+
+### RUN 20260501 playback_t_key_apk_locals (perf, golden-locked)
+
+- **command**: `python -m harness.smoke` → `python -m harness.golden_opt_cycle --skip-smoke --tag playback_apk_touchdown_locals_v1` → `python -m harness.opt_repeat_experiment --reps 8 --skip-smoke`
+- **result**: golden triple PASS; repeat 8/8 PASS, `sum_wall_s` median **33.15** s (mean 33.23, stdev 0.29).
+- **대안**: (A) `_playback_schedule_point_t_key` + touchdown `else`에서 `apk`/`dep_rows_sel` 로컬 — **채택** (프로파일 구간 미세 절약, 계약 동일). (B) apron `_ensure_*` 호출 줄이기 — 변경면 큼. (C) `sorted`만 손보기만 — 단독 적용 시 한계 있어 A에 포함.
+
+### RUN 20260501 runway_key_strip_elide (perf, golden-locked)
+
+- **command**: `python -m harness.smoke` → `python -m harness.golden_opt_cycle --skip-smoke --tag runway_key_strip_elide_v1` → `python -m harness.opt_repeat_experiment --reps 8 --skip-smoke`
+- **result**: golden triple PASS (deep-equal); repeat 8/8 PASS, `sum_wall_s` median **33.14** s (mean 33.17, stdev 0.15).
+- **대안 요약**: (A) `_agent_runway_id_key`: sim `Flight`의 활주로 id가 생성 시점에 이미 strip 정규화되므로 루프 내 `str(...).strip()` 제거 — **채택**. (B) 터치다운 모션 캐시 증분 갱신 — 이득 큼, 계약 리스크 큼 → 보류. (C) 재생 포인트 `sorted` 람다 치환 — 프로파일 대비 영향 미미 → 보류.
+- **change**: `utils/airside_sim.py` — `_agent_runway_id_key`; touchdown/점유 등 agent 경로에서 arr/dep runway dict·비교 키 계산 단순화.
+
 ### RUN 20260424T0400Z temp-stand-passthrough + arr-temp-splice-snap
 - **RUN_ID**: 20260424T0400Z
 - **command**:
