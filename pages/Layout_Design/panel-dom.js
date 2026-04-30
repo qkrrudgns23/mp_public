@@ -798,9 +798,15 @@
           if (hasMultiSegments && typeof applyApronStaySegmentHandleMinute === 'function') {
             applyApronStaySegmentHandleMinute(f, handleSegIdx, role, m);
           } else if (role === 'sibt') {
-            if (typeof _ganttApplySibtHandleSnappedMinutes === 'function') _ganttApplySibtHandleSnappedMinutes(f, m, dragSibtCtx);
+            if (typeof _ganttApplySibtHandleSnappedMinutes === 'function') {
+              _ganttApplySibtHandleSnappedMinutes(f, m, dragSibtCtx);
+              if (typeof syncSingleApronStaySegmentFromAggregate === 'function') syncSingleApronStaySegmentFromAggregate(f);
+            }
           } else {
-            if (typeof applyScheduledGateTimingFromSField === 'function') applyScheduledGateTimingFromSField(f, 'sobt', m);
+            if (typeof applyScheduledGateTimingFromSField === 'function') {
+              applyScheduledGateTimingFromSField(f, 'sobt', m);
+              if (typeof syncSingleApronStaySegmentFromAggregate === 'function') syncSingleApronStaySegmentFromAggregate(f);
+            }
           }
           if (typeof computeScheduledDisplayTimesIncremental === 'function') {
             const tset = new Set();

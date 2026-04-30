@@ -580,6 +580,49 @@
     });
     return out;
   }
+  function syncSingleApronStaySegmentFromAggregate(f) {
+    if (!f || !Array.isArray(f.apronStaySegments) || f.apronStaySegments.length !== 1) return false;
+    const sibt = f.sibtMin != null && isFinite(Number(f.sibtMin))
+      ? Number(f.sibtMin)
+      : (f.timeMin != null && isFinite(Number(f.timeMin)) ? Number(f.timeMin) : null);
+    const sobt = f.sobtMin != null && isFinite(Number(f.sobtMin))
+      ? Number(f.sobtMin)
+      : (sibt != null ? sibt + Math.max(0, Number(f.dwellMin) || 0) : null);
+    if (sibt == null || sobt == null || sobt <= sibt) return false;
+    const cur = f.apronStaySegments[0] || {};
+    const standId = cur.standId != null && String(cur.standId).trim() !== ''
+      ? String(cur.standId)
+      : (f.standId != null && String(f.standId).trim() !== '' ? String(f.standId) : null);
+    f.apronStaySegments = [{ standId: standId, sibtMin: Math.max(0, sibt), sobtMin: Math.max(0, sobt) }];
+    syncFlightApronStayAggregate(f);
+    return true;
+  }
+  function collapseFlightApronStaySegmentsIfSingleStand(f) {
+    if (!f || !Array.isArray(f.apronStaySegments) || f.apronStaySegments.length <= 1) return false;
+    const segs = normalizeFlightApronStaySegments(f);
+    if (segs.length <= 1) return false;
+    const firstStandKey = String(segs[0].standId || '');
+    for (let i = 1; i < segs.length; i++) {
+      if (String(segs[i].standId || '') !== firstStandKey) return false;
+    }
+    const first = segs[0];
+    const last = segs[segs.length - 1];
+    f.apronStaySegments = [{
+      standId: first.standId || null,
+      sibtMin: first.sibtMin,
+      sobtMin: last.sobtMin
+    }];
+    syncFlightApronStayAggregate(f);
+    return true;
+  }
+  function collapseSingleStandApronStaySegmentsForFlights(flights) {
+    const changed = [];
+    (flights || []).forEach(function(f) {
+      if (!f || typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f)) return;
+      if (collapseFlightApronStaySegmentsIfSingleStand(f)) changed.push(f);
+    });
+    return changed;
+  }
   function syncFlightApronStayAggregate(f) {
     if (!f) return [];
     const segs = normalizeFlightApronStaySegments(f);

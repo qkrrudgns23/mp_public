@@ -10651,10 +10651,22 @@
   if (btnDesignerPageUpdate) {
     btnDesignerPageUpdate.addEventListener('click', function() {
       if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
+      const collapsedApronFlights = typeof collapseSingleStandApronStaySegmentsForFlights === 'function'
+        ? collapseSingleStandApronStaySegmentsForFlights(state.flights || [])
+        : [];
       if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
       if (typeof renderObjectList === 'function') renderObjectList();
       if (typeof updateObjectInfo === 'function') updateObjectInfo();
       if (typeof triggerArrivalConfigResampleFromLayoutEdit === 'function') triggerArrivalConfigResampleFromLayoutEdit();
+      if (collapsedApronFlights.length && typeof renderFlightList === 'function') {
+        renderFlightList(false, false, {
+          scheduleMode: 'incremental',
+          dirtyFlightIds: collapsedApronFlights.map(function(f) { return f.id; }).filter(Boolean),
+          touchedStandIds: collapsedApronFlights.map(function(f) { return f.standId; }).filter(Boolean),
+          skipGanttRefresh: true
+        });
+      }
+      if (collapsedApronFlights.length && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
       if (typeof draw === 'function') draw();
       if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
       if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
