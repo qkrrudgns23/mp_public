@@ -42,13 +42,16 @@ from __future__ import annotations
 
 import json
 import hashlib
+import itertools
 import logging
 import math
+
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from operator import itemgetter
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+
 
 from utils.designer_path_graph import (
     DirectedEdgeRecord,
@@ -1069,6 +1072,26 @@ def _closest_on_polyline_with_cum_dist(
     return (best_xy[0], best_xy[1], best_cum)
 
 
+def _layout_ret_runway_exit_tw_object(
+    layout: Dict[str, Any], ret_tw_id: Optional[str]
+) -> Optional[Dict[str, Any]]:
+    """Runway-exit taxiway dict: ``runwayTaxiways`` by id first, then ``taxiways`` ``pathType==runway_exit``."""
+    if not ret_tw_id or not str(ret_tw_id).strip():
+        return None
+    rid = str(ret_tw_id).strip()
+    for tw in layout.get("runwayTaxiways") or []:
+        if isinstance(tw, dict) and str(tw.get("id", "")) == rid:
+            return tw
+    for tw in layout.get("taxiways") or []:
+        if (
+            isinstance(tw, dict)
+            and str(tw.get("id", "")) == rid
+            and tw.get("pathType") == "runway_exit"
+        ):
+            return tw
+    return None
+
+
 def _arr_ret_runway_junction_xy(
     layout: Dict[str, Any],
     cell_size: float,
@@ -1087,20 +1110,7 @@ def _arr_ret_runway_junction_xy(
     rw_pts = _as_xy_pairs(r.get("pts"))
     if len(rw_pts) < 2:
         return None
-    ret_obj: Optional[Dict[str, Any]] = None
-    for tw in layout.get("runwayTaxiways") or []:
-        if isinstance(tw, dict) and str(tw.get("id", "")) == str(ret_tw_id):
-            ret_obj = tw
-            break
-    if ret_obj is None:
-        for tw in layout.get("taxiways") or []:
-            if (
-                isinstance(tw, dict)
-                and str(tw.get("id", "")) == str(ret_tw_id)
-                and tw.get("pathType") == "runway_exit"
-            ):
-                ret_obj = tw
-                break
+    ret_obj = _layout_ret_runway_exit_tw_object(layout, ret_tw_id)
     if not ret_obj:
         return None
     ex_pts_raw = get_ordered_points(ret_obj, layout, cell_size)
@@ -1132,26 +1142,18 @@ def _arr_ret_first_edge_far_xy(
     cell_size: float,
     ret_tw_id: Optional[str],
     runway_junction_xy: Optional[Tuple[float, float]],
+    *,
+    ex_pts_poly: Optional[List[Tuple[float, float]]] = None,
 ) -> Optional[Tuple[float, float]]:
     if not ret_tw_id or not str(ret_tw_id).strip() or runway_junction_xy is None:
         return None
-    ret_obj: Optional[Dict[str, Any]] = None
-    for tw in layout.get("runwayTaxiways") or []:
-        if isinstance(tw, dict) and str(tw.get("id", "")) == str(ret_tw_id):
-            ret_obj = tw
-            break
-    if ret_obj is None:
-        for tw in layout.get("taxiways") or []:
-            if (
-                isinstance(tw, dict)
-                and str(tw.get("id", "")) == str(ret_tw_id)
-                and tw.get("pathType") == "runway_exit"
-            ):
-                ret_obj = tw
-                break
-    if not ret_obj:
-        return None
-    ex_pts = _as_xy_pairs(get_ordered_points(ret_obj, layout, cell_size) or [])
+    if ex_pts_poly is not None and len(ex_pts_poly) >= 2:
+        ex_pts = ex_pts_poly
+    else:
+        ret_obj = _layout_ret_runway_exit_tw_object(layout, ret_tw_id)
+        if not ret_obj:
+            return None
+        ex_pts = _as_xy_pairs(get_ordered_points(ret_obj, layout, cell_size) or [])
     if len(ex_pts) < 2:
         return None
     jx, jy = float(runway_junction_xy[0]), float(runway_junction_xy[1])
@@ -1193,20 +1195,7 @@ def _arr_ret_exit_first_junction_a_xy(
     """
     if not ret_tw_id or not str(ret_tw_id).strip() or runway_junction_xy is None:
         return None
-    ret_obj: Optional[Dict[str, Any]] = None
-    for tw in layout.get("runwayTaxiways") or []:
-        if isinstance(tw, dict) and str(tw.get("id", "")) == str(ret_tw_id):
-            ret_obj = tw
-            break
-    if ret_obj is None:
-        for tw in layout.get("taxiways") or []:
-            if (
-                isinstance(tw, dict)
-                and str(tw.get("id", "")) == str(ret_tw_id)
-                and tw.get("pathType") == "runway_exit"
-            ):
-                ret_obj = tw
-                break
+    ret_obj = _layout_ret_runway_exit_tw_object(layout, ret_tw_id)
     if not ret_obj:
         return None
     ex_pts = _as_xy_pairs(get_ordered_points(ret_obj, layout, cell_size) or [])
@@ -1244,7 +1233,9 @@ def _arr_ret_exit_first_junction_a_xy(
             best = (qx, qy)
     if best is not None:
         return best
-    return _arr_ret_first_edge_far_xy(layout, cell_size, ret_tw_id, runway_junction_xy)
+    return _arr_ret_first_edge_far_xy(
+        layout, cell_size, ret_tw_id, runway_junction_xy, ex_pts_poly=ex_pts
+    )
 
 
 def _polyline_total_length_px(pts: List[Tuple[float, float]]) -> float:
@@ -1543,12 +1534,33 @@ def _iter_layout_rtx_objects(layout: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
+def _rtx_polyline_px_by_candidate_ids(
+    layout: Dict[str, Any],
+    cell_size: float,
+    cand_ids: set[str],
+) -> Dict[str, List[Tuple[float, float]]]:
+    """Precompute layout-pixel polylines for RTX ids in ``cand_ids`` (one ``_iter_layout_rtx_objects`` scan)."""
+    if not cand_ids:
+        return {}
+    out: Dict[str, List[Tuple[float, float]]] = {}
+    for tx in _iter_layout_rtx_objects(layout):
+        tid = str(tx.get("id", "")).strip()
+        if not tid or tid not in cand_ids or tid in out:
+            continue
+        rtx = _as_xy_pairs(get_ordered_points(tx, layout, cell_size) or [])
+        if len(rtx) >= 2:
+            out[tid] = rtx
+    return out
+
+
 def _list_rtx_touching_lineup_on_runway(
     layout: Dict[str, Any],
     cell_size: float,
     runway_tw: Dict[str, Any],
     lineup_pt: Tuple[float, float],
     tol_px: Optional[float] = None,
+    *,
+    rtx_objects: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     rw_pts_raw = get_ordered_points(runway_tw, layout, cell_size)
@@ -1559,7 +1571,10 @@ def _list_rtx_touching_lineup_on_runway(
     tol = float(tol_px) if isinstance(tol_px, (int, float)) and math.isfinite(float(tol_px)) and float(tol_px) > 0 else 7.0
     touch_d2 = max(float(SPLIT_TOL_D2), tol * tol)
     lx, ly = float(lineup_pt[0]), float(lineup_pt[1])
-    for tx in _iter_layout_rtx_objects(layout):
+    rtx_iter = (
+        rtx_objects if rtx_objects is not None else _iter_layout_rtx_objects(layout)
+    )
+    for tx in rtx_iter:
         rtx_raw = get_ordered_points(tx, layout, cell_size)
         rtx = _as_xy_pairs(rtx_raw or [])
         if len(rtx) < 2:
@@ -1593,11 +1608,13 @@ def _expand_rtx_candidate_ids_touching_lineup(
     ids: set[str] = set()
     if runway_tw is None:
         return ids
-    hop1 = _list_rtx_touching_lineup_on_runway(layout, cell_size, runway_tw, lineup_pt, tol_px)
+    rtx_list = _iter_layout_rtx_objects(layout)
+    hop1 = _list_rtx_touching_lineup_on_runway(
+        layout, cell_size, runway_tw, lineup_pt, tol_px, rtx_objects=rtx_list
+    )
     for tx in hop1:
         if isinstance(tx, dict) and tx.get("id") is not None:
             ids.add(str(tx["id"]))
-    rtx_list = _iter_layout_rtx_objects(layout)
     for a in hop1:
         for b in rtx_list:
             if b.get("id") == a.get("id"):
@@ -1616,14 +1633,23 @@ def _runway_holding_near_rtx_candidate_set(
     hp: Dict[str, Any],
     cand_ids: set[str],
     tol_px: Optional[float] = None,
+    *,
+    rtx_polyline_by_id: Optional[Dict[str, List[Tuple[float, float]]]] = None,
 ) -> bool:
     p = _holding_point_xy_px(hp)
     if p is None or not _holding_point_kind_runway_holding(hp):
         return False
-    _ = cell_size
     tol = float(tol_px) if isinstance(tol_px, (int, float)) and math.isfinite(float(tol_px)) and float(tol_px) > 0 else 7.0
     tol_d2 = max(float(SPLIT_TOL_D2), (tol * 1.15) ** 2)
     px, py = p[0], p[1]
+    if rtx_polyline_by_id is not None:
+        for tid in cand_ids:
+            rtx = rtx_polyline_by_id.get(str(tid).strip())
+            if rtx is None or len(rtx) < 2:
+                continue
+            if _point_near_polyline_sq(px, py, rtx, tol_d2):
+                return True
+        return False
     for tx in _iter_layout_rtx_objects(layout):
         tid = str(tx.get("id", ""))
         if tid not in cand_ids:
@@ -1669,9 +1695,9 @@ def _find_last_runway_holding_on_departure_path(
 ) -> Optional[Tuple[Dict[str, Any], float, Tuple[float, float]]]:
     if len(to_lineup_pts) < 2 or not cand_ids:
         return None
+    rtx_px = _rtx_polyline_px_by_candidate_ids(layout, cell_size, cand_ids)
     hps = layout.get("holdingPoints") or []
     best: Optional[Tuple[Dict[str, Any], float, Tuple[float, float]]] = None
-    _ = cell_size
     tol = float(tol_px) if isinstance(tol_px, (int, float)) and math.isfinite(float(tol_px)) and float(tol_px) > 0 else 7.0
     tol_line_d2 = max(float(SPLIT_TOL_D2), (tol * 1.3) ** 2)
     for hp in hps:
@@ -1679,7 +1705,9 @@ def _find_last_runway_holding_on_departure_path(
             continue
         if not _holding_point_kind_runway_holding(hp):
             continue
-        if not _runway_holding_near_rtx_candidate_set(layout, cell_size, hp, cand_ids, tol):
+        if not _runway_holding_near_rtx_candidate_set(
+            layout, cell_size, hp, cand_ids, tol, rtx_polyline_by_id=rtx_px
+        ):
             continue
         p = _holding_point_xy_px(hp)
         if p is None:
@@ -2092,11 +2120,26 @@ def extract_point_to_paths(
     ]
 
 
-def _avg_move_velocity_ms_for_taxiway_id(
-    layout: Dict[str, Any], taxiway_id: str, flight_id: str
-) -> Optional[float]:
-    """Return avg speed (m/s) if ``taxiway_id`` matches a taxiway-like record; ``None`` if no match."""
-    tid = str(taxiway_id).strip()
+
+@dataclass
+class LayoutLinkVelocityCaches:
+    """Pre-layout dict: taxi/runway link speeds + apron link speeds (see ``layout_link_velocity_cache_for_layout``)."""
+
+    taxi_runway_velocity_mps: Dict[str, float]
+    taxi_runway_velocity_invalid_ids: Set[str]
+    apron_link_velocity_mps: Dict[str, float]
+
+
+_LAYOUT_LINK_VEL_CACHE: Dict[int, LayoutLinkVelocityCaches] = {}
+
+
+def layout_link_velocity_cache_for_layout(layout: Dict[str, Any]) -> LayoutLinkVelocityCaches:
+    lk = id(layout)
+    hit = _LAYOUT_LINK_VEL_CACHE.get(lk)
+    if hit is not None:
+        return hit
+    trr_vel: Dict[str, float] = {}
+    trr_bad: Set[str] = set()
     for bucket in (
         layout.get("taxiways"),
         layout.get("runwayTaxiways"),
@@ -2105,29 +2148,62 @@ def _avg_move_velocity_ms_for_taxiway_id(
         if not isinstance(bucket, list):
             continue
         for obj in bucket:
-            if not isinstance(obj, dict) or str(obj.get("id", "")).strip() != tid:
+            if not isinstance(obj, dict):
+                continue
+            tid = str(obj.get("id", "")).strip()
+            if not tid or tid in trr_vel or tid in trr_bad:
                 continue
             v = _safe_float(obj.get("avgMoveVelocity"), float("nan"))
             if math.isfinite(v) and v > 0:
-                return float(v)
-            raise ValueError(
-                f"avgMoveVelocity missing or invalid for link_id={tid!r} (flight_id={flight_id!r})"
-            )
-    return None
-
-
-def _avg_move_velocity_ms_for_link(layout: Dict[str, Any], link_id: str, flight_id: str) -> float:
-    lid = str(link_id).strip()
-    direct = _avg_move_velocity_ms_for_taxiway_id(layout, lid, flight_id)
-    if direct is not None:
-        return direct
+                trr_vel[tid] = float(v)
+            else:
+                trr_bad.add(tid)
+    apron_v: Dict[str, float] = {}
     for al in layout.get("apronLinks") or []:
-        if not isinstance(al, dict) or str(al.get("id", "")).strip() != lid:
+        if not isinstance(al, dict):
+            continue
+        tid = str(al.get("id", "")).strip()
+        if not tid or tid in apron_v:
             continue
         v = _safe_float(al.get("avgMoveVelocity"), float("nan"))
         if math.isfinite(v) and v > 0:
-            return float(v)
-        return float(APRON_LINK_SPEED_MPS)
+            apron_v[tid] = float(v)
+        else:
+            apron_v[tid] = float(APRON_LINK_SPEED_MPS)
+    built = LayoutLinkVelocityCaches(
+        taxi_runway_velocity_mps=trr_vel,
+        taxi_runway_velocity_invalid_ids=trr_bad,
+        apron_link_velocity_mps=apron_v,
+    )
+    _LAYOUT_LINK_VEL_CACHE[lk] = built
+    return built
+
+
+def _velocity_cache_get_or_build(
+    layout: Dict[str, Any], velocity_cache: Optional[LayoutLinkVelocityCaches]
+) -> LayoutLinkVelocityCaches:
+    return velocity_cache if velocity_cache is not None else layout_link_velocity_cache_for_layout(layout)
+
+
+def _avg_move_velocity_ms_for_link(
+    layout: Dict[str, Any],
+    link_id: str,
+    flight_id: str,
+    *,
+    velocity_cache: Optional[LayoutLinkVelocityCaches] = None,
+) -> float:
+    lid = str(link_id).strip()
+    caches = _velocity_cache_get_or_build(layout, velocity_cache)
+    if lid in caches.taxi_runway_velocity_invalid_ids:
+        raise ValueError(
+            f"avgMoveVelocity missing or invalid for link_id={lid!r} (flight_id={flight_id!r})"
+        )
+    v_tr = caches.taxi_runway_velocity_mps.get(lid)
+    if v_tr is not None:
+        return float(v_tr)
+    v_ap = caches.apron_link_velocity_mps.get(lid)
+    if v_ap is not None:
+        return float(v_ap)
     raise ValueError(
         f"link_id={lid!r} not found in layout taxiways/runwayTaxiways/runwayPaths/apronLinks "
         f"(flight_id={flight_id!r})"
@@ -2199,6 +2275,8 @@ def _annotate_segment_kinematics(
     pixels_per_meter: float,
     flight_id: str,
     information: Dict[str, Any],
+    *,
+    velocity_cache: Optional[LayoutLinkVelocityCaches] = None,
 ) -> Tuple[List[float], List[float], List[float]]:
     """
     Parallel to micro-segments: start velocity (m/s) and constant acceleration (m/s^2) on each segment,
@@ -2228,6 +2306,7 @@ def _annotate_segment_kinematics(
     arr_vtd_f = _safe_float(arr_vtd, float("nan"))
 
     ppm = max(float(pixels_per_meter), 1e-9)
+    vcache = _velocity_cache_get_or_build(layout, velocity_cache)
 
     for i in range(n):
         phase = segment_phases[i]
@@ -2279,7 +2358,7 @@ def _annotate_segment_kinematics(
                         f"runway_taxiway at path start has no previous link (flight_id={flight_id!r})"
                     )
                 prev_lid = str(segment_link_ids[i - 1])
-                v_t = _avg_move_velocity_ms_for_link(layout, prev_lid, flight_id)
+                v_t = _avg_move_velocity_ms_for_link(layout, prev_lid, flight_id, velocity_cache=vcache)
                 if phase in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
                     v_t = max(float(v_t), MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
                 v0_out[i] = float(v_t)
@@ -2289,7 +2368,7 @@ def _annotate_segment_kinematics(
                 _ret_floor = float(MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
                 # RET micro-segments: after speed drops ~0, do not integrate decel from v0≈0 (durations explode).
                 if float(v_cur) < 1e-3:
-                    v_t = _avg_move_velocity_ms_for_link(layout, link_id, flight_id)
+                    v_t = _avg_move_velocity_ms_for_link(layout, link_id, flight_id, velocity_cache=vcache)
                     v_t = max(float(v_t), _ret_floor)
                     v0_out[i] = float(v_t)
                     a_out[i] = 0.0
@@ -2309,7 +2388,7 @@ def _annotate_segment_kinematics(
                 v_cur = max(float(v_end), _ret_floor)
                 continue
             else:
-                v_t = _avg_move_velocity_ms_for_link(layout, link_id, flight_id)
+                v_t = _avg_move_velocity_ms_for_link(layout, link_id, flight_id, velocity_cache=vcache)
                 v0_out[i] = float(v_t)
                 a_out[i] = 0.0
                 v_cur = float(v_t)
@@ -2773,6 +2852,7 @@ def prepare_flight_path(
     if playback_ok and not direction_violation:
         ppm = _layout_pixels_per_meter(information)
         fid = str(flight.get("id", ""))
+        vlc = layout_link_velocity_cache_for_layout(layout)
         try:
             v0s, accs, durs = _annotate_segment_kinematics(
                 flight,
@@ -2784,6 +2864,7 @@ def prepare_flight_path(
                 ppm,
                 fid,
                 information,
+                velocity_cache=vlc,
             )
         except ValueError:
             return PreparedFlightPath(
@@ -3263,18 +3344,18 @@ def _reroute_penalized_edges_from_wait(
             for e in control_state.temp_stand_incident_edges.get(ts_id, set())
             if str(e).strip()
         }
-    elif wr.startswith("runway_rot_busy:") and lookahead_edges:
-        for e in lookahead_edges[:4]:
-            s = str(e).strip()
+    if lookahead_edges and wr:
+        n_la = len(lookahead_edges)
+        lim = max(
+            min(4, n_la) if wr.startswith("runway_rot_busy:") else 0,
+            min(2, n_la),
+        )
+        for j in range(lim):
+            s = str(lookahead_edges[j]).strip()
             if s:
                 out.add(s)
-    if wr:
-        for e in lookahead_edges[:2]:
-            s = str(e).strip()
-            if s:
-                out.add(s)
-        if agent.edge_ids:
-            out.add(str(agent.edge_ids[0]))
+    if wr and agent.edge_ids:
+        out.add(str(agent.edge_ids[0]))
     return {e for e in out if e}
 
 
@@ -3539,10 +3620,10 @@ def _arr_touchdown_motion_abs_sec(
 
 
 def _path_length_px(segments: List[Tuple[Point, Point]]) -> float:
-    s = 0.0
+    tot = 0.0
     for p0, p1 in segments:
-        s += math.hypot(p1[0] - p0[0], p1[1] - p0[1])
-    return s
+        tot += math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+    return tot
 
 
 def _flight_opt_str(fobj: Dict[str, Any], *keys: str) -> Optional[str]:
@@ -3607,15 +3688,15 @@ def _taxi_in_out_sec_from_prep(
         )
 
     taxi_in = 0.0
-    for g in range(gi, len(segs)):
-        if g < 0 or g >= len(segs):
-            continue
-        if str(phs[g]) in (PHASE_LANDING, PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
-            taxi_in += dur_from_playback_start(g)
-
     taxi_out = 0.0
     for g, ph in enumerate(phs):
-        if str(ph) in (
+        p = str(ph)
+        if (
+            g >= gi
+            and p in (PHASE_LANDING, PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP)
+        ):
+            taxi_in += dur_from_playback_start(g)
+        elif p in (
             PHASE_PUSHBACK,
             PHASE_DEP_TAXI,
             PHASE_HOLDING_LINEUP,
@@ -3653,9 +3734,18 @@ def _departure_leg_durations_sec_for_schedule(
     phs = prep.segment_phases
     if not durs or len(phs) != len(durs):
         return None, None, None
-    t2 = sum(float(durs[g]) for g, ph in enumerate(phs) if str(ph) == PHASE_DEP_TAXI)
-    t3 = sum(float(durs[g]) for g, ph in enumerate(phs) if str(ph) == PHASE_HOLDING_LINEUP)
-    t4 = sum(float(durs[g]) for g, ph in enumerate(phs) if str(ph) == PHASE_LINEUP_DEPARTURE)
+    t2 = 0.0
+    t3 = 0.0
+    t4 = 0.0
+    for g, ph in enumerate(phs):
+        p = str(ph)
+        d = float(durs[g])
+        if p == PHASE_DEP_TAXI:
+            t2 += d
+        elif p == PHASE_HOLDING_LINEUP:
+            t3 += d
+        elif p == PHASE_LINEUP_DEPARTURE:
+            t4 += d
     return t2, t3, t4
 
 
@@ -5331,6 +5421,7 @@ def _build_prep_xy_to_xy_phase(
         _snap_segment_endpoints_to_stand_px(segs, start_xy=start_xy)
     fid = str(fobj.get("id", agent.id))
     ppm = max(float(_layout_pixels_per_meter(information)), 1e-9)
+    vlc = layout_link_velocity_cache_for_layout(layout)
     try:
         v0s, accs, durs = _annotate_segment_kinematics(
             fobj,
@@ -5342,6 +5433,7 @@ def _build_prep_xy_to_xy_phase(
             ppm,
             fid,
             information,
+            velocity_cache=vlc,
         )
     except ValueError:
         return None
@@ -6739,15 +6831,27 @@ def _runway_rot_reservation_blocked(
     return False
 
 
+def _temp_stand_edge_incident_index(
+    temp_stand_incident_edges: Dict[str, set[str]],
+) -> Dict[str, List[str]]:
+    """Map layout edge id -> temp stand ids (append order mirrors legacy nested scan)."""
+
+    if not temp_stand_incident_edges:
+        return {}
+    out: Dict[str, List[str]] = {}
+    for ts_id, e_set in temp_stand_incident_edges.items():
+        ts_key = str(ts_id)
+        for raw_e in e_set:
+            out.setdefault(str(raw_e), []).append(ts_key)
+    return out
+
+
 def _resource_use_count(
     occupied: List[str], reserved: List[str], agent_id: str
 ) -> int:
     aid = agent_id
     s: set[str] = set()
-    for x in occupied:
-        if x != aid:
-            s.add(x)
-    for x in reserved:
+    for x in itertools.chain(occupied, reserved):
         if x != aid:
             s.add(x)
     return len(s)
@@ -6765,17 +6869,12 @@ def _blocking_temp_stand_for_edge(
     if not eid:
         return None
     stand_get = control_state.stand_resources.get
-    if edge_incident_temp_stands is not None:
-        for ts_id in edge_incident_temp_stands.get(eid, ()):
-            sr = stand_get(str(ts_id))
-            if sr is None:
-                continue
-            if any(str(x) != aid for x in sr.occupied_by):
-                return str(ts_id)
-        return None
-    for ts_id, e_set in control_state.temp_stand_incident_edges.items():
-        if eid not in e_set:
-            continue
+    ix = (
+        edge_incident_temp_stands
+        if edge_incident_temp_stands is not None
+        else _temp_stand_edge_incident_index(control_state.temp_stand_incident_edges)
+    )
+    for ts_id in ix.get(eid, ()):
         sr = stand_get(str(ts_id))
         if sr is None:
             continue
@@ -6843,6 +6942,8 @@ def can_reserve_path(
     stand_arrival_book: Optional[Dict[str, int]] = None,
     reservation_depth: int = RESERV_DEPTH_ARR_TAXI,
     stand_cooldown_index: Optional[StandCooldownIndex] = None,
+    *,
+    edge_incident_temp_stands: Optional[Dict[str, List[str]]] = None,
 ) -> Tuple[bool, str]:
     if not lookahead:
         return False, "empty_lookahead"
@@ -6850,15 +6951,12 @@ def can_reserve_path(
     t_abs = float(sim_time)
     depth_cap = max(1, int(reservation_depth))
     ptn = control_state.edge_path_type_norm
-    temp_edges = control_state.temp_stand_incident_edges
-    if temp_edges:
-        edge_incident_temp_stands: Dict[str, List[str]] = {}
-        for ts_id, e_set in temp_edges.items():
-            ts_key = str(ts_id)
-            for raw_e in e_set:
-                edge_incident_temp_stands.setdefault(str(raw_e), []).append(ts_key)
+    if edge_incident_temp_stands is not None:
+        edge_incident_temp_stand_map = edge_incident_temp_stands
     else:
-        edge_incident_temp_stands = {}
+        edge_incident_temp_stand_map = _temp_stand_edge_incident_index(
+            control_state.temp_stand_incident_edges
+        )
 
     edge_resources = control_state.edge_resources
     stand_resources = control_state.stand_resources
@@ -6876,13 +6974,15 @@ def can_reserve_path(
     stand_get_crp = stand_resources.get
     rw_get_crp = runway_resources.get
     ir_get_crp = intersection_resources.get
+    rr_lag = float(runway_release_lag_sec)
+    dep_runway_rr_blocked: Optional[bool] = None
 
     for idx, eid in enumerate(lookahead):
         billed_here: Optional[int] = None
         er = edge_get_crp(eid)
         if er is None:
             return False, f"unknown_edge:{eid}"
-        for ts_id in edge_incident_temp_stands.get(str(eid), ()):
+        for ts_id in edge_incident_temp_stand_map.get(str(eid), ()):
             sr_t = stand_get_crp(ts_id)
             if sr_t is None:
                 continue
@@ -6926,14 +7026,16 @@ def can_reserve_path(
         ):
             rr_dep = rw_get_crp(dep_rwy)
             if rr_dep is not None and not rr_dep.forced_open:
-                if _runway_rot_reservation_blocked(
-                    t_abs,
-                    dep_rwy,
-                    aid,
-                    agents,
-                    float(runway_release_lag_sec),
-                    control_state=control_state,
-                ):
+                if dep_runway_rr_blocked is None:
+                    dep_runway_rr_blocked = _runway_rot_reservation_blocked(
+                        t_abs,
+                        dep_rwy,
+                        aid,
+                        agents,
+                        rr_lag,
+                        control_state=control_state,
+                    )
+                if dep_runway_rr_blocked:
                     return False, f"runway_rot_busy:{dep_rwy}"
                 ou_d = _resource_use_count(rr_dep.occupied_by, rr_dep.reserved_by, aid)
                 if ou_d >= max(1, int(rr_dep.capacity)):
@@ -6955,14 +7057,16 @@ def can_reserve_path(
             if rem_m is not None and rem_m <= float(DEP_RUNWAY_HOLD_BUFFER_M):
                 rr_dep_b = rw_get_crp(dep_rwy)
                 if rr_dep_b is not None and not rr_dep_b.forced_open:
-                    if _runway_rot_reservation_blocked(
-                        t_abs,
-                        dep_rwy,
-                        aid,
-                        agents,
-                        float(runway_release_lag_sec),
-                        control_state=control_state,
-                    ):
+                    if dep_runway_rr_blocked is None:
+                        dep_runway_rr_blocked = _runway_rot_reservation_blocked(
+                            t_abs,
+                            dep_rwy,
+                            aid,
+                            agents,
+                            rr_lag,
+                            control_state=control_state,
+                        )
+                    if dep_runway_rr_blocked:
                         return False, f"runway_rot_busy:{dep_rwy}"
                     ou_d_b = _resource_use_count(
                         rr_dep_b.occupied_by, rr_dep_b.reserved_by, aid
@@ -7157,30 +7261,28 @@ def reserve_path(
             billed_memo[idx_i] = bi
         return bi
 
+    n_la = len(lookahead)
     for idx, eid in enumerate(lookahead):
         er = edge_get_rp(eid)
-        if er is None:
+        if er is not None:
+            if er.runway_id:
+                if idx < depth_cap:
+                    if aid not in er.reserved_by:
+                        er.reserved_by.append(aid)
+                    rr = rw_get_rp(str(er.runway_id))
+                    if rr is not None and aid not in rr.reserved_by:
+                        rr.reserved_by.append(aid)
+            elif _edge_uses_full_depth_reservation(agent, idx, control_state):
+                billed = _billed_at(idx)
+                if billed <= depth_cap:
+                    if aid not in er.reserved_by:
+                        er.reserved_by.append(aid)
+        if idx >= n_la - 1:
             continue
-        if er.runway_id:
-            if idx >= depth_cap:
-                continue
-            if aid not in er.reserved_by:
-                er.reserved_by.append(aid)
-            rr = rw_get_rp(str(er.runway_id))
-            if rr is not None and aid not in rr.reserved_by:
-                rr.reserved_by.append(aid)
+        if er is None or not er.intersection_out:
             continue
-        if not _edge_uses_full_depth_reservation(agent, idx, control_state):
-            continue
-        billed = _billed_at(idx)
-        if billed > depth_cap:
-            continue
-        if aid not in er.reserved_by:
-            er.reserved_by.append(aid)
-    for k in range(len(lookahead) - 1):
-        er_k = edge_get_rp(lookahead[k])
-        if er_k is None or not er_k.intersection_out:
-            continue
+        k = idx
+        er_k = er
         if er_k.runway_id:
             if k >= depth_cap:
                 continue
@@ -7637,6 +7739,7 @@ def build_reroute_path_from_xy(
     if guvs is None or len(guvs) != len(ex_ids):
         return None
     fid = str(flight.get("id", agent.id))
+    vlc = layout_link_velocity_cache_for_layout(layout)
     try:
         v0s, accs, durs = _annotate_segment_kinematics(
             flight,
@@ -7648,6 +7751,7 @@ def build_reroute_path_from_xy(
             ppm,
             fid,
             information,
+            velocity_cache=vlc,
         )
     except ValueError:
         return None
@@ -8217,6 +8321,7 @@ def _single_full_reservation_pass(
     ordered = sorted(eligible, key=_decision_sort_key)
     stand_arrival_book: Dict[str, int] = {}
     stand_cooldown_index = _build_stand_pushback_clearance_index(agents)
+    edge_ix_res = _temp_stand_edge_incident_index(control_state.temp_stand_incident_edges)
     td_mid_rp = control_state.touchdown_motion_by_id
     for ag in ordered:
         st = agent_states_get(ag.id)
@@ -8255,6 +8360,7 @@ def _single_full_reservation_pass(
             stand_arrival_book,
             reservation_depth=depth_n,
             stand_cooldown_index=stand_cooldown_index,
+            edge_incident_temp_stands=edge_ix_res,
         )
         if ok:
             reserve_path(ag, la, control_state, sim_time, reservation_depth=depth_n)
@@ -8370,12 +8476,13 @@ def _apply_same_direction_following_caps(
     for eid, group in by_edge.items():
         if len(group) < 2:
             continue
-        scored: List[Tuple[float, Flight]] = []
-        for ag in group:
-            if not ag.segment_endpoints:
-                continue
-            along_m = float(ag.edge_s_along_px) / ppm
-            scored.append((along_m, ag))
+        scored: List[Tuple[float, Flight]] = [
+            (float(ag.edge_s_along_px) / ppm, ag)
+            for ag in group
+            if ag.segment_endpoints
+        ]
+        if len(scored) < 2:
+            continue
         scored.sort(key=_SORT_KEY_ALONG_M_PAIR)
         for i in range(len(scored) - 1):
             along_f, ag_f = scored[i]
@@ -8409,14 +8516,7 @@ def apply_movement_controls(
     t_end = float(sim_time_abs)
     rw_lag = float(runway_release_lag_sec)
     temp_edges_mc = control_state.temp_stand_incident_edges
-    if temp_edges_mc:
-        edge_incident_temp_mc: Dict[str, List[str]] = {}
-        for ts_id, e_set in temp_edges_mc.items():
-            ts_key = str(ts_id)
-            for raw_e in e_set:
-                edge_incident_temp_mc.setdefault(str(raw_e), []).append(ts_key)
-    else:
-        edge_incident_temp_mc = {}
+    edge_incident_temp_mc = _temp_stand_edge_incident_index(temp_edges_mc)
     agent_states_get_m = control_state.agent_states.get
     edge_resources_get_m = control_state.edge_resources.get
     runway_resources_get_m = control_state.runway_resources.get
@@ -8508,6 +8608,7 @@ def run_simulation(
     progress_cb: Optional[Callable[[float, float, Optional[float]], None]] = None,
 ) -> Dict[str, Any]:
     _PATH_GRAPH_BUILD_CACHE.clear()
+    _LAYOUT_LINK_VEL_CACHE.clear()
     information = _load_information_json()
     deadlock_resolve_stop_n = max(
         1,
@@ -8537,8 +8638,14 @@ def run_simulation(
     total = max(1, len(flights_raw))
     prep_list: List[PreparedFlightPath] = []
     agents_by_id: Dict[str, Flight] = {}
+    flights_by_id: Dict[str, Dict[str, Any]] = {}
+    flight_input_order: Dict[str, int] = {}
 
     for i, fobj in enumerate(flights_raw):
+        if isinstance(fobj, dict) and fobj.get("id") is not None:
+            _fid_k = str(fobj["id"])
+            flights_by_id[_fid_k] = fobj
+            flight_input_order.setdefault(_fid_k, int(i))
         prep_list.append(
             prepare_flight_path(
                 fobj,
@@ -8704,14 +8811,6 @@ def run_simulation(
         pixels_per_meter=pixels_per_meter,
     )
     ensure_agent_control_states(control_state, agents)
-
-    flights_by_id: Dict[str, Dict[str, Any]] = {}
-    flight_input_order: Dict[str, int] = {}
-    for _fi, fobj in enumerate(flights_raw):
-        if isinstance(fobj, dict) and fobj.get("id") is not None:
-            _fid = str(fobj["id"])
-            flights_by_id[_fid] = fobj
-            flight_input_order.setdefault(_fid, int(_fi))
 
     eldt_vals = [
         float(ag.eldt_anchor_sec)
@@ -9155,7 +9254,7 @@ def run_simulation(
                 if float(p.get("t", 0.0)) + 1e-9 >= td0
             ]
         positions[ag.id] = _plist
-
+        
     schedule_list: List[Dict[str, Any]] = []
     flights_detail: List[Dict[str, Any]] = []
     for i, fobj in enumerate(flights_raw):
