@@ -2535,7 +2535,7 @@
     if (!obj || typeof obj !== 'object') return;
     state.simPlaybackEndCapSec = null;
     const dp = obj.designerPersist;
-    const restoreProSimSyncUi = !!(dp && dp.v === 1 && dp.globalUpdateFresh === true);
+    const persistPlaybackSnapshot = !!(dp && dp.v === 1 && dp.hasSimulationPlayback === true);
     if (obj.grid) {
       if (typeof obj.grid.cols === 'number') GRID_COLS = obj.grid.cols;
       if (typeof obj.grid.rows === 'number') GRID_ROWS = obj.grid.rows;
@@ -2633,7 +2633,7 @@
         f.noWayDep = false;
         delete f._noWayArrDetail;
         delete f._noWayDepDetail;
-        if (restoreProSimSyncUi && f.arrDep !== 'Dep') {
+        if (persistPlaybackSnapshot && f.arrDep !== 'Dep') {
           if (exitTwPersist) {
             f.sampledArrRet = exitTwPersist;
             f.arrRetFailed = arrRetFailedPersist;
@@ -2741,6 +2741,10 @@
     } else {
       state.flights = [];
     }
+    if (obj.simPlaybackPositionsByFlightId && typeof obj.simPlaybackPositionsByFlightId === 'object') {
+      state.simPlaybackPositionsByFlightId = obj.simPlaybackPositionsByFlightId;
+      state.simPlaybackTimelinesEvictedForMemory = false;
+    }
     if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
     state.simPlaying = false;
     state.layoutPathDrawPointer = null;
@@ -2762,25 +2766,30 @@
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
     else draw();
+    let didAutoPathGraphSync = false;
     if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.layers && state.layers.junction) {
       try {
         if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
+        didAutoPathGraphSync = true;
         if (typeof draw === 'function') draw();
+        if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
       } catch (ePg) {
         console.warn('applyLayoutObject: path graph sync', ePg);
       }
     }
-    if (restoreProSimSyncUi) {
-      state.globalUpdateFresh = true;
-      if (dp.designerPageUpdateFresh === true) {
-        if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
-      } else {
-        state.designerPageUpdateFresh = false;
-        const ddot = document.getElementById('designerPageUpdateSyncDot');
-        if (ddot) {
-          ddot.classList.remove('fresh');
-          ddot.classList.add('stale');
-          ddot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
+    if (dp && dp.v === 1) {
+      state.globalUpdateFresh = !!dp.globalUpdateFresh;
+      if (!didAutoPathGraphSync) {
+        if (dp.designerPageUpdateFresh === true) {
+          if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+        } else {
+          state.designerPageUpdateFresh = false;
+          const ddot = document.getElementById('designerPageUpdateSyncDot');
+          if (ddot) {
+            ddot.classList.remove('fresh');
+            ddot.classList.add('stale');
+            ddot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
+          }
         }
       }
       if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
@@ -2884,38 +2893,108 @@
     const scalar = f && f[scalarKey] != null ? Number(f[scalarKey]) : NaN;
     return isFinite(scalar) ? [scalar] : [];
   }
-  function buildFlightTimelineFromPlaybackPoints(rawPts) {
-    const pts = Array.isArray(rawPts) ? rawPts : [];
-    if (pts.length < 2) return null;
-    const tl = pts.map(function(p) {
-      const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
-      const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-      const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
-      const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
-      if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
-      if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
-      if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
-      return o;
-    }).filter(function(k) {
-      return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
-    }).sort(function(a, b) { return a.t - b.t; });
-    return tl.length >= 2 ? tl : null;
+  function isCompactPlaybackTrack(raw) {
+    return !!(
+      raw && typeof raw === 'object' && raw.format === 'compact_v2' &&
+      Array.isArray(raw.t) && Array.isArray(raw.x) && Array.isArray(raw.y) && Array.isArray(raw.v) &&
+      raw.t.length === raw.x.length && raw.t.length === raw.y.length && raw.t.length === raw.v.length
+    );
+  }
+  function compactPlaybackTrackLength(raw) {
+    return isCompactPlaybackTrack(raw) ? raw.t.length : 0;
+  }
+  function compactPlaybackTrackForFlight(f) {
+    if (!f || f.id == null) return null;
+    const map = state.simPlaybackPositionsByFlightId;
+    if (!map || typeof map !== 'object') return null;
+    const tr = map[String(f.id)];
+    return isCompactPlaybackTrack(tr) ? tr : null;
+  }
+  function compactPlaybackDghostSet(track) {
+    if (!track) return new Set();
+    if (track.__dghostSet instanceof Set) return track.__dghostSet;
+    const s = new Set();
+    const arr = Array.isArray(track.dghost_t) ? track.dghost_t : [];
+    for (let i = 0; i < arr.length; i++) {
+      const t = Math.round(Number(arr[i]));
+      if (isFinite(t)) s.add(t);
+    }
+    track.__dghostSet = s;
+    return s;
+  }
+  function compactPlaybackMetaStateAt(track, t) {
+    const meta = Array.isArray(track && track.meta) ? track.meta : [];
+    const out = {};
+    const tt = Number(t);
+    for (let i = 0; i < meta.length; i++) {
+      const mr = meta[i];
+      if (!mr || typeof mr !== 'object') continue;
+      const mt = Number(mr.t);
+      if (!isFinite(mt) || mt > tt + 1e-9) break;
+      if (mr.phase != null) out.phase = String(mr.phase);
+      if (mr.pathType != null) out.pathType = String(mr.pathType);
+      if (mr.edgeId != null && String(mr.edgeId).trim()) out.edgeId = String(mr.edgeId).trim();
+    }
+    return out;
+  }
+  function compactPlaybackSampleAtIndex(track, idx) {
+    if (!isCompactPlaybackTrack(track)) return null;
+    const i = Math.max(0, Math.min(track.t.length - 1, idx | 0));
+    const t = Number(track.t[i]);
+    const x = Number(track.x[i]);
+    const y = Number(track.y[i]);
+    if (!isFinite(t) || !isFinite(x) || !isFinite(y)) return null;
+    const o = { t: t, x: x, y: y, v: Number(track.v[i]) || 0 };
+    o.deadlockGhost = compactPlaybackDghostSet(track).has(Math.round(t));
+    const m = compactPlaybackMetaStateAt(track, t);
+    if (m.phase) o.phase = m.phase;
+    if (m.pathType) o.pathType = m.pathType;
+    if (m.edgeId) o.edgeId = m.edgeId;
+    return o;
+  }
+  function compactPlaybackIndexAtTime(track, tSec, clampEnd) {
+    if (!isCompactPlaybackTrack(track) || track.t.length < 2) return -1;
+    let t = Number(tSec);
+    if (!isFinite(t)) return -1;
+    const firstT = Number(track.t[0]);
+    const lastT = Number(track.t[track.t.length - 1]);
+    if (t + 1e-9 < firstT) return -1;
+    if (t > lastT) {
+      if (!clampEnd) return -1;
+      t = lastT;
+    }
+    let lo = 0, hi = track.t.length - 1;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (Number(track.t[mid]) <= t + 1e-9) lo = mid;
+      else hi = mid - 1;
+    }
+    const idx = Math.min(lo, track.t.length - 2);
+    return (t + 1e-9 >= Number(track.t[idx]) && t - 1e-9 <= Number(track.t[idx + 1])) ? idx : -1;
+  }
+  function compactPlaybackTimelineWindow(track, tSec, radius) {
+    const idx = compactPlaybackIndexAtTime(track, tSec, true);
+    if (idx < 0) return null;
+    const r = Math.max(2, radius || 40);
+    const s = Math.max(0, idx - r);
+    const e = Math.min(track.t.length - 1, idx + r + 1);
+    const out = [];
+    for (let i = s; i <= e; i++) {
+      const p = compactPlaybackSampleAtIndex(track, i);
+      if (p) out.push(p);
+    }
+    return out.length >= 2 ? out : null;
+  }
+  function compactPlaybackTrackStartEnd(track) {
+    if (!isCompactPlaybackTrack(track) || track.t.length < 1) return null;
+    return { t0: Number(track.t[0]), t1: Number(track.t[track.t.length - 1]) };
   }
   function refreshHasSimulationResultFromPlaybackSources() {
-    const flights = state.flights || [];
-    for (let i = 0; i < flights.length; i++) {
-      const f = flights[i];
-      if (f && f.timeline && f.timeline.length >= 2) {
-        state.hasSimulationResult = true;
-        return;
-      }
-    }
     const pos = state.simPlaybackPositionsByFlightId;
     if (pos && typeof pos === 'object') {
       for (const k in pos) {
         if (!Object.prototype.hasOwnProperty.call(pos, k)) continue;
-        const arr = pos[k];
-        if (Array.isArray(arr) && arr.length >= 2) {
+        if (compactPlaybackTrackLength(pos[k]) >= 2) {
           state.hasSimulationResult = true;
           return;
         }
@@ -2931,7 +3010,6 @@
       const f = flights[i];
       if (!f) continue;
       f.timeline = null;
-      delete f.timeline_meta;
     }
     state.simPlaybackTimelinesEvictedForMemory = true;
     _lazyTimelineLastEvictSimSec = NaN;
@@ -2940,66 +3018,8 @@
   }
   function rehydrateFlightPlaybackTimelinesAfterPlayAllowed() {
     if (!state.simPlaybackTimelinesEvictedForMemory) return false;
-    const positions = state.simPlaybackPositionsByFlightId;
-    const scheduleList = Array.isArray(state.simPlaybackScheduleSnapshot) ? state.simPlaybackScheduleSnapshot : [];
-    const schedById = {};
-    for (let si = 0; si < scheduleList.length; si++) {
-      const s = scheduleList[si];
-      if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
-    }
-    if (!positions || typeof positions !== 'object') {
-      state.simPlaybackTimelinesEvictedForMemory = false;
-      refreshHasSimulationResultFromPlaybackSources();
-      return true;
-    }
-    let mergedTimelines = 0;
-    const flights = state.flights || [];
-    for (let i = 0; i < flights.length; i++) {
-      const f = flights[i];
-      if (!f || f.id == null) continue;
-      const srec = schedById[String(f.id)] || null;
-      const rawPts = positions[f.id];
-      if (rawPts != null) {
-        const tl = buildFlightTimelineFromPlaybackPoints(rawPts);
-        if (tl) {
-          mergedTimelines++;
-          f.timeline = tl;
-        }
-      }
-      if (srec && f.timeline && f.timeline.length >= 2) {
-        const eldtS = srec.ELDT != null ? Number(srec.ELDT) : NaN;
-        const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
-        const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
-        const etotS = srec.ETOT != null ? Number(srec.ETOT) : NaN;
-        const prevMeta = f.timeline_meta || {};
-        const builtDep = (typeof buildDepartureSurfaceTimelineSegments === 'function' && f.arrDep === 'Dep'
-          && isFinite(eobtS) && isFinite(etotS))
-          ? buildDepartureSurfaceTimelineSegments(f, eobtS, etotS)
-          : null;
-        const builtDepMeta = (builtDep && builtDep.meta) ? builtDep.meta : null;
-        f.timeline_meta = Object.assign(
-          {},
-          prevMeta,
-          builtDepMeta || {},
-          {
-            playbackSource: 'des_result',
-            eldtSec: isFinite(eldtS) ? eldtS : undefined,
-            eibtSec: isFinite(eibtS) ? eibtS : undefined,
-            eobtSec: isFinite(eobtS) ? eobtS : undefined,
-            etotSec: isFinite(etotS) ? etotS : undefined,
-            eibtSecList: Array.isArray(srec.EIBT_LIST) ? srec.EIBT_LIST.slice() : undefined,
-            eobtSecList: Array.isArray(srec.EOBT_LIST) ? srec.EOBT_LIST.slice() : undefined,
-            ePushFinishedSecList: Array.isArray(srec.E_PUSH_FINISHED_LIST) ? srec.E_PUSH_FINISHED_LIST.slice() : undefined,
-          }
-        );
-      } else {
-        delete f.timeline_meta;
-      }
-      applyAirsideScheduleRowToFlight(f, srec);
-    }
-    state.hasSimulationResult = mergedTimelines > 0;
-    state.simPlaybackTimelinesEvictedForMemory = false;
     refreshHasSimulationResultFromPlaybackSources();
+    state.simPlaybackTimelinesEvictedForMemory = false;
     return true;
   }
   function deriveDeadlockGhostPlaybackFromPayload(payload, flights) {
@@ -3013,11 +3033,9 @@
     (flights || []).forEach(function(f) {
       if (!f || f.id == null) return;
       const raw = positions[String(f.id)];
-      if (!Array.isArray(raw)) return;
-      for (let i = 0; i < raw.length; i++) {
-        const p = raw[i];
-        if (!p || !(p.deadlockGhost === true || p.deadlock_ghost === true)) continue;
-        const t = Number(p.t);
+      if (!isCompactPlaybackTrack(raw) || !Array.isArray(raw.dghost_t) || !raw.dghost_t.length) return;
+      for (let i = 0; i < raw.dghost_t.length; i++) {
+        const t = Number(raw.dghost_t[i]);
         if (!isFinite(t)) continue;
         const tr = Math.round(t);
         const label = String(f.reg || '').trim() || String(f.flightNumber || f.id || '').trim() || String(f.id);
@@ -3118,17 +3136,14 @@
     (state.flights || []).forEach(function(f) {
       if (!f || f.id == null) return;
       const srec = schedById[String(f.id)] || null;
-      if (hasPositions) {
-        const rawPts = positions[f.id];
-        if (rawPts != null) {
-          const tl = buildFlightTimelineFromPlaybackPoints(rawPts);
-          if (tl) {
-            mergedTimelines++;
-            f.timeline = tl;
-          }
-        }
+      const track = hasPositions ? positions[String(f.id)] : null;
+      const hasTrack = compactPlaybackTrackLength(track) >= 2;
+      f.timeline = null;
+      if (hasTrack) {
+        mergedTimelines++;
+        if (f.arrDep !== 'Dep') f.arrRetFailed = false;
       }
-      if (srec && f.timeline && f.timeline.length >= 2) {
+      if (srec && hasTrack) {
         const eldtS = srec.ELDT != null ? Number(srec.ELDT) : NaN;
         const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
         const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
@@ -3166,6 +3181,7 @@
     state.simDeadlockGhostPlayback = deriveDeadlockGhostPlaybackFromPayload(payload, state.flights);
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
+      if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
     } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
     if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
     else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
@@ -4861,26 +4877,11 @@
         copy.sobtDateTime = formatFlightScheduleDateTime(f, schedExport.sobt);
         copy.sldtDateTime = formatFlightScheduleDateTime(f, schedExport.sldt);
         copy.stotDateTime = formatFlightScheduleDateTime(f, schedExport.stot);
-        if (state.hasSimulationResult && Array.isArray(f.timeline) && f.timeline.length >= 2) {
-          copy.timeline = f.timeline.map(function(p) {
-            const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
-            const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-            const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
-            const o = { t: Number(p.t), x: x, y: y };
-            if (dg) o.deadlockGhost = true;
-            if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
-            if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
-            if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
-            return o;
-          }).filter(function(k) {
-            return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
-          });
-          if (copy.timeline.length >= 2 && f.timeline_meta && typeof f.timeline_meta === 'object') {
-            try {
-              copy.timeline_meta = JSON.parse(JSON.stringify(f.timeline_meta));
-            } catch (eMeta) {
-              copy.timeline_meta = Object.assign({}, f.timeline_meta);
-            }
+        if (state.hasSimulationResult && f.timeline_meta && typeof f.timeline_meta === 'object') {
+          try {
+            copy.timeline_meta = JSON.parse(JSON.stringify(f.timeline_meta));
+          } catch (eMeta) {
+            copy.timeline_meta = Object.assign({}, f.timeline_meta);
           }
         }
         if (state.hasSimulationResult && Array.isArray(f.proSimEdgeList) && f.proSimEdgeList.length) {
@@ -4947,6 +4948,9 @@
         mapTypeMode: (state.mapTypeMode === 'heatmap') ? 'heatmap' : 'normal',
         heatmapTrafficPhases: Object.assign({}, state.heatmapTrafficPhases || {}),
       },
+      simPlaybackPositionsByFlightId: state.hasSimulationResult && state.simPlaybackPositionsByFlightId
+        ? state.simPlaybackPositionsByFlightId
+        : null,
       simPathGraph: buildSimPathGraphExport()
     };
   }
@@ -8449,6 +8453,12 @@
     let maxT = -Infinity;
     (state.flights || []).forEach(function(f) {
       if (!f) return;
+      const trWin = compactPlaybackTrackStartEnd(compactPlaybackTrackForFlight(f));
+      if (trWin) {
+        if (trWin.t0 < minT) minT = trWin.t0;
+        if (trWin.t1 > maxT) maxT = trWin.t1;
+        return;
+      }
       const w = getFlightAirsideWindowSec(f);
       if (!w) return;
       if (w.t0 < minT) minT = w.t0;
@@ -8895,7 +8905,8 @@
   }
 
   function getFlightPositionAtTime(flight, tSec) {
-    const tl = flight.timeline;
+    const tr = compactPlaybackTrackForFlight(flight);
+    const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 4) : flight.timeline;
     if (!tl || !tl.length) return null;
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
     const i = timelineSegmentIndexAtTime(tl, tSec, false);
@@ -8934,7 +8945,8 @@
   }
 
   function getFlightPoseAtTime(flight, tSec) {
-    const tl = flight.timeline;
+    const tr = compactPlaybackTrackForFlight(flight);
+    const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 80) : flight.timeline;
     if (!tl || !tl.length) return null;
     if (tl.length === 1) {
       const a = tl[0];
@@ -9033,7 +9045,8 @@
     const m = flight.timeline_meta;
     if (!m || typeof m.eobtSec !== 'number' || !isFinite(m.eobtSec)) return pose;
     if (tSec + 1e-3 < m.eobtSec) return pose;
-    const tl = flight.timeline;
+    const tr = compactPlaybackTrackForFlight(flight);
+    const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 2) : flight.timeline;
     if (!tl || !tl.length) return pose;
     const tKey = Math.round(Number(tSec));
     const byT = Object.create(null);
@@ -9072,7 +9085,8 @@
     if (!m || typeof m.eobtSec !== 'number' || !isFinite(m.eobtSec)) return pose;
     const t = Number(tSec);
     if (!isFinite(t) || t + 1e-3 < m.eobtSec) return pose;
-    const tl = flight.timeline;
+    const tr = compactPlaybackTrackForFlight(flight);
+    const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 2) : flight.timeline;
     if (!tl || !tl.length) return pose;
     const tKey = Math.round(t);
     const byT = Object.create(null);
@@ -9126,7 +9140,8 @@
 
   function getPushbackRearWheelOnPathPoseForDraw(flight, tSec, pose) {
     if (!pose || !flight) return pose;
-    const tl = flight.timeline;
+    const tr = compactPlaybackTrackForFlight(flight);
+    const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 80) : flight.timeline;
     if (!tl || tl.length < 2) return pose;
     const t = Number(tSec);
     if (!isFinite(t)) return pose;
@@ -9262,11 +9277,13 @@
   }
 
   function getFlightPoseAtTimeForDraw(flight, tSec) {
-    const tl = flight && flight.timeline;
-    if (!tl || !tl.length) return null;
     let t = Number(tSec);
     if (!isFinite(t)) return null;
-    const t0 = tl[0].t, t1 = tl[tl.length - 1].t;
+    const trWin = compactPlaybackTrackStartEnd(compactPlaybackTrackForFlight(flight));
+    const tl = flight && flight.timeline;
+    const t0 = trWin ? trWin.t0 : (tl && tl.length ? tl[0].t : NaN);
+    const t1 = trWin ? trWin.t1 : (tl && tl.length ? tl[tl.length - 1].t : NaN);
+    if (!isFinite(t0) || !isFinite(t1)) return null;
     if (t + 1e-9 < t0) return null;
     if (t > t1) t = t1;
     return getPushbackRearWheelOnPathPoseForDraw(flight, t, getFlightPoseAtTime(flight, t));
@@ -9292,7 +9309,8 @@
 
   
   function isFlightTimelineStationaryAtSimTime(f, tSec) {
-    const tl = f && f.timeline;
+    const tr = compactPlaybackTrackForFlight(f);
+    const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 2) : (f && f.timeline);
     if (!tl || tl.length < 2) return false;
     const t = Number(tSec);
     if (!isFinite(t)) return false;
@@ -9317,7 +9335,8 @@
   }
 
   function getFlightTrailPolylineBackward(f, tEnd, maxDistM) {
-    const tl = f && f.timeline;
+    const tr = compactPlaybackTrackForFlight(f);
+    const tl = tr ? compactPlaybackTimelineWindow(tr, tEnd, 160) : (f && f.timeline);
     if (!tl || tl.length < 2 || !(maxDistM > 0)) return [];
     const tMin = tl[0].t, tMax = tl[tl.length - 1].t;
     let t = Math.min(Math.max(tEnd, tMin), tMax);
@@ -9983,6 +10002,11 @@
   function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {
     if (!f) return;
     const rev = state.vttArrCacheRev | 0;
+    if (!forceResample && f.timeline_meta && typeof f.timeline_meta === 'object' &&
+        f.timeline_meta.playbackSource === 'des_result') {
+      f.__schedRetRotRev = rev;
+      return;
+    }
     if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
     if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
         f.sampledArrRet != null && f.arrRetFailed === false &&
@@ -16010,10 +16034,9 @@
   function heatmapClipSecFullScenarioStatic() {
     let maxT = isFinite(state.simDurationSec) ? Math.max(0, Number(state.simDurationSec)) : 0;
     (state.flights || []).forEach(function(f) {
+      const trWin = compactPlaybackTrackStartEnd(compactPlaybackTrackForFlight(f));
       const tl = f && f.timeline;
-      if (!tl || !tl.length) return;
-      const last = tl[tl.length - 1];
-      const tt = Number(last && last.t);
+      const tt = trWin ? trWin.t1 : (tl && tl.length ? Number(tl[tl.length - 1].t) : NaN);
       if (isFinite(tt) && tt > maxT) maxT = tt;
     });
     return maxT;
@@ -16140,11 +16163,13 @@
     for (let fi = 0; fi < flights.length; fi++) {
       const f = flights[fi];
       if (!f) continue;
-      const tl = f.timeline;
-      if (!tl || tl.length < 2) continue;
-      for (let i = 0; i < tl.length - 1; i++) {
-        const a = tl[i];
-        const b = tl[i + 1];
+      const tr = compactPlaybackTrackForFlight(f);
+      const tl = tr || f.timeline;
+      const n = tr ? compactPlaybackTrackLength(tr) : (tl ? tl.length : 0);
+      if (n < 2) continue;
+      for (let i = 0; i < n - 1; i++) {
+        const a = tr ? compactPlaybackSampleAtIndex(tr, i) : tl[i];
+        const b = tr ? compactPlaybackSampleAtIndex(tr, i + 1) : tl[i + 1];
         if (!a || !b) continue;
         const t1 = Number(b.t);
         const t0 = Number(a.t);
@@ -16271,12 +16296,14 @@
     for (let fi = 0; fi < flights.length; fi++) {
       const f = flights[fi];
       if (!f) continue;
-      const tl = f.timeline;
-      if (!tl || !tl.length) continue;
-      tlPts += tl.length;
-      const step = Math.max(1, Math.floor(tl.length / 16));
-      for (let j = 0; j < tl.length; j += step) {
-        const s = tl[j];
+      const tr = compactPlaybackTrackForFlight(f);
+      const tl = tr || f.timeline;
+      const n = tr ? compactPlaybackTrackLength(tr) : (tl ? tl.length : 0);
+      if (!n) continue;
+      tlPts += n;
+      const step = Math.max(1, Math.floor(n / 16));
+      for (let j = 0; j < n; j += step) {
+        const s = tr ? compactPlaybackSampleAtIndex(tr, j) : tl[j];
         if (!s) continue;
         const x = Math.round(Number(s.x) * 10), y = Math.round(Number(s.y) * 10), tt = Math.round(Number(s.t) * 1000);
         h = Math.imul(h ^ x, 16777619);
@@ -21894,7 +21921,8 @@
   }
 
   function flightTimelineSegmentAtSimTime(flight, tSec) {
-    const tl = flight && flight.timeline;
+    const tr = compactPlaybackTrackForFlight(flight);
+    const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 2) : (flight && flight.timeline);
     if (!tl || tl.length < 2) return null;
     let t = Number(tSec);
     if (!isFinite(t)) return null;

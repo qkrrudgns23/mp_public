@@ -62,6 +62,19 @@ def validate_sim_result(sim_input: Dict[str, Any], sim_result: Dict[str, Any]) -
                     f"positions missing {len(missing_pos)} flight ids (sample: {missing_pos[:3]})",
                 )
             )
+        for fid in flight_ids:
+            tr = pos.get(fid)
+            td = _as_dict(tr)
+            if td.get("format") != "compact_v2":
+                issues.append(ValidationIssue("positions_format", f"positions[{fid}] must be compact_v2"))
+                continue
+            arrays = [td.get(k) for k in ("t", "x", "y", "v")]
+            if not all(isinstance(a, list) for a in arrays):
+                issues.append(ValidationIssue("positions_arrays", f"positions[{fid}] missing t/x/y/v arrays"))
+                continue
+            lens = {len(a) for a in arrays if isinstance(a, list)}
+            if len(lens) != 1:
+                issues.append(ValidationIssue("positions_arrays", f"positions[{fid}] t/x/y/v length mismatch"))
     else:
         issues.append(ValidationIssue("positions_type", "positions must be an object/dict"))
 

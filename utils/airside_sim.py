@@ -4336,6 +4336,110 @@ def _apply_pro_sim_phase_durations_to_schedule_row(
     _set_sec("LINEUP_DEPARTURE_SEC", lineup if lineup > 1e-6 else None)
 
 
+_POSITIONS_COMPACT_FORMAT_V2 = "compact_v2"
+_POSITIONS_META_KEYS_V2 = ("phase", "pathType", "edgeId")
+
+
+def _flight_positions_to_compact_v2(plist: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Export dense t/x/y/v arrays plus sparse metadata changes."""
+    t_arr: List[int] = []
+    x_arr: List[float] = []
+    y_arr: List[float] = []
+    v_arr: List[float] = []
+    dghost_ts: List[int] = []
+    meta: List[Dict[str, Any]] = []
+    last: Dict[str, Any] = {}
+
+    for p in plist:
+        t = int(p["t"])
+        t_arr.append(t)
+        x_arr.append(round(float(p["x"]), 3))
+        y_arr.append(round(float(p["y"]), 3))
+        v_arr.append(round(float(p["v"]), 3))
+        if p.get("deadlockGhost"):
+            dghost_ts.append(t)
+
+        row: Dict[str, Any] = {"t": t}
+        changed = False
+        for key in _POSITIONS_META_KEYS_V2:
+            if key not in p:
+                continue
+            val = p[key]
+            if last.get(key) != val:
+                row[key] = val
+                last[key] = val
+                changed = True
+        if changed:
+            meta.append(row)
+
+    out: Dict[str, Any] = {
+        "format": _POSITIONS_COMPACT_FORMAT_V2,
+        "t": t_arr,
+        "x": x_arr,
+        "y": y_arr,
+        "v": v_arr,
+        "meta": meta,
+    }
+    if dghost_ts:
+        out["dghost_t"] = dghost_ts
+    return out
+
+
+def _expand_flight_positions_track_v2(compact: Any) -> List[Dict[str, Any]]:
+    if not isinstance(compact, dict) or compact.get("format") != _POSITIONS_COMPACT_FORMAT_V2:
+        return []
+    t_arr = compact.get("t")
+    x_arr = compact.get("x")
+    y_arr = compact.get("y")
+    v_arr = compact.get("v")
+    if not all(isinstance(a, list) for a in (t_arr, x_arr, y_arr, v_arr)):
+        return []
+    if not (len(t_arr) == len(x_arr) == len(y_arr) == len(v_arr)):
+        return []
+    dghost_set: Set[int] = set()
+    if isinstance(compact.get("dghost_t"), list):
+        for raw in compact.get("dghost_t") or []:
+            try:
+                dghost_set.add(int(raw))
+            except (TypeError, ValueError):
+                continue
+    meta_rows = compact.get("meta") if isinstance(compact.get("meta"), list) else []
+    meta_i = 0
+    meta_state: Dict[str, Any] = {}
+    out: List[Dict[str, Any]] = []
+    for i in range(len(t_arr)):
+        try:
+            t = int(t_arr[i])
+            sample: Dict[str, Any] = {
+                "t": t,
+                "x": float(x_arr[i]),
+                "y": float(y_arr[i]),
+                "v": float(v_arr[i]),
+                "deadlockGhost": t in dghost_set,
+            }
+        except (TypeError, ValueError):
+            continue
+        while meta_i < len(meta_rows):
+            mr = meta_rows[meta_i]
+            if not isinstance(mr, dict):
+                meta_i += 1
+                continue
+            try:
+                mt = int(mr.get("t"))
+            except (TypeError, ValueError):
+                meta_i += 1
+                continue
+            if mt > t:
+                break
+            for key in _POSITIONS_META_KEYS_V2:
+                if key in mr:
+                    meta_state[key] = mr[key]
+            meta_i += 1
+        sample.update(meta_state)
+        out.append(sample)
+    return out
+
+
 def _overlay_schedule_timing_from_playback_positions(
     out: Dict[str, Any],
     layout: Dict[str, Any],
@@ -8727,33 +8831,13 @@ def run_simulation(
             _dsnap = row[6] if len(row) > 6 else None
             if _dsnap is not None:
                 _sid, _cap, _phys_o, _booked, _cd, _ok = _dsnap
-                _pos["destinationApron"] = {
-                    "standId": str(_sid),
-                    "capacity": int(_cap),
-                    "physicalOthersOnStand": int(_phys_o),
-                    "pipelineBooked": int(_booked),
-                    "pushbackCooldownActive": bool(_cd),
-                    "standPipelineOpen": bool(_ok),
-                }
-            if len(row) > 7 and row[7] is not None:
-                _pos["clearance"] = str(row[7])
-            if len(row) > 8 and row[8] is not None:
-                _pos["waitReason"] = str(row[8])
+                _ = (_sid, _cap, _phys_o, _booked, _cd, _ok)
             if len(row) > 9 and row[9] is not None:
                 _pos["edgeId"] = str(row[9])
             if len(row) > 10 and row[10] is not None:
                 _pos["phase"] = str(row[10])
             if len(row) > 11 and row[11] is not None:
                 _pos["pathType"] = str(row[11])
-            if len(row) > 12:
-                _pos["controlHalt"] = bool(row[12])
-            if len(row) > 13 and row[13] is not None:
-                try:
-                    _pos["controlSpeedCapMs"] = float(row[13])
-                except (TypeError, ValueError):
-                    pass
-            if len(row) > 14 and row[14] is not None:
-                _pos["runwayId"] = str(row[14])
             _plist.append(_pos)
         # Playback: do not export positions before actual touchdown motion (same clock as
         # schedule TOUCHDOWN_MOTION / _compute_arr_touchdown_motion_abs_sec). Sim internal
@@ -8847,4 +8931,9 @@ def run_simulation(
         cell_size,
         pixels_per_meter,
     )
+    out["positions"] = {
+        str(fid): _flight_positions_to_compact_v2(pts)
+        for fid, pts in positions.items()
+    }
+    out["positions_format"] = _POSITIONS_COMPACT_FORMAT_V2
     return out

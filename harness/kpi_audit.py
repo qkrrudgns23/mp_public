@@ -80,6 +80,9 @@ def main(argv: List[str] | None = None) -> int:
         print("FAIL positions missing or not dict")
         return 2
 
+    def position_points(raw: Any) -> List[Dict[str, Any]]:
+        return sim._expand_flight_positions_track_v2(raw)
+
     eldt_by_fid: Dict[str, float] = {}
     exit_runway_by_fid: Dict[str, float] = {}
     for sr in res.get("schedule") or []:
@@ -103,9 +106,8 @@ def main(argv: List[str] | None = None) -> int:
 
     by_t: Dict[int, List[Tuple[str, float, float, float, bool]]] = {}
     for fid, plist in positions.items():
-        if not isinstance(plist, list):
-            continue
-        for pt in plist:
+        pts = position_points(plist)
+        for pt in pts:
             if not isinstance(pt, dict):
                 continue
             t = int(pt.get("t", 0))
@@ -130,18 +132,17 @@ def main(argv: List[str] | None = None) -> int:
         fails.append(f"deadlock_resolve_event_count={dc_int} > {args.deadlock_max}")
 
     warps = 0
-    for _fid, plist in positions.items():
-        if not isinstance(plist, list):
-            continue
-        for i in range(1, len(plist)):
-            if not isinstance(plist[i], dict) or not isinstance(plist[i - 1], dict):
+    for plist in positions.values():
+        pts = position_points(plist)
+        for i in range(1, len(pts)):
+            if not isinstance(pts[i], dict) or not isinstance(pts[i - 1], dict):
                 continue
-            dt = float(plist[i]["t"]) - float(plist[i - 1]["t"])
+            dt = float(pts[i]["t"]) - float(pts[i - 1]["t"])
             if dt <= 0:
                 continue
             d = math.hypot(
-                float(plist[i]["x"]) - float(plist[i - 1]["x"]),
-                float(plist[i]["y"]) - float(plist[i - 1]["y"]),
+                float(pts[i]["x"]) - float(pts[i - 1]["x"]),
+                float(pts[i]["y"]) - float(pts[i - 1]["y"]),
             )
             if d > float(args.warp_px):
                 warps += 1
