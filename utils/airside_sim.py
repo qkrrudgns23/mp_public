@@ -8665,6 +8665,7 @@ def run_simulation(
         elif current_time_abs - float(ref_t0) + dt_sec > SIM_MAX_TIME_SEC + 1e-6:
             break
         current_time_abs += dt_sec
+        t_tick = float(current_time_abs)
         _refresh_touchdown_motion_cache(control_state, agents, rw_release_lag)
         refresh_resource_occupancy(
             control_state,
@@ -8674,7 +8675,7 @@ def run_simulation(
             rw_release_lag,
         )
         for ag in agents:
-            _tick_arr_temp_detour_eldt_flag(ag, float(current_time_abs))
+            _tick_arr_temp_detour_eldt_flag(ag, t_tick)
         agents_temp_pipe = sorted(
             agents,
             key=lambda a: _temp_stand_pipeline_sort_key(
@@ -8682,7 +8683,8 @@ def run_simulation(
             ),
         )
         for ag in agents_temp_pipe:
-            fo = flights_by_id.get(str(ag.id))
+            ag_id_temp = str(ag.id)
+            fo = flights_by_id.get(ag_id_temp)
             if isinstance(fo, dict):
                 _try_inject_arr_taxi_from_temp_stand(
                     ag,
@@ -8694,7 +8696,7 @@ def run_simulation(
                     reverse_cost,
                     merge_r,
                     taxiway_h,
-                    float(current_time_abs),
+                    t_tick,
                     agents,
                 )
                 _try_reroute_temp_stand_if_contested(
@@ -8707,7 +8709,7 @@ def run_simulation(
                     reverse_cost,
                     merge_r,
                     taxiway_h,
-                    float(current_time_abs),
+                    t_tick,
                     agents,
                 )
                 _try_splice_temp_stand_arrival_detour(
@@ -8720,7 +8722,7 @@ def run_simulation(
                     reverse_cost,
                     merge_r,
                     taxiway_h,
-                    float(current_time_abs),
+                    t_tick,
                     agents,
                 )
         refresh_agent_edge_fsm(agents)
@@ -8743,7 +8745,7 @@ def run_simulation(
                 flights_by_id,
             )
         elif (
-            float(current_time_abs)
+            t_tick
             - float(control_state.last_light_reservation_rebook_sim_time)
             + 1e-9
             >= float(LIGHT_RESERVATION_RETRY_INTERVAL_SEC)
@@ -8756,9 +8758,7 @@ def run_simulation(
                 rw_release_lag,
             )
             control_state.stand_arrival_book_snapshot = dict(_book_lt)
-            control_state.last_light_reservation_rebook_sim_time = float(
-                current_time_abs
-            )
+            control_state.last_light_reservation_rebook_sim_time = t_tick
         apply_movement_controls(
             control_state,
             agents,
@@ -8772,7 +8772,7 @@ def run_simulation(
                 flights_by_id,
                 layout,
                 information,
-                float(current_time_abs),
+                t_tick,
                 cell_size,
                 reverse_cost,
                 merge_r,
@@ -8837,19 +8837,19 @@ def run_simulation(
                     or (str(ag.edge_phases[0]) == PHASE_DEP_TAXI and _pt_eobt == "apron_link")
                 )
                 and _gate_cur is not None
-                and float(current_time_abs) > float(_gate_cur) + 1e-9
+                and t_tick > float(_gate_cur) + 1e-9
                 and abs(float(ag.velocity_ms)) > 0.01
             ):
-                _agent_stamp_current_offblocks(ag, float(current_time_abs))
+                _agent_stamp_current_offblocks(ag, t_tick)
                 stand_cooldown_index = _build_stand_pushback_clearance_index(agents)
             st_h = agent_states_hist_tick(ag.id)
             _gh = (
-                _agent_deadlock_ghost_at_time(st_h, float(current_time_abs))
+                _agent_deadlock_ghost_at_time(st_h, t_tick)
                 if st_h is not None
                 else False
             )
             _dst_snap = _destination_stand_history_snap(
-                ag, control_state, agents, float(current_time_abs), stand_cooldown_index
+                ag, control_state, agents, t_tick, stand_cooldown_index
             )
             _st_dbg = st_h
             _eid0 = str(ag.edge_ids[0]) if ag.edge_ids else ""
@@ -8901,13 +8901,13 @@ def run_simulation(
             progress_cb(
                 current_time_abs - float(ref_t0),
                 progress_elapsed_total_sec,
-                float(current_time_abs),
+                t_tick,
             )
         if int(control_state.deadlock_resolve_event_count) >= int(deadlock_resolve_stop_n):
-            truncation_abs_sec = float(current_time_abs)
+            truncation_abs_sec = t_tick
             _LOG.warning(
                 "SIM_STOP_DEADLOCK_CAP t=%.1f count=%s cap=%s",
-                float(current_time_abs),
+                t_tick,
                 int(control_state.deadlock_resolve_event_count),
                 int(deadlock_resolve_stop_n),
             )
