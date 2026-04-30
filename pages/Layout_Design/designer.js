@@ -1230,6 +1230,7 @@
     hoverCell: null,
     vttArrCacheRev: 0,
     derivedGraphEdges: [],
+    duplicateApronByStandId: {},
     globalUpdateFresh: false,
     /** Path graph / views match last Designer 'Update' (applyPathGraphSyncNow), not Pro Sim. */
     designerPageUpdateFresh: false,
@@ -2856,6 +2857,7 @@
     } else {
       state.flights = [];
     }
+    if (typeof recomputeDuplicateApronByStandId === 'function') recomputeDuplicateApronByStandId();
     if (obj.simPlaybackPositionsByFlightId && typeof obj.simPlaybackPositionsByFlightId === 'object') {
       state.simPlaybackPositionsByFlightId = obj.simPlaybackPositionsByFlightId;
       state.simPlaybackTimelinesEvictedForMemory = false;
@@ -3036,6 +3038,31 @@
     }
     track.__dghostSet = s;
     return s;
+  }
+  function compactPlaybackTugIntervals(track) {
+    if (!track) return [];
+    if (Array.isArray(track.__tugIntervals)) return track.__tugIntervals;
+    const raw = Array.isArray(track.tug_intervals) ? track.tug_intervals : [];
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+      const it = raw[i];
+      if (!it || typeof it !== 'object') continue;
+      const start = Number(it.start != null ? it.start : it.t0);
+      const end = Number(it.end != null ? it.end : it.t1);
+      if (isFinite(start) && isFinite(end) && end > start) out.push({ start: start, end: end });
+    }
+    track.__tugIntervals = out;
+    return out;
+  }
+  function compactPlaybackNeedsTugAt(track, tSec) {
+    const t = Number(tSec);
+    if (!isFinite(t)) return false;
+    const intervals = compactPlaybackTugIntervals(track);
+    for (let i = 0; i < intervals.length; i++) {
+      const it = intervals[i];
+      if (t + 1e-9 >= it.start && t <= it.end + 1e-9) return true;
+    }
+    return false;
   }
   function compactPlaybackMetaStateAt(track, t) {
     const meta = Array.isArray(track && track.meta) ? track.meta : [];
@@ -4284,6 +4311,37 @@
     }
     return false;
   }
+  function polygonsOverlapXY(polyA, polyB) {
+    if (!Array.isArray(polyA) || !Array.isArray(polyB) || polyA.length < 3 || polyB.length < 3) return false;
+    for (let i = 0; i < polyA.length; i++) if (pointInPolygonXY(polyA[i], polyB)) return true;
+    for (let i = 0; i < polyB.length; i++) if (pointInPolygonXY(polyB[i], polyA)) return true;
+    for (let i = 0; i < polyA.length; i++) {
+      const a1 = polyA[i], a2 = polyA[(i + 1) % polyA.length];
+      for (let j = 0; j < polyB.length; j++) {
+        if (segIntersect(a1, a2, polyB[j], polyB[(j + 1) % polyB.length])) return true;
+      }
+    }
+    return false;
+  }
+  function polygonAabbXY(poly) {
+    if (!Array.isArray(poly) || !poly.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i];
+      const x = Number(p && p[0]), y = Number(p && p[1]);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)
+      ? { left: minX, right: maxX, top: minY, bottom: maxY }
+      : null;
+  }
+  function aabbRectOverlap(a, b) {
+    return !!(a && b && !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom));
+  }
   function distPointToSegment(px, py, ax, ay, bx, by) {
     const vx = bx - ax, vy = by - ay;
     const wx = px - ax, wy = py - ay;
@@ -4361,6 +4419,83 @@
       standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, widM / 2),
       standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, widM / 2),
     ];
+  }
+  function buildStandDuplicateSafetyPolygonLocalPoints(depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return null;
+    const g = Number(r.gap), ws = Number(r.wingspan), pb = Number(r.pushback);
+    if (!isFinite(g) || !isFinite(ws) || !isFinite(pb) || g <= 0 || ws <= 0) return null;
+    const halfD = depM / 2, halfW = widM / 2;
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    const xStop = 0;
+    const xPush = (halfD - pb) + shiftX;
+    const yLim = halfW - g;
+    const xMin = (-halfD) + shiftX;
+    const xMax = halfD + shiftX;
+    const eps = 0.12;
+    if (!(yLim > eps && yLim < halfW - eps)) return null;
+    if (!(xStop > xMin + eps && xStop < xMax - eps)) return null;
+    const xA = Math.max(xMin, Math.min(xMax, Math.min(xStop, xPush)));
+    const xB = Math.max(xMin, Math.min(xMax, Math.max(xStop, xPush)));
+    if (!(xB > xA + eps)) return null;
+    return [
+      [xA, -yLim],
+      [xB, -yLim],
+      [xB, yLim],
+      [xA, yLim],
+    ];
+  }
+  function standDuplicateSafetyWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
+    const polyLocal = buildStandDuplicateSafetyPolygonLocalPoints(depM, widM, category);
+    if (!polyLocal || polyLocal.length < 3) return null;
+    return polyLocal.map(function(p) { return standFootprintLocalToWorld(cx, cy, angleRad, p[0], p[1]); });
+  }
+  function standSafetyOverlapSpec(stand) {
+    if (!stand || stand.id == null) return null;
+    const id = String(stand.id);
+    const isPbb = (state.pbbStands || []).some(function(s) { return s && String(s.id) === id; });
+    const center = isPbb ? getStandConnectionPx(stand) : getRemoteStandCenterPx(stand);
+    const angle = isPbb ? getPBBStandAngle(stand) : getRemoteStandAngleRad(stand);
+    const category = stand.category || 'C';
+    const dep = getStandDepthMeters(category);
+    const wid = getStandWidthMeters(category);
+    if (!center || !isFinite(center[0]) || !isFinite(center[1]) || !isFinite(dep) || !isFinite(wid)) return null;
+    const poly = standDuplicateSafetyWorldPolygonForSpec(center[0], center[1], angle, dep, wid, category);
+    const aabb = polygonAabbXY(poly);
+    return poly && aabb ? { id: id, stand: stand, poly: poly, aabb: aabb } : null;
+  }
+  function recomputeDuplicateApronByStandId() {
+    const specs = (typeof allStandsForFlightAssignment === 'function' ? allStandsForFlightAssignment() : [])
+      .map(standSafetyOverlapSpec)
+      .filter(Boolean);
+    const map = {};
+    for (let i = 0; i < specs.length; i++) {
+      const a = specs[i];
+      if (!map[a.id]) map[a.id] = [];
+      for (let j = i + 1; j < specs.length; j++) {
+        const b = specs[j];
+        if (!aabbRectOverlap(a.aabb, b.aabb)) continue;
+        if (!polygonsOverlapXY(a.poly, b.poly)) continue;
+        if (!map[a.id]) map[a.id] = [];
+        if (!map[b.id]) map[b.id] = [];
+        map[a.id].push(b.id);
+        map[b.id].push(a.id);
+      }
+    }
+    specs.forEach(function(spec) {
+      const list = (map[spec.id] || []).slice().sort();
+      spec.stand.duplicate_apron_list = list;
+      map[spec.id] = list;
+    });
+    state.duplicateApronByStandId = map;
+    return map;
+  }
+  function duplicateApronStandIdsForStand(standId) {
+    const key = standId != null ? String(standId) : '';
+    if (!key) return [];
+    const map = state.duplicateApronByStandId || {};
+    const arr = Array.isArray(map[key]) ? map[key] : [];
+    return arr.map(function(id) { return String(id); }).filter(Boolean);
   }
   function standGapSegmentsWorldForSpec(cx, cy, angleRad, depM, widM, category) {
     const r = standConfigRowForIcaoCat(category);
@@ -8871,7 +9006,7 @@
       }
       if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
       if (flightWouldOverlapStandAssignment(f, standId, segIdxForValidation)) {
-        showAllocationConstraintModal("This stand already has an overlapping flight in the selected SIBT-SOBT window.");
+        showAllocationConstraintModal("This stand or a safety-overlapped stand already has an overlapping flight in the selected SIBT-SOBT window.");
         return false;
       }
     }
@@ -8930,6 +9065,7 @@
       : flightScheduleStandWindowMinutes(f);
     if (!win) return false;
     const target = String(standId);
+    const blockedStandIds = new Set([target].concat(duplicateApronStandIdsForStand(target)));
     const flights = state.flights || [];
     for (let i = 0; i < flights.length; i++) {
       const other = flights[i];
@@ -8938,11 +9074,11 @@
       if (segsOther.length) {
         for (let j = 0; j < segsOther.length; j++) {
           const os = segsOther[j];
-          if (!os || String(os.standId || '') !== target) continue;
+          if (!os || !blockedStandIds.has(String(os.standId || ''))) continue;
           const os0 = Number(os.sibtMin), os1 = Number(os.sobtMin);
           if (isFinite(os0) && isFinite(os1) && win.sibt < os1 && os0 < win.sobt) return true;
         }
-      } else if (String(other.standId || '') === target) {
+      } else if (blockedStandIds.has(String(other.standId || ''))) {
         const ow = flightScheduleStandWindowMinutes(other);
         if (ow && win.sibt < ow.sobt && ow.sibt < win.sobt) return true;
       }
@@ -9553,18 +9689,18 @@
     return arrTaxiBlockCount >= 2;
   }
   function flightNeedsTugAtSimTime(f, tSec, pose) {
-    if (!f || isFlightAirsideCycleCompleteAtSimTime(f, tSec) || isFlightParkedAtSimTime(f, tSec)) return false;
-    const ph = simFlightPhaseAtTime(f, tSec, pose).toLowerCase().replace(/[\s-]+/g, '_');
-    if (ph === 'pushback') return true;
-    if (ph.indexOf('arr_temp') >= 0) return true;
-    if (ph.indexOf('arr_taxi') >= 0) return isSecondOrLaterArrTaxiAtTime(f, tSec);
+    if (!f) return false;
+    const tr = typeof compactPlaybackTrackForFlight === 'function' ? compactPlaybackTrackForFlight(f) : null;
+    if (tr) return compactPlaybackNeedsTugAt(tr, tSec);
     return false;
   }
   function drawFlightTugCar2D(ctx, x, y, nx, ny, lenM, wingM) {
-    const tugLen = Math.max(3.8, lenM * 0.14);
-    const tugWid = Math.max(2.4, wingM * 0.12);
-    const cx = x + nx * Math.max(5, lenM * 0.16);
-    const cy = y + ny * Math.max(5, lenM * 0.16);
+    void lenM;
+    void wingM;
+    const tugLen = 10;
+    const tugWid = 3;
+    const cx = x + nx * 7;
+    const cy = y + ny * 7;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(Math.atan2(ny, nx));
@@ -11469,6 +11605,19 @@
       const rowFlights = (standId == null)
         ? (intervalsByStandKey.__unassigned || [])
         : (intervalsByStandKey[String(standId)] || []);
+      const duplicateBg = [];
+      if (standId != null) {
+        const dupIds = duplicateApronStandIdsForStand(standId);
+        for (let di = 0; di < dupIds.length; di++) {
+          const dupFlights = intervalsByStandKey[String(dupIds[di])] || [];
+          for (let ii = 0; ii < dupFlights.length; ii++) {
+            const dit = dupFlights[ii];
+            if (dit && isFinite(dit.t0) && isFinite(dit.t1) && dit.t1 > dit.t0) {
+              pushAllocSpan(duplicateBg, dit.t0, dit.t1, 'alloc-duplicate-bg', 0.5);
+            }
+          }
+        }
+      }
       const conflictMap = {};
       for (let i = 0; i < rowFlights.length; i++) {
         for (let j = i + 1; j < rowFlights.length; j++) {
@@ -11617,6 +11766,7 @@
       const trackHtml =
         '<div class="alloc-row' + rowNoLinkClass + '" data-stand-id="' + sidAttr + '"' + apronLinkDataAttr + '>' +
           '<div class="alloc-row-track" data-stand-id="' + sidAttr + '"' + apronLinkDataAttr + '>' +
+            duplicateBg.join('') +
             bgSlots +
             blocks +
             (showEibtBars && eBars ? eBars.join('') : '') +
@@ -25030,6 +25180,7 @@
   if (btnDesignerPageUpdate) {
     btnDesignerPageUpdate.addEventListener('click', function() {
       if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
+      if (typeof recomputeDuplicateApronByStandId === 'function') recomputeDuplicateApronByStandId();
       const collapsedApronFlights = typeof collapseSingleStandApronStaySegmentsForFlights === 'function'
         ? collapseSingleStandApronStaySegmentsForFlights(state.flights || [])
         : [];

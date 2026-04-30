@@ -4340,7 +4340,78 @@ _POSITIONS_COMPACT_FORMAT_V2 = "compact_v2"
 _POSITIONS_META_KEYS_V2 = ("phase", "pathType", "edgeId")
 
 
-def _flight_positions_to_compact_v2(plist: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _phase_requires_tug(phase: str) -> bool:
+    ph = str(phase or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not ph:
+        return False
+    if ph in {"landing", "arr_taxi", "dep_taxi", "lineup_departure"}:
+        return False
+    if "holding" in ph or ph == "departure":
+        return False
+    return True
+
+
+def _schedule_row_parked_windows(row: Optional[Dict[str, Any]]) -> List[Tuple[float, float]]:
+    if not isinstance(row, dict):
+        return []
+    eibt_raw = row.get("EIBT_LIST")
+    eobt_raw = row.get("EOBT_LIST")
+    if not isinstance(eibt_raw, list):
+        eibt_raw = [row.get("EIBT")]
+    if not isinstance(eobt_raw, list):
+        eobt_raw = [row.get("EOBT")]
+    out: List[Tuple[float, float]] = []
+    for s_raw, e_raw in zip(eibt_raw, eobt_raw):
+        try:
+            s = float(s_raw)
+            e = float(e_raw)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(s) and math.isfinite(e) and e > s:
+            out.append((s, e))
+    return out
+
+
+def _time_in_windows(t: float, windows: List[Tuple[float, float]]) -> bool:
+    return any(float(s) - 1e-9 <= float(t) <= float(e) + 1e-9 for s, e in windows)
+
+
+def _tug_intervals_from_positions(
+    plist: List[Dict[str, Any]], schedule_row: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, int]]:
+    if not plist or len(plist) < 2:
+        return []
+    parked = _schedule_row_parked_windows(schedule_row)
+    intervals: List[Dict[str, int]] = []
+    cur_start: Optional[float] = None
+    cur_end: Optional[float] = None
+    for i in range(len(plist) - 1):
+        p0 = plist[i]
+        p1 = plist[i + 1]
+        try:
+            t0 = float(p0.get("t", 0.0))
+            t1 = float(p1.get("t", 0.0))
+        except (TypeError, ValueError):
+            continue
+        if not (math.isfinite(t0) and math.isfinite(t1)) or t1 <= t0:
+            continue
+        need = _phase_requires_tug(str(p0.get("phase") or "")) and not _time_in_windows(t0, parked)
+        if need:
+            if cur_start is None:
+                cur_start = t0
+            cur_end = t1
+        elif cur_start is not None and cur_end is not None and cur_end > cur_start:
+            intervals.append({"start": int(round(cur_start)), "end": int(round(cur_end))})
+            cur_start = None
+            cur_end = None
+    if cur_start is not None and cur_end is not None and cur_end > cur_start:
+        intervals.append({"start": int(round(cur_start)), "end": int(round(cur_end))})
+    return intervals
+
+
+def _flight_positions_to_compact_v2(
+    plist: List[Dict[str, Any]], schedule_row: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Export dense t/x/y/v arrays plus sparse metadata changes."""
     t_arr: List[int] = []
     x_arr: List[float] = []
@@ -4382,6 +4453,9 @@ def _flight_positions_to_compact_v2(plist: List[Dict[str, Any]]) -> Dict[str, An
     }
     if dghost_ts:
         out["dghost_t"] = dghost_ts
+    tug_intervals = _tug_intervals_from_positions(plist, schedule_row)
+    if tug_intervals:
+        out["tug_intervals"] = tug_intervals
     return out
 
 
@@ -8931,8 +9005,13 @@ def run_simulation(
         cell_size,
         pixels_per_meter,
     )
+    schedule_by_id = {
+        str(row.get("flight_id", "")).strip(): row
+        for row in schedule_list
+        if isinstance(row, dict) and str(row.get("flight_id", "")).strip()
+    }
     out["positions"] = {
-        str(fid): _flight_positions_to_compact_v2(pts)
+        str(fid): _flight_positions_to_compact_v2(pts, schedule_by_id.get(str(fid)))
         for fid, pts in positions.items()
     }
     out["positions_format"] = _POSITIONS_COMPACT_FORMAT_V2
