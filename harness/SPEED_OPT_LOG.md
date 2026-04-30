@@ -20,6 +20,7 @@
 | LOOP4 | `_ensure_agent_apron_lists` 이미 충분한 길이면 즉시 return | PASS | PASS | PASS | ADOPT |
 | LOOP5 | `_lookahead_depth_billed_count_pts` + `get_lookahead_edges`에서 `edge_pts` 1회 생성 | PASS | PASS | PASS | ADOPT |
 | LOOP6 | touchdown fast-path: 그룹 스캔 시 `arr_runway` strip 재검사 생략 | PASS | PASS | PASS | ADOPT |
+| **LOOP7–16** | touchdown 단일 패스 인덱스, lookahead 증분 billed, `edge_path_type_norm`, 예약/분리 최적화 등 (SPEED_OPT_LOG §추가 10회) | PASS | PASS | PASS | ADOPT |
 
 **실패·원복**: 이번 5루프(LOOP2~6)에서 골든 실패 없음 → 원복 없음.
 
@@ -197,3 +198,48 @@
 **결과**: `default_layout`에서 `deadlock_resolve_event_count`가 `0 -> 2`로 바뀌어 골든 실패.
 
 **조치**: 즉시 원복. 현재 코드에는 A4 변경 없음.
+
+---
+
+## 추가 10회 루프 (LOOP7–LOOP16, 2026-04-30)
+
+**절차**: `harness.smoke` → 변경 적용 → 3페어 `golden_compare.py` → 실패 시 즉시 원복.  
+**결과**: 골든 실패 **0건** (원복 없음). 벽시계는 OS 부하에 따라 크게 흔들림 → 아래 샘플은 **참고용** (N=2 `harness.run --no-validate`, min만 기재).
+
+### 루프 요약 표
+
+| 루프 | 변경 요약 | default | large_flight | MNL_OSM | 비고 |
+| --- | --- | --- | --- | --- | --- |
+| **LOOP7** | `_touchdown_motion_indexes`: `dep_rows` + `arr_by_rw` 단일 `agents` 패스 후 prefix | PASS | PASS | PASS | `_touchdown_dep_window_rows_by_runway` + `_agents_by_arr_runway` 이중 순회 제거 |
+| **LOOP8** | `get_lookahead_edges`: `_lookahead_depth_billed_count_pts` 반복 O(k²) → 접두사 **증분** O(k) (동일 단조 규칙) | PASS | PASS | PASS | A4(잘못된 단일패스)와 달리 **매 k의 billed 값을 기존과 동일하게** 유지 |
+| **LOOP9** | `SimulationControlState.edge_path_type_norm` + `build_resource_model` 채움; `_layout_edge_path_type` / `_lookahead_depth_billed_count` 조회 단순화 | PASS | PASS | PASS | Hot `edge_resources` → 선계산 strip dict |
+| **LOOP10** | `_resource_use_count`: `occupied + reserved` 중간 리스트 제거, 이중 루프로 set 합집합 | PASS | PASS | PASS | 할당 감소 |
+| **LOOP11** | `can_reserve_path`: `apron_link` 판별을 `edge_path_type_norm` 우선 | PASS | PASS | PASS | strip/`path_type` 문자열 반복 완화 |
+| **LOOP12** | `_stand_arrival_book_if_pipeline_proceed`: norm dict 우선 `apron_link` 탐지 | PASS | PASS | PASS | |
+| **LOOP13** | `get_lookahead_edges` (norm 미일치 시): `ptn.get(edge_id)` 직접 slice | PASS | PASS | PASS | `_layout_edge_path_type` 호출 감소 |
+| **LOOP14** | `_single_full_reservation_pass`: `get_agent_priority_rank` 정렬·루프 **중복 제거** (`rank_cache`) | PASS | PASS | PASS | |
+| **LOOP15** | `_current_edge_separation_ok`: `_agents_on_edge` 리스트 할당 제거, 동일 엣지 인라인 스캔 | PASS | PASS | PASS | |
+| **LOOP16** | `reserve_path`: 동일 tick 내 `_lookahead_depth_billed_count(idx)` **메모** (`_billed_at`) | PASS | PASS | PASS | idx 중복 계산 제거 |
+
+### LOOP7 직후 샘플 (동일 세션 단일 실행, 비교용)
+
+| pair | wall_sec (참고) |
+| --- | --- |
+| default_layout | 10.15 |
+| large_flight | 25.84 |
+| MNL_OSM | 17.93 |
+
+### LOOP16 직후 N=2 min wall_sec (`harness.run --no-validate`)
+
+| pair | run1 | run2 | **min** |
+| --- | --- | --- | --- |
+| default_layout | 7.89 | 11.01 | **7.89** |
+| large_flight | 45.73 | 21.35 | **21.35** |
+| MNL_OSM | 9.82 | 13.30 | **9.82** |
+
+### 프로파일 단서 (LOOP7 진행 전, `large_flight`, cProfile)
+
+- 상위: `_compute_arr_touchdown_motion_abs_sec`, `_layout_edge_path_type`, `get_lookahead_edges` 내 listcomp, `_ensure_agent_apron_lists`, `_lookahead_depth_billed_count` 등.  
+- 이번 10회 루프는 위 후보들과 예약 패스(`reserve_path`, `can_reserve_path`, `get_agent_priority_rank`) 쪽 호출·할당 비용을 겨냥함.
+
+**실패·원복**: 없음 (10/10 골든 PASS).

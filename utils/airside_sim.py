@@ -752,6 +752,8 @@ class SimulationControlState:
     touchdown_motion_by_id: Optional[Dict[str, Optional[float]]] = field(
         default=None, repr=False
     )
+    # Stripped layout path_type by edge id (built once in ``build_resource_model``).
+    edge_path_type_norm: Dict[str, str] = field(default_factory=dict, repr=False)
 
 
 CLEARANCE_DEADLOCK_GHOST = "DEADLOCK_GHOST"
@@ -3293,6 +3295,38 @@ def _agents_by_arr_runway(agents: List[Flight]) -> Dict[str, List[Flight]]:
     return out
 
 
+def _touchdown_motion_indexes(
+    agents: List[Flight],
+    *,
+    dep_release_buffer_sec: float = 20.0,
+) -> Tuple[
+    Dict[str, List[Tuple[float, Optional[float], Any]]],
+    Dict[str, List[Flight]],
+    TouchdownArrivalPrefixIndex,
+]:
+    """One pass over ``agents`` for dep-window rows + arrival-runway buckets, then prefix index."""
+
+    buf = float(dep_release_buffer_sec)
+    dep_rows: Dict[str, List[Tuple[float, Optional[float], Any]]] = {}
+    arr_by_rw: Dict[str, List[Flight]] = {}
+    for o in agents:
+        dep_rw = str(o.dep_runway_id or "").strip()
+        if dep_rw:
+            dep_entry = o.runway_entry_abs_sec
+            if dep_entry is not None:
+                dep_end = (
+                    float(o.path_completed_abs_sec) + buf
+                    if o.path_completed_abs_sec is not None
+                    else None
+                )
+                dep_rows.setdefault(dep_rw, []).append((float(dep_entry), dep_end, o.id))
+        rw_o = str(o.arr_runway_id or "").strip()
+        if rw_o:
+            arr_by_rw.setdefault(rw_o, []).append(o)
+    arr_prefix = _touchdown_arrival_prefix_index(arr_by_rw)
+    return dep_rows, arr_by_rw, arr_prefix
+
+
 def _touchdown_arrival_prefix_index(
     agents_by_arr_runway: Dict[str, List[Flight]],
 ) -> TouchdownArrivalPrefixIndex:
@@ -3448,9 +3482,9 @@ def _refresh_touchdown_motion_cache(
     runway_release_lag_sec: float,
 ) -> None:
     lag = float(runway_release_lag_sec)
-    dep_rows = _touchdown_dep_window_rows_by_runway(agents, dep_release_buffer_sec=20.0)
-    arr_by_rw = _agents_by_arr_runway(agents)
-    arr_prefix = _touchdown_arrival_prefix_index(arr_by_rw)
+    dep_rows, arr_by_rw, arr_prefix = _touchdown_motion_indexes(
+        agents, dep_release_buffer_sec=20.0
+    )
     control_state.touchdown_motion_by_id = {
         str(ag.id): _compute_arr_touchdown_motion_abs_sec(
             ag,
@@ -5615,6 +5649,10 @@ def build_resource_model(
         edge_resources[eid] = er
         if runway_id is not None:
             runway_to_edges.setdefault(str(runway_id), set()).add(eid)
+    edge_path_type_norm = {
+        eid0: (str(er0.path_type or "taxiway").strip() or "taxiway")
+        for eid0, er0 in edge_resources.items()
+    }
     intersection_resources: Dict[str, IntersectionResource] = {}
     if g is not None:
         for ni in range(len(g.nodes)):
@@ -5639,6 +5677,7 @@ def build_resource_model(
         path_graph=g,
         pixels_per_meter=ppm,
         temp_stand_incident_edges=temp_inc,
+        edge_path_type_norm=edge_path_type_norm,
     )
 
 
@@ -6133,23 +6172,41 @@ def get_lookahead_edges(
     n_e = len(agent.edge_ids)
     k_max = min(n_e, max(T * 80, 400))
     if agent.segment_path_types_norm and len(agent.segment_path_types_norm) == n_e:
-        edge_pts: Sequence[str] = agent.segment_path_types_norm[:k_max]
+        edge_pts: Sequence[str] = agent.segment_path_types_norm
     else:
-        edge_pts = [
-            str(_layout_edge_path_type(control_state, str(agent.edge_ids[i])) or "").strip()
-            for i in range(k_max)
-        ]
+        ptn = control_state.edge_path_type_norm
+        if ptn:
+            edge_pts = [ptn.get(str(agent.edge_ids[i]), "taxiway") for i in range(k_max)]
+        else:
+            edge_pts = [
+                str(_layout_edge_path_type(control_state, str(agent.edge_ids[i])) or "").strip()
+                for i in range(k_max)
+            ]
+    eids = agent.edge_ids
+    c_loop = 0
+    has_apron = False
+    has_apron_taxi_prefix = False
     for k in range(k_max):
-        b = _lookahead_depth_billed_count_pts(edge_pts, k)
+        pt = edge_pts[k]
+        if pt == "apron_taxiway":
+            has_apron_taxi_prefix = True
+        else:
+            if pt == "apron_link":
+                has_apron = True
+            if pt == "taxiway":
+                if k == 0:
+                    c_loop += 1
+                else:
+                    if edge_pts[k - 1] != "taxiway":
+                        c_loop += 1
+            else:
+                c_loop += 1
+        b = c_loop + (1 if has_apron else 0)
         if b >= T:
-            return [str(agent.edge_ids[i]) for i in range(k + 1)]
-        if (
-            k + 1 == T
-            and b < T
-            and not any(edge_pts[j] == "apron_taxiway" for j in range(k + 1))
-        ):
-            return [str(agent.edge_ids[i]) for i in range(T)]
-    return [str(agent.edge_ids[i]) for i in range(min(T, n_e))]
+            return [str(eids[i]) for i in range(k + 1)]
+        if k + 1 == T and b < T and not has_apron_taxi_prefix:
+            return [str(eids[i]) for i in range(T)]
+    return [str(eids[i]) for i in range(min(T, n_e))]
 
 
 def _temp_apron_hold_reservation_only_current_edge(ag: Flight) -> bool:
@@ -6184,7 +6241,13 @@ def _agent_eligible_for_reservation_pass(ag: Flight) -> bool:
 
 
 def _layout_edge_path_type(control_state: SimulationControlState, eid: str) -> str:
-    er = control_state.edge_resources.get(str(eid))
+    key = str(eid)
+    ptn = control_state.edge_path_type_norm
+    if ptn:
+        out = ptn.get(key)
+        if out is not None:
+            return out
+    er = control_state.edge_resources.get(key)
     if er is None:
         return "taxiway"
     return str(er.path_type or "taxiway")
@@ -6234,10 +6297,14 @@ def _lookahead_depth_billed_count(
     if hi < 0:
         return 0
     upto = min(hi + 1, len(eids))
-    pts: List[str] = [
-        str(_layout_edge_path_type(control_state, str(eids[j])) or "").strip()
-        for j in range(0, upto)
-    ]
+    ptn = control_state.edge_path_type_norm
+    if ptn:
+        pts: List[str] = [ptn.get(str(eids[j]), "taxiway") for j in range(0, upto)]
+    else:
+        pts = [
+            str(_layout_edge_path_type(control_state, str(eids[j])) or "").strip()
+            for j in range(0, upto)
+        ]
     return _lookahead_depth_billed_count_pts(pts, hi)
 
 
@@ -6265,7 +6332,13 @@ def _stand_arrival_book_if_pipeline_proceed(
     if st is None or not st.reserved_edges:
         return
     has_apron = False
+    ptn = control_state.edge_path_type_norm
     for eid in st.reserved_edges:
+        if ptn:
+            if ptn.get(str(eid), "taxiway") == "apron_link":
+                has_apron = True
+                break
+            continue
         er0 = control_state.edge_resources.get(str(eid))
         if er0 is not None and str(er0.path_type or "").strip() == "apron_link":
             has_apron = True
@@ -6388,7 +6461,15 @@ def _runway_rot_reservation_blocked(
 def _resource_use_count(
     occupied: List[str], reserved: List[str], agent_id: str
 ) -> int:
-    return len({x for x in (occupied + reserved) if x != agent_id})
+    aid = agent_id
+    s: set[str] = set()
+    for x in occupied:
+        if x != aid:
+            s.add(x)
+    for x in reserved:
+        if x != aid:
+            s.add(x)
+    return len(s)
 
 
 def _blocking_temp_stand_for_edge(
@@ -6428,7 +6509,10 @@ def _current_edge_separation_ok(
     my_along = float(agent.edge_s_along_px) / ppm
     t_eff = float(sim_time)
     rw_lag = float(runway_release_lag_sec)
-    for o in _agents_on_edge(er.edge_id, agents):
+    eid_sp = str(er.edge_id)
+    for o in agents:
+        if not o.edge_ids or str(o.edge_ids[0]) != eid_sp:
+            continue
         if o.id == agent.id or not o.segment_endpoints:
             continue
         o_td = _arr_touchdown_motion_abs_sec(
@@ -6472,6 +6556,7 @@ def can_reserve_path(
     aid = agent.id
     t_abs = float(sim_time)
     depth_cap = max(1, int(reservation_depth))
+    ptn = control_state.edge_path_type_norm
 
     for idx, eid in enumerate(lookahead):
         er = control_state.edge_resources.get(eid)
@@ -6494,8 +6579,13 @@ def can_reserve_path(
             if agent.segment_path_types and len(agent.segment_path_types) == len(agent.edge_ids)
             else ""
         )
+        er_pt = (
+            ptn.get(str(er.edge_id), "taxiway")
+            if ptn
+            else (str(er.path_type or "").strip() or "taxiway")
+        )
         if (
-            str(er.path_type or "").strip() == "apron_link"
+            er_pt == "apron_link"
             and ph0 == PHASE_ARR_TAXI
             and agent.actual_apron_inblocks_abs_sec is None
         ):
@@ -6723,6 +6813,15 @@ def reserve_path(
     st.reserved_intersections.clear()
     aid = agent.id
     depth_cap = max(1, int(reservation_depth))
+    billed_memo: Dict[int, int] = {}
+
+    def _billed_at(idx_i: int) -> int:
+        bi = billed_memo.get(idx_i)
+        if bi is None:
+            bi = _lookahead_depth_billed_count(agent, idx_i, control_state)
+            billed_memo[idx_i] = bi
+        return bi
+
     for idx, eid in enumerate(lookahead):
         er = control_state.edge_resources.get(eid)
         if er is None:
@@ -6738,7 +6837,7 @@ def reserve_path(
             continue
         if not _edge_uses_full_depth_reservation(agent, idx, control_state):
             continue
-        billed = _lookahead_depth_billed_count(agent, idx, control_state)
+        billed = _billed_at(idx)
         if billed > depth_cap:
             continue
         if aid not in er.reserved_by:
@@ -6753,7 +6852,7 @@ def reserve_path(
         else:
             if not _edge_uses_full_depth_reservation(agent, k, control_state):
                 continue
-            bk = _lookahead_depth_billed_count(agent, k, control_state)
+            bk = _billed_at(k)
             if bk > depth_cap:
                 continue
         iid = er_k.intersection_out
@@ -7727,10 +7826,13 @@ def _single_full_reservation_pass(
         st.clearance = "PROCEED"
         st.wait_reason = None
 
+    eligible = [ag for ag in agents if _agent_eligible_for_reservation_pass(ag)]
+    rank_cache = {ag.id: get_agent_priority_rank(ag) for ag in eligible}
+
     def _decision_sort_key(ag: Flight) -> Tuple[int, int, int, float, float, str]:
         st0 = control_state.agent_states.get(ag.id)
         tw = float(st0.total_wait_sec) if st0 else 0.0
-        pr = get_agent_priority_rank(ag)
+        pr = rank_cache[ag.id]
         eldt_i = (
             int(round(float(ag.eldt_anchor_sec)))
             if ag.eldt_anchor_sec is not None
@@ -7746,17 +7848,14 @@ def _single_full_reservation_pass(
             str(ag.id),
         )
 
-    ordered = sorted(
-        [ag for ag in agents if _agent_eligible_for_reservation_pass(ag)],
-        key=_decision_sort_key,
-    )
+    ordered = sorted(eligible, key=_decision_sort_key)
     stand_arrival_book: Dict[str, int] = {}
     stand_cooldown_index = _build_stand_pushback_clearance_index(agents)
     for ag in ordered:
         st = control_state.agent_states.get(ag.id)
         if st is None:
             continue
-        st.priority_rank = get_agent_priority_rank(ag)
+        st.priority_rank = rank_cache[ag.id]
         if _agent_deadlock_ghost_at_time(st, t_dec):
             continue
         motion_td = _arr_touchdown_motion_abs_sec(
@@ -7968,9 +8067,9 @@ def apply_movement_controls(
                     st.clearance = "WAIT"
                     st.wait_reason = f"runway_occupied:{er0.runway_id}"
     _apply_same_direction_following_caps(control_state, agents, ppm, t_end)
-    dep_rows = _touchdown_dep_window_rows_by_runway(agents, dep_release_buffer_sec=20.0)
-    arr_by_rw = _agents_by_arr_runway(agents)
-    arr_prefix = _touchdown_arrival_prefix_index(arr_by_rw)
+    dep_rows, arr_by_rw, arr_prefix = _touchdown_motion_indexes(
+        agents, dep_release_buffer_sec=20.0
+    )
     for ag in agents:
         # Do not use touchdown cache: prior agents may have moved / exited runway this tick.
         td = _compute_arr_touchdown_motion_abs_sec(
