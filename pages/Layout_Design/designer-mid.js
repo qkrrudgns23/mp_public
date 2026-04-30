@@ -113,6 +113,7 @@
       if (state.simDurationSec <= state.simStartSec) slider.disabled = true;
       else slider.disabled = false;
     }
+    if (typeof renderFlightSimSliderDeadlockMarkers === 'function') renderFlightSimSliderDeadlockMarkers();
     updateFlightSimPlaybackLabelsDom();
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }

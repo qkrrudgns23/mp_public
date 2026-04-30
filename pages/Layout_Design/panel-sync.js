@@ -558,6 +558,11 @@
     state.simPlaybackPositionsByFlightId = hasPositions ? positions : null;
     state.simPlaybackScheduleSnapshot = scheduleList.length ? scheduleList.slice() : null;
     state.simPlaybackTimelinesEvictedForMemory = false;
+    if (typeof deriveDeadlockGhostPlaybackFromPayload === 'function') {
+      state.simDeadlockGhostPlayback = deriveDeadlockGhostPlaybackFromPayload(payload, state.flights);
+    } else {
+      state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
+    }
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
     } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();

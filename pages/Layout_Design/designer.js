@@ -1188,6 +1188,8 @@
     /** True when timelines were evicted from flights but ``simPlaybackPositionsByFlightId`` still holds data. */
     simPlaybackTimelinesEvictedForMemory: false,
     simPlaybackDockVisible: false,
+    /** Derived after Pro Sim: first deadlockGhost sample per flight; slider markers + left dock banner. */
+    simDeadlockGhostPlayback: { events: [], bodyLines: '', resolveCount: 0 },
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
     showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
@@ -1598,6 +1600,21 @@
         ban.hidden = true;
         ban.setAttribute('aria-hidden', 'true');
         banT.textContent = '';
+      }
+    }
+    const dlBan = document.getElementById('deadlockGhostBanner');
+    const dlBanT = document.getElementById('deadlockGhostBannerText');
+    const dlp = state.simDeadlockGhostPlayback || { events: [], bodyLines: '', resolveCount: 0 };
+    const showDeadlock = !!state.hasSimulationResult && ((dlp.events && dlp.events.length > 0) || (dlp.resolveCount > 0));
+    if (dlBan && dlBanT) {
+      if (showDeadlock) {
+        dlBan.hidden = false;
+        dlBan.setAttribute('aria-hidden', 'false');
+        dlBanT.textContent = dlp.bodyLines || (dlp.resolveCount > 0 ? ('Deadlock auto-resolve recorded ' + dlp.resolveCount + ' time(s).') : '');
+      } else {
+        dlBan.hidden = true;
+        dlBan.setAttribute('aria-hidden', 'true');
+        dlBanT.textContent = '';
       }
     }
     const allow = !!state.designerPageUpdateFresh && !hasRetFail;
@@ -2905,6 +2922,7 @@
       }
     }
     state.hasSimulationResult = false;
+    state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
   }
   function evictFlightPlaybackTimelinesWhenPlayBlocked() {
     if (!state.simPlaybackPositionsByFlightId || typeof state.simPlaybackPositionsByFlightId !== 'object') return false;
@@ -2983,6 +3001,67 @@
     state.simPlaybackTimelinesEvictedForMemory = false;
     refreshHasSimulationResultFromPlaybackSources();
     return true;
+  }
+  function deriveDeadlockGhostPlaybackFromPayload(payload, flights) {
+    const empty = { events: [], bodyLines: '', resolveCount: 0 };
+    if (!payload || typeof payload !== 'object') return empty;
+    const positions = payload.positions;
+    if (!positions || typeof positions !== 'object') return empty;
+    const resolveCount = Number(payload.deadlock_resolve_event_count);
+    const rc = isFinite(resolveCount) && resolveCount > 0 ? Math.floor(resolveCount) : 0;
+    const byT = new Map();
+    (flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const raw = positions[String(f.id)];
+      if (!Array.isArray(raw)) return;
+      for (let i = 0; i < raw.length; i++) {
+        const p = raw[i];
+        if (!p || !(p.deadlockGhost === true || p.deadlock_ghost === true)) continue;
+        const t = Number(p.t);
+        if (!isFinite(t)) continue;
+        const tr = Math.round(t);
+        const label = String(f.reg || '').trim() || String(f.flightNumber || f.id || '').trim() || String(f.id);
+        if (!byT.has(tr)) byT.set(tr, []);
+        const arr = byT.get(tr);
+        if (arr.indexOf(label) < 0) arr.push(label);
+        break;
+      }
+    });
+    const entries = Array.from(byT.entries()).sort(function(a, b) { return a[0] - b[0]; });
+    const events = entries.map(function(e) { return { t_abs: e[0], labels: e[1].slice() }; });
+    let bodyLines = '';
+    if (events.length) {
+      bodyLines = events.map(function(ev) {
+        const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
+        const names = ev.labels.join(', ');
+        return timeStr + ' — Aircraft ' + names + ' entered deadlock ghost.';
+      }).join('\n');
+    } else if (rc > 0) {
+      bodyLines = 'Deadlock resolve was recorded ' + rc + ' time(s), but no ghost samples were found in positions.';
+    }
+    return { events: events, bodyLines: bodyLines, resolveCount: rc };
+  }
+  function renderFlightSimSliderDeadlockMarkers() {
+    const host = document.getElementById('flightSimSliderMarkers');
+    if (!host) return;
+    host.textContent = '';
+    const span = Number(state.simDurationSec) - Number(state.simStartSec);
+    if (!(span > 1e-6)) return;
+    const dlp = state.simDeadlockGhostPlayback;
+    const evs = (dlp && Array.isArray(dlp.events)) ? dlp.events : [];
+    const lo = Number(state.simStartSec);
+    const hi = Number(state.simDurationSec);
+    evs.forEach(function(ev) {
+      const t = Number(ev.t_abs);
+      if (!isFinite(t)) return;
+      if (t < lo - 2 || t > hi + 2) return;
+      const pct = 100 * (t - lo) / span;
+      const dot = document.createElement('span');
+      dot.className = 'sim-slider-deadlock-dot';
+      dot.style.left = Math.max(0, Math.min(100, pct)) + '%';
+      dot.setAttribute('title', 'DeadLock @ ' + formatTotalSecondsToHHMMSS(t));
+      host.appendChild(dot);
+    });
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
@@ -3084,6 +3163,7 @@
     state.simPlaybackPositionsByFlightId = hasPositions ? positions : null;
     state.simPlaybackScheduleSnapshot = scheduleList.length ? scheduleList.slice() : null;
     state.simPlaybackTimelinesEvictedForMemory = false;
+    state.simDeadlockGhostPlayback = deriveDeadlockGhostPlaybackFromPayload(payload, state.flights);
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
     } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
@@ -8407,6 +8487,7 @@
       if (state.simDurationSec <= state.simStartSec) slider.disabled = true;
       else slider.disabled = false;
     }
+    if (typeof renderFlightSimSliderDeadlockMarkers === 'function') renderFlightSimSliderDeadlockMarkers();
     updateFlightSimPlaybackLabelsDom();
     if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
   }
@@ -18767,6 +18848,7 @@
         }).then(function(layoutObj) {
           try {
             state.hasSimulationResult = false;
+            state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
             applyLayoutObject(layoutObj);
             if (typeof resizeCanvas === 'function') resizeCanvas();
             if (typeof reset2DView === 'function') reset2DView();
@@ -18907,6 +18989,7 @@
             if (!obj || typeof obj !== 'object') { throw new Error('invalid_response'); }
             try {
               state.hasSimulationResult = false;
+              state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
               applyLayoutObject(obj);
               resizeCanvas();
               reset2DView();

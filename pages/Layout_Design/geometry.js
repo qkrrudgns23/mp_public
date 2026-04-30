@@ -149,6 +149,21 @@
         banT.textContent = '';
       }
     }
+    const dlBan = document.getElementById('deadlockGhostBanner');
+    const dlBanT = document.getElementById('deadlockGhostBannerText');
+    const dlp = state.simDeadlockGhostPlayback || { events: [], bodyLines: '', resolveCount: 0 };
+    const showDeadlock = !!state.hasSimulationResult && ((dlp.events && dlp.events.length > 0) || (dlp.resolveCount > 0));
+    if (dlBan && dlBanT) {
+      if (showDeadlock) {
+        dlBan.hidden = false;
+        dlBan.setAttribute('aria-hidden', 'false');
+        dlBanT.textContent = dlp.bodyLines || (dlp.resolveCount > 0 ? ('Deadlock auto-resolve recorded ' + dlp.resolveCount + ' time(s).') : '');
+      } else {
+        dlBan.hidden = true;
+        dlBan.setAttribute('aria-hidden', 'true');
+        dlBanT.textContent = '';
+      }
+    }
     const allow = !!state.designerPageUpdateFresh && !hasRetFail;
     if (btn) {
       btn.disabled = !allow;
