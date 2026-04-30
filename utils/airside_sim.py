@@ -5337,7 +5337,8 @@ def _apply_prep_to_agent(
     control_state: SimulationControlState,
     sim_time: float,
 ) -> None:
-    st = control_state.agent_states.get(agent.id)
+    agent_states_get_ap = control_state.agent_states.get
+    st = agent_states_get_ap(agent.id)
     if st is None:
         return
     agent.edge_ids = list(prep.edge_ids)
@@ -5737,7 +5738,8 @@ def _agent_occupies_temp_stand_slot(
     tid = str(ag.temp_stand_id or "").strip()
     if not tid:
         return None
-    st0 = control_state.agent_states.get(ag.id)
+    agent_states_get_ts = control_state.agent_states.get
+    st0 = agent_states_get_ts(ag.id)
     if st0 is not None and _agent_deadlock_ghost_at_time(st0, float(t_abs)):
         return None
     # Physical occupancy only: agent must be PARKED at the temp stand
@@ -6004,28 +6006,33 @@ def refresh_resource_occupancy(
     rad_px = NODE_OCCUPANCY_RADIUS_M * ppm
     t_abs = float(sim_time_abs)
     rw_lag = float(runway_release_lag_sec)
+    edge_resources = control_state.edge_resources
+    stand_resources = control_state.stand_resources
+    runway_resources = control_state.runway_resources
+    intersection_resources = control_state.intersection_resources
+    agent_states_get = control_state.agent_states.get
     for ag in agents:
         td = _arr_touchdown_motion_abs_sec(
             ag, agents, rw_lag, control_state=control_state
         )
         if td is not None and t_abs + 1e-9 < float(td):
             continue
-        st_ag = control_state.agent_states.get(ag.id)
+        st_ag = agent_states_get(ag.id)
         if st_ag is not None and _agent_deadlock_ghost_at_time(st_ag, t_abs):
             continue
         if not ag.edge_ids:
             temp_wait = _agent_occupies_temp_stand_slot(ag, t_abs, control_state)
             if temp_wait:
-                sr_w = control_state.stand_resources.get(temp_wait)
+                sr_w = stand_resources.get(temp_wait)
                 if sr_w is not None and ag.id not in sr_w.occupied_by:
                     sr_w.occupied_by.append(ag.id)
             continue
         eid0 = str(ag.edge_ids[0])
-        er = control_state.edge_resources.get(eid0)
+        er = edge_resources.get(eid0)
         if er and ag.id not in er.occupied_by:
             er.occupied_by.append(ag.id)
         if er and er.runway_id:
-            rr = control_state.runway_resources.get(str(er.runway_id))
+            rr = runway_resources.get(str(er.runway_id))
             if rr and ag.id not in rr.occupied_by:
                 rr.occupied_by.append(ag.id)
         dep_rw = str(ag.dep_runway_id or "").strip()
@@ -6040,17 +6047,17 @@ def refresh_resource_occupancy(
             and ph0 in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE)
             and pt0 in ("runway", "runway_taxiway")
         ):
-            rr_d = control_state.runway_resources.get(dep_rw)
+            rr_d = runway_resources.get(dep_rw)
             if rr_d and ag.id not in rr_d.occupied_by:
                 rr_d.occupied_by.append(ag.id)
         sid_slot = _agent_occupies_apron_stand_slot(ag, t_abs, control_state)
         if sid_slot:
-            sr = control_state.stand_resources.get(sid_slot)
+            sr = stand_resources.get(sid_slot)
             if sr is not None and ag.id not in sr.occupied_by:
                 sr.occupied_by.append(ag.id)
         temp_slot = _agent_occupies_temp_stand_slot(ag, t_abs, control_state)
         if temp_slot:
-            sr_t = control_state.stand_resources.get(temp_slot)
+            sr_t = stand_resources.get(temp_slot)
             if sr_t is not None and ag.id not in sr_t.occupied_by:
                 sr_t.occupied_by.append(ag.id)
         if not g or not er or not ag.segment_endpoints:
@@ -6066,7 +6073,7 @@ def refresh_resource_occupancy(
             if ni < 0 or ni >= len(g.nodes):
                 continue
             if path_dist(pxy, g.nodes[ni]) <= rad_px:
-                ir = control_state.intersection_resources.get(nid)
+                ir = intersection_resources.get(nid)
                 if ir and ag.id not in ir.occupied_by:
                     ir.occupied_by.append(ag.id)
 
@@ -6116,8 +6123,9 @@ def compare_agents(agent_a: Flight, agent_b: Flight, control_state: SimulationCo
         return -1
     if pa > pb:
         return 1
-    sa = control_state.agent_states.get(agent_a.id)
-    sb = control_state.agent_states.get(agent_b.id)
+    agent_states_ca = control_state.agent_states.get
+    sa = agent_states_ca(agent_a.id)
+    sb = agent_states_ca(agent_b.id)
     wa = float(sa.total_wait_sec if sa else 0.0)
     wb = float(sb.total_wait_sec if sb else 0.0)
     if wa > wb:
@@ -6158,7 +6166,8 @@ def _target_apron_stand_occupied_by_other(
     sid = str(agent.apron_stand_id or "").strip()
     if not sid:
         return False
-    sr = control_state.stand_resources.get(sid)
+    stand_get_tgt = control_state.stand_resources.get
+    sr = stand_get_tgt(sid)
     if sr is None:
         return False
     aid = str(agent.id)
@@ -6359,23 +6368,23 @@ def get_lookahead_edges(
     n: int,
     control_state: SimulationControlState,
 ) -> List[str]:
-    if not agent.edge_ids:
+    eids = agent.edge_ids
+    if not eids:
         return []
     T = max(1, int(n))
-    n_e = len(agent.edge_ids)
+    n_e = len(eids)
     k_max = min(n_e, max(T * 80, 400))
     if agent.segment_path_types_norm and len(agent.segment_path_types_norm) == n_e:
         edge_pts: Sequence[str] = agent.segment_path_types_norm
     else:
         ptn = control_state.edge_path_type_norm
         if ptn:
-            edge_pts = [ptn.get(str(agent.edge_ids[i]), "taxiway") for i in range(k_max)]
+            edge_pts = [ptn.get(str(eids[i]), "taxiway") for i in range(k_max)]
         else:
             edge_pts = [
-                str(_layout_edge_path_type(control_state, str(agent.edge_ids[i])) or "").strip()
+                str(_layout_edge_path_type(control_state, str(eids[i])) or "").strip()
                 for i in range(k_max)
             ]
-    eids = agent.edge_ids
     c_loop = 0
     has_apron = False
     has_apron_taxi_prefix = False
@@ -6440,7 +6449,8 @@ def _layout_edge_path_type(control_state: SimulationControlState, eid: str) -> s
         out = ptn.get(key)
         if out is not None:
             return out
-    er = control_state.edge_resources.get(key)
+    er_get_lept = control_state.edge_resources.get
+    er = er_get_lept(key)
     if er is None:
         return "taxiway"
     return str(er.path_type or "taxiway")
@@ -6491,14 +6501,32 @@ def _lookahead_depth_billed_count(
         return 0
     upto = min(hi + 1, len(eids))
     ptn = control_state.edge_path_type_norm
-    if ptn:
-        pts: List[str] = [ptn.get(str(eids[j]), "taxiway") for j in range(0, upto)]
-    else:
-        pts = [
-            str(_layout_edge_path_type(control_state, str(eids[j])) or "").strip()
-            for j in range(0, upto)
-        ]
-    return _lookahead_depth_billed_count_pts(pts, hi)
+    # Single-pass (no ``pts`` list): must match ``_lookahead_depth_billed_count_pts`` semantics.
+    c = 0
+    has_apron_link = False
+    prev_pt: Optional[str] = None
+    for j in range(0, upto):
+        if ptn:
+            pt = ptn.get(str(eids[j]), "taxiway")
+        else:
+            pt = str(_layout_edge_path_type(control_state, str(eids[j])) or "").strip()
+        if pt == "apron_taxiway":
+            prev_pt = pt
+            continue
+        if pt == "apron_link":
+            has_apron_link = True
+        if pt == "taxiway":
+            if j == 0:
+                c += 1
+            else:
+                if prev_pt != "taxiway":
+                    c += 1
+        else:
+            c += 1
+        prev_pt = pt
+    if has_apron_link:
+        c += 1
+    return c
 
 
 def _edge_uses_full_depth_reservation(
@@ -6521,24 +6549,27 @@ def _stand_arrival_book_if_pipeline_proceed(
         return
     if not ag.edge_phases or str(ag.edge_phases[0]) != PHASE_ARR_TAXI:
         return
-    st = control_state.agent_states.get(ag.id)
+    agent_states_sb = control_state.agent_states.get
+    st = agent_states_sb(ag.id)
     if st is None or not st.reserved_edges:
         return
     has_apron = False
     ptn = control_state.edge_path_type_norm
+    edge_resources_get = control_state.edge_resources.get
     for eid in st.reserved_edges:
         if ptn:
             if ptn.get(str(eid), "taxiway") == "apron_link":
                 has_apron = True
                 break
             continue
-        er0 = control_state.edge_resources.get(str(eid))
+        er0 = edge_resources_get(str(eid))
         if er0 is not None and str(er0.path_type or "").strip() == "apron_link":
             has_apron = True
             break
     if not has_apron:
         return
-    sr = control_state.stand_resources.get(sid)
+    stand_res_sb = control_state.stand_resources.get
+    sr = stand_res_sb(sid)
     if sr is None or ag.id in sr.occupied_by:
         return
     stand_arrival_book[sid] = int(stand_arrival_book.get(sid, 0)) + 1
@@ -6585,7 +6616,8 @@ def _agent_current_runway_id(
 ) -> Optional[str]:
     if not ag.edge_ids:
         return None
-    er0 = control_state.edge_resources.get(str(ag.edge_ids[0]))
+    edge_get_arc = control_state.edge_resources.get
+    er0 = edge_get_arc(str(ag.edge_ids[0]))
     if er0 is None or not er0.runway_id:
         return None
     return str(er0.runway_id)
@@ -6669,15 +6701,26 @@ def _blocking_temp_stand_for_edge(
     control_state: SimulationControlState,
     edge_id: str,
     agent_id: str,
+    *,
+    edge_incident_temp_stands: Optional[Dict[str, List[str]]] = None,
 ) -> Optional[str]:
     eid = str(edge_id).strip()
     aid = str(agent_id)
     if not eid:
         return None
+    stand_get = control_state.stand_resources.get
+    if edge_incident_temp_stands is not None:
+        for ts_id in edge_incident_temp_stands.get(eid, ()):
+            sr = stand_get(str(ts_id))
+            if sr is None:
+                continue
+            if any(str(x) != aid for x in sr.occupied_by):
+                return str(ts_id)
+        return None
     for ts_id, e_set in control_state.temp_stand_incident_edges.items():
         if eid not in e_set:
             continue
-        sr = control_state.stand_resources.get(str(ts_id))
+        sr = stand_get(str(ts_id))
         if sr is None:
             continue
         if any(str(x) != aid for x in sr.occupied_by):
@@ -6703,6 +6746,7 @@ def _current_edge_separation_ok(
     t_eff = float(sim_time)
     rw_lag = float(runway_release_lag_sec)
     eid_sp = str(er.edge_id)
+    agent_states_get_sep = control_state.agent_states.get
     for o in agents:
         if not o.edge_ids or str(o.edge_ids[0]) != eid_sp:
             continue
@@ -6713,7 +6757,7 @@ def _current_edge_separation_ok(
         )
         if o_td is not None and t_eff + 1e-9 < float(o_td):
             continue
-        st_o = control_state.agent_states.get(o.id)
+        st_o = agent_states_get_sep(o.id)
         if _agent_deadlock_ghost_at_time(st_o, t_eff):
             continue
         if (
@@ -6750,28 +6794,43 @@ def can_reserve_path(
     t_abs = float(sim_time)
     depth_cap = max(1, int(reservation_depth))
     ptn = control_state.edge_path_type_norm
+    temp_edges = control_state.temp_stand_incident_edges
+    if temp_edges:
+        edge_incident_temp_stands: Dict[str, List[str]] = {}
+        for ts_id, e_set in temp_edges.items():
+            ts_key = str(ts_id)
+            for raw_e in e_set:
+                edge_incident_temp_stands.setdefault(str(raw_e), []).append(ts_key)
+    else:
+        edge_incident_temp_stands = {}
+
+    edge_resources = control_state.edge_resources
+    stand_resources = control_state.stand_resources
+    intersection_resources = control_state.intersection_resources
+    runway_resources = control_state.runway_resources
+    ph0 = str(agent.edge_phases[0]) if agent.edge_phases else ""
+    pt0 = (
+        str(agent.segment_path_types[0] or "")
+        if agent.segment_path_types and len(agent.segment_path_types) == len(agent.edge_ids)
+        else ""
+    )
+    dep_rwy = str(agent.dep_runway_id or "").strip()
+    aid_key = str(aid)
 
     for idx, eid in enumerate(lookahead):
-        er = control_state.edge_resources.get(eid)
+        billed_here: Optional[int] = None
+        er = edge_resources.get(eid)
         if er is None:
             return False, f"unknown_edge:{eid}"
-        for ts_id, e_set in control_state.temp_stand_incident_edges.items():
-            if str(eid) not in e_set:
-                continue
-            sr_t = control_state.stand_resources.get(str(ts_id))
+        for ts_id in edge_incident_temp_stands.get(str(eid), ()):
+            sr_t = stand_resources.get(ts_id)
             if sr_t is None:
                 continue
-            if any(str(x) != str(aid) for x in sr_t.occupied_by):
+            if any(str(x) != aid_key for x in sr_t.occupied_by):
                 return False, f"temp_stand_busy:{ts_id}"
         # Never bypass runway safety via forced-open.
         if er.forced_open and not er.runway_id:
             continue
-        ph0 = str(agent.edge_phases[0]) if agent.edge_phases else ""
-        pt0 = (
-            str(agent.segment_path_types[0] or "")
-            if agent.segment_path_types and len(agent.segment_path_types) == len(agent.edge_ids)
-            else ""
-        )
         er_pt = (
             ptn.get(str(er.edge_id), "taxiway")
             if ptn
@@ -6784,7 +6843,7 @@ def can_reserve_path(
         ):
             sid = str(agent.apron_stand_id or "").strip()
             if sid:
-                sr = control_state.stand_resources.get(sid)
+                sr = stand_resources.get(sid)
                 if sr is not None:
                     cap = max(1, int(sr.capacity))
                     phys_others = len({x for x in sr.occupied_by if x != aid})
@@ -6806,7 +6865,7 @@ def can_reserve_path(
             and ph0 in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE)
             and pt0 in ("runway", "runway_taxiway")
         ):
-            rr_dep = control_state.runway_resources.get(dep_rwy)
+            rr_dep = runway_resources.get(dep_rwy)
             if rr_dep is not None and not rr_dep.forced_open:
                 if _runway_rot_reservation_blocked(
                     t_abs,
@@ -6835,7 +6894,7 @@ def can_reserve_path(
         ):
             rem_m = _dep_runway_entry_remaining_m(agent, ppm)
             if rem_m is not None and rem_m <= float(DEP_RUNWAY_HOLD_BUFFER_M):
-                rr_dep_b = control_state.runway_resources.get(dep_rwy)
+                rr_dep_b = runway_resources.get(dep_rwy)
                 if rr_dep_b is not None and not rr_dep_b.forced_open:
                     if _runway_rot_reservation_blocked(
                         t_abs,
@@ -6853,10 +6912,10 @@ def can_reserve_path(
                         return False, f"runway_dep_busy:{dep_rwy}"
         if er.runway_id:
             rwid = str(er.runway_id)
-            rr = control_state.runway_resources.get(rwid)
+            rr = runway_resources.get(rwid)
             if rr is not None:
                 # Hard invariant: runway occupancy by another aircraft blocks reservation.
-                if any(str(x) != str(aid) for x in rr.occupied_by):
+                if any(str(x) != aid_key for x in rr.occupied_by):
                     return False, f"runway_occupied:{rwid}"
                 if rr.forced_open:
                     continue
@@ -6873,7 +6932,9 @@ def can_reserve_path(
                 if ou_rw >= max(1, int(rr.capacity)):
                     return False, f"runway_capacity:{rwid}"
         else:
-            billed = _lookahead_depth_billed_count(agent, idx, control_state)
+            if billed_here is None:
+                billed_here = _lookahead_depth_billed_count(agent, idx, control_state)
+            billed = billed_here
             interior = not _edge_uses_full_depth_reservation(agent, idx, control_state)
             if interior or billed > depth_cap:
                 cap_use = _resource_use_count(er.occupied_by, [], aid)
@@ -6894,10 +6955,12 @@ def can_reserve_path(
         if idx < len(lookahead) - 1:
             ir_id = er.intersection_out
             if ir_id:
-                ir = control_state.intersection_resources.get(ir_id)
+                ir = intersection_resources.get(ir_id)
                 if ir is not None and not ir.forced_open:
                     depth_ir = depth_cap
-                    billed_ir = _lookahead_depth_billed_count(agent, idx, control_state)
+                    if billed_here is None:
+                        billed_here = _lookahead_depth_billed_count(agent, idx, control_state)
+                    billed_ir = billed_here
                     interior_ir = not _edge_uses_full_depth_reservation(
                         agent, idx, control_state
                     )
@@ -6947,8 +7010,9 @@ def _update_deadlock_stagnation_probe(
 ) -> None:
     ppm = max(float(pixels_per_meter), 1e-9)
     t = float(sim_time)
+    agent_states_get_us = control_state.agent_states.get
     for ag in agents:
-        st = control_state.agent_states.get(ag.id)
+        st = agent_states_get_us(ag.id)
         if st is None:
             continue
         if _agent_deadlock_ghost_at_time(st, t):
@@ -7007,6 +7071,9 @@ def reserve_path(
     aid = agent.id
     depth_cap = max(1, int(reservation_depth))
     billed_memo: Dict[int, int] = {}
+    edge_resources = control_state.edge_resources
+    runway_resources = control_state.runway_resources
+    intersection_resources = control_state.intersection_resources
 
     def _billed_at(idx_i: int) -> int:
         bi = billed_memo.get(idx_i)
@@ -7016,7 +7083,7 @@ def reserve_path(
         return bi
 
     for idx, eid in enumerate(lookahead):
-        er = control_state.edge_resources.get(eid)
+        er = edge_resources.get(eid)
         if er is None:
             continue
         if er.runway_id:
@@ -7024,7 +7091,7 @@ def reserve_path(
                 continue
             if aid not in er.reserved_by:
                 er.reserved_by.append(aid)
-            rr = control_state.runway_resources.get(str(er.runway_id))
+            rr = runway_resources.get(str(er.runway_id))
             if rr is not None and aid not in rr.reserved_by:
                 rr.reserved_by.append(aid)
             continue
@@ -7036,7 +7103,7 @@ def reserve_path(
         if aid not in er.reserved_by:
             er.reserved_by.append(aid)
     for k in range(len(lookahead) - 1):
-        er_k = control_state.edge_resources.get(lookahead[k])
+        er_k = edge_resources.get(lookahead[k])
         if er_k is None or not er_k.intersection_out:
             continue
         if er_k.runway_id:
@@ -7049,7 +7116,7 @@ def reserve_path(
             if bk > depth_cap:
                 continue
         iid = er_k.intersection_out
-        ir = control_state.intersection_resources.get(iid)
+        ir = intersection_resources.get(iid)
         if ir is not None and aid not in ir.reserved_by:
             ir.reserved_by.append(aid)
         st.reserved_intersections.append(iid)
@@ -7098,8 +7165,9 @@ def resolve_head_on_conflict(
     if not detect_head_on_conflict(agent_a, agent_b, control_state):
         return
     eid0 = str(agent_a.edge_ids[0])
-    sta = control_state.agent_states.get(agent_a.id)
-    stb = control_state.agent_states.get(agent_b.id)
+    aget_h = control_state.agent_states.get
+    sta = aget_h(agent_a.id)
+    stb = aget_h(agent_b.id)
     if sta and _agent_deadlock_ghost_at_time(sta, sim_time):
         return
     if stb and _agent_deadlock_ghost_at_time(stb, sim_time):
@@ -7120,7 +7188,7 @@ def resolve_head_on_conflict(
         loser = agent_b
     else:
         loser = agent_a
-    st = control_state.agent_states.get(loser.id)
+    st = aget_h(loser.id)
     if st:
         st.clearance = "YIELD"
         st.wait_reason = "head_on"
@@ -7177,8 +7245,9 @@ def compute_following_speed(
     control_state: SimulationControlState,
     ppm: float,
 ) -> float:
+    er_get_cfs = control_state.edge_resources.get
     er_id = str(follower.edge_ids[0]) if follower.edge_ids else ""
-    er = control_state.edge_resources.get(er_id)
+    er = er_get_cfs(er_id)
     min_sep = float(er.min_separation_m) if er else DEFAULT_MIN_SEPARATION_M
     if not follower.segment_endpoints or not leader.segment_endpoints:
         return float(TAXI_SPEED_MPS)
@@ -7203,7 +7272,8 @@ def compute_following_speed(
 def can_enter_intersection(
     agent: Flight, intersection_id: str, control_state: SimulationControlState
 ) -> bool:
-    ir = control_state.intersection_resources.get(intersection_id)
+    ir_get_cei = control_state.intersection_resources.get
+    ir = ir_get_cei(intersection_id)
     if ir is None or ir.forced_open:
         return True
     return (
@@ -7219,7 +7289,8 @@ def reserve_intersection(
     sim_time: float,
 ) -> None:
     del sim_time
-    ir = control_state.intersection_resources.get(intersection_id)
+    ir_get_rs = control_state.intersection_resources.get
+    ir = ir_get_rs(intersection_id)
     if ir is None:
         return
     if agent.id not in ir.reserved_by:
@@ -7737,12 +7808,13 @@ def _reroute_all_moving_flights_after_temp_park_arrival(
     """
     n_ok = 0
     t_abs = float(sim_time_abs)
+    agent_states_get_tp = control_state.agent_states.get
     for ag in sorted(agents, key=lambda a: str(a.id)):
         if not ag.edge_ids or not ag.edge_phases:
             continue
         if str(ag.edge_phases[0]) == PHASE_LANDING:
             continue
-        st = control_state.agent_states.get(ag.id)
+        st = agent_states_get_tp(ag.id)
         if st is None or _agent_deadlock_ghost_at_time(st, t_abs):
             continue
         fo = flights_by_id.get(str(ag.id))
@@ -7836,7 +7908,8 @@ def should_reroute_agent(
     sim_time: float,
     information: Dict[str, Any],
 ) -> bool:
-    st = control_state.agent_states.get(agent.id)
+    agent_states_get_sr = control_state.agent_states.get
+    st = agent_states_get_sr(agent.id)
     if st is None or not agent.edge_ids or not agent.edge_phases:
         return False
     if _agent_deadlock_ghost_at_time(st, float(sim_time)):
@@ -7898,9 +7971,10 @@ def _try_one_aggressive_deadlock_reroute(
     taxiway_h: float,
 ) -> bool:
     agents_by_id: Dict[str, Flight] = {str(a.id): a for a in agents}
+    agent_states_get_dl = control_state.agent_states.get
 
     def _wait_rank(fid: str) -> float:
-        st = control_state.agent_states.get(fid)
+        st = agent_states_get_dl(fid)
         return float(st.total_wait_sec) if st else 0.0
 
     for fid in sorted(deadlocked_ids, key=_wait_rank, reverse=True):
@@ -8021,9 +8095,11 @@ def _single_full_reservation_pass(
 
     eligible = [ag for ag in agents if _agent_eligible_for_reservation_pass(ag)]
     rank_cache = {ag.id: get_agent_priority_rank(ag) for ag in eligible}
+    tie_bucket = int(float(sim_time)) // 10
+    agent_states_get = control_state.agent_states.get
 
     def _decision_sort_key(ag: Flight) -> Tuple[int, int, int, float, float, str]:
-        st0 = control_state.agent_states.get(ag.id)
+        st0 = agent_states_get(ag.id)
         tw = float(st0.total_wait_sec) if st0 else 0.0
         pr = rank_cache[ag.id]
         eldt_i = (
@@ -8031,7 +8107,7 @@ def _single_full_reservation_pass(
             if ag.eldt_anchor_sec is not None
             else 0
         )
-        eldt_tie = _stable_tie_seed(eldt_i, str(ag.id), int(sim_time) // 10)
+        eldt_tie = _stable_tie_seed(eldt_i, str(ag.id), tie_bucket)
         return (
             pr,
             eldt_i,
@@ -8045,7 +8121,7 @@ def _single_full_reservation_pass(
     stand_arrival_book: Dict[str, int] = {}
     stand_cooldown_index = _build_stand_pushback_clearance_index(agents)
     for ag in ordered:
-        st = control_state.agent_states.get(ag.id)
+        st = agent_states_get(ag.id)
         if st is None:
             continue
         st.priority_rank = rank_cache[ag.id]
@@ -8177,10 +8253,12 @@ def _apply_same_direction_following_caps(
 ) -> None:
     by_edge: Dict[str, List[Flight]] = {}
     t_eff = float(sim_time_abs)
+    agent_states_get_sf = control_state.agent_states.get
+    edge_resources_get_sf = control_state.edge_resources.get
     for ag in agents:
         if not ag.edge_ids or ag.control_halt:
             continue
-        st = control_state.agent_states.get(ag.id)
+        st = agent_states_get_sf(ag.id)
         if st and _agent_deadlock_ghost_at_time(st, t_eff):
             continue
         if st and st.clearance in ("WAIT", "YIELD"):
@@ -8203,7 +8281,7 @@ def _apply_same_direction_following_caps(
             if not detect_same_direction_conflict(ag_f, ag_l, control_state):
                 continue
             gap_m = along_l - along_f
-            er = control_state.edge_resources.get(eid)
+            er = edge_resources_get_sf(eid)
             min_sep = float(er.min_separation_m) if er else DEFAULT_MIN_SEPARATION_M
             if gap_m >= min_sep + FOLLOW_GAP_BUFFER_M:
                 continue
@@ -8228,10 +8306,22 @@ def apply_movement_controls(
     ppm = max(float(pixels_per_meter), 1e-9)
     t_end = float(sim_time_abs)
     rw_lag = float(runway_release_lag_sec)
+    temp_edges_mc = control_state.temp_stand_incident_edges
+    if temp_edges_mc:
+        edge_incident_temp_mc: Dict[str, List[str]] = {}
+        for ts_id, e_set in temp_edges_mc.items():
+            ts_key = str(ts_id)
+            for raw_e in e_set:
+                edge_incident_temp_mc.setdefault(str(raw_e), []).append(ts_key)
+    else:
+        edge_incident_temp_mc = {}
+    agent_states_get_m = control_state.agent_states.get
+    edge_resources_get_m = control_state.edge_resources.get
+    runway_resources_get_m = control_state.runway_resources.get
     for ag in agents:
         ag.control_halt = False
         ag.control_speed_cap_ms = None
-        st = control_state.agent_states.get(ag.id)
+        st = agent_states_get_m(ag.id)
         if st is None:
             continue
         td0 = _arr_touchdown_motion_abs_sec(
@@ -8243,7 +8333,10 @@ def apply_movement_controls(
             ag.control_halt = True
         elif ag.edge_ids:
             ts_block = _blocking_temp_stand_for_edge(
-                control_state, str(ag.edge_ids[0]), str(ag.id)
+                control_state,
+                str(ag.edge_ids[0]),
+                str(ag.id),
+                edge_incident_temp_stands=edge_incident_temp_mc,
             )
             if ts_block:
                 ag.control_halt = True
@@ -8252,9 +8345,9 @@ def apply_movement_controls(
         if st.clearance in ("WAIT", "YIELD"):
             ag.control_halt = True
         if ag.edge_ids:
-            er0 = control_state.edge_resources.get(str(ag.edge_ids[0]))
+            er0 = edge_resources_get_m(str(ag.edge_ids[0]))
             if er0 is not None and er0.runway_id:
-                rr0 = control_state.runway_resources.get(str(er0.runway_id))
+                rr0 = runway_resources_get_m(str(er0.runway_id))
                 if rr0 is not None and any(str(x) != str(ag.id) for x in rr0.occupied_by):
                     ag.control_halt = True
                     st.clearance = "WAIT"

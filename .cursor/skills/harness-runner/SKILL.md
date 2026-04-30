@@ -51,7 +51,29 @@ description: Execute and iterate the airside simulation harness loop (smoke -> r
 
 불필요한 대형 파일 전체 읽기 금지.
 
+## Golden-locked performance loop (``airside_sim.py``)
+
+목적: **동작/산출 골든 JSON**을 깨지 않으면서 wall time·지역 연산만 줄이는 패치를 **한 건씩** 쌓는다.
+
+**한 사이클 (코드 수정 직후 1회):**
+
+1. 최소 패치 적용 (**Think 70%** 절차는 변경 없음 — 대안 비교 후 한 가지만).
+2. ``python -m harness.golden_opt_cycle [--tag LABEL]``
+   - 내부: ``harness.smoke`` → (default_layout / large_flight / MNL_OSM 각각) ``harness.run`` → 해당 골든과 ``golden_compare`` (deep ``==``, 부동 허용오차 없음).
+3. **exit 1** 또는 골든 FAIL → 해당 패치 **즉시 원복** 후 원인 근거를 잡고 다시 진행한다.
+4. **exit 0** → 패치 채택. 필요 시 같은 출력 로그의 wall 시간으로 전후 비교만 기록.
+
+**연속 최적화(마라톤, 최대 ``N``회 시도)** — 레지스트리에 등록된 패치를 순서대로 적용하고 **매 패치 후** 위와 동일한 골든 사이클을 돌린다:
+
+- ``python -m harness.golden_opt_marathon --iterations 50``
+  - 패치 정의 목록은 ``harness/golden_opt_marathon_steps.py`` 의 ``_PATCHES`` 순서이다.
+  - 인덱스가 레지스트리를 넘기면 해당 iteration은 SKIP(확장할 때까지)한다. 더 이상 스킵 없이 멈추려면 ``--abort-on-registry-exhaust`` 참고.
+  - 한 iteration에서 골든이 깨지면 **그 패치만** 파일에서 되돌리고 프로그램이 exit 1 한다.
+
+동일 코드로 wall time 만 반복 측정하는 것 (**``bench_triple_loop``** 등, 코드 변경 없음)은 OS 지터 분석에는 쓰이지만 **계약 검증으로는 패치 채택 근거가 되지 않는다.** 성능 튜닝의 PASS/FAIL은 항상 **골든 3페어**와 ``golden_opt_cycle`` exit 코드로만 판별한다.
+
 ## Standard loop
+
 
 1. 목표 정의(이번 실행의 성공 기준 1~2개)
 2. **사고 단계 (Think 70%)**
@@ -88,6 +110,10 @@ description: Execute and iterate the airside simulation harness loop (smoke -> r
   - `python -m harness.run --input data/Result_storage/default_layout_sim_input.json --output data/Result_storage/_validation_sim_result.json`
 - Managed loop:
   - `python -m harness.loop --input data/Result_storage/default_layout_sim_input.json --output data/Result_storage/_validation_sim_result.json --max-runs 2`
+- Golden triple gate (변경 후 1회, smoke + run×3 + compare×3):
+  - ``python -m harness.golden_opt_cycle [--tag LABEL]``
+- Golden marathon (레지스트리 패치 순서대로 각각 동일 게이트, 기본 최대 반복 예: 50회):
+  - ``python -m harness.golden_opt_marathon --iterations 50``
 
 ## Logging requirements
 

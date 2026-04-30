@@ -27,6 +27,10 @@ def main(argv: list[str] | None = None) -> int:
         _ROOT / "harness" / "run.py",
         _ROOT / "harness" / "validate.py",
         _ROOT / "harness" / "golden_compare.py",
+        _ROOT / "harness" / "golden_opt_cycle.py",
+        _ROOT / "harness" / "golden_opt_marathon.py",
+        _ROOT / "harness" / "golden_opt_marathon_steps.py",
+        _ROOT / "harness" / "bench_triple_loop.py",
         _ROOT / "harness" / "smoke.py",
         _ROOT / "harness" / "multi_apron_regression.py",
     ]
