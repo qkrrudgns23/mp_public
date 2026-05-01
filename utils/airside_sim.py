@@ -7401,17 +7401,7 @@ def _update_deadlock_stagnation_probe(
             continue
         if _agent_deadlock_ghost_at_time(st, t):
             continue
-        td_ag = (
-            td_mid_u.get(ag.id)
-            if td_mid_u is not None
-            else _arr_touchdown_motion_abs_sec(
-                ag,
-                agents,
-                rw_u,
-                control_state=control_state,
-            )
-        )
-        if td_ag is not None and t + 1e-9 < float(td_ag):
+        if st.clearance not in ("WAIT", "YIELD"):
             st.stagnation_anchor_sec = None
             st.progress_snapshot_edge_id = None
             continue
@@ -7423,7 +7413,17 @@ def _update_deadlock_stagnation_probe(
             st.stagnation_anchor_sec = None
             st.progress_snapshot_edge_id = None
             continue
-        if st.clearance not in ("WAIT", "YIELD"):
+        td_ag = (
+            td_mid_u.get(ag.id)
+            if td_mid_u is not None
+            else _arr_touchdown_motion_abs_sec(
+                ag,
+                agents,
+                rw_u,
+                control_state=control_state,
+            )
+        )
+        if td_ag is not None and t + 1e-9 < float(td_ag):
             st.stagnation_anchor_sec = None
             st.progress_snapshot_edge_id = None
             continue
@@ -7482,7 +7482,8 @@ def reserve_path(
                 if idx < depth_cap:
                     if aid not in er.reserved_by:
                         er.reserved_by.append(aid)
-                    rr = rw_get_rp(str(er.runway_id))
+                    rw_id_rp = er.runway_id
+                    rr = rw_get_rp(rw_id_rp)
                     if rr is not None and aid not in rr.reserved_by:
                         rr.reserved_by.append(aid)
             elif _edge_uses_full_depth_reservation(agent, idx, control_state):
@@ -7518,8 +7519,7 @@ def _agent_reserved_lookahead_contains_edge(
     """True if this tick's reserved lookahead includes the edge (after ``reserve_path``)."""
     if st is None or not st.reserved_edges:
         return False
-    e = str(edge_id)
-    return any(str(x) == e for x in st.reserved_edges)
+    return edge_id in st.reserved_edges
 
 
 def detect_head_on_conflict(
