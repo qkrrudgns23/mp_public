@@ -5828,29 +5828,29 @@ def _try_splice_temp_stand_arrival_detour(
     pt_old = list(ag.segment_path_types) if ag.segment_path_types else []
     guv_old = list(ag.segment_graph_uv) if ag.segment_graph_uv else []
 
-    new_eids = e_old[:first_arr] + list(temp_prep.edge_ids) + e_old[dep_idx:]
+    # Route only to the temp stand for now.  The original departure tail is kept
+    # in ``post_temp_route_tail_prep`` and is reattached after temp->apron Arr_taxi
+    # is injected once the destination apron clears.
+    new_eids = e_old[:first_arr] + list(temp_prep.edge_ids)
     ptn = len(new_eids)
     ag.edge_ids = deque(new_eids)
     ag.edge_phases = deque(
-        ph_old[:first_arr] + list(temp_prep.segment_phases) + ph_old[dep_idx:]
+        ph_old[:first_arr] + list(temp_prep.segment_phases)
     )
     ag.segment_endpoints = deque(
         se_old[:first_arr]
         + [(tuple(a), tuple(b)) for a, b in temp_prep.segment_endpoints]
-        + se_old[dep_idx:]
     )
     ag.segment_v0_ms = deque(
         v0_old[:first_arr]
         + list(temp_prep.segment_start_velocity_ms)
-        + v0_old[dep_idx:]
     )
     ag.segment_accel_ms2 = deque(
         acc_old[:first_arr]
         + list(temp_prep.segment_accel_ms2)
-        + acc_old[dep_idx:]
     )
     if temp_prep.segment_path_types and len(temp_prep.segment_path_types) == len(temp_prep.edge_ids):
-        new_pt = pt_old[:first_arr] + list(temp_prep.segment_path_types) + pt_old[dep_idx:]
+        new_pt = pt_old[:first_arr] + list(temp_prep.segment_path_types)
     else:
         new_pt = []
     if len(new_pt) != ptn:
@@ -5858,7 +5858,7 @@ def _try_splice_temp_stand_arrival_detour(
     ag.segment_path_types = deque(new_pt)
     _refresh_agent_segment_path_types_norm(ag)
     if temp_prep.segment_graph_uv and len(temp_prep.segment_graph_uv) == len(temp_prep.edge_ids):
-        new_guv = guv_old[:first_arr] + list(temp_prep.segment_graph_uv) + guv_old[dep_idx:]
+        new_guv = guv_old[:first_arr] + list(temp_prep.segment_graph_uv)
         if len(new_guv) != ptn:
             new_guv = []
         ag.segment_graph_uv = deque(new_guv)
