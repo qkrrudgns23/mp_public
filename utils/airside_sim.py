@@ -716,6 +716,22 @@ class Flight:
     arr_temp_detour_decided: bool = False
     # Absolute time when destination apron was first observed unoccupied (inject gated by TEMP_TO_APRON_HOLD_SEC).
     temp_dest_apron_cleared_abs_sec: Optional[float] = None
+    # Sticky flag for `_ensure_agent_apron_lists`: True once apron list lengths
+    # are confirmed to match `n = max(1, len(apron_segments), len(dwell_sec_list))`.
+    # Index-only writes to those lists do not change length, so the invariant
+    # holds for the life of the agent. Default False forces a one-time setup.
+    _apron_lists_valid: bool = False
+    # Per-tick dirty flag for the touchdown-motion cache inputs:
+    # set True when ``_finish_edge_segment`` writes ``runway_entry_abs_sec`` or
+    # ``path_completed_abs_sec``. ``_refresh_touchdown_motion_cache`` clears it.
+    # Default True forces the first cache refresh to run unconditionally.
+    _td_cache_input_dirty: bool = True
+    # Dirty flag for the per-stand pushback-clearance index cache:
+    # set True by ``_agent_stamp_current_offblocks`` (offblocks list write) and by
+    # ``_agent_set_current_apron_index`` (may shift ``apron_stand_id`` /
+    # ``actual_apron_offblocks_abs_sec``). Cleared after a full index rebuild.
+    # Default True forces the first build to populate the cache.
+    _pushback_clearance_dirty: bool = True
 
 
 @dataclass
@@ -803,6 +819,13 @@ class SimulationControlState:
     temp_stand_incident_edges: Dict[str, set[str]] = field(default_factory=dict)
     # Per simulation tick: _compute_arr_touchdown_motion_abs_sec per flight (invalidated after movement).
     touchdown_motion_by_id: Optional[Dict[str, Optional[float]]] = field(
+        default=None, repr=False
+    )
+    # Cross-call cache for the per-stand pushback-clearance cooldown index.
+    # Reused while no agent's ``_pushback_clearance_dirty`` is True; rebuilt
+    # otherwise. Mutated in-place by ``_stand_pushback_clearance_merge_agent``
+    # incremental updates inside the history loop.
+    stand_cooldown_index_cache: Optional["StandCooldownIndex"] = field(
         default=None, repr=False
     )
     # Stripped layout path_type by edge id (built once in ``build_resource_model``).
@@ -3076,6 +3099,8 @@ def _agents_by_front_edge_index(agents: Sequence[Flight]) -> Dict[str, List[Flig
 
 
 def _ensure_agent_apron_lists(agent: Flight) -> None:
+    if agent._apron_lists_valid:
+        return
     apron_segs = agent.apron_segments
     dsl = agent.dwell_sec_list
     apron_n = len(apron_segs)
@@ -3087,6 +3112,7 @@ def _ensure_agent_apron_lists(agent: Flight) -> None:
         a3 = agent.pushback_finished_abs_sec_list
         a4 = agent.dep_taxi_start_abs_sec_list
         if len(a1) >= n and len(a2) >= n and len(a3) >= n and len(a4) >= n:
+            agent._apron_lists_valid = True
             return
     if not dsl:
         agent.dwell_sec_list = [float(agent.dwell_sec)] * n
@@ -3103,6 +3129,7 @@ def _ensure_agent_apron_lists(agent: Flight) -> None:
         arr = getattr(agent, attr)
         while len(arr) < n:
             arr.append(None)
+    agent._apron_lists_valid = True
 
 
 def _agent_current_apron_index(agent: Flight) -> int:
@@ -3131,6 +3158,10 @@ def _agent_set_current_apron_index(agent: Flight, idx: int) -> None:
             agent.dep_taxi_start_sim_time = None
     if ci < len(agent.actual_apron_offblocks_abs_sec_list):
         agent.actual_apron_offblocks_abs_sec = agent.actual_apron_offblocks_abs_sec_list[ci]
+    # `apron_stand_id` and the singular `actual_apron_offblocks_abs_sec` may have
+    # shifted to a different segment slot; either flips the agent's contribution
+    # to `_build_stand_pushback_clearance_index`.
+    agent._pushback_clearance_dirty = True
 
 
 def _agent_stamp_current_inblocks(agent: Flight, t_abs: float) -> None:
@@ -3147,6 +3178,7 @@ def _agent_stamp_current_offblocks(agent: Flight, t_abs: float) -> None:
     idx = _agent_current_apron_index(agent)
     if agent.actual_apron_offblocks_abs_sec_list[idx] is None:
         agent.actual_apron_offblocks_abs_sec_list[idx] = float(t_abs)
+        agent._pushback_clearance_dirty = True
     _agent_set_current_apron_index(agent, idx)
 
 
@@ -3200,6 +3232,7 @@ def _finish_edge_segment(
             agent.temp_park_arrival_trigger_global_reroute = True
         elif not agent.awaiting_apron_from_temp:
             agent.path_completed_abs_sec = float(sim_time_abs)
+            agent._td_cache_input_dirty = True
     new_ph = str(agent.edge_phases[0]) if agent.edge_phases else ""
     if (
         sim_time_abs is not None
@@ -3208,6 +3241,7 @@ def _finish_edge_segment(
     ):
         if agent.runway_entry_abs_sec is None:
             agent.runway_entry_abs_sec = float(sim_time_abs)
+            agent._td_cache_input_dirty = True
         inf_lineup = (
             information if isinstance(information, dict) else _load_information_json()
         )
@@ -3755,6 +3789,8 @@ def _refresh_touchdown_motion_cache(
         )
         for ag in agents
     }
+    for ag in agents:
+        ag._td_cache_input_dirty = False
 
 
 def _arr_touchdown_motion_abs_sec(
@@ -6573,6 +6609,33 @@ def _build_stand_pushback_clearance_index(agents: List[Flight]) -> StandCooldown
     return out
 
 
+def _get_stand_pushback_clearance_index(
+    control_state: SimulationControlState, agents: List[Flight]
+) -> StandCooldownIndex:
+    """Cached wrapper around `_build_stand_pushback_clearance_index`.
+
+    Returns the cached index unchanged when no agent has flipped
+    ``_pushback_clearance_dirty`` since the last build. Otherwise rebuilds the
+    full index and clears every agent's flag. Mirrors legacy semantics exactly:
+    rebuild produces the same dict the legacy per-call build would have.
+    """
+
+    cache = control_state.stand_cooldown_index_cache
+    if cache is not None:
+        any_dirty = False
+        for ag in agents:
+            if ag._pushback_clearance_dirty:
+                any_dirty = True
+                break
+        if not any_dirty:
+            return cache
+    fresh = _build_stand_pushback_clearance_index(agents)
+    for ag in agents:
+        ag._pushback_clearance_dirty = False
+    control_state.stand_cooldown_index_cache = fresh
+    return fresh
+
+
 def _stand_pushback_clearance_merge_agent(
     out: StandCooldownIndex,
     agent: Flight,
@@ -6633,12 +6696,30 @@ def _stand_pipeline_allows_apron_inblocks_stamp(
     return True
 
 
+def _build_stand_phys_set_snapshot(
+    control_state: SimulationControlState,
+) -> Dict[str, Set[str]]:
+    """One-shot per-tick snapshot: ``stand_id → set(occupied_by ids)``.
+
+    Mirrors the legacy per-agent ``{x for x in sr.occupied_by if x != aid}`` set
+    contents (de-duplicated occupant ids). Callers compute ``phys_others`` as
+    ``len(s) - (1 if aid in s else 0)`` to match the original semantics exactly.
+    """
+
+    out: Dict[str, Set[str]] = {}
+    for sid_k, sr_k in control_state.stand_resources.items():
+        out[str(sid_k)] = set(sr_k.occupied_by)
+    return out
+
+
 def _destination_stand_history_snap(
     ag: Flight,
     control_state: SimulationControlState,
     agents: List[Flight],
     t_abs: float,
     stand_cooldown_index: Optional[StandCooldownIndex] = None,
+    *,
+    phys_set_by_stand: Optional[Dict[str, Set[str]]] = None,
 ) -> Optional[DestinationStandHistorySnap]:
     """
     Per-step stand/apron diagnostics for export: matches ``can_reserve_path`` stand slot check when
@@ -6646,6 +6727,8 @@ def _destination_stand_history_snap(
     id is missing from ``stand_resources``, reservation does not apply a stand block — export
     ``capacity`` 0 and ``standPipelineOpen`` True.
     Pipeline book uses the last heavy-decision tick snapshot (``stand_arrival_book_snapshot``).
+    ``phys_set_by_stand``: optional per-tick snapshot (built once via
+    ``_build_stand_phys_set_snapshot``) to skip the per-agent ``set(...)`` rebuild.
     """
     sid = str(ag.apron_stand_id or "").strip()
     if not sid:
@@ -6660,7 +6743,14 @@ def _destination_stand_history_snap(
     if sr is None:
         return (sid, 0, 0, booked, cd, True)
     cap = max(1, int(sr.capacity))
-    phys_others = len({x for x in sr.occupied_by if x != aid})
+    if phys_set_by_stand is not None:
+        s = phys_set_by_stand.get(sid)
+        if s is None:
+            phys_others = 0
+        else:
+            phys_others = len(s) - (1 if aid in s else 0)
+    else:
+        phys_others = len({x for x in sr.occupied_by if x != aid})
     allow = phys_others + booked < cap and not cd
     return (sid, cap, phys_others, booked, cd, allow)
 
@@ -8539,7 +8629,7 @@ def _single_full_reservation_pass(
 
     ordered = sorted(eligible, key=_decision_sort_key)
     stand_arrival_book: Dict[str, int] = {}
-    stand_cooldown_index = _build_stand_pushback_clearance_index(agents)
+    stand_cooldown_index = _get_stand_pushback_clearance_index(control_state, agents)
     edge_ix_res = _temp_stand_edge_incident_index(control_state.temp_stand_incident_edges)
     td_mid_rp = control_state.touchdown_motion_by_id
     for ag in ordered:
@@ -9036,6 +9126,13 @@ def run_simulation(
 
     agents = list(agents_by_id.values())
 
+    # Per-agent scalar arrays (NumPy) for the vectorized touchdown-motion refresh.
+    # Built once: ``eldt_anchor`` / ``eldt_raw`` / ``arr_runway_id`` / ``dep_runway_id``
+    # are all immutable post-construction, and the mutable columns
+    # (``runway_entry`` / ``path_completed`` / ``exit_runway``) are synced in
+    # place from agent attributes inside ``_refresh_touchdown_motion_cache``
+    # whenever ``_td_cache_input_dirty`` is set by the three real mutators
+    # (``_finish_edge_segment`` ×2 and ``_try_record_exit_runway_abs_sec``).
     control_state = build_resource_model(
         layout,
         information,
@@ -9196,8 +9293,18 @@ def run_simulation(
                 rw_release_lag,
             ),
         )
-        _refresh_touchdown_motion_cache(control_state, agents, rw_release_lag)
-        stand_cooldown_index = _build_stand_pushback_clearance_index(agents)
+        # 2nd touchdown-motion refresh: only when ``apply_movement_controls``
+        # actually mutated ``runway_entry_abs_sec`` or ``path_completed_abs_sec``
+        # (the only inputs that can change between the tick-top refresh and the
+        # history loop). Flags are set in ``_finish_edge_segment`` and cleared
+        # by ``_refresh_touchdown_motion_cache``.
+        if any(ag._td_cache_input_dirty for ag in agents):
+            _refresh_touchdown_motion_cache(control_state, agents, rw_release_lag)
+        stand_cooldown_index = _get_stand_pushback_clearance_index(control_state, agents)
+        # Per-tick stand occupancy snapshot for `_destination_stand_history_snap`.
+        # `sr.occupied_by` is not mutated inside the agent loop below
+        # (`_agent_stamp_current_offblocks` only writes per-segment time lists).
+        stand_phys_snapshot = _build_stand_phys_set_snapshot(control_state)
         agent_states_hist_tick = control_state.agent_states.get
         edge_hist_tick = control_state.edge_resources.get
         td_mid_hist = control_state.touchdown_motion_by_id
@@ -9275,7 +9382,12 @@ def run_simulation(
                 else False
             )
             _dst_snap = _destination_stand_history_snap(
-                ag, control_state, agents, t_tick, stand_cooldown_index
+                ag,
+                control_state,
+                agents,
+                t_tick,
+                stand_cooldown_index,
+                phys_set_by_stand=stand_phys_snapshot,
             )
             _st_dbg = st_h
             _eid0 = str(eids_hist[0]) if eids_hist else ""

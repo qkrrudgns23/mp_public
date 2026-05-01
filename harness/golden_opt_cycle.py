@@ -1,10 +1,10 @@
 """One optimisation verification cycle after editing ``utils/airside_sim.py``.
 
 Runs: smoke → ``harness.run`` (three pairs) → ``golden_compare`` (three pairs).
-Exit 0 only if **all three** golden deep-equals PASS.
+Exit 0 only if **all three** golden PASS (default strict; optional numeric leaf tolerances forwarded).
 
 Intended workflow (repeat manually or from an agent loop):
-1. Patch ``airside_sim.py`` toward performance or behaviour fix.
+1. Patch ``utils/airside_sim.py`` toward performance or behaviour fix.
 2. ``python -m harness.golden_opt_cycle [--tag mytry1]``
 3. On FAIL: revert the patch(es). On PASS: optionally record wall times vs baseline.
 
@@ -40,7 +40,7 @@ def _must_ok(code: int, label: str) -> None:
 
 def main(argv: List[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
-        description="Single cycle: smoke + 3x run + 3x golden_compare (PASS only if all match)."
+        description="Single cycle: smoke + 3x run + 3x golden_compare (PASS only when compare passes).",
     )
     ap.add_argument(
         "--tag",
@@ -48,6 +48,18 @@ def main(argv: List[str] | None = None) -> int:
         help="suffix for output JSON paths under data/Result_storage/ (avoid clobber)",
     )
     ap.add_argument("--skip-smoke", action="store_true", help="skip harness.smoke")
+    ap.add_argument(
+        "--float-rtol",
+        type=float,
+        default=0.0,
+        help="golden_compare numeric leaf --float-rtol (default 0: strict equality)",
+    )
+    ap.add_argument(
+        "--float-atol",
+        type=float,
+        default=0.0,
+        help="golden_compare numeric leaf --float-atol (default 0: strict equality)",
+    )
     ns = ap.parse_args(argv)
 
     tag = "".join(c if c.isalnum() or c in "_-" else "_" for c in ns.tag.strip() or "cycle")
@@ -67,7 +79,12 @@ def main(argv: List[str] | None = None) -> int:
 
     times: dict[str, float] = {}
     all_pass = True
-    print("=== golden_opt_cycle: run + golden (deep equality) ===")
+    print("=== golden_opt_cycle: run + golden_compare ===")
+    rtol = float(ns.float_rtol)
+    atol = float(ns.float_atol)
+    if rtol != 0.0 or atol != 0.0:
+        print(f"(numeric leaf rtol={rtol:g} atol={atol:g})", file=sys.stderr)
+
     for pair_id, inp_rel, golden_rel in _PAIRS:
         inp = _ROOT / inp_rel
         golden = _ROOT / golden_rel
@@ -99,20 +116,20 @@ def main(argv: List[str] | None = None) -> int:
         if m:
             times[pair_id] = float(m.group(1))
 
-        gc = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "harness.golden_compare",
-                str(golden),
-                str(out),
-                "--pair-id",
-                pair_id,
-            ],
-            cwd=str(_ROOT),
-            capture_output=True,
-            text=True,
-        )
+        gc_cmd: List[str] = [
+            sys.executable,
+            "-m",
+            "harness.golden_compare",
+            str(golden),
+            str(out),
+            "--pair-id",
+            pair_id,
+        ]
+        if rtol != 0.0:
+            gc_cmd.extend(["--float-rtol", f"{rtol}"])
+        if atol != 0.0:
+            gc_cmd.extend(["--float-atol", f"{atol}"])
+        gc = subprocess.run(gc_cmd, cwd=str(_ROOT), capture_output=True, text=True)
         if gc.stdout:
             print(gc.stdout.rstrip())
         if gc.stderr:

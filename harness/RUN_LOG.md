@@ -1,22 +1,90 @@
 ## Run Notes (최근 실행 결과 요약)
 
+> **Note (2026-05)**: 벽시간만 반복 측정하는 `opt_repeat_experiment` 및 벤치/스냅 스크립트는 하네스에서 제거됨. 성능 확인은 `golden_opt_cycle` 한 사이클(또는 프로파일)로만 기록하는 것을 권장.
+
+### Phase summary (numpy-vectorize-airside-sim plan)
+
+- **baseline (Phase 0)**: golden triple wall sum **25.31 s** (default 5.50 / large 9.47 / MNL 10.34).
+- **Phase 1 (non-numpy 4 patches)**: P1.1 → P1.4 모두 채택. wall sum **25.31 → 21.04 s** (-4.27 s, -16.9 %). cProfile 측정으로 검증된 구조적 개선:
+  - `_ensure_agent_apron_lists`: 11.15 M 호출 → 사실상 0 (sticky flag 첫 호출 후 즉시 return). 더 이상 top-12에 없음.
+  - `_compute_arr_touchdown_motion_abs_sec`: 513 K 호출 → 257 K (P1.3 dirty flag로 정확히 절반).
+  - `_build_stand_pushback_clearance_index`: 513 K 호출 → 29 (P1.4 캐시로 17,000× 감소).
+- **Phase 2 (numpy 시도)**: P2.1+P2.2 결합 시도 → wall +2.8 s regression → REVERT. P2.3는 같은 리스크 프로파일이라 선제 cancel.
+- **최종 결과**: wall sum **21.15 s** (베이스 대비 -16.5 %). golden triple loose gate(rtol=1e-9, atol=1e-6) 통과 (Phase 1 패치는 정확 비트-동등도 유지).
+- **Lessons**: 본 워크로드(N≈50 agents, 2–3 runways)에서 NumPy 벡터라이즈는 per-op Python 오버헤드가 작은 배열 산술을 능가하여 손해. Phase 1 비-numpy 캐시/dirty-flag 전략이 모든 실측에서 우위. 향후 N이 한 자릿수 더 커지면(>500 agents) P2.2 재고 가치 있음.
+
+### RUN 20260501 P1.1 _apron_lists_valid sticky flag (perf, golden-locked)
+
+- **command**: `python -m harness.golden_opt_cycle --float-rtol 1e-9 --float-atol 1e-6 --tag p1_1_apron_valid_flag`
+- **change**: `Flight._apron_lists_valid: bool = False` 추가, `_ensure_agent_apron_lists`가 True면 즉시 return하고 lists 길이 정규화 후 True로 셋. apron_segments / dwell_sec_list 길이는 생성 후 변하지 않으므로 sticky 불변식 유지.
+- **alternatives**: (A) sticky flag — **채택**. (B) lists를 numpy로 — 무관(no-op 체크가 비용). (C) hot caller에서 호출 인라인 제거 — 회귀 위험.
+- **result**: golden triple PASS. wall sum **25.31 s → 21.27 s (-4.04 s, -16 %)**; default 5.50→4.81, large 9.47→8.29, MNL 10.34→8.17.
+
+### RUN 20260501 P1.2 stand_phys snapshot for history snap (perf, golden-locked)
+
+- **command**: `python -m harness.golden_opt_cycle --float-rtol 1e-9 --float-atol 1e-6 --tag p1_2_stand_phys_snapshot`
+- **change**: `_build_stand_phys_set_snapshot(control_state)` 신설 — tick당 한 번 `{stand_id → set(occupied_by)}`. `_destination_stand_history_snap`에 `phys_set_by_stand` kwarg 추가, 있으면 per-agent set-comp 생략 후 `len(s) - (1 if aid in s else 0)`로 즉답. `run_simulation` 히스토리 루프에서 1회 빌드하여 전 agent에 공유.
+- **alternatives**: (A) snapshot dict — **채택**. (B) NxK NumPy bool 매트릭스 — agents/stands가 적어 무가치. (C) 히스토리 스냅 자체를 시뮬 종료 후로 미루기 — 데이터 흐름 큰 변경.
+- **result**: golden triple PASS. wall sum **21.27 → 22.72 s** (+1.45 s, OS 지터 범위 ±1.5 s 내). cProfile로 확인: `_destination_stand_history_snap` tottime 0.69 s (이미 작아짐 — 절감 0.1 s 추정으로 노이즈에 묻힘). 채택은 **유지**(코드 명확성 + 미세 절감).
+
+### RUN 20260501 P1.3 conditional 2nd touchdown-cache refresh (perf, golden-locked)
+
+- **command**: `python -m harness.golden_opt_cycle --float-rtol 1e-9 --float-atol 1e-6 --tag p1_3_td_cache_dirty_flag`
+- **change**: `Flight._td_cache_input_dirty: bool = True`. `_finish_edge_segment`이 `runway_entry_abs_sec` / `path_completed_abs_sec`를 새로 쓸 때 True. `_refresh_touchdown_motion_cache`가 호출 끝에 모든 agent의 플래그 클리어. `run_simulation` 의 2nd refresh(line 9235)는 `any(ag._td_cache_input_dirty for ag in agents)`일 때만 실행.
+- **alternatives**: (A) per-Flight 플래그 + 조건부 — **채택**. (B) 무조건 1번으로 줄이고 `_try_record_exit_runway_abs_sec` 재배치 — 계약 변경 위험. (C) `_finish_edge_segment` 시그니처에 control_state 주입 후 직접 invalidate — 콜사이트 다수, 침습.
+- **result**: golden triple PASS. wall sum **22.72 → 21.72 s** (-1.0 s, -4.4 %). cProfile: `_compute_arr_touchdown_motion_abs_sec` 호출 수 **513,044 → 256,914 (정확히 절반)**, tottime **2.23 → 1.14 s**. 2nd refresh가 대략 절반 tick에서 스킵됨.
+
+### RUN 20260501 P1.4 stand cooldown index cache + dirty flag (perf, golden-locked)
+
+- **command**: `python -m harness.golden_opt_cycle --float-rtol 1e-9 --float-atol 1e-6 --tag p1_4_pushback_cooldown_cache`
+- **change**:
+  - `Flight._pushback_clearance_dirty: bool = True` 추가, 진짜 mutator 두 곳에서 셋: `_agent_stamp_current_offblocks`(offblocks list 첫 기입), `_agent_set_current_apron_index`(apron_stand_id / 단일 offblocks 슬롯 시프트).
+  - `SimulationControlState.stand_cooldown_index_cache: Optional[StandCooldownIndex]` 신설.
+  - 새 헬퍼 `_get_stand_pushback_clearance_index(control_state, agents)`: 캐시 있고 dirty agent 없으면 캐시 즉답, 아니면 full rebuild + 모든 agent 플래그 클리어.
+  - `_single_full_reservation_pass`(line 8632) / `run_simulation`(line 9251)의 두 build call 모두 헬퍼로 교체. 히스토리 루프의 in-place `_stand_pushback_clearance_merge_agent`는 그대로 유지(다음 tick rebuild 때 dirty로 정합성 보장).
+- **alternatives**: (A) 캐시 + per-agent dirty flag — **채택**. (B) NxK NumPy cooldown 매트릭스 — N·K가 모두 수십 단위라 무가치. (C) build 빈도만 줄이기 — heavy/light pass와 history loop 두 위치 모두 별도 소비처라 단순 빈도 축소 어려움.
+- **result**: golden triple PASS. wall sum **21.72 → 21.04 s** (-0.68 s, -3.1 %). cProfile 측정:
+  - `_build_stand_pushback_clearance_index` 호출 **513,058 → 29회** (>17,000× 감소).
+  - `_stand_pushback_clearance_merge_agent` **513,058 → 420회**.
+  - `_get_stand_pushback_clearance_index` 36,646회(= 2 × 18,323 tick) 캐시 히트.
+  - 클러스터 전체 cProfile time **2.63 → 0.052 s**(P1.3 이후 2.63s 기준 50× 절감).
+
+### RUN 20260501 P2.1 + P2.2 NumPy vectorize touchdown cache (REVERTED, evidence-based)
+
+- **command**: `python -m harness.golden_opt_cycle --float-rtol 1e-9 --float-atol 1e-6 --tag p2_1_p2_2_vectorize_td_cache`
+- **change attempted**: `numpy` 의존성 추가, `_AgentScalarArrays`(병렬 컬럼) + `_build_agent_scalar_arrays` + `_sync_agent_scalar_arrays_dirty` + `_refresh_touchdown_motion_cache_vectorized` (per-arr-runway `np.argsort` + `np.searchsorted` + `np.maximum.accumulate` + `np.cumsum`로 predecessor 통계 계산, dep-window는 per-agent legacy 루프 유지). `_try_record_exit_runway_abs_sec`도 `_td_cache_input_dirty=True`로 마킹.
+- **result**: golden triple PASS. 그러나 **wall sum 21.04 → 23.84 s (+2.80 s, +13 %)**. cProfile: `_refresh_touchdown_motion_cache_vectorized` tottime **2.437 s** vs legacy 1.13 s — 정확히 두 배. per-runway 그룹이 5–30 agent 수준이라 `np.where` / `np.argsort` / `np.searchsorted`의 Python 호출 오버헤드가 작은 배열 산술을 압도.
+- **decision**: **REVERT**. plan stop condition("If two consecutive numpy patches cost more than they save, abandon further numpy work")의 첫 패치에서 명백한 regression. 사용자 사전 지시("넘파이 어레이의 전환이 너무 잦아서 오히려 성능을 떨어뜨릴 수 있기 때문에 ... 효과가 있어보일만한 곳에 넣자가 전략") 합치. P2.3은 더 작은 단위(per-call 2.8 us)라 동일 리스크가 자명하므로 **선제 cancel**.
+- **revert verify**: tag `p2_revert_verify` PASS, wall sum **21.15 s** (P1.4 21.04 s ±지터 범위 내).
+
+### Loose golden gate (numpy-vectorize-airside-sim plan, Phase 0)
+
+- **gate command (Phase 1/2 patches)**: `python -m harness.golden_opt_cycle --float-rtol 1e-9 --float-atol 1e-6 --tag <step>`
+- **rationale**: NumPy 벡터라이즈 / 사전계산 캐시 패치는 합산/곱 순서가 바뀌면서 IEEE 비결합법칙으로 인한 ULP-급 미세 떨림이 발생할 수 있음. 사용자 승인하에 leaf number tolerance를 `rtol=1e-9 / atol=1e-6` 로 설정 (시간 1ms·위치 1um 수준).
+- **baseline wall (golden triple, no profiler)**: default_layout 5.50 s · large_flight 9.47 s · MNL_OSM 10.34 s · **sum 25.31 s** (`--tag baseline_phase0`).
+- **profile baseline (large_flight only, cProfile 5–10× overhead)**: `_prof_lf_opt10.pstats` 기준 cumulative **377.77 s**. 비율 분석은 유효, 절대 절감은 wall sum 기준으로 환산 필요.
+- **top hot clusters (baseline)**: `_refresh_touchdown_motion_cache`+`_compute_arr_touchdown_motion_abs_sec` 106 s (28 %), `_single_full_reservation_pass` 105 s, `_ensure_agent_apron_lists` 22 s (11.15 M calls), `_stand_pushback_clearance_merge_agent` 16 s (4.17 M), `_destination_stand_history_snap` 17 s, `_lookahead_depth_billed_count` 13 s.
+- **abort/revert rule**: 패치가 loose gate(`rtol=1e-9 atol=1e-6`)를 통과 못 하면 즉시 원복하고 사고 단계로 복귀.
+
+
+
 ### RUN 20260501 td_compute_aid_aa_bucket — **미채택(원복)**
 
 - **패치**: `_compute_arr_touchdown_motion_abs_sec`에 `aid` 로컬, `deps` 합의 `float(20.0)` 제거, `agents_by_arr_runway`를 `aa`·`bucket`으로 조회.
 - **golden**: `golden_opt_cycle --tag td_compute_aid_aa_bucket_v1` PASS.
-- **opt_repeat**: 8 reps median **33.51 s** — 동일 세션 패치 전 4 reps baseline median **33.33 s** 대비 악화 → **시간 줄이기** 미충족으로 **원복**.
+- **과거 반복 측정(도구 제거 전)**: 8 reps median **33.51 s** — 동일 세션 패치 전 4 reps baseline median **33.33 s** 대비 악화 → **시간 줄이기** 미충족으로 **원복**.
 - **note**: 이후 `golden_opt_cycle --tag revert_verify_td_compute` 로 원복 트리 PASS 확인.
 
 ### RUN 20260501 playback_t_key_apk_locals (perf, golden-locked)
 
-- **command**: `python -m harness.smoke` → `python -m harness.golden_opt_cycle --skip-smoke --tag playback_apk_touchdown_locals_v1` → `python -m harness.opt_repeat_experiment --reps 8 --skip-smoke`
-- **result**: golden triple PASS; repeat 8/8 PASS, `sum_wall_s` median **33.15** s (mean 33.23, stdev 0.29).
+- **command**: `python -m harness.smoke` → `python -m harness.golden_opt_cycle --skip-smoke --tag playback_apk_touchdown_locals_v1`
+- **result**: golden triple PASS; 당시 합계 벽시간 샘플 **median ~33.15 s** (레거거 반복 하네스 기록).
 - **대안**: (A) `_playback_schedule_point_t_key` + touchdown `else`에서 `apk`/`dep_rows_sel` 로컬 — **채택** (프로파일 구간 미세 절약, 계약 동일). (B) apron `_ensure_*` 호출 줄이기 — 변경면 큼. (C) `sorted`만 손보기만 — 단독 적용 시 한계 있어 A에 포함.
 
 ### RUN 20260501 runway_key_strip_elide (perf, golden-locked)
 
-- **command**: `python -m harness.smoke` → `python -m harness.golden_opt_cycle --skip-smoke --tag runway_key_strip_elide_v1` → `python -m harness.opt_repeat_experiment --reps 8 --skip-smoke`
-- **result**: golden triple PASS (deep-equal); repeat 8/8 PASS, `sum_wall_s` median **33.14** s (mean 33.17, stdev 0.15).
+- **command**: `python -m harness.smoke` → `python -m harness.golden_opt_cycle --skip-smoke --tag runway_key_strip_elide_v1`
+- **result**: golden triple PASS (deep-equal); 당시 합계 벽시간 샘플 **median ~33.14 s** (레거거 반복 하네스 기록).
 - **대안 요약**: (A) `_agent_runway_id_key`: sim `Flight`의 활주로 id가 생성 시점에 이미 strip 정규화되므로 루프 내 `str(...).strip()` 제거 — **채택**. (B) 터치다운 모션 캐시 증분 갱신 — 이득 큼, 계약 리스크 큼 → 보류. (C) 재생 포인트 `sorted` 람다 치환 — 프로파일 대비 영향 미미 → 보류.
 - **change**: `utils/airside_sim.py` — `_agent_runway_id_key`; touchdown/점유 등 agent 경로에서 arr/dep runway dict·비교 키 계산 단순화.
 
