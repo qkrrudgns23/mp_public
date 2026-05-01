@@ -6336,7 +6336,7 @@ def refresh_resource_occupancy(
     td_mid = control_state.touchdown_motion_by_id
     for ag in agents:
         td = (
-            td_mid.get(str(ag.id))
+            td_mid.get(ag.id)
             if td_mid is not None
             else _arr_touchdown_motion_abs_sec(
                 ag, agents, rw_lag, control_state=control_state
@@ -6354,7 +6354,7 @@ def refresh_resource_occupancy(
                 if sr_w is not None and ag.id not in sr_w.occupied_by:
                     sr_w.occupied_by.append(ag.id)
             continue
-        eid0 = str(ag.edge_ids[0])
+        eid0 = ag.edge_ids[0]
         er = edge_get_occ(eid0)
         rwid0: Optional[str] = None
         if er and er.runway_id:
@@ -6366,9 +6366,9 @@ def refresh_resource_occupancy(
             if rr and ag.id not in rr.occupied_by:
                 rr.occupied_by.append(ag.id)
         dep_rw = _agent_runway_id_key(ag.dep_runway_id)
-        ph0 = str(ag.edge_phases[0]) if ag.edge_phases else ""
+        ph0 = ag.edge_phases[0] if ag.edge_phases else ""
         pt0 = (
-            str(ag.segment_path_types[0] or "")
+            (ag.segment_path_types[0] or "")
             if ag.segment_path_types and len(ag.segment_path_types) == len(ag.edge_ids)
             else ""
         )
@@ -9088,13 +9088,13 @@ def run_simulation(
                 ag_tp
                 for ag_tp in agents
                 if ag_tp.awaiting_apron_from_temp
-                or bool(str(ag_tp.temp_stand_id or "").strip())
+                or bool((ag_tp.temp_stand_id or "").strip())
                 or not ag_tp.arr_temp_detour_decided
             ],
             key=_temp_pipe_sort_key,
         )
         for ag in agents_temp_pipe:
-            ag_id_temp = str(ag.id)
+            ag_id_temp = ag.id
             fo = flights_by_id.get(ag_id_temp)
             if isinstance(fo, dict):
                 _try_inject_arr_taxi_from_temp_stand(
