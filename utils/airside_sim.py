@@ -3745,7 +3745,7 @@ def _refresh_touchdown_motion_cache(
         agents, dep_release_buffer_sec=20.0
     )
     control_state.touchdown_motion_by_id = {
-        str(ag.id): _compute_arr_touchdown_motion_abs_sec(
+        ag.id: _compute_arr_touchdown_motion_abs_sec(
             ag,
             agents,
             lag,
@@ -3766,7 +3766,7 @@ def _arr_touchdown_motion_abs_sec(
 ) -> Optional[float]:
     if control_state is not None and control_state.touchdown_motion_by_id is not None:
         t_mid = control_state.touchdown_motion_by_id
-        return t_mid.get(str(agent.id))
+        return t_mid.get(agent.id)
     return _compute_arr_touchdown_motion_abs_sec(agent, agents, runway_release_lag_sec)
 
 
@@ -7397,7 +7397,7 @@ def _update_deadlock_stagnation_probe(
         if _agent_deadlock_ghost_at_time(st, t):
             continue
         td_ag = (
-            td_mid_u.get(str(ag.id))
+            td_mid_u.get(ag.id)
             if td_mid_u is not None
             else _arr_touchdown_motion_abs_sec(
                 ag,
@@ -8506,7 +8506,6 @@ def _single_full_reservation_pass(
     rank_cache = {ag.id: get_agent_priority_rank(ag) for ag in eligible}
     tie_bucket = int(float(sim_time)) // 10
     agent_states_get = control_state.agent_states.get
-    id_str_cache = {ag.id: str(ag.id) for ag in eligible}
     tw_cache: Dict[Any, float] = {}
     tie_seed_cache: Dict[Any, int] = {}
     eldt_i_cache: Dict[Any, int] = {}
@@ -8514,14 +8513,13 @@ def _single_full_reservation_pass(
         st0 = agent_states_get(ag.id)
         aid = ag.id
         tw_cache[aid] = float(st0.total_wait_sec) if st0 else 0.0
-        id_s = id_str_cache[aid]
         eldt_i = (
             int(round(float(ag.eldt_anchor_sec)))
             if ag.eldt_anchor_sec is not None
             else 0
         )
         eldt_i_cache[aid] = eldt_i
-        tie_seed_cache[aid] = _stable_tie_seed(eldt_i, id_s, tie_bucket)
+        tie_seed_cache[aid] = _stable_tie_seed(eldt_i, aid, tie_bucket)
 
     def _decision_sort_key(ag: Flight) -> Tuple[int, int, int, float, float, str]:
         aid_k = ag.id
@@ -8531,7 +8529,7 @@ def _single_full_reservation_pass(
             tie_seed_cache[aid_k],
             -tw_cache[aid_k],
             -_edge_progress_ratio(ag),
-            id_str_cache[aid_k],
+            aid_k,
         )
 
     ordered = sorted(eligible, key=_decision_sort_key)
@@ -8547,7 +8545,7 @@ def _single_full_reservation_pass(
         if _agent_deadlock_ghost_at_time(st, t_dec):
             continue
         motion_td = (
-            td_mid_rp.get(id_str_cache[ag.id])
+            td_mid_rp.get(ag.id)
             if td_mid_rp is not None
             else _arr_touchdown_motion_abs_sec(
                 ag, agents, rw_lag, control_state=control_state
@@ -8745,7 +8743,7 @@ def apply_movement_controls(
         st = agent_states_get_m(ag.id)
         if st is None:
             continue
-        aid_mc = str(ag.id)
+        aid_mc = ag.id
         td0 = (
             td_mid_m.get(aid_mc)
             if td_mid_m is not None
@@ -8760,7 +8758,7 @@ def apply_movement_controls(
         elif ag.edge_ids:
             ts_block = _blocking_temp_stand_for_edge(
                 control_state,
-                str(ag.edge_ids[0]),
+                ag.edge_ids[0],
                 aid_mc,
                 edge_incident_temp_stands=edge_incident_temp_mc,
             )
@@ -8771,7 +8769,7 @@ def apply_movement_controls(
         if st.clearance in ("WAIT", "YIELD"):
             ag.control_halt = True
         if ag.edge_ids:
-            er0 = edge_resources_get_m(str(ag.edge_ids[0]))
+            er0 = edge_resources_get_m(ag.edge_ids[0])
             if er0 is not None and er0.runway_id:
                 rr0 = runway_resources_get_m(str(er0.runway_id))
                 if rr0 is not None and any(str(x) != aid_mc for x in rr0.occupied_by):
@@ -8785,7 +8783,7 @@ def apply_movement_controls(
     td_mid_move = control_state.touchdown_motion_by_id
     for ag in agents:
         td = (
-            td_mid_move.get(str(ag.id))
+            td_mid_move.get(ag.id)
             if td_mid_move is not None
             else _arr_touchdown_motion_abs_sec(
                 ag, agents, rw_lag, control_state=control_state
@@ -9206,7 +9204,7 @@ def run_simulation(
             # over the hold yield stable playback; touchdown motion still only starts after
             # `td_h` in `apply_movement_controls` above.
             td_h = (
-                td_mid_hist.get(str(ag.id))
+                td_mid_hist.get(ag.id)
                 if td_mid_hist is not None
                 else _arr_touchdown_motion_abs_sec(
                     ag, agents, rw_release_lag, control_state=control_state
