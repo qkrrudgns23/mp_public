@@ -3070,7 +3070,7 @@ def _agents_by_front_edge_index(agents: Sequence[Flight]) -> Dict[str, List[Flig
     for ag in agents:
         if not ag.edge_ids:
             continue
-        e0 = str(ag.edge_ids[0])
+        e0 = ag.edge_ids[0]
         ix.setdefault(e0, []).append(ag)
     return ix
 
@@ -6292,12 +6292,12 @@ def _try_stamp_actual_apron_inblocks_from_stand_position(
 def refresh_agent_edge_fsm(agents: Iterable[Flight]) -> None:
     for ag in agents:
         if ag.edge_ids:
-            ag.current_edge_id = str(ag.edge_ids[0])
-            ag.next_edge_id = str(ag.edge_ids[1]) if len(ag.edge_ids) > 1 else None
+            ag.current_edge_id = ag.edge_ids[0]
+            ag.next_edge_id = ag.edge_ids[1] if len(ag.edge_ids) > 1 else None
             if ag.segment_endpoints:
                 p0, p1 = ag.segment_endpoints[0]
                 ag.heading_rad = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
-            ag.fsm_state = str(ag.edge_phases[0]) if ag.edge_phases else "TAXI"
+            ag.fsm_state = ag.edge_phases[0] if ag.edge_phases else "TAXI"
         else:
             ag.current_edge_id = None
             ag.next_edge_id = None
@@ -6774,7 +6774,7 @@ def _temp_apron_hold_reservation_only_current_edge(ag: Flight) -> bool:
 def _temp_apron_current_edge_lookahead(ag: Flight) -> Optional[List[str]]:
     """Single edge id: active segment head, else last finished segment while awaiting apron from temp."""
     if ag.edge_ids:
-        return [str(ag.edge_ids[0])]
+        return [ag.edge_ids[0]]
     if ag.awaiting_apron_from_temp and ag.edge_ids_finished:
         tail = ag.edge_ids_finished[-1]
         if isinstance(tail, dict):
@@ -6966,7 +6966,7 @@ def _agent_current_runway_id(
     if not ag.edge_ids:
         return None
     edge_get_arc = control_state.edge_resources.get
-    er0 = edge_get_arc(str(ag.edge_ids[0]))
+    er0 = edge_get_arc(ag.edge_ids[0])
     if er0 is None or not er0.runway_id:
         return None
     return str(er0.runway_id)
@@ -7422,7 +7422,7 @@ def _update_deadlock_stagnation_probe(
             st.stagnation_anchor_sec = None
             st.progress_snapshot_edge_id = None
             continue
-        eid = str(ag.edge_ids[0]) if ag.edge_ids else ""
+        eid = ag.edge_ids[0] if ag.edge_ids else ""
         along_m = float(ag.edge_s_along_px) / ppm
         if st.stagnation_anchor_sec is None:
             st.stagnation_anchor_sec = t
@@ -7594,7 +7594,7 @@ def _resolve_all_head_on(
             continue
         if ag.eldt_anchor_sec is not None and t_eff + 1e-9 < float(ag.eldt_anchor_sec):
             continue
-        eid = str(ag.edge_ids[0])
+        eid = ag.edge_ids[0]
         cur_e = by_eid.get(eid)
         if cur_e is None:
             by_eid[eid] = ag
@@ -8218,12 +8218,12 @@ def _reroute_all_moving_flights_after_temp_park_arrival(
     for ag in sorted(agents, key=_sort_key_flight_id_str):
         if not ag.edge_ids or not ag.edge_phases:
             continue
-        if str(ag.edge_phases[0]) == PHASE_LANDING:
+        if ag.edge_phases[0] == PHASE_LANDING:
             continue
         st = agent_states_get_tp(ag.id)
         if st is None or _agent_deadlock_ghost_at_time(st, t_abs):
             continue
-        fo = flights_by_id.get(str(ag.id))
+        fo = flights_by_id.get(ag.id)
         if not isinstance(fo, dict):
             continue
         la_n, _depth_n = _lookahead_and_reservation_depth_for_agent(
@@ -8231,7 +8231,7 @@ def _reroute_all_moving_flights_after_temp_park_arrival(
         )
         la = get_lookahead_edges(ag, la_n, control_state)
         temp_pen = _yield_temp_occupied_incident_edges_for_pathfinding(
-            control_state, str(ag.id)
+            control_state, ag.id
         )
         if not temp_pen or not any(str(eid) in temp_pen for eid in la):
             continue
@@ -8620,7 +8620,7 @@ def update_decisions_every_10s(
     reverse_cost, merge_r, taxiway_h = _path_search_params(information)
     if flights_by_id:
         for ag in ordered:
-            fo = flights_by_id.get(str(ag.id))
+            fo = flights_by_id.get(ag.id)
             if not isinstance(fo, dict):
                 continue
             if reroute_agent_if_needed(
@@ -8685,7 +8685,7 @@ def _apply_same_direction_following_caps(
             continue
         if st and st.clearance in ("WAIT", "YIELD"):
             continue
-        eid = str(ag.edge_ids[0])
+        eid = ag.edge_ids[0]
         by_edge.setdefault(eid, []).append(ag)
     for eid, group in by_edge.items():
         if len(group) < 2:
