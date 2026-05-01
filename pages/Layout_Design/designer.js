@@ -3285,9 +3285,7 @@
     if (layout && typeof layout === 'object') {
       applyLayoutObject(layout);
     }
-    if (truncCap != null) {
-      state.simPlaybackEndCapSec = truncCap;
-    }
+    state.simPlaybackEndCapSec = truncCap;
     const schedById = {};
     scheduleList.forEach(function(s) {
       if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
@@ -8777,12 +8775,15 @@
       if (trWin) {
         if (trWin.t0 < minT) minT = trWin.t0;
         if (trWin.t1 > maxT) maxT = trWin.t1;
-        return;
       }
-      const w = getFlightAirsideWindowSec(f);
-      if (!w) return;
-      if (w.t0 < minT) minT = w.t0;
-      if (w.t1 > maxT) maxT = w.t1;
+      const w = trWin ? null : getFlightAirsideWindowSec(f);
+      if (w) {
+        if (w.t0 < minT) minT = w.t0;
+        if (w.t1 > maxT) maxT = w.t1;
+      }
+      const m = f.timeline_meta;
+      const etotSec = m && typeof m.etotSec === 'number' ? Number(m.etotSec) : NaN;
+      if (isFinite(etotSec) && etotSec > maxT) maxT = etotSec;
     });
     if (!isFinite(minT) || !isFinite(maxT)) {
       minT = 0;
@@ -11481,6 +11482,30 @@
     }
 
     let intervals = [];
+    const intervalFlightIds = new Set();
+    function pushGanttIntervalsFromFlight(f) {
+      if (!f) return;
+      const fid = f.id != null ? String(f.id) : '';
+      const t0 = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+      const t1 = f.sobtMin != null ? f.sobtMin : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
+      const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, t0 - SCHED_SIBT_MINUS_SLDT_MIN);
+      const stot = f.stotMin != null ? f.stotMin : (t1 + SCHED_STOT_MINUS_SOBT_MIN);
+      const eSer = ganttESeriesMinutesFromTimelineMeta(f);
+      if (Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1 && typeof buildApronStayGanttIntervalsForFlight === 'function') {
+        buildApronStayGanttIntervalsForFlight(f, eSer).forEach(function(it) { intervals.push(it); });
+        if (fid) intervalFlightIds.add(fid);
+        return;
+      }
+      const eibt = eSer.eibt;
+      const eobt = eSer.eobt;
+      const eldt = eSer.eldt;
+      const etot = eSer.etot;
+      const sldtOrig = sldt;
+      const sobtOrig = f.sobtMin != null ? f.sobtMin : t1;
+      const stotOrig = stot;
+      intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig, segmentIdx: 0, segmentCount: 1, segmentStandId: f.standId || null });
+      if (fid) intervalFlightIds.add(fid);
+    }
     const schedTable = document.querySelector('.flight-schedule-table');
     const domScheduleOk = schedTable && schedTable.getAttribute('data-virtual-table') !== '1';
     if (domScheduleOk) {
@@ -11531,6 +11556,7 @@
         const etot = eSer.etot != null ? eSer.etot : getMin(etotIdx);
         if (Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1 && typeof buildApronStayGanttIntervalsForFlight === 'function') {
           buildApronStayGanttIntervalsForFlight(f, eSer).forEach(function(it) { intervals.push(it); });
+          intervalFlightIds.add(String(f.id));
         } else {
           const t0 = sibt;
           const t1 = sobt || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
@@ -11538,29 +11564,18 @@
           const sobtOrig = sobt || t1;
           const stotOrig = stot;
           intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig, segmentIdx: 0, segmentCount: 1, segmentStandId: f.standId || null });
+          intervalFlightIds.add(String(f.id));
         }
       });
     }
-    if (!intervals.length) {
-      flights.forEach(f => {
-        const t0 = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
-        const t1 = f.sobtMin != null ? f.sobtMin : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-        const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, t0 - SCHED_SIBT_MINUS_SLDT_MIN);
-        const stot = f.stotMin != null ? f.stotMin : (t1 + SCHED_STOT_MINUS_SOBT_MIN);
-        const eSer2 = ganttESeriesMinutesFromTimelineMeta(f);
-        if (Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1 && typeof buildApronStayGanttIntervalsForFlight === 'function') {
-          buildApronStayGanttIntervalsForFlight(f, eSer2).forEach(function(it) { intervals.push(it); });
-          return;
-        }
-        const eibt = eSer2.eibt;
-        const eobt = eSer2.eobt;
-        const eldt = eSer2.eldt;
-        const etot = eSer2.etot;
-        const sldtOrig = sldt;
-        const sobtOrig = f.sobtMin != null ? f.sobtMin : t1;
-        const stotOrig = stot;
-        intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig, segmentIdx: 0, segmentCount: 1, segmentStandId: f.standId || null });
+    if (intervals.length && intervalFlightIds.size < flights.length) {
+      flights.forEach(function(f) {
+        if (!f || f.id == null || intervalFlightIds.has(String(f.id))) return;
+        pushGanttIntervalsFromFlight(f);
       });
+    }
+    if (!intervals.length) {
+      flights.forEach(function(f) { pushGanttIntervalsFromFlight(f); });
     }
 
     let minS = Infinity;
@@ -18701,7 +18716,7 @@
           layoutForSim = layoutPayload;
         }
         if (typeof setGlobalUpdateProgressUi === 'function') {
-          setGlobalUpdateProgressUi(true, '', null);
+          setGlobalUpdateProgressUi(true, '00sec', 0);
         }
         fetch(base + '/api/run-simulation', {
           method: 'POST',
@@ -18725,11 +18740,12 @@
               .then(function(pr) { return pr.json(); })
               .then(function(p) {
                 if (p && p.running) {
+                  const pct = (p.percent != null && isFinite(Number(p.percent))) ? Number(p.percent) : 0;
                   const runLabel = (p.runningClockLabel != null && String(p.runningClockLabel).trim() !== '')
                     ? String(p.runningClockLabel)
-                    : '';
+                    : '00sec';
                   if (typeof setGlobalUpdateProgressUi === 'function') {
-                    setGlobalUpdateProgressUi(true, runLabel, null);
+                    setGlobalUpdateProgressUi(true, runLabel, pct);
                   }
                   setTimeout(pollProgress, 350);
                   return;

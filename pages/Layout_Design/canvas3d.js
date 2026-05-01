@@ -4133,7 +4133,7 @@
           layoutForSim = layoutPayload;
         }
         if (typeof setGlobalUpdateProgressUi === 'function') {
-          setGlobalUpdateProgressUi(true, '', null);
+          setGlobalUpdateProgressUi(true, '00sec', 0);
         }
         fetch(base + '/api/run-simulation', {
           method: 'POST',
@@ -4157,11 +4157,12 @@
               .then(function(pr) { return pr.json(); })
               .then(function(p) {
                 if (p && p.running) {
+                  const pct = (p.percent != null && isFinite(Number(p.percent))) ? Number(p.percent) : 0;
                   const runLabel = (p.runningClockLabel != null && String(p.runningClockLabel).trim() !== '')
                     ? String(p.runningClockLabel)
-                    : '';
+                    : '00sec';
                   if (typeof setGlobalUpdateProgressUi === 'function') {
-                    setGlobalUpdateProgressUi(true, runLabel, null);
+                    setGlobalUpdateProgressUi(true, runLabel, pct);
                   }
                   setTimeout(pollProgress, 350);
                   return;

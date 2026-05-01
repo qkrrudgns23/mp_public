@@ -461,6 +461,10 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
+    def _request_origin(self) -> str:
+        host = (self.headers.get("Host") or f"127.0.0.1:{_PORT}").strip()
+        return f"http://{host}"
+
     def do_OPTIONS(self):
         self.send_response(204)
         self._send_cors()
@@ -468,6 +472,45 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         req_path = (urlparse(self.path).path or self.path or "/").split("?", 1)[0].rstrip("/") or "/"
+        if req_path in ("/", "/layout-design"):
+            try:
+                from utils.layout_designer_standalone import build_designer_html
+
+                qs = parse_qs(urlparse(self.path).query)
+                load_layout = (qs.get("load_layout", [""])[0] or "").strip() or None
+                origin = self._request_origin()
+                body = build_designer_html(
+                    layout_api_url=origin,
+                    grid3d_asset_api_url=origin,
+                    load_layout=load_layout,
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(body.encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(str(e).encode("utf-8", errors="replace"))
+            return
+        if req_path == "/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._send_cors()
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "service": "standalone-layout-server",
+                        "layoutApiUrl": self._request_origin(),
+                    }
+                ).encode("utf-8")
+            )
+            return
         if req_path == "/api/fetch-airport-map":
             self.send_response(405)
             self.send_header("Content-Type", "application/json")
@@ -968,7 +1011,7 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
 def _run_simulation_elapsed_sec_label(t0_mono: float) -> str:
     """Wall seconds for ``run_simulation`` only (``time.monotonic()`` span)."""
     el = max(0.0, float(time.monotonic()) - float(t0_mono))
-    return f"{el:.1f}s"
+    return f"{int(el):02d}sec"
 
 
 def _prosim_worker_popen_extra() -> Dict[str, Any]:
@@ -1000,6 +1043,17 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
             sim_input_path.parent == rs_resolved or rs_resolved in sim_input_path.parents
         ):
             raise ValueError("invalid sim input path")
+        progress_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_progress.json").resolve()
+        if not (
+            progress_path.parent == rs_resolved or rs_resolved in progress_path.parents
+        ):
+            raise ValueError("invalid progress path")
+        try:
+            progress_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
 
         _engine_wall_mono0 = time.monotonic()
         _t_rs = time.time()
@@ -1007,13 +1061,18 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
             [
                 sys.executable,
                 "-m",
-                "harness.prosim_worker",
+                "harness.run",
                 "--input",
                 str(sim_input_path),
                 "--output",
                 str(named_path),
+                "--no-validate",
+                "--compact-output",
+                "--metrics-json",
                 "--stem",
                 safe_stem,
+                "--progress",
+                str(progress_path),
             ],
             cwd=str(_ROOT),
             stdout=subprocess.PIPE,
@@ -1034,11 +1093,22 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
                 _pub_elapsed = float(now_m - float(_engine_wall_mono0))
                 if _pub_elapsed > progress_pub_max_mono_elapsed["sec"]:
                     progress_pub_max_mono_elapsed["sec"] = _pub_elapsed
+                pct = 0
+                current = 0.0
+                total = 0.0
+                try:
+                    progress_obj = json.loads(progress_path.read_text(encoding="utf-8"))
+                    if isinstance(progress_obj, dict):
+                        pct = int(progress_obj.get("percent") or 0)
+                        current = float(progress_obj.get("current") or 0.0)
+                        total = float(progress_obj.get("total") or 0.0)
+                except Exception:
+                    pass
                 with _sim_lock:
                     _sim_progress.update(
-                        current=0,
-                        total=0,
-                        percent=0,
+                        current=current,
+                        total=total,
+                        percent=max(0, min(100, pct)),
                         runningClockLabel=_run_simulation_elapsed_sec_label(
                             _engine_wall_mono0
                         ),
@@ -1072,6 +1142,10 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
         _t_ds = _t_dd = _t_we = time.time()
         _persist_wall_ms = (time.monotonic() - _persist_mono0) * 1000
         _payload_bytes = int(worker_metrics.get("payloadUtf8Bytes") or 0)
+        try:
+            progress_path.unlink()
+        except OSError:
+            pass
         _dbg_layout_sim_8ab4c9(
             {
                 "runId": "prosim-thread",
@@ -1122,7 +1196,10 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
                     ),
                     "thread_total_wall_so_far_sec": round(_t_we - thread_wall_t0, 4),
                     "payload_utf8_bytes": _payload_bytes,
-                    "progress_cb_calls": 0,
+                    "progress_cb_calls": int(worker_metrics.get("progressCbCalls") or 0),
+                    "worker_progress_writes": int(
+                        worker_metrics.get("progressWrites") or 0
+                    ),
                     "progress_cb_lock_updates": int(progress_publish_ctr["pub"]),
                 },
             }
@@ -1190,3 +1267,21 @@ def start_layout_receiver(port: int = LAYOUT_RECEIVER_PORT) -> str:
         _thread.start()
         _receiver_boot_mtime = cur_mtime
         return f"http://127.0.0.1:{port}"
+
+
+def serve_layout_receiver_forever(
+    host: str = "127.0.0.1", port: int = LAYOUT_RECEIVER_PORT
+) -> None:
+    """Run the Layout Design standalone HTTP server in the foreground."""
+    global _PORT
+    _PORT = int(port)
+    server = HTTPServer((host, int(port)), LayoutReceiverHandler)
+    url_host = host if host not in ("0.0.0.0", "") else "127.0.0.1"
+    print(f"Standalone Layout Design: http://{url_host}:{port}/", flush=True)
+    print(f"Health: http://{url_host}:{port}/health", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()

@@ -7,7 +7,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 def _process_priority_label() -> str:
@@ -44,10 +44,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", required=True, help="sim_result JSON path")
     parser.add_argument("--stem", default="", help="result stem for diagnostics")
     parser.add_argument("--dt", type=float, default=1.0, help="simulation dt seconds")
+    parser.add_argument("--progress", default="", help="optional progress JSON path")
     args = parser.parse_args(argv)
 
     in_path = Path(args.input).resolve()
     out_path = Path(args.output).resolve()
+    progress_path = Path(args.progress).resolve() if str(args.progress or "").strip() else None
 
     t_load0 = time.perf_counter()
     input_text = in_path.read_text(encoding="utf-8")
@@ -62,7 +64,40 @@ def main(argv: list[str] | None = None) -> int:
 
     t_run0 = time.perf_counter()
     cpu_run0 = time.process_time()
-    result = run_simulation(layout, dt=float(args.dt), progress_cb=None)
+    progress_counts = {"calls": 0, "writes": 0, "last_write": 0.0}
+
+    def _write_progress(
+        current_time: float, total_time: float, _sim_time_abs: Optional[float]
+    ) -> None:
+        progress_counts["calls"] += 1
+        if progress_path is None:
+            return
+        now = time.perf_counter()
+        if progress_counts["last_write"] and now - progress_counts["last_write"] < 1.0:
+            return
+        progress_counts["last_write"] = now
+        pct = int(100 * float(current_time) / float(total_time)) if float(total_time) > 0 else 0
+        pct = max(0, min(100, pct))
+        row = {
+            "percent": pct,
+            "elapsedSec": max(0.0, now - t_run0),
+            "current": float(current_time),
+            "total": float(total_time),
+        }
+        try:
+            progress_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = progress_path.with_suffix(progress_path.suffix + ".tmp")
+            tmp.write_text(json.dumps(row, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(progress_path)
+            progress_counts["writes"] += 1
+        except Exception:
+            pass
+
+    result = run_simulation(
+        layout,
+        dt=float(args.dt),
+        progress_cb=(_write_progress if progress_path is not None else None),
+    )
     cpu_run1 = time.process_time()
     t_run1 = time.perf_counter()
 
@@ -90,6 +125,8 @@ def main(argv: list[str] | None = None) -> int:
                 "inputLoadWallSec": round(t_load1 - t_load0, 6),
                 "runSimulationWallSec": round(t_run1 - t_run0, 6),
                 "runSimulationCpuSec": round(cpu_run1 - cpu_run0, 6),
+                "progressCbCalls": int(progress_counts["calls"]),
+                "progressWrites": int(progress_counts["writes"]),
                 "jsonDumpsWallSec": round(t_dump1 - t_dump0, 6),
                 "resultWriteWallSec": round(t_write1 - t_dump1, 6),
                 "payloadUtf8Bytes": len(payload.encode("utf-8")),
