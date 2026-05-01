@@ -11,6 +11,23 @@ from harness.validate import validate_sim_result
 
 
 _ROOT = Path(__file__).resolve().parents[1]
+_DEBUG_LOG_8AB4C9 = (_ROOT / "debug-8ab4c9.log").resolve()
+
+
+def _dbg_run_harness_8ab4c9(payload: Dict[str, Any]) -> None:
+    # #region agent log
+    row = dict(payload)
+    row.setdefault("sessionId", "8ab4c9")
+    row.setdefault("timestamp", int(time.time() * 1000))
+    try:
+        _DEBUG_LOG_8AB4C9.parent.mkdir(parents=True, exist_ok=True)
+        import json as _jd
+
+        with _DEBUG_LOG_8AB4C9.open("a", encoding="utf-8") as _fp:
+            _fp.write(_jd.dumps(row, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+    # #endregion
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -60,12 +77,40 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from utils.airside_sim import run_simulation
 
+        _dbg_run_harness_8ab4c9(
+            {
+                "runId": "harness-cli",
+                "hypothesisId": "H4_COMPARE",
+                "location": "harness/run.py:main",
+                "message": "before_run_simulation",
+                "data": {
+                    "input_path": str(in_path),
+                    "input_bytes": (
+                        in_path.stat().st_size if in_path.exists() else -1
+                    ),
+                },
+            }
+        )
+
         sim_result = run_simulation(sim_input, dt=float(args.dt))
     except Exception as e:
         print(f"run: runtime failure: {type(e).__name__}: {e}", file=sys.stderr)
         raise
     finally:
         dt_wall = time.time() - t0
+
+    try:
+        _dbg_run_harness_8ab4c9(
+            {
+                "runId": "harness-cli",
+                "hypothesisId": "H4_COMPARE",
+                "location": "harness/run.py:main",
+                "message": "after_run_sim_total_wall_sec",
+                "data": {"run_simulation_total_wall_sec": round(dt_wall, 4)},
+            }
+        )
+    except Exception:
+        pass
 
     _write_json_atomic(out_path, sim_result)
     print(f"run: wrote {out_path} ({dt_wall:.2f}s)")

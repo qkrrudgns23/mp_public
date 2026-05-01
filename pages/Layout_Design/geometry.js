@@ -339,7 +339,10 @@
       ov.classList.add('is-visible');
       ov.setAttribute('aria-hidden', 'false');
       if (lab && label != null) lab.textContent = label;
-      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (fill) {
+        if (pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        else fill.style.width = '0%';
+      }
       if (btn) btn.disabled = true;
     } else {
       ov.classList.remove('is-visible');

@@ -364,6 +364,7 @@
       font-weight: 500;
       color: var(--ui-text-primary);
       text-align: center;
+      white-space: pre-line;
     }
     .global-update-progress-track {
       width: 100%;

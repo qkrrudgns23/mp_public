@@ -1818,7 +1818,10 @@
       ov.classList.add('is-visible');
       ov.setAttribute('aria-hidden', 'false');
       if (lab && label != null) lab.textContent = label;
-      if (fill && pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+      if (fill) {
+        if (pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        else fill.style.width = '0%';
+      }
       if (btn) btn.disabled = true;
     } else {
       ov.classList.remove('is-visible');
@@ -18698,7 +18701,7 @@
           layoutForSim = layoutPayload;
         }
         if (typeof setGlobalUpdateProgressUi === 'function') {
-          setGlobalUpdateProgressUi(true, 'Running… · 3%', 3);
+          setGlobalUpdateProgressUi(true, '', null);
         }
         fetch(base + '/api/run-simulation', {
           method: 'POST',
@@ -18722,13 +18725,11 @@
               .then(function(pr) { return pr.json(); })
               .then(function(p) {
                 if (p && p.running) {
-                  const pct = (p.percent != null && isFinite(Number(p.percent))) ? Number(p.percent) : 0;
-                  const pctClamped = Math.max(0, Math.min(100, Math.round(pct)));
                   const runLabel = (p.runningClockLabel != null && String(p.runningClockLabel).trim() !== '')
                     ? String(p.runningClockLabel)
-                    : ('Running… (' + pctClamped + '% / 00:00)');
+                    : '';
                   if (typeof setGlobalUpdateProgressUi === 'function') {
-                    setGlobalUpdateProgressUi(true, runLabel, pct);
+                    setGlobalUpdateProgressUi(true, runLabel, null);
                   }
                   setTimeout(pollProgress, 350);
                   return;
@@ -18737,7 +18738,6 @@
                   failProSim(String(p.error));
                   return;
                 }
-                if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
                 const layoutNameDone = (state.currentLayoutName && String(state.currentLayoutName).trim()) || INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout';
                 fetch(base + '/api/load-sim-result?name=' + encodeURIComponent(layoutNameDone))
                   .then(function(r) {
@@ -18745,9 +18745,11 @@
                     return r.json();
                   })
                   .then(function(data) {
+                    if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
                     if (typeof applyAirsideSimulationResultPayload === 'function') applyAirsideSimulationResultPayload(data);
                   })
                   .catch(function(e) {
+                    if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
                     console.warn('Pro Sim result fetch', e && e.message ? e.message : e);
                   });
               })

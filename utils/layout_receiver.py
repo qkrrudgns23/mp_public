@@ -17,6 +17,7 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 import urllib.error
@@ -25,9 +26,25 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 import time
-from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, Dict, Optional
+
+
+def _dbg_layout_sim_8ab4c9(payload: Dict[str, Any]) -> None:
+    """Session 8ab4c9: NDJSON probe for Layout ProSim vs harness timings."""
+    # #region agent log
+    try:
+        log_path = (_ROOT / "debug-8ab4c9.log").resolve()
+        row = dict(payload)
+        row.setdefault("sessionId", "8ab4c9")
+        row.setdefault("timestamp", int(time.time() * 1000))
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as _fp:
+            _fp.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
 
 # Standalone receiver: Layout JSON must be data/Layout_storage/ Save only to
 _ROOT = Path(__file__).resolve().parents[1]
@@ -753,7 +770,10 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/run-simulation" or path.startswith("/api/run-simulation"):
             try:
+                _post_t0 = time.time()
+                _t_parse0 = time.time()
                 obj = json.loads(body)
+                _parse_ms = (time.time() - _t_parse0) * 1000
                 layout = obj.get("layout", obj) if isinstance(obj, dict) else obj
                 layout_name_raw = ""
                 if isinstance(obj, dict):
@@ -766,9 +786,42 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 rs_resolved_in = RESULT_STORAGE_DIR.resolve()
                 if not (sim_input_path.parent == rs_resolved_in or rs_resolved_in in sim_input_path.parents):
                     raise ValueError("invalid sim input path")
-                sim_input_path.write_text(
-                    json.dumps(layout, ensure_ascii=False, indent=2), encoding="utf-8"
+                _t_dump0 = time.time()
+                sim_input_json = json.dumps(
+                    layout,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
                 )
+                _dump_ms = (time.time() - _t_dump0) * 1000
+                _t_write0 = time.time()
+                sim_input_path.write_text(sim_input_json, encoding="utf-8")
+                _write_ms = (time.time() - _t_write0) * 1000
+                try:
+                    _si_bytes = sim_input_path.stat().st_size
+                except OSError:
+                    _si_bytes = -1
+                _post_handler_ms = (time.time() - _post_t0) * 1000
+                # #region agent log
+                _dbg_layout_sim_8ab4c9(
+                    {
+                        "runId": "prosim-http",
+                        "hypothesisId": "H_SERIALIZE",
+                        "location": "layout_receiver.py:POST/api/run-simulation",
+                        "message": "request_parse_dump_write_ms",
+                        "data": {
+                            "resultStem": result_stem,
+                            "request_parse_ms": round(_parse_ms, 3),
+                            "sim_input_json_dumps_ms": round(_dump_ms, 3),
+                            "sim_input_disk_write_ms": round(_write_ms, 3),
+                            "post_handler_before_thread_ms": round(_post_handler_ms, 3),
+                            "request_body_bytes": len(body.encode("utf-8"))
+                            if isinstance(body, str)
+                            else (len(body) if isinstance(body, (bytes, bytearray)) else 0),
+                            "sim_input_bytes": _si_bytes,
+                        },
+                    }
+                )
+                # #endregion
                 _remove_legacy_layout_storage_sim_files()
                 with _sim_lock:
                     if _sim_progress["running"]:
@@ -791,7 +844,7 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                     )
                 t = threading.Thread(
                     target=_run_simulation_thread,
-                    args=(layout, result_stem),
+                    args=(sim_input_path, result_stem),
                     daemon=True,
                 )
                 t.start()
@@ -912,70 +965,168 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
         pass
 
 
-def _format_sim_clock_5min(base_date: str, sim_sec_abs: float) -> str:
-    s = (base_date or "").strip() or "2026-03-31"
+def _run_simulation_elapsed_sec_label(t0_mono: float) -> str:
+    """Wall seconds for ``run_simulation`` only (``time.monotonic()`` span)."""
+    el = max(0.0, float(time.monotonic()) - float(t0_mono))
+    return f"{el:.1f}s"
+
+
+def _prosim_worker_popen_extra() -> Dict[str, Any]:
+    """Windows: keep Streamlit-spawned worker out of inherited low scheduling class."""
+    if os.name != "nt":
+        return {}
+    flags = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    flags |= int(getattr(subprocess, "ABOVE_NORMAL_PRIORITY_CLASS", 0x00008000))
+    return {"creationflags": flags}
+
+
+def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
     try:
-        d0 = datetime.strptime(s[:10], "%Y-%m-%d")
-    except ValueError:
-        d0 = datetime(2026, 1, 1)
-    snapped = (max(0.0, float(sim_sec_abs)) // 300.0) * 300.0
-    dt = d0 + timedelta(seconds=snapped)
-    return dt.strftime("%Y-%m-%d %H:%M")
+        thread_wall_t0 = time.time()
+        publish_throttle: Dict[str, Optional[float]] = {"last_mono": None}
+        progress_publish_ctr = {"pub": 0}
+        # #region agent log
+        progress_pub_max_mono_elapsed: Dict[str, float] = {"sec": 0.0}
+        # #endregion
 
-
-def _wall_elapsed_mm_ss(wall_t0: float) -> str:
-    elapsed = max(0, int(time.time() - wall_t0))
-    m, sec = divmod(elapsed, 60)
-    return f"{m:02d}:{sec:02d}"
-
-
-def _run_simulation_thread(layout: Dict[str, Any], result_stem: str) -> None:
-    try:
-        from utils.airside_sim import _deep_get, _load_information_json, run_simulation
-
-        info = _load_information_json()
-        base_date = str(
-            _deep_get(
-                info,
-                "tiers",
-                "algorithm",
-                "simulation",
-                "baseDate",
-                default="2026-03-31",
-            )
-        )
-        wall_t0 = time.time()
-
-        def _progress_cb(
-            current_time: float, total_time: float, sim_time_abs: Optional[float]
-        ) -> None:
-            pct = int(100 * current_time / total_time) if total_time > 0 else 0
-            pct = max(0, min(100, pct))
-            wall_part = _wall_elapsed_mm_ss(wall_t0)
-            if sim_time_abs is None:
-                sim_part = "준비 중"
-            else:
-                sim_part = _format_sim_clock_5min(base_date, float(sim_time_abs))
-            running_clock = f"{sim_part} ({pct}% / {wall_part})"
-            with _sim_lock:
-                _sim_progress.update(
-                    current=current_time,
-                    total=total_time,
-                    percent=pct,
-                    runningClockLabel=running_clock,
-                )
-
-        result = run_simulation(layout, progress_cb=_progress_cb)
-        output = dict(result) if isinstance(result, dict) else {}
-        output.pop("flight_edge_paths", None)
         RESULT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
         safe_stem = _sanitize_layout_name(result_stem) or "default_layout"
         named_path = (RESULT_STORAGE_DIR / f"{safe_stem}_sim_result.json").resolve()
         rs_resolved = RESULT_STORAGE_DIR.resolve()
         if not (named_path.parent == rs_resolved or rs_resolved in named_path.parents):
             raise ValueError("invalid result path")
-        payload = json.dumps(output, ensure_ascii=False, indent=2, default=str)
-        named_path.write_text(payload, encoding="utf-8")
+        sim_input_path = Path(sim_input_path).resolve()
+        if not (
+            sim_input_path.parent == rs_resolved or rs_resolved in sim_input_path.parents
+        ):
+            raise ValueError("invalid sim input path")
+
+        _engine_wall_mono0 = time.monotonic()
+        _t_rs = time.time()
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "harness.prosim_worker",
+                "--input",
+                str(sim_input_path),
+                "--output",
+                str(named_path),
+                "--stem",
+                safe_stem,
+            ],
+            cwd=str(_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, "PYTHONHASHSEED": "0"},
+            **_prosim_worker_popen_extra(),
+        )
+
+        while proc.poll() is None:
+            now_m = time.monotonic()
+            last_m = publish_throttle["last_mono"]
+            if last_m is None or (now_m - float(last_m)) >= 0.25:
+                publish_throttle["last_mono"] = now_m
+                progress_publish_ctr["pub"] += 1
+                _pub_elapsed = float(now_m - float(_engine_wall_mono0))
+                if _pub_elapsed > progress_pub_max_mono_elapsed["sec"]:
+                    progress_pub_max_mono_elapsed["sec"] = _pub_elapsed
+                with _sim_lock:
+                    _sim_progress.update(
+                        current=0,
+                        total=0,
+                        percent=0,
+                        runningClockLabel=_run_simulation_elapsed_sec_label(
+                            _engine_wall_mono0
+                        ),
+                    )
+            time.sleep(0.05)
+
+        stdout, stderr = proc.communicate()
+        _t_re = time.time()
+        # #region agent log
+        _run_wall_mono_sec = float(time.monotonic() - float(_engine_wall_mono0))
+        # #endregion
+        if proc.returncode != 0:
+            raise RuntimeError((stderr or stdout or "ProSim subprocess failed").strip())
+
+        worker_metrics: Dict[str, Any] = {}
+        for line in reversed((stdout or "").splitlines()):
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict):
+                worker_metrics = obj
+                break
+
+        with _sim_lock:
+            _sim_progress.update(
+                runningClockLabel="",
+                percent=0,
+            )
+        _persist_mono0 = time.monotonic()
+        _t_ds = _t_dd = _t_we = time.time()
+        _persist_wall_ms = (time.monotonic() - _persist_mono0) * 1000
+        _payload_bytes = int(worker_metrics.get("payloadUtf8Bytes") or 0)
+        _dbg_layout_sim_8ab4c9(
+            {
+                "runId": "prosim-thread",
+                "hypothesisId": "H1_H3_H4",
+                "location": "layout_receiver.py:_run_simulation_thread",
+                "message": "sim_core_vs_serialize_wall_sec",
+                "data": {
+                    "resultStem": safe_stem,
+                    "persist_monotonic_wall_ms": round(_persist_wall_ms, 4),
+                    "run_simulation_wall_sec": round(
+                        float(
+                            worker_metrics.get(
+                                "runSimulationWallSec", _t_re - _t_rs
+                            )
+                        ),
+                        4,
+                    ),
+                    "run_simulation_wall_mono_sec": round(_run_wall_mono_sec, 4),
+                    "max_progress_publish_mono_elapsed_sec": round(
+                        float(progress_pub_max_mono_elapsed["sec"]), 4
+                    ),
+                    "subprocess_total_wall_sec": round(_t_re - _t_rs, 4),
+                    "worker_input_load_wall_sec": round(
+                        float(worker_metrics.get("inputLoadWallSec") or 0.0), 4
+                    ),
+                    "worker_run_simulation_cpu_sec": round(
+                        float(worker_metrics.get("runSimulationCpuSec") or 0.0), 4
+                    ),
+                    "worker_python_executable": str(
+                        worker_metrics.get("pythonExecutable") or ""
+                    ),
+                    "worker_python_hash_seed": str(
+                        worker_metrics.get("pythonHashSeed") or ""
+                    ),
+                    "worker_process_priority_class": str(
+                        worker_metrics.get("processPriorityClass") or ""
+                    ),
+                    "worker_omp_num_threads": str(
+                        worker_metrics.get("ompNumThreads") or ""
+                    ),
+                    "worker_pythonpath": str(worker_metrics.get("pythonPath") or ""),
+                    "worker_input_sha256": str(worker_metrics.get("inputSha256") or ""),
+                    "json_dumps_wall_sec": round(
+                        float(worker_metrics.get("jsonDumpsWallSec") or 0.0), 4
+                    ),
+                    "result_write_wall_sec": round(
+                        float(worker_metrics.get("resultWriteWallSec") or 0.0), 4
+                    ),
+                    "thread_total_wall_so_far_sec": round(_t_we - thread_wall_t0, 4),
+                    "payload_utf8_bytes": _payload_bytes,
+                    "progress_cb_calls": 0,
+                    "progress_cb_lock_updates": int(progress_publish_ctr["pub"]),
+                },
+            }
+        )
         _remove_legacy_layout_storage_sim_files()
         with _sim_lock:
             _sim_progress.update(
