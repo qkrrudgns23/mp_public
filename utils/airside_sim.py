@@ -7103,18 +7103,23 @@ def _current_edge_separation_ok(
     my_along = float(agent.edge_s_along_px) / ppm
     t_eff = float(sim_time)
     rw_lag = float(runway_release_lag_sec)
-    eid_sp = str(er.edge_id)
+    eid_sp = er.edge_id
+    td_mid_sep = control_state.touchdown_motion_by_id
     agent_states_get_sep = control_state.agent_states.get
     others: Iterable[Flight] = (
         agents_by_front_edge.get(eid_sp, ()) if agents_by_front_edge is not None else agents
     )
     for o in others:
-        if not o.edge_ids or str(o.edge_ids[0]) != eid_sp:
+        if not o.edge_ids or o.edge_ids[0] != eid_sp:
             continue
         if o.id == agent.id or not o.segment_endpoints:
             continue
-        o_td = _arr_touchdown_motion_abs_sec(
-            o, agents, rw_lag, control_state=control_state
+        o_td = (
+            td_mid_sep.get(o.id)
+            if td_mid_sep is not None
+            else _arr_touchdown_motion_abs_sec(
+                o, agents, rw_lag, control_state=control_state
+            )
         )
         if o_td is not None and t_eff + 1e-9 < float(o_td):
             continue
@@ -7168,14 +7173,14 @@ def can_reserve_path(
     stand_resources = control_state.stand_resources
     intersection_resources = control_state.intersection_resources
     runway_resources = control_state.runway_resources
-    ph0 = str(agent.edge_phases[0]) if agent.edge_phases else ""
+    ph0 = agent.edge_phases[0] if agent.edge_phases else ""
     pt0 = (
-        str(agent.segment_path_types[0] or "")
+        (agent.segment_path_types[0] or "")
         if agent.segment_path_types and len(agent.segment_path_types) == len(agent.edge_ids)
         else ""
     )
     dep_rwy = _agent_runway_id_key(agent.dep_runway_id)
-    aid_key = str(aid)
+    aid_key = aid
     edge_get_crp = edge_resources.get
     stand_get_crp = stand_resources.get
     rw_get_crp = runway_resources.get
@@ -7189,17 +7194,17 @@ def can_reserve_path(
         er = edge_get_crp(eid)
         if er is None:
             return False, f"unknown_edge:{eid}"
-        for ts_id in edge_incident_temp_stand_map.get(str(eid), ()):
+        for ts_id in edge_incident_temp_stand_map.get(eid, ()):
             sr_t = stand_get_crp(ts_id)
             if sr_t is None:
                 continue
-            if any(str(x) != aid_key for x in sr_t.occupied_by):
+            if any(x != aid for x in sr_t.occupied_by):
                 return False, f"temp_stand_busy:{ts_id}"
         # Never bypass runway safety via forced-open.
         if er.forced_open and not er.runway_id:
             continue
         er_pt = (
-            ptn.get(str(er.edge_id), "taxiway")
+            ptn.get(er.edge_id, "taxiway")
             if ptn
             else (str(er.path_type or "").strip() or "taxiway")
         )
@@ -7213,7 +7218,7 @@ def can_reserve_path(
                 sr = stand_get_crp(sid)
                 if sr is not None:
                     cap = max(1, int(sr.capacity))
-                    phys_others = len({str(x) for x in sr.occupied_by if str(x) != aid_key})
+                    phys_others = len({x for x in sr.occupied_by if x != aid_key})
                     booked = (
                         int(stand_arrival_book.get(sid, 0))
                         if stand_arrival_book is not None
@@ -7285,7 +7290,7 @@ def can_reserve_path(
             rr = rw_get_crp(rwid)
             if rr is not None:
                 # Hard invariant: runway occupancy by another aircraft blocks reservation.
-                if any(str(x) != aid_key for x in rr.occupied_by):
+                if any(x != aid for x in rr.occupied_by):
                     return False, f"runway_occupied:{rwid}"
                 if rr.forced_open:
                     continue
@@ -7525,10 +7530,10 @@ def detect_head_on_conflict(
     if (
         not agent_a.edge_ids
         or not agent_b.edge_ids
-        or str(agent_a.edge_ids[0]) != str(agent_b.edge_ids[0])
+        or agent_a.edge_ids[0] != agent_b.edge_ids[0]
     ):
         return False
-    eid = str(agent_a.edge_ids[0])
+    eid = agent_a.edge_ids[0]
     er_get_dhc = control_state.edge_resources.get
     er = er_get_dhc(eid)
     if er is None or er.direction_mode != "bidirectional":
@@ -7550,7 +7555,7 @@ def resolve_head_on_conflict(
 ) -> None:
     if not detect_head_on_conflict(agent_a, agent_b, control_state):
         return
-    eid0 = str(agent_a.edge_ids[0])
+    eid0 = agent_a.edge_ids[0]
     aget_h = control_state.agent_states.get
     sta = aget_h(agent_a.id)
     stb = aget_h(agent_b.id)
@@ -7569,7 +7574,7 @@ def resolve_head_on_conflict(
         return
     c = compare_agents(agent_a, agent_b, control_state)
     if c == 0:
-        loser = agent_b if str(agent_a.id) > str(agent_b.id) else agent_a
+        loser = agent_b if agent_a.id > agent_b.id else agent_a
     elif c < 0:
         loser = agent_b
     else:
@@ -7619,7 +7624,7 @@ def detect_same_direction_conflict(
     if (
         not agent_a.edge_ids
         or not agent_b.edge_ids
-        or str(agent_a.edge_ids[0]) != str(agent_b.edge_ids[0])
+        or agent_a.edge_ids[0] != agent_b.edge_ids[0]
     ):
         return False
     if not agent_a.segment_endpoints or not agent_b.segment_endpoints:
@@ -7638,7 +7643,7 @@ def compute_following_speed(
     ppm: float,
 ) -> float:
     er_get_cfs = control_state.edge_resources.get
-    er_id = str(follower.edge_ids[0]) if follower.edge_ids else ""
+    er_id = follower.edge_ids[0] if follower.edge_ids else ""
     er = er_get_cfs(er_id)
     min_sep = float(er.min_separation_m) if er else DEFAULT_MIN_SEPARATION_M
     if not follower.segment_endpoints or not leader.segment_endpoints:
