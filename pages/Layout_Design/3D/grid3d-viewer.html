@@ -1282,7 +1282,22 @@
     );
   }
 
+  var prosimPaused = false;
+  window.addEventListener('message', function (ev) {
+    var data = ev && ev.data;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === 'prosim:pause') {
+      prosimPaused = true;
+    } else if (data.type === 'prosim:resume') {
+      if (prosimPaused) {
+        prosimPaused = false;
+        try { clock.getDelta(); } catch (eC) { /* ignore */ }
+        requestAnimationFrame(tick);
+      }
+    }
+  });
   function tick() {
+    if (prosimPaused) return;
     requestAnimationFrame(tick);
     var dt = Math.min(clock.getDelta(), 0.08);
     if (vehicleMode === 'orbit') {

@@ -17,7 +17,6 @@ import importlib.util
 import json
 import os
 import re
-import subprocess
 import sys
 import threading
 import urllib.error
@@ -28,22 +27,6 @@ from urllib.parse import parse_qs, unquote, urlparse
 import time
 from functools import lru_cache
 from typing import Any, Dict, Optional
-
-
-def _dbg_layout_sim_8ab4c9(payload: Dict[str, Any]) -> None:
-    """Session 8ab4c9: NDJSON probe for Layout ProSim vs harness timings."""
-    # #region agent log
-    try:
-        log_path = (_ROOT / "debug-8ab4c9.log").resolve()
-        row = dict(payload)
-        row.setdefault("sessionId", "8ab4c9")
-        row.setdefault("timestamp", int(time.time() * 1000))
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as _fp:
-            _fp.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-    # #endregion
 
 
 # Standalone receiver: Layout JSON must be data/Layout_storage/ Save only to
@@ -245,6 +228,52 @@ def _remove_legacy_layout_storage_sim_files() -> None:
                 legacy.unlink()
         except OSError:
             pass
+
+
+def _simulation_server_base_url_normalized() -> str:
+    raw = (os.environ.get("SIMULATION_SERVER_URL") or "").strip()
+    if not raw:
+        return ""
+    low = raw.lower()
+    if not (low.startswith("http://") or low.startswith("https://")):
+        raw = "http://" + raw.lstrip("/")
+    return raw.rstrip("/")
+
+
+def _simulation_proxy_active() -> bool:
+    return bool(_simulation_server_base_url_normalized())
+
+
+def _proxy_simulation_request(
+    method: str,
+    rel_path: str,
+    body_bytes: Optional[bytes] = None,
+    *,
+    timeout: float,
+) -> tuple[int, bytes]:
+    norm = _simulation_server_base_url_normalized()
+    if not norm:
+        raise RuntimeError("simulation_proxy_not_configured")
+    rp = (rel_path or "").strip()
+    if not rp.startswith("/"):
+        rp = "/" + rp
+    url = norm + rp
+    meth = method.upper()
+    data: Optional[bytes] = None if meth == "GET" else body_bytes
+    hdrs = {}
+    if data is not None:
+        hdrs["Content-Type"] = "application/json; charset=utf-8"
+    req = urllib.request.Request(url, data=data, headers=hdrs, method=meth)
+    try:
+        with urllib.request.urlopen(req, timeout=float(timeout)) as resp:
+            st = int(getattr(resp, "status", resp.getcode()))
+            return st, resp.read()
+    except urllib.error.HTTPError as e:
+        try:
+            payload = e.read()
+        except OSError:
+            payload = b"{}"
+        return int(e.code), payload if payload else b"{}"
 
 
 def _safe_layout_path(name: str) -> Optional[Path]:
@@ -501,15 +530,16 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self._send_cors()
             self.end_headers()
-            self.wfile.write(
-                json.dumps(
-                    {
-                        "ok": True,
-                        "service": "standalone-layout-server",
-                        "layoutApiUrl": self._request_origin(),
-                    }
-                ).encode("utf-8")
-            )
+            hbody: Dict[str, Any] = {
+                "ok": True,
+                "service": "standalone-layout-server",
+                "layoutApiUrl": self._request_origin(),
+            }
+            sb = _simulation_server_base_url_normalized()
+            if sb:
+                hbody["simulationProxy"] = True
+                hbody["simulationServerUrl"] = sb
+            self.wfile.write(json.dumps(hbody).encode("utf-8"))
             return
         if req_path == "/api/fetch-airport-map":
             self.send_response(405)
@@ -691,6 +721,26 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
             return
         if self.path.startswith("/api/sim-progress"):
+            if _simulation_proxy_active():
+                try:
+                    code, pb = _proxy_simulation_request("GET", "/api/sim-progress", None, timeout=30.0)
+                except urllib.error.URLError as e:
+                    self.send_response(502)
+                    self.send_header("Content-Type", "application/json")
+                    self._send_cors()
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"ok": False, "error": "simulation_server_unreachable", "detail": str(e)}).encode(
+                            "utf-8"
+                        )
+                    )
+                    return
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(pb if pb else b"{}")
+                return
             with _sim_lock:
                 body = json.dumps(_sim_progress).encode("utf-8")
             self.send_response(200)
@@ -755,7 +805,8 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = (urlparse(self.path).path or self.path).rstrip("/")
         length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length).decode("utf-8") if length else "{}"
+        body_bytes = self.rfile.read(length) if length > 0 else b"{}"
+        body = body_bytes.decode("utf-8") if body_bytes else "{}"
         if path == "/api/delete-layout" or path.startswith("/api/delete-layout"):
             try:
                 obj = json.loads(body)
@@ -812,11 +863,30 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
             return
         if path == "/api/run-simulation" or path.startswith("/api/run-simulation"):
+            if _simulation_proxy_active():
+                try:
+                    code, out_bytes = _proxy_simulation_request(
+                        "POST", "/api/run-simulation", body_bytes, timeout=120.0
+                    )
+                except urllib.error.URLError as e:
+                    self.send_response(502)
+                    self.send_header("Content-Type", "application/json")
+                    self._send_cors()
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps({"ok": False, "error": "simulation_server_unreachable", "detail": str(e)}).encode(
+                            "utf-8"
+                        )
+                    )
+                    return
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(out_bytes if out_bytes else b"{}")
+                return
             try:
-                _post_t0 = time.time()
-                _t_parse0 = time.time()
                 obj = json.loads(body)
-                _parse_ms = (time.time() - _t_parse0) * 1000
                 layout = obj.get("layout", obj) if isinstance(obj, dict) else obj
                 layout_name_raw = ""
                 if isinstance(obj, dict):
@@ -829,42 +899,12 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
                 rs_resolved_in = RESULT_STORAGE_DIR.resolve()
                 if not (sim_input_path.parent == rs_resolved_in or rs_resolved_in in sim_input_path.parents):
                     raise ValueError("invalid sim input path")
-                _t_dump0 = time.time()
                 sim_input_json = json.dumps(
                     layout,
                     ensure_ascii=False,
                     separators=(",", ":"),
                 )
-                _dump_ms = (time.time() - _t_dump0) * 1000
-                _t_write0 = time.time()
                 sim_input_path.write_text(sim_input_json, encoding="utf-8")
-                _write_ms = (time.time() - _t_write0) * 1000
-                try:
-                    _si_bytes = sim_input_path.stat().st_size
-                except OSError:
-                    _si_bytes = -1
-                _post_handler_ms = (time.time() - _post_t0) * 1000
-                # #region agent log
-                _dbg_layout_sim_8ab4c9(
-                    {
-                        "runId": "prosim-http",
-                        "hypothesisId": "H_SERIALIZE",
-                        "location": "layout_receiver.py:POST/api/run-simulation",
-                        "message": "request_parse_dump_write_ms",
-                        "data": {
-                            "resultStem": result_stem,
-                            "request_parse_ms": round(_parse_ms, 3),
-                            "sim_input_json_dumps_ms": round(_dump_ms, 3),
-                            "sim_input_disk_write_ms": round(_write_ms, 3),
-                            "post_handler_before_thread_ms": round(_post_handler_ms, 3),
-                            "request_body_bytes": len(body.encode("utf-8"))
-                            if isinstance(body, str)
-                            else (len(body) if isinstance(body, (bytes, bytearray)) else 0),
-                            "sim_input_bytes": _si_bytes,
-                        },
-                    }
-                )
-                # #endregion
                 _remove_legacy_layout_storage_sim_files()
                 with _sim_lock:
                     if _sim_progress["running"]:
@@ -1014,23 +1054,14 @@ def _run_simulation_elapsed_sec_label(t0_mono: float) -> str:
     return f"{int(el):02d}sec"
 
 
-def _prosim_worker_popen_extra() -> Dict[str, Any]:
-    """Windows: keep Streamlit-spawned worker out of inherited low scheduling class."""
-    if os.name != "nt":
-        return {}
-    flags = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
-    flags |= int(getattr(subprocess, "ABOVE_NORMAL_PRIORITY_CLASS", 0x00008000))
-    return {"creationflags": flags}
+def _run_simulation_progress_label(pct: int, t0_mono: float) -> str:
+    pct_i = max(0, min(100, int(pct)))
+    return f"{pct_i}% · {_run_simulation_elapsed_sec_label(t0_mono)}"
 
 
 def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
     try:
-        thread_wall_t0 = time.time()
         publish_throttle: Dict[str, Optional[float]] = {"last_mono": None}
-        progress_publish_ctr = {"pub": 0}
-        # #region agent log
-        progress_pub_max_mono_elapsed: Dict[str, float] = {"sec": 0.0}
-        # #endregion
 
         RESULT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
         safe_stem = _sanitize_layout_name(result_stem) or "default_layout"
@@ -1048,51 +1079,78 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
             progress_path.parent == rs_resolved or rs_resolved in progress_path.parents
         ):
             raise ValueError("invalid progress path")
+        metrics_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_metrics.json").resolve()
+        if not (
+            metrics_path.parent == rs_resolved or rs_resolved in metrics_path.parents
+        ):
+            raise ValueError("invalid metrics path")
+        log_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_worker.log").resolve()
+        if not (log_path.parent == rs_resolved or rs_resolved in log_path.parents):
+            raise ValueError("invalid worker log path")
+        status_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_status.json").resolve()
+        if not (
+            status_path.parent == rs_resolved or rs_resolved in status_path.parents
+        ):
+            raise ValueError("invalid status path")
+        job_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_job.json").resolve()
+        if not (job_path.parent == rs_resolved or rs_resolved in job_path.parents):
+            raise ValueError("invalid job path")
         try:
             progress_path.unlink()
         except FileNotFoundError:
             pass
         except OSError:
             pass
+        try:
+            metrics_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        try:
+            status_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        try:
+            job_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        try:
+            running_job_path = job_path.with_suffix(job_path.suffix + ".running")
+            running_job_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
 
         _engine_wall_mono0 = time.monotonic()
-        _t_rs = time.time()
-        proc = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "harness.run",
-                "--input",
-                str(sim_input_path),
-                "--output",
-                str(named_path),
-                "--no-validate",
-                "--compact-output",
-                "--metrics-json",
-                "--stem",
-                safe_stem,
-                "--progress",
-                str(progress_path),
-            ],
-            cwd=str(_ROOT),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env={**os.environ, "PYTHONHASHSEED": "0"},
-            **_prosim_worker_popen_extra(),
-        )
+        job_id = f"{safe_stem}-{int(time.time() * 1000)}"
+        job_obj = {
+            "jobId": job_id,
+            "stem": safe_stem,
+            "inputPath": str(sim_input_path),
+            "outputPath": str(named_path),
+            "progressPath": str(progress_path),
+            "metricsPath": str(metrics_path),
+            "statusPath": str(status_path),
+            "logPath": str(log_path),
+            "progressStepPercent": 5.0,
+        }
+        job_tmp = job_path.with_suffix(job_path.suffix + ".tmp")
+        job_tmp.write_text(json.dumps(job_obj, ensure_ascii=False), encoding="utf-8")
+        job_tmp.replace(job_path)
 
-        while proc.poll() is None:
+        terminal_worker_started = False
+        terminal_worker_deadline_mono = time.monotonic() + 20.0
+        while True:
             now_m = time.monotonic()
             last_m = publish_throttle["last_mono"]
             if last_m is None or (now_m - float(last_m)) >= 0.25:
                 publish_throttle["last_mono"] = now_m
-                progress_publish_ctr["pub"] += 1
-                _pub_elapsed = float(now_m - float(_engine_wall_mono0))
-                if _pub_elapsed > progress_pub_max_mono_elapsed["sec"]:
-                    progress_pub_max_mono_elapsed["sec"] = _pub_elapsed
                 pct = 0
                 current = 0.0
                 total = 0.0
@@ -1109,101 +1167,46 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
                         current=current,
                         total=total,
                         percent=max(0, min(100, pct)),
-                        runningClockLabel=_run_simulation_elapsed_sec_label(
-                            _engine_wall_mono0
+                        runningClockLabel=_run_simulation_progress_label(
+                            pct, _engine_wall_mono0
                         ),
                     )
-            time.sleep(0.05)
-
-        stdout, stderr = proc.communicate()
-        _t_re = time.time()
-        # #region agent log
-        _run_wall_mono_sec = float(time.monotonic() - float(_engine_wall_mono0))
-        # #endregion
-        if proc.returncode != 0:
-            raise RuntimeError((stderr or stdout or "ProSim subprocess failed").strip())
-
-        worker_metrics: Dict[str, Any] = {}
-        for line in reversed((stdout or "").splitlines()):
+            status_obj: Dict[str, Any] = {}
             try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(obj, dict):
-                worker_metrics = obj
+                raw_status = json.loads(status_path.read_text(encoding="utf-8"))
+                if isinstance(raw_status, dict):
+                    status_obj = raw_status
+            except Exception:
+                status_obj = {}
+            state = str(status_obj.get("state") or "")
+            if state == "running":
+                terminal_worker_started = True
+            if state == "completed":
                 break
-
+            if state == "failed":
+                err = str(status_obj.get("error") or status_obj.get("returnCode") or "ProSim terminal worker failed")
+                raise RuntimeError(err)
+            if metrics_path.exists() and named_path.exists():
+                break
+            if (
+                not terminal_worker_started
+                and (job_path.exists() or running_job_path.exists() or not status_path.exists())
+                and time.monotonic() > terminal_worker_deadline_mono
+            ):
+                raise RuntimeError(
+                    "Terminal ProSim worker is not running. Start it with: "
+                    "python -m harness.prosim_job_worker"
+                )
+            time.sleep(0.05)
         with _sim_lock:
             _sim_progress.update(
                 runningClockLabel="",
                 percent=0,
             )
-        _persist_mono0 = time.monotonic()
-        _t_ds = _t_dd = _t_we = time.time()
-        _persist_wall_ms = (time.monotonic() - _persist_mono0) * 1000
-        _payload_bytes = int(worker_metrics.get("payloadUtf8Bytes") or 0)
         try:
             progress_path.unlink()
         except OSError:
             pass
-        _dbg_layout_sim_8ab4c9(
-            {
-                "runId": "prosim-thread",
-                "hypothesisId": "H1_H3_H4",
-                "location": "layout_receiver.py:_run_simulation_thread",
-                "message": "sim_core_vs_serialize_wall_sec",
-                "data": {
-                    "resultStem": safe_stem,
-                    "persist_monotonic_wall_ms": round(_persist_wall_ms, 4),
-                    "run_simulation_wall_sec": round(
-                        float(
-                            worker_metrics.get(
-                                "runSimulationWallSec", _t_re - _t_rs
-                            )
-                        ),
-                        4,
-                    ),
-                    "run_simulation_wall_mono_sec": round(_run_wall_mono_sec, 4),
-                    "max_progress_publish_mono_elapsed_sec": round(
-                        float(progress_pub_max_mono_elapsed["sec"]), 4
-                    ),
-                    "subprocess_total_wall_sec": round(_t_re - _t_rs, 4),
-                    "worker_input_load_wall_sec": round(
-                        float(worker_metrics.get("inputLoadWallSec") or 0.0), 4
-                    ),
-                    "worker_run_simulation_cpu_sec": round(
-                        float(worker_metrics.get("runSimulationCpuSec") or 0.0), 4
-                    ),
-                    "worker_python_executable": str(
-                        worker_metrics.get("pythonExecutable") or ""
-                    ),
-                    "worker_python_hash_seed": str(
-                        worker_metrics.get("pythonHashSeed") or ""
-                    ),
-                    "worker_process_priority_class": str(
-                        worker_metrics.get("processPriorityClass") or ""
-                    ),
-                    "worker_omp_num_threads": str(
-                        worker_metrics.get("ompNumThreads") or ""
-                    ),
-                    "worker_pythonpath": str(worker_metrics.get("pythonPath") or ""),
-                    "worker_input_sha256": str(worker_metrics.get("inputSha256") or ""),
-                    "json_dumps_wall_sec": round(
-                        float(worker_metrics.get("jsonDumpsWallSec") or 0.0), 4
-                    ),
-                    "result_write_wall_sec": round(
-                        float(worker_metrics.get("resultWriteWallSec") or 0.0), 4
-                    ),
-                    "thread_total_wall_so_far_sec": round(_t_we - thread_wall_t0, 4),
-                    "payload_utf8_bytes": _payload_bytes,
-                    "progress_cb_calls": int(worker_metrics.get("progressCbCalls") or 0),
-                    "worker_progress_writes": int(
-                        worker_metrics.get("progressWrites") or 0
-                    ),
-                    "progress_cb_lock_updates": int(progress_publish_ctr["pub"]),
-                },
-            }
-        )
         _remove_legacy_layout_storage_sim_files()
         with _sim_lock:
             _sim_progress.update(

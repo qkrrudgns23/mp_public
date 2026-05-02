@@ -4135,6 +4135,10 @@
         if (typeof setGlobalUpdateProgressUi === 'function') {
           setGlobalUpdateProgressUi(true, '00sec', 0);
         }
+        state.simPlaying = false;
+        if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+        state.simSliderScrubbing = false;
+        if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
         fetch(base + '/api/run-simulation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -4164,7 +4168,7 @@
                   if (typeof setGlobalUpdateProgressUi === 'function') {
                     setGlobalUpdateProgressUi(true, runLabel, pct);
                   }
-                  setTimeout(pollProgress, 350);
+                  setTimeout(pollProgress, 1000);
                   return;
                 }
                 if (p && p.error) {

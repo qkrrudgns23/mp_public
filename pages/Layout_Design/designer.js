@@ -1179,6 +1179,8 @@
     simPlaybackEndCapSec: null,
     simPlaying: false,
     simSliderScrubbing: false,
+    prosimBusy: false,
+    grid3dPopupRef: null,
     simSpeed: _dc.defaultSimSpeed,
     hasSimulationResult: false,
     /** Last Pro Sim ``payload.positions`` — keeps x,y playback samples off flights when Play is blocked (lighter pan/zoom). */
@@ -5439,6 +5441,10 @@
         console.error('postMessage to 3D viewer failed:', e4);
         alert('Could not send layout data to the 3D window. Try again or check the browser console.');
       }
+    }
+    state.grid3dPopupRef = w;
+    if (state.prosimBusy) {
+      try { w.postMessage({ type: 'prosim:pause' }, '*'); } catch (eP) { /* ignore */ }
     }
     if (!openedViaReceiverShell) {
       try {
@@ -18640,9 +18646,28 @@
     }
     if (globalUpdateBtn) {
       globalUpdateBtn.addEventListener('click', function() {
+        function _prosimSetBusy(busy) {
+          state.prosimBusy = !!busy;
+          try {
+            const popup = state.grid3dPopupRef;
+            if (popup && !popup.closed) {
+              popup.postMessage({ type: busy ? 'prosim:pause' : 'prosim:resume' }, '*');
+            } else if (popup && popup.closed) {
+              state.grid3dPopupRef = null;
+            }
+          } catch (ePm) { /* ignore */ }
+          if (!busy) {
+            try {
+              if (view3dContainer && view3dContainer.classList && view3dContainer.classList.contains('active') && typeof animate3D === 'function') {
+                animate3D();
+              }
+            } catch (eAn) { /* ignore */ }
+          }
+        }
         function failProSim(msg) {
           const m = (msg && String(msg)) || 'Pro Sim failed';
           console.error('Pro Sim:', m);
+          _prosimSetBusy(false);
           if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
           if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
           if (typeof alert === 'function') alert(m);
@@ -18718,6 +18743,11 @@
         if (typeof setGlobalUpdateProgressUi === 'function') {
           setGlobalUpdateProgressUi(true, '00sec', 0);
         }
+        state.simPlaying = false;
+        if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+        state.simSliderScrubbing = false;
+        if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
+        _prosimSetBusy(true);
         fetch(base + '/api/run-simulation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -18747,7 +18777,7 @@
                   if (typeof setGlobalUpdateProgressUi === 'function') {
                     setGlobalUpdateProgressUi(true, runLabel, pct);
                   }
-                  setTimeout(pollProgress, 350);
+                  setTimeout(pollProgress, 1000);
                   return;
                 }
                 if (p && p.error) {
@@ -18761,10 +18791,12 @@
                     return r.json();
                   })
                   .then(function(data) {
+                    _prosimSetBusy(false);
                     if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
                     if (typeof applyAirsideSimulationResultPayload === 'function') applyAirsideSimulationResultPayload(data);
                   })
                   .catch(function(e) {
+                    _prosimSetBusy(false);
                     if (typeof setGlobalUpdateProgressUi === 'function') setGlobalUpdateProgressUi(false);
                     console.warn('Pro Sim result fetch', e && e.message ? e.message : e);
                   });
@@ -25454,6 +25486,7 @@
 
   function animate3D() {
     if (!renderer3d || !view3dContainer.classList.contains('active')) return;
+    if (state.prosimBusy) return;
     requestAnimationFrame(animate3D);
     if (controls3d) controls3d.update();
     if (renderer3d && scene3d && camera3d) renderer3d.render(scene3d, camera3d);

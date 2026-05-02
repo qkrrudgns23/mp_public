@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import sys
 import time
@@ -13,23 +14,6 @@ from harness.validate import validate_sim_result
 
 
 _ROOT = Path(__file__).resolve().parents[1]
-_DEBUG_LOG_8AB4C9 = (_ROOT / "debug-8ab4c9.log").resolve()
-
-
-def _dbg_run_harness_8ab4c9(payload: Dict[str, Any]) -> None:
-    # #region agent log
-    row = dict(payload)
-    row.setdefault("sessionId", "8ab4c9")
-    row.setdefault("timestamp", int(time.time() * 1000))
-    try:
-        _DEBUG_LOG_8AB4C9.parent.mkdir(parents=True, exist_ok=True)
-        import json as _jd
-
-        with _DEBUG_LOG_8AB4C9.open("a", encoding="utf-8") as _fp:
-            _fp.write(_jd.dumps(row, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-    # #endregion
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -75,6 +59,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dt", type=float, default=1.0, help="simulation dt step (seconds)")
     parser.add_argument("--no-validate", action="store_true", help="skip validate step")
     parser.add_argument("--progress", default="", help="optional progress JSON path")
+    parser.add_argument(
+        "--progress-step-percent",
+        type=float,
+        default=5.0,
+        help="minimum percent step between run_simulation progress callbacks",
+    )
     parser.add_argument("--stem", default="", help="result stem for diagnostics")
     parser.add_argument(
         "--compact-output",
@@ -86,11 +76,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print machine-readable run metrics as the final stdout line",
     )
+    parser.add_argument("--metrics-file", default="", help="optional metrics JSON output path")
     args = parser.parse_args(argv)
 
     in_path = Path(args.input)
     out_path = Path(args.output)
     progress_path = Path(args.progress).resolve() if str(args.progress or "").strip() else None
+    metrics_path = Path(args.metrics_file).resolve() if str(args.metrics_file or "").strip() else None
 
     if not in_path.exists():
         print(f"run: input not found: {in_path}", file=sys.stderr)
@@ -113,24 +105,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from utils.airside_sim import run_simulation
 
-        _dbg_run_harness_8ab4c9(
-            {
-                "runId": "harness-cli",
-                "hypothesisId": "H4_COMPARE",
-                "location": "harness/run.py:main",
-                "message": "before_run_simulation",
-                "data": {
-                    "input_path": str(in_path),
-                    "input_bytes": (
-                        in_path.stat().st_size if in_path.exists() else -1
-                    ),
-                },
-            }
-        )
-
         t_run0 = time.perf_counter()
         cpu_run0 = time.process_time()
-        progress_counts = {"calls": 0, "writes": 0, "last_write": 0.0}
+        progress_counts = {"calls": 0, "writes": 0, "last_write": 0.0, "last_pct": -1}
 
         def _write_progress(
             current_time: float, total_time: float, _sim_time_abs: Optional[float]
@@ -139,11 +116,18 @@ def main(argv: list[str] | None = None) -> int:
             if progress_path is None:
                 return
             now = time.perf_counter()
-            if progress_counts["last_write"] and now - progress_counts["last_write"] < 1.0:
-                return
-            progress_counts["last_write"] = now
-            pct = int(100 * float(current_time) / float(total_time)) if float(total_time) > 0 else 0
+            pct_raw = 100 * float(current_time) / float(total_time) if float(total_time) > 0 else 0
+            pct = int(pct_raw)
             pct = max(0, min(100, pct))
+            step = float(args.progress_step_percent) if args.progress_step_percent else 0.0
+            if math.isfinite(step) and step > 0:
+                pct = 100 if pct_raw >= 100.0 else int(max(0.0, min(100.0, math.floor(pct_raw / step) * step)))
+                if pct <= int(progress_counts["last_pct"]) and pct < 100:
+                    return
+            elif progress_counts["last_write"] and now - progress_counts["last_write"] < 1.0:
+                return
+            progress_counts["last_pct"] = pct
+            progress_counts["last_write"] = now
             row = {
                 "percent": pct,
                 "elapsedSec": max(0.0, now - t_run0),
@@ -163,6 +147,9 @@ def main(argv: list[str] | None = None) -> int:
             sim_input,
             dt=float(args.dt),
             progress_cb=(_write_progress if progress_path is not None else None),
+            progress_step_percent=(
+                float(args.progress_step_percent) if progress_path is not None else 0.0
+            ),
         )
         cpu_run1 = time.process_time()
         t_run1 = time.perf_counter()
@@ -171,19 +158,6 @@ def main(argv: list[str] | None = None) -> int:
         raise
     finally:
         dt_wall = time.time() - t0
-
-    try:
-        _dbg_run_harness_8ab4c9(
-            {
-                "runId": "harness-cli",
-                "hypothesisId": "H4_COMPARE",
-                "location": "harness/run.py:main",
-                "message": "after_run_sim_total_wall_sec",
-                "data": {"run_simulation_total_wall_sec": round(dt_wall, 4)},
-            }
-        )
-    except Exception:
-        pass
 
     output = dict(sim_result) if isinstance(sim_result, dict) else {}
     if args.compact_output:
@@ -199,31 +173,31 @@ def main(argv: list[str] | None = None) -> int:
     t_write1 = time.perf_counter()
     payload_bytes = len(payload.encode("utf-8"))
     print(f"run: wrote {out_path} ({dt_wall:.2f}s)")
+    metrics_obj = {
+        "ok": True,
+        "resultStem": str(args.stem or ""),
+        "pythonExecutable": sys.executable,
+        "pythonHashSeed": os.environ.get("PYTHONHASHSEED", ""),
+        "processPriorityClass": _process_priority_label(),
+        "ompNumThreads": os.environ.get("OMP_NUM_THREADS", ""),
+        "pythonPath": os.environ.get("PYTHONPATH", ""),
+        "inputSha256": input_sha256,
+        "inputLoadWallSec": round(t_load1 - t_load0, 6),
+        "runSimulationWallSec": round(t_run1 - t_run0, 6),
+        "runSimulationCpuSec": round(cpu_run1 - cpu_run0, 6),
+        "progressCbCalls": int(progress_counts["calls"]),
+        "progressWrites": int(progress_counts["writes"]),
+        "jsonDumpsWallSec": round(t_dump1 - t_dump0, 6),
+        "resultWriteWallSec": round(t_write1 - t_dump1, 6),
+        "payloadUtf8Bytes": int(payload_bytes),
+    }
+    if metrics_path is not None:
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        metrics_tmp = metrics_path.with_suffix(metrics_path.suffix + ".tmp")
+        metrics_tmp.write_text(json.dumps(metrics_obj, ensure_ascii=False), encoding="utf-8")
+        metrics_tmp.replace(metrics_path)
     if args.metrics_json:
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "resultStem": str(args.stem or ""),
-                    "pythonExecutable": sys.executable,
-                    "pythonHashSeed": os.environ.get("PYTHONHASHSEED", ""),
-                    "processPriorityClass": _process_priority_label(),
-                    "ompNumThreads": os.environ.get("OMP_NUM_THREADS", ""),
-                    "pythonPath": os.environ.get("PYTHONPATH", ""),
-                    "inputSha256": input_sha256,
-                    "inputLoadWallSec": round(t_load1 - t_load0, 6),
-                    "runSimulationWallSec": round(t_run1 - t_run0, 6),
-                    "runSimulationCpuSec": round(cpu_run1 - cpu_run0, 6),
-                    "progressCbCalls": int(progress_counts["calls"]),
-                    "progressWrites": int(progress_counts["writes"]),
-                    "jsonDumpsWallSec": round(t_dump1 - t_dump0, 6),
-                    "resultWriteWallSec": round(t_write1 - t_dump1, 6),
-                    "payloadUtf8Bytes": int(payload_bytes),
-                },
-                ensure_ascii=False,
-            ),
-            flush=True,
-        )
+        print(json.dumps(metrics_obj, ensure_ascii=False), flush=True)
 
     if args.no_validate:
         return 0

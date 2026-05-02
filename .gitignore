@@ -1,3 +1,5 @@
 .env
 data/Result_storage/_perf_*.json
 data/Result_storage/_prof_*.prof
+_local_archive/*
+!_local_archive/README.txt

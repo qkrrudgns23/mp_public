@@ -58,6 +58,7 @@ from utils.designer_path_graph import (
     DirectedEdgeRecord,
     PathGraph,
     SPLIT_TOL_D2,
+    _dist2,
     _stand_end_node_index,
     _vertex_to_px,
     build_path_graph,
@@ -73,6 +74,7 @@ from utils.designer_path_graph import (
     path_graph_from_layout_sim_export,
     path_total_dist,
     project_on_segment,
+    quantize_designer_world_geometry_inplace,
     segment_segment_intersection,
 )
 
@@ -1287,7 +1289,7 @@ def _arr_ret_exit_first_junction_a_xy(
         if (qx - jx) ** 2 + (qy - jy) ** 2 <= exclude_rw_d2:
             continue
         _px, _py, s_q = _closest_on_polyline_with_cum_dist(ex_pts, (qx, qy))
-        if math.hypot(qx - _px, qy - _py) > on_tol:
+        if _dist2((qx, qy), (_px, _py)) > on_tol * on_tol:
             continue
         if increasing:
             if s_q < s_jw + margin or s_q > s_total + 1e-6:
@@ -3064,9 +3066,10 @@ def _snap_agent_to_first_segment(agent: Flight) -> None:
     p0, p1 = agent.segment_endpoints[0]
     dx = float(p1[0]) - float(p0[0])
     dy = float(p1[1]) - float(p0[1])
-    seg_len_px = math.hypot(dx, dy)
-    if seg_len_px < 1e-9:
+    seg_len_sq = dx * dx + dy * dy
+    if seg_len_sq < 1e-18:
         return
+    seg_len_px = math.sqrt(seg_len_sq)
     t, proj = project_on_segment(
         (float(p0[0]), float(p0[1])),
         (float(p1[0]), float(p1[1])),
@@ -3338,13 +3341,14 @@ def move_agent(
         p0, p1 = agent.segment_endpoints[0]
         dx = p1[0] - p0[0]
         dy = p1[1] - p0[1]
-        seg_len_px = math.hypot(dx, dy)
-        if seg_len_px < 1e-9:
+        seg_len_sq = dx * dx + dy * dy
+        if seg_len_sq < 1e-18:
             _finish_edge_segment(agent, sim_time_abs=sim_time_abs, information=information)
             agent.edge_s_along_px = 0.0
             agent.col, agent.row = p1[0], p1[1]
             continue
 
+        seg_len_px = math.sqrt(seg_len_sq)
         v0s = float(agent.segment_v0_ms[0])
         ac = float(agent.segment_accel_ms2[0])
         ph = agent.edge_phases[0]
@@ -3390,7 +3394,9 @@ def move_agent(
             agent.edge_s_along_px = 0.0
             agent.col, agent.row = p1[0], p1[1]
 
-    dist_px = math.hypot(agent.col - col0, agent.row - row0)
+    dist_px = math.sqrt(
+        (float(agent.col) - float(col0)) ** 2 + (float(agent.row) - float(row0)) ** 2
+    )
     agent.velocity_ms = (dist_px / max(float(dt), 1e-9)) / ppm
     if (
         agent.edge_ids
@@ -4879,6 +4885,7 @@ def _overlay_schedule_timing_from_playback_positions(
         )
     )
     eps_step_px = max(1.0, still_m * ppm)
+    eps_step_px_sq = eps_step_px * eps_step_px
 
     def _eibt_eobt_from_xy_plateau(
         plist: List[Dict[str, Any]],
@@ -4893,8 +4900,7 @@ def _overlay_schedule_timing_from_playback_positions(
             p0, p1 = plist[i - 1], plist[i]
             dx = float(p1.get("x", 0.0)) - float(p0.get("x", 0.0))
             dy = float(p1.get("y", 0.0)) - float(p0.get("y", 0.0))
-            step = math.hypot(dx, dy)
-            if step >= eps_step_px:
+            if dx * dx + dy * dy >= eps_step_px_sq:
                 if i - 1 > run_start:
                     t0 = float(plist[run_start].get("t", 0.0))
                     t1 = float(plist[i - 1].get("t", 0.0))
@@ -4919,7 +4925,7 @@ def _overlay_schedule_timing_from_playback_positions(
             q0, q1 = plist[j - 1], plist[j]
             dx = float(q1.get("x", 0.0)) - float(q0.get("x", 0.0))
             dy = float(q1.get("y", 0.0)) - float(q0.get("y", 0.0))
-            if math.hypot(dx, dy) >= eps_step_px:
+            if dx * dx + dy * dy >= eps_step_px_sq:
                 eobt_v = float(q1.get("t", 0.0))
                 break
         return eibt_v, eobt_v
@@ -6307,8 +6313,8 @@ def _try_stamp_actual_apron_inblocks_from_stand_position(
     ppm = max(float(pixels_per_meter), 1e-9)
     r_m = _sim_stand_arrival_stop_radius_m(information)
     v_max = _sim_stand_stopped_velocity_max_ms(information)
-    d_m = math.hypot(float(ag.col) - txy[0], float(ag.row) - txy[1]) / ppm
-    if d_m > r_m + 1e-6:
+    thr_px_sq = ((float(r_m) + 1e-6) * ppm) ** 2
+    if _dist2((float(ag.col), float(ag.row)), (float(txy[0]), float(txy[1]))) > thr_px_sq:
         return
     if abs(float(ag.velocity_ms)) > v_max + 1e-9:
         return
@@ -6438,7 +6444,7 @@ def refresh_resource_occupancy(
             ni = int(idx_s)
             if ni < 0 or ni >= len(g.nodes):
                 continue
-            if path_dist(pxy, g.nodes[ni]) <= rad_px:
+            if _dist2(pxy, g.nodes[ni]) <= rad_px * rad_px:
                 ir = ir_get_occ(nid)
                 if ir and ag.id not in ir.occupied_by:
                     ir.occupied_by.append(ag.id)
@@ -6476,9 +6482,12 @@ def _edge_progress_ratio(agent: Flight) -> float:
     if not agent.segment_endpoints or not agent.edge_ids:
         return 0.0
     p0, p1 = agent.segment_endpoints[0]
-    sl = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
-    if sl < 1e-9:
+    dx = float(p1[0]) - float(p0[0])
+    dy = float(p1[1]) - float(p0[1])
+    sl_sq = dx * dx + dy * dy
+    if sl_sq < 1e-18:
         return 0.0
+    sl = math.sqrt(sl_sq)
     return float(agent.edge_s_along_px) / sl
 
 
@@ -8923,6 +8932,7 @@ def run_simulation(
     layout: Dict[str, Any],
     dt: float = 1.0,
     progress_cb: Optional[Callable[[float, float, Optional[float]], None]] = None,
+    progress_step_percent: float = 0.0,
 ) -> Dict[str, Any]:
     _PATH_GRAPH_BUILD_CACHE.clear()
     _LAYOUT_LINK_VEL_CACHE.clear()
@@ -8948,6 +8958,8 @@ def run_simulation(
     )
     reverse_cost, merge_r, taxiway_h = _path_search_params(information)
     cell_size = float(layout.get("grid", {}).get("cellSize", 20.0))
+    # Canonical world XY (Designer px ≈ m when ppm≈1) to REDUCE FLOAT NOISE upstream of graph/polyline math.
+    quantize_designer_world_geometry_inplace(layout, cell_size=cell_size)
     dt_sec = _sim_time_step_sec(information, dt)
     pixels_per_meter = _layout_pixels_per_meter(information)
     exit_rw_thr_m = _exit_runway_min_perpendicular_distance_m(information)
@@ -9121,7 +9133,7 @@ def run_simulation(
             _refresh_agent_segment_path_types_norm(ag_new)
             _ensure_agent_apron_lists(ag_new)
             agents_by_id[fid] = ag_new
-        if progress_cb:
+        if progress_cb and not progress_step_percent:
             progress_cb(float(i + 1), float(total), None)
 
     agents = list(agents_by_id.values())
@@ -9154,8 +9166,27 @@ def run_simulation(
     progress_elapsed_total_sec = _sim_progress_elapsed_total_sec(
         flights_raw, float(ref_t0)
     )
+    progress_step = float(progress_step_percent) if progress_step_percent else 0.0
+    progress_step = progress_step if math.isfinite(progress_step) and progress_step > 0 else 0.0
+    progress_bucket_last = {"bucket": -1}
     max_stot_abs = _max_stot_s_sec(flights_raw)
     truncation_abs_sec: Optional[float] = None
+
+    def _emit_main_progress(
+        current: float, total_sec: float, sim_time_abs: Optional[float]
+    ) -> None:
+        if not progress_cb:
+            return
+        if progress_step <= 0:
+            progress_cb(float(current), float(total_sec), sim_time_abs)
+            return
+        denom = max(float(total_sec), 1e-9)
+        pct = max(0.0, min(100.0, 100.0 * float(current) / denom))
+        bucket = int(math.floor((pct + 1e-9) / progress_step))
+        if bucket <= progress_bucket_last["bucket"] and pct < 100.0:
+            return
+        progress_bucket_last["bucket"] = bucket
+        progress_cb(float(current), float(total_sec), sim_time_abs)
 
     def _temp_pipe_sort_key(ag_pipe: Flight) -> Tuple[float, float, int, str]:
         return _temp_stand_pipeline_sort_key(ag_pipe, flights_by_id, flight_input_order)
@@ -9431,12 +9462,11 @@ def run_simulation(
             st_w = st_h
             if st_w and st_w.clearance in ("WAIT", "YIELD"):
                 st_w.total_wait_sec += float(dt_sec)
-        if progress_cb:
-            progress_cb(
-                current_time_abs - float(ref_t0),
-                progress_elapsed_total_sec,
-                t_tick,
-            )
+        _emit_main_progress(
+            current_time_abs - float(ref_t0),
+            progress_elapsed_total_sec,
+            t_tick,
+        )
         if int(control_state.deadlock_resolve_event_count) >= int(deadlock_resolve_stop_n):
             truncation_abs_sec = t_tick
             _LOG.warning(

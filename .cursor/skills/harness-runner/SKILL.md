@@ -70,7 +70,7 @@ description: Execute and iterate the airside simulation harness loop (smoke -> r
   - 인덱스가 레지스트리를 넘기면 해당 iteration은 SKIP(확장할 때까지)한다. 더 이상 스킵 없이 멈추려면 ``--abort-on-registry-exhaust`` 참고.
   - 한 iteration에서 골든이 깨지면 **그 패치만** 파일에서 되돌리고 프로그램이 exit 1 한다.
 
-동일 코드로 wall time 만 반복 측정하는 것 (**``bench_triple_loop``** 등, 코드 변경 없음)은 OS 지터 분석에는 쓰이지만 **계약 검증으로는 패치 채택 근거가 되지 않는다.** 성능 튜닝의 PASS/FAIL은 항상 **골든 3페어**와 ``golden_opt_cycle`` exit 코드로만 판별한다.
+동일 코드로 벽시간만 여러 번 재측정하는 것은 OS 지터에 흔들리므로 **계약 검증(패치 채택 근거)으로 쓰지 않는다.** 성능 튜닝의 PASS/FAIL은 **골든 3페어**와 ``golden_opt_cycle`` exit 코드로 판별한다.
 
 ## Standard loop
 

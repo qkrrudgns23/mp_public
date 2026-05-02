@@ -12,6 +12,117 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 Point = Tuple[float, float]
 
 SPLIT_TOL_D2 = 0.25
+# Layout coordinates are Designer world px (~ meters when layoutPixelsPerMeter≈1). Quantize once per run.
+DESIGN_WORLD_XY_DECIMALS_DEFAULT = 2
+
+
+def quantize_designer_world_geometry_inplace(
+    layout: dict,
+    *,
+    cell_size: float,
+    ndigits: int = DESIGN_WORLD_XY_DECIMALS_DEFAULT,
+) -> None:
+    """Round world-space XY on layout primitives in-place before path-graph use.
+
+    Touches runway/taxi vertices, apron link anchors/mid-polylines, stands, holding points,
+    network junctions, and terminal footprints. Exported ``simPathGraph`` JSON is intentionally
+    left unchanged — rounding its ``pts``/``nodes`` while keeping stale ``dist`` weights broke shortest-path
+    resolution; the graph consumes these primitives where geometry is rebuilt/snapped anyway.
+    """
+    cs = max(float(cell_size), 1e-9)
+    dg = max(0, int(ndigits))
+    for pk in ("runwayPaths", "runwayTaxiways", "taxiways"):
+        for tw in layout.get(pk) or []:
+            if isinstance(tw, dict):
+                _quantize_vertex_list_inplace(tw.get("vertices"), cs, dg)
+    for sk in ("pbbStands", "remoteStands", "tempStands"):
+        for st in layout.get(sk) or []:
+            if isinstance(st, dict):
+                _quantize_stand_dict_inplace(st, cs, dg)
+    for lk in layout.get("apronLinks") or []:
+        if isinstance(lk, dict):
+            _quantize_xy_named_pair_inplace(lk, "tx", "ty", dg)
+            mids = lk.get("midVertices")
+            if isinstance(mids, list):
+                for mv in mids:
+                    if isinstance(mv, dict):
+                        _quantize_xy_named_pair_inplace(mv, "x", "y", dg)
+    for hp in layout.get("holdingPoints") or []:
+        if isinstance(hp, dict):
+            _quantize_xy_named_pair_inplace(hp, "x", "y", dg)
+    for jn in layout.get("networkJunctions") or []:
+        if isinstance(jn, dict):
+            _quantize_xy_named_pair_inplace(jn, "x", "y", dg)
+    for tm in layout.get("terminals") or []:
+        if isinstance(tm, dict):
+            _quantize_vertex_list_inplace(tm.get("vertices"), cs, dg)
+
+
+def _quantize_xy_named_pair_inplace(d: dict, kx: str, ky: str, ndigits: int) -> None:
+    try:
+        if d.get(kx) is None or d.get(ky) is None:
+            return
+        d[kx] = round(float(d[kx]), ndigits)
+        d[ky] = round(float(d[ky]), ndigits)
+    except (TypeError, ValueError):
+        pass
+
+
+def _quantize_vertex_dict_inplace(v: dict, cell_size: float, ndigits: int) -> None:
+    cs = max(float(cell_size), 1e-9)
+    dg = max(0, int(ndigits))
+    if not isinstance(v, dict):
+        return
+    if v.get("x") is not None and v.get("y") is not None:
+        try:
+            v["x"] = round(float(v["x"]), dg)
+            v["y"] = round(float(v["y"]), dg)
+        except (TypeError, ValueError):
+            pass
+        return
+    if v.get("col") is not None or v.get("row") is not None:
+        try:
+            c = float(v.get("col") or 0)
+            r = float(v.get("row") or 0)
+            xw = round(c * cs, dg)
+            yw = round(r * cs, dg)
+            v["col"] = xw / cs
+            v["row"] = yw / cs
+        except (TypeError, ValueError):
+            pass
+
+
+def _quantize_vertex_list_inplace(
+    verts: Any, cell_size: float, ndigits: int
+) -> None:
+    if not isinstance(verts, list):
+        return
+    for vv in verts:
+        if isinstance(vv, dict):
+            _quantize_vertex_dict_inplace(vv, cell_size, ndigits)
+
+
+def _quantize_stand_dict_inplace(st: dict, cell_size: float, ndigits: int) -> None:
+    dg = max(0, int(ndigits))
+    for ax, ay in (
+        ("apronSiteX", "apronSiteY"),
+        ("x2", "y2"),
+        ("junctionX", "junctionY"),
+        ("x", "y"),
+    ):
+        _quantize_xy_named_pair_inplace(st, ax, ay, dg)
+    if (
+        st.get("x") is None
+        and st.get("y") is None
+        and st.get("apronSiteX") is None
+        and st.get("apronSiteY") is None
+        and st.get("x2") is None
+        and st.get("y2") is None
+        and st.get("junctionX") is None
+        and st.get("junctionY") is None
+    ):
+        if st.get("col") is not None or st.get("row") is not None:
+            _quantize_vertex_dict_inplace(st, cell_size, ndigits)
 
 
 def _dist2(a: Point, b: Point) -> float:
