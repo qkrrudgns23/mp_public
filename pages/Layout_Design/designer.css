@@ -115,7 +115,7 @@
     #sim-controls-container label { font-size: 11px; color: var(--ui-text-secondary); margin: 0 4px 0 0; flex-shrink: 0; }
     #sim-controls-container .sim-slider-stack { flex: 1; min-width: 80px; display: flex; flex-direction: column; gap: 1px; justify-content: center; min-height: 0; }
     #sim-controls-container .sim-slider-markers { position: relative; height: 11px; pointer-events: none; margin: 0 7px 0 4px; }
-    #sim-controls-container .sim-slider-deadlock-dot { position: absolute; top: 2px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 1px rgba(0,0,0,0.4); z-index: 1; }
+    #sim-controls-container .sim-slider-deadlock-dot { position: absolute; top: 2px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 1px rgba(0,0,0,0.4); z-index: 2; pointer-events: auto; cursor: pointer; }
     #sim-controls-container #flightSimSlider { width: 100%; min-width: 0; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); }
     #sim-controls-container #flightSimTimeLabel { font-size: 11px; color: var(--ui-text-primary); min-width: 120px; flex-shrink: 0; display: inline-block; }
     #view-toggle-stack { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
@@ -953,9 +953,12 @@
     .alloc-gantt-label-col::-webkit-scrollbar { display:none; }
     .alloc-gantt-scroll-col { flex:1; overflow:auto; min-height:0; }
     
-    .alloc-gantt-inner { position:relative; min-width:100%; height:100%; }
+    .alloc-gantt-inner { position:relative; min-width:100%; min-height:100%; }
     .alloc-gantt-inner > .alloc-gantt-grid-overlay { position:absolute; left:0; top:0; right:0; bottom:24px; pointer-events:none; z-index:0; }
     .rwysep-rows > .alloc-gantt-grid-overlay { position:absolute; left:0; top:0; right:0; bottom:0; pointer-events:none; z-index:0; }
+    .alloc-gantt-inner > .alloc-gantt-sim-playhead-layer { position:absolute; left:0; top:0; right:0; bottom:0; pointer-events:none; z-index:6; }
+    .alloc-gantt-sim-playhead { position:absolute; left:0; top:0; bottom:0; width:20px; margin-left:-10px; pointer-events:auto; cursor:ew-resize; touch-action:none; -webkit-tap-highlight-color:transparent; z-index:1; background:transparent; box-sizing:border-box; }
+    .alloc-gantt-sim-playhead::before { content:''; position:absolute; left:50%; top:0; bottom:0; width:0; margin-left:-1px; border-left:2px dashed #ef4444; pointer-events:none; }
     .alloc-gantt-inner > .alloc-row { position:relative; z-index:1; }
     
     .alloc-terminal-header { margin:0; height:20px; min-height:20px; line-height:20px; font-size: 11px; font-weight: 600; color: var(--ui-text-primary); text-transform: uppercase; letter-spacing: 0.06em; flex-shrink:0; display:flex; align-items:center; gap:4px; box-sizing:border-box; overflow:hidden; min-width:0; }
@@ -974,6 +977,7 @@
     .alloc-apron-bg-slot { position:absolute; top:4px; bottom:4px; display:flex; align-items:center; justify-content:center; font-size:4px; font-weight:600; color:rgba(148,163,184,0.35); opacity:var(--style-gantt-apron-slot-opacity, 0.35); pointer-events:none; white-space:nowrap; }
     .alloc-duplicate-bg { position:absolute; top:2px; bottom:2px; border-radius:4px; background:repeating-linear-gradient(135deg, rgba(153,27,27,0.34) 0, rgba(153,27,27,0.34) 6px, rgba(69,10,10,0.42) 6px, rgba(69,10,10,0.42) 12px); border:1px solid rgba(248,113,113,0.24); pointer-events:none; z-index:0; }
     .alloc-flight { position:absolute; top:1px; bottom:1px; border-radius:3px; background:var(--style-gantt-flight-bg, #38bdf8); color:var(--style-gantt-flight-fg, #0f172a); padding:0 2px; font-size:4px; display:flex; flex-direction:row; align-items:center; gap:4px; cursor:default; box-shadow:0 1px 2px var(--style-gantt-flight-shadow, rgba(0,0,0,0.5)); overflow:visible; transition:opacity 0.15s ease-out; z-index:1; container-type:inline-size; container-name:allocflight; }
+    .alloc-flight .alloc-flight-deadlock-seg { position:absolute; top:1px; bottom:1px; min-width:3px; border-radius:2px; background:#dc2626; pointer-events:none; z-index:1; box-sizing:border-box; }
     .alloc-flight-handle { position:absolute; top:50%; z-index:4; width:6.3px; height:6.3px; margin:0; padding:0; border-radius:50%; border:1px solid #0f172a; background:#f4f4f5; box-shadow:0 0 0 1px rgba(255,255,255,0.35), 0 1px 2px rgba(0,0,0,0.4); cursor:ew-resize; flex-shrink:0; pointer-events:auto; touch-action:none; -webkit-tap-highlight-color:transparent; }
     .alloc-flight-handle:hover { background:#fff; border-color:#27272a; }
     .alloc-flight-handle:focus { outline:2px solid var(--style-gantt-selected, #fbbf24); outline-offset:1px; }
@@ -986,6 +990,41 @@
     .alloc-flight-split-btn { position:absolute; right:3px; top:0; z-index:5; height:9px; padding:0 2px; border-radius:2px; border:1px solid rgba(15,23,42,0.75); background:rgba(244,244,245,0.96); color:#0f172a; font-size:6px; font-weight:600; line-height:7px; cursor:pointer; opacity:0; pointer-events:none; transition:opacity 0.12s ease-out, background 0.12s ease-out, border-color 0.12s ease-out; }
     .alloc-flight-selected .alloc-flight-split-btn { opacity:1; pointer-events:auto; }
     .alloc-flight-split-btn:hover { background:#fff; border-color:#fbbf24; }
+    .alloc-flight.alloc-flight-deadlock {
+      background: #000000 !important;
+      color: #ffffff;
+      --style-gantt-flight-bg: #000000;
+      --style-gantt-flight-fg: #ffffff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.65);
+      border: 1px solid #27272a;
+    }
+    .alloc-flight.alloc-flight-deadlock.conflict {
+      background: #000000 !important;
+      color: #ffffff;
+      border-color: #3f3f46;
+    }
+    .alloc-flight.alloc-flight-deadlock.alloc-invalid {
+      background: #000000 !important;
+      color: #ffffff;
+      border: 1px solid #57534e;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.65);
+    }
+    .alloc-flight.alloc-flight-deadlock .alloc-flight-reg,
+    .alloc-flight.alloc-flight-deadlock .alloc-flight-meta,
+    .alloc-flight.alloc-flight-deadlock .alloc-flight-code,
+    .alloc-flight.alloc-flight-deadlock .alloc-flight-type {
+      position: relative;
+      z-index: 3;
+      color: #ffffff;
+      opacity: 1;
+    }
+    .alloc-flight.alloc-flight-deadlock .alloc-flight-ap-badge {
+      position: relative;
+      z-index: 3;
+      border-color: rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.12);
+      color: #ffffff;
+    }
     .alloc-flight-ap-badge { flex:0 0 auto; min-width:14px; padding:0 3px; border-radius:9999px; border:1px solid rgba(15,23,42,0.4); background:rgba(15,23,42,0.12); color:#0f172a; font-size:7px; font-weight:700; line-height:10px; text-align:center; }
     .alloc-gantt-sibt-sobt-tooltip { position:fixed; z-index:10050; padding:5px 9px; font-size:11px; line-height:1.25; color:#e4e4e7; background:#18181b; border:1px solid #3f3f46; border-radius:4px; pointer-events:none; box-shadow:0 4px 14px rgba(0,0,0,0.45); max-width:min(280px, calc(100vw - 16px)); white-space:nowrap; }
     .alloc-flight.conflict {

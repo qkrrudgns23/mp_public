@@ -614,12 +614,14 @@
     const winEnd = winStart + visibleSpan;
     state._allocGanttClamp = { baseMinT: baseMinT, baseMaxT: baseMaxT, visibleSpan: visibleSpan };
     const displaySpan = visibleSpan;
-    const zoom = (state.allocTimeZoom && state.allocTimeZoom > 1) ? state.allocTimeZoom : 1;
+    const zoomRaw = (state.allocTimeZoom && state.allocTimeZoom > 1) ? state.allocTimeZoom : 1;
+    const innerMinWidthPct = Math.max(100, Math.round(zoomRaw * 100));
+    const zoomLayout = innerMinWidthPct / 100;
 
-    const tickPositions = buildTimeAxisTicks(winStart, winEnd, winStart, displaySpan, zoom);
+    const tickPositions = buildTimeAxisTicks(winStart, winEnd, winStart, displaySpan, zoomLayout);
 
     function allocLeftPct(t) {
-      return ((t - winStart) / displaySpan) * 100 * zoom;
+      return ((t - winStart) / displaySpan) * 100 * zoomLayout;
     }
     function allocTrackSpanHtml(cls, leftPct, widthPct, minWidthPct) {
       return '<div class="' + cls + '" style="left:' + leftPct + '%;width:' + Math.max(minWidthPct, widthPct) + '%;"></div>';
@@ -636,7 +638,7 @@
       const clippedStart = Math.max(startT, winStart);
       const clippedEnd = Math.min(endT, winEnd);
       if (clippedEnd <= clippedStart) return;
-      arr.push(allocTrackSpanHtml(cls, allocLeftPct(clippedStart), ((clippedEnd - clippedStart) / displaySpan) * 100 * zoom, minWidthPct));
+      arr.push(allocTrackSpanHtml(cls, allocLeftPct(clippedStart), ((clippedEnd - clippedStart) / displaySpan) * 100 * zoomLayout, minWidthPct));
     }
     function pushAllocTriangle(arr, t, cls) {
       if (!arr || !isFinite(t) || t < winStart || t > winEnd) return;
@@ -728,8 +730,8 @@
         const tStart = Math.max(t0, winStart);
         const tEnd = Math.min(t1, winEnd);
         if (tEnd <= tStart) return '';
-        const leftPct = ((tStart - winStart) / displaySpan) * 100 * zoom;
-        const widthPct = Math.max(2, ((tEnd - tStart) / displaySpan) * 100 * zoom);
+        const leftPct = ((tStart - winStart) / displaySpan) * 100 * zoomLayout;
+        const widthPct = Math.max(2, ((tEnd - tStart) / displaySpan) * 100 * zoomLayout);
         const regSafe = escapeHtml(f.reg || '');
         const codeSafe = escapeHtml((f.code || '').toUpperCase());
         const typeSafe = escapeHtml(String(f.aircraftType || '').trim());
@@ -1000,7 +1002,6 @@
       '<div class="alloc-gantt-label-col">' +
         labelRows.join('') +
       '</div>';
-    const innerMinWidthPct = Math.max(100, Math.round(zoom * 100));
     const gridOverlayHtml =
       '<div class="alloc-gantt-grid-overlay">' +
         tickPositions.map(function(tp) {
