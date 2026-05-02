@@ -18597,7 +18597,7 @@
         const sibt = f.sibtMin != null ? f.sibtMin : (typeof f.timeMin === 'number' ? f.timeMin : 0);
         if (isFinite(sibt) && sibt > maxT) maxT = sibt;
       });
-      return maxT + 10;
+      return maxT + 5;
     }
     if (dwellEl) {
       const syncDwell = () => {

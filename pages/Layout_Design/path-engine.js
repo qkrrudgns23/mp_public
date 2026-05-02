@@ -1,3 +1,157 @@
+        playDot.classList.remove('fresh');
+        playDot.classList.add('stale');
+        playDot.setAttribute('title', state.hasSimulationResult
+          ? 'Playback uses an older Pro Sim result — run Pro Sim to refresh'
+          : 'No playback result loaded');
+      }
+    }
+    let playbackMemSync = false;
+    if (!allowPlay) {
+      if (typeof evictFlightPlaybackTimelinesWhenPlayBlocked === 'function') {
+        playbackMemSync = evictFlightPlaybackTimelinesWhenPlayBlocked();
+      }
+      state.simPlaybackDockVisible = false;
+      state.simPlaying = false;
+      state.simSliderScrubbing = false;
+      if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
+      if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
+    } else {
+      if (typeof rehydrateFlightPlaybackTimelinesAfterPlayAllowed === 'function') {
+        playbackMemSync = rehydrateFlightPlaybackTimelinesAfterPlayAllowed();
+      }
+    }
+    if (playbackMemSync) {
+      if (typeof draw === 'function') draw();
+      if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+    }
+    if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
+  }
+  function redrawLayoutAfterEdit() {
+    bumpPathPolylineCacheRev();
+    if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
+    // Full reset rebuilds junctions in draw(); manual-sync mode keeps last graph for display until Update / Pro Sim.
+    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
+      invalidatePathGraphCache(false);
+    } else {
+      invalidatePathGraphCache(true);
+    }
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof markDesignerPageUpdateStale === 'function') markDesignerPageUpdateStale();
+    if (typeof draw === 'function') draw();
+    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+  }
+  function setGlobalUpdateProgressUi(visible, label, pct) {
+    const ov = document.getElementById('globalUpdateOverlay');
+    const fill = document.getElementById('globalUpdateProgressFill');
+    const lab = document.getElementById('globalUpdateOverlayLabel');
+    const btn = document.getElementById('btnGlobalUpdate');
+    if (!ov) return;
+    if (visible) {
+      ov.classList.add('is-visible');
+      ov.setAttribute('aria-hidden', 'false');
+      if (lab && label != null) lab.textContent = label;
+      if (fill) {
+        if (pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+        else fill.style.width = '0%';
+      }
+      if (btn) btn.disabled = true;
+    } else {
+      ov.classList.remove('is-visible');
+      ov.setAttribute('aria-hidden', 'true');
+      if (fill) fill.style.width = '0%';
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+      else if (btn) btn.disabled = false;
+    }
+  }
+  function scheduleAfterPaint(fn) {
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() { setTimeout(fn, 0); });
+    });
+  }
+  const DEFAULT_AIRLINE_CODES = (function() {
+    const a = _flightTier.defaultAirlineCodes;
+    return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
+  })();
+  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
+  function pathTypeFromLayoutMode(layoutMode) {
+    if (layoutMode === 'runwayPath') return 'runway';
+    if (layoutMode === 'runwayTaxiway') return 'runway_exit';
+    if (layoutMode === 'taxiway') return 'taxiway';
+    return 'taxiway';
+  }
+
+
+  function layoutModeFromPathType(pt) {
+    if (pt === 'runway') return 'runwayPath';
+    if (pt === 'runway_exit') return 'runwayTaxiway';
+    if (pt === 'apron_taxiway') return 'taxiway';
+    if (pt === 'general_queue_taxiway') return 'taxiway';
+    return 'taxiway';
+  }
+  function isPathLayoutMode(m) {
+    return PATH_LAYOUT_MODES.indexOf(m) >= 0;
+  }
+  function standHasApronTaxiwayLink(standId) {
+    if (standId == null || standId === '') return false;
+    const links = state.apronLinks || [];
+    const tws = state.taxiways || [];
+    for (let i = 0; i < links.length; i++) {
+      const lk = links[i];
+      if (!lk || lk.pbbId !== standId) continue;
+      const tid = lk.taxiwayId;
+      for (let j = 0; j < tws.length; j++) {
+        if (tws[j] && tws[j].id === tid) return true;
+      }
+    }
+    return false;
+  }
+  function ganttESeriesMinutesFromTimelineMeta(f) {
+    const m = f && f.timeline_meta;
+    if (!m || typeof m !== 'object') {
+      return { eldt: NaN, eibt: NaN, eobt: NaN, etot: NaN };
+    }
+    const toMin = function(sec) {
+      const n = sec != null ? Number(sec) : NaN;
+      return (isFinite(n) ? n / 60 : NaN);
+    };
+    const toMinList = function(list) {
+      if (!Array.isArray(list)) return [];
+      return list.map(function(sec) {
+        const n = sec != null ? Number(sec) : NaN;
+        return isFinite(n) ? n / 60 : NaN;
+      });
+    };
+    return {
+      eldt: toMin(m.eldtSec),
+      eibt: toMin(m.eibtSec),
+      eobt: toMin(m.eobtSec),
+      etot: toMin(m.etotSec),
+      eibtList: toMinList(m.eibtSecList),
+      eobtList: toMinList(m.eobtSecList),
+    };
+  }
+  function settingModeValueForHit(hit) {
+    if (!hit || !hit.type) return null;
+    if (hit.type === 'terminal') return 'terminal';
+    if (hit.type === 'pbb') return 'pbb';
+    if (hit.type === 'remote') return 'remote';
+    if (hit.type === 'tempStand') return 'tempStand';
+    if (hit.type === 'holdingPoint') return 'holdingPoint';
+    if (hit.type === 'taxiway') return layoutModeFromPathType((hit.obj && hit.obj.pathType) || 'taxiway');
+    if (hit.type === 'apronLink') return 'apronTaxiway';
+    if (hit.type === 'layoutMarker') return 'marker';
+    return null;
+  }
+  function cancelActiveLayoutDrawingState() {
+    state.pbbDrawing = false;
+    state.remoteDrawing = false;
+    state.tempStandDrawing = false;
+    state.holdingPointDrawing = false;
+    state.previewHoldingPoint = null;
+    state.apronLinkDrawing = false;
+    state.apronLinkTemp = null;
+    state.apronLinkMidpoints = [];
+    state.apronLinkPointerWorld = null;
     state.layoutPathDrawPointer = null;
     state.previewPbb = null;
     state.previewRemote = null;
@@ -576,202 +730,3 @@
         prev.sobtMin = Math.max(prev.sobtMin, sobt);
       } else {
         out.push({ standId: sid, sibtMin: sibt, sobtMin: sobt });
-      }
-    });
-    return out;
-  }
-  function syncSingleApronStaySegmentFromAggregate(f) {
-    if (!f || !Array.isArray(f.apronStaySegments) || f.apronStaySegments.length !== 1) return false;
-    const sibt = f.sibtMin != null && isFinite(Number(f.sibtMin))
-      ? Number(f.sibtMin)
-      : (f.timeMin != null && isFinite(Number(f.timeMin)) ? Number(f.timeMin) : null);
-    const sobt = f.sobtMin != null && isFinite(Number(f.sobtMin))
-      ? Number(f.sobtMin)
-      : (sibt != null ? sibt + Math.max(0, Number(f.dwellMin) || 0) : null);
-    if (sibt == null || sobt == null || sobt <= sibt) return false;
-    const cur = f.apronStaySegments[0] || {};
-    const standId = cur.standId != null && String(cur.standId).trim() !== ''
-      ? String(cur.standId)
-      : (f.standId != null && String(f.standId).trim() !== '' ? String(f.standId) : null);
-    f.apronStaySegments = [{ standId: standId, sibtMin: Math.max(0, sibt), sobtMin: Math.max(0, sobt) }];
-    syncFlightApronStayAggregate(f);
-    return true;
-  }
-  function collapseFlightApronStaySegmentsIfSingleStand(f) {
-    if (!f || !Array.isArray(f.apronStaySegments) || f.apronStaySegments.length <= 1) return false;
-    const segs = normalizeFlightApronStaySegments(f);
-    if (segs.length <= 1) return false;
-    const firstStandKey = String(segs[0].standId || '');
-    for (let i = 1; i < segs.length; i++) {
-      if (String(segs[i].standId || '') !== firstStandKey) return false;
-    }
-    const first = segs[0];
-    const last = segs[segs.length - 1];
-    f.apronStaySegments = [{
-      standId: first.standId || null,
-      sibtMin: first.sibtMin,
-      sobtMin: last.sobtMin
-    }];
-    syncFlightApronStayAggregate(f);
-    return true;
-  }
-  function collapseSingleStandApronStaySegmentsForFlights(flights) {
-    const changed = [];
-    (flights || []).forEach(function(f) {
-      if (!f || typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f)) return;
-      if (collapseFlightApronStaySegmentsIfSingleStand(f)) changed.push(f);
-    });
-    return changed;
-  }
-  function syncFlightApronStayAggregate(f) {
-    if (!f) return [];
-    const segs = normalizeFlightApronStaySegments(f);
-    if (!segs.length) return segs;
-    const first = segs[0];
-    const last = segs[segs.length - 1];
-    f.arrApronId = first.standId || null;
-    f.depApronId = last.standId || null;
-    f.standId = f.depApronId || null;
-    if (f.token && typeof f.token === 'object') f.token.apronId = f.depApronId || null;
-    f.sibtMin = first.sibtMin;
-    f.timeMin = first.sibtMin;
-    f.sobtMin = last.sobtMin;
-    let dwell = 0;
-    for (let i = 0; i < segs.length; i++) dwell += Math.max(0, segs[i].sobtMin - segs[i].sibtMin);
-    f.dwellMin = dwell;
-    if (typeof SCHED_SIBT_MINUS_SLDT_MIN === 'number') f.sldtMin = Math.max(0, f.sibtMin - SCHED_SIBT_MINUS_SLDT_MIN);
-    if (typeof SCHED_STOT_MINUS_SOBT_MIN === 'number') f.stotMin = f.sobtMin + SCHED_STOT_MINUS_SOBT_MIN;
-    return segs;
-  }
-  function serializableApronStaySegmentsForFlight(f) {
-    const segs = syncFlightApronStayAggregate(f).map(function(seg) {
-      return { standId: seg.standId, sibtMin: seg.sibtMin, sobtMin: seg.sobtMin };
-    });
-    return mergeAdjacentSameStandApronSegments(segs);
-  }
-  const APRON_STAY_SPLIT_MIN_PART_MIN = 20;
-  function splitFlightApronStaySegmentAtMinute(f, segIdx, cutMin) {
-    if (!f || flightBlockedLikeNoWay(f)) return false;
-    const segs = normalizeFlightApronStaySegments(f);
-    const idx = Math.max(0, parseInt(segIdx, 10) || 0);
-    if (idx >= segs.length) return false;
-    const seg = segs[idx];
-    const cut = Number(cutMin);
-    if (!isFinite(cut)) return false;
-    const snap = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0)
-      ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN
-      : 1;
-    const t = Math.max(0, Math.round(cut / snap) * snap);
-    if (t - seg.sibtMin < APRON_STAY_SPLIT_MIN_PART_MIN || seg.sobtMin - t < APRON_STAY_SPLIT_MIN_PART_MIN) {
-      return false;
-    }
-    const left = { standId: seg.standId || null, sibtMin: seg.sibtMin, sobtMin: t };
-    const right = { standId: seg.standId || null, sibtMin: t, sobtMin: seg.sobtMin };
-    segs.splice(idx, 1, left, right);
-    f.apronStaySegments = segs;
-    syncFlightApronStayAggregate(f);
-    return true;
-  }
-  function _sameApronStayStand(a, b) {
-    const sa = a && a.standId != null ? String(a.standId) : '';
-    const sb = b && b.standId != null ? String(b.standId) : '';
-    return sa === sb;
-  }
-  function applyApronStaySegmentHandleMinute(f, segIdx, role, minutes) {
-    if (!f || flightBlockedLikeNoWay(f)) return false;
-    const segs = normalizeFlightApronStaySegments(f);
-    const idx = Math.max(0, parseInt(segIdx, 10) || 0);
-    if (idx >= segs.length) return false;
-    const raw = Number(minutes);
-    if (!isFinite(raw)) return false;
-    const snap = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0)
-      ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN
-      : 1;
-    const tRaw = Math.max(0, Math.round(raw / snap) * snap);
-    if (role === 'sibt') {
-      if (idx === 0) {
-        segs[0].sibtMin = Math.min(tRaw, segs[0].sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN);
-      } else {
-        const prev = segs[idx - 1];
-        const cur = segs[idx];
-        if (_sameApronStayStand(prev, cur)) return false;
-        const lo = prev.sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN;
-        const hi = cur.sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN;
-        if (hi < lo) return false;
-        const t = Math.max(lo, Math.min(hi, tRaw));
-        prev.sobtMin = t;
-        cur.sibtMin = t;
-      }
-    } else if (role === 'sobt') {
-      if (idx >= segs.length - 1) {
-        segs[idx].sobtMin = Math.max(tRaw, segs[idx].sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN);
-      } else {
-        const cur = segs[idx];
-        const next = segs[idx + 1];
-        if (_sameApronStayStand(cur, next)) return false;
-        const lo = cur.sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN;
-        const hi = next.sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN;
-        if (hi < lo) return false;
-        const t = Math.max(lo, Math.min(hi, tRaw));
-        cur.sobtMin = t;
-        next.sibtMin = t;
-      }
-    } else {
-      return false;
-    }
-    f.apronStaySegments = segs;
-    syncFlightApronStayAggregate(f);
-    return true;
-  }
-  function buildApronStayGanttIntervalsForFlight(f, eSer) {
-    const segs = normalizeFlightApronStaySegments(f);
-    if (!segs.length) return [];
-    syncFlightApronStayAggregate(f);
-    const first = segs[0];
-    const last = segs[segs.length - 1];
-    const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, first.sibtMin - SCHED_SIBT_MINUS_SLDT_MIN);
-    const stot = f.stotMin != null ? f.stotMin : (last.sobtMin + SCHED_STOT_MINUS_SOBT_MIN);
-    return segs.map(function(seg, idx) {
-      return {
-        f: f,
-        t0: seg.sibtMin,
-        t1: seg.sobtMin,
-        sldt: sldt,
-        stot: stot,
-        eibt: eSer.eibt,
-        eobt: eSer.eobt,
-        eldt: eSer.eldt,
-        etot: eSer.etot,
-        sldtOrig: sldt,
-        sobtOrig: last.sobtMin,
-        stotOrig: stot,
-        segmentIdx: idx,
-        segmentCount: segs.length,
-        segmentStandId: seg.standId || null
-      };
-    });
-  }
-  /** If E minute fields were omitted from persist but Pro Sim left them on ``timeline_meta``, fill them for schedule UI. */
-  function hydrateEMinutesFromTimelineMetaIfMissing(f) {
-    if (!f || !f.timeline_meta || typeof f.timeline_meta !== 'object') return;
-    const m = f.timeline_meta;
-    function setMin(minKey, secKey) {
-      if (f[minKey] != null && isFinite(Number(f[minKey]))) return;
-      const n = m[secKey] != null ? Number(m[secKey]) : NaN;
-      if (isFinite(n)) f[minKey] = n / 60;
-    }
-    setMin('eldtMin', 'eldtSec');
-    setMin('eibtMin', 'eibtSec');
-    setMin('eobtMin', 'eobtSec');
-    setMin('etotMin', 'etotSec');
-  }
-  function applyLayoutObject(obj) {
-    if (!obj || typeof obj !== 'object') return;
-    state.simPlaybackEndCapSec = null;
-    const dp = obj.designerPersist;
-    const restoreProSimSyncUi = !!(dp && dp.v === 1 && dp.globalUpdateFresh === true);
-    if (obj.grid) {
-      if (typeof obj.grid.cols === 'number') GRID_COLS = obj.grid.cols;
-      if (typeof obj.grid.rows === 'number') GRID_ROWS = obj.grid.rows;
-      if (typeof obj.grid.cellSize === 'number') CELL_SIZE = obj.grid.cellSize;
-    }

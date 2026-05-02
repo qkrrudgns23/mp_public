@@ -1,3 +1,283 @@
+    refreshHasSimulationResultFromPlaybackSources();
+    return true;
+  }
+  function rehydrateFlightPlaybackTimelinesAfterPlayAllowed() {
+    if (!state.simPlaybackTimelinesEvictedForMemory) return false;
+    refreshHasSimulationResultFromPlaybackSources();
+    state.simPlaybackTimelinesEvictedForMemory = false;
+    return true;
+  }
+  function deriveDeadlockGhostPlaybackFromPayload(payload, flights) {
+    const empty = { events: [], bodyLines: '', resolveCount: 0 };
+    if (!payload || typeof payload !== 'object') return empty;
+    const positions = payload.positions;
+    if (!positions || typeof positions !== 'object') return empty;
+    const resolveCount = Number(payload.deadlock_resolve_event_count);
+    const rc = isFinite(resolveCount) && resolveCount > 0 ? Math.floor(resolveCount) : 0;
+    const byT = new Map();
+    (flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const raw = positions[String(f.id)];
+      if (!isCompactPlaybackTrack(raw) || !Array.isArray(raw.dghost_t) || !raw.dghost_t.length) return;
+      for (let i = 0; i < raw.dghost_t.length; i++) {
+        const t = Number(raw.dghost_t[i]);
+        if (!isFinite(t)) continue;
+        const tr = Math.round(t);
+        const label = String(f.reg || '').trim() || String(f.flightNumber || f.id || '').trim() || String(f.id);
+        if (!byT.has(tr)) byT.set(tr, []);
+        const arr = byT.get(tr);
+        if (arr.indexOf(label) < 0) arr.push(label);
+        break;
+      }
+    });
+    const entries = Array.from(byT.entries()).sort(function(a, b) { return a[0] - b[0]; });
+    const events = entries.map(function(e) { return { t_abs: e[0], labels: e[1].slice() }; });
+    let bodyLines = '';
+    if (events.length) {
+      bodyLines = events.map(function(ev) {
+        const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
+        const names = ev.labels.join(', ');
+        return timeStr + ' — Aircraft ' + names + ' entered deadlock ghost.';
+      }).join('\n');
+    } else if (rc > 0) {
+      bodyLines = 'Deadlock resolve was recorded ' + rc + ' time(s), but no ghost samples were found in positions.';
+    }
+    return { events: events, bodyLines: bodyLines, resolveCount: rc };
+  }
+  function renderFlightSimSliderDeadlockMarkers() {
+    const host = document.getElementById('flightSimSliderMarkers');
+    if (!host) return;
+    host.textContent = '';
+    const span = Number(state.simDurationSec) - Number(state.simStartSec);
+    if (!(span > 1e-6)) return;
+    const dlp = state.simDeadlockGhostPlayback;
+    const evs = (dlp && Array.isArray(dlp.events)) ? dlp.events : [];
+    const lo = Number(state.simStartSec);
+    const hi = Number(state.simDurationSec);
+    evs.forEach(function(ev) {
+      const t = Number(ev.t_abs);
+      if (!isFinite(t)) return;
+      if (t < lo - 2 || t > hi + 2) return;
+      const pct = 100 * (t - lo) / span;
+      const dot = document.createElement('span');
+      dot.className = 'sim-slider-deadlock-dot';
+      dot.style.left = Math.max(0, Math.min(100, pct)) + '%';
+      dot.setAttribute('title', 'DeadLock @ ' + formatTotalSecondsToHHMMSS(t));
+      host.appendChild(dot);
+    });
+  }
+  function applyAirsideSimulationResultPayload(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const truncCap = (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true)
+      ? (function() {
+        const rawCap = payload.simulation_playback_end_abs_sec;
+        const c = Number(rawCap);
+        return isFinite(c) ? c : null;
+      })()
+      : null;
+    const flightsDetail = Array.isArray(payload.flights_detail) ? payload.flights_detail : null;
+    if (flightsDetail) {
+      const byId = {};
+      flightsDetail.forEach(function(row) {
+        if (!row || row.flight_id == null) return;
+        const fid = String(row.flight_id);
+        const fin = row.edge_list_finished;
+        const planned = row.edge_list;
+        if (Array.isArray(fin) && fin.length) {
+          byId[fid] = fin.slice();
+        } else if (Array.isArray(planned) && planned.length) {
+          byId[fid] = planned.slice();
+        } else {
+          byId[fid] = [];
+        }
+      });
+      (state.flights || []).forEach(function(f) {
+        if (!f || f.id == null) return;
+        const raw = byId[String(f.id)];
+        if (Array.isArray(raw) && raw.length) {
+          f.edge_list = raw.slice();
+          f.proSimEdgeList = f.edge_list.slice();
+        } else {
+          delete f.edge_list;
+          delete f.proSimEdgeList;
+        }
+      });
+    }
+    const positions = payload.positions;
+    const hasPositions = positions && typeof positions === 'object' && Object.keys(positions).length > 0;
+    const scheduleList = Array.isArray(payload.schedule) ? payload.schedule : [];
+    const layout = payload.layout;
+    if (layout && typeof layout === 'object') {
+      applyLayoutObject(layout);
+    }
+    state.simPlaybackEndCapSec = truncCap;
+    const schedById = {};
+    scheduleList.forEach(function(s) {
+      if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
+    });
+    let mergedTimelines = 0;
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const srec = schedById[String(f.id)] || null;
+      const track = hasPositions ? positions[String(f.id)] : null;
+      const hasTrack = compactPlaybackTrackLength(track) >= 2;
+      f.timeline = null;
+      if (hasTrack) {
+        mergedTimelines++;
+        if (f.arrDep !== 'Dep') f.arrRetFailed = false;
+      }
+      if (srec && hasTrack) {
+        const eldtS = srec.ELDT != null ? Number(srec.ELDT) : NaN;
+        const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
+        const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
+        const etotS = srec.ETOT != null ? Number(srec.ETOT) : NaN;
+        const prevMeta = f.timeline_meta || {};
+        const builtDep = (typeof buildDepartureSurfaceTimelineSegments === 'function' && f.arrDep === 'Dep'
+          && isFinite(eobtS) && isFinite(etotS))
+          ? buildDepartureSurfaceTimelineSegments(f, eobtS, etotS)
+          : null;
+        const builtDepMeta = (builtDep && builtDep.meta) ? builtDep.meta : null;
+        f.timeline_meta = Object.assign(
+          {},
+          prevMeta,
+          builtDepMeta || {},
+          {
+            playbackSource: 'des_result',
+            eldtSec: isFinite(eldtS) ? eldtS : undefined,
+            eibtSec: isFinite(eibtS) ? eibtS : undefined,
+            eobtSec: isFinite(eobtS) ? eobtS : undefined,
+            etotSec: isFinite(etotS) ? etotS : undefined,
+            eibtSecList: Array.isArray(srec.EIBT_LIST) ? srec.EIBT_LIST.slice() : undefined,
+            eobtSecList: Array.isArray(srec.EOBT_LIST) ? srec.EOBT_LIST.slice() : undefined,
+            ePushFinishedSecList: Array.isArray(srec.E_PUSH_FINISHED_LIST) ? srec.E_PUSH_FINISHED_LIST.slice() : undefined,
+          }
+        );
+      } else {
+        delete f.timeline_meta;
+      }
+      applyAirsideScheduleRowToFlight(f, srec);
+    });
+    state.hasSimulationResult = mergedTimelines > 0;
+    state.simPlaybackPositionsByFlightId = hasPositions ? positions : null;
+    state.simPlaybackScheduleSnapshot = scheduleList.length ? scheduleList.slice() : null;
+    state.simPlaybackTimelinesEvictedForMemory = false;
+    state.simDeadlockGhostPlayback = deriveDeadlockGhostPlaybackFromPayload(payload, state.flights);
+    if (state.hasSimulationResult) {
+      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
+      if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+    } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+    else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+    if (typeof resizeCanvas === 'function') resizeCanvas();
+    if (typeof reset2DView === 'function') reset2DView();
+    if (typeof syncPanelFromState === 'function') syncPanelFromState();
+    if (typeof renderFlightList === 'function') renderFlightList(false, false);
+    if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
+    if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
+    if (typeof draw === 'function') draw();
+    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  }
+  function applyInitialLayoutFromJson() {
+    if (!INITIAL_LAYOUT || typeof INITIAL_LAYOUT !== 'object') return;
+    applyLayoutObject(INITIAL_LAYOUT);
+  }
+  function updateLayoutNameBar(name) {
+    const n = (name && String(name).trim()) || '';
+    state.currentLayoutName = n || state.currentLayoutName || 'default_layout';
+    const bar = document.getElementById('layout-name-bar');
+    if (bar) bar.textContent = n || state.currentLayoutName;
+  }
+  function uniqueNameAgainstSet(baseName, usedNames) {
+    const base = (baseName && String(baseName).trim()) || 'Untitled';
+    const used = usedNames instanceof Set ? usedNames : new Set();
+    if (!used.has(base)) return base;
+    let idx = 1;
+    while (used.has(base + ' (' + idx + ')')) idx++;
+    return base + ' (' + idx + ')';
+  }
+  function zeroPadNumber(num, width) {
+    return String(Math.max(0, Number(num) || 0)).padStart(width, '0');
+  }
+  function getDefaultPathName(pathType, currentId) {
+    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : (pathType === 'apron_taxiway' ? 'ATX' : (pathType === 'general_queue_taxiway' ? 'QTX' : 'TX')));
+    const sameType = (state.taxiways || []).filter(function(tw) { return tw && tw.id !== currentId && tw.pathType === pathType; });
+    const used = new Set(sameType.map(function(tw) { return (tw.name && String(tw.name).trim()) || ''; }).filter(Boolean));
+    let n = 1;
+    let candidate = prefix + String(n);
+    while (used.has(candidate)) {
+      n++;
+      candidate = prefix + String(n);
+      if (n > 100000) break;
+    }
+    return candidate;
+  }
+  function getDefaultTerminalName(currentId) {
+    return getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, currentId);
+  }
+  function getDefaultPbbStandName(currentId) {
+    const stands = (state.pbbStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('C' + zeroPadNumber(stands.length + 1, 3), used);
+  }
+  function getDefaultRemoteStandName(currentId) {
+    const stands = (state.remoteStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('R' + zeroPadNumber(stands.length + 1, 3), used);
+  }
+  function getDefaultTempStandName(currentId) {
+    const stands = (state.tempStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('T' + zeroPadNumber(stands.length + 1, 3), used);
+  }
+  function getApronLinkDefaultName(linkOrId) {
+    const linkId = (typeof linkOrId === 'object' && linkOrId) ? linkOrId.id : linkOrId;
+    const idx = (state.apronLinks || []).findIndex(function(lk) { return lk && lk.id === linkId; });
+    return 'Apron Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
+  }
+  function getApronLinkDisplayName(link) {
+    if (!link) return 'Apron Taxiway';
+    return (link.name && String(link.name).trim()) || getApronLinkDefaultName(link);
+  }
+  function ensureUniqueApronLinkName(rawName, currentId) {
+    const fallbackBase = getApronLinkDefaultName(currentId);
+    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
+    const used = new Set((state.apronLinks || [])
+      .filter(function(lk) { return lk && lk.id !== currentId; })
+      .map(function(lk) { return (lk.name && String(lk.name).trim()) || getApronLinkDefaultName(lk); })
+      .filter(Boolean));
+    return uniqueNameAgainstSet(baseName, used);
+  }
+  function getLayoutEdgeDefaultName(edge) {
+    if (!edge) return 'Edge';
+    return 'Edge ' + (edge.label || '001');
+  }
+  function getLayoutEdgeDisplayName(edge) {
+    if (!edge) return 'Edge';
+    return (edge.name && String(edge.name).trim()) || getLayoutEdgeDefaultName(edge);
+  }
+  function ensureUniqueLayoutEdgeName(rawName, currentId, fallbackEdge) {
+    const fallbackBase = getLayoutEdgeDefaultName(fallbackEdge || { label: '001' });
+    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
+    const used = new Set(Object.keys(state.layoutEdgeNames || {})
+      .filter(function(id) { return id !== currentId; })
+      .map(function(id) { return state.layoutEdgeNames[id]; })
+      .filter(Boolean));
+    return uniqueNameAgainstSet(baseName, used);
+  }
+  function normalizeLayoutNameKey(name) {
+    return String(name || '').trim().toLowerCase();
+  }
+  function findDuplicateLayoutName(objectKind, excludeId, proposedRaw) {
+    const key = normalizeLayoutNameKey(proposedRaw);
+    if (!key) return null;
+    const ex = excludeId == null || excludeId === '' ? null : String(excludeId);
+    function isOther(oid) {
+      if (ex === null) return true;
+      return String(oid) !== ex;
+    }
+    if (objectKind === 'terminal') {
+      const arr = state.terminals || [];
       for (let i = 0; i < arr.length; i++) {
         const o = arr[i];
         if (!o || !isOther(o.id)) continue;
@@ -168,283 +448,3 @@
   }
   function normalizeAllowedRunwayDirections(raw) {
     const out = [];
-    const src = Array.isArray(raw) ? raw : [];
-    src.forEach(function(v) {
-      const d = normalizeRwDirectionValue(v);
-      if (d === 'clockwise' && out.indexOf('clockwise') < 0) out.push('clockwise');
-      if (d === 'counter_clockwise' && out.indexOf('counter_clockwise') < 0) out.push('counter_clockwise');
-    });
-    return out;
-  }
-  function getTaxiwayAllowedRunwayDirections(tw) {
-    if (!tw || tw.pathType !== 'runway_exit') return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
-    const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
-    if (!arr.length) return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
-    return arr;
-  }
-  function isRunwayExitDirectionAllowed(tw, runwayDir) {
-    const d = normalizeRwDirectionValue(runwayDir);
-    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
-    const allow = getTaxiwayAllowedRunwayDirections(tw);
-    return allow.indexOf(d) >= 0;
-  }
-  /**
-   * Arrival RET sampling (F2): runways in the property panel are always stored as CW or CCW;
-   * legacy data may still have direction "both". The panel coerces "both" to the CW option for display,
-   * so we use CW as the operational match for "Available RW direction" vs the runway.
-   */
-  function getRunwayOperationalDirForArrivalRetFilter2(rw) {
-    if (!rw || rw.pathType !== 'runway') return 'clockwise';
-    const raw = getTaxiwayDirection(rw);
-    const d = normalizeRwDirectionValue(raw);
-    if (d === 'clockwise' || d === 'counter_clockwise') return d;
-    return 'clockwise';
-  }
-  /**
-   * F2: same semantics as checkboxes, but an explicit `allowedRwDirections: []` (both unchecked) means
-   * "no use" — do not re-expand to the default both-way list (pathfinding may still do that for legacy).
-   */
-  function isRunwayExitDirAllowedForArrivalFilter2(exitTw, runwayDir) {
-    const d = normalizeRwDirectionValue(runwayDir);
-    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
-    if (!exitTw || exitTw.pathType !== 'runway_exit') return false;
-    if (Object.prototype.hasOwnProperty.call(exitTw, 'allowedRwDirections')) {
-      const arr = normalizeAllowedRunwayDirections(exitTw.allowedRwDirections);
-      if (arr.length === 0) return false;
-      return arr.indexOf(d) >= 0;
-    }
-    return isRunwayExitDirectionAllowed(exitTw, d);
-  }
-  function getRunwayExitAllowedDirectionsFromPanel() {
-    const out = [];
-    const container = document.getElementById('runwayExitAllowedDirection');
-    if (!container) return out;
-    container.querySelectorAll('.runway-exit-dir-check').forEach(function(ch) {
-      if (!ch.checked) return;
-      const value = String(ch.getAttribute('data-item-id') || '').trim();
-      if (value === 'clockwise' || value === 'counter_clockwise') out.push(value);
-    });
-    return out;
-  }
-
-  const _rwy = _tiers.runway || {};
-  const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
-  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
-  const RSEP_COLOR_THRESHOLDS = (function() {
-    const arr = _sepUi.inputColorThresholdsSec;
-    if (Array.isArray(arr) && arr.length) {
-      return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
-    }
-    return [90, 120, 150];
-  })();
-  const RSEP_LEGEND_LAB = (_sepUi.legendLabels && typeof _sepUi.legendLabels === 'object') ? _sepUi.legendLabels : {};
-  function rsepLegendFmt(tpl, a0, a1) {
-    let s = String(tpl || '');
-    if (a1 != null && s.indexOf('{1}') >= 0) return s.replace('{0}', String(a0)).replace('{1}', String(a1));
-    return s.replace('{0}', String(a0));
-  }
-  const RSEP_COLOR_STYLES = [
-    { bg: '#0d2018', color: '#68d391', border: '#68d39155' },
-    { bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' },
-    { bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' },
-    { bg: '#280d0d', color: '#fc8181', border: '#fc818155' },
-  ];
-  const _stds = _rwy.standards || {};
-  const RSEP_STD_CATS = {
-    'ICAO': (_stds.ICAO && _stds.ICAO.categories) ? _stds.ICAO.categories : ['J','H','M','L'],
-    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categories) ? _stds['RECAT-EU'].categories : ['A','B','C','D','E','F'],
-  };
-  const RSEP_SEQ_TYPES = Object.assign({ 'ARR→ARR': 'matrix', 'DEP→DEP': 'matrix', 'ARR→DEP': 'lead-1d', 'DEP→ARR': 'trail-1d' }, _sepUi.seqTypes || {});
-  const RSEP_MODE_SEQS = (function() {
-    const def = { ARR: ['ARR→ARR'], DEP: ['DEP→DEP'], MIX: ['ARR→ARR','DEP→DEP','ARR→DEP','DEP→ARR'] };
-    const ms = _sepUi.modeSequences || {};
-    const out = {};
-    ['ARR','DEP','MIX'].forEach(k => {
-      const a = ms[k];
-      out[k] = (Array.isArray(a) && a.length) ? a.slice() : def[k].slice();
-    });
-    return out;
-  })();
-  const RSEP_DEFAULTS = {};
-  ['ICAO','RECAT-EU'].forEach(k => {
-    const s = _stds[k];
-    if (!s) return;
-    RSEP_DEFAULTS[k] = { ...(s.separationDefaults || {}), ROT: s.ROT || {} };
-  });
-  if (!RSEP_DEFAULTS['ICAO'] || !Object.keys(RSEP_DEFAULTS['ICAO']).length) {
-    RSEP_DEFAULTS['ICAO'] = { 'ARR→ARR': { J:{J:90,H:120,M:180,L:240}, H:{J:90,H:90,M:120,L:180}, M:{J:90,H:90,M:90,L:180}, L:{J:90,H:90,M:90,L:90} }, 'DEP→DEP': { J:{J:90,H:120,M:180,L:180}, H:{J:90,H:90,M:120,L:120}, M:{J:90,H:90,M:90,L:90}, L:{J:90,H:90,M:90,L:90} }, 'ARR→DEP': {J:90,H:80,M:65,L:50}, 'DEP→ARR': {J:60,H:60,M:70,L:90}, ROT: {J:70,H:65,M:55,L:40} };
-  }
-  if (!RSEP_DEFAULTS['RECAT-EU'] || !Object.keys(RSEP_DEFAULTS['RECAT-EU']).length) {
-    RSEP_DEFAULTS['RECAT-EU'] = { 'ARR→ARR': { A:{A:80,B:100,C:120,D:140,E:160,F:180}, B:{A:80,B:80,C:100,D:120,E:120,F:140}, C:{A:80,B:80,C:80,D:100,E:100,F:120}, D:{A:80,B:80,C:80,D:80,E:80,F:100}, E:{A:80,B:80,C:80,D:80,E:80,F:100}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'DEP→DEP': { A:{A:80,B:100,C:120,D:120,E:120,F:140}, B:{A:80,B:80,C:100,D:100,E:100,F:120}, C:{A:80,B:80,C:80,D:80,E:80,F:100}, D:{A:80,B:80,C:80,D:80,E:80,F:80}, E:{A:80,B:80,C:80,D:80,E:80,F:80}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'ARR→DEP': {A:80,B:70,C:60,D:55,E:50,F:45}, 'DEP→ARR': {A:55,B:55,C:60,D:65,E:70,F:80}, ROT: {A:65,B:60,C:55,D:50,E:45,F:40} };
-  }
-  const RSEP_STANDARDS = { 'ICAO': { ROT: RSEP_DEFAULTS['ICAO'] && RSEP_DEFAULTS['ICAO'].ROT ? RSEP_DEFAULTS['ICAO'].ROT : {} }, 'RECAT-EU': { ROT: RSEP_DEFAULTS['RECAT-EU'] && RSEP_DEFAULTS['RECAT-EU'].ROT ? RSEP_DEFAULTS['RECAT-EU'].ROT : {} } };
-  const RSEP_CAT_LABELS = {
-    'ICAO': (_stds.ICAO && _stds.ICAO.categoryLabels) ? _stds.ICAO.categoryLabels : { J:'Super', H:'Heavy', M:'Medium', L:'Light' },
-    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categoryLabels) ? _stds['RECAT-EU'].categoryLabels : { A:'Super-Heavy', B:'Upper-Heavy', C:'Lower-Heavy', D:'Medium', E:'Light', F:'Very-Light' },
-  };
-  const RSEP_SEQ_META = _rwy.seqMeta || {
-    'ARR→ARR': { driver: 'Wake of leading arrival aircraft', refPoint: 'Touchdown / final approach point of the leading arrival', input: 'Lead (arrival) × Trail (arrival) matrix input' },
-    'DEP→DEP': { driver: 'Wake of leading departure aircraft', refPoint: 'Take-off / runway entry point of the leading departure', input: 'Lead (departure) × Trail (departure) matrix input' },
-    'ARR→DEP': { driver: 'Leading aircraft ROT (runway occupancy time)', refPoint: 'Trailing aircraft: time from lineup to gear-off (lineup–gear-off)', input: 'Lead arrival category — 1D separation inputs' },
-    'DEP→ARR': { driver: 'Wake / ROT of leading departure', refPoint: 'Runway vacation / ROT end of the leading departure', input: 'Trail (arrival category) 1‑D input' },
-  };
-  function rsepGetCatLabel(stdKey, cat) {
-    const t = RSEP_CAT_LABELS[stdKey];
-    if (!t) return '';
-    return t[cat] || '';
-  }
-  function rsepGetSeqMeta(seq) {
-    return RSEP_SEQ_META[seq] || null;
-  }
-  function _rsepStringValue(value) {
-    return value != null ? String(value) : '';
-  }
-  function _rsepMakeCategoryValues(cats, src, asMatrix) {
-    const out = {};
-    cats.forEach(leadCat => {
-      if (!asMatrix) {
-        out[leadCat] = _rsepStringValue(src && src[leadCat]);
-        return;
-      }
-      out[leadCat] = {};
-      cats.forEach(trailCat => {
-        out[leadCat][trailCat] = _rsepStringValue(src && src[leadCat] && src[leadCat][trailCat]);
-      });
-    });
-    return out;
-  }
-  function rsepMakeMatrix(cats, src) {
-    return _rsepMakeCategoryValues(cats, src, true);
-  }
-  function rsepMake1D(cats, src) {
-    return _rsepMakeCategoryValues(cats, src, false);
-  }
-  function rsepMakeSeqData(stdKey) {
-    const cats = RSEP_STD_CATS[stdKey] || [];
-    const def = RSEP_DEFAULTS[stdKey] || {};
-    const arrDep = rsepMake1D(cats, def['ARR→DEP']);
-    const boost = RSEP_ARRDEP_BOOST_SEC;
-    cats.forEach(function(c) {
-      const s = arrDep[c];
-      if (s === '' || s == null) return;
-      const n = Number(s);
-      if (isFinite(n)) arrDep[c] = String(Math.round(n + boost));
-    });
-    return {
-      'ARR→ARR': rsepMakeMatrix(cats, def['ARR→ARR']),
-      'DEP→DEP': rsepMakeMatrix(cats, def['DEP→DEP']),
-      'ARR→DEP': arrDep,
-      'DEP→ARR': rsepMake1D(cats, def['DEP→ARR']),
-    };
-  }
-
-  function rsepColorForValue(val) {
-    const n = Number(val);
-    if (!isFinite(n) || val === '' || val == null) {
-      return { bg: '#1a1a1a', color: '#e5e7eb', border: '#444444' };
-    }
-    const th = RSEP_COLOR_THRESHOLDS;
-    for (let i = 0; i < th.length; i++) {
-      if (n < th[i]) return RSEP_COLOR_STYLES[i] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
-    }
-    return RSEP_COLOR_STYLES[th.length] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
-  }
-  function rsepLegendHtml(filled, total) {
-    const th = RSEP_COLOR_THRESHOLDS;
-    const countColor = filled === total ? '#68d391' : '#9ca3af';
-    let html = '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
-    const lab = RSEP_LEGEND_LAB;
-    if (th.length) {
-      const st0 = rsepColorForValue(Math.max(0, th[0] - 1));
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st0.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st0.color + ';">' + escapeHtml(rsepLegendFmt(lab.ltFirst || '<{0}s', th[0])) + '</span></span>';
-      for (let i = 1; i < th.length; i++) {
-        const lo = th[i - 1], hi = th[i];
-        const mid = lo + (hi - lo) / 2;
-        const st = rsepColorForValue(mid);
-        const text = rsepLegendFmt(lab.rangeMid || '{0}–{1}s', lo, hi - 1);
-        html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st.color + ';">' + escapeHtml(text) + '</span></span>';
-      }
-      const lastT = th[th.length - 1];
-      const stL = rsepColorForValue(lastT + 1000);
-      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + stL.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + stL.color + ';">' + escapeHtml(rsepLegendFmt(lab.gteLast || '≥{0}s', lastT)) + '</span></span>';
-    }
-    html += '<span style="margin-left:4px;color:' + countColor + ';">' + filled + '/' + total + '</span>';
-    html += '</div>';
-    return html;
-  }
-  function rsepMakeConfig(stdKey) {
-    const std = RSEP_STANDARDS[stdKey] || RSEP_STANDARDS['ICAO'];
-    const cats = RSEP_STD_CATS[stdKey];
-    const rot = std.ROT || {};
-    const rotCopy = {};
-    const boost = RSEP_ARRDEP_BOOST_SEC;
-    cats.forEach(function(c) {
-      if (rot[c] == null || rot[c] === '') rotCopy[c] = '';
-      else {
-        const n = Number(rot[c]);
-
-
-        rotCopy[c] = isFinite(n) ? String(Math.round(n + boost)) : String(rot[c]);
-      }
-    });
-    return {
-      standard: stdKey,
-      mode: 'MIX',
-      activeSeq: 'ARR→ARR',
-      seqData: rsepMakeSeqData(stdKey),
-      rot: rotCopy,
-    };
-  }
-  function rsepGetConfigForRunway(rw) {
-    if (!rw) return null;
-    if (!rw.rwySepConfig) {
-      rw.rwySepConfig = rsepMakeConfig('ICAO');
-    }
-    const cfg = rw.rwySepConfig;
-    if (!RSEP_STD_CATS[cfg.standard]) {
-      rw.rwySepConfig = rsepMakeConfig('ICAO');
-      return rw.rwySepConfig;
-    }
-    return cfg;
-  }
-  let dpr = window.devicePixelRatio || 1;
-  let ctx = (canvas && typeof canvas.getContext === 'function') ? canvas.getContext('2d') : null;
-  let layoutDrawCanvas = canvas;
-  function layoutUseForegroundOverlay() {
-    return !!(overlayCtx && overlayCanvas && layoutDrawCanvas === canvas);
-  }
-
-  function screenToWorld(sx, sy) {
-    return [(sx - state.panX) / state.scale, (sy - state.panY) / state.scale];
-  }
-  function worldToScreenCanvas(wx, wy) {
-    return [wx * state.scale + state.panX, wy * state.scale + state.panY];
-  }
-  function cellToPixel(col, row) { return [col * CELL_SIZE, row * CELL_SIZE]; }
-  function getTaxiwayAvgMoveVelocityForPath(path) {
-    if (path && typeof path.avgMoveVelocity === 'number' && isFinite(path.avgMoveVelocity) && path.avgMoveVelocity > 0)
-      return Math.max(1, Math.min(50, path.avgMoveVelocity));
-    const el = document.getElementById('taxiwayAvgMoveVelocity');
-    const v = el ? Number(el.value) : 10;
-    return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
-  }
-  function roundToStep(value, step) {
-    const n = Number(value);
-    const s = Number(step);
-    if (!isFinite(n)) return 0;
-    if (!isFinite(s) || s <= 0) return n;
-    return Math.round(n / s) * s;
-  }
-  function clampToGridBounds(col, row) {
-    const c = Math.max(0, Math.min(GRID_COLS, Number(col) || 0));
-    const r = Math.max(0, Math.min(GRID_ROWS, Number(row) || 0));
-    return [c, r];
-  }
-  function pixelToCell(x, y) {
-    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-    const snappedCol = roundToStep(x / cs, GRID_SNAP_STEP_CELL);
-    const snappedRow = roundToStep(y / cs, GRID_SNAP_STEP_CELL);
-    return clampToGridBounds(snappedCol, snappedRow);
-  }
-  function worldPointToCellPoint(wx, wy, snapToGrid) {
-    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;

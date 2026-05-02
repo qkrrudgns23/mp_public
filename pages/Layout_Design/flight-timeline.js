@@ -1,3 +1,283 @@
+    const src = Array.isArray(raw) ? raw : [];
+    src.forEach(function(v) {
+      const d = normalizeRwDirectionValue(v);
+      if (d === 'clockwise' && out.indexOf('clockwise') < 0) out.push('clockwise');
+      if (d === 'counter_clockwise' && out.indexOf('counter_clockwise') < 0) out.push('counter_clockwise');
+    });
+    return out;
+  }
+  function getTaxiwayAllowedRunwayDirections(tw) {
+    if (!tw || tw.pathType !== 'runway_exit') return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
+    const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
+    if (!arr.length) return (RW_EXIT_ALLOWED_DEFAULT && RW_EXIT_ALLOWED_DEFAULT.length) ? RW_EXIT_ALLOWED_DEFAULT.slice() : ['clockwise', 'counter_clockwise'];
+    return arr;
+  }
+  function isRunwayExitDirectionAllowed(tw, runwayDir) {
+    const d = normalizeRwDirectionValue(runwayDir);
+    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
+    const allow = getTaxiwayAllowedRunwayDirections(tw);
+    return allow.indexOf(d) >= 0;
+  }
+  /**
+   * Arrival RET sampling (F2): runways in the property panel are always stored as CW or CCW;
+   * legacy data may still have direction "both". The panel coerces "both" to the CW option for display,
+   * so we use CW as the operational match for "Available RW direction" vs the runway.
+   */
+  function getRunwayOperationalDirForArrivalRetFilter2(rw) {
+    if (!rw || rw.pathType !== 'runway') return 'clockwise';
+    const raw = getTaxiwayDirection(rw);
+    const d = normalizeRwDirectionValue(raw);
+    if (d === 'clockwise' || d === 'counter_clockwise') return d;
+    return 'clockwise';
+  }
+  /**
+   * F2: same semantics as checkboxes, but an explicit `allowedRwDirections: []` (both unchecked) means
+   * "no use" — do not re-expand to the default both-way list (pathfinding may still do that for legacy).
+   */
+  function isRunwayExitDirAllowedForArrivalFilter2(exitTw, runwayDir) {
+    const d = normalizeRwDirectionValue(runwayDir);
+    if (d !== 'clockwise' && d !== 'counter_clockwise') return true;
+    if (!exitTw || exitTw.pathType !== 'runway_exit') return false;
+    if (Object.prototype.hasOwnProperty.call(exitTw, 'allowedRwDirections')) {
+      const arr = normalizeAllowedRunwayDirections(exitTw.allowedRwDirections);
+      if (arr.length === 0) return false;
+      return arr.indexOf(d) >= 0;
+    }
+    return isRunwayExitDirectionAllowed(exitTw, d);
+  }
+  function getRunwayExitAllowedDirectionsFromPanel() {
+    const out = [];
+    const container = document.getElementById('runwayExitAllowedDirection');
+    if (!container) return out;
+    container.querySelectorAll('.runway-exit-dir-check').forEach(function(ch) {
+      if (!ch.checked) return;
+      const value = String(ch.getAttribute('data-item-id') || '').trim();
+      if (value === 'clockwise' || value === 'counter_clockwise') out.push(value);
+    });
+    return out;
+  }
+
+  const _rwy = _tiers.runway || {};
+  const _sepUi = (_rwy.separationUi && typeof _rwy.separationUi === 'object') ? _rwy.separationUi : {};
+  const RSEP_ARRDEP_BOOST_SEC = Math.max(0, Number(_sepUi.arrDepDefaultBoostSec) || 50);
+  const RSEP_COLOR_THRESHOLDS = (function() {
+    const arr = _sepUi.inputColorThresholdsSec;
+    if (Array.isArray(arr) && arr.length) {
+      return arr.map(x => Number(x)).filter(x => isFinite(x) && x > 0).sort((a, b) => a - b);
+    }
+    return [90, 120, 150];
+  })();
+  const RSEP_LEGEND_LAB = (_sepUi.legendLabels && typeof _sepUi.legendLabels === 'object') ? _sepUi.legendLabels : {};
+  function rsepLegendFmt(tpl, a0, a1) {
+    let s = String(tpl || '');
+    if (a1 != null && s.indexOf('{1}') >= 0) return s.replace('{0}', String(a0)).replace('{1}', String(a1));
+    return s.replace('{0}', String(a0));
+  }
+  const RSEP_COLOR_STYLES = [
+    { bg: '#0d2018', color: '#68d391', border: '#68d39155' },
+    { bg: '#0d1a28', color: '#63b3ed', border: '#63b3ed55' },
+    { bg: '#1e1e08', color: '#f6e05e', border: '#f6e05e55' },
+    { bg: '#280d0d', color: '#fc8181', border: '#fc818155' },
+  ];
+  const _stds = _rwy.standards || {};
+  const RSEP_STD_CATS = {
+    'ICAO': (_stds.ICAO && _stds.ICAO.categories) ? _stds.ICAO.categories : ['J','H','M','L'],
+    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categories) ? _stds['RECAT-EU'].categories : ['A','B','C','D','E','F'],
+  };
+  const RSEP_SEQ_TYPES = Object.assign({ 'ARR→ARR': 'matrix', 'DEP→DEP': 'matrix', 'ARR→DEP': 'lead-1d', 'DEP→ARR': 'trail-1d' }, _sepUi.seqTypes || {});
+  const RSEP_MODE_SEQS = (function() {
+    const def = { ARR: ['ARR→ARR'], DEP: ['DEP→DEP'], MIX: ['ARR→ARR','DEP→DEP','ARR→DEP','DEP→ARR'] };
+    const ms = _sepUi.modeSequences || {};
+    const out = {};
+    ['ARR','DEP','MIX'].forEach(k => {
+      const a = ms[k];
+      out[k] = (Array.isArray(a) && a.length) ? a.slice() : def[k].slice();
+    });
+    return out;
+  })();
+  const RSEP_DEFAULTS = {};
+  ['ICAO','RECAT-EU'].forEach(k => {
+    const s = _stds[k];
+    if (!s) return;
+    RSEP_DEFAULTS[k] = { ...(s.separationDefaults || {}), ROT: s.ROT || {} };
+  });
+  if (!RSEP_DEFAULTS['ICAO'] || !Object.keys(RSEP_DEFAULTS['ICAO']).length) {
+    RSEP_DEFAULTS['ICAO'] = { 'ARR→ARR': { J:{J:90,H:120,M:180,L:240}, H:{J:90,H:90,M:120,L:180}, M:{J:90,H:90,M:90,L:180}, L:{J:90,H:90,M:90,L:90} }, 'DEP→DEP': { J:{J:90,H:120,M:180,L:180}, H:{J:90,H:90,M:120,L:120}, M:{J:90,H:90,M:90,L:90}, L:{J:90,H:90,M:90,L:90} }, 'ARR→DEP': {J:90,H:80,M:65,L:50}, 'DEP→ARR': {J:60,H:60,M:70,L:90}, ROT: {J:70,H:65,M:55,L:40} };
+  }
+  if (!RSEP_DEFAULTS['RECAT-EU'] || !Object.keys(RSEP_DEFAULTS['RECAT-EU']).length) {
+    RSEP_DEFAULTS['RECAT-EU'] = { 'ARR→ARR': { A:{A:80,B:100,C:120,D:140,E:160,F:180}, B:{A:80,B:80,C:100,D:120,E:120,F:140}, C:{A:80,B:80,C:80,D:100,E:100,F:120}, D:{A:80,B:80,C:80,D:80,E:80,F:100}, E:{A:80,B:80,C:80,D:80,E:80,F:100}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'DEP→DEP': { A:{A:80,B:100,C:120,D:120,E:120,F:140}, B:{A:80,B:80,C:100,D:100,E:100,F:120}, C:{A:80,B:80,C:80,D:80,E:80,F:100}, D:{A:80,B:80,C:80,D:80,E:80,F:80}, E:{A:80,B:80,C:80,D:80,E:80,F:80}, F:{A:80,B:80,C:80,D:80,E:80,F:80} }, 'ARR→DEP': {A:80,B:70,C:60,D:55,E:50,F:45}, 'DEP→ARR': {A:55,B:55,C:60,D:65,E:70,F:80}, ROT: {A:65,B:60,C:55,D:50,E:45,F:40} };
+  }
+  const RSEP_STANDARDS = { 'ICAO': { ROT: RSEP_DEFAULTS['ICAO'] && RSEP_DEFAULTS['ICAO'].ROT ? RSEP_DEFAULTS['ICAO'].ROT : {} }, 'RECAT-EU': { ROT: RSEP_DEFAULTS['RECAT-EU'] && RSEP_DEFAULTS['RECAT-EU'].ROT ? RSEP_DEFAULTS['RECAT-EU'].ROT : {} } };
+  const RSEP_CAT_LABELS = {
+    'ICAO': (_stds.ICAO && _stds.ICAO.categoryLabels) ? _stds.ICAO.categoryLabels : { J:'Super', H:'Heavy', M:'Medium', L:'Light' },
+    'RECAT-EU': (_stds['RECAT-EU'] && _stds['RECAT-EU'].categoryLabels) ? _stds['RECAT-EU'].categoryLabels : { A:'Super-Heavy', B:'Upper-Heavy', C:'Lower-Heavy', D:'Medium', E:'Light', F:'Very-Light' },
+  };
+  const RSEP_SEQ_META = _rwy.seqMeta || {
+    'ARR→ARR': { driver: 'Wake of leading arrival aircraft', refPoint: 'Touchdown / final approach point of the leading arrival', input: 'Lead (arrival) × Trail (arrival) matrix input' },
+    'DEP→DEP': { driver: 'Wake of leading departure aircraft', refPoint: 'Take-off / runway entry point of the leading departure', input: 'Lead (departure) × Trail (departure) matrix input' },
+    'ARR→DEP': { driver: 'Leading aircraft ROT (runway occupancy time)', refPoint: 'Trailing aircraft: time from lineup to gear-off (lineup–gear-off)', input: 'Lead arrival category — 1D separation inputs' },
+    'DEP→ARR': { driver: 'Wake / ROT of leading departure', refPoint: 'Runway vacation / ROT end of the leading departure', input: 'Trail (arrival category) 1‑D input' },
+  };
+  function rsepGetCatLabel(stdKey, cat) {
+    const t = RSEP_CAT_LABELS[stdKey];
+    if (!t) return '';
+    return t[cat] || '';
+  }
+  function rsepGetSeqMeta(seq) {
+    return RSEP_SEQ_META[seq] || null;
+  }
+  function _rsepStringValue(value) {
+    return value != null ? String(value) : '';
+  }
+  function _rsepMakeCategoryValues(cats, src, asMatrix) {
+    const out = {};
+    cats.forEach(leadCat => {
+      if (!asMatrix) {
+        out[leadCat] = _rsepStringValue(src && src[leadCat]);
+        return;
+      }
+      out[leadCat] = {};
+      cats.forEach(trailCat => {
+        out[leadCat][trailCat] = _rsepStringValue(src && src[leadCat] && src[leadCat][trailCat]);
+      });
+    });
+    return out;
+  }
+  function rsepMakeMatrix(cats, src) {
+    return _rsepMakeCategoryValues(cats, src, true);
+  }
+  function rsepMake1D(cats, src) {
+    return _rsepMakeCategoryValues(cats, src, false);
+  }
+  function rsepMakeSeqData(stdKey) {
+    const cats = RSEP_STD_CATS[stdKey] || [];
+    const def = RSEP_DEFAULTS[stdKey] || {};
+    const arrDep = rsepMake1D(cats, def['ARR→DEP']);
+    const boost = RSEP_ARRDEP_BOOST_SEC;
+    cats.forEach(function(c) {
+      const s = arrDep[c];
+      if (s === '' || s == null) return;
+      const n = Number(s);
+      if (isFinite(n)) arrDep[c] = String(Math.round(n + boost));
+    });
+    return {
+      'ARR→ARR': rsepMakeMatrix(cats, def['ARR→ARR']),
+      'DEP→DEP': rsepMakeMatrix(cats, def['DEP→DEP']),
+      'ARR→DEP': arrDep,
+      'DEP→ARR': rsepMake1D(cats, def['DEP→ARR']),
+    };
+  }
+
+  function rsepColorForValue(val) {
+    const n = Number(val);
+    if (!isFinite(n) || val === '' || val == null) {
+      return { bg: '#1a1a1a', color: '#e5e7eb', border: '#444444' };
+    }
+    const th = RSEP_COLOR_THRESHOLDS;
+    for (let i = 0; i < th.length; i++) {
+      if (n < th[i]) return RSEP_COLOR_STYLES[i] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
+    }
+    return RSEP_COLOR_STYLES[th.length] || RSEP_COLOR_STYLES[RSEP_COLOR_STYLES.length - 1];
+  }
+  function rsepLegendHtml(filled, total) {
+    const th = RSEP_COLOR_THRESHOLDS;
+    const countColor = filled === total ? '#68d391' : '#9ca3af';
+    let html = '<div style="display:flex;align-items:center;gap:12px;margin-top:4px;margin-bottom:4px;font-size:10px;color:#9ca3af;">';
+    const lab = RSEP_LEGEND_LAB;
+    if (th.length) {
+      const st0 = rsepColorForValue(Math.max(0, th[0] - 1));
+      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st0.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st0.color + ';">' + escapeHtml(rsepLegendFmt(lab.ltFirst || '<{0}s', th[0])) + '</span></span>';
+      for (let i = 1; i < th.length; i++) {
+        const lo = th[i - 1], hi = th[i];
+        const mid = lo + (hi - lo) / 2;
+        const st = rsepColorForValue(mid);
+        const text = rsepLegendFmt(lab.rangeMid || '{0}–{1}s', lo, hi - 1);
+        html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + st.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + st.color + ';">' + escapeHtml(text) + '</span></span>';
+      }
+      const lastT = th[th.length - 1];
+      const stL = rsepColorForValue(lastT + 1000);
+      html += '<span><span style="display:inline-block;width:10px;height:10px;background:' + stL.bg + ';border-radius:2px;margin-right:4px;"></span><span style="color:' + stL.color + ';">' + escapeHtml(rsepLegendFmt(lab.gteLast || '≥{0}s', lastT)) + '</span></span>';
+    }
+    html += '<span style="margin-left:4px;color:' + countColor + ';">' + filled + '/' + total + '</span>';
+    html += '</div>';
+    return html;
+  }
+  function rsepMakeConfig(stdKey) {
+    const std = RSEP_STANDARDS[stdKey] || RSEP_STANDARDS['ICAO'];
+    const cats = RSEP_STD_CATS[stdKey];
+    const rot = std.ROT || {};
+    const rotCopy = {};
+    const boost = RSEP_ARRDEP_BOOST_SEC;
+    cats.forEach(function(c) {
+      if (rot[c] == null || rot[c] === '') rotCopy[c] = '';
+      else {
+        const n = Number(rot[c]);
+
+
+        rotCopy[c] = isFinite(n) ? String(Math.round(n + boost)) : String(rot[c]);
+      }
+    });
+    return {
+      standard: stdKey,
+      mode: 'MIX',
+      activeSeq: 'ARR→ARR',
+      seqData: rsepMakeSeqData(stdKey),
+      rot: rotCopy,
+    };
+  }
+  function rsepGetConfigForRunway(rw) {
+    if (!rw) return null;
+    if (!rw.rwySepConfig) {
+      rw.rwySepConfig = rsepMakeConfig('ICAO');
+    }
+    const cfg = rw.rwySepConfig;
+    if (!RSEP_STD_CATS[cfg.standard]) {
+      rw.rwySepConfig = rsepMakeConfig('ICAO');
+      return rw.rwySepConfig;
+    }
+    return cfg;
+  }
+  let dpr = window.devicePixelRatio || 1;
+  let ctx = (canvas && typeof canvas.getContext === 'function') ? canvas.getContext('2d') : null;
+  let layoutDrawCanvas = canvas;
+  function layoutUseForegroundOverlay() {
+    return !!(overlayCtx && overlayCanvas && layoutDrawCanvas === canvas);
+  }
+
+  function screenToWorld(sx, sy) {
+    return [(sx - state.panX) / state.scale, (sy - state.panY) / state.scale];
+  }
+  function worldToScreenCanvas(wx, wy) {
+    return [wx * state.scale + state.panX, wy * state.scale + state.panY];
+  }
+  function cellToPixel(col, row) { return [col * CELL_SIZE, row * CELL_SIZE]; }
+  function getTaxiwayAvgMoveVelocityForPath(path) {
+    if (path && typeof path.avgMoveVelocity === 'number' && isFinite(path.avgMoveVelocity) && path.avgMoveVelocity > 0)
+      return Math.max(1, Math.min(50, path.avgMoveVelocity));
+    const el = document.getElementById('taxiwayAvgMoveVelocity');
+    const v = el ? Number(el.value) : 10;
+    return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
+  }
+  function roundToStep(value, step) {
+    const n = Number(value);
+    const s = Number(step);
+    if (!isFinite(n)) return 0;
+    if (!isFinite(s) || s <= 0) return n;
+    return Math.round(n / s) * s;
+  }
+  function clampToGridBounds(col, row) {
+    const c = Math.max(0, Math.min(GRID_COLS, Number(col) || 0));
+    const r = Math.max(0, Math.min(GRID_ROWS, Number(row) || 0));
+    return [c, r];
+  }
+  function pixelToCell(x, y) {
+    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
+    const snappedCol = roundToStep(x / cs, GRID_SNAP_STEP_CELL);
+    const snappedRow = roundToStep(y / cs, GRID_SNAP_STEP_CELL);
+    return clampToGridBounds(snappedCol, snappedRow);
+  }
+  function worldPointToCellPoint(wx, wy, snapToGrid) {
+    const cs = (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
     const step = snapToGrid ? GRID_SNAP_STEP_CELL : FREE_DRAW_STEP_CELL;
     const col = roundToStep(wx / cs, step);
     const row = roundToStep(wy / cs, step);
@@ -422,6 +702,37 @@
     }
     return false;
   }
+  function polygonsOverlapXY(polyA, polyB) {
+    if (!Array.isArray(polyA) || !Array.isArray(polyB) || polyA.length < 3 || polyB.length < 3) return false;
+    for (let i = 0; i < polyA.length; i++) if (pointInPolygonXY(polyA[i], polyB)) return true;
+    for (let i = 0; i < polyB.length; i++) if (pointInPolygonXY(polyB[i], polyA)) return true;
+    for (let i = 0; i < polyA.length; i++) {
+      const a1 = polyA[i], a2 = polyA[(i + 1) % polyA.length];
+      for (let j = 0; j < polyB.length; j++) {
+        if (segIntersect(a1, a2, polyB[j], polyB[(j + 1) % polyB.length])) return true;
+      }
+    }
+    return false;
+  }
+  function polygonAabbXY(poly) {
+    if (!Array.isArray(poly) || !poly.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i];
+      const x = Number(p && p[0]), y = Number(p && p[1]);
+      if (!isFinite(x) || !isFinite(y)) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    return isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)
+      ? { left: minX, right: maxX, top: minY, bottom: maxY }
+      : null;
+  }
+  function aabbRectOverlap(a, b) {
+    return !!(a && b && !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom));
+  }
   function distPointToSegment(px, py, ax, ay, bx, by) {
     const vx = bx - ax, vy = by - ay;
     const wx = px - ax, wy = py - ay;
@@ -499,6 +810,125 @@
       standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, widM / 2),
       standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, widM / 2),
     ];
+  }
+  function buildStandDuplicateSafetyPolygonLocalPoints(depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return null;
+    const g = Number(r.gap), ws = Number(r.wingspan), pb = Number(r.pushback);
+    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
+    if (!isFinite(g) || !isFinite(ws) || !isFinite(pb) || !isFinite(nw) || !isFinite(nc) || g <= 0 || ws <= 0 || nw <= 0 || nc <= 0) return null;
+    const halfD = depM / 2, halfW = widM / 2;
+    const noseHalf = nw / 2;
+    const shiftX = standStopbarCenterShiftLocalX(depM, category);
+    const xNose = -halfD + shiftX;
+    const xStop = 0;
+    const xBendEnd = xStop + (halfW - noseHalf);
+    const xPush = (halfD - pb) + shiftX;
+    const yLim = halfW - g;
+    const xMin = (-halfD) + shiftX;
+    const xMax = halfD + shiftX;
+    const eps = 0.12;
+    if (!(noseHalf < halfW - eps)) return null;
+    if (!(xBendEnd <= xMax + eps)) return null;
+    if (!(yLim > eps && yLim < halfW - eps)) return null;
+    if (!(xStop > xMin + eps && xStop < xMax - eps)) return null;
+    const xA = Math.max(xMin, Math.min(xMax, Math.min(xStop, xPush)));
+    const xB = Math.max(xMin, Math.min(xMax, Math.max(xStop, xPush)));
+    if (!(xB > xA + eps)) return null;
+    const contour = [
+      [xNose, -noseHalf],
+      [xNose, noseHalf],
+      [xStop, noseHalf],
+      [Math.min(xBendEnd, xMax), halfW],
+      [xMax, halfW],
+      [xMax, -halfW],
+      [Math.min(xBendEnd, xMax), -halfW],
+      [xStop, -noseHalf],
+    ];
+    return clipPolygonToAxisAlignedBox(contour, xA, xB, -yLim, yLim);
+  }
+  function clipPolygonToAxisAlignedBox(poly, minX, maxX, minY, maxY) {
+    if (!Array.isArray(poly) || poly.length < 3) return null;
+    function clip(input, axis, keepGreater, value) {
+      const out = [];
+      for (let i = 0; i < input.length; i++) {
+        const a = input[i];
+        const b = input[(i + 1) % input.length];
+        const av = axis === 'x' ? a[0] : a[1];
+        const bv = axis === 'x' ? b[0] : b[1];
+        const ain = keepGreater ? av >= value - 1e-9 : av <= value + 1e-9;
+        const bin = keepGreater ? bv >= value - 1e-9 : bv <= value + 1e-9;
+        if (ain && bin) {
+          out.push(b);
+        } else if (ain !== bin) {
+          const denom = bv - av;
+          if (Math.abs(denom) > 1e-12) {
+            const t = (value - av) / denom;
+            out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+          }
+          if (!ain && bin) out.push(b);
+        }
+      }
+      return out;
+    }
+    let out = poly.slice();
+    out = clip(out, 'x', true, minX);
+    out = clip(out, 'x', false, maxX);
+    out = clip(out, 'y', true, minY);
+    out = clip(out, 'y', false, maxY);
+    return out.length >= 3 ? out : null;
+  }
+  function standDuplicateSafetyWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
+    const polyLocal = buildStandDuplicateSafetyPolygonLocalPoints(depM, widM, category);
+    if (!polyLocal || polyLocal.length < 3) return null;
+    return polyLocal.map(function(p) { return standFootprintLocalToWorld(cx, cy, angleRad, p[0], p[1]); });
+  }
+  function standSafetyOverlapSpec(stand) {
+    if (!stand || stand.id == null) return null;
+    const id = String(stand.id);
+    const isPbb = (state.pbbStands || []).some(function(s) { return s && String(s.id) === id; });
+    const center = isPbb ? getStandConnectionPx(stand) : getRemoteStandCenterPx(stand);
+    const angle = isPbb ? getPBBStandAngle(stand) : getRemoteStandAngleRad(stand);
+    const category = stand.category || 'C';
+    const dep = getStandDepthMeters(category);
+    const wid = getStandWidthMeters(category);
+    if (!center || !isFinite(center[0]) || !isFinite(center[1]) || !isFinite(dep) || !isFinite(wid)) return null;
+    const poly = standDuplicateSafetyWorldPolygonForSpec(center[0], center[1], angle, dep, wid, category);
+    const aabb = polygonAabbXY(poly);
+    return poly && aabb ? { id: id, stand: stand, poly: poly, aabb: aabb } : null;
+  }
+  function recomputeDuplicateApronByStandId() {
+    const specs = (typeof allStandsForFlightAssignment === 'function' ? allStandsForFlightAssignment() : [])
+      .map(standSafetyOverlapSpec)
+      .filter(Boolean);
+    const map = {};
+    for (let i = 0; i < specs.length; i++) {
+      const a = specs[i];
+      if (!map[a.id]) map[a.id] = [];
+      for (let j = i + 1; j < specs.length; j++) {
+        const b = specs[j];
+        if (!aabbRectOverlap(a.aabb, b.aabb)) continue;
+        if (!polygonsOverlapXY(a.poly, b.poly)) continue;
+        if (!map[a.id]) map[a.id] = [];
+        if (!map[b.id]) map[b.id] = [];
+        map[a.id].push(b.id);
+        map[b.id].push(a.id);
+      }
+    }
+    specs.forEach(function(spec) {
+      const list = (map[spec.id] || []).slice().sort();
+      spec.stand.duplicate_apron_list = list;
+      map[spec.id] = list;
+    });
+    state.duplicateApronByStandId = map;
+    return map;
+  }
+  function duplicateApronStandIdsForStand(standId) {
+    const key = standId != null ? String(standId) : '';
+    if (!key) return [];
+    const map = state.duplicateApronByStandId || {};
+    const arr = Array.isArray(map[key]) ? map[key] : [];
+    return arr.map(function(id) { return String(id); }).filter(Boolean);
   }
   function standGapSegmentsWorldForSpec(cx, cy, angleRad, depM, widM, category) {
     const r = standConfigRowForIcaoCat(category);
@@ -927,442 +1357,3 @@
     const taxiways = [];
     (list || []).forEach(function(tw) {
       const ser = serializeTaxiwayWithEndpoints(tw);
-      const pt = tw.pathType || 'taxiway';
-      if (pt === 'runway') runwayPaths.push(ser);
-      else if (pt === 'runway_exit') runwayTaxiways.push(ser);
-      else {
-        if (pt === 'general_queue_taxiway') ser.pathType = pt;
-        else delete ser.pathType;
-        taxiways.push(ser);
-      }
-    });
-    return { runwayPaths: runwayPaths, runwayTaxiways: runwayTaxiways, taxiways: taxiways };
-  }
-  function serializeCurrentLayout() {
-    function pathJunctionsToNetworkJunctions(pts) {
-      const out = [];
-      (pts || []).forEach(function(p) {
-        if (!p) return;
-        if (Array.isArray(p) && p.length >= 2) {
-          out.push({ x: p[0], y: p[1] });
-        } else if (typeof p.x === 'number' && typeof p.y === 'number') {
-          out.push({ x: p.x, y: p.y });
-        }
-      });
-      return out;
-    }
-    let networkJunctions = pathJunctionsToNetworkJunctions(state.pathGraphJunctions);
-    if (!networkJunctions.length && typeof buildPathGraph === 'function') {
-      try {
-        let gj = null;
-        const sig = computeTaxiwaysGraphSig();
-        if (state.pathGraphCacheValid && state.pathGraphCache && state.pathGraphCacheSig === sig) {
-          gj = state.pathGraphCache;
-        } else if (!PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
-          gj = buildPathGraph(null);
-        }
-        if (gj) {
-          const cj = (gj && (gj.connectedJunctions || gj.junctions)) || [];
-          networkJunctions = pathJunctionsToNetworkJunctions(cj);
-        }
-      } catch (e) { /* ignore */ }
-    }
-    let edgeExport = [];
-    if (typeof rebuildDerivedGraphEdges === 'function') {
-      try {
-        rebuildDerivedGraphEdges();
-        edgeExport = (state.derivedGraphEdges || []).map(function(ed) {
-          return { id: ed.id, label: ed.label, name: ed.name, fromIdx: ed.fromIdx, toIdx: ed.toIdx };
-        });
-      } catch (e2) { edgeExport = []; }
-    }
-    return {
-      grid: {
-        cols: GRID_COLS,
-        rows: GRID_ROWS,
-        cellSize: CELL_SIZE,
-        showGrid: !!state.showGrid,
-        showImage: !!state.showImage,
-        showRoadWidth: !!state.showRoadWidth,
-        showLayoutMarkers: !!state.showLayoutMarkers,
-        layers: Object.assign({}, state.layers),
-        layerMono: state.layerMono ? Object.assign({}, state.layerMono) : Object.assign({}, DEFAULT_LAYER_MONO),
-        layoutImageOverlay: state.layoutImageOverlay ? Object.assign({}, state.layoutImageOverlay) : null
-      },
-      networkJunctions: networkJunctions,
-      Edge: edgeExport,
-      terminals: makeUniqueNamedCopy(state.terminals, 'name').map(function(t) {
-        const o = Object.assign({}, t);
-        if (Array.isArray(o.vertices)) o.vertices = persistVerticesCellsToXY(o.vertices);
-        return o;
-      }),
-      pbbStands: makeUniqueNamedCopy(state.pbbStands, 'name'),
-      remoteStands: state.remoteStands.slice(),
-      tempStands: (state.tempStands || []).slice(),
-      holdingPoints: (state.holdingPoints || []).slice(),
-      ...(function() {
-        const p = partitionTaxiwaysForPersist(state.taxiways);
-        return { runwayPaths: p.runwayPaths, runwayTaxiways: p.runwayTaxiways, taxiways: p.taxiways };
-      })(),
-      apronLinks: (state.apronLinks || []).map(function(lk) {
-        const o = Object.assign({}, lk);
-        if (Array.isArray(o.midVertices)) o.midVertices = persistVerticesCellsToXY(o.midVertices);
-        return o;
-      }),
-      directionModes: state.directionModes.slice(),
-      flights: state.flights.map(function(f) {
-        const copy = {};
-        const simFlightKeys = [
-          'id',
-          'reg',
-          'airlineCode',
-          'flightNumber',
-          'aircraftType',
-          'code',
-          'timeMin',
-          'sibtDate',
-          'dwellMin',
-          'minDwellMin',
-          'noWayArr',
-          'noWayDep',
-          'arrRetFailed',
-          'serviceDate',
-          'sldtMin',
-          'sibtMin',
-          'sobtMin',
-          'stotMin',
-          'eldtMin',
-          'eibtMin',
-          'eobtMin',
-          'etotMin',
-          'arrApronId',
-          'depApronId',
-          'terminalId',
-          'arrTerminalId',
-          'depTerminalId',
-          'eibtMinList',
-          'eobtMinList',
-          'ePushFinishedMinList',
-          'arrRunwayDirUsed',
-          'depRunwayDirUsed',
-          'arrTdDistM',
-          'arrVTdMs',
-          'arrDecelMs2',
-          'arrDep',
-          'intDom',
-          'arrRotSec',
-          'proSimVttArrSec',
-          'proSimDttArrSec',
-          'proSimPushbackSec',
-          'proSimDttDepSec',
-          'proSimVttDepSec',
-          'proSimDepLineupSec',
-          'arrRunwayIdUsed',
-          'arrRetDistM',
-          'arrVRetInMs',
-          'arrVRetOutMs',
-        ];
-        simFlightKeys.forEach(function(k) {
-          if (Object.prototype.hasOwnProperty.call(f, k) && f[k] !== undefined) {
-            copy[k] = f[k];
-          }
-        });
-        const apronStaySegments = (typeof serializableApronStaySegmentsForFlight === 'function')
-          ? serializableApronStaySegmentsForFlight(f)
-          : [];
-        if (apronStaySegments.length) {
-          copy.apronStaySegments = apronStaySegments.map(function(seg) {
-            const out = { sibtMin: seg.sibtMin, sobtMin: seg.sobtMin };
-            if (seg.standId != null) out.standId = seg.standId;
-            return out;
-          });
-          copy.arrApronId = copy.apronStaySegments[0].standId || null;
-          copy.depApronId = copy.apronStaySegments[copy.apronStaySegments.length - 1].standId || null;
-          copy.standId = copy.depApronId || null;
-        }
-        if (Array.isArray(f.edge_list) && f.edge_list.length) {
-          copy.edge_list = f.edge_list.slice();
-        }
-        const t = f.token || {};
-        const arrRwyId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
-        const apronId = (copy.depApronId != null ? copy.depApronId : (f.standId != null ? f.standId : (t.apronId != null ? t.apronId : null)));
-        const termId = f.terminalId || t.terminalId || null;
-        const arrTermId = f.arrTerminalId || t.arrTerminalId || termId || null;
-        const depTermId = f.depTerminalId || t.depTerminalId || termId || null;
-        const depRwyId = f.depRunwayId || t.depRunwayId || null;
-        const exitTwId = (f.sampledArrRet != null && f.sampledArrRet !== '') ? f.sampledArrRet : (t.ExitTaxiwayId != null ? t.ExitTaxiwayId : null);
-        copy.token = {
-          arrRunwayId: arrRwyId,
-          ExitTaxiwayId: exitTwId || null,
-          apronId: apronId || null,
-          terminalId: termId || null,
-          arrTerminalId: arrTermId || null,
-          depTerminalId: depTermId || null,
-          depRunwayId: depRwyId || null,
-        };
-        function _twNameById(id) {
-          if (id == null || id === '') return null;
-          const tw = (state.taxiways || []).find(function(x) { return x && x.id === id; });
-          if (!tw) return String(id);
-          const n = (tw.name && String(tw.name).trim()) || '';
-          return n || String(tw.id || id);
-        }
-        function _standNameById(id) {
-          if (id == null || id === '') return null;
-          if (typeof findStandById === 'function') {
-            const st = findStandById(id);
-            if (!st) return String(id);
-            const n = (st.name && String(st.name).trim()) || '';
-            return n || String(st.id || id);
-          }
-          return String(id);
-        }
-        function _labelOrId(id, getLab) {
-          if (id == null || id === '') return null;
-          if (typeof getLab === 'function') {
-            const lab = getLab(id);
-            if (lab && lab !== '—') return lab;
-          }
-          return String(id);
-        }
-        copy.token_name = {
-          arrRunwayId: _labelOrId(arrRwyId, typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById : null),
-          ExitTaxiwayId: exitTwId ? _twNameById(exitTwId) : null,
-          apronId: apronId ? _standNameById(apronId) : null,
-          terminalId: _labelOrId(termId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
-          arrTerminalId: _labelOrId(arrTermId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
-          depTerminalId: _labelOrId(depTermId, typeof getTerminalDisplayLabelById === 'function' ? getTerminalDisplayLabelById : null),
-          depRunwayId: _labelOrId(depRwyId, typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById : null),
-        };
-        const schedExport = flightScheduleMinutesForRow(f);
-        copy.sibtDateTime = formatFlightScheduleDateTime(f, schedExport.sibt);
-        copy.sobtDateTime = formatFlightScheduleDateTime(f, schedExport.sobt);
-        copy.sldtDateTime = formatFlightScheduleDateTime(f, schedExport.sldt);
-        copy.stotDateTime = formatFlightScheduleDateTime(f, schedExport.stot);
-        if (state.hasSimulationResult && Array.isArray(f.timeline) && f.timeline.length >= 2) {
-          copy.timeline = f.timeline.map(function(p) {
-            const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
-            const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
-            const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
-            const o = { t: Number(p.t), x: x, y: y };
-            if (dg) o.deadlockGhost = true;
-            if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
-            if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
-            if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
-            return o;
-          }).filter(function(k) {
-            return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
-          });
-        }
-        if (state.hasSimulationResult && f.timeline_meta && typeof f.timeline_meta === 'object') {
-          try {
-            copy.timeline_meta = JSON.parse(JSON.stringify(f.timeline_meta));
-          } catch (eMeta) {
-            copy.timeline_meta = Object.assign({}, f.timeline_meta);
-          }
-        }
-        if (state.hasSimulationResult && Array.isArray(f.proSimEdgeList) && f.proSimEdgeList.length) {
-          copy.proSimEdgeList = f.proSimEdgeList.slice();
-        }
-        return copy;
-      }),
-      layoutMarkers: (state.layoutMarkers || []).map(function(m) {
-        if (!m || !m.kind) return null;
-        if (m.kind === 'text') {
-          return { kind: 'text', id: m.id, x: Number(m.x), y: Number(m.y), text: String(m.text || '') };
-        }
-        if (m.kind === 'ruler') {
-          return { kind: 'ruler', id: m.id, x1: Number(m.x1), y1: Number(m.y1), x2: Number(m.x2), y2: Number(m.y2) };
-        }
-        if (m.kind === 'island') {
-          const pts = Array.isArray(m.points) ? m.points.map(function(p) {
-            return { x: Number(p && p.x), y: Number(p && p.y) };
-          }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : [];
-          if (pts.length < 3) return null;
-          return {
-            kind: 'island',
-            id: m.id,
-            points: pts,
-            widthM: islandWidthMResolved(m),
-          };
-        }
-        if (m.kind === 'area') {
-          const pts = Array.isArray(m.points) ? m.points.map(function(p) {
-            return { x: Number(p && p.x), y: Number(p && p.y) };
-          }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : [];
-          if (pts.length < 3) return null;
-          return { kind: 'area', id: m.id, points: pts };
-        }
-        if (m.kind === 'flight') {
-          const si = (typeof m.segIndex === 'number' && isFinite(m.segIndex)) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
-          return {
-            kind: 'flight',
-            id: m.id,
-            taxiwayId: m.taxiwayId,
-            segIndex: si,
-            t: Number(m.t),
-            aircraftType: String(m.aircraftType || '').trim(),
-            blazerEnabled: !!m.blazerEnabled,
-            headingReversed: !!m.headingReversed,
-            blazerColor: MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) >= 0 ? String(m.blazerColor).trim() : MARKER_BLAZER_COLOR_OPTIONS[0],
-            blazerLeftTrail: Array.isArray(m.blazerLeftTrail) ? m.blazerLeftTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : [],
-            blazerRightTrail: Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }) : []
-          };
-        }
-        if (m.kind === 'navaid') {
-          return { kind: 'navaid', id: m.id, subType: (m.subType === 'ils') ? 'ils' : 'papi', x: Number(m.x), y: Number(m.y) };
-        }
-        return null;
-      }).filter(Boolean),
-      designerPersist: {
-        v: 1,
-        globalUpdateFresh: !!state.globalUpdateFresh,
-        designerPageUpdateFresh: !!state.designerPageUpdateFresh,
-        hasSimulationPlayback: !!state.hasSimulationResult,
-        simPlaybackEndCapSec: (state.simPlaybackEndCapSec != null && isFinite(Number(state.simPlaybackEndCapSec)))
-          ? Number(state.simPlaybackEndCapSec)
-          : null,
-        mapTypeMode: (state.mapTypeMode === 'heatmap') ? 'heatmap' : 'normal',
-        heatmapTrafficPhases: Object.assign({}, state.heatmapTrafficPhases || {}),
-      },
-      simPathGraph: buildSimPathGraphExport()
-    };
-  }
-  function buildLayout3DViewerPayload() {
-    let tSec = Number(state.simTimeSec);
-    if (!isFinite(tSec)) tSec = 0;
-    const layout = serializeCurrentLayout();
-    const flightDrawPoses = [];
-    (state.flights || []).forEach(function(f) {
-      if (!f) return;
-      let pose = null;
-      if (typeof getFlightPoseAtTimeForDraw === 'function') {
-        pose = getFlightPoseAtTimeForDraw(f, tSec);
-      }
-      flightDrawPoses.push({
-        id: f.id,
-        reg: f.reg,
-        aircraftType: f.aircraftType,
-        code: f.code,
-        arrDep: f.arrDep,
-        pose: pose && isFinite(pose.x) && isFinite(pose.y) ? { x: pose.x, y: pose.y, dx: pose.dx, dy: pose.dy } : null
-      });
-    });
-    const enrichedFootprints = {
-      remote: (state.remoteStands || []).map(function(st) {
-        return {
-          id: st && st.id,
-          name: st && st.name,
-          corners: typeof getRemoteStandCorners === 'function' ? getRemoteStandCorners(st) : null
-        };
-      }).filter(function(r) { return r.corners && r.corners.length >= 3; }),
-      pbb: (state.pbbStands || []).map(function(pbb) {
-        return {
-          id: pbb && pbb.id,
-          name: pbb && pbb.name,
-          corners: typeof getPBBStandCorners === 'function' ? getPBBStandCorners(pbb) : null
-        };
-      }).filter(function(r) { return r.corners && r.corners.length >= 3; })
-    };
-    const enrichedApronLinkPolylines = (state.apronLinks || []).map(function(lk) {
-      if (!lk || typeof getApronLinkPolylineWorldPts !== 'function') return null;
-      const pts = getApronLinkPolylineWorldPts(lk);
-      if (!pts || pts.length < 2) return null;
-      return {
-        id: lk.id,
-        points: pts.map(function(p) { return { x: p[0], y: p[1] }; })
-      };
-    }).filter(Boolean);
-    const payload = {
-      version: 1,
-      kind: 'grid3dViewer',
-      layoutApiUrl: (typeof LAYOUT_API_URL === 'string' && LAYOUT_API_URL) ? LAYOUT_API_URL : '',
-      grid3dAssetApiUrl: (typeof GRID3D_ASSET_API_URL === 'string' && GRID3D_ASSET_API_URL) ? GRID3D_ASSET_API_URL : '',
-      exportedAt: new Date().toISOString(),
-      simTimeSec: tSec,
-      viewerConfig: {
-        gridMajorInterval: GRID_MAJOR_INTERVAL,
-        gridViewBg: GRID_VIEW_BG
-      },
-      layout: layout,
-      flightDrawPoses: flightDrawPoses,
-      enrichedFootprints: enrichedFootprints,
-      enrichedApronLinkPolylines: enrichedApronLinkPolylines
-    };
-    try {
-      let tiled = null;
-      if (typeof exportLayoutGroundTilesFor3D === 'function') tiled = exportLayoutGroundTilesFor3D();
-      if (tiled && tiled.tiles && tiled.tiles.length === 4) {
-        payload.layoutGroundTiles = tiled;
-      } else if (typeof exportLayoutGroundTextureFor3D === 'function') {
-        const gt = exportLayoutGroundTextureFor3D();
-        if (gt && gt.dataUrl) payload.layoutGroundTexture = gt;
-      }
-    } catch (eTex) {
-      console.warn('exportLayoutGroundTilesFor3D / exportLayoutGroundTextureFor3D failed', eTex);
-    }
-    return payload;
-  }
-  function openGrid3DViewerWindow() {
-    const tpl = typeof window.__GRID3D_VIEWER_HTML_TEMPLATE__ === 'string' ? window.__GRID3D_VIEWER_HTML_TEMPLATE__ : '';
-    if (!tpl || tpl.length < 80) {
-      console.error('Grid 3D viewer template missing');
-      alert('3D viewer template is not loaded. Ensure pages/Layout_Design/3D/grid3d-viewer.html exists and reload the Layout Design page.');
-      return;
-    }
-    const bootHtml = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Layout 3D</title>' +
-      '<style>html,body{margin:0;height:100%;background:#0d0d0f;color:#e2e8f0;font-family:system-ui,sans-serif;overflow:hidden}' +
-      '.wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;box-sizing:border-box}' +
-      '.sp{width:44px;height:44px;border:3px solid rgba(148,163,184,.25);border-top-color:#7c6af7;border-radius:50%;animation:g .85s linear infinite}' +
-      '@keyframes g{to{transform:rotate(360deg)}}' +
-      '.bar{width:min(360px,86vw);height:4px;border-radius:2px;background:rgba(148,163,184,.2);overflow:hidden}' +
-      '.bar>i{display:block;height:100%;width:38%;background:linear-gradient(90deg,#5b52d6,#7c6af7);border-radius:2px;animation:p 1.15s ease-in-out infinite}' +
-      '@keyframes p{0%,100%{transform:translateX(-40%)}50%{transform:translateX(200%)}}' +
-      '.t{font-size:15px;font-weight:600;color:#f1f5f9;text-align:center}.s{font-size:13px;color:#94a3b8;text-align:center;max-width:360px;line-height:1.45}' +
-      '</style></head><body><div class="wrap"><div class="sp"></div><div class="bar"><i></i></div><p class="t">3D 뷰 준비 중</p>' +
-      '<p class="s">레이아웃 스냅샷을 만들고 있습니다. 잠시만 기다려 주세요.</p></div></body></html>';
-    const g3Base = (typeof GRID3D_ASSET_API_URL === 'string' && GRID3D_ASSET_API_URL.trim()) ? GRID3D_ASSET_API_URL.trim() : '';
-    const viewerShellUrl = /^https?:\/\//i.test(g3Base) ? g3Base.replace(/\/$/, '') + '/api/grid3d-viewer-app' : '';
-    let w = null;
-    let openedViaReceiverShell = false;
-    if (viewerShellUrl) {
-      try {
-        w = window.open(viewerShellUrl, '_blank', 'width=1280,height=840');
-        openedViaReceiverShell = !!w;
-      } catch (eHttp) {
-        console.warn('Grid 3D receiver shell open failed', eHttp);
-        w = null;
-        openedViaReceiverShell = false;
-      }
-    }
-    if (!w) {
-      try {
-        w = window.open('data:text/html;charset=utf-8,' + encodeURIComponent(bootHtml), '_blank', 'width=1280,height=840');
-      } catch (eData) {
-        console.warn('Grid 3D popup data URL failed, using about:blank', eData);
-      }
-    }
-    if (!w) {
-      w = window.open('about:blank', '_blank', 'width=1280,height=840');
-    }
-    if (!w) {
-      alert('Popup was blocked. Allow popups for this site to open the 3D viewer.');
-      return;
-    }
-    if (!openedViaReceiverShell) {
-      var bootHref = '';
-      try {
-        bootHref = w.location && w.location.href ? String(w.location.href) : '';
-      } catch (eLoc) {
-        bootHref = '';
-      }
-      if (bootHref.indexOf('data:') !== 0) {
-        try {
-          w.document.open();
-          w.document.write(bootHtml);
-          w.document.close();
-        } catch (eOpen) {
-          console.error(eOpen);
-          try {
-            w.close();
-          } catch (eClose) { /* ignore */ }

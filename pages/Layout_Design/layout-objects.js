@@ -559,6 +559,8 @@
     simPlaybackEndCapSec: null,
     simPlaying: false,
     simSliderScrubbing: false,
+    prosimBusy: false,
+    grid3dPopupRef: null,
     simSpeed: _dc.defaultSimSpeed,
     hasSimulationResult: false,
     /** Last Pro Sim ``payload.positions`` — keeps x,y playback samples off flights when Play is blocked (lighter pan/zoom). */
@@ -568,6 +570,8 @@
     /** True when timelines were evicted from flights but ``simPlaybackPositionsByFlightId`` still holds data. */
     simPlaybackTimelinesEvictedForMemory: false,
     simPlaybackDockVisible: false,
+    /** Derived after Pro Sim: first deadlockGhost sample per flight; slider markers + left dock banner. */
+    simDeadlockGhostPlayback: { events: [], bodyLines: '', resolveCount: 0 },
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
     showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
@@ -608,6 +612,7 @@
     hoverCell: null,
     vttArrCacheRev: 0,
     derivedGraphEdges: [],
+    duplicateApronByStandId: {},
     globalUpdateFresh: false,
     /** Path graph / views match last Designer 'Update' (applyPathGraphSyncNow), not Pro Sim. */
     designerPageUpdateFresh: false,
@@ -823,8 +828,3 @@
       }
       return false;
     }
-    function filt(arr) {
-      if (!Array.isArray(arr)) return arr;
-      return arr.filter(function(pt) { return !pointNearDeletedTw(pt); });
-    }
-    if (Array.isArray(g.validJunctions)) g.validJunctions = filt(g.validJunctions);

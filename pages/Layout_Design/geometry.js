@@ -1,3 +1,8 @@
+    function filt(arr) {
+      if (!Array.isArray(arr)) return arr;
+      return arr.filter(function(pt) { return !pointNearDeletedTw(pt); });
+    }
+    if (Array.isArray(g.validJunctions)) g.validJunctions = filt(g.validJunctions);
     if (Array.isArray(g.connectedJunctions)) g.connectedJunctions = filt(g.connectedJunctions);
     if (Array.isArray(g.junctions)) g.junctions = filt(g.junctions);
     if (Array.isArray(g.disconnectedValidJunctions)) g.disconnectedValidJunctions = filt(g.disconnectedValidJunctions);
@@ -132,7 +137,7 @@
     return failedRegs;
   }
   function flightApronIntervalsForProSimBlock(f) {
-    if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return [];
+    if (!f || flightBlockedLikeNoWay(f)) return [];
     const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
     const out = [];
     if (segs.length) {
@@ -206,6 +211,7 @@
   function syncProSimButtonFromDesignerPageState() {
     const btn = document.getElementById('btnGlobalUpdate');
     const dot = document.getElementById('globalUpdateSyncDot');
+    const playDot = document.getElementById('playbackFreshSyncDot');
     const ban = document.getElementById('arrRetFailedBanner');
     const banT = document.getElementById('arrRetFailedBannerText');
     const apronBan = document.getElementById('apronDuplicatedBanner');
@@ -290,145 +296,25 @@
       }
     }
     const playDock = document.getElementById('btnShowPlayDock');
-    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !!state.globalUpdateFresh;
-    const allowPlay = !!state.hasSimulationResult && proSimUiFresh;
+    const playbackFresh = !hasRetFail && !hasApronDuplicated && !!state.globalUpdateFresh;
+    const allowPlay = !!state.hasSimulationResult && !hasRetFail && !hasApronDuplicated;
     if (playDock) {
       playDock.disabled = !allowPlay;
-    }
-    let playbackMemSync = false;
-    if (!allowPlay) {
-      if (typeof evictFlightPlaybackTimelinesWhenPlayBlocked === 'function') {
-        playbackMemSync = evictFlightPlaybackTimelinesWhenPlayBlocked();
-      }
-      state.simPlaybackDockVisible = false;
-      state.simPlaying = false;
-      state.simSliderScrubbing = false;
-      if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
-      if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
-    } else {
-      if (typeof rehydrateFlightPlaybackTimelinesAfterPlayAllowed === 'function') {
-        playbackMemSync = rehydrateFlightPlaybackTimelinesAfterPlayAllowed();
+      if (!state.hasSimulationResult) {
+        playDock.setAttribute('title', '시뮬레이션 결과가 있을 때 재생 바를 엽니다');
+      } else if (hasRetFail) {
+        playDock.setAttribute('title', 'Runway exit failure가 있어 재생을 막았습니다');
+      } else if (hasApronDuplicated) {
+        playDock.setAttribute('title', 'Apron duplicated가 있어 Pro Sim/재생을 막았습니다');
+      } else if (playbackFresh) {
+        playDock.setAttribute('title', '최신 Pro Sim 결과를 재생합니다');
+      } else {
+        playDock.setAttribute('title', '이전 Pro Sim 결과를 재생합니다 — 레이아웃 변경으로 최신 상태는 아닙니다');
       }
     }
-    if (playbackMemSync) {
-      if (typeof draw === 'function') draw();
-      if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-    }
-    if (typeof syncMapTypePopoverFromState === 'function') syncMapTypePopoverFromState();
-  }
-  function redrawLayoutAfterEdit() {
-    if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
-    // Full reset rebuilds junctions in draw(); manual-sync mode keeps last graph for display until Update / Pro Sim.
-    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION) {
-      invalidatePathGraphCache(false);
-    } else {
-      invalidatePathGraphCache(true);
-    }
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    if (typeof markDesignerPageUpdateStale === 'function') markDesignerPageUpdateStale();
-    if (typeof draw === 'function') draw();
-    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-  }
-  function setGlobalUpdateProgressUi(visible, label, pct) {
-    const ov = document.getElementById('globalUpdateOverlay');
-    const fill = document.getElementById('globalUpdateProgressFill');
-    const lab = document.getElementById('globalUpdateOverlayLabel');
-    const btn = document.getElementById('btnGlobalUpdate');
-    if (!ov) return;
-    if (visible) {
-      ov.classList.add('is-visible');
-      ov.setAttribute('aria-hidden', 'false');
-      if (lab && label != null) lab.textContent = label;
-      if (fill) {
-        if (pct != null) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
-        else fill.style.width = '0%';
-      }
-      if (btn) btn.disabled = true;
-    } else {
-      ov.classList.remove('is-visible');
-      ov.setAttribute('aria-hidden', 'true');
-      if (fill) fill.style.width = '0%';
-      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
-      else if (btn) btn.disabled = false;
-    }
-  }
-  function scheduleAfterPaint(fn) {
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() { setTimeout(fn, 0); });
-    });
-  }
-  const DEFAULT_AIRLINE_CODES = (function() {
-    const a = _flightTier.defaultAirlineCodes;
-    return (Array.isArray(a) && a.length) ? a.map(String) : ['KE', '7C', 'DL'];
-  })();
-  const PATH_LAYOUT_MODES = ['runwayPath', 'runwayTaxiway', 'taxiway'];
-  function pathTypeFromLayoutMode(layoutMode) {
-    if (layoutMode === 'runwayPath') return 'runway';
-    if (layoutMode === 'runwayTaxiway') return 'runway_exit';
-    if (layoutMode === 'taxiway') return 'taxiway';
-    return 'taxiway';
-  }
-
-
-  function layoutModeFromPathType(pt) {
-    if (pt === 'runway') return 'runwayPath';
-    if (pt === 'runway_exit') return 'runwayTaxiway';
-    if (pt === 'apron_taxiway') return 'taxiway';
-    if (pt === 'general_queue_taxiway') return 'taxiway';
-    return 'taxiway';
-  }
-  function isPathLayoutMode(m) {
-    return PATH_LAYOUT_MODES.indexOf(m) >= 0;
-  }
-  function standHasApronTaxiwayLink(standId) {
-    if (standId == null || standId === '') return false;
-    const links = state.apronLinks || [];
-    const tws = state.taxiways || [];
-    for (let i = 0; i < links.length; i++) {
-      const lk = links[i];
-      if (!lk || lk.pbbId !== standId) continue;
-      const tid = lk.taxiwayId;
-      for (let j = 0; j < tws.length; j++) {
-        if (tws[j] && tws[j].id === tid) return true;
-      }
-    }
-    return false;
-  }
-  function ganttESeriesMinutesFromTimelineMeta(f) {
-    const m = f && f.timeline_meta;
-    if (!m || typeof m !== 'object') {
-      return { eldt: NaN, eibt: NaN, eobt: NaN, etot: NaN };
-    }
-    const toMin = function(sec) {
-      const n = sec != null ? Number(sec) : NaN;
-      return (isFinite(n) ? n / 60 : NaN);
-    };
-    return {
-      eldt: toMin(m.eldtSec),
-      eibt: toMin(m.eibtSec),
-      eobt: toMin(m.eobtSec),
-      etot: toMin(m.etotSec),
-    };
-  }
-  function settingModeValueForHit(hit) {
-    if (!hit || !hit.type) return null;
-    if (hit.type === 'terminal') return 'terminal';
-    if (hit.type === 'pbb') return 'pbb';
-    if (hit.type === 'remote') return 'remote';
-    if (hit.type === 'tempStand') return 'tempStand';
-    if (hit.type === 'holdingPoint') return 'holdingPoint';
-    if (hit.type === 'taxiway') return layoutModeFromPathType((hit.obj && hit.obj.pathType) || 'taxiway');
-    if (hit.type === 'apronLink') return 'apronTaxiway';
-    if (hit.type === 'layoutMarker') return 'marker';
-    return null;
-  }
-  function cancelActiveLayoutDrawingState() {
-    state.pbbDrawing = false;
-    state.remoteDrawing = false;
-    state.tempStandDrawing = false;
-    state.holdingPointDrawing = false;
-    state.previewHoldingPoint = null;
-    state.apronLinkDrawing = false;
-    state.apronLinkTemp = null;
-    state.apronLinkMidpoints = [];
-    state.apronLinkPointerWorld = null;
+    if (playDot) {
+      if (playbackFresh) {
+        playDot.classList.remove('stale');
+        playDot.classList.add('fresh');
+        playDot.setAttribute('title', 'Playback result matches the latest layout');
+      } else {
