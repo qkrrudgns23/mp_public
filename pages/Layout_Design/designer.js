@@ -3203,6 +3203,26 @@
     const idx = Math.min(lo, track.t.length - 2);
     return (t + 1e-9 >= Number(track.t[idx]) && t - 1e-9 <= Number(track.t[idx + 1])) ? idx : -1;
   }
+  /** Last unit direction of a non-trivial chord strictly before the segment containing ``tSec`` (full track — not windowed). */
+  function playbackLastMotionUnitDirBeforeTime(track, tSec) {
+    const eps = 0.08;
+    const eps2 = eps * eps;
+    if (!isCompactPlaybackTrack(track)) return null;
+    const idx = compactPlaybackIndexAtTime(track, tSec, true);
+    if (idx < 1) return null;
+    for (let j = idx - 1; j >= 0; j--) {
+      const p = compactPlaybackSampleAtIndex(track, j);
+      const q = compactPlaybackSampleAtIndex(track, j + 1);
+      if (!p || !q) continue;
+      const ddx = q.x - p.x, ddy = q.y - p.y;
+      const l2 = ddx * ddx + ddy * ddy;
+      if (l2 >= eps2) {
+        const inv = 1 / Math.sqrt(l2);
+        return { dx: ddx * inv, dy: ddy * inv };
+      }
+    }
+    return null;
+  }
   function compactPlaybackXYAtAbsTime(track, tSec) {
     const idx = compactPlaybackIndexAtTime(track, tSec, true);
     if (idx < 0 || !isCompactPlaybackTrack(track)) return null;
@@ -9557,7 +9577,12 @@
       const a = tl[0];
       if (tSec + 1e-6 < a.t || tSec - 1e-6 > a.t) return null;
       const dg = a.deadlockGhost === true;
-      return { x: a.x, y: a.y, dx: 1, dy: 0, deadlockGhost: dg };
+      let dx = 1, dy = 0;
+      if (tr) {
+        const fb = playbackLastMotionUnitDirBeforeTime(tr, tSec);
+        if (fb) { dx = fb.dx; dy = fb.dy; }
+      }
+      return { x: a.x, y: a.y, dx: dx, dy: dy, deadlockGhost: dg };
     }
     if (tSec < tl[0].t || tSec > tl[tl.length - 1].t) return null;
     const motionChordEps = 0.08;
@@ -9578,13 +9603,6 @@
       }
       return null;
     }
-    function firstMotionUnitDirFrom(startSeg) {
-      for (let j = startSeg; j <= tl.length - 2; j++) {
-        const u = segmentUnitDir(j);
-        if (u) return u;
-      }
-      return null;
-    }
     function headingForInterval(i) {
       const a = tl[i], b = tl[i + 1];
       const dx = b.x - a.x, dy = b.y - a.y;
@@ -9592,8 +9610,6 @@
       if (l2 >= motionChordEps2) return { dx: dx, dy: dy };
       const prev = lastMotionUnitDirBefore(i);
       if (prev) return { dx: prev.dx, dy: prev.dy };
-      const next = firstMotionUnitDirFrom(i + 1);
-      if (next) return { dx: next.dx, dy: next.dy };
       return { dx: 1, dy: 0 };
     }
     function frBicyclePose(R, x, y, lenM, bmin, dg) {
@@ -9649,7 +9665,14 @@
       const u = (tSec - a.t) / span;
       const x = a.x + (b.x - a.x) * u;
       const y = a.y + (b.y - a.y) * u;
-      const h = headingForInterval(useI);
+      const va = Number(a.v), vb = Number(b.v);
+      const vThreshMps = 0.05;
+      const velocityStill = isFinite(va) && isFinite(vb) && va <= vThreshMps && vb <= vThreshMps;
+      let h = headingForInterval(useI);
+      if (tr && !lastMotionUnitDirBefore(useI)) {
+        const fb = playbackLastMotionUnitDirBeforeTime(tr, tSec);
+        if (fb) h = { dx: fb.dx, dy: fb.dy };
+      }
       const dg = !!(a.deadlockGhost || b.deadlockGhost);
       let hDraw = h;
       if (dg) {
@@ -9658,11 +9681,16 @@
           firstNonDghostMotionUnitDirFrom(useI + 1);
         if (live) hDraw = { dx: live.dx, dy: live.dy };
       }
+      if (!dg && velocityStill) {
+        let back = lastMotionUnitDirBefore(useI) || lastNonDghostMotionUnitDirBeforeEnd(useI + 1);
+        if (!back && tr) back = playbackLastMotionUnitDirBeforeTime(tr, tSec);
+        if (back) hDraw = { dx: back.dx, dy: back.dy };
+      }
       const hn = normHeadingVec(hDraw);
       const dxAB = b.x - a.x, dyAB = b.y - a.y;
       const dist2 = dxAB * dxAB + dyAB * dyAB;
       const geomStill = dist2 < motionChordEps2;
-      const stationary = geomStill || dg;
+      const stationary = geomStill || dg || velocityStill;
       const { lenM } = getSimAircraftWorldDimsM(flight);
       const wheelBaseM = 0.55 * lenM;
       const bicycleMin = Math.max(0.15 * motionChordEps, 0.005 * lenM, 0.04);
