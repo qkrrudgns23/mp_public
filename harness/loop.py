@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--input", default=str(_ROOT / "data" / "Result_storage" / "default_layout_sim_input.json"))
     p.add_argument("--output", default=str(_ROOT / "data" / "Result_storage" / "_validation_sim_result.json"))
-    p.add_argument("--dt", type=float, default=3.0)
+    p.add_argument("--dt", type=float, default=5.0)
     p.add_argument("--max-runs", type=int, default=2)
     p.add_argument("--record", default=str(_ROOT / "harness" / "run_records.jsonl"))
     args = p.parse_args(argv)

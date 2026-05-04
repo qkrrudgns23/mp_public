@@ -1528,7 +1528,7 @@
         "defaultIcaoCategory": "M",
         "exitRunwayMinPerpendicularDistanceFromCenterlineM": 120,
         "playbackLeadBeforeFirstTouchdownSec": 20,
-        "timeStepSec": 3,
+        "timeStepSec": 5,
         "layoutPixelsPerMeter": 1,
         "approachOffsetM": 10000,
         "approachStraightFinalM": 3000,

@@ -153,14 +153,14 @@ DEFAULT_MIN_SEPARATION_M = 60.0
 LOOKAHEAD_RUNWAY = 0
 RESERV_DEPTH_RUNWAY = 0
 # Dep_taxi (and holding/lineup when first segment is not runway above).
-LOOKAHEAD_DEP_TAXI = 14 #12가 좋았음
-RESERV_DEPTH_DEP_TAXI = 4
+LOOKAHEAD_DEP_TAXI = 13 #13가 좋았음
+RESERV_DEPTH_DEP_TAXI = 1 # 1가 좋았음
 # Arr_taxi (default).
-LOOKAHEAD_ARR_TAXI = 14 #12가 좋았음
-RESERV_DEPTH_ARR_TAXI = 4
+LOOKAHEAD_ARR_TAXI = 13 #13가 좋았음
+RESERV_DEPTH_ARR_TAXI = 1 # 1가 좋았음
 # Arr_taxi when sim ≥ ELDT and target stand occupied / pushback cooldown.
-LOOKAHEAD_ARR_TAXI_BUSY = 12
-RESERV_DEPTH_ARR_TAXI_BUSY = 6
+LOOKAHEAD_ARR_TAXI_BUSY = 13 
+RESERV_DEPTH_ARR_TAXI_BUSY = 2
 # Upper bound for failsafe resource collection and control_state default.
 LOOKAHEAD_EDGE_COUNT_MAX = max(
     LOOKAHEAD_RUNWAY,
@@ -177,6 +177,8 @@ DEADLOCK_THRESHOLD_SEC = 300.0
 DEADLOCK_FORCE_MOVE_DURATION_SEC = 60.0
 DEADLOCK_RELEASE_STAGGER_SEC = 30.0
 DEADLOCK_RESOLVE_STOP_COUNT = 7
+# Per flight: stagnation duration before deadlock uses base threshold × multiplier in [1-f, 1+f].
+DEADLOCK_THRESHOLD_JITTER_FRAC = 0.15
 STAGNATION_PROGRESS_EPS_M = 2.0
 # After pushback from a stand, block other arrivals to that stand for this many seconds.
 STAND_POST_PUSHBACK_CLEARANCE_DELAY_SEC = 60.0
@@ -186,7 +188,7 @@ TEMP_TO_APRON_HOLD_SEC = 420.0  # 7 minutes
 ARR_TEMP_DETOUR_DECISION_LEAD_SEC = 120.0
 REROUTE_WAIT_THRESHOLD_SEC = 60.0
 REROUTE_IMPROVEMENT_RATIO = 0.2
-REROUTE_MAX_ATTEMPTS = 25
+REROUTE_MAX_ATTEMPTS = 50
 REVERSE_PENALTY_COST = 1_000_000.0
 REROUTE_YIELD_EDGE_PENALTY = REVERSE_PENALTY_COST
 REROUTE_MIN_OLD_PATH_M = 50.0
@@ -800,6 +802,9 @@ class AgentControlState:
     stagnation_anchor_sec: Optional[float] = None
     progress_snapshot_along_m: float = 0.0
     progress_snapshot_edge_id: Optional[str] = None
+    # Effective threshold (sec) for (sim_time - stagnation_anchor) before deadlock; derived from
+    # global ``deadlock_threshold_sec`` × per-flight jitter. 0.0 = use global (legacy agents).
+    deadlock_stagnation_threshold_sec: float = 0.0
 
 
 @dataclass
@@ -848,6 +853,22 @@ def _agent_deadlock_ghost_at_time(
         return False
     u = st.deadlock_ghost_until_abs_sec
     return u is not None and sim_time_abs + 1e-9 < float(u)
+
+
+def _deadlock_stagnation_threshold_for_flight(base_sec: float, flight_id: str) -> float:
+    """
+    Deterministic multiplier in [1-j, 1+j] with j = DEADLOCK_THRESHOLD_JITTER_FRAC (e.g. ±15%).
+    Spreads deadlock declaration times across flights without extra RNG state.
+    """
+    base = max(0.0, float(base_sec))
+    j = float(DEADLOCK_THRESHOLD_JITTER_FRAC)
+    if j <= 0.0:
+        return base
+    lo = 1.0 - min(j, 1.0)
+    hi = 1.0 + j
+    h = hashlib.sha256(str(flight_id).encode("utf-8")).digest()
+    u01 = int.from_bytes(h[:4], "big") / float(2**32)
+    return base * (lo + (hi - lo) * u01)
 
 
 def resolve_route_endpoint_index(
@@ -6236,10 +6257,14 @@ def build_resource_model(
 
 def ensure_agent_control_states(control_state: SimulationControlState, agents: Iterable[Flight]) -> None:
     ast = control_state.agent_states
+    base_thr = float(control_state.deadlock_threshold_sec)
     for ag in agents:
         fid = str(ag.id)
         if fid not in ast:
-            ast[fid] = AgentControlState(flight_id=fid)
+            eff_thr = _deadlock_stagnation_threshold_for_flight(base_thr, fid)
+            ast[fid] = AgentControlState(
+                flight_id=fid, deadlock_stagnation_threshold_sec=float(eff_thr)
+            )
 
 
 def _agent_occupies_apron_stand_slot(
@@ -8516,7 +8541,7 @@ def detect_deadlock(
     agents: List[Flight],
     sim_time: float,
 ) -> List[str]:
-    thr = float(control_state.deadlock_threshold_sec)
+    base_thr = float(control_state.deadlock_threshold_sec)
     t = float(sim_time)
     out: List[str] = []
     agent_states_get_dd = control_state.agent_states.get
@@ -8531,7 +8556,10 @@ def detect_deadlock(
         anchor = st.stagnation_anchor_sec
         if anchor is None:
             continue
-        if t - float(anchor) + 1e-9 < thr:
+        eff_thr = float(st.deadlock_stagnation_threshold_sec)
+        if eff_thr <= 0.0:
+            eff_thr = base_thr
+        if t - float(anchor) + 1e-9 < eff_thr:
             continue
         out.append(ag.id)
     return out
@@ -8946,7 +8974,7 @@ def apply_movement_controls(
 
 def run_simulation(
     layout: Dict[str, Any],
-    dt: float = 3.0,
+    dt: float = 5.0,
     progress_cb: Optional[Callable[[float, float, Optional[float]], None]] = None,
     progress_step_percent: float = 0.0,
 ) -> Dict[str, Any]:
