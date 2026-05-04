@@ -51,7 +51,7 @@ def run_simulation_job(
     progress_path: Optional[Path] = None,
     metrics_path: Optional[Path] = None,
     stem: str = "",
-    dt: float = 1.0,
+    dt: float = 3.0,
     no_validate: bool = False,
     compact_output: bool = False,
     progress_step_percent: float = 5.0,
@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         default=str(_ROOT / "data" / "Result_storage" / "_validation_sim_result.json"),
         help="sim_result json path (harness output)",
     )
-    parser.add_argument("--dt", type=float, default=1.0, help="simulation dt step (seconds)")
+    parser.add_argument("--dt", type=float, default=3.0, help="simulation dt step (seconds)")
     parser.add_argument("--no-validate", action="store_true", help="skip validate step")
     parser.add_argument("--progress", default="", help="optional progress JSON path")
     parser.add_argument(

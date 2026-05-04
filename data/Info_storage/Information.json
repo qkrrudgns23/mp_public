@@ -1528,7 +1528,7 @@
         "defaultIcaoCategory": "M",
         "exitRunwayMinPerpendicularDistanceFromCenterlineM": 120,
         "playbackLeadBeforeFirstTouchdownSec": 20,
-        "timeStepSec": 1,
+        "timeStepSec": 3,
         "layoutPixelsPerMeter": 1,
         "approachOffsetM": 10000,
         "approachStraightFinalM": 3000,
@@ -1542,7 +1542,7 @@
         "defaultApronStandCapacity": 1,
         "standArrivalStopRadiusM": 22,
         "standStoppedVelocityMaxMs": 0.12,
-        "deadlockResolveStopCount": 3
+        "deadlockResolveStopCount": 7
       }
     }
   }

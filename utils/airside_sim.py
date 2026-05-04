@@ -175,7 +175,8 @@ HEAVY_DECISION_INTERVAL_SEC = 15
 LIGHT_RESERVATION_RETRY_INTERVAL_SEC = 1.0
 DEADLOCK_THRESHOLD_SEC = 300.0
 DEADLOCK_FORCE_MOVE_DURATION_SEC = 60.0
-DEADLOCK_RESOLVE_STOP_COUNT = 3
+DEADLOCK_RELEASE_STAGGER_SEC = 30.0
+DEADLOCK_RESOLVE_STOP_COUNT = 7
 STAGNATION_PROGRESS_EPS_M = 2.0
 # After pushback from a stand, block other arrivals to that stand for this many seconds.
 STAND_POST_PUSHBACK_CLEARANCE_DELAY_SEC = 60.0
@@ -8546,32 +8547,47 @@ def resolve_deadlock(
         return
     id_set = {str(x) for x in deadlocked_ids}
     control_state.deadlock_resolve_event_count = int(control_state.deadlock_resolve_event_count) + 1
-    ghost_until = float(sim_time) + float(DEADLOCK_FORCE_MOVE_DURATION_SEC)
     wait_snap: Dict[str, float] = {}
     stall_snap: Dict[str, Optional[float]] = {}
+    ghost_until_snap: Dict[str, float] = {}
     agent_states_get_rd = control_state.agent_states.get
-    for fid in id_set:
+    agents_by_id_rd: Dict[str, Flight] = {str(ag.id): ag for ag in agents}
+
+    def _release_sort_key(fid: str) -> Tuple[int, float, str]:
+        ag = agents_by_id_rd.get(str(fid))
+        st = agent_states_get_rd(str(fid))
+        rank = get_agent_priority_rank(ag) if ag is not None else AGENT_PRIORITY_UNKNOWN
+        total_wait = float(st.total_wait_sec) if st is not None else 0.0
+        return (rank, -total_wait, str(fid))
+
+    ordered_ids = sorted(id_set, key=_release_sort_key)
+    base_ghost_until = float(sim_time) + float(DEADLOCK_FORCE_MOVE_DURATION_SEC)
+    stagger = max(0.0, float(DEADLOCK_RELEASE_STAGGER_SEC))
+    for idx, fid in enumerate(ordered_ids):
         st = agent_states_get_rd(fid)
         if st is None:
             continue
+        ghost_until = base_ghost_until + stagger * float(idx)
         st.deadlock_flag = True
         st.clearance = CLEARANCE_DEADLOCK_GHOST
         st.wait_reason = "deadlock_ghost"
         st.deadlock_ghost_until_abs_sec = ghost_until
         wait_snap[fid] = float(st.total_wait_sec)
         stall_snap[fid] = st.stagnation_anchor_sec
+        ghost_until_snap[fid] = float(ghost_until)
         st.stagnation_anchor_sec = None
         st.progress_snapshot_edge_id = None
         st.wait_start_sec = None
     _LOG.warning(
         "DEADLOCK_GHOST t=%.1f flights=%s total_wait_sec=%s stagnation_anchor_sec=%s "
-        "ghost_until=%.1f duration_sec=%.1f",
+        "ghost_until_by_flight=%s duration_sec=%.1f release_stagger_sec=%.1f",
         float(sim_time),
-        sorted(id_set),
+        ordered_ids,
         wait_snap,
         stall_snap,
-        ghost_until,
+        ghost_until_snap,
         float(DEADLOCK_FORCE_MOVE_DURATION_SEC),
+        stagger,
     )
 
 
@@ -8930,7 +8946,7 @@ def apply_movement_controls(
 
 def run_simulation(
     layout: Dict[str, Any],
-    dt: float = 1.0,
+    dt: float = 3.0,
     progress_cb: Optional[Callable[[float, float, Optional[float]], None]] = None,
     progress_step_percent: float = 0.0,
 ) -> Dict[str, Any]:
