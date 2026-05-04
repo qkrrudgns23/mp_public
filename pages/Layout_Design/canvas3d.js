@@ -1697,10 +1697,18 @@
     return out;
   }
 
+  function taxiwayUsesQueueJunctionSpacing(tw) {
+    if (!tw) return false;
+    const pt = String(tw.pathType || '');
+    if (pt === 'general_queue_taxiway') return true;
+    if (pt === 'runway_exit' || pt === 'runway_taxiway') return tw.queueFlow !== false;
+    return false;
+  }
+
   function queueTaxiwayAutoJunctionMarkersAlong(tw, spacingM) {
     const verts = tw && tw.vertices;
     if (!verts || verts.length < 2 || !isFinite(spacingM) || spacingM < 1e-6) return [];
-    if (String(tw.pathType || '') !== 'general_queue_taxiway') return [];
+    if (!taxiwayUsesQueueJunctionSpacing(tw)) return [];
     const out = [];
     let alongM = 0;
     let nextMark = spacingM;
@@ -2001,7 +2009,7 @@
         }
       }
     }
-    if (obj.pathType === 'general_queue_taxiway') {
+    if (taxiwayUsesQueueJunctionSpacing(obj)) {
       queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
         junctions.push({ tAlong: qj.tAlong, p: qj.p });
       });
@@ -2409,7 +2417,7 @@
           }
         }
       }
-      if (obj.pathType === 'general_queue_taxiway') {
+      if (taxiwayUsesQueueJunctionSpacing(obj)) {
         queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
           junctions.push(qj);
         });
@@ -3753,7 +3761,7 @@
     ctx.scale(state.scale, state.scale);
     const r = Math.max(3.5, CELL_SIZE * 0.22) * LAYOUT_VERTEX_DOT_SCALE;
     (state.taxiways || []).forEach(function(tw) {
-      if (!tw || tw.pathType !== 'general_queue_taxiway' || !tw.vertices || tw.vertices.length < 2) return;
+      if (!tw || !taxiwayUsesQueueJunctionSpacing(tw) || !tw.vertices || tw.vertices.length < 2) return;
       if (!taxiwayShouldDrawInViewport(tw, vbQ)) return;
       const jm = queueTaxiwayAutoJunctionMarkersAlong(tw, QUEUE_TAXIWAY_JUNCTION_SPACING_M);
       for (let j = 0; j < jm.length; j++) {
@@ -5999,6 +6007,14 @@
       const v = el ? Number(el.value) : 10;
       return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
     })(), startDisplacedThresholdM, startBlastPadM, endDisplacedThresholdM, endBlastPadM };
+    if (pathType === 'runway_exit') {
+      const kEl = document.getElementById('taxiwayPathTypeKind');
+      const kr = kEl ? String(kEl.value || 'queue') : 'queue';
+      if (kr === 'normal') taxiway.queueFlow = false;
+      else delete taxiway.queueFlow;
+    } else {
+      delete taxiway.queueFlow;
+    }
     if (pathType !== 'runway') delete taxiway.minArrVelocity;
     if (pathType !== 'runway') delete taxiway.lineupDistM;
     if (pathType !== 'runway') delete taxiway.lineupDistM_CW;

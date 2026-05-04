@@ -160,7 +160,7 @@ LOOKAHEAD_ARR_TAXI = 13 #13가 좋았음
 RESERV_DEPTH_ARR_TAXI = 1 # 1가 좋았음
 # Arr_taxi when sim ≥ ELDT and target stand occupied / pushback cooldown.
 LOOKAHEAD_ARR_TAXI_BUSY = 13 
-RESERV_DEPTH_ARR_TAXI_BUSY = 2
+RESERV_DEPTH_ARR_TAXI_BUSY = 1
 # Upper bound for failsafe resource collection and control_state default.
 LOOKAHEAD_EDGE_COUNT_MAX = max(
     LOOKAHEAD_RUNWAY,
@@ -168,6 +168,9 @@ LOOKAHEAD_EDGE_COUNT_MAX = max(
     LOOKAHEAD_ARR_TAXI,
     LOOKAHEAD_ARR_TAXI_BUSY,
 )
+
+# 안1 : Deadlock 편만 Lookahead를 증가시키면 될듯
+
 RWY_ARRIVAL_SPACING_BUFFER_SEC = 25 #### 홪주로 이탈시간 여유분분
 HEAVY_DECISION_INTERVAL_SEC = 15
 # Between heavy ticks, re-run full reservation pass this often so Arr_taxi / Dep_taxi agents

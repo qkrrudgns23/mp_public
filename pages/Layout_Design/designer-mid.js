@@ -489,6 +489,11 @@
         if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
           const kind = String(this.value || 'normal');
           tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+          delete tw.queueFlow;
+        } else if (ptCur === 'runway_exit' || ptCur === 'runway_taxiway') {
+          const kindRx = String(this.value || 'queue');
+          if (kindRx === 'normal') tw.queueFlow = false;
+          else delete tw.queueFlow;
         }
         updateObjectInfo();
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();

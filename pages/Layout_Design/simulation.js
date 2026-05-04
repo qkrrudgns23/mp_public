@@ -350,7 +350,9 @@
       const kindSel = document.getElementById('taxiwayPathTypeKind');
       if (kindSel) {
         const ptk = tw.pathType || 'taxiway';
-        kindSel.value = (ptk === 'general_queue_taxiway') ? 'queue' : 'normal';
+        if (ptk === 'general_queue_taxiway') kindSel.value = 'queue';
+        else if (ptk === 'runway_exit' || ptk === 'runway_taxiway') kindSel.value = (tw.queueFlow === false) ? 'normal' : 'queue';
+        else kindSel.value = 'normal';
       }
       syncPathPavementRadiosToValue(pathPavementResolvedForTaxiway(tw));
     } else if (state.selectedObject && state.selectedObject.type === 'apronLink') {
@@ -372,6 +374,7 @@
         }
         const twKindIdle = document.getElementById('taxiwayPathTypeKind');
         if (twKindIdle && ptx === 'taxiway') twKindIdle.value = 'normal';
+        if (twKindIdle && (ptx === 'runway_exit' || ptx === 'runway_taxiway')) twKindIdle.value = 'queue';
         syncPathPavementRadiosToValue(pathPavementDefaultForPathType(ptx));
       }
       else {
@@ -602,6 +605,11 @@
         if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
           const kind = String(el('taxiwayPathTypeKind').value || 'normal');
           tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+          delete tw.queueFlow;
+        } else if (ptCur === 'runway_exit' || ptCur === 'runway_taxiway') {
+          const kindR = String(el('taxiwayPathTypeKind').value || 'queue');
+          if (kindR === 'normal') tw.queueFlow = false;
+          else delete tw.queueFlow;
         }
       }
       if (el('taxiwayAvgMoveVelocity')) {
@@ -644,6 +652,7 @@
         delete tw.endDisplacedThresholdM;
         delete tw.endBlastPadM;
       }
+      if (tw.pathType !== 'runway_exit' && tw.pathType !== 'runway_taxiway') delete tw.queueFlow;
     }
   }
 
@@ -686,6 +695,8 @@
           const endBlastInput = document.getElementById('runwayEndBlastPadM');
           if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
         }
+        const pathKindIdleStSm = document.getElementById('taxiwayPathTypeKind');
+        if (pathKindIdleStSm && (pt === 'runway_exit' || pt === 'runway_taxiway')) pathKindIdleStSm.value = 'queue';
       }
     }
     if (typeof renderObjectList === 'function') renderObjectList();

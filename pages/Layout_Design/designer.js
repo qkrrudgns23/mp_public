@@ -295,6 +295,14 @@
     const use = (isFinite(raw) && raw > 0) ? raw : baseWidth;
     return Math.max(lo, Math.min(100, use));
   }
+  /** Queue junction spacing along path (matches backend designer_path_graph queue splits). */
+  function taxiwayUsesQueueJunctionSpacing(tw) {
+    if (!tw) return false;
+    const pt = String(tw.pathType || '');
+    if (pt === 'general_queue_taxiway') return true;
+    if (pt === 'runway_exit' || pt === 'runway_taxiway') return tw.queueFlow !== false;
+    return false;
+  }
   function normalizeTaxiwayWidthInPlace(tw) {
     if (!tw || typeof tw !== 'object') return;
     const pt = tw.pathType || 'taxiway';
@@ -1431,7 +1439,9 @@
     return (state.taxiways || []).map(function(tw) {
       if (!tw || !tw.vertices) return '';
       const verts = tw.vertices.map(function(v) { return String(Number(v.col)) + ',' + String(Number(v.row)); }).join(';');
-      return String(tw.id || '') + '|' + String(tw.pathType || '') + '|' + String(tw.direction || '') + '|' + verts;
+      const ptSig = String(tw.pathType || '');
+      const qf = (ptSig === 'runway_exit' || ptSig === 'runway_taxiway') ? String(tw.queueFlow !== false ? '1' : '0') : '';
+      return String(tw.id || '') + '|' + ptSig + '|' + String(tw.direction || '') + '|' + qf + '|' + verts;
     }).join('||');
   }
   function stripPathGraphCacheJunctionsNearTaxiwayWorld(tw) {
@@ -2261,7 +2271,7 @@
     const rwDirWrap = document.getElementById('runwayExitAllowedDirectionWrap');
     const taxiwayTypeWrap = document.getElementById('taxiwayTypeWrap');
     if (taxiwayAvgWrap) taxiwayAvgWrap.style.display = (pt === 'taxiway' || pt === 'apron_taxiway' || pt === 'general_queue_taxiway') ? 'grid' : 'none';
-    if (taxiwayTypeWrap) taxiwayTypeWrap.style.display = (pt === 'taxiway' || pt === 'general_queue_taxiway') ? 'grid' : 'none';
+    if (taxiwayTypeWrap) taxiwayTypeWrap.style.display = (pt === 'taxiway' || pt === 'general_queue_taxiway' || pt === 'runway_exit' || pt === 'runway_taxiway') ? 'grid' : 'none';
     if (runwayMinArrWrap) runwayMinArrWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
     if (runwayLineupWrap) runwayLineupWrap.style.display = (pt === 'runway') ? 'block' : 'none';
     if (runwayStartDispWrap) runwayStartDispWrap.style.display = (pt === 'runway') ? 'grid' : 'none';
@@ -5183,6 +5193,11 @@
     }
     if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
     else delete copy.rwySepConfig;
+    if (tw.pathType === 'runway_exit' || tw.pathType === 'runway_taxiway') {
+      copy.queueFlow = tw.queueFlow !== false;
+    } else {
+      delete copy.queueFlow;
+    }
     return copy;
   }
   function partitionTaxiwaysForPersist(list) {
@@ -5193,7 +5208,7 @@
       const ser = serializeTaxiwayWithEndpoints(tw);
       const pt = tw.pathType || 'taxiway';
       if (pt === 'runway') runwayPaths.push(ser);
-      else if (pt === 'runway_exit') runwayTaxiways.push(ser);
+      else if (pt === 'runway_exit' || pt === 'runway_taxiway') runwayTaxiways.push(ser);
       else {
         if (pt === 'general_queue_taxiway') ser.pathType = pt;
         else delete ser.pathType;
@@ -7722,7 +7737,9 @@
       const kindSel = document.getElementById('taxiwayPathTypeKind');
       if (kindSel) {
         const ptk = tw.pathType || 'taxiway';
-        kindSel.value = (ptk === 'general_queue_taxiway') ? 'queue' : 'normal';
+        if (ptk === 'general_queue_taxiway') kindSel.value = 'queue';
+        else if (ptk === 'runway_exit' || ptk === 'runway_taxiway') kindSel.value = (tw.queueFlow === false) ? 'normal' : 'queue';
+        else kindSel.value = 'normal';
       }
       syncPathPavementRadiosToValue(pathPavementResolvedForTaxiway(tw));
     } else if (state.selectedObject && state.selectedObject.type === 'apronLink') {
@@ -7744,6 +7761,7 @@
         }
         const twKindIdle = document.getElementById('taxiwayPathTypeKind');
         if (twKindIdle && ptx === 'taxiway') twKindIdle.value = 'normal';
+        if (twKindIdle && (ptx === 'runway_exit' || ptx === 'runway_taxiway')) twKindIdle.value = 'queue';
         syncPathPavementRadiosToValue(pathPavementDefaultForPathType(ptx));
       }
       else {
@@ -7974,6 +7992,11 @@
         if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
           const kind = String(el('taxiwayPathTypeKind').value || 'normal');
           tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+          delete tw.queueFlow;
+        } else if (ptCur === 'runway_exit' || ptCur === 'runway_taxiway') {
+          const kindR = String(el('taxiwayPathTypeKind').value || 'queue');
+          if (kindR === 'normal') tw.queueFlow = false;
+          else delete tw.queueFlow;
         }
       }
       if (el('taxiwayAvgMoveVelocity')) {
@@ -8016,6 +8039,7 @@
         delete tw.endDisplacedThresholdM;
         delete tw.endBlastPadM;
       }
+      if (tw.pathType !== 'runway_exit' && tw.pathType !== 'runway_taxiway') delete tw.queueFlow;
     }
   }
 
@@ -8058,6 +8082,8 @@
           const endBlastInput = document.getElementById('runwayEndBlastPadM');
           if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
         }
+        const pathKindIdleSt = document.getElementById('taxiwayPathTypeKind');
+        if (pathKindIdleSt && (pt === 'runway_exit' || pt === 'runway_taxiway')) pathKindIdleSt.value = 'queue';
       }
     }
     if (typeof renderObjectList === 'function') renderObjectList();
@@ -8843,6 +8869,11 @@
         if (ptCur === 'taxiway' || ptCur === 'general_queue_taxiway') {
           const kind = String(this.value || 'normal');
           tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
+          delete tw.queueFlow;
+        } else if (ptCur === 'runway_exit' || ptCur === 'runway_taxiway') {
+          const kindRx = String(this.value || 'queue');
+          if (kindRx === 'normal') tw.queueFlow = false;
+          else delete tw.queueFlow;
         }
         updateObjectInfo();
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
@@ -15966,7 +15997,7 @@
   function queueTaxiwayAutoJunctionMarkersAlong(tw, spacingM) {
     const verts = tw && tw.vertices;
     if (!verts || verts.length < 2 || !isFinite(spacingM) || spacingM < 1e-6) return [];
-    if (String(tw.pathType || '') !== 'general_queue_taxiway') return [];
+    if (!taxiwayUsesQueueJunctionSpacing(tw)) return [];
     const out = [];
     let alongM = 0;
     let nextMark = spacingM;
@@ -16267,7 +16298,7 @@
         }
       }
     }
-    if (obj.pathType === 'general_queue_taxiway') {
+    if (taxiwayUsesQueueJunctionSpacing(obj)) {
       queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
         junctions.push({ tAlong: qj.tAlong, p: qj.p });
       });
@@ -18452,7 +18483,7 @@
     ctx.scale(state.scale, state.scale);
     const r = Math.max(3.5, CELL_SIZE * 0.22) * LAYOUT_VERTEX_DOT_SCALE;
     (state.taxiways || []).forEach(function(tw) {
-      if (!tw || tw.pathType !== 'general_queue_taxiway' || !tw.vertices || tw.vertices.length < 2) return;
+      if (!tw || !taxiwayUsesQueueJunctionSpacing(tw) || !tw.vertices || tw.vertices.length < 2) return;
       if (!taxiwayShouldDrawInViewport(tw, vbQ)) return;
       const jm = queueTaxiwayAutoJunctionMarkersAlong(tw, QUEUE_TAXIWAY_JUNCTION_SPACING_M);
       for (let j = 0; j < jm.length; j++) {
@@ -20821,6 +20852,14 @@
       const v = el ? Number(el.value) : 10;
       return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
     })(), startDisplacedThresholdM, startBlastPadM, endDisplacedThresholdM, endBlastPadM };
+    if (pathType === 'runway_exit') {
+      const kEl = document.getElementById('taxiwayPathTypeKind');
+      const kr = kEl ? String(kEl.value || 'queue') : 'queue';
+      if (kr === 'normal') taxiway.queueFlow = false;
+      else delete taxiway.queueFlow;
+    } else {
+      delete taxiway.queueFlow;
+    }
     if (pathType !== 'runway') delete taxiway.minArrVelocity;
     if (pathType !== 'runway') delete taxiway.lineupDistM;
     if (pathType !== 'runway') delete taxiway.lineupDistM_CW;

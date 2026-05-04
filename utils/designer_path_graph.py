@@ -926,7 +926,12 @@ def build_path_graph(
                         and _dist2(p_ts, sp_ts) <= hp_tol_d2
                     ):
                         junctions.append((seg + float(t_ts), p_ts))
-        if str(obj.get("pathType") or "") == "general_queue_taxiway":
+        pt_flow = str(obj.get("pathType") or "")
+        use_queue_spacing = pt_flow == "general_queue_taxiway" or (
+            pt_flow in ("runway_exit", "runway_taxiway")
+            and bool(obj.get("queueFlow", True))
+        )
+        if use_queue_spacing:
             for t_along_q, p_q in _queue_taxiway_junction_along_vertices(
                 obj, cell_size, queue_spacing_m
             ):
