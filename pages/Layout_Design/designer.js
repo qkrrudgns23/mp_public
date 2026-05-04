@@ -9855,15 +9855,38 @@
       }
     }
     if (segIdx < 0) return pose;
-    const { lenM } = getSimAircraftWorldDimsM(flight);
-    const wheelBaseM = 0.55 * lenM;
-    const rear = walkPushbackPolylineFromFront(tl, segIdx, pose.x, pose.y, wheelBaseM);
-    if (!rear) return pose;
-    const dx = pose.x - rear.x;
-    const dy = pose.y - rear.y;
-    const dl = Math.hypot(dx, dy);
-    if (dl < Math.max(0.005 * lenM, 0.04)) return pose;
-    const pushPose = { x: pose.x, y: pose.y, dx: dx / dl, dy: dy / dl, deadlockGhost: !!pose.deadlockGhost };
+    const segA = tl[segIdx];
+    const segB = tl[segIdx + 1];
+    const purePushSeg =
+      String(segA.phase || '') === 'Pushback' && String(segB.phase || '') === 'Pushback';
+    let pushPose = null;
+    if (purePushSeg) {
+      const sdx = segB.x - segA.x;
+      const sdy = segB.y - segA.y;
+      const sl = Math.hypot(sdx, sdy);
+      if (sl >= 0.08) {
+        const ux = sdx / sl;
+        const uy = sdy / sl;
+        pushPose = {
+          x: pose.x,
+          y: pose.y,
+          dx: -ux,
+          dy: -uy,
+          deadlockGhost: !!pose.deadlockGhost,
+        };
+      }
+    }
+    if (!pushPose) {
+      const { lenM } = getSimAircraftWorldDimsM(flight);
+      const wheelBaseM = 0.55 * lenM;
+      const rear = walkPushbackPolylineFromFront(tl, segIdx, pose.x, pose.y, wheelBaseM);
+      if (!rear) return pose;
+      const dx = pose.x - rear.x;
+      const dy = pose.y - rear.y;
+      const dl = Math.hypot(dx, dy);
+      if (dl < Math.max(0.005 * lenM, 0.04)) return pose;
+      pushPose = { x: pose.x, y: pose.y, dx: dx / dl, dy: dy / dl, deadlockGhost: !!pose.deadlockGhost };
+    }
     if (!inBlend || transitionStartT == null || curPhase === 'Pushback') return pushPose;
     const alpha = Math.max(0, Math.min(1, (t - transitionStartT) / PUSHBACK_TO_DEP_TAXI_BLEND_SEC));
     return blendPoseHeading(pushPose, pose, alpha);
@@ -25301,7 +25324,7 @@
           draw();
         }
       } else if (pickHit && !layoutDrawModePreventsBackgroundObjectPick()) {
-        state.flightPathRevealFlightId = null;
+        state.flightPathRevealFlightId = pickHit.type === 'flight' ? String(pickHit.id) : null;
         state.selectedObject = pickHit;
         if (pickHit.type === 'terminal') state.currentTerminalId = pickHit.id;
         const sm = settingModeValueForHit(pickHit);
