@@ -5034,19 +5034,17 @@
     const flightSubtabButtons = document.querySelectorAll('.flight-subtab');
     const flightPaneSchedule = document.getElementById('flightPaneSchedule');
     const flightPaneConfig = document.getElementById('flightPaneConfig');
+    const flightPaneRouteRedesign = document.getElementById('flightPaneRouteRedesign');
     if (flightSubtabButtons && flightPaneSchedule && flightPaneConfig) {
       flightSubtabButtons.forEach(btn => {
         btn.addEventListener('click', function() {
           const target = this.getAttribute('data-flight-subtab') || 'schedule';
           flightSubtabButtons.forEach(b => b.classList.remove('active'));
           this.classList.add('active');
-          if (target === 'config') {
-            flightPaneSchedule.style.display = 'none';
-            flightPaneConfig.style.display = 'block';
-          } else {
-            flightPaneSchedule.style.display = 'block';
-            flightPaneConfig.style.display = 'none';
-          }
+          flightPaneSchedule.style.display = target === 'schedule' ? 'block' : 'none';
+          flightPaneConfig.style.display = target === 'config' ? 'block' : 'none';
+          if (flightPaneRouteRedesign) flightPaneRouteRedesign.style.display = target === 'routeRedesign' ? 'block' : 'none';
+          if (target === 'routeRedesign' && typeof renderRouteRedesignPanel === 'function') renderRouteRedesignPanel();
         });
       });
     }

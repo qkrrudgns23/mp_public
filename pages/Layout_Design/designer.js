@@ -1192,6 +1192,15 @@
     simPlaybackDockVisible: false,
     /** Derived after Pro Sim: first deadlockGhost sample per flight; slider markers + left dock banner. */
     simDeadlockGhostPlayback: { events: [], bodyLines: '', resolveCount: 0 },
+    /** flight_id keys with any deadlock ghost in last compact_v2 playback (survives timeline eviction). */
+    deadlockFlightIdsFromLastSim: Object.create(null),
+    routeRedesignSelectedFlightId: null,
+    routeRedesignDraftEdgeList: null,
+    routeRedesignPickEdgeMode: false,
+    routeRedesignPickedEdgeId: null,
+    /** When set, 2D Pro Sim path overlay uses this edge list for the flight (preview only). */
+    routeRedesignRevealOnlyFlightId: null,
+    routeRedesignRevealOnlyEdgeList: null,
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
     showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
@@ -3529,6 +3538,13 @@
     state.simPlaybackScheduleSnapshot = scheduleList.length ? scheduleList.slice() : null;
     state.simPlaybackTimelinesEvictedForMemory = false;
     state.simDeadlockGhostPlayback = deriveDeadlockGhostPlaybackFromPayload(payload, state.flights);
+    if (hasPositions && positions && typeof positions === 'object') {
+      if (!state.deadlockFlightIdsFromLastSim) state.deadlockFlightIdsFromLastSim = Object.create(null);
+      Object.keys(positions).forEach(function(pid) {
+        const tr = positions[pid];
+        if (allocFlightTrackHasDeadlock(tr)) state.deadlockFlightIdsFromLastSim[String(pid)] = true;
+      });
+    }
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
       if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
@@ -3544,6 +3560,7 @@
     if (typeof draw === 'function') draw();
     if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
     if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+    if (typeof renderRouteRedesignPanel === 'function') renderRouteRedesignPanel();
   }
   function applyInitialLayoutFromJson() {
     if (!INITIAL_LAYOUT || typeof INITIAL_LAYOUT !== 'object') return;
@@ -17604,6 +17621,439 @@
     return d;
   }
 
+  /** Phases allowed for path Dijkstra replacement (Landing / pushback / lineup stay unchanged in v1). */
+  function routeRedesignPhaseEditable(phaseRaw) {
+    const p = String(phaseRaw || '').trim();
+    return p === 'Arr_taxi' || p === 'Arr_taxi_occupied' || p === 'Dep_taxi' || p === 'Holding_lineup';
+  }
+
+  function flightHasRouteRedesignDeadlock(f) {
+    if (!f || f.id == null) return false;
+    const idStr = String(f.id);
+    if (state.deadlockFlightIdsFromLastSim && state.deadlockFlightIdsFromLastSim[idStr]) return true;
+    const tr = compactPlaybackTrackForFlight(f);
+    if (allocFlightTrackHasDeadlock(tr)) return true;
+    if (f.timeline && Array.isArray(f.timeline)) {
+      for (let i = 0; i < f.timeline.length; i++) {
+        if (f.timeline[i] && f.timeline[i].deadlockGhost === true) return true;
+      }
+    }
+    return false;
+  }
+
+  function routeRedesignGetFlightEdgeListCopy(f) {
+    const raw = (Array.isArray(f.proSimEdgeList) && f.proSimEdgeList.length)
+      ? f.proSimEdgeList
+      : f.edge_list;
+    if (!Array.isArray(raw) || !raw.length) return [];
+    return raw.map(function(e) {
+      if (e == null) return e;
+      if (typeof e === 'object') {
+        const o = {};
+        if (e.edge_id != null) o.edge_id = e.edge_id;
+        if (e.id != null) o.id = e.id;
+        if (e.phase != null) o.phase = e.phase;
+        return Object.keys(o).length ? o : Object.assign({}, e);
+      }
+      return e;
+    });
+  }
+
+  function routeRedesignGroupEdgeListByPhase(entries) {
+    const groups = [];
+    let cur = null;
+    for (let i = 0; i < entries.length; i++) {
+      const ent = entries[i];
+      let ph = 'Landing';
+      if (ent != null && typeof ent === 'object' && ent.phase != null) {
+        ph = String(ent.phase).trim() || 'Landing';
+      }
+      if (!cur || cur.phase !== ph) {
+        cur = { phase: ph, entries: [] };
+        groups.push(cur);
+      }
+      cur.entries.push(ent);
+    }
+    return groups;
+  }
+
+  function routeRedesignFirstContiguousEditableGroupIndices(groups) {
+    const idxs = [];
+    for (let i = 0; i < groups.length; i++) {
+      if (!routeRedesignPhaseEditable(groups[i].phase)) {
+        if (idxs.length) break;
+        continue;
+      }
+      if (!idxs.length || i === idxs[idxs.length - 1] + 1) idxs.push(i);
+      else break;
+    }
+    return idxs;
+  }
+
+  function routeRedesignSpliceGroupsWithReplacement(groups, loGi, hiGi, replacementEntries) {
+    const out = [];
+    for (let i = 0; i < groups.length; i++) {
+      if (i === loGi) {
+        for (let k = 0; k < replacementEntries.length; k++) out.push(replacementEntries[k]);
+      }
+      if (i < loGi || i > hiGi) {
+        for (let j = 0; j < groups[i].entries.length; j++) out.push(groups[i].entries[j]);
+      }
+    }
+    return out;
+  }
+
+  function routeRedesignNodeSequenceFromEntries(derivedById, entries) {
+    const out = [];
+    let prev = null;
+    for (let i = 0; i < entries.length; i++) {
+      const ent = entries[i];
+      let key = '';
+      if (typeof ent === 'string' || typeof ent === 'number') key = String(ent).trim();
+      else if (ent && typeof ent === 'object') {
+        key = String(ent.edge_id != null ? ent.edge_id : ent.id || '').trim();
+      }
+      if (!key) continue;
+      const ge = derivedById[key];
+      if (!ge) {
+        throw new Error('Route Redesign: unknown layout edge "' + key + '". Rebuild graph (Update) or fix layout-edge ids.');
+      }
+      const a = ge.fromIdx;
+      const b = ge.toIdx;
+      if (prev == null) {
+        out.push(a, b);
+        prev = b;
+      } else if (prev === a) {
+        out.push(b);
+        prev = b;
+      } else if (prev === b) {
+        out.push(a);
+        prev = a;
+      } else {
+        out.push(a, b);
+        prev = b;
+      }
+    }
+    return out;
+  }
+
+  function routeRedesignLayoutEdgeIdForStep(derivedArr, u, v) {
+    if (!derivedArr || !derivedArr.length) return null;
+    for (let i = 0; i < derivedArr.length; i++) {
+      const e = derivedArr[i];
+      if (!e) continue;
+      if (e.fromIdx === u && e.toIdx === v) return e.id;
+      if (e.fromIdx === v && e.toIdx === u) return e.id;
+    }
+    return null;
+  }
+
+  function routeRedesignJoinPathsSkipDup(p1, p2) {
+    if (!p1 || !p2 || p1.length < 1 || p2.length < 1) return null;
+    const last = p1[p1.length - 1];
+    if (last === p2[0]) return p1.concat(p2.slice(1));
+    return p1.concat(p2);
+  }
+
+  function pathDijkstraThroughNode(g, s, via, t) {
+    if (via == null || s == null || t == null) return null;
+    const p1 = pathDijkstra(g, s, via);
+    const p2 = pathDijkstra(g, via, t);
+    if (!p1 || !p2) return null;
+    return routeRedesignJoinPathsSkipDup(p1, p2);
+  }
+
+  function pathDijkstraThroughDirectedEdge(g, s, uFrom, uTo, t) {
+    const key = uFrom + ':' + uTo;
+    const e = g.edgeMap && g.edgeMap[key];
+    if (!e || e.dist >= REVERSE_COST) return null;
+    const p1 = pathDijkstra(g, s, uFrom);
+    const p2 = pathDijkstra(g, uTo, t);
+    if (!p1 || !p2) return null;
+    return routeRedesignJoinPathsSkipDup(p1, p2);
+  }
+
+  function pathDijkstraThroughLayoutEdgeId(g, derivedById, s, t, layoutEdgeId) {
+    const ge = derivedById[String(layoutEdgeId || '').trim()];
+    if (!ge) return null;
+    const a = ge.fromIdx;
+    const b = ge.toIdx;
+    const pa = pathDijkstraThroughDirectedEdge(g, s, a, b, t);
+    const pb = pathDijkstraThroughDirectedEdge(g, s, b, a, t);
+    if (pa && !pb) return pa;
+    if (pb && !pa) return pb;
+    if (!pa && !pb) return null;
+    const da = pathTotalDist(g, pa);
+    const db = pathTotalDist(g, pb);
+    return da <= db ? pa : pb;
+  }
+
+  function routeRedesignEdgeListFromNodePath(g, derivedArr, nodePath, phaseLabel) {
+    const ph = String(phaseLabel || 'Arr_taxi').trim() || 'Arr_taxi';
+    const out = [];
+    if (!nodePath || nodePath.length < 2) return out;
+    for (let i = 0; i < nodePath.length - 1; i++) {
+      const u = nodePath[i];
+      const v = nodePath[i + 1];
+      const e = g.edgeMap && g.edgeMap[u + ':' + v];
+      if (!e || e.dist >= REVERSE_COST) {
+        throw new Error('Route Redesign: invalid graph step ' + u + '→' + v + ' (missing or reverse-penalty only).');
+      }
+      const lid = routeRedesignLayoutEdgeIdForStep(derivedArr, u, v);
+      if (!lid) {
+        throw new Error('Route Redesign: no layout-edge for step ' + u + '→' + v + '. Sync derived graph (Update / edge mode).');
+      }
+      out.push({ edge_id: lid, phase: ph });
+    }
+    return out;
+  }
+
+  function buildPathGraphForRouteRedesign(f) {
+    void f;
+    const rwDir = resolveArrivalRunwayDirForRetGate(f);
+    return buildPathGraph(null, rwDir, {});
+  }
+
+  function routeRedesignArrivalStandIdForGraph(f) {
+    if (!f) return null;
+    if (f.arrApronId != null) return f.arrApronId;
+    if (f.standId != null) return f.standId;
+    const t = f.token || {};
+    return t.apronId != null ? t.apronId : null;
+  }
+
+  function routeRedesignGatherRetStarters(g, f) {
+    const retId = f.sampledArrRet != null ? f.sampledArrRet : (f.token && f.token.ExitTaxiwayId);
+    if (retId == null) return [];
+    const tw = (state.taxiways || []).find(function(t) { return t && t.id === retId && t.pathType === 'runway_exit'; });
+    if (!tw) return [];
+    const pts = getOrderedPoints(tw);
+    if (!pts || pts.length < 2) return [];
+    const retEndPx = pts[pts.length - 1];
+    return gatherRetExitPivotIndicesOnGFull(g, retEndPx, null, pts);
+  }
+
+  function routeRedesignActiveGraphAndDerived(f) {
+    const g = buildPathGraphForRouteRedesign(f);
+    if (!g || !g.nodes || !g.edgeMap) throw new Error('Route Redesign: path graph unavailable.');
+    state.pathGraphCache = g;
+    state.pathGraphCacheValid = true;
+    state.pathGraphCacheSig = computeTaxiwaysGraphSig();
+    if (typeof rebuildDerivedGraphEdges === 'function') rebuildDerivedGraphEdges();
+    const derivedArr = state.derivedGraphEdges || [];
+    const derivedById = Object.create(null);
+    for (let i = 0; i < derivedArr.length; i++) {
+      const ed = derivedArr[i];
+      if (ed && ed.id) derivedById[ed.id] = ed;
+    }
+    return { g: g, derivedArr: derivedArr, derivedById: derivedById };
+  }
+
+  function renderRouteRedesignEditor() {
+    const editor = document.getElementById('routeRedesignEditor');
+    const sum = document.getElementById('routeRedesignFlightSummary');
+    const phaseSel = document.getElementById('routeRedesignPhaseSelect');
+    if (!editor || !sum || !phaseSel) return;
+    const fid = state.routeRedesignSelectedFlightId;
+    const f = (state.flights || []).find(function(x) { return x && String(x.id) === String(fid); });
+    if (!f) {
+      editor.style.display = 'none';
+      return;
+    }
+    editor.style.display = 'block';
+    sum.textContent = 'Reg: ' + (f.reg || '—') + ' · Flight: ' + (String(f.airlineCode || '').trim() + String(f.flightNumber || '').trim() || '—') + ' · id: ' + f.id;
+    while (phaseSel.firstChild) phaseSel.removeChild(phaseSel.firstChild);
+    const draft = state.routeRedesignDraftEdgeList;
+    const entries = (Array.isArray(draft) && draft.length) ? draft : routeRedesignGetFlightEdgeListCopy(f);
+    const groups = routeRedesignGroupEdgeListByPhase(entries);
+    let added = 0;
+    for (let gi = 0; gi < groups.length; gi++) {
+      if (!routeRedesignPhaseEditable(groups[gi].phase)) continue;
+      const opt = document.createElement('option');
+      opt.value = String(gi);
+      opt.textContent = groups[gi].phase + ' (' + groups[gi].entries.length + ' edges)';
+      phaseSel.appendChild(opt);
+      added++;
+    }
+    if (!added) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '(no editable taxi phase — run Pro Sim or check edge_list)';
+      phaseSel.appendChild(opt);
+    }
+  }
+
+  function renderRouteRedesignDeadlockPane() {
+    const host = document.getElementById('routeRedesignDeadlockList');
+    if (!host) return;
+    const flights = (state.flights || []).filter(flightHasRouteRedesignDeadlock);
+    host.textContent = '';
+    if (!flights.length) {
+      const msg = document.createElement('div');
+      msg.className = 'flight-schedule-inline-msg';
+      msg.style.color = '#9ca3af';
+      msg.textContent = 'No deadlock flights. Run Pro Sim; flights with deadlock ghost appear here.';
+      host.appendChild(msg);
+      const editor = document.getElementById('routeRedesignEditor');
+      if (editor) editor.style.display = 'none';
+      return;
+    }
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      const row = document.createElement('div');
+      row.className = 'obj-list-item';
+      row.style.cursor = 'pointer';
+      const label = (String(f.airlineCode || '').trim() + String(f.flightNumber || '').trim()) || String(f.reg || '') || ('id ' + f.id);
+      row.textContent = label + ' · ' + String(f.id);
+      if (String(state.routeRedesignSelectedFlightId) === String(f.id)) {
+        row.style.outline = '1px solid #3b82f6';
+      }
+      row.addEventListener('click', function() {
+        state.routeRedesignSelectedFlightId = f.id;
+        state.routeRedesignPickedEdgeId = null;
+        state.routeRedesignDraftEdgeList = routeRedesignGetFlightEdgeCopyFromFlight(f);
+        state.routeRedesignRevealOnlyFlightId = null;
+        state.routeRedesignRevealOnlyEdgeList = null;
+        const pickEl = document.getElementById('routeRedesignPickStatus');
+        if (pickEl) pickEl.textContent = '';
+        const errEl = document.getElementById('routeRedesignError');
+        if (errEl) errEl.textContent = '';
+        renderRouteRedesignDeadlockPane();
+        renderRouteRedesignEditor();
+      });
+      host.appendChild(row);
+    }
+    if (state.routeRedesignSelectedFlightId != null) {
+      const still = flights.some(function(ff) { return String(ff.id) === String(state.routeRedesignSelectedFlightId); });
+      if (!still) {
+        state.routeRedesignSelectedFlightId = null;
+        state.routeRedesignDraftEdgeList = null;
+        const editor = document.getElementById('routeRedesignEditor');
+        if (editor) editor.style.display = 'none';
+      }
+    }
+  }
+
+  function routeRedesignGetFlightEdgeCopyFromFlight(f) {
+    const base = routeRedesignGetFlightEdgeListCopy(f);
+    return base.map(function(e) {
+      if (e != null && typeof e === 'object') return Object.assign({}, e);
+      return e;
+    });
+  }
+
+  function renderRouteRedesignPanel() {
+    renderRouteRedesignDeadlockPane();
+    renderRouteRedesignEditor();
+  }
+
+  /** @param {string} msg */
+  function routeRedesignSetError(msg) {
+    const el = document.getElementById('routeRedesignError');
+    if (el) el.textContent = msg || '';
+  }
+
+  function routeRedesignSyncPreviewOverlayFromDraft(f) {
+    if (!f || !Array.isArray(state.routeRedesignDraftEdgeList) || !state.routeRedesignDraftEdgeList.length) return;
+    const copy = state.routeRedesignDraftEdgeList.map(function(e) {
+      if (e != null && typeof e === 'object') return Object.assign({}, e);
+      return e;
+    });
+    state.routeRedesignRevealOnlyFlightId = f.id;
+    state.routeRedesignRevealOnlyEdgeList = copy;
+    state.selectedObject = { type: 'flight', id: f.id, obj: f };
+    state.flightPathRevealFlightId = f.id;
+  }
+
+  function routeRedesignRunDijkstraFullTaxi(f) {
+    routeRedesignSetError('');
+    const ag = routeRedesignActiveGraphAndDerived(f);
+    const g = ag.g;
+    if (!g.standIdToNodeIndex) throw new Error('Route Redesign: path graph missing stand mapping.');
+    const standId = routeRedesignArrivalStandIdForGraph(f);
+    if (standId == null) throw new Error('Route Redesign: no stand/apron id on flight.');
+    const standMap = g.standIdToNodeIndex || {};
+    const endNode = standMap[standId] != null ? standMap[standId] : standMap[String(standId)];
+    if (endNode == null) throw new Error('Route Redesign: stand not connected in path graph.');
+    const starters = routeRedesignGatherRetStarters(g, f);
+    if (!starters.length) throw new Error('Route Redesign: no RET start nodes (set runway exit / sampledArrRet).');
+    const pack = pathDijkstraFromRetExitToStand(g, endNode, starters);
+    if (!pack || !pack.path || pack.path.length < 2) throw new Error('Route Redesign: Dijkstra RET→stand failed (disconnected graph?).');
+    const replacement = routeRedesignEdgeListFromNodePath(g, ag.derivedArr, pack.path, 'Arr_taxi');
+    const draft = state.routeRedesignDraftEdgeList;
+    if (!Array.isArray(draft) || !draft.length) throw new Error('Route Redesign: empty draft edge list.');
+    const groups = routeRedesignGroupEdgeListByPhase(draft);
+    const runIx = routeRedesignFirstContiguousEditableGroupIndices(groups);
+    if (!runIx.length) throw new Error('Route Redesign: no contiguous editable taxi phase block to replace.');
+    const lo = runIx[0];
+    const hi = runIx[runIx.length - 1];
+    state.routeRedesignDraftEdgeList = routeRedesignSpliceGroupsWithReplacement(groups, lo, hi, replacement);
+  }
+
+  function routeRedesignRunPhaseDijkstra(f, groupIndex) {
+    routeRedesignSetError('');
+    const draft = state.routeRedesignDraftEdgeList;
+    if (!Array.isArray(draft) || !draft.length) throw new Error('Route Redesign: empty draft.');
+    const groups = routeRedesignGroupEdgeListByPhase(draft);
+    const gi = Number(groupIndex);
+    if (!isFinite(gi) || gi < 0 || gi >= groups.length) throw new Error('Route Redesign: invalid phase group.');
+    if (!routeRedesignPhaseEditable(groups[gi].phase)) throw new Error('Route Redesign: phase is not editable.');
+    const ag = routeRedesignActiveGraphAndDerived(f);
+    const g = ag.g;
+    const seq = routeRedesignNodeSequenceFromEntries(ag.derivedById, groups[gi].entries);
+    if (seq.length < 2) throw new Error('Route Redesign: could not resolve graph endpoints for phase.');
+    const s0 = seq[0];
+    const s1 = seq[seq.length - 1];
+    const path = pathDijkstra(g, s0, s1);
+    if (!path || path.length < 2) throw new Error('Route Redesign: Dijkstra failed for phase endpoints.');
+    const replacement = routeRedesignEdgeListFromNodePath(g, ag.derivedArr, path, groups[gi].phase);
+    state.routeRedesignDraftEdgeList = routeRedesignSpliceGroupsWithReplacement(groups, gi, gi, replacement);
+  }
+
+  function routeRedesignRunPhaseViaNode(f, groupIndex, viaIdx) {
+    routeRedesignSetError('');
+    const via = Number(viaIdx);
+    if (!isFinite(via)) throw new Error('Route Redesign: invalid via node index.');
+    const draft = state.routeRedesignDraftEdgeList;
+    if (!Array.isArray(draft) || !draft.length) throw new Error('Route Redesign: empty draft.');
+    const groups = routeRedesignGroupEdgeListByPhase(draft);
+    const gi = Number(groupIndex);
+    if (!isFinite(gi) || gi < 0 || gi >= groups.length) throw new Error('Route Redesign: invalid phase group.');
+    if (!routeRedesignPhaseEditable(groups[gi].phase)) throw new Error('Route Redesign: phase is not editable.');
+    const ag = routeRedesignActiveGraphAndDerived(f);
+    const g = ag.g;
+    const seq = routeRedesignNodeSequenceFromEntries(ag.derivedById, groups[gi].entries);
+    if (seq.length < 2) throw new Error('Route Redesign: could not resolve graph endpoints for phase.');
+    const s0 = seq[0];
+    const s1 = seq[seq.length - 1];
+    const path = pathDijkstraThroughNode(g, s0, via, s1);
+    if (!path || path.length < 2) throw new Error('Route Redesign: via-node path not found.');
+    const replacement = routeRedesignEdgeListFromNodePath(g, ag.derivedArr, path, groups[gi].phase);
+    state.routeRedesignDraftEdgeList = routeRedesignSpliceGroupsWithReplacement(groups, gi, gi, replacement);
+  }
+
+  function routeRedesignRunPhaseViaPickedEdge(f, groupIndex, layoutEdgeId) {
+    routeRedesignSetError('');
+    const le = String(layoutEdgeId || '').trim();
+    if (!le) throw new Error('Route Redesign: pick a layout edge first (Pick edge on grid).');
+    const draft = state.routeRedesignDraftEdgeList;
+    if (!Array.isArray(draft) || !draft.length) throw new Error('Route Redesign: empty draft.');
+    const groups = routeRedesignGroupEdgeListByPhase(draft);
+    const gi = Number(groupIndex);
+    if (!isFinite(gi) || gi < 0 || gi >= groups.length) throw new Error('Route Redesign: invalid phase group.');
+    if (!routeRedesignPhaseEditable(groups[gi].phase)) throw new Error('Route Redesign: phase is not editable.');
+    const ag = routeRedesignActiveGraphAndDerived(f);
+    const g = ag.g;
+    const seq = routeRedesignNodeSequenceFromEntries(ag.derivedById, groups[gi].entries);
+    if (seq.length < 2) throw new Error('Route Redesign: could not resolve graph endpoints for phase.');
+    const s0 = seq[0];
+    const s1 = seq[seq.length - 1];
+    const path = pathDijkstraThroughLayoutEdgeId(g, ag.derivedById, s0, s1, le);
+    if (!path || path.length < 2) throw new Error('Route Redesign: no shortest path through that edge for this phase.');
+    const replacement = routeRedesignEdgeListFromNodePath(g, ag.derivedArr, path, groups[gi].phase);
+    state.routeRedesignDraftEdgeList = routeRedesignSpliceGroupsWithReplacement(groups, gi, gi, replacement);
+  }
+
   /** RET gate filtering only: exit direction is not chosen via taxi Dijkstra. Use flight token / defaults. */
   function probePreferredArrivalRunwayDir(f) {
     void f;
@@ -18190,7 +18640,11 @@
     const sel = state.selectedObject;
     const rid = state.flightPathRevealFlightId;
     if (!sel || sel.type !== 'flight' || !sel.obj || rid == null || String(sel.id) !== String(rid)) return;
-    const ids = sel.obj.edge_list || sel.obj.proSimEdgeList;
+    let ids = sel.obj.edge_list || sel.obj.proSimEdgeList;
+    if (state.routeRedesignRevealOnlyFlightId != null && String(state.routeRedesignRevealOnlyFlightId) === String(rid) &&
+      Array.isArray(state.routeRedesignRevealOnlyEdgeList) && state.routeRedesignRevealOnlyEdgeList.length) {
+      ids = state.routeRedesignRevealOnlyEdgeList;
+    }
     if (!Array.isArray(ids) || !ids.length) return;
     if (typeof rebuildDerivedGraphEdges === 'function') rebuildDerivedGraphEdges();
     const byId = {};
@@ -19284,22 +19738,135 @@
     const flightSubtabButtons = document.querySelectorAll('.flight-subtab');
     const flightPaneSchedule = document.getElementById('flightPaneSchedule');
     const flightPaneConfig = document.getElementById('flightPaneConfig');
+    const flightPaneRouteRedesign = document.getElementById('flightPaneRouteRedesign');
     if (flightSubtabButtons && flightPaneSchedule && flightPaneConfig) {
       flightSubtabButtons.forEach(btn => {
         btn.addEventListener('click', function() {
           const target = this.getAttribute('data-flight-subtab') || 'schedule';
           flightSubtabButtons.forEach(b => b.classList.remove('active'));
           this.classList.add('active');
-          if (target === 'config') {
-            flightPaneSchedule.style.display = 'none';
-            flightPaneConfig.style.display = 'block';
-          } else {
-            flightPaneSchedule.style.display = 'block';
-            flightPaneConfig.style.display = 'none';
-          }
+          flightPaneSchedule.style.display = target === 'schedule' ? 'block' : 'none';
+          flightPaneConfig.style.display = target === 'config' ? 'block' : 'none';
+          if (flightPaneRouteRedesign) flightPaneRouteRedesign.style.display = target === 'routeRedesign' ? 'block' : 'none';
+          if (target === 'routeRedesign' && typeof renderRouteRedesignPanel === 'function') renderRouteRedesignPanel();
         });
       });
     }
+    (function wireRouteRedesignButtons() {
+      const errShow = function(err) {
+        const m = err && err.message ? String(err.message) : String(err);
+        routeRedesignSetError(m);
+      };
+      const selectedFlight = function() {
+        const fid = state.routeRedesignSelectedFlightId;
+        return (state.flights || []).find(function(x) { return x && String(x.id) === String(fid); }) || null;
+      };
+      const phaseGi = function() {
+        const sel = document.getElementById('routeRedesignPhaseSelect');
+        const v = sel && sel.value !== '' ? Number(sel.value) : NaN;
+        return isFinite(v) ? v : NaN;
+      };
+      const btnFull = document.getElementById('btnRouteRedesignDijkstra');
+      if (btnFull) btnFull.addEventListener('click', function() {
+        const f = selectedFlight();
+        if (!f) { errShow(new Error('Select a deadlock flight first.')); return; }
+        try {
+          routeRedesignRunDijkstraFullTaxi(f);
+          routeRedesignSyncPreviewOverlayFromDraft(f);
+          renderRouteRedesignEditor();
+          if (typeof draw === 'function') draw();
+        } catch (e) { errShow(e); }
+      });
+      const btnPh = document.getElementById('btnRouteRedesignPhase');
+      if (btnPh) btnPh.addEventListener('click', function() {
+        const f = selectedFlight();
+        const gi = phaseGi();
+        if (!f) { errShow(new Error('Select a deadlock flight first.')); return; }
+        if (!isFinite(gi)) { errShow(new Error('Choose an editable phase.')); return; }
+        try {
+          routeRedesignRunPhaseDijkstra(f, gi);
+          routeRedesignSyncPreviewOverlayFromDraft(f);
+          renderRouteRedesignEditor();
+          if (typeof draw === 'function') draw();
+        } catch (e) { errShow(e); }
+      });
+      const btnVia = document.getElementById('btnRouteRedesignViaNode');
+      if (btnVia) btnVia.addEventListener('click', function() {
+        const f = selectedFlight();
+        const gi = phaseGi();
+        const inp = document.getElementById('routeRedesignViaNodeIdx');
+        const via = inp ? Number(inp.value) : NaN;
+        if (!f) { errShow(new Error('Select a deadlock flight first.')); return; }
+        if (!isFinite(gi)) { errShow(new Error('Choose an editable phase.')); return; }
+        try {
+          routeRedesignRunPhaseViaNode(f, gi, via);
+          routeRedesignSyncPreviewOverlayFromDraft(f);
+          renderRouteRedesignEditor();
+          if (typeof draw === 'function') draw();
+        } catch (e) { errShow(e); }
+      });
+      const btnMust = document.getElementById('btnRouteRedesignMustEdge');
+      if (btnMust) btnMust.addEventListener('click', function() {
+        const f = selectedFlight();
+        const gi = phaseGi();
+        const eid = state.routeRedesignPickedEdgeId;
+        if (!f) { errShow(new Error('Select a deadlock flight first.')); return; }
+        if (!isFinite(gi)) { errShow(new Error('Choose an editable phase.')); return; }
+        try {
+          routeRedesignRunPhaseViaPickedEdge(f, gi, eid);
+          routeRedesignSyncPreviewOverlayFromDraft(f);
+          renderRouteRedesignEditor();
+          if (typeof draw === 'function') draw();
+        } catch (e) { errShow(e); }
+      });
+      const btnPick = document.getElementById('btnRouteRedesignPickEdge');
+      if (btnPick) btnPick.addEventListener('click', function() {
+        state.routeRedesignPickEdgeMode = true;
+        routeRedesignSetError('');
+        const pickEl = document.getElementById('routeRedesignPickStatus');
+        if (pickEl) pickEl.textContent = 'Click a layout graph edge on the grid…';
+      });
+      const btnApply = document.getElementById('btnRouteRedesignApplyDraft');
+      if (btnApply) btnApply.addEventListener('click', function() {
+        const f = selectedFlight();
+        const draft = state.routeRedesignDraftEdgeList;
+        if (!f) { errShow(new Error('Select a flight.')); return; }
+        if (!Array.isArray(draft) || !draft.length) { errShow(new Error('No draft edges to apply.')); return; }
+        routeRedesignSetError('');
+        const copy = draft.map(function(e) {
+          if (e != null && typeof e === 'object') return Object.assign({}, e);
+          return e;
+        });
+        f.edge_list = copy;
+        f.proSimEdgeList = copy.slice();
+        state.routeRedesignRevealOnlyFlightId = null;
+        state.routeRedesignRevealOnlyEdgeList = null;
+        state.selectedObject = { type: 'flight', id: f.id, obj: f };
+        state.flightPathRevealFlightId = f.id;
+        if (typeof renderFlightList === 'function') renderFlightList(false, false);
+        if (typeof syncPanelFromState === 'function') syncPanelFromState();
+        if (typeof draw === 'function') draw();
+      });
+      const btnRev = document.getElementById('btnRouteRedesignRevertDraft');
+      if (btnRev) btnRev.addEventListener('click', function() {
+        const f = selectedFlight();
+        if (!f) return;
+        state.routeRedesignDraftEdgeList = routeRedesignGetFlightEdgeCopyFromFlight(f);
+        state.routeRedesignRevealOnlyFlightId = null;
+        state.routeRedesignRevealOnlyEdgeList = null;
+        routeRedesignSetError('');
+        renderRouteRedesignEditor();
+        if (typeof draw === 'function') draw();
+      });
+      const btnRevPath = document.getElementById('btnRouteRedesignRevealPath');
+      if (btnRevPath) btnRevPath.addEventListener('click', function() {
+        const f = selectedFlight();
+        if (!f) { errShow(new Error('Select a flight.')); return; }
+        routeRedesignSyncPreviewOverlayFromDraft(f);
+        routeRedesignSetError('');
+        if (typeof draw === 'function') draw();
+      });
+    })();
     if (addBtn) {
       addBtn.addEventListener('click', function() {
         const airlineCodeElLocal = document.getElementById('flightAirlineCode');
@@ -24282,6 +24849,22 @@
     const sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
     const [wx, wy] = screenToWorld(sx, sy);
     const mode = settingModeSelect.value;
+    if (state.routeRedesignPickEdgeMode) {
+      if (typeof rebuildDerivedGraphEdges === 'function') rebuildDerivedGraphEdges();
+      const ehPick = hitTestLayoutGraphEdge(wx, wy);
+      state.routeRedesignPickEdgeMode = false;
+      const pickSta = document.getElementById('routeRedesignPickStatus');
+      if (ehPick && ehPick.id) {
+        state.routeRedesignPickedEdgeId = ehPick.id;
+        if (pickSta) pickSta.textContent = 'Picked ' + ehPick.id;
+      } else {
+        state.routeRedesignPickedEdgeId = null;
+        if (pickSta) pickSta.textContent = 'No layout edge under click.';
+      }
+      ev.preventDefault();
+      draw();
+      return;
+    }
     const pathArcStartOnCanvas = canvas && ev.target === canvas;
     if (state.pathArcModeOn && !state.pathArcDrag && pathArcStartOnCanvas) {
       const eligArc = isPathArcHudVertexSelection();

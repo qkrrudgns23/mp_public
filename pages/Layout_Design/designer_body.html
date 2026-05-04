@@ -536,6 +536,7 @@
           <div class="layout-save-load-tabs flight-panel-subtabs">
             <button type="button" class="layout-save-load-tab flight-subtab active" data-flight-subtab="schedule">Flight Schedule</button>
             <button type="button" class="layout-save-load-tab flight-subtab" data-flight-subtab="config">Arrival Configuration</button>
+            <button type="button" class="layout-save-load-tab flight-subtab" data-flight-subtab="routeRedesign">Route Redesign</button>
           </div>
           <!-- Arr / Dep The choice is reserved for internal compatibility., UIhidden in -->
           <label style="display:none;">Arr / Dep</label>
@@ -622,6 +623,38 @@
           <div id="flightPaneConfig" class="flight-config-pane" style="display:none;">
             <div class="section-title">Arrival Configuration</div>
             <div id="flightConfigList" class="obj-list"></div>
+          </div>
+
+          <div id="flightPaneRouteRedesign" class="flight-route-redesign-pane compact-form" style="display:none;">
+            <div class="section-title">Route Redesign (deadlock flights)</div>
+            <p id="routeRedesignHint" class="flight-schedule-inline-msg" style="color:#9ca3af;font-size:11px;margin:0 0 8px 0;">Lists flights that had deadlock ghost in the last Pro Sim playback. Edits update <code style="font-size:10px;">edge_list</code> for re-run.</p>
+            <div id="routeRedesignDeadlockList" class="obj-list" aria-label="Deadlock flights"></div>
+            <div id="routeRedesignEditor" style="margin-top:10px;display:none;">
+              <div class="section-title" style="font-size:12px;">Selected flight</div>
+              <div id="routeRedesignFlightSummary" style="font-size:11px;color:#d1d5db;margin-bottom:8px;"></div>
+              <div class="compact-field wide">
+                <label for="routeRedesignPhaseSelect">Phase to edit</label>
+                <select id="routeRedesignPhaseSelect"></select>
+              </div>
+              <div class="compact-field wide" style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;">
+                <button type="button" class="small" id="btnRouteRedesignDijkstra">Redesign (RET→stand)</button>
+                <button type="button" class="small" id="btnRouteRedesignPhase">Shortest (selected phase)</button>
+                <button type="button" class="small" id="btnRouteRedesignViaNode">Apply via-node</button>
+                <button type="button" class="small" id="btnRouteRedesignMustEdge">Shortest via picked edge</button>
+                <button type="button" class="small" id="btnRouteRedesignPickEdge">Pick edge on grid</button>
+              </div>
+              <div class="compact-field wide">
+                <label for="routeRedesignViaNodeIdx">Via graph node index (optional)</label>
+                <input type="number" id="routeRedesignViaNodeIdx" min="0" step="1" placeholder="nearest to click…" />
+              </div>
+              <div id="routeRedesignPickStatus" class="flight-schedule-inline-msg" style="font-size:11px;color:#93c5fd;"></div>
+              <div id="routeRedesignError" class="flight-schedule-inline-msg" style="color:#f97316;font-size:11px;"></div>
+              <div class="compact-field wide" style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="small" id="btnRouteRedesignApplyDraft" style="background:#2563eb;color:#fff;">Apply draft to flight</button>
+                <button type="button" class="small" id="btnRouteRedesignRevertDraft">Discard draft</button>
+                <button type="button" class="small" id="btnRouteRedesignRevealPath">Show path on grid</button>
+              </div>
+            </div>
           </div>
         </div>
 

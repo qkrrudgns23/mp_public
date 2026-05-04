@@ -153,10 +153,10 @@ DEFAULT_MIN_SEPARATION_M = 60.0
 LOOKAHEAD_RUNWAY = 0
 RESERV_DEPTH_RUNWAY = 0
 # Dep_taxi (and holding/lineup when first segment is not runway above).
-LOOKAHEAD_DEP_TAXI = 6
+LOOKAHEAD_DEP_TAXI = 14 #12가 좋았음
 RESERV_DEPTH_DEP_TAXI = 4
 # Arr_taxi (default).
-LOOKAHEAD_ARR_TAXI = 6
+LOOKAHEAD_ARR_TAXI = 14 #12가 좋았음
 RESERV_DEPTH_ARR_TAXI = 4
 # Arr_taxi when sim ≥ ELDT and target stand occupied / pushback cooldown.
 LOOKAHEAD_ARR_TAXI_BUSY = 12
