@@ -1,3 +1,8 @@
+"""Optional: poll ``*_prosim_job.json`` and run ``harness.run`` in a subprocess.
+
+The layout receiver runs ProSim in-process; a separate terminal worker is not required for
+Designer/Streamlit clicks. Use this module only for subprocess isolation or external job files.
+"""
 from __future__ import annotations
 
 import argparse

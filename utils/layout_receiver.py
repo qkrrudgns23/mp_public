@@ -8,6 +8,7 @@ Save Layout/load: data/Layout_storage/ Save by name to.
 - POST /api/fetch-airport-map: body { "icao": "RPLL" } → download OSM bundle, write ``{ICAO}_map.json``, build ``{ICAO}_OSM.json``.
 - POST /api/process-stored-airport-map: body { "icao": "RPLL" } → read saved ``{ICAO}_map.json`` only, rebuild ``{ICAO}_OSM.json``.
 - POST /api/ai-chat: body ``{ "messages": [ {"role":"user","content":"..."} ], "model": "kimi-k2.5" }`` → Moonshot Kimi (OpenAI-compatible). Set ``MOONSHOT_API_KEY`` (or ``KIMI_API_KEY``) in the process environment, or in project-root ``.env`` (loaded at import; not sent from the browser).
+- POST /api/run-simulation: ProSim runs in-process via ``harness.run.run_simulation_job`` (no separate ``python -m harness.prosim_job_worker`` terminal). Progress/status/metrics files match the old worker contract; optional ``harness.prosim_job_worker`` remains for subprocess-isolated runs.
 """
 
 from __future__ import annotations
@@ -1059,12 +1060,44 @@ def _run_simulation_progress_label(pct: int, t0_mono: float) -> str:
     return f"{pct_i}% · {_run_simulation_elapsed_sec_label(t0_mono)}"
 
 
+def _atomic_write_json(path: Path, obj: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+
+
+class _TeeTextStream:
+    """Duplicate ``write``/``flush`` to multiple text streams (e.g. console + ProSim log)."""
+
+    def __init__(self, *streams: Any) -> None:
+        self._streams = streams
+
+    def write(self, data: str) -> int:
+        for s in self._streams:
+            try:
+                s.write(data)
+            except Exception:
+                pass
+        return len(data)
+
+    def flush(self) -> None:
+        for s in self._streams:
+            try:
+                s.flush()
+            except Exception:
+                pass
+
+    def isatty(self) -> bool:
+        return False
+
+
 def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
+    safe_stem = _sanitize_layout_name(result_stem) or "default_layout"
     try:
         publish_throttle: Dict[str, Optional[float]] = {"last_mono": None}
 
         RESULT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-        safe_stem = _sanitize_layout_name(result_stem) or "default_layout"
         named_path = (RESULT_STORAGE_DIR / f"{safe_stem}_sim_result.json").resolve()
         rs_resolved = RESULT_STORAGE_DIR.resolve()
         if not (named_path.parent == rs_resolved or rs_resolved in named_path.parents):
@@ -1092,9 +1125,6 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
             status_path.parent == rs_resolved or rs_resolved in status_path.parents
         ):
             raise ValueError("invalid status path")
-        job_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_job.json").resolve()
-        if not (job_path.parent == rs_resolved or rs_resolved in job_path.parents):
-            raise ValueError("invalid job path")
         try:
             progress_path.unlink()
         except FileNotFoundError:
@@ -1113,43 +1143,27 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
             pass
         except OSError:
             pass
-        try:
-            job_path.unlink()
-        except FileNotFoundError:
-            pass
-        except OSError:
-            pass
-        try:
-            running_job_path = job_path.with_suffix(job_path.suffix + ".running")
-            running_job_path.unlink()
-        except FileNotFoundError:
-            pass
-        except OSError:
-            pass
 
         _engine_wall_mono0 = time.monotonic()
         job_id = f"{safe_stem}-{int(time.time() * 1000)}"
-        job_obj = {
-            "jobId": job_id,
-            "stem": safe_stem,
-            "inputPath": str(sim_input_path),
-            "outputPath": str(named_path),
-            "progressPath": str(progress_path),
-            "metricsPath": str(metrics_path),
-            "statusPath": str(status_path),
-            "logPath": str(log_path),
-            "progressStepPercent": 5.0,
-        }
-        job_tmp = job_path.with_suffix(job_path.suffix + ".tmp")
-        job_tmp.write_text(json.dumps(job_obj, ensure_ascii=False), encoding="utf-8")
-        job_tmp.replace(job_path)
+        _atomic_write_json(
+            status_path,
+            {
+                "ok": True,
+                "state": "running",
+                "jobId": job_id,
+                "stem": safe_stem,
+                "startedAt": time.time(),
+            },
+        )
+        poller_stop = threading.Event()
 
-        terminal_worker_started = False
-        terminal_worker_deadline_mono = time.monotonic() + 20.0
-        while True:
-            now_m = time.monotonic()
-            last_m = publish_throttle["last_mono"]
-            if last_m is None or (now_m - float(last_m)) >= 0.25:
+        def _poll_progress_loop() -> None:
+            while not poller_stop.wait(0.25):
+                now_m = time.monotonic()
+                last_m = publish_throttle["last_mono"]
+                if last_m is not None and (now_m - float(last_m)) < 0.25:
+                    continue
                 publish_throttle["last_mono"] = now_m
                 pct = 0
                 current = 0.0
@@ -1171,33 +1185,64 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
                             pct, _engine_wall_mono0
                         ),
                     )
-            status_obj: Dict[str, Any] = {}
-            try:
-                raw_status = json.loads(status_path.read_text(encoding="utf-8"))
-                if isinstance(raw_status, dict):
-                    status_obj = raw_status
-            except Exception:
-                status_obj = {}
-            state = str(status_obj.get("state") or "")
-            if state == "running":
-                terminal_worker_started = True
-            if state == "completed":
-                break
-            if state == "failed":
-                err = str(status_obj.get("error") or status_obj.get("returnCode") or "ProSim terminal worker failed")
-                raise RuntimeError(err)
-            if metrics_path.exists() and named_path.exists():
-                break
-            if (
-                not terminal_worker_started
-                and (job_path.exists() or running_job_path.exists() or not status_path.exists())
-                and time.monotonic() > terminal_worker_deadline_mono
-            ):
-                raise RuntimeError(
-                    "Terminal ProSim worker is not running. Start it with: "
-                    "python -m harness.prosim_job_worker"
+
+        poller = threading.Thread(target=_poll_progress_loop, daemon=True)
+        poller.start()
+        rc = 1
+        try:
+            from harness.run import run_simulation_job
+
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8", errors="replace") as log_fp:
+                log_fp.write(
+                    f"\n--- ProSim inline job {job_id} start {time.time():.3f} ---\n"
                 )
-            time.sleep(0.05)
+                log_fp.flush()
+                old_out, old_err = sys.stdout, sys.stderr
+                sys.stdout = _TeeTextStream(old_out, log_fp)
+                sys.stderr = _TeeTextStream(old_err, log_fp)
+                try:
+                    rc = run_simulation_job(
+                        input_path=sim_input_path,
+                        output_path=named_path,
+                        progress_path=progress_path,
+                        metrics_path=metrics_path,
+                        stem=safe_stem,
+                        no_validate=True,
+                        compact_output=True,
+                        progress_step_percent=5.0,
+                    )
+                finally:
+                    sys.stdout, sys.stderr = old_out, old_err
+            if rc == 0:
+                _atomic_write_json(
+                    status_path,
+                    {
+                        "ok": True,
+                        "state": "completed",
+                        "jobId": job_id,
+                        "stem": safe_stem,
+                        "completedAt": time.time(),
+                    },
+                )
+            else:
+                _atomic_write_json(
+                    status_path,
+                    {
+                        "ok": False,
+                        "state": "failed",
+                        "jobId": job_id,
+                        "stem": safe_stem,
+                        "returnCode": int(rc),
+                        "completedAt": time.time(),
+                    },
+                )
+                raise RuntimeError(
+                    f"simulation failed (harness.run exit {rc}); see {log_path}"
+                )
+        finally:
+            poller_stop.set()
+            poller.join(timeout=3.0)
         with _sim_lock:
             _sim_progress.update(
                 runningClockLabel="",
@@ -1219,6 +1264,19 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
     except Exception as e:
         import traceback
         traceback.print_exc()
+        try:
+            status_p = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_status.json").resolve()
+            _atomic_write_json(
+                status_p,
+                {
+                    "ok": False,
+                    "state": "failed",
+                    "error": str(e),
+                    "completedAt": time.time(),
+                },
+            )
+        except Exception:
+            pass
         with _sim_lock:
             _sim_progress.update(running=False, error=str(e), runningClockLabel="")
 
