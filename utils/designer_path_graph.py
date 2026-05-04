@@ -715,9 +715,9 @@ def build_path_graph(
     pure_ground_exclude_runway = bool(opts.get("pureGroundExcludeRunway"))
     omit_other_runway_exits = bool(opts.get("omitOtherRunwayExits"))
     try:
-        queue_spacing_m = float(opts.get("queueTaxiwayJunctionSpacingM", 40.0))
+        queue_spacing_m = float(opts.get("queueTaxiwayJunctionSpacingM", 20.0))
     except (TypeError, ValueError):
-        queue_spacing_m = 40.0
+        queue_spacing_m = 20.0
     queue_spacing_m = max(5.0, queue_spacing_m)
 
     nodes: List[Point] = []

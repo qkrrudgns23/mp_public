@@ -1160,7 +1160,7 @@
         "minWidth": 1,
         "avgMoveVelocity": 10,
         "direction": "both",
-        "queueJunctionSpacingM": 40
+        "queueJunctionSpacingM": 20
       },
       "runwayPath": {
         "width": 60,

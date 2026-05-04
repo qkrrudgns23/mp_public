@@ -814,6 +814,15 @@
     button.small { padding: 6px 12px; font-size: 11px; font-weight: 500; margin-top: 4px; cursor: pointer; border-radius: 4px; background: var(--ui-bg-control); color: var(--ui-text-primary); transition: var(--ui-transition); }
     button.small:hover { background: var(--ui-bg-overlay); }
     button.small:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ui-accent-muted); }
+    #flightPaneSchedule .flight-assign-strip-wrap .flight-assign-lookahead-input {
+      margin-top: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      background: var(--ui-bg-input);
+      color: var(--ui-text-primary);
+      border: 1px solid var(--ui-border-default);
+      border-radius: 4px;
+    }
     #btnAddFlight { border: 1px solid rgba(255,255,255,0.42); }
     .draw-toggle-btn { border: 1px solid rgba(255,255,255,0.42); }
     .draw-toggle-btn.drawing { background: var(--ui-success-bg); color: var(--ui-success-text); }
@@ -903,6 +912,17 @@
     .flight-schedule-table td.flight-td-arr-ret-failed { color:var(--style-fs-arr-ret-failed, #f87171); font-weight:600; }
     .flight-schedule-table .flight-td-del { width:36px; text-align:center; padding:2px 0; }
     .flight-schedule-table tbody tr.flight-row-path-pending td { background: rgba(239, 68, 68, 0.12); }
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock > td {
+      background-color: #000000;
+      color: #dc2626;
+      border-bottom-color: #27272a;
+    }
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock > td .flight-sched-cell-text { color: #dc2626; }
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock .obj-item-delete { color: #fca5a5; }
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock.obj-item.selected > td {
+      background-color: #000000;
+      box-shadow: inset 3px 0 0 0 var(--ui-accent);
+    }
     .flight-config-input { width:72px; font-size:11px; text-align:right; }
     .flight-config-table th.sticky-col,
     .flight-config-table td.sticky-col { position:sticky; left:0; z-index:2; background:rgba(8,10,12,0.98); }

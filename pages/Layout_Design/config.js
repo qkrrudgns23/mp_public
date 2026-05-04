@@ -281,7 +281,7 @@
   const TAXIWAY_WIDTH_MIN = Math.max(1, Math.min(100, Number(_taxiwayTier.minWidth) || 1));
   const RUNWAY_EXIT_WIDTH_MIN = Math.max(1, Math.min(100, Number(_runwayExitTier.minWidth) || 1));
   const TAXIWAY_DEFAULT_WIDTH = Math.max(TAXIWAY_WIDTH_MIN, Math.min(100, Number(_taxiwayTier.width) || 1));
-  const QUEUE_TAXIWAY_JUNCTION_SPACING_M = Math.max(5, Number(_taxiwayTier.queueJunctionSpacingM) || 40);
+  const QUEUE_TAXIWAY_JUNCTION_SPACING_M = Math.max(5, Number(_taxiwayTier.queueJunctionSpacingM) || 20);
   const RUNWAY_PATH_DEFAULT_WIDTH = Math.max(5, Math.min(100, Number(_runwayPathTier.width) || 60));
   const RUNWAY_EXIT_DEFAULT_WIDTH = Math.max(RUNWAY_EXIT_WIDTH_MIN, Math.min(100, Number(_runwayExitTier.width) || 1));
   function minWidthMForTaxiwayPathType(pathType) {

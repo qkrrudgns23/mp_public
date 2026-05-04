@@ -31,7 +31,7 @@ consecutive ``positions`` intervals inside each VTT window whose start sample ha
 (``sobtMin - sibtMin`` when both set, else ``dwellMin``), not ELDT+nominal taxi-in.
 Between heavy control ticks, a full reservation rebook runs every ``LIGHT_RESERVATION_RETRY_INTERVAL_SEC`` so agents
 re-check stand pipeline and departure-runway resources and regain ``PROCEED`` when slots free (same rules as ``can_reserve_path``).
-Per-flight lookahead / billed reservation depth by regime (runway, Dep_taxi, Arr_taxi, Arr_taxi stand-busy after ELDT);
+Per-flight lookahead edge count for Dep_taxi and Arr_taxi (JSON ``lookaheadTaxi``); billed reservation depth by regime (runway, Dep_taxi, Arr_taxi);
 ``apron_taxiway`` edges use billed depth where those edges
 add no slot; consecutive ``taxiway`` edges still share one slot. Physical edges remain reserved along the path.
 Each apron stand has configurable capacity (layout ``pbbStands[].capacity`` or ``defaultApronStandCapacity``);
@@ -152,21 +152,21 @@ DEFAULT_MIN_SEPARATION_M = 60.0
 # Holding_lineup / Lineup_departure on those path types.
 LOOKAHEAD_RUNWAY = 0
 RESERV_DEPTH_RUNWAY = 0
-# Dep_taxi (and holding/lineup when first segment is not runway above).
-LOOKAHEAD_DEP_TAXI = 13 #13가 좋았음
+# Dep_taxi (and holding/lineup when first segment is not runway above). Legacy default when JSON omits per-flight value.
+LOOKAHEAD_DEP_TAXI = 15 #13가 좋았음
 RESERV_DEPTH_DEP_TAXI = 1 # 1가 좋았음
-# Arr_taxi (default).
-LOOKAHEAD_ARR_TAXI = 13 #13가 좋았음
+# Arr_taxi (legacy default when JSON omits per-flight value).
+LOOKAHEAD_ARR_TAXI = 15 #13가 좋았음
 RESERV_DEPTH_ARR_TAXI = 1 # 1가 좋았음
-# Arr_taxi when sim ≥ ELDT and target stand occupied / pushback cooldown.
-LOOKAHEAD_ARR_TAXI_BUSY = 13 
-RESERV_DEPTH_ARR_TAXI_BUSY = 1
+# Per-flight JSON/UI default for Arr_taxi and Dep_taxi lookahead edge count.
+DEFAULT_LOOKAHEAD_TAXI_EDGES = 9
+LOOKAHEAD_TAXI_EDGES_CAP = 200
 # Upper bound for failsafe resource collection and control_state default.
 LOOKAHEAD_EDGE_COUNT_MAX = max(
     LOOKAHEAD_RUNWAY,
     LOOKAHEAD_DEP_TAXI,
     LOOKAHEAD_ARR_TAXI,
-    LOOKAHEAD_ARR_TAXI_BUSY,
+    DEFAULT_LOOKAHEAD_TAXI_EDGES,
 )
 
 # 안1 : Deadlock 편만 Lookahead를 증가시키면 될듯
@@ -473,9 +473,9 @@ def _graph_for_direction(
         direction_modes = []
     tw_info = _deep_get(information, "tiers", "layout", "taxiway", default={}) or {}
     try:
-        q_js = float(tw_info.get("queueJunctionSpacingM", 40.0))
+        q_js = float(tw_info.get("queueJunctionSpacingM", 20.0))
     except (TypeError, ValueError):
-        q_js = 40.0
+        q_js = 20.0
     path_graph_opts = {"queueTaxiwayJunctionSpacingM": max(5.0, q_js)}
     return build_path_graph(
         layout,
@@ -684,6 +684,7 @@ class Flight:
     eldt_anchor_sec: Optional[float] = None
     eldt_raw_sec: Optional[float] = None
     dwell_sec: float = 0.0
+    lookahead_taxi_edges: int = DEFAULT_LOOKAHEAD_TAXI_EDGES
     # Apron in-blocks: Arr_taxi → Dep_taxi segment transition (arrival complete at stand).
     actual_apron_inblocks_abs_sec: Optional[float] = None
     # Apron off-blocks: first Dep_taxi motion (pushback / taxi-out start from stand).
@@ -6793,6 +6794,18 @@ def _destination_stand_history_snap(
     return (sid, cap, phys_others, booked, cd, allow)
 
 
+def _lookahead_taxi_edges_from_fobj(fobj: Dict[str, Any]) -> int:
+    raw = fobj.get("lookaheadTaxi", fobj.get("lookahead_taxi"))
+    if raw is None:
+        return int(DEFAULT_LOOKAHEAD_TAXI_EDGES)
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return int(DEFAULT_LOOKAHEAD_TAXI_EDGES)
+    cap = int(LOOKAHEAD_TAXI_EDGES_CAP)
+    return max(0, min(n, cap))
+
+
 def _lookahead_and_reservation_depth_for_agent(
     agent: Flight,
     control_state: SimulationControlState,
@@ -6800,9 +6813,10 @@ def _lookahead_and_reservation_depth_for_agent(
     agents: List[Flight],
     stand_cooldown_index: Optional[StandCooldownIndex] = None,
 ) -> Tuple[int, int]:
-    """(lookahead_edge_count, billed_reservation_depth) by runway / Dep_taxi / Arr_taxi / Arr busy."""
+    """(lookahead_edge_count, billed_reservation_depth) by runway / Dep_taxi / Arr_taxi."""
+    la_taxi = max(0, int(agent.lookahead_taxi_edges))
     if not agent.edge_phases:
-        return (LOOKAHEAD_ARR_TAXI, RESERV_DEPTH_ARR_TAXI)
+        return (la_taxi, RESERV_DEPTH_ARR_TAXI)
     ph0 = str(agent.edge_phases[0])
     pt0 = (
         agent.segment_path_types_norm[0]
@@ -6819,24 +6833,12 @@ def _lookahead_and_reservation_depth_for_agent(
     if ph0 in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE):
         if on_runway_seg:
             return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
-        return (LOOKAHEAD_DEP_TAXI, RESERV_DEPTH_DEP_TAXI)
+        return (la_taxi, RESERV_DEPTH_DEP_TAXI)
     if ph0 in (PHASE_PUSHBACK, PHASE_DEP_TAXI):
-        return (LOOKAHEAD_DEP_TAXI, RESERV_DEPTH_DEP_TAXI)
+        return (la_taxi, RESERV_DEPTH_DEP_TAXI)
     if ph0 in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
-        eldt = agent.eldt_anchor_sec
-        t_abs = float(sim_time_abs)
-        eldt_reached = eldt is None or t_abs + 1e-9 >= float(eldt)
-        sid = str(agent.apron_stand_id or "").strip()
-        stand_busy = _target_apron_stand_occupied_by_other(agent, control_state) or (
-            sid
-            and _stand_pushback_clearance_cooldown_active(
-                sid, str(agent.id), agents, t_abs, stand_cooldown_index
-            )
-        )
-        if ph0 == PHASE_ARR_TAXI and eldt_reached and stand_busy:
-            return (LOOKAHEAD_ARR_TAXI_BUSY, RESERV_DEPTH_ARR_TAXI_BUSY)
-        return (LOOKAHEAD_ARR_TAXI, RESERV_DEPTH_ARR_TAXI)
-    return (LOOKAHEAD_ARR_TAXI, RESERV_DEPTH_ARR_TAXI)
+        return (la_taxi, RESERV_DEPTH_ARR_TAXI)
+    return (la_taxi, RESERV_DEPTH_ARR_TAXI)
 
 
 def get_lookahead_edges(
@@ -8977,7 +8979,7 @@ def apply_movement_controls(
 
 def run_simulation(
     layout: Dict[str, Any],
-    dt: float = 5.0,
+    dt: float = 2.0,
     progress_cb: Optional[Callable[[float, float, Optional[float]], None]] = None,
     progress_step_percent: float = 0.0,
 ) -> Dict[str, Any]:
@@ -9116,6 +9118,7 @@ def run_simulation(
             _arr_rid = str(arr_rwy_o).strip() if arr_rwy_o else ""
             dep_rwy_o = fobj.get("depRunwayId") or token_o.get("depRunwayId")
             _dep_rid = str(dep_rwy_o).strip() if dep_rwy_o else ""
+            _la_taxi = _lookahead_taxi_edges_from_fobj(_fobj_dict)
             ag_new = Flight(
                 id=fid,
                 edge_ids=deque(eids),
@@ -9129,6 +9132,7 @@ def run_simulation(
                 eldt_anchor_sec=anchor_use,
                 eldt_raw_sec=float(anchor_raw) if anchor_raw is not None else None,
                 dwell_sec=float(dwell_s),
+                lookahead_taxi_edges=_la_taxi,
                 apron_stand_id=(
                     str(_apron_segments[0].get("standId")).strip()
                     if _apron_segments and _apron_segments[0].get("standId") is not None and str(_apron_segments[0].get("standId")).strip()

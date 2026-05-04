@@ -3266,66 +3266,6 @@
     return path.reverse();
   }
 
-  /** RET 출구 근처 여러 그래프 노드에서 gFull 상 스탠드까지 다익스트라를 시도해, 단일 nearest 스냅이 다른 성분에 묶이는 경우를 완화한다. */
-  function gatherRetExitPivotIndicesOnGFull(gFull, retEndPx, pivotG1Px, rPts) {
-    const mergeRM = PATH_JUNCTION_MERGE_RADIUS_PX;
-    const pxPts = [];
-    if (pivotG1Px && pivotG1Px.length >= 2) pxPts.push(pivotG1Px);
-    if (retEndPx && retEndPx.length >= 2) pxPts.push(retEndPx);
-    if (rPts && rPts.length >= 2) {
-      pxPts.push(rPts[rPts.length - 1]);
-      if (rPts.length >= 3) pxPts.push(rPts[rPts.length - 2]);
-    }
-    const indices = [];
-    const seen = new Set();
-    for (let i = 0; i < pxPts.length; i++) {
-      const idx = nearestPathNode(gFull, pxPts[i]);
-      if (idx != null && !seen.has(idx)) {
-        seen.add(idx);
-        indices.push(idx);
-      }
-    }
-    const rNear = mergeRM * 6;
-    const r2 = rNear * rNear;
-    if (retEndPx && retEndPx.length >= 2 && gFull.nodes && gFull.nodes.length) {
-      const scored = [];
-      for (let ni = 0; ni < gFull.nodes.length; ni++) {
-        const d2 = dist2(gFull.nodes[ni], retEndPx);
-        if (d2 <= r2) scored.push({ ni: ni, d2: d2 });
-      }
-      scored.sort(function(a, b) { return a.d2 - b.d2; });
-      const cap = 36;
-      for (let k = 0; k < scored.length && k < cap; k++) {
-        const ni = scored[k].ni;
-        if (!seen.has(ni)) {
-          seen.add(ni);
-          indices.push(ni);
-        }
-      }
-    }
-    return indices;
-  }
-  function pathDijkstraFromRetExitToStand(gFull, endNodeFull, candidateStartIndices) {
-    if (!gFull || endNodeFull == null || !candidateStartIndices || !candidateStartIndices.length) return { path: null, startIdx: null };
-    let bestPath = null;
-    let bestD = Infinity;
-    const seenStart = new Set();
-    for (let ci = 0; ci < candidateStartIndices.length; ci++) {
-      const s = candidateStartIndices[ci];
-      if (s == null || seenStart.has(s)) continue;
-      seenStart.add(s);
-      const path = pathDijkstra(gFull, s, endNodeFull);
-      if (!path || path.length < 2) continue;
-      const d = pathTotalDist(gFull, path);
-      if (!(d < REVERSE_COST)) continue;
-      if (d < bestD) {
-        bestD = d;
-        bestPath = path;
-      }
-    }
-    return { path: bestPath, startIdx: bestPath ? bestPath[0] : null };
-  }
-
   function nearestPathNode(g, p) {
     let best = 0, bestD2 = dist2(g.nodes[0], p);
     for (let i = 1; i < g.nodes.length; i++) {
@@ -3569,22 +3509,32 @@
     ctx.scale(state.scale, state.scale);
     const r = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
     const rGreen = r * 0.7;
+    const rRedJn = rGreen * 0.85;
+    const etcMonoJn = layerMonoEtcOn();
+    const redJnHairline = Math.max(0.1, layoutHairlineStrokeWidthWorld() * 0.2);
     if (cacheHasDots) {
       let reds = panCoarse ? [] : filterPtsWorld(redJunctions);
       let greens = filterPtsWorld(connectedJunctions);
       reds = subsamplePts(reds);
       greens = subsamplePts(greens);
-      const etcMono = layerMonoEtcOn();
-      ctx.fillStyle = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#ef4444';
       reds.forEach(function(p) {
         ctx.beginPath();
-        ctx.arc(p[0], p[1], r, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(p[0], p[1], rRedJn, 0, Math.PI * 2);
+        if (etcMonoJn) {
+          ctx.fillStyle = C2D_LAYER_MONO_ETC_WHITE;
+          ctx.fill();
+        } else {
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(153, 27, 27, 0.9)';
+          ctx.lineWidth = redJnHairline;
+          ctx.stroke();
+        }
       });
-      ctx.fillStyle = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#22c55e';
+      ctx.fillStyle = etcMonoJn ? C2D_LAYER_MONO_ETC_WHITE : '#22c55e';
       greens.forEach(function(p) {
         ctx.beginPath();
-        ctx.arc(p[0], p[1], rGreen, 0, Math.PI * 2);
+        ctx.arc(p[0], p[1], rRedJn, 0, Math.PI * 2);
         ctx.fill();
       });
     }
@@ -3612,10 +3562,20 @@
       for (let li = 0; li < localPts.length; li++) {
         const lp = localPts[li];
         if (alreadyDrawnAtOverlay(lp)) continue;
-        ctx.fillStyle = overlayJunctionFillForWorldPoint(lp, gColorRef);
+        const jf = overlayJunctionFillForWorldPoint(lp, gColorRef);
+        const rOv = rRedJn;
         ctx.beginPath();
-        ctx.arc(lp[0], lp[1], rGreen, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(lp[0], lp[1], rOv, 0, Math.PI * 2);
+        if (!etcMonoJn && jf === '#ef4444') {
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(153, 27, 27, 0.9)';
+          ctx.lineWidth = redJnHairline;
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = etcMonoJn ? C2D_LAYER_MONO_ETC_WHITE : jf;
+          ctx.fill();
+        }
       }
     }
     function flushOverlayDotsForApronLinkDraft(draftPoly) {
@@ -3626,10 +3586,20 @@
       for (let li = 0; li < localPts.length; li++) {
         const lp = localPts[li];
         if (alreadyDrawnAtOverlay(lp)) continue;
-        ctx.fillStyle = overlayJunctionFillForWorldPoint(lp, gColorRef);
+        const jf = overlayJunctionFillForWorldPoint(lp, gColorRef);
+        const rOv = rRedJn;
         ctx.beginPath();
-        ctx.arc(lp[0], lp[1], rGreen, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(lp[0], lp[1], rOv, 0, Math.PI * 2);
+        if (!etcMonoJn && jf === '#ef4444') {
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(153, 27, 27, 0.9)';
+          ctx.lineWidth = redJnHairline;
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = etcMonoJn ? C2D_LAYER_MONO_ETC_WHITE : jf;
+          ctx.fill();
+        }
       }
     }
     if (needDrawingTwOverlay) flushOverlayDotsForTaxiway(twDraw);
@@ -3759,7 +3729,8 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(state.panX, state.panY);
     ctx.scale(state.scale, state.scale);
-    const r = Math.max(3.5, CELL_SIZE * 0.22) * LAYOUT_VERTEX_DOT_SCALE;
+    const rJnBase = Math.max(4, CELL_SIZE * 0.35) * LAYOUT_VERTEX_DOT_SCALE;
+    const r = rJnBase * 0.7 * 0.85;
     (state.taxiways || []).forEach(function(tw) {
       if (!tw || !taxiwayUsesQueueJunctionSpacing(tw) || !tw.vertices || tw.vertices.length < 2) return;
       if (!taxiwayShouldDrawInViewport(tw, vbQ)) return;
@@ -3771,9 +3742,6 @@
         ctx.arc(xy[0], xy[1], r, 0, Math.PI * 2);
         ctx.fillStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#22c55e';
         ctx.fill();
-        ctx.strokeStyle = layerMonoEtcOn() ? C2D_LAYER_MONO_ETC_WHITE : '#ef4444';
-        ctx.lineWidth = 1.8;
-        ctx.stroke();
       }
     });
     ctx.restore();
@@ -5042,7 +5010,6 @@
     const flightSubtabButtons = document.querySelectorAll('.flight-subtab');
     const flightPaneSchedule = document.getElementById('flightPaneSchedule');
     const flightPaneConfig = document.getElementById('flightPaneConfig');
-    const flightPaneRouteRedesign = document.getElementById('flightPaneRouteRedesign');
     if (flightSubtabButtons && flightPaneSchedule && flightPaneConfig) {
       flightSubtabButtons.forEach(btn => {
         btn.addEventListener('click', function() {
@@ -5051,8 +5018,6 @@
           this.classList.add('active');
           flightPaneSchedule.style.display = target === 'schedule' ? 'block' : 'none';
           flightPaneConfig.style.display = target === 'config' ? 'block' : 'none';
-          if (flightPaneRouteRedesign) flightPaneRouteRedesign.style.display = target === 'routeRedesign' ? 'block' : 'none';
-          if (target === 'routeRedesign' && typeof renderRouteRedesignPanel === 'function') renderRouteRedesignPanel();
         });
       });
     }
@@ -5110,6 +5075,7 @@
           intDom: intDomNew,
           dwellMin,
           minDwellMin,
+          lookaheadTaxi: 9,
           arrRunwayId: defaultRunwayId,
           depRunwayId: defaultRunwayId,
           timeline: null,
