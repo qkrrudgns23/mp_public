@@ -6917,7 +6917,7 @@
       if (!pose) continue;
       const dx = pose.x - wx, dy = pose.y - wy;
       const d2 = dx * dx + dy * dy;
-      const poly = simFlightSilhouetteWorldPolygon(f, pose);
+      const poly = simFlightSilhouetteWorldPolygon(f, pose, tSec);
       if (poly.length >= 3 && pointInPolygonXY([wx, wy], poly) && d2 < bestD2) {
         bestD2 = d2;
         best = f;
@@ -9217,12 +9217,18 @@
     const flights = state.flights || [];
     for (let i = 0; i < flights.length; i++) {
       const f = flights[i];
-      if (!f || !f.standId) continue;
+      if (!f) continue;
       const m = f.timeline_meta;
-      if (m && typeof m.eibtSec === 'number' && typeof m.eobtSec === 'number') {
-        if (t + 1e-3 >= m.eibtSec && t <= m.eobtSec + 1e-3) set.add(String(f.standId));
-        continue;
+      if (m && !m.error) {
+        const eibtList = Array.isArray(m.eibtSecList) ? m.eibtSecList : (typeof m.eibtSec === 'number' ? [m.eibtSec] : []);
+        const eobtList = Array.isArray(m.eobtSecList) ? m.eobtSecList : (typeof m.eobtSec === 'number' ? [m.eobtSec] : []);
+        if (Math.min(eibtList.length, eobtList.length) > 0) {
+          const sidOcc = standIdForParkedApronInterval(f, t);
+          if (sidOcc) set.add(String(sidOcc));
+          continue;
+        }
       }
+      if (!f.standId) continue;
       if (f.arrDep !== 'Dep' && (f.noWayArr || f.arrRetFailed)) {
         const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
         const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
@@ -9840,7 +9846,7 @@
     pose = applyParkedStandHeadingToPoseIfNeeded(flight, t, pose);
     return pose;
   }
-  function simFlightSilhouetteWorldPolygon(f, pose) {
+  function simFlightSilhouetteWorldPolygon(f, pose, tSecOpt) {
     if (!f || !pose) return [];
     const x = Number(pose.x), y = Number(pose.y), dx = Number(pose.dx), dy = Number(pose.dy);
     if (![x, y, dx, dy].every(isFinite)) return [];
@@ -9868,7 +9874,11 @@
       scaleX = dimsM.lenM / lenNorm;
       scaleY = dimsM.wingM / wingNorm;
     }
-    const pFwX = nX * scaleX - 0.15 * dimsM.lenM;
+    let fuselageStationFrac = 0.15;
+    if (typeof tSecOpt === 'number' && isFinite(tSecOpt) && simFlightPhaseAtTime(f, tSecOpt, pose) === 'Pushback') {
+      fuselageStationFrac = 0.25;
+    }
+    const pFwX = nX * scaleX - fuselageStationFrac * dimsM.lenM;
     const drawX = x - nx * pFwX;
     const drawY = y - ny * pFwX;
     const pts = (useDetailSil && silhouette2D.length >= 3)
@@ -18367,9 +18377,10 @@
         scaleY = wingM / wingNorm;
         sizeRef = 0.5 * Math.hypot(lenM, wingM);
       }
-      // Pose (x,y) is the unified aircraft anchor: station 15 on nose=0 tail=100 fuselage axis.
-      // Silhouette origin (0,0) is not the nose, so offset draw until that anchor lands on (x,y).
-      const pFwX = nX * scaleX - 0.15 * lenM;
+      // Pose (x,y): fuselage anchor nose=0 tail=100 — station 15 normally; station 25 during Pushback (reverse draw).
+      const phaseDraw = simFlightPhaseAtTime(f, tSecDraw, pose);
+      const fuselageStationFrac = (phaseDraw === 'Pushback') ? 0.25 : 0.15;
+      const pFwX = nX * scaleX - fuselageStationFrac * lenM;
       const drawX = x - nx * pFwX;
       const drawY = y - ny * pFwX;
       const outW = Number(_ac2d.outlineWidth);

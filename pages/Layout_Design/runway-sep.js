@@ -151,7 +151,7 @@
       if (!pose) continue;
       const dx = pose.x - wx, dy = pose.y - wy;
       const d2 = dx * dx + dy * dy;
-      const poly = simFlightSilhouetteWorldPolygon(f, pose);
+      const poly = simFlightSilhouetteWorldPolygon(f, pose, tSec);
       if (poly.length >= 3 && pointInPolygonXY([wx, wy], poly) && d2 < bestD2) {
         bestD2 = d2;
         best = f;

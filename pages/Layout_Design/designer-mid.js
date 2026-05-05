@@ -947,12 +947,18 @@
     const flights = state.flights || [];
     for (let i = 0; i < flights.length; i++) {
       const f = flights[i];
-      if (!f || !f.standId) continue;
+      if (!f) continue;
       const m = f.timeline_meta;
-      if (m && typeof m.eibtSec === 'number' && typeof m.eobtSec === 'number') {
-        if (t + 1e-3 >= m.eibtSec && t <= m.eobtSec + 1e-3) set.add(String(f.standId));
-        continue;
+      if (m && !m.error) {
+        const eibtList = Array.isArray(m.eibtSecList) ? m.eibtSecList : (typeof m.eibtSec === 'number' ? [m.eibtSec] : []);
+        const eobtList = Array.isArray(m.eobtSecList) ? m.eobtSecList : (typeof m.eobtSec === 'number' ? [m.eobtSec] : []);
+        if (Math.min(eibtList.length, eobtList.length) > 0) {
+          const sidOcc = standIdForParkedApronInterval(f, t);
+          if (sidOcc) set.add(String(sidOcc));
+          continue;
+        }
       }
+      if (!f.standId) continue;
       if (f.arrDep !== 'Dep' && (f.noWayArr || f.arrRetFailed)) {
         const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
         const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
@@ -1570,7 +1576,7 @@
     pose = applyParkedStandHeadingToPoseIfNeeded(flight, t, pose);
     return pose;
   }
-  function simFlightSilhouetteWorldPolygon(f, pose) {
+  function simFlightSilhouetteWorldPolygon(f, pose, tSecOpt) {
     if (!f || !pose) return [];
     const x = Number(pose.x), y = Number(pose.y), dx = Number(pose.dx), dy = Number(pose.dy);
     if (![x, y, dx, dy].every(isFinite)) return [];
@@ -1598,7 +1604,11 @@
       scaleX = dimsM.lenM / lenNorm;
       scaleY = dimsM.wingM / wingNorm;
     }
-    const pFwX = nX * scaleX - 0.15 * dimsM.lenM;
+    let fuselageStationFrac = 0.15;
+    if (typeof tSecOpt === 'number' && isFinite(tSecOpt) && simFlightPhaseAtTime(f, tSecOpt, pose) === 'Pushback') {
+      fuselageStationFrac = 0.25;
+    }
+    const pFwX = nX * scaleX - fuselageStationFrac * dimsM.lenM;
     const drawX = x - nx * pFwX;
     const drawY = y - ny * pFwX;
     const pts = (useDetailSil && silhouette2D.length >= 3)

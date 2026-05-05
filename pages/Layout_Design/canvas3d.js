@@ -4744,9 +4744,10 @@
         scaleY = wingM / wingNorm;
         sizeRef = 0.5 * Math.hypot(lenM, wingM);
       }
-      // Pose (x,y) is the unified aircraft anchor: station 15 on nose=0 tail=100 fuselage axis.
-      // Silhouette origin (0,0) is not the nose, so offset draw until that anchor lands on (x,y).
-      const pFwX = nX * scaleX - 0.15 * lenM;
+      // Pose (x,y): fuselage anchor nose=0 tail=100 — station 15 normally; station 25 during Pushback (reverse draw).
+      const phaseDraw = simFlightPhaseAtTime(f, tSecDraw, pose);
+      const fuselageStationFrac = (phaseDraw === 'Pushback') ? 0.25 : 0.15;
+      const pFwX = nX * scaleX - fuselageStationFrac * lenM;
       const drawX = x - nx * pFwX;
       const drawY = y - ny * pFwX;
       const outW = Number(_ac2d.outlineWidth);
