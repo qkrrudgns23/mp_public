@@ -1,3 +1,11 @@
+    ctx.lineJoin = 'miter';
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = lw;
+    if (selected && !preview) {
+      ctx.shadowColor = c2dObjectSelectedGlow();
+      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
+    } else {
+      ctx.shadowBlur = 0;
     }
     function strokeBarAtOffset(ofs) {
       const sx = cx - px * halfLen + g.ux * ofs;
@@ -572,6 +580,8 @@
     simPlaybackDockVisible: false,
     /** Derived after Pro Sim: first deadlockGhost sample per flight; slider markers + left dock banner. */
     simDeadlockGhostPlayback: { events: [], bodyLines: '', resolveCount: 0 },
+    /** flight_id keys with any deadlock ghost in last compact_v2 playback (survives timeline eviction). */
+    deadlockFlightIdsFromLastSim: Object.create(null),
     showGrid: GRID_VISIBLE_DEFAULT,
     showImage: IMAGE_VISIBLE_DEFAULT,
     showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
@@ -818,15 +828,3 @@
     function distPointToSegSq(p, a, b) {
       const pr = projectOnSegment(a, b, p);
       const dpx = p[0] - pr.p[0], dpy = p[1] - pr.p[1];
-      return dpx * dpx + dpy * dpy;
-    }
-    function pointNearDeletedTw(p) {
-      if (!p || !Array.isArray(p) || p.length < 2) return false;
-      if (!isFinite(p[0]) || !isFinite(p[1])) return false;
-      for (let seg = 0; seg < pts.length - 1; seg++) {
-        const a = pts[seg], b = pts[seg + 1];
-        if (!a || !b || !isFinite(a[0]) || !isFinite(b[0])) continue;
-        if (distPointToSegSq(p, a, b) <= tol2) return true;
-      }
-      return false;
-    }

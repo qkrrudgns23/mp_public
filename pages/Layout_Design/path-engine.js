@@ -1,3 +1,15 @@
+      } else if (playbackFresh) {
+        playDock.setAttribute('title', '최신 Pro Sim 결과를 재생합니다');
+      } else {
+        playDock.setAttribute('title', '이전 Pro Sim 결과를 재생합니다 — 레이아웃 변경으로 최신 상태는 아닙니다');
+      }
+    }
+    if (playDot) {
+      if (playbackFresh) {
+        playDot.classList.remove('stale');
+        playDot.classList.add('fresh');
+        playDot.setAttribute('title', 'Playback result matches the latest layout');
+      } else {
         playDot.classList.remove('fresh');
         playDot.classList.add('stale');
         playDot.setAttribute('title', state.hasSimulationResult
@@ -718,15 +730,3 @@
     return segs;
   }
   function mergeAdjacentSameStandApronSegments(segs) {
-    const out = [];
-    (segs || []).forEach(function(seg) {
-      if (!seg) return;
-      const sid = seg.standId != null && String(seg.standId).trim() !== '' ? String(seg.standId) : null;
-      const sibt = Number(seg.sibtMin);
-      const sobt = Number(seg.sobtMin);
-      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return;
-      const prev = out.length ? out[out.length - 1] : null;
-      if (prev && String(prev.standId || '') === String(sid || '') && sibt <= prev.sobtMin + 1e-6) {
-        prev.sobtMin = Math.max(prev.sobtMin, sobt);
-      } else {
-        out.push({ standId: sid, sibtMin: sibt, sobtMin: sobt });

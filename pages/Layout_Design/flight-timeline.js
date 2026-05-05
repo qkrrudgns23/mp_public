@@ -1,3 +1,231 @@
+  function getDefaultRemoteStandName(currentId) {
+    const stands = (state.remoteStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('R' + zeroPadNumber(stands.length + 1, 3), used);
+  }
+  function getDefaultTempStandName(currentId) {
+    const stands = (state.tempStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('T' + zeroPadNumber(stands.length + 1, 3), used);
+  }
+  function getApronLinkDefaultName(linkOrId) {
+    const linkId = (typeof linkOrId === 'object' && linkOrId) ? linkOrId.id : linkOrId;
+    const idx = (state.apronLinks || []).findIndex(function(lk) { return lk && lk.id === linkId; });
+    return 'Apron Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
+  }
+  function getApronLinkDisplayName(link) {
+    if (!link) return 'Apron Taxiway';
+    return (link.name && String(link.name).trim()) || getApronLinkDefaultName(link);
+  }
+  function ensureUniqueApronLinkName(rawName, currentId) {
+    const fallbackBase = getApronLinkDefaultName(currentId);
+    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
+    const used = new Set((state.apronLinks || [])
+      .filter(function(lk) { return lk && lk.id !== currentId; })
+      .map(function(lk) { return (lk.name && String(lk.name).trim()) || getApronLinkDefaultName(lk); })
+      .filter(Boolean));
+    return uniqueNameAgainstSet(baseName, used);
+  }
+  function getLayoutEdgeDefaultName(edge) {
+    if (!edge) return 'Edge';
+    return 'Edge ' + (edge.label || '001');
+  }
+  function getLayoutEdgeDisplayName(edge) {
+    if (!edge) return 'Edge';
+    return (edge.name && String(edge.name).trim()) || getLayoutEdgeDefaultName(edge);
+  }
+  function ensureUniqueLayoutEdgeName(rawName, currentId, fallbackEdge) {
+    const fallbackBase = getLayoutEdgeDefaultName(fallbackEdge || { label: '001' });
+    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
+    const used = new Set(Object.keys(state.layoutEdgeNames || {})
+      .filter(function(id) { return id !== currentId; })
+      .map(function(id) { return state.layoutEdgeNames[id]; })
+      .filter(Boolean));
+    return uniqueNameAgainstSet(baseName, used);
+  }
+  function normalizeLayoutNameKey(name) {
+    return String(name || '').trim().toLowerCase();
+  }
+  function findDuplicateLayoutName(objectKind, excludeId, proposedRaw) {
+    const key = normalizeLayoutNameKey(proposedRaw);
+    if (!key) return null;
+    const ex = excludeId == null || excludeId === '' ? null : String(excludeId);
+    function isOther(oid) {
+      if (ex === null) return true;
+      return String(oid) !== ex;
+    }
+    if (objectKind === 'terminal') {
+      const arr = state.terminals || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'terminal', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'pbb') {
+      const arr = state.pbbStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'pbb', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'remote') {
+      const arr = state.remoteStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'remote', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'tempStand') {
+      const arr = state.tempStands || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'tempStand', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'holdingPoint') {
+      const arr = state.holdingPoints || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'holdingPoint', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'taxiway') {
+      const arr = state.taxiways || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = (o.name && String(o.name).trim()) || '';
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'taxiway', existing: disp || o.id };
+      }
+      return null;
+    }
+    if (objectKind === 'apronLink') {
+      const arr = state.apronLinks || [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = arr[i];
+        if (!o || !isOther(o.id)) continue;
+        const disp = getApronLinkDisplayName(o);
+        if (normalizeLayoutNameKey(disp) === key) return { kind: 'apronLink', existing: disp };
+      }
+      return null;
+    }
+    if (objectKind === 'layoutEdge') {
+      const map = state.layoutEdgeNames || {};
+      const edgeIds = Object.keys(map);
+      for (let ki = 0; ki < edgeIds.length; ki++) {
+        const kid = edgeIds[ki];
+        if (!isOther(kid)) continue;
+        const disp = map[kid];
+        if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
+      }
+      return null;
+    }
+    return null;
+  }
+  function alertDuplicateLayoutName() {
+    alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
+  }
+  function ensureDefaultDirectionModes() {
+    if (state.directionModes.length === 0) {
+      state.directionModes = [
+        { id: id(), name: 'Mode A', direction: 'clockwise' },
+        { id: id(), name: 'Mode B', direction: 'counter_clockwise' },
+        { id: id(), name: 'Mode C', direction: 'both' }
+      ];
+    }
+  }
+  const undoStack = [];
+  const maxUndoLevels = _interactionConfigNum('maxUndoLevels', 50);
+  function pushUndo() {
+    const snap = {
+      terminals: JSON.parse(JSON.stringify(state.terminals || [])),
+      pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
+      remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
+      tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
+      holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
+      taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
+      apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
+      layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
+      layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
+      directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
+      flights: cloneFlightsWithoutPathPolylineCache(state.flights),
+      layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))
+    };
+    undoStack.push(snap);
+    if (undoStack.length > maxUndoLevels) undoStack.shift();
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    const snap = undoStack.pop();
+    state.terminals = snap.terminals;
+    state.pbbStands = snap.pbbStands;
+    state.remoteStands = snap.remoteStands;
+    state.tempStands = snap.tempStands || [];
+    state.holdingPoints = snap.holdingPoints || [];
+    state.taxiways = snap.taxiways;
+    state.apronLinks = snap.apronLinks;
+    state.apronLinkJunctionOverlayDirtyIds = null;
+    state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
+    syncLayoutImageBitmap();
+    state.layoutEdgeNames = snap.layoutEdgeNames || {};
+    state.directionModes = snap.directionModes;
+    state.flights = snap.flights;
+    state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(Array.isArray(snap.layoutMarkers) ? snap.layoutMarkers : []);
+    state.pathArcDrag = null;
+    state.selectedObject = null;
+    state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
+    state.terminalDrawingId = null;
+    state.taxiwayDrawingId = null;
+    state.layoutPathDrawPointer = null;
+    syncPanelFromState();
+    updateObjectInfo();
+    renderObjectList();
+    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
+  }
+  function getTaxiwayDirection(tw) {
+    if (!tw) return 'both';
+    if (tw.direction != null) {
+      const d = tw.direction;
+      if (d === 'topToBottom') return 'clockwise';
+      if (d === 'bottomToTop') return 'counter_clockwise';
+      return d || 'both';
+    }
+    if (tw.directionModeId) {
+      const m = state.directionModes.find(d => d.id === tw.directionModeId);
+      if (m && m.direction) return m.direction;
+    }
+    return 'both';
+  }
+  function normalizeRwDirectionValue(dir) {
+    if (dir == null) return 'both';
+    const s0 = String(dir).trim();
+    if (!s0) return 'both';
+    const s = s0.toLowerCase().replace(/[\s-]+/g, '_');
+    if (s === 'clockwise' || s === 'cw') return 'clockwise';
+    if (s === 'counter_clockwise' || s === 'ccw' || s === 'counterclockwise') return 'counter_clockwise';
+    if (s === 'top_tobottom' || s === 'toptobottom' || s === 'ttb') return 'clockwise';
+    if (s === 'bottom_totop' || s === 'bottomtotop' || s === 'btt') return 'counter_clockwise';
+    return 'both';
+  }
+  function normalizeAllowedRunwayDirections(raw) {
+    const out = [];
     const src = Array.isArray(raw) ? raw : [];
     src.forEach(function(v) {
       const d = normalizeRwDirectionValue(v);
@@ -1129,231 +1357,3 @@
       if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
     }
     for (let i = 0; i < state.pbbStands.length; i++) {
-      const o = state.pbbStands[i];
-      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
-    }
-    for (let i = 0; i < (state.tempStands || []).length; i++) {
-      const o = state.tempStands[i];
-      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
-    }
-    if (standGapLineHitsExistingOuterContours([Number(wx), Number(wy)], angleDeg * Math.PI / 180, category)) return false;
-    const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
-    if (findDuplicateLayoutName('remote', null, baseName)) {
-      alertDuplicateLayoutName();
-      return false;
-    }
-    pushUndo();
-    state.remoteStands.push(normalizeRemoteStandObject({
-      id: id(),
-      x: Number(wx),
-      y: Number(wy),
-      category,
-      name: baseName,
-      angleDeg,
-      categoryMode: categoryMode,
-      allowedIcaoCategories: allowedIcaoCategoriesR,
-      allowedAircraftTypes: panelAllowedTypesR,
-      allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
-    }));
-    return true;
-  }
-  function tryPlaceTempStandAt(wx, wy) {
-    const snap = snapTempStandOnTaxiwayCenterlines(wx, wy);
-    if (!snap) return false;
-    const sx = snap.x, sy = snap.y;
-    const uTs = readUnifiedNewStandConstraintFromPanel('tempStandIcaoCategories', 'tempStandAircraftAccess', ['A', 'B', 'C']);
-    const categoryMode = uTs.categoryMode;
-    const category = uTs.category;
-    const allowedIcaoCategoriesT = uTs.allowedIcaoCategories;
-    const panelAllowedTypesT = uTs.allowedAircraftTypes;
-    const angleDeg = 0;
-    const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };
-    const candCorners = getRemoteStandCorners(candidate);
-    for (let i = 0; i < (state.tempStands || []).length; i++) {
-      const o = state.tempStands[i];
-      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
-    }
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      const o = state.remoteStands[i];
-      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
-    }
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      const o = state.pbbStands[i];
-      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
-    }
-    if (standGapLineHitsExistingOuterContours([Number(sx), Number(sy)], angleDeg * Math.PI / 180, category)) return false;
-    const baseName = (document.getElementById('tempStandName') && document.getElementById('tempStandName').value.trim()) || getDefaultTempStandName();
-    if (findDuplicateLayoutName('tempStand', null, baseName)) {
-      alertDuplicateLayoutName();
-      return false;
-    }
-    pushUndo();
-    state.tempStands.push(normalizeTempStandObject({
-      id: id(),
-      x: Number(sx),
-      y: Number(sy),
-      junctionX: Number(sx),
-      junctionY: Number(sy),
-      category,
-      name: baseName,
-      angleDeg,
-      categoryMode: categoryMode,
-      allowedIcaoCategories: allowedIcaoCategoriesT,
-      allowedAircraftTypes: panelAllowedTypesT,
-      allowedTerminals: Array.from((document.getElementById('tempStandTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
-    }));
-    return true;
-  }
-  function taxiwayOverlapsAnyTerminal(tw) {
-    if (!tw || !tw.vertices || tw.vertices.length < 2) return false;
-    const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-    for (let t = 0; t < state.terminals.length; t++) {
-      const term = state.terminals[t];
-      if (!term.closed || term.vertices.length < 3) continue;
-      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
-      for (let i = 0; i < vertsPix.length; i++) {
-        if (pointInPolygonXY(vertsPix[i], termPix)) return true;
-      }
-      for (let i = 0; i < vertsPix.length - 1; i++) {
-        const a1 = vertsPix[i], a2 = vertsPix[i+1];
-        for (let j = 0; j < termPix.length; j++) {
-          const b1 = termPix[j], b2 = termPix[(j+1) % termPix.length];
-          if (segIntersect(a1, a2, b1, b2)) return true;
-        }
-      }
-    }
-    return false;
-
-
-  }
-  function terminalOverlapsAnyTaxiway(term) {
-    if (!term || !term.vertices || term.vertices.length < 3) return false;
-    const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
-    if (!state.taxiways || !state.taxiways.length) return false;
-    for (let i = 0; i < state.taxiways.length; i++) {
-      const tw = state.taxiways[i];
-      if (!tw.vertices || tw.vertices.length < 2) continue;
-      const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
-      for (let k = 0; k < vertsPix.length; k++) {
-        if (pointInPolygonXY(vertsPix[k], termPix)) return true;
-      }
-      for (let a = 0; a < vertsPix.length - 1; a++) {
-        const a1 = vertsPix[a], a2 = vertsPix[a+1];
-        for (let b = 0; b < termPix.length; b++) {
-          const b1 = termPix[b], b2 = termPix[(b+1) % termPix.length];
-          if (segIntersect(a1, a2, b1, b2)) return true;
-        }
-      }
-    }
-    return false;
-  }
-  function makeUniqueNamedCopy(list, _prop) {
-    return (list || []).map(function(obj) {
-      return Object.assign({}, obj);
-    });
-  }
-
-  function _persistCellSizePx() {
-    return (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
-  }
-  function persistVerticesCellsToXY(vertices) {
-    const cs = _persistCellSizePx();
-    if (!Array.isArray(vertices)) return [];
-    return vertices.map(function(v) {
-      if (!v || typeof v !== 'object') return { x: 0, y: 0 };
-      const c = Number(v.col), r = Number(v.row);
-      return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
-    });
-  }
-  function persistPointCellToXY(pt) {
-    if (!pt || typeof pt !== 'object') return null;
-    const xRaw = Number(pt.x), yRaw = Number(pt.y);
-    if (isFinite(xRaw) && isFinite(yRaw)) return { x: xRaw, y: yRaw };
-    const cs = _persistCellSizePx();
-    const c = Number(pt.col), r = Number(pt.row);
-    return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
-  }
-
-  function _polylineLengthPxForLineup(pts) {
-    if (!pts || pts.length < 2) return 0;
-    let s = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i], p2 = pts[i + 1];
-      s += Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
-    }
-    return s;
-  }
-  function _pointOnPolylineAtDistPxForLineup(pts, distPx) {
-    if (!pts || pts.length < 2) return null;
-    const total = _polylineLengthPxForLineup(pts);
-    const d = Math.max(0, Math.min(typeof distPx === 'number' ? distPx : 0, total));
-    let acc = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i], p2 = pts[i + 1];
-      const segLen = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
-      if (!(segLen > 1e-6)) continue;
-      if (acc + segLen >= d - 1e-6) {
-        const t = Math.max(0, Math.min(1, (d - acc) / segLen));
-        return [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
-      }
-      acc += segLen;
-    }
-    const last = pts[pts.length - 1];
-    return [last[0], last[1]];
-  }
-  /** Ordered runway polyline in layout px (matches getRunwayPath / departure graphPath). */
-  function _persistRunwayPolylinePtsPx(tw) {
-    if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) return null;
-    return tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
-  }
-
-  function serializeTaxiwayWithEndpoints(tw) {
-    const copy = Object.assign({}, tw);
-    if (Array.isArray(tw.vertices)) {
-      copy.vertices = persistVerticesCellsToXY(tw.vertices.slice());
-    }
-    delete copy.start_point;
-    delete copy.end_point;
-    if (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) {
-      copy.avgMoveVelocity = tw.avgMoveVelocity;
-    }
-    if (tw.pathType === 'runway' && typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0) {
-      copy.minArrVelocity = Math.max(1, Math.min(150, tw.minArrVelocity));
-    }
-    if (tw.pathType === 'runway') {
-      const lCw = getRunwayLineupDistMByDirection(tw, 'clockwise');
-      const lCcw = getRunwayLineupDistMByDirection(tw, 'counter_clockwise');
-      copy.lineupDistM_CW = lCw;
-      copy.lineupDistM_CCW = lCcw;
-      copy.lineupDistM = getEffectiveRunwayLineupDistM(tw);
-      if (typeof tw.startDisplacedThresholdM === 'number' && isFinite(tw.startDisplacedThresholdM) && tw.startDisplacedThresholdM >= 0) copy.startDisplacedThresholdM = tw.startDisplacedThresholdM;
-      else delete copy.startDisplacedThresholdM;
-      if (typeof tw.startBlastPadM === 'number' && isFinite(tw.startBlastPadM) && tw.startBlastPadM >= 0) copy.startBlastPadM = tw.startBlastPadM;
-      else delete copy.startBlastPadM;
-      if (typeof tw.endDisplacedThresholdM === 'number' && isFinite(tw.endDisplacedThresholdM) && tw.endDisplacedThresholdM >= 0) copy.endDisplacedThresholdM = tw.endDisplacedThresholdM;
-      else delete copy.endDisplacedThresholdM;
-      if (typeof tw.endBlastPadM === 'number' && isFinite(tw.endBlastPadM) && tw.endBlastPadM >= 0) copy.endBlastPadM = tw.endBlastPadM;
-      else delete copy.endBlastPadM;
-      const rwPts = _persistRunwayPolylinePtsPx(tw);
-      if (rwPts && rwPts.length >= 2) {
-        const lenPx = _polylineLengthPxForLineup(rwPts);
-        const dPx = getEffectiveRunwayLineupDistFromStartM(tw, lenPx);
-        const lp = _pointOnPolylineAtDistPxForLineup(rwPts, dPx);
-        if (lp) copy.lineup_point = { x: lp[0], y: lp[1] };
-        else delete copy.lineup_point;
-      } else {
-        delete copy.lineup_point;
-      }
-      delete copy.dep_point;
-      delete copy.depPointPos;
-    }
-    if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
-    else delete copy.rwySepConfig;
-    return copy;
-  }
-  function partitionTaxiwaysForPersist(list) {
-    const runwayPaths = [];
-    const runwayTaxiways = [];
-    const taxiways = [];
-    (list || []).forEach(function(tw) {
-      const ser = serializeTaxiwayWithEndpoints(tw);

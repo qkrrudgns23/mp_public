@@ -5578,6 +5578,7 @@ def _build_prep_xy_to_xy_phase(
     *,
     snap_exact_start_xy: bool = False,
     snap_exact_end_xy: bool = False,
+    allow_prior_reverse_hops: bool = False,
     control_state: Optional[SimulationControlState] = None,
 ) -> Optional[PreparedFlightPath]:
     pair_index = _pair_index_from_layout_edge(layout)
@@ -5620,7 +5621,7 @@ def _build_prep_xy_to_xy_phase(
     )
     if dv or path is None or g is None or len(path) < 2:
         return None
-    if _graph_path_has_disallowed_reverse_of_prior_hops(
+    if not allow_prior_reverse_hops and _graph_path_has_disallowed_reverse_of_prior_hops(
         g, path, pair_index, agent.completed_directed_hops
     ):
         return None
@@ -6088,6 +6089,7 @@ def _try_inject_arr_taxi_from_temp_stand(
         merge_r,
         taxiway_h,
         snap_exact_start_xy=True,
+        allow_prior_reverse_hops=True,
         control_state=control_state,
     )
     if not arr_prep or not arr_prep.edge_ids:
@@ -6296,13 +6298,15 @@ def _agent_occupies_apron_stand_slot(
         if ag.segment_path_types and len(ag.segment_path_types) == len(ag.edge_ids)
         else ""
     )
-    if ph0 == PHASE_ARR_TAXI and pt0 == "apron_link":
+    if ph0 in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP) and pt0 == "apron_link":
         st = agent_states_occ_ap(ag.id)
-        if (
-            st
-            and st.clearance in ("WAIT", "YIELD")
-            and st.wait_reason == "stand_occupied"
-        ):
+        # Stopped on the apron_link toward ``sid``: do not treat as occupying the stand's
+        # ``occupied_by`` slot. Reasons include ``stand_occupied``, ``temp_stand_busy:*``,
+        # ``separation:*``, ``intersection:*``, ``edge_capacity:*``, etc. Counting these as
+        # physical occupants blocks ``_target_apron_stand_occupied_by_other`` and temp→apron
+        # inject even when no aircraft is parked at the gate (Park-155-class stalls).
+        # Actual gate use remains gated by ``can_reserve_path`` + in-blocks stamping.
+        if st and st.clearance in ("WAIT", "YIELD"):
             return None
         return sid
     ib = ag.actual_apron_inblocks_abs_sec_list[idx] if idx < len(ag.actual_apron_inblocks_abs_sec_list) else ag.actual_apron_inblocks_abs_sec

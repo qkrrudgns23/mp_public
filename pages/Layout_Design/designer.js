@@ -9161,14 +9161,13 @@
   function formatFlightScheduleDateTime(f, minsRaw) {
     const base = flightScheduleBaseDateIso(f);
     const sec = _normalizeTimeToSeconds(minsRaw, 'minutes', 'round');
-    const minTotal = sec / 60;
     const ps = base.split('-');
     const Y = parseInt(ps[0], 10);
     const Mo = parseInt(ps[1], 10) - 1;
     const D = parseInt(ps[2], 10);
     if (!isFinite(Y) || !isFinite(Mo) || !isFinite(D)) return formatMinutesToHHMMSS(minsRaw);
     const t0 = new Date(Y, Mo, D, 0, 0, 0);
-    t0.setMinutes(t0.getMinutes() + minTotal);
+    t0.setTime(t0.getTime() + sec * 1000);
     const pad = function(n) { return (n < 10 ? '0' : '') + n; };
     return t0.getFullYear() + '-' + pad(t0.getMonth() + 1) + '-' + pad(t0.getDate()) + ' ' + pad(t0.getHours()) + ':' + pad(t0.getMinutes()) + ':' + pad(t0.getSeconds());
   }
@@ -9772,138 +9771,13 @@
     return null;
   }
 
-  /**
-   * After EOBT, while on apron_link (departure push/taxi) only: if the bicycle nose points with
-   * the ground track step (nose . track &gt; 0), flip dx/dy 180&deg; so the silhouette shows
-   * towed/reverse (retro) like R3, without changing (x,y) or the underlying bicycle trace.
-   * Does not run before EObT, not off apron, not Arr_taxi, and does not change already-retro
-   * pose. Other flights/pathTypes unchanged.
-   */
-  function applyEobtApronDepTaxiPushbackNoseIfNeeded(flight, tSec, pose) {
-    if (!pose || !flight) return pose;
-    const m = flight.timeline_meta;
-    if (!m || typeof m.eobtSec !== 'number' || !isFinite(m.eobtSec)) return pose;
-    if (tSec + 1e-3 < m.eobtSec) return pose;
-    const tr = compactPlaybackTrackForFlight(flight);
-    const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 2) : flight.timeline;
-    if (!tl || !tl.length) return pose;
-    const tKey = Math.round(Number(tSec));
-    const byT = Object.create(null);
-    for (let i = 0; i < tl.length; i++) {
-      const w = tl[i];
-      if (!w) continue;
-      const tt = Math.round(Number(w.t));
-      if (isFinite(tt)) byT[tt] = w;
-    }
-    const cur = byT[tKey];
-    if (!cur) return pose;
-    const ph = String(cur.phase || '');
-    if (ph !== 'Pushback') return pose;
-    const prev = byT[tKey - 1];
-    if (!prev) return pose;
-    const ddx = cur.x - prev.x, ddy = cur.y - prev.y;
-    const dlen = Math.hypot(ddx, ddy);
-    if (dlen < 1e-9) return pose;
-    const ux = ddx / dlen, uy = ddy / dlen;
-    const pl = Math.hypot(pose.dx, pose.dy);
-    if (pl < 1e-9) return pose;
-    const px = pose.dx / pl, py = pose.dy / pl;
-    const dotU = px * ux + py * uy;
-    if (dotU <= 0.05) return pose;
-    return { x: pose.x, y: pose.y, dx: -pose.dx, dy: -pose.dy, deadlockGhost: !!pose.deadlockGhost };
-  }
-
-  /**
-   * Pushback tail-first motion: no bicycle model. Fuselage nose=0, tail=100; path
-   * sample is station 70 (70% nose→tail). Draw anchor (≈10% aft of nose) at C + h * (0.70−0.1) * lenM
-   * with h = unit nose from pose (after applyEobt). Forward taxi leaves pose unchanged.
-   */
-  function applyApronLinkDepReverseFuselageStation75PoseIfNeeded(flight, tSec, pose) {
-    if (!pose || !flight) return pose;
-    const m = flight.timeline_meta;
-    if (!m || typeof m.eobtSec !== 'number' || !isFinite(m.eobtSec)) return pose;
-    const t = Number(tSec);
-    if (!isFinite(t) || t + 1e-3 < m.eobtSec) return pose;
-    const tr = compactPlaybackTrackForFlight(flight);
-    const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 2) : flight.timeline;
-    if (!tl || !tl.length) return pose;
-    const tKey = Math.round(t);
-    const byT = Object.create(null);
-    for (let i = 0; i < tl.length; i++) {
-      const w = tl[i];
-      if (!w) continue;
-      const tt = Math.round(Number(w.t));
-      if (isFinite(tt)) byT[tt] = w;
-    }
-    const cur = byT[tKey];
-    if (!cur) return pose;
-    const ph = String(cur.phase || '');
-    if (ph !== 'Pushback') return pose;
-    let a = null;
-    let b = null;
-    for (let i = 0; i < tl.length - 1; i++) {
-      const p = tl[i];
-      const q = tl[i + 1];
-      if (t + 1e-9 >= p.t && t - 1e-9 <= q.t) {
-        a = p;
-        b = q;
-        break;
-      }
-    }
-    if (!a || !b) return pose;
-    const ddx = b.x - a.x;
-    const ddy = b.y - a.y;
-    const segLen = Math.hypot(ddx, ddy);
-    if (segLen < 0.08) return pose;
-    const vx = ddx / segLen;
-    const vy = ddy / segLen;
-    const pl = Math.hypot(pose.dx, pose.dy);
-    if (pl < 1e-9) return pose;
-    const hx = pose.dx / pl;
-    const hy = pose.dy / pl;
-    if (hx * vx + hy * vy > -0.05) return pose;
-    const C = getFlightPositionAtTime(flight, t);
-    if (!C) return pose;
-    const { lenM } = getSimAircraftWorldDimsM(flight);
-    const NOSE_TO_STATION75_FRAC = 0.70;
-    const NOSE_TO_FRONT_WHEEL_FRAC = 0.1;
-    const alongNoseM = (NOSE_TO_STATION75_FRAC - NOSE_TO_FRONT_WHEEL_FRAC) * lenM;
-    return {
-      x: C.x + hx * alongNoseM,
-      y: C.y + hy * alongNoseM,
-      dx: pose.dx,
-      dy: pose.dy,
-      deadlockGhost: !!pose.deadlockGhost,
-    };
-  }
-
-  function getPushbackRearWheelOnPathPoseForDraw(flight, tSec, pose) {
+  function getPushbackReversePoseForDraw(flight, tSec, pose) {
     if (!pose || !flight) return pose;
     const tr = compactPlaybackTrackForFlight(flight);
     const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 80) : flight.timeline;
     if (!tl || tl.length < 2) return pose;
     const t = Number(tSec);
     if (!isFinite(t)) return pose;
-    const tKey = Math.round(t);
-    const byT = Object.create(null);
-    let transitionStartT = null;
-    for (let i = 0; i < tl.length; i++) {
-      const w = tl[i];
-      if (!w) continue;
-      const tt = Math.round(Number(w.t));
-      if (isFinite(tt)) byT[tt] = w;
-      if (i > 0 && String(w.phase || '') === 'Dep_taxi' && String(tl[i - 1].phase || '') === 'Pushback') {
-        transitionStartT = Number(w.t);
-      }
-    }
-    const curPhase = String((byT[tKey] && byT[tKey].phase) || '');
-    const prevPhase = String((byT[tKey - 1] && byT[tKey - 1].phase) || '');
-    const PUSHBACK_TO_DEP_TAXI_BLEND_SEC = 1.0;
-    const inBlend = transitionStartT != null
-      && t + 1e-9 >= transitionStartT
-      && t <= transitionStartT + PUSHBACK_TO_DEP_TAXI_BLEND_SEC + 1e-9;
-    const inPushback = curPhase === 'Pushback' || (curPhase === 'Dep_taxi' && prevPhase === 'Pushback') || inBlend;
-    if (!inPushback) return pose;
     let segIdx = -1;
     for (let i = 0; i < tl.length - 1; i++) {
       const a = tl[i], b = tl[i + 1];
@@ -9920,122 +9794,34 @@
     if (segIdx < 0) return pose;
     const segA = tl[segIdx];
     const segB = tl[segIdx + 1];
-    const purePushSeg =
-      String(segA.phase || '') === 'Pushback' && String(segB.phase || '') === 'Pushback';
-    let pushPose = null;
-    if (purePushSeg) {
-      const sdx = segB.x - segA.x;
-      const sdy = segB.y - segA.y;
-      const sl = Math.hypot(sdx, sdy);
-      if (sl >= 0.08) {
-        const ux = sdx / sl;
-        const uy = sdy / sl;
-        pushPose = {
-          x: pose.x,
-          y: pose.y,
-          dx: -ux,
-          dy: -uy,
-          deadlockGhost: !!pose.deadlockGhost,
-        };
+    if (String(segA.phase || '') !== 'Pushback') return pose;
+    let sdx = segB.x - segA.x;
+    let sdy = segB.y - segA.y;
+    let sl = Math.hypot(sdx, sdy);
+    if (sl < 0.08) {
+      for (let j = segIdx - 1; j >= 0; j--) {
+        const p = tl[j], q = tl[j + 1];
+        if (String(p.phase || '') !== 'Pushback') continue;
+        const px = q.x - p.x, py = q.y - p.y;
+        const pl = Math.hypot(px, py);
+        if (pl >= 0.08) { sdx = px; sdy = py; sl = pl; break; }
+      }
+      for (let j = segIdx + 1; sl < 0.08 && j < tl.length - 1; j++) {
+        const p = tl[j], q = tl[j + 1];
+        if (String(p.phase || '') !== 'Pushback') continue;
+        const px = q.x - p.x, py = q.y - p.y;
+        const pl = Math.hypot(px, py);
+        if (pl >= 0.08) { sdx = px; sdy = py; sl = pl; break; }
       }
     }
-    if (!pushPose) {
-      const { lenM } = getSimAircraftWorldDimsM(flight);
-      const wheelBaseM = 0.55 * lenM;
-      const rear = walkPushbackPolylineFromFront(tl, segIdx, pose.x, pose.y, wheelBaseM);
-      if (!rear) return pose;
-      const dx = pose.x - rear.x;
-      const dy = pose.y - rear.y;
-      const dl = Math.hypot(dx, dy);
-      if (dl < Math.max(0.005 * lenM, 0.04)) return pose;
-      pushPose = { x: pose.x, y: pose.y, dx: dx / dl, dy: dy / dl, deadlockGhost: !!pose.deadlockGhost };
-    }
-    if (!inBlend || transitionStartT == null || curPhase === 'Pushback') return pushPose;
-    const alpha = Math.max(0, Math.min(1, (t - transitionStartT) / PUSHBACK_TO_DEP_TAXI_BLEND_SEC));
-    return blendPoseHeading(pushPose, pose, alpha);
-  }
-
-  function blendPoseHeading(fromPose, toPose, alpha) {
-    if (!fromPose || !toPose) return fromPose || toPose || null;
-    const a = Math.max(0, Math.min(1, Number(alpha) || 0));
-    const a0 = Math.atan2(fromPose.dy, fromPose.dx);
-    const a1 = Math.atan2(toPose.dy, toPose.dx);
-    let da = a1 - a0;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    const th = a0 + da * a;
+    if (sl < 0.08) return pose;
     return {
-      x: toPose.x,
-      y: toPose.y,
-      dx: Math.cos(th),
-      dy: Math.sin(th),
-      deadlockGhost: !!(fromPose.deadlockGhost || toPose.deadlockGhost),
+      x: pose.x,
+      y: pose.y,
+      dx: -sdx / sl,
+      dy: -sdy / sl,
+      deadlockGhost: !!pose.deadlockGhost,
     };
-  }
-
-  function walkPushbackPolylineFromFront(tl, segIndex, fx, fy, distM) {
-    const eps = 1e-6;
-    const motionEps = 0.08;
-    if (!tl || tl.length < 2 || !(distM > eps)) return null;
-    let rem = distM;
-    let x = fx, y = fy;
-    let s = segIndex;
-    let lastUx = null;
-    let lastUy = null;
-    while (rem > eps && s <= tl.length - 2) {
-      const a = tl[s];
-      const b = tl[s + 1];
-      if (String(a.phase || '') !== 'Pushback' || String(b.phase || '') !== 'Pushback') break;
-      const ddx = b.x - x;
-      const ddy = b.y - y;
-      const dlen = Math.hypot(ddx, ddy);
-      if (dlen < eps) {
-        const sx = b.x - a.x;
-        const sy = b.y - a.y;
-        const sl = Math.hypot(sx, sy);
-        if (sl > motionEps) {
-          lastUx = sx / sl;
-          lastUy = sy / sl;
-        }
-        x = b.x;
-        y = b.y;
-        s++;
-        continue;
-      }
-      const ux = ddx / dlen;
-      const uy = ddy / dlen;
-      if (dlen > motionEps) {
-        lastUx = ux;
-        lastUy = uy;
-      }
-      const step = Math.min(rem, dlen);
-      x += ux * step;
-      y += uy * step;
-      rem -= step;
-      if (rem < eps) return { x, y };
-      if (dlen - step < eps) {
-        x = b.x;
-        y = b.y;
-        s++;
-      }
-    }
-    if (lastUx == null || lastUy == null) {
-      for (let j = Math.min(segIndex, tl.length - 2); j >= 0; j--) {
-        const a = tl[j];
-        const b = tl[j + 1];
-        if (String(a.phase || '') !== 'Pushback' || String(b.phase || '') !== 'Pushback') continue;
-        const sx = b.x - a.x;
-        const sy = b.y - a.y;
-        const sl = Math.hypot(sx, sy);
-        if (sl > motionEps) {
-          lastUx = sx / sl;
-          lastUy = sy / sl;
-          break;
-        }
-      }
-    }
-    if (lastUx == null || lastUy == null) return null;
-    return { x: x + lastUx * rem, y: y + lastUy * rem };
   }
 
   function getFlightPoseAtTimeForDraw(flight, tSec) {
@@ -10050,9 +9836,7 @@
     if (t > t1) t = t1;
     let pose = getFlightPoseAtTime(flight, t);
     if (!pose) return null;
-    pose = applyEobtApronDepTaxiPushbackNoseIfNeeded(flight, t, pose);
-    pose = applyApronLinkDepReverseFuselageStation75PoseIfNeeded(flight, t, pose);
-    pose = getPushbackRearWheelOnPathPoseForDraw(flight, t, pose);
+    pose = getPushbackReversePoseForDraw(flight, t, pose);
     pose = applyParkedStandHeadingToPoseIfNeeded(flight, t, pose);
     return pose;
   }
@@ -10084,7 +9868,7 @@
       scaleX = dimsM.lenM / lenNorm;
       scaleY = dimsM.wingM / wingNorm;
     }
-    const pFwX = nX * scaleX - 0.1 * dimsM.lenM;
+    const pFwX = nX * scaleX - 0.15 * dimsM.lenM;
     const drawX = x - nx * pFwX;
     const drawY = y - ny * pFwX;
     const pts = (useDetailSil && silhouette2D.length >= 3)
@@ -10706,6 +10490,80 @@
     }
   }
 
+  function _flightListSortedFlightsCopy() {
+    const flightsSorted = state.flights.slice();
+    flightsSorted.sort(function(a, b) {
+      return (a.sibtMin != null ? a.sibtMin : (a.timeMin != null ? a.timeMin : 0)) -
+        (b.sibtMin != null ? b.sibtMin : (b.timeMin != null ? b.timeMin : 0));
+    });
+    return flightsSorted;
+  }
+  function _flightListSortedIndexForFlightId(flightsSorted, flightId) {
+    const want = String(flightId);
+    for (let i = 0; i < flightsSorted.length; i++) {
+      const f = flightsSorted[i];
+      if (f && String(f.id) === want) return i;
+    }
+    return -1;
+  }
+  /** Match Flight Schedule row highlight (purple) to ``state.selectedObject`` flight; optional scroll when ``scrollRow``. */
+  function _flightListApplyScheduleSelectionHighlightDom(listEl, scrollRow) {
+    if (!listEl) return;
+    listEl.querySelectorAll('.flight-schedule-table tbody tr.obj-item').forEach(function(r) {
+      r.classList.remove('selected', 'expanded');
+    });
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'flight' || sel.id == null) return;
+    const row = listEl.querySelector('.flight-schedule-table tbody tr.obj-item[data-id="' + String(sel.id) + '"]');
+    if (!row) return;
+    row.classList.add('selected', 'expanded');
+    if (scrollRow) {
+      try {
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } catch (eScroll) {
+        row.scrollIntoView(false);
+      }
+    }
+  }
+  /** Grid / external selection: jump pager & virtual scroll so the flight row exists, then highlight. */
+  function syncFlightScheduleTableSelectionHighlight() {
+    const listEl = document.getElementById('flightList');
+    if (!listEl) return;
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'flight' || sel.id == null) {
+      _flightListApplyScheduleSelectionHighlightDom(listEl, false);
+      return;
+    }
+    const flightsSorted = _flightListSortedFlightsCopy();
+    const idx = _flightListSortedIndexForFlightId(flightsSorted, sel.id);
+    if (idx < 0) {
+      _flightListApplyScheduleSelectionHighlightDom(listEl, false);
+      return;
+    }
+    const size = FLIGHT_SCHED_PAGE_SIZE;
+    const usePagination = size > 0;
+    if (usePagination) {
+      const targetPage = Math.floor(idx / size);
+      if (state.flightSchedulePage !== targetPage) {
+        state.flightSchedulePage = targetPage;
+        if (typeof renderFlightList === 'function')
+          renderFlightList(false, false, { pageTurnOnly: true });
+        _flightListApplyScheduleSelectionHighlightDom(listEl, true);
+        return;
+      }
+    }
+    const vs = listEl._flightVirtState;
+    if (vs && flightsSorted.length && !usePagination) {
+      const rowH = vs.rowH || DOM_OPT_FLIGHT_VIRT_ROW_H;
+      const vh = listEl.clientHeight || 418;
+      listEl.scrollTop = Math.max(0, idx * rowH - Math.max(0, (vh - rowH) * 0.5));
+      _flightListPaintVirtualSlice(listEl);
+      _flightListApplyScheduleSelectionHighlightDom(listEl, true);
+      return;
+    }
+    _flightListApplyScheduleSelectionHighlightDom(listEl, true);
+  }
+
   function _flightListPaintVirtualSlice(listEl) {
     const vs = listEl._flightVirtState;
     if (!vs) return;
@@ -10732,6 +10590,7 @@
     parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"' + colCount + '\"></td></tr>');
     tbody.innerHTML = parts.join('');
     _flightListWireEvents(listEl, state);
+    _flightListApplyScheduleSelectionHighlightDom(listEl, false);
   }
   function _flightListTeardownVirtual(listEl) {
     listEl._flightVirtState = null;
@@ -11386,6 +11245,7 @@
     if (typeof ensureFlightAssignStripWired === 'function') ensureFlightAssignStripWired();
     if (typeof syncFlightAssignStrip === 'function') syncFlightAssignStrip();
     if (!skipGanttRefresh && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+    _flightListApplyScheduleSelectionHighlightDom(listEl, false);
   }
   function _renderFlightListAfterPathEnsure(flightsSorted, schedFull, forceResampleRet, dirtySet, standSet, listEl, cfgEl, scheduleOpts) {
     if (forceResampleRet && typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
@@ -18507,8 +18367,9 @@
         scaleY = wingM / wingNorm;
         sizeRef = 0.5 * Math.hypot(lenM, wingM);
       }
-      // Pose (x,y) = front wheel (10% from nose on fuselage). Silhouette origin (0,0) is not the nose: offset draw so 10% point lands on (x,y).
-      const pFwX = nX * scaleX - 0.1 * lenM;
+      // Pose (x,y) is the unified aircraft anchor: station 15 on nose=0 tail=100 fuselage axis.
+      // Silhouette origin (0,0) is not the nose, so offset draw until that anchor lands on (x,y).
+      const pFwX = nX * scaleX - 0.15 * lenM;
       const drawX = x - nx * pFwX;
       const drawY = y - ny * pFwX;
       const outW = Number(_ac2d.outlineWidth);
@@ -25307,6 +25168,7 @@
         updateObjectInfo();
         draw();
         if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
+        syncFlightScheduleTableSelectionHighlight();
         state.dragStart = null;
         return;
       }
@@ -25403,6 +25265,7 @@
         updateObjectInfo();
         draw();
         if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
+        syncFlightScheduleTableSelectionHighlight();
       } else {
         const pt = worldPointToCellPoint(wx, wy, !!ev.shiftKey);
         const col = pt.col, row = pt.row;

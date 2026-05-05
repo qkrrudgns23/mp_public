@@ -1,6 +1,239 @@
+      const o = state.pbbStands[i];
+      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
+    }
+    for (let i = 0; i < (state.tempStands || []).length; i++) {
+      const o = state.tempStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
+    }
+    if (standGapLineHitsExistingOuterContours([Number(wx), Number(wy)], angleDeg * Math.PI / 180, category)) return false;
+    const baseName = (document.getElementById('remoteName') && document.getElementById('remoteName').value.trim()) || getDefaultRemoteStandName();
+    if (findDuplicateLayoutName('remote', null, baseName)) {
+      alertDuplicateLayoutName();
+      return false;
+    }
+    pushUndo();
+    state.remoteStands.push(normalizeRemoteStandObject({
+      id: id(),
+      x: Number(wx),
+      y: Number(wy),
+      category,
+      name: baseName,
+      angleDeg,
+      categoryMode: categoryMode,
+      allowedIcaoCategories: allowedIcaoCategoriesR,
+      allowedAircraftTypes: panelAllowedTypesR,
+      allowedTerminals: Array.from((document.getElementById('remoteTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
+    }));
+    return true;
+  }
+  function tryPlaceTempStandAt(wx, wy) {
+    const snap = snapTempStandOnTaxiwayCenterlines(wx, wy);
+    if (!snap) return false;
+    const sx = snap.x, sy = snap.y;
+    const uTs = readUnifiedNewStandConstraintFromPanel('tempStandIcaoCategories', 'tempStandAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uTs.categoryMode;
+    const category = uTs.category;
+    const allowedIcaoCategoriesT = uTs.allowedIcaoCategories;
+    const panelAllowedTypesT = uTs.allowedAircraftTypes;
+    const angleDeg = 0;
+    const candidate = { x: Number(sx), y: Number(sy), category, angleDeg };
+    const candCorners = getRemoteStandCorners(candidate);
+    for (let i = 0; i < (state.tempStands || []).length; i++) {
+      const o = state.tempStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
+    }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const o = state.remoteStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const o = state.pbbStands[i];
+      if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
+    }
+    if (standGapLineHitsExistingOuterContours([Number(sx), Number(sy)], angleDeg * Math.PI / 180, category)) return false;
+    const baseName = (document.getElementById('tempStandName') && document.getElementById('tempStandName').value.trim()) || getDefaultTempStandName();
+    if (findDuplicateLayoutName('tempStand', null, baseName)) {
+      alertDuplicateLayoutName();
+      return false;
+    }
+    pushUndo();
+    state.tempStands.push(normalizeTempStandObject({
+      id: id(),
+      x: Number(sx),
+      y: Number(sy),
+      junctionX: Number(sx),
+      junctionY: Number(sy),
+      category,
+      name: baseName,
+      angleDeg,
+      categoryMode: categoryMode,
+      allowedIcaoCategories: allowedIcaoCategoriesT,
+      allowedAircraftTypes: panelAllowedTypesT,
+      allowedTerminals: Array.from((document.getElementById('tempStandTerminalAccess') || document).querySelectorAll('.remote-term-check')).filter(function(ch) { return ch.checked; }).map(function(ch) { return String(ch.getAttribute('data-item-id') || '').trim(); }).filter(Boolean)
+    }));
+    return true;
+  }
+  function taxiwayOverlapsAnyTerminal(tw) {
+    if (!tw || !tw.vertices || tw.vertices.length < 2) return false;
+    const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
+    for (let t = 0; t < state.terminals.length; t++) {
+      const term = state.terminals[t];
+      if (!term.closed || term.vertices.length < 3) continue;
+      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
+      for (let i = 0; i < vertsPix.length; i++) {
+        if (pointInPolygonXY(vertsPix[i], termPix)) return true;
+      }
+      for (let i = 0; i < vertsPix.length - 1; i++) {
+        const a1 = vertsPix[i], a2 = vertsPix[i+1];
+        for (let j = 0; j < termPix.length; j++) {
+          const b1 = termPix[j], b2 = termPix[(j+1) % termPix.length];
+          if (segIntersect(a1, a2, b1, b2)) return true;
+        }
+      }
+    }
+    return false;
+
+
+  }
+  function terminalOverlapsAnyTaxiway(term) {
+    if (!term || !term.vertices || term.vertices.length < 3) return false;
+    const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
+    if (!state.taxiways || !state.taxiways.length) return false;
+    for (let i = 0; i < state.taxiways.length; i++) {
+      const tw = state.taxiways[i];
+      if (!tw.vertices || tw.vertices.length < 2) continue;
+      const vertsPix = tw.vertices.map(v => cellToPixel(v.col, v.row));
+      for (let k = 0; k < vertsPix.length; k++) {
+        if (pointInPolygonXY(vertsPix[k], termPix)) return true;
+      }
+      for (let a = 0; a < vertsPix.length - 1; a++) {
+        const a1 = vertsPix[a], a2 = vertsPix[a+1];
+        for (let b = 0; b < termPix.length; b++) {
+          const b1 = termPix[b], b2 = termPix[(b+1) % termPix.length];
+          if (segIntersect(a1, a2, b1, b2)) return true;
+        }
+      }
+    }
+    return false;
+  }
+  function makeUniqueNamedCopy(list, _prop) {
+    return (list || []).map(function(obj) {
+      return Object.assign({}, obj);
+    });
+  }
+
+  function _persistCellSizePx() {
+    return (typeof CELL_SIZE === 'number' && CELL_SIZE > 0) ? CELL_SIZE : 20;
+  }
+  function persistVerticesCellsToXY(vertices) {
+    const cs = _persistCellSizePx();
+    if (!Array.isArray(vertices)) return [];
+    return vertices.map(function(v) {
+      if (!v || typeof v !== 'object') return { x: 0, y: 0 };
+      const c = Number(v.col), r = Number(v.row);
+      return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
+    });
+  }
+  function persistPointCellToXY(pt) {
+    if (!pt || typeof pt !== 'object') return null;
+    const xRaw = Number(pt.x), yRaw = Number(pt.y);
+    if (isFinite(xRaw) && isFinite(yRaw)) return { x: xRaw, y: yRaw };
+    const cs = _persistCellSizePx();
+    const c = Number(pt.col), r = Number(pt.row);
+    return { x: (isFinite(c) ? c : 0) * cs, y: (isFinite(r) ? r : 0) * cs };
+  }
+
+  function _polylineLengthPxForLineup(pts) {
+    if (!pts || pts.length < 2) return 0;
+    let s = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      s += Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+    }
+    return s;
+  }
+  function _pointOnPolylineAtDistPxForLineup(pts, distPx) {
+    if (!pts || pts.length < 2) return null;
+    const total = _polylineLengthPxForLineup(pts);
+    const d = Math.max(0, Math.min(typeof distPx === 'number' ? distPx : 0, total));
+    let acc = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i], p2 = pts[i + 1];
+      const segLen = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+      if (!(segLen > 1e-6)) continue;
+      if (acc + segLen >= d - 1e-6) {
+        const t = Math.max(0, Math.min(1, (d - acc) / segLen));
+        return [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
+      }
+      acc += segLen;
+    }
+    const last = pts[pts.length - 1];
+    return [last[0], last[1]];
+  }
+  /** Ordered runway polyline in layout px (matches getRunwayPath / departure graphPath). */
+  function _persistRunwayPolylinePtsPx(tw) {
+    if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) return null;
+    return tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+  }
+
+  function serializeTaxiwayWithEndpoints(tw) {
+    const copy = Object.assign({}, tw);
+    if (Array.isArray(tw.vertices)) {
+      copy.vertices = persistVerticesCellsToXY(tw.vertices.slice());
+    }
+    delete copy.start_point;
+    delete copy.end_point;
+    if (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) {
+      copy.avgMoveVelocity = tw.avgMoveVelocity;
+    }
+    if (tw.pathType === 'runway' && typeof tw.minArrVelocity === 'number' && isFinite(tw.minArrVelocity) && tw.minArrVelocity > 0) {
+      copy.minArrVelocity = Math.max(1, Math.min(150, tw.minArrVelocity));
+    }
+    if (tw.pathType === 'runway') {
+      const lCw = getRunwayLineupDistMByDirection(tw, 'clockwise');
+      const lCcw = getRunwayLineupDistMByDirection(tw, 'counter_clockwise');
+      copy.lineupDistM_CW = lCw;
+      copy.lineupDistM_CCW = lCcw;
+      copy.lineupDistM = getEffectiveRunwayLineupDistM(tw);
+      if (typeof tw.startDisplacedThresholdM === 'number' && isFinite(tw.startDisplacedThresholdM) && tw.startDisplacedThresholdM >= 0) copy.startDisplacedThresholdM = tw.startDisplacedThresholdM;
+      else delete copy.startDisplacedThresholdM;
+      if (typeof tw.startBlastPadM === 'number' && isFinite(tw.startBlastPadM) && tw.startBlastPadM >= 0) copy.startBlastPadM = tw.startBlastPadM;
+      else delete copy.startBlastPadM;
+      if (typeof tw.endDisplacedThresholdM === 'number' && isFinite(tw.endDisplacedThresholdM) && tw.endDisplacedThresholdM >= 0) copy.endDisplacedThresholdM = tw.endDisplacedThresholdM;
+      else delete copy.endDisplacedThresholdM;
+      if (typeof tw.endBlastPadM === 'number' && isFinite(tw.endBlastPadM) && tw.endBlastPadM >= 0) copy.endBlastPadM = tw.endBlastPadM;
+      else delete copy.endBlastPadM;
+      const rwPts = _persistRunwayPolylinePtsPx(tw);
+      if (rwPts && rwPts.length >= 2) {
+        const lenPx = _polylineLengthPxForLineup(rwPts);
+        const dPx = getEffectiveRunwayLineupDistFromStartM(tw, lenPx);
+        const lp = _pointOnPolylineAtDistPxForLineup(rwPts, dPx);
+        if (lp) copy.lineup_point = { x: lp[0], y: lp[1] };
+        else delete copy.lineup_point;
+      } else {
+        delete copy.lineup_point;
+      }
+      delete copy.dep_point;
+      delete copy.depPointPos;
+    }
+    if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
+    else delete copy.rwySepConfig;
+    if (tw.pathType === 'runway_exit' || tw.pathType === 'runway_taxiway') {
+      copy.queueFlow = tw.queueFlow !== false;
+    } else {
+      delete copy.queueFlow;
+    }
+    return copy;
+  }
+  function partitionTaxiwaysForPersist(list) {
+    const runwayPaths = [];
+    const runwayTaxiways = [];
+    const taxiways = [];
+    (list || []).forEach(function(tw) {
+      const ser = serializeTaxiwayWithEndpoints(tw);
       const pt = tw.pathType || 'taxiway';
       if (pt === 'runway') runwayPaths.push(ser);
-      else if (pt === 'runway_exit') runwayTaxiways.push(ser);
+      else if (pt === 'runway_exit' || pt === 'runway_taxiway') runwayTaxiways.push(ser);
       else {
         if (pt === 'general_queue_taxiway') ser.pathType = pt;
         else delete ser.pathType;
@@ -220,6 +453,10 @@
         if (state.hasSimulationResult && Array.isArray(f.proSimEdgeList) && f.proSimEdgeList.length) {
           copy.proSimEdgeList = f.proSimEdgeList.slice();
         }
+        let laEx = f.lookaheadTaxi;
+        if (laEx == null || laEx === '' || !isFinite(Number(laEx))) laEx = 9;
+        else laEx = Math.max(0, Math.min(200, Math.floor(Number(laEx))));
+        copy.lookaheadTaxi = laEx;
         return copy;
       }),
       layoutMarkers: (state.layoutMarkers || []).map(function(m) {
@@ -284,6 +521,20 @@
       simPlaybackPositionsByFlightId: state.hasSimulationResult && state.simPlaybackPositionsByFlightId
         ? state.simPlaybackPositionsByFlightId
         : null,
+      simDeadlockGhostPlayback: (function() {
+        const dlp = state.simDeadlockGhostPlayback;
+        if (!dlp || !Array.isArray(dlp.events) || !dlp.events.length) return null;
+        return {
+          events: dlp.events.map(function(ev) {
+            const o = { t_abs: Number(ev.t_abs), labels: Array.isArray(ev.labels) ? ev.labels.slice() : [] };
+            if (ev.focusWorldX != null && isFinite(Number(ev.focusWorldX))) o.focusWorldX = Number(ev.focusWorldX);
+            if (ev.focusWorldY != null && isFinite(Number(ev.focusWorldY))) o.focusWorldY = Number(ev.focusWorldY);
+            return o;
+          }),
+          bodyLines: dlp.bodyLines || '',
+          resolveCount: isFinite(Number(dlp.resolveCount)) ? Math.floor(Number(dlp.resolveCount)) : 0,
+        };
+      })(),
       simPathGraph: buildSimPathGraphExport()
     };
   }
@@ -607,254 +858,3 @@
   }
   function getPbbTerminalFrameFromEdge(term, edgeIndex, wallX, wallY) {
     const v1 = term.vertices[edgeIndex], v2 = term.vertices[(edgeIndex + 1) % term.vertices.length];
-    const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-    const edx = p2[0] - p1[0], edy = p2[1] - p1[1];
-    const el = Math.hypot(edx, edy) || 1;
-    const tx = edx / el, ty = edy / el;
-    let nx = -ty, ny = tx;
-    let tcx = 0, tcy = 0;
-    term.vertices.forEach(function(v) {
-      const q = cellToPixel(v.col, v.row);
-      tcx += q[0];
-      tcy += q[1];
-    });
-    tcx /= term.vertices.length;
-    tcy /= term.vertices.length;
-    const inX = tcx - wallX, inY = tcy - wallY;
-    if (nx * inX + ny * inY > 0) {
-      nx = -nx;
-      ny = -ny;
-    }
-    return { tx: tx, ty: ty, nx: nx, ny: ny };
-  }
-  function getPbbTerminalFrameAtWorld(wx, wy) {
-    const proj = getClosestTerminalEdgePoint(wx, wy);
-    if (!proj || !proj.term) return null;
-    const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-    return { mpx: proj.point[0], mpy: proj.point[1], term: proj.term, edgeIndex: proj.edgeIndex, tx: fr.tx, ty: fr.ty, nx: fr.nx, ny: fr.ny };
-  }
-  function ensurePbbBoardingWallGeometry(pbb) {
-    if (!pbb || !Array.isArray(pbb.pbbBridges) || !pbb.pbbBridges.length) return;
-    const Tsrcx = Number.isFinite(Number(pbb.x1)) ? Number(pbb.x1) : Number(pbb.pbbBridges[0].points[0].x) || 0;
-    const Tsrcy = Number.isFinite(Number(pbb.y1)) ? Number(pbb.y1) : Number(pbb.pbbBridges[0].points[0].y) || 0;
-    const proj = getClosestTerminalEdgePoint(Tsrcx, Tsrcy);
-    if (!proj || !proj.term) return;
-    const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-    const wx = proj.point[0], wy = proj.point[1];
-    const Tx = wx, Ty = wy;
-    const depthM = getPbbBoardingHeightM(pbb);
-    const Bx = Tx + fr.nx * depthM, By = Ty + fr.ny * depthM;
-    pbb.pbbBridges.forEach(function(bridge) {
-      if (!bridge.points || bridge.points.length < 3) return;
-      bridge.points[0].x = Tx;
-      bridge.points[0].y = Ty;
-      bridge.points[1].x = Bx;
-      bridge.points[1].y = By;
-    });
-    pbb.x1 = Tx;
-    pbb.y1 = Ty;
-    pbb.x2 = Bx;
-    pbb.y2 = By;
-  }
-  function applyPbbArmLengthToBridgeEnds(pbb, armLenM) {
-    if (!pbb || !Array.isArray(pbb.pbbBridges)) return;
-    ensurePbbBoardingWallGeometry(pbb);
-    const len = Math.max(3, Number(armLenM) || 15);
-    pbb.pbbBridges.forEach(function(bridge) {
-      const pts = bridge.points;
-      if (!pts || pts.length < 3) return;
-      const bx = Number(pts[1].x), by = Number(pts[1].y);
-      const px = Number(pts[2].x), py = Number(pts[2].y);
-      let vx = px - bx, vy = py - by;
-      const hl = Math.hypot(vx, vy) || 1;
-      vx /= hl;
-      vy /= hl;
-      pts[2].x = bx + vx * len;
-      pts[2].y = by + vy * len;
-    });
-    bumpPathPolylineCacheRev();
-  }
-  function getPbbBoardingRectangleCornersWorldPx(pbb) {
-    ensurePbbBoardingWallGeometry(pbb);
-    const proj = getClosestTerminalEdgePoint(Number(pbb.x1) || 0, Number(pbb.y1) || 0);
-    if (!proj || !proj.term) return null;
-    const fr = getPbbTerminalFrameFromEdge(proj.term, proj.edgeIndex, proj.point[0], proj.point[1]);
-    const wx = proj.point[0], wy = proj.point[1];
-    const Tx = wx, Ty = wy;
-    const halfW = getPbbBoardingWidthM(pbb) * 0.5;
-    const depthM = getPbbBoardingHeightM(pbb);
-    const c0 = [Tx - fr.tx * halfW, Ty - fr.ty * halfW];
-    const c1 = [Tx + fr.tx * halfW, Ty + fr.ty * halfW];
-    const c2 = [c1[0] + fr.nx * depthM, c1[1] + fr.ny * depthM];
-    const c3 = [c0[0] + fr.nx * depthM, c0[1] + fr.ny * depthM];
-    return [c0, c1, c2, c3];
-  }
-  function drawPbbBoardingRectangle(ctx, pbb, sel) {
-    const poly = getPbbBoardingRectangleCornersWorldPx(pbb);
-    if (!poly || poly.length < 4) return;
-    const nowPerf = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    const suppressStandFill = !!state.isPanning || nowPerf < _layoutDetailSuppressUntil;
-    const sl = !!state.layers.standLines, sf = !!state.layers.standFill && !suppressStandFill;
-    const monoFillP = layerMonoFillOn() && !sel;
-    const monoLineP = layerMonoLinesOn() && !sel;
-    const monoLp = c2dLayerMonoLineStrokeCss();
-    if (!sl && !sf) return;
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(poly[0][0], poly[0][1]);
-    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
-    ctx.closePath();
-    const hairW = layoutHairlineStrokeWidthWorld();
-    if (sf) {
-      if (monoFillP) {
-        ctx.fillStyle = c2dLayerMonoFillDarkAsphaltRgba(0.5);
-        ctx.fill();
-        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, monoLp, hairW);
-      } else {
-        ctx.fillStyle = sel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.14)';
-        ctx.fill();
-        drawPolygonDiagonalHatch45M(ctx, poly, LAYOUT_AREA_DIAGONAL_HATCH_SPACING_M, sel ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.4)', hairW);
-      }
-    }
-    if (sl) {
-      ctx.beginPath();
-      ctx.moveTo(poly[0][0], poly[0][1]);
-      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i][0], poly[i][1]);
-      ctx.closePath();
-      ctx.strokeStyle = monoLineP ? monoLp : 'rgba(255,255,255,0.88)';
-      ctx.lineWidth = hairW;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  function pointInPolygon(p, verts) {
-    let inside = false;
-    const n = verts.length;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const vi = cellToPixel(verts[i].col, verts[i].row);
-      const vj = cellToPixel(verts[j].col, verts[j].row);
-      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
-    }
-    return inside;
-  }
-
-  function getApronLinkStandEndPx(lk) {
-    if (!lk || !lk.pbbId) return null;
-    const stand = findStandById(lk.pbbId);
-    if (!stand) return null;
-    return getStandApronTaxiwayAttachWorldPx(stand);
-  }
-  function getApronLinkPolylineWorldPts(lk) {
-    if (!lk || lk.tx == null || lk.ty == null) return [];
-    const a = getApronLinkStandEndPx(lk);
-    if (!a) return [];
-    const mids = (Array.isArray(lk.midVertices) ? lk.midVertices : []).map(function(v) {
-      if (v && isFinite(Number(v.x)) && isFinite(Number(v.y))) return [Number(v.x), Number(v.y)];
-      return cellToPixel(Number(v.col), Number(v.row));
-    });
-    const b = [Number(lk.tx), Number(lk.ty)];
-    const forward = [a].concat(mids).concat([b]);
-    if (String(lk.apronDrawFirstEndpoint || 'stand') === 'taxiway' && forward.length >= 2) {
-      return forward.slice().reverse();
-    }
-    return forward;
-  }
-  function hitTestApronLink(wx, wy) {
-    const click = [wx, wy];
-    const hitD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
-    const list = state.apronLinks || [];
-    for (let i = list.length - 1; i >= 0; i--) {
-      const lk = list[i];
-      const poly = getApronLinkPolylineWorldPts(lk);
-      if (poly.length < 2) continue;
-      for (let j = 0; j < poly.length - 1; j++) {
-        const near = closestPointOnSegment(poly[j], poly[j + 1], click);
-        if (!near) continue;
-        if (dist2(near, click) < hitD2) return { type: 'apronLink', id: lk.id, obj: lk };
-      }
-    }
-    return null;
-  }
-
-  function getDefaultHoldingPointLabel() {
-    let maxN = 0;
-    (state.holdingPoints || []).forEach(function(h) {
-      const m = /^Position(\d+)$/i.exec(String(h && h.name || '').trim());
-      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
-    });
-    return 'Position' + (maxN + 1);
-  }
-  function snapHoldingPointOnAllowedTaxiways(wx, wy) {
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    (state.taxiways || []).forEach(function(tw) {
-      const pt = tw.pathType || 'taxiway';
-      if (pt !== 'taxiway' && pt !== 'runway_exit') return;
-      if (!tw.vertices || tw.vertices.length < 2) return;
-      for (let i = 0; i < tw.vertices.length - 1; i++) {
-        const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
-        const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-        if (!near) continue;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2) { bestD2 = d2; best = { x: near[0], y: near[1], pathType: pt }; }
-      }
-    });
-    return best;
-  }
-  function snapTempStandOnTaxiwayCenterlines(wx, wy) {
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_TW_SEG_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    const allowPt = { taxiway: 1, runway_exit: 1, runway_taxiway: 1, general_queue_taxiway: 1 };
-    (state.taxiways || []).forEach(function(tw) {
-      const pt = tw.pathType || 'taxiway';
-      if (!allowPt[pt]) return;
-      if (!tw.vertices || tw.vertices.length < 2) return;
-      for (let i = 0; i < tw.vertices.length - 1; i++) {
-        const [x1, y1] = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        const [x2, y2] = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
-        const near = closestPointOnSegment([x1, y1], [x2, y2], click);
-        if (!near) continue;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2) { bestD2 = d2; best = { x: near[0], y: near[1], pathType: pt }; }
-      }
-    });
-    return best;
-  }
-  function hitTestHoldingPoint(wx, wy) {
-    const hitPadSq = Math.pow(Math.max(5, CELL_SIZE * 0.22), 2);
-    const lineW = c2dHoldingPointMarkingLineWidthWorld();
-    const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
-    const pts = state.holdingPoints || [];
-    for (let i = pts.length - 1; i >= 0; i--) {
-      const hp = pts[i];
-      if (!hp || !isFinite(hp.x) || !isFinite(hp.y)) continue;
-      const g = findHoldingPointPathGeometry(hp);
-      const perp = holdingPointPerpFromTangent(g.ux, g.uy);
-      const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM);
-      const cx = hp.x, cy = hp.y;
-      const nearOfs = function(ofs) {
-        const x0 = cx - perp.px * halfLen + g.ux * ofs, y0 = cy - perp.py * halfLen + g.uy * ofs;
-        const x1 = cx + perp.px * halfLen + g.ux * ofs, y1 = cy + perp.py * halfLen + g.uy * ofs;
-        return distPointToSegmentSq(wx, wy, x0, y0, x1, y1) <= hitPadSq;
-      };
-      if (nearOfs(-pairHalf) || nearOfs(pairHalf)) return { type: 'holdingPoint', id: hp.id, obj: hp };
-    }
-    return null;
-  }
-  function tryPlaceHoldingPointAt(x, y, pathType) {
-    const hpKind = pathTypeToHpKind(pathType || 'taxiway');
-    const nameInput = document.getElementById('holdingPointName');
-    const manual = nameInput && nameInput.value && String(nameInput.value).trim();
-    let baseName = manual ? String(nameInput.value).trim() : getDefaultHoldingPointLabel();
-    if (findDuplicateLayoutName('holdingPoint', null, baseName)) { alertDuplicateLayoutName(); return false; }
-    pushUndo();
-    state.holdingPoints.push({ id: id(), name: baseName, x: x, y: y, hpKind: hpKind });
-    return true;
-  }
-

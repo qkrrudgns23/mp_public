@@ -295,6 +295,14 @@
     const use = (isFinite(raw) && raw > 0) ? raw : baseWidth;
     return Math.max(lo, Math.min(100, use));
   }
+  /** Queue junction spacing along path (matches backend designer_path_graph queue splits). */
+  function taxiwayUsesQueueJunctionSpacing(tw) {
+    if (!tw) return false;
+    const pt = String(tw.pathType || '');
+    if (pt === 'general_queue_taxiway') return true;
+    if (pt === 'runway_exit' || pt === 'runway_taxiway') return tw.queueFlow !== false;
+    return false;
+  }
   function normalizeTaxiwayWidthInPlace(tw) {
     if (!tw || typeof tw !== 'object') return;
     const pt = tw.pathType || 'taxiway';
@@ -320,11 +328,3 @@
     return (typeof s === 'string' && s.trim()) ? s.trim() : '#908e82';
   }
   function c2dRunwayOutline() { return _canvas2dStyle.runwayOutline || '#cbd5e1'; }
-  function c2dRunwayMarkingColor() { return _canvas2dStyle.runwayMarkingColor || '#f8fafc'; }
-  function c2dRunwayThresholdColor() { return _canvas2dStyle.runwayThresholdColor || c2dRunwayMarkingColor(); }
-  function c2dRunwayCenterlineColor() { return _canvas2dStyle.runwayCenterlineColor || c2dRunwayMarkingColor(); }
-  function c2dRunwayTouchdownColor() { return _canvas2dStyle.runwayTouchdownColor || c2dRunwayMarkingColor(); }
-  function c2dRunwayAimingPointColor() { return _canvas2dStyle.runwayAimingPointColor || c2dRunwayMarkingColor(); }
-  function c2dRunwayExtensionFill() { return _canvas2dStyle.runwayExtensionFill || c2dRunwayStroke(); }
-  function c2dRunwayBlastChevronColor() { return _canvas2dStyle.runwayBlastChevronColor || '#facc15'; }
-  /** Strip alpha from rgba for solid road surface when showRoadWidth is on. */

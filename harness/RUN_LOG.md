@@ -2,6 +2,21 @@
 
 > **Note (2026-05)**: 벽시간만 반복 측정하는 `opt_repeat_experiment` 및 벤치/스냅 스크립트는 하네스에서 제거됨. 성능 확인은 `golden_opt_cycle` 한 사이클(또는 프로파일)로만 기록하는 것을 권장.
 
+### RUN 20260505 temp-to-apron prior reverse exception
+
+- **command**:
+  - `python -m py_compile utils/airside_sim.py`
+  - `python -m harness.smoke`
+  - `python -m harness.run --input data/Result_storage/MNL_large_sim_input.json --output data/Result_storage/_verify_MNL_temp_fix_result.json --no-validate --metrics-json`
+  - `python -m harness.validate --input data/Result_storage/MNL_large_sim_input.json --result data/Result_storage/_verify_MNL_temp_fix_result.json`
+- **problem**: `INX15352` (`id_517e5l7xf`, user-reported as `INX15332`) was routed to temp stand `T002` while `PARK-155` was occupied, but stayed at temp even after `PARK-155` became empty. Runtime instrumentation showed `stand_occ=[]` at injection time; `_build_prep_xy_to_xy_phase(..., Arr_taxi)` returned no prep because `_graph_path_has_disallowed_reverse_of_prior_hops` rejected the required egress hops (`layout-edge-433/434/436/438`) as reverse traversal of the just-completed temp approach.
+- **alternatives**:
+  - (A) Relax `_graph_path_has_disallowed_reverse_of_prior_hops` globally - rejected, broad reroute behavior risk.
+  - (B) Add an opt-in `allow_prior_reverse_hops` flag and enable it only for temp→apron injection - **chosen**, smallest scoped fix matching temp stand egress.
+  - (C) Model separate temp stand egress links in the graph - rejected, larger layout/graph impact.
+- **change**: `utils/airside_sim.py` adds `allow_prior_reverse_hops=False` to `_build_prep_xy_to_xy_phase`; `_try_inject_arr_taxi_from_temp_stand` passes `True` for the temp→destination apron leg only.
+- **result**: PASS smoke/run/validate. Before fix, `INX15352` finished only 17 edges (`Landing` + `Arr_taxi_occupied`) and ended at temp `(2146.8, 1996.69)` with `EIBT_LIST=[None]`. After fix, it finished 116 edges including `Arr_taxi`, `Pushback`, `Dep_taxi`, and `Lineup_departure`; `EIBT=48070`, `EIBT_LIST=[48070]`, `E_PUSH_FINISHED=51730`, `RUNWAY_ENTRY=52045`, `ETOT=52115`.
+
 ### Phase summary (numpy-vectorize-airside-sim plan)
 
 - **baseline (Phase 0)**: golden triple wall sum **25.31 s** (default 5.50 / large 9.47 / MNL 10.34).

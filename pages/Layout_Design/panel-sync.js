@@ -1,3 +1,15 @@
+    const out = [];
+    (segs || []).forEach(function(seg) {
+      if (!seg) return;
+      const sid = seg.standId != null && String(seg.standId).trim() !== '' ? String(seg.standId) : null;
+      const sibt = Number(seg.sibtMin);
+      const sobt = Number(seg.sobtMin);
+      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return;
+      const prev = out.length ? out[out.length - 1] : null;
+      if (prev && String(prev.standId || '') === String(sid || '') && sibt <= prev.sobtMin + 1e-6) {
+        prev.sobtMin = Math.max(prev.sobtMin, sobt);
+      } else {
+        out.push({ standId: sid, sibtMin: sibt, sobtMin: sobt });
       }
     });
     return out;
@@ -283,6 +295,11 @@
         f.terminalId = f.terminalId || t.terminalId || null;
         f.arrTerminalId = f.arrTerminalId || t.arrTerminalId || f.terminalId || null;
         f.depTerminalId = f.depTerminalId || t.depTerminalId || f.terminalId || null;
+        if (f.lookaheadTaxi == null || f.lookaheadTaxi === '' || !isFinite(Number(f.lookaheadTaxi))) {
+          f.lookaheadTaxi = 9;
+        } else {
+          f.lookaheadTaxi = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadTaxi))));
+        }
         const apronId = f.depApronId != null ? f.depApronId : (t.apronId != null ? t.apronId : (f.standId != null ? f.standId : f.arrApronId || null));
         f.standId = apronId;
         f.token = {
@@ -605,6 +622,21 @@
   function allocFlightTrackHasDeadlock(trDead) {
     return !!(trDead && Array.isArray(trDead.dghost_t) && trDead.dghost_t.length > 0);
   }
+  /** Flight Schedule row: deadlock from last Pro Sim compact playback, timeline ghost, or persisted id set. */
+  function flightScheduleRowHasDeadlock(f) {
+    if (!f || f.id == null) return false;
+    const idStr = String(f.id);
+    if (state.deadlockFlightIdsFromLastSim && state.deadlockFlightIdsFromLastSim[idStr]) return true;
+    const tr = compactPlaybackTrackForFlight(f);
+    if (allocFlightTrackHasDeadlock(tr)) return true;
+    if (f.timeline && Array.isArray(f.timeline)) {
+      for (let i = 0; i < f.timeline.length; i++) {
+        if (f.timeline[i] && f.timeline[i].deadlockGhost === true) return true;
+      }
+    }
+    return false;
+  }
+  /** Gantt apron bar: red overlay only where sim seconds fall in merged dghost ranges (time axis = sec/60). */
   function allocFlightDeadlockOverlayHtml(trDead, segT0Min, segT1Min, visT0Min, visT1Min) {
     if (!trDead || !Array.isArray(trDead.dghost_t) || !trDead.dghost_t.length) return '';
     const ranges = compactPlaybackDghostMergedRangesSec(trDead);
@@ -641,81 +673,3 @@
     return out;
   }
   function compactPlaybackNeedsTugAt(track, tSec) {
-    const t = Number(tSec);
-    if (!isFinite(t)) return false;
-    const intervals = compactPlaybackTugIntervals(track);
-    for (let i = 0; i < intervals.length; i++) {
-      const it = intervals[i];
-      if (t + 1e-9 >= it.start && t <= it.end + 1e-9) return true;
-    }
-    return false;
-  }
-  function compactPlaybackMetaStateAt(track, t) {
-    const meta = Array.isArray(track && track.meta) ? track.meta : [];
-    const out = {};
-    const tt = Number(t);
-    for (let i = 0; i < meta.length; i++) {
-      const mr = meta[i];
-      if (!mr || typeof mr !== 'object') continue;
-      const mt = Number(mr.t);
-      if (!isFinite(mt) || mt > tt + 1e-9) break;
-      if (mr.phase != null) out.phase = String(mr.phase);
-      if (mr.pathType != null) out.pathType = String(mr.pathType);
-      if (mr.edgeId != null && String(mr.edgeId).trim()) out.edgeId = String(mr.edgeId).trim();
-    }
-    return out;
-  }
-  function compactPlaybackSampleAtIndex(track, idx) {
-    if (!isCompactPlaybackTrack(track)) return null;
-    const i = Math.max(0, Math.min(track.t.length - 1, idx | 0));
-    const t = Number(track.t[i]);
-    const x = Number(track.x[i]);
-    const y = Number(track.y[i]);
-    if (!isFinite(t) || !isFinite(x) || !isFinite(y)) return null;
-    const o = { t: t, x: x, y: y, v: Number(track.v[i]) || 0 };
-    o.deadlockGhost = compactPlaybackDghostSet(track).has(Math.round(t));
-    const m = compactPlaybackMetaStateAt(track, t);
-    if (m.phase) o.phase = m.phase;
-    if (m.pathType) o.pathType = m.pathType;
-    if (m.edgeId) o.edgeId = m.edgeId;
-    return o;
-  }
-  function compactPlaybackIndexAtTime(track, tSec, clampEnd) {
-    if (!isCompactPlaybackTrack(track) || track.t.length < 2) return -1;
-    let t = Number(tSec);
-    if (!isFinite(t)) return -1;
-    const firstT = Number(track.t[0]);
-    const lastT = Number(track.t[track.t.length - 1]);
-    if (t + 1e-9 < firstT) return -1;
-    if (t > lastT) {
-      if (!clampEnd) return -1;
-      t = lastT;
-    }
-    let lo = 0, hi = track.t.length - 1;
-    while (lo < hi) {
-      const mid = Math.ceil((lo + hi) / 2);
-      if (Number(track.t[mid]) <= t + 1e-9) lo = mid;
-      else hi = mid - 1;
-    }
-    const idx = Math.min(lo, track.t.length - 2);
-    return (t + 1e-9 >= Number(track.t[idx]) && t - 1e-9 <= Number(track.t[idx + 1])) ? idx : -1;
-  }
-  function compactPlaybackXYAtAbsTime(track, tSec) {
-    const idx = compactPlaybackIndexAtTime(track, tSec, true);
-    if (idx < 0 || !isCompactPlaybackTrack(track)) return null;
-    const t = Number(tSec);
-    const t0 = Number(track.t[idx]), t1 = Number(track.t[idx + 1]);
-    const x0 = Number(track.x[idx]), y0 = Number(track.y[idx]);
-    const x1 = Number(track.x[idx + 1]), y1 = Number(track.y[idx + 1]);
-    if (!isFinite(t0) || !isFinite(t1) || !isFinite(x0) || !isFinite(y0) || !isFinite(x1) || !isFinite(y1)) return null;
-    if (t1 <= t0) return { x: x0, y: y0 };
-    const u = Math.max(0, Math.min(1, (t - t0) / (t1 - t0)));
-    return { x: x0 + (x1 - x0) * u, y: y0 + (y1 - y0) * u };
-  }
-  function deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR) {
-    const tr = Math.round(Number(tR));
-    if (!isFinite(tr) || !positions || typeof positions !== 'object') return null;
-    let sx = 0, sy = 0, n = 0;
-    (flights || []).forEach(function(f) {
-      if (!f || f.id == null) return;
-      const raw = positions[String(f.id)];

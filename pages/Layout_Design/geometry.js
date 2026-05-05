@@ -1,3 +1,15 @@
+      return dpx * dpx + dpy * dpy;
+    }
+    function pointNearDeletedTw(p) {
+      if (!p || !Array.isArray(p) || p.length < 2) return false;
+      if (!isFinite(p[0]) || !isFinite(p[1])) return false;
+      for (let seg = 0; seg < pts.length - 1; seg++) {
+        const a = pts[seg], b = pts[seg + 1];
+        if (!a || !b || !isFinite(a[0]) || !isFinite(b[0])) continue;
+        if (distPointToSegSq(p, a, b) <= tol2) return true;
+      }
+      return false;
+    }
     function filt(arr) {
       if (!Array.isArray(arr)) return arr;
       return arr.filter(function(pt) { return !pointNearDeletedTw(pt); });
@@ -306,15 +318,3 @@
         playDock.setAttribute('title', 'Runway exit failure가 있어 재생을 막았습니다');
       } else if (hasApronDuplicated) {
         playDock.setAttribute('title', 'Apron duplicated가 있어 Pro Sim/재생을 막았습니다');
-      } else if (playbackFresh) {
-        playDock.setAttribute('title', '최신 Pro Sim 결과를 재생합니다');
-      } else {
-        playDock.setAttribute('title', '이전 Pro Sim 결과를 재생합니다 — 레이아웃 변경으로 최신 상태는 아닙니다');
-      }
-    }
-    if (playDot) {
-      if (playbackFresh) {
-        playDot.classList.remove('stale');
-        playDot.classList.add('fresh');
-        playDot.setAttribute('title', 'Playback result matches the latest layout');
-      } else {

@@ -1,3 +1,201 @@
+    const t = Number(tSec);
+    if (!isFinite(t)) return false;
+    const intervals = compactPlaybackTugIntervals(track);
+    for (let i = 0; i < intervals.length; i++) {
+      const it = intervals[i];
+      if (t + 1e-9 >= it.start && t <= it.end + 1e-9) return true;
+    }
+    return false;
+  }
+  function compactPlaybackMetaStateAt(track, t) {
+    const meta = Array.isArray(track && track.meta) ? track.meta : [];
+    const out = {};
+    const tt = Number(t);
+    for (let i = 0; i < meta.length; i++) {
+      const mr = meta[i];
+      if (!mr || typeof mr !== 'object') continue;
+      const mt = Number(mr.t);
+      if (!isFinite(mt) || mt > tt + 1e-9) break;
+      if (mr.phase != null) out.phase = String(mr.phase);
+      if (mr.pathType != null) out.pathType = String(mr.pathType);
+      if (mr.edgeId != null && String(mr.edgeId).trim()) out.edgeId = String(mr.edgeId).trim();
+    }
+    return out;
+  }
+  function compactPlaybackSampleAtIndex(track, idx) {
+    if (!isCompactPlaybackTrack(track)) return null;
+    const i = Math.max(0, Math.min(track.t.length - 1, idx | 0));
+    const t = Number(track.t[i]);
+    const x = Number(track.x[i]);
+    const y = Number(track.y[i]);
+    if (!isFinite(t) || !isFinite(x) || !isFinite(y)) return null;
+    const o = { t: t, x: x, y: y, v: Number(track.v[i]) || 0 };
+    o.deadlockGhost = compactPlaybackDghostSet(track).has(Math.round(t));
+    const m = compactPlaybackMetaStateAt(track, t);
+    if (m.phase) o.phase = m.phase;
+    if (m.pathType) o.pathType = m.pathType;
+    if (m.edgeId) o.edgeId = m.edgeId;
+    return o;
+  }
+  function compactPlaybackIndexAtTime(track, tSec, clampEnd) {
+    if (!isCompactPlaybackTrack(track) || track.t.length < 2) return -1;
+    let t = Number(tSec);
+    if (!isFinite(t)) return -1;
+    const firstT = Number(track.t[0]);
+    const lastT = Number(track.t[track.t.length - 1]);
+    if (t + 1e-9 < firstT) return -1;
+    if (t > lastT) {
+      if (!clampEnd) return -1;
+      t = lastT;
+    }
+    let lo = 0, hi = track.t.length - 1;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (Number(track.t[mid]) <= t + 1e-9) lo = mid;
+      else hi = mid - 1;
+    }
+    const idx = Math.min(lo, track.t.length - 2);
+    return (t + 1e-9 >= Number(track.t[idx]) && t - 1e-9 <= Number(track.t[idx + 1])) ? idx : -1;
+  }
+  /** Last unit direction of a non-trivial chord strictly before the segment containing ``tSec`` (full track — not windowed). */
+  function playbackLastMotionUnitDirBeforeTime(track, tSec) {
+    const eps = 0.08;
+    const eps2 = eps * eps;
+    if (!isCompactPlaybackTrack(track)) return null;
+    const idx = compactPlaybackIndexAtTime(track, tSec, true);
+    if (idx < 1) return null;
+    for (let j = idx - 1; j >= 0; j--) {
+      const p = compactPlaybackSampleAtIndex(track, j);
+      const q = compactPlaybackSampleAtIndex(track, j + 1);
+      if (!p || !q) continue;
+      const ddx = q.x - p.x, ddy = q.y - p.y;
+      const l2 = ddx * ddx + ddy * ddy;
+      if (l2 >= eps2) {
+        const inv = 1 / Math.sqrt(l2);
+        return { dx: ddx * inv, dy: ddy * inv };
+      }
+    }
+    return null;
+  }
+  function compactPlaybackXYAtAbsTime(track, tSec) {
+    const idx = compactPlaybackIndexAtTime(track, tSec, true);
+    if (idx < 0 || !isCompactPlaybackTrack(track)) return null;
+    const t = Number(tSec);
+    const t0 = Number(track.t[idx]), t1 = Number(track.t[idx + 1]);
+    const x0 = Number(track.x[idx]), y0 = Number(track.y[idx]);
+    const x1 = Number(track.x[idx + 1]), y1 = Number(track.y[idx + 1]);
+    if (!isFinite(t0) || !isFinite(t1) || !isFinite(x0) || !isFinite(y0) || !isFinite(x1) || !isFinite(y1)) return null;
+    if (t1 <= t0) return { x: x0, y: y0 };
+    const u = Math.max(0, Math.min(1, (t - t0) / (t1 - t0)));
+    return { x: x0 + (x1 - x0) * u, y: y0 + (y1 - y0) * u };
+  }
+  function deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR) {
+    const tr = Math.round(Number(tR));
+    if (!isFinite(tr) || !positions || typeof positions !== 'object') return null;
+    let sx = 0, sy = 0, n = 0;
+    (flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const raw = positions[String(f.id)];
+      if (!isCompactPlaybackTrack(raw)) return;
+      if (!compactPlaybackDghostSet(raw).has(tr)) return;
+      const p = compactPlaybackXYAtAbsTime(raw, tr);
+      if (p && isFinite(p.x) && isFinite(p.y)) {
+        sx += p.x;
+        sy += p.y;
+        n++;
+      }
+    });
+    if (!n) return null;
+    return { x: sx / n, y: sy / n };
+  }
+  function focusLayoutMapOnWorldXY(wx, wy) {
+    if (!isFinite(wx) || !isFinite(wy)) return;
+    const c = document.getElementById('grid-canvas');
+    if (!c) return;
+    const w = c.clientWidth || 0, h = c.clientHeight || 0;
+    if (w < 8 || h < 8) return;
+    const sc = Math.max(Number(state.scale) || 1, 1e-6);
+    state.panX = w * 0.5 - wx * sc;
+    state.panY = h * 0.5 - wy * sc;
+    if (typeof scheduleDraw === 'function') scheduleDraw();
+    else if (typeof draw === 'function') {
+      try { draw(); } catch (e) { /* ignore */ }
+    }
+  }
+  function seekSimToDeadlockMarkerEvent(ev) {
+    if (!ev || typeof ev !== 'object') return;
+    const tAbs = Number(ev.t_abs);
+    if (!isFinite(tAbs)) return;
+    const lo = Number(state.simStartSec), hi = Number(state.simDurationSec);
+    if (!isFinite(lo) || !isFinite(hi)) return;
+    const snapped =
+      typeof snapSimTimeSecForSlider === 'function'
+        ? snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, tAbs)))
+        : Math.max(lo, Math.min(hi, tAbs));
+    state.simTimeSec = snapped;
+    const slider = document.getElementById('flightSimSlider');
+    if (slider) slider.value = String(snapped);
+    if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+    let fx = ev.focusWorldX != null ? Number(ev.focusWorldX) : NaN;
+    let fy = ev.focusWorldY != null ? Number(ev.focusWorldY) : NaN;
+    if (!isFinite(fx) || !isFinite(fy)) {
+      const fw = deadlockFocusWorldMeanAtRoundedTime(
+        state.simPlaybackPositionsByFlightId,
+        state.flights,
+        Math.round(snapped)
+      );
+      if (fw) {
+        fx = fw.x;
+        fy = fw.y;
+      }
+    }
+    if (isFinite(fx) && isFinite(fy)) focusLayoutMapOnWorldXY(fx, fy);
+    try {
+      if (typeof draw === 'function') draw();
+    } catch (e2) { /* ignore */ }
+    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+  }
+  function compactPlaybackTimelineWindow(track, tSec, radius) {
+    const idx = compactPlaybackIndexAtTime(track, tSec, true);
+    if (idx < 0) return null;
+    const r = Math.max(2, radius || 40);
+    const s = Math.max(0, idx - r);
+    const e = Math.min(track.t.length - 1, idx + r + 1);
+    const out = [];
+    for (let i = s; i <= e; i++) {
+      const p = compactPlaybackSampleAtIndex(track, i);
+      if (p) out.push(p);
+    }
+    return out.length >= 2 ? out : null;
+  }
+  function compactPlaybackTrackStartEnd(track) {
+    if (!isCompactPlaybackTrack(track) || track.t.length < 1) return null;
+    return { t0: Number(track.t[0]), t1: Number(track.t[track.t.length - 1]) };
+  }
+  function refreshHasSimulationResultFromPlaybackSources() {
+    const pos = state.simPlaybackPositionsByFlightId;
+    if (pos && typeof pos === 'object') {
+      for (const k in pos) {
+        if (!Object.prototype.hasOwnProperty.call(pos, k)) continue;
+        if (compactPlaybackTrackLength(pos[k]) >= 2) {
+          state.hasSimulationResult = true;
+          return;
+        }
+      }
+    }
+    state.hasSimulationResult = false;
+    state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
+  }
+  function evictFlightPlaybackTimelinesWhenPlayBlocked() {
+    if (!state.simPlaybackPositionsByFlightId || typeof state.simPlaybackPositionsByFlightId !== 'object') return false;
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f) continue;
+      f.timeline = null;
+    }
+    state.simPlaybackTimelinesEvictedForMemory = true;
+    _lazyTimelineLastEvictSimSec = NaN;
     refreshHasSimulationResultFromPlaybackSources();
     return true;
   }
@@ -31,7 +229,16 @@
       }
     });
     const entries = Array.from(byT.entries()).sort(function(a, b) { return a[0] - b[0]; });
-    const events = entries.map(function(e) { return { t_abs: e[0], labels: e[1].slice() }; });
+    const events = entries.map(function(e) {
+      const tR = e[0];
+      const ev = { t_abs: tR, labels: e[1].slice() };
+      const fw = deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR);
+      if (fw && isFinite(fw.x) && isFinite(fw.y)) {
+        ev.focusWorldX = fw.x;
+        ev.focusWorldY = fw.y;
+      }
+      return ev;
+    });
     let bodyLines = '';
     if (events.length) {
       bodyLines = events.map(function(ev) {
@@ -62,7 +269,21 @@
       const dot = document.createElement('span');
       dot.className = 'sim-slider-deadlock-dot';
       dot.style.left = Math.max(0, Math.min(100, pct)) + '%';
-      dot.setAttribute('title', 'DeadLock @ ' + formatTotalSecondsToHHMMSS(t));
+      dot.setAttribute('title', 'Deadlock @ ' + formatTotalSecondsToHHMMSS(t) + ' — click to jump');
+      dot.setAttribute('role', 'button');
+      dot.setAttribute('tabindex', '0');
+      dot.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        seekSimToDeadlockMarkerEvent(ev);
+      });
+      dot.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          seekSimToDeadlockMarkerEvent(ev);
+        }
+      });
       host.appendChild(dot);
     });
   }
@@ -162,6 +383,13 @@
     state.simPlaybackScheduleSnapshot = scheduleList.length ? scheduleList.slice() : null;
     state.simPlaybackTimelinesEvictedForMemory = false;
     state.simDeadlockGhostPlayback = deriveDeadlockGhostPlaybackFromPayload(payload, state.flights);
+    if (hasPositions && positions && typeof positions === 'object') {
+      if (!state.deadlockFlightIdsFromLastSim) state.deadlockFlightIdsFromLastSim = Object.create(null);
+      Object.keys(positions).forEach(function(pid) {
+        const tr = positions[pid];
+        if (allocFlightTrackHasDeadlock(tr)) state.deadlockFlightIdsFromLastSim[String(pid)] = true;
+      });
+    }
     if (state.hasSimulationResult) {
       if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
       if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
@@ -220,231 +448,3 @@
     const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
     return uniqueNameAgainstSet('C' + zeroPadNumber(stands.length + 1, 3), used);
   }
-  function getDefaultRemoteStandName(currentId) {
-    const stands = (state.remoteStands || []).filter(function(st) { return st && st.id !== currentId; });
-    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
-    return uniqueNameAgainstSet('R' + zeroPadNumber(stands.length + 1, 3), used);
-  }
-  function getDefaultTempStandName(currentId) {
-    const stands = (state.tempStands || []).filter(function(st) { return st && st.id !== currentId; });
-    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
-    return uniqueNameAgainstSet('T' + zeroPadNumber(stands.length + 1, 3), used);
-  }
-  function getApronLinkDefaultName(linkOrId) {
-    const linkId = (typeof linkOrId === 'object' && linkOrId) ? linkOrId.id : linkOrId;
-    const idx = (state.apronLinks || []).findIndex(function(lk) { return lk && lk.id === linkId; });
-    return 'Apron Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
-  }
-  function getApronLinkDisplayName(link) {
-    if (!link) return 'Apron Taxiway';
-    return (link.name && String(link.name).trim()) || getApronLinkDefaultName(link);
-  }
-  function ensureUniqueApronLinkName(rawName, currentId) {
-    const fallbackBase = getApronLinkDefaultName(currentId);
-    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
-    const used = new Set((state.apronLinks || [])
-      .filter(function(lk) { return lk && lk.id !== currentId; })
-      .map(function(lk) { return (lk.name && String(lk.name).trim()) || getApronLinkDefaultName(lk); })
-      .filter(Boolean));
-    return uniqueNameAgainstSet(baseName, used);
-  }
-  function getLayoutEdgeDefaultName(edge) {
-    if (!edge) return 'Edge';
-    return 'Edge ' + (edge.label || '001');
-  }
-  function getLayoutEdgeDisplayName(edge) {
-    if (!edge) return 'Edge';
-    return (edge.name && String(edge.name).trim()) || getLayoutEdgeDefaultName(edge);
-  }
-  function ensureUniqueLayoutEdgeName(rawName, currentId, fallbackEdge) {
-    const fallbackBase = getLayoutEdgeDefaultName(fallbackEdge || { label: '001' });
-    const baseName = (rawName && String(rawName).trim()) || fallbackBase;
-    const used = new Set(Object.keys(state.layoutEdgeNames || {})
-      .filter(function(id) { return id !== currentId; })
-      .map(function(id) { return state.layoutEdgeNames[id]; })
-      .filter(Boolean));
-    return uniqueNameAgainstSet(baseName, used);
-  }
-  function normalizeLayoutNameKey(name) {
-    return String(name || '').trim().toLowerCase();
-  }
-  function findDuplicateLayoutName(objectKind, excludeId, proposedRaw) {
-    const key = normalizeLayoutNameKey(proposedRaw);
-    if (!key) return null;
-    const ex = excludeId == null || excludeId === '' ? null : String(excludeId);
-    function isOther(oid) {
-      if (ex === null) return true;
-      return String(oid) !== ex;
-    }
-    if (objectKind === 'terminal') {
-      const arr = state.terminals || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'terminal', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'pbb') {
-      const arr = state.pbbStands || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'pbb', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'remote') {
-      const arr = state.remoteStands || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'remote', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'tempStand') {
-      const arr = state.tempStands || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'tempStand', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'holdingPoint') {
-      const arr = state.holdingPoints || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'holdingPoint', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'taxiway') {
-      const arr = state.taxiways || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = (o.name && String(o.name).trim()) || '';
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'taxiway', existing: disp || o.id };
-      }
-      return null;
-    }
-    if (objectKind === 'apronLink') {
-      const arr = state.apronLinks || [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = arr[i];
-        if (!o || !isOther(o.id)) continue;
-        const disp = getApronLinkDisplayName(o);
-        if (normalizeLayoutNameKey(disp) === key) return { kind: 'apronLink', existing: disp };
-      }
-      return null;
-    }
-    if (objectKind === 'layoutEdge') {
-      const map = state.layoutEdgeNames || {};
-      const edgeIds = Object.keys(map);
-      for (let ki = 0; ki < edgeIds.length; ki++) {
-        const kid = edgeIds[ki];
-        if (!isOther(kid)) continue;
-        const disp = map[kid];
-        if (disp != null && normalizeLayoutNameKey(disp) === key) return { kind: 'layoutEdge', existing: String(disp) };
-      }
-      return null;
-    }
-    return null;
-  }
-  function alertDuplicateLayoutName() {
-    alert('설정 불가: 동일한 이름이 이미 사용 중입니다.');
-  }
-  function ensureDefaultDirectionModes() {
-    if (state.directionModes.length === 0) {
-      state.directionModes = [
-        { id: id(), name: 'Mode A', direction: 'clockwise' },
-        { id: id(), name: 'Mode B', direction: 'counter_clockwise' },
-        { id: id(), name: 'Mode C', direction: 'both' }
-      ];
-    }
-  }
-  const undoStack = [];
-  const maxUndoLevels = _interactionConfigNum('maxUndoLevels', 50);
-  function pushUndo() {
-    const snap = {
-      terminals: JSON.parse(JSON.stringify(state.terminals || [])),
-      pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
-      remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
-      tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
-      holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
-      taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
-      apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
-      layoutImageOverlay: JSON.parse(JSON.stringify(state.layoutImageOverlay || null)),
-      layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
-      directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
-      flights: cloneFlightsWithoutPathPolylineCache(state.flights),
-      layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))
-    };
-    undoStack.push(snap);
-    if (undoStack.length > maxUndoLevels) undoStack.shift();
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-  }
-  function undo() {
-    if (!undoStack.length) return;
-    const snap = undoStack.pop();
-    state.terminals = snap.terminals;
-    state.pbbStands = snap.pbbStands;
-    state.remoteStands = snap.remoteStands;
-    state.tempStands = snap.tempStands || [];
-    state.holdingPoints = snap.holdingPoints || [];
-    state.taxiways = snap.taxiways;
-    state.apronLinks = snap.apronLinks;
-    state.apronLinkJunctionOverlayDirtyIds = null;
-    state.layoutImageOverlay = normalizeLayoutImageOverlay(snap.layoutImageOverlay);
-    syncLayoutImageBitmap();
-    state.layoutEdgeNames = snap.layoutEdgeNames || {};
-    state.directionModes = snap.directionModes;
-    state.flights = snap.flights;
-    state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(Array.isArray(snap.layoutMarkers) ? snap.layoutMarkers : []);
-    state.pathArcDrag = null;
-    state.selectedObject = null;
-    state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
-    state.terminalDrawingId = null;
-    state.taxiwayDrawingId = null;
-    state.layoutPathDrawPointer = null;
-    syncPanelFromState();
-    updateObjectInfo();
-    renderObjectList();
-    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
-    else if (typeof updateAllFlightPaths === 'function') updateAllFlightPaths(); else draw();
-  }
-  function getTaxiwayDirection(tw) {
-    if (!tw) return 'both';
-    if (tw.direction != null) {
-      const d = tw.direction;
-      if (d === 'topToBottom') return 'clockwise';
-      if (d === 'bottomToTop') return 'counter_clockwise';
-      return d || 'both';
-    }
-    if (tw.directionModeId) {
-      const m = state.directionModes.find(d => d.id === tw.directionModeId);
-      if (m && m.direction) return m.direction;
-    }
-    return 'both';
-  }
-  function normalizeRwDirectionValue(dir) {
-    if (dir == null) return 'both';
-    const s0 = String(dir).trim();
-    if (!s0) return 'both';
-    const s = s0.toLowerCase().replace(/[\s-]+/g, '_');
-    if (s === 'clockwise' || s === 'cw') return 'clockwise';
-    if (s === 'counter_clockwise' || s === 'ccw' || s === 'counterclockwise') return 'counter_clockwise';
-    if (s === 'top_tobottom' || s === 'toptobottom' || s === 'ttb') return 'clockwise';
-    if (s === 'bottom_totop' || s === 'bottomtotop' || s === 'btt') return 'counter_clockwise';
-    return 'both';
-  }
-  function normalizeAllowedRunwayDirections(raw) {
-    const out = [];

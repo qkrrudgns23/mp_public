@@ -1,3 +1,11 @@
+  function c2dRunwayMarkingColor() { return _canvas2dStyle.runwayMarkingColor || '#f8fafc'; }
+  function c2dRunwayThresholdColor() { return _canvas2dStyle.runwayThresholdColor || c2dRunwayMarkingColor(); }
+  function c2dRunwayCenterlineColor() { return _canvas2dStyle.runwayCenterlineColor || c2dRunwayMarkingColor(); }
+  function c2dRunwayTouchdownColor() { return _canvas2dStyle.runwayTouchdownColor || c2dRunwayMarkingColor(); }
+  function c2dRunwayAimingPointColor() { return _canvas2dStyle.runwayAimingPointColor || c2dRunwayMarkingColor(); }
+  function c2dRunwayExtensionFill() { return _canvas2dStyle.runwayExtensionFill || c2dRunwayStroke(); }
+  function c2dRunwayBlastChevronColor() { return _canvas2dStyle.runwayBlastChevronColor || '#facc15'; }
+  /** Strip alpha from rgba for solid road surface when showRoadWidth is on. */
   function c2dCssColorToOpaque(css) {
     const s = String(css || '').trim();
     const ra = s.match(/^rgba\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/i);
@@ -280,11 +288,3 @@
     const dashLen = Math.max(lineW * 2.2, pathSpanM * 0.13);
     const gapLen = Math.max(lineW * 1.6, pathSpanM * 0.09);
     ctx.lineCap = 'butt';
-    ctx.lineJoin = 'miter';
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = lw;
-    if (selected && !preview) {
-      ctx.shadowColor = c2dObjectSelectedGlow();
-      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-    } else {
-      ctx.shadowBlur = 0;

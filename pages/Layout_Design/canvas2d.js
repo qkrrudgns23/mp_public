@@ -1,3 +1,582 @@
+      const clippedEnd = Math.min(endT, winEnd);
+      if (clippedEnd <= clippedStart) return;
+      arr.push(allocTrackSpanHtml(cls, allocLeftPct(clippedStart), ((clippedEnd - clippedStart) / displaySpan) * 100 * zoomLayout, minWidthPct));
+    }
+    function pushAllocTriangle(arr, t, cls) {
+      if (!arr || !isFinite(t) || t < winStart || t > winEnd) return;
+      arr.push(allocTrackMarkerHtml(cls, allocLeftPct(t)));
+    }
+
+    /** O(flights) — avoid per-row intervals.filter (was O(stands * flights) per gantt pass). */
+    const intervalsByStandKey = (function() {
+      const o = { __unassigned: [] };
+      for (let gi = 0; gi < intervals.length; gi++) {
+        const it = intervals[gi];
+        const raw = it.segmentStandId != null ? it.segmentStandId : (it.f && it.f.standId);
+        if (raw == null || raw === '') o.__unassigned.push(it);
+        else {
+          const sid = String(raw);
+          if (!o[sid]) o[sid] = [];
+          o[sid].push(it);
+        }
+      }
+      return o;
+    })();
+
+    function buildRowHtml(label, standId) {
+      const showSPointsEl = document.getElementById('chkShowSPoints');
+      const showSPoints = !showSPointsEl || showSPointsEl.checked;
+      const showSBarsEl = document.getElementById('chkShowSBars');
+      const dimSBars = !!(showSBarsEl && !showSBarsEl.checked);
+      const showEBarEl = document.getElementById('chkShowEBar');
+      const showEBar = !showEBarEl || showEBarEl.checked;
+      const showEPointsEl = document.getElementById('chkShowEPoints');
+      const showEPoints = !showEPointsEl || showEPointsEl.checked;
+      const showAuxBars = showSPoints;
+      const showEibtBars = showEBar;
+      const showEldtBars = showEPoints;
+      const showSDots = showSPoints;
+      const showSdDots = showSPoints;
+      const showEDots = showEPoints;
+      const rowFlights = (standId == null)
+        ? (intervalsByStandKey.__unassigned || [])
+        : (intervalsByStandKey[String(standId)] || []);
+      const duplicateBg = [];
+      if (standId != null) {
+        const dupIds = duplicateApronStandIdsForStand(standId);
+        for (let di = 0; di < dupIds.length; di++) {
+          const dupFlights = intervalsByStandKey[String(dupIds[di])] || [];
+          for (let ii = 0; ii < dupFlights.length; ii++) {
+            const dit = dupFlights[ii];
+            if (dit && isFinite(dit.t0) && isFinite(dit.t1) && dit.t1 > dit.t0) {
+              pushAllocSpan(duplicateBg, dit.t0, dit.t1, 'alloc-duplicate-bg', 0.5);
+            }
+          }
+        }
+      }
+      const conflictMap = {};
+      for (let i = 0; i < rowFlights.length; i++) {
+        for (let j = i + 1; j < rowFlights.length; j++) {
+          const a = rowFlights[i];
+          const b = rowFlights[j];
+          if (a.f && b.f && a.f.id === b.f.id) continue;
+          if (a.t0 < b.t1 && b.t0 < a.t1) { // Section overlap
+            conflictMap[a.f.id] = true;
+            conflictMap[b.f.id] = true;
+          }
+        }
+      }
+      const sBars = showAuxBars ? [] : null;
+      const eBars = showEibtBars ? [] : null;
+      const e2Bars = showEldtBars ? [] : null;
+      const sDots = showSDots ? [] : null;
+      const sdDots = showSdDots ? [] : null;
+      const eDots = showEDots ? [] : null;
+      const sLines = showSPoints ? [] : null;      // SOBT(orig) vertical line
+      const sTrisDown = showSPoints ? [] : null;   // SLDTtriangle under dragon
+      const sTrisUp = showSPoints ? [] : null;     // STOTtriangle above dragon
+      const eTrisDown = showEPoints ? [] : null;   // ELDTtriangle under dragon
+      const eTrisUp = showEPoints ? [] : null;     // ETOTtriangle above dragon
+      const blocks = rowFlights.map(it => {
+        const f = it.f;
+        const t0 = it.t0;
+        const t1 = it.t1;
+        const sldt = it.sldt;
+        const stot = it.stot;
+        const eibt = it.eibt;
+        const eobt = it.eobt;
+        const eldt = it.eldt;
+        const etot = it.etot;
+        const depBlk = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+        const sobtOrig = (it.sobtOrig != null) ? it.sobtOrig : (it.stotOrig - depBlk);
+        const tStart = Math.max(t0, winStart);
+        const tEnd = Math.min(t1, winEnd);
+        if (tEnd <= tStart) return '';
+        const leftPct = ((tStart - winStart) / displaySpan) * 100 * zoomLayout;
+        const widthPct = Math.max(2, ((tEnd - tStart) / displaySpan) * 100 * zoomLayout);
+        const regSafe = escapeHtml(f.reg || '');
+        const codeSafe = escapeHtml((f.code || '').toUpperCase());
+        const typeSafe = escapeHtml(String(f.aircraftType || '').trim());
+        const codeHtml = codeSafe ? ('<span class="alloc-flight-code">' + codeSafe + '</span>') : '';
+        const typeHtml = typeSafe
+          ? ((codeSafe ? '<span class="alloc-flight-type-sep"> · </span>' : '') + '<span class="alloc-flight-type">' + typeSafe + '</span>')
+          : '';
+        const metaHtml = (codeHtml || typeHtml)
+          ? ('<div class="alloc-flight-meta">' + codeHtml + typeHtml + '</div>')
+          : '';
+        const conflictClass = (conflictMap[f.id] || flightBlockedLikeNoWay(f)) ? ' conflict' : '';
+        const selectedClass = (state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id) ? ' alloc-flight-selected' : '';
+        const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
+        const segIdx = it.segmentIdx != null ? Number(it.segmentIdx) : 0;
+        const segCount = it.segmentCount != null ? Number(it.segmentCount) : 1;
+        const segStandId = it.segmentStandId != null ? it.segmentStandId : standId;
+        const segStand = segStandId != null && typeof findStandById === 'function' ? findStandById(segStandId) : null;
+        const invalidClass = (segStand && typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, segStand, segIdx, segCount)) ? ' alloc-invalid' : '';
+        const isFirstSeg = segIdx === 0;
+        const isLastSeg = segIdx >= segCount - 1;
+        const segName = segCount > 1 ? ('AP' + (segIdx + 1)) : '';
+        const sibtLabel = formatFlightScheduleDateTime(f, t0);
+        const sobtLabel = formatFlightScheduleDateTime(f, t1);
+        const handleHoverSibt = escapeAttr((segCount > 1 ? ('SIBT' + (segIdx + 1)) : 'SIBT') + ': ' + sibtLabel);
+        const handleHoverSobt = escapeAttr((segCount > 1 ? ('SOBT' + (segIdx + 1)) : 'SOBT') + ': ' + sobtLabel);
+        const barTitle =
+          (segName ? (segName + '\\n') : '') +
+          (segCount > 1 ? ('SIBT' + (segIdx + 1)) : 'SIBT') + ': ' + sibtLabel +
+          '\\n' + (segCount > 1 ? ('SOBT' + (segIdx + 1)) : 'SOBT') + ': ' + sobtLabel +
+          '\\nReg: ' + (f.reg || '') +
+          '\\nAirline: ' + (f.airlineCode || '') + ' ' + (f.flightNumber || '');
+        if (showEibtBars && eBars && (it.eBarSegmented || isFirstSeg) && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {
+          pushAllocSpan(eBars, eibt, eobt, 'alloc-e-bar', 2);
+        }
+        if (showEldtBars && e2Bars && isFirstSeg) {
+          if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) pushAllocSpan(e2Bars, eldt, eibt, 'alloc-e2-bar', 0.5);
+          if (isFinite(eobt) && isFinite(etot) && etot >= eobt) pushAllocSpan(e2Bars, eobt, etot, 'alloc-e2-bar', 0.5);
+        }
+        if (showAuxBars && sBars) {
+          if (isFirstSeg && isFinite(sldt) && sldt <= t0) pushAllocSpan(sBars, sldt, t0, 'alloc-s-bar', 0.5);
+          if (isLastSeg && isFinite(stot) && stot >= t1) pushAllocSpan(sBars, t1, stot, 'alloc-s-bar', 0.5);
+        }
+        if (showSDots && sDots) {
+          if (isFirstSeg) pushAllocDot(sDots, sldt, 'alloc-time-dot-s');
+          if (isLastSeg) pushAllocDot(sDots, stot, 'alloc-time-dot-s');
+        }
+        if (showSdDots && sdDots) {
+          if (isFirstSeg) pushAllocDot(sdDots, sldt, 'alloc-time-dot-sd');
+          if (isLastSeg) pushAllocDot(sdDots, stot, 'alloc-time-dot-sd');
+        }
+        if (showEDots && eDots && isFirstSeg) {
+          pushAllocDot(eDots, eldt, 'alloc-time-dot-e');
+          pushAllocDot(eDots, etot, 'alloc-time-dot-e');
+          pushAllocTriangle(eTrisDown, eldt, 'alloc-e-tri alloc-e-tri-down');
+          pushAllocTriangle(eTrisUp, etot, 'alloc-e-tri alloc-e-tri-up');
+        }
+        if (showSPoints) {
+          if (isFirstSeg) pushAllocTriangle(sTrisDown, sldt, 'alloc-s-tri alloc-s-tri-down');
+          if (isLastSeg) pushAllocTriangle(sTrisUp, stot, 'alloc-s-tri alloc-s-tri-up');
+        }
+        const blocked = typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f);
+        const handleParts = [];
+        if (!blocked) {
+          const segsForHandles = Array.isArray(f.apronStaySegments) ? f.apronStaySegments : [];
+          const leftUnlocked = isFirstSeg || !(_sameApronStayStand(segsForHandles[segIdx - 1], segsForHandles[segIdx]));
+          const rightUnlocked = isLastSeg || !(_sameApronStayStand(segsForHandles[segIdx], segsForHandles[segIdx + 1]));
+          if (leftUnlocked) handleParts.push('<button type="button" class="alloc-flight-handle alloc-flight-handle--sibt" data-handle-role="sibt" data-segment-idx="' + segIdx + '" tabindex="-1" aria-label="Adjust SIBT (5 min)" title="' + handleHoverSibt + '"></button>');
+          else handleParts.push('<span class="alloc-flight-junction alloc-flight-junction--left alloc-flight-junction--locked" title="Move to a different stand to enable timing edits"></span>');
+          if (rightUnlocked) handleParts.push('<button type="button" class="alloc-flight-handle alloc-flight-handle--sobt" data-handle-role="sobt" data-segment-idx="' + segIdx + '" tabindex="-1" aria-label="Adjust SOBT (5 min)" title="' + handleHoverSobt + '"></button>');
+          else handleParts.push('<span class="alloc-flight-junction alloc-flight-junction--right alloc-flight-junction--locked" title="Move to a different stand to enable timing edits"></span>');
+        }
+        const splitHtml = (!blocked && (t1 - t0) >= (APRON_STAY_SPLIT_MIN_PART_MIN * 2))
+          ? '<button type="button" class="alloc-flight-split-btn" data-segment-idx="' + segIdx + '" title="Split apron stay">Split</button>'
+          : '';
+        const segBadgeHtml = segName ? '<span class="alloc-flight-ap-badge">' + escapeHtml(segName) + '</span>' : '';
+        const trDead = (typeof compactPlaybackTrackForFlight === 'function') ? compactPlaybackTrackForFlight(f) : null;
+        const deadlockOverlayHtml = allocFlightDeadlockOverlayHtml(trDead, t0, t1, tStart, tEnd);
+        const deadlockBarClass = allocFlightTrackHasDeadlock(trDead) ? ' alloc-flight-deadlock' : '';
+        return '' +
+          '<div class="alloc-flight' + conflictClass + invalidClass + selectedClass + sbarDimClass + deadlockBarClass + '" draggable="true" data-flight-id="' + f.id + '" data-segment-idx="' + segIdx + '" ' +
+            'style="left:' + leftPct + '%;width:' + widthPct + '%;min-width:4px;"' +
+            ' title="' + barTitle + '">' +
+            deadlockOverlayHtml +
+            handleParts.join('') +
+            '<div class="alloc-flight-reg">' + regSafe + '</div>' +
+            metaHtml +
+            segBadgeHtml +
+            splitHtml +
+          '</div>';
+      }).join('');
+      const sidAttr = standId ? String(standId) : '';
+      const apronDropOk = standId == null || standHasApronTaxiwayLink(standId);
+      const rowNoLinkClass = (!apronDropOk && standId != null) ? ' alloc-row-no-apron-link' : '';
+      const apronLinkDataAttr = ' data-apron-link-ok="' + (apronDropOk ? '1' : '0') + '"';
+      const bgSlots = (tickPositions.length > 1)
+        ? tickPositions.slice(0, -1).map((tp, idx) => {
+            const next = tickPositions[idx + 1];
+            const midLeft = (tp.leftPct + next.leftPct) / 2;
+            return (
+              '<div class="alloc-apron-bg-slot" style="left:' + midLeft + '%;transform:translateX(-50%);">' +
+                escapeHtml(label) +
+              '</div>'
+            );
+          }).join('')
+        : '';
+      const labelHtml =
+        '<div class="alloc-row-label' + rowNoLinkClass + '" data-stand-id="' + sidAttr + '"' + apronLinkDataAttr + '>' +
+          escapeHtml(label) +
+        '</div>';
+      const trackHtml =
+        '<div class="alloc-row' + rowNoLinkClass + '" data-stand-id="' + sidAttr + '"' + apronLinkDataAttr + '>' +
+          '<div class="alloc-row-track" data-stand-id="' + sidAttr + '"' + apronLinkDataAttr + '>' +
+            duplicateBg.join('') +
+            bgSlots +
+            blocks +
+            (showEibtBars && eBars ? eBars.join('') : '') +
+            (showEldtBars && e2Bars ? e2Bars.join('') : '') +
+            (showAuxBars && sBars ? sBars.join('') : '') +
+            (showSDots && sDots ? sDots.join('') : '') +
+            (showSdDots && sdDots ? sdDots.join('') : '') +
+            (showEDots && eDots ? eDots.join('') : '') +
+            (sTrisDown ? sTrisDown.join('') : '') +
+            (sTrisUp ? sTrisUp.join('') : '') +
+            (eTrisDown ? eTrisDown.join('') : '') +
+            (eTrisUp ? eTrisUp.join('') : '') +
+            (sLines ? sLines.join('') : '') +
+          '</div>' +
+        '</div>';
+      return { labelHtml, trackHtml };
+    }
+    const labelRows = [];
+    const trackRows = [];
+    (function() {
+      const row = buildRowHtml('Unassigned', null);
+      labelRows.push(row.labelHtml);
+      trackRows.push(row.trackHtml);
+    })();
+    const terminalCopies = makeUniqueNamedCopy(state.terminals || [], 'name');
+    const termLabelById = {};
+    terminalCopies.forEach(t => { termLabelById[t.id] = (t.name || '').trim() || 'Building'; });
+    const terminalIdsWithApronLink = (function() {
+      const s = new Set();
+      const links = state.apronLinks || [];
+      for (let i = 0; i < links.length; i++) {
+        const lk = links[i];
+        if (!lk || !lk.pbbId) continue;
+        const pbb = (state.pbbStands || []).find(function(p) { return p && p.id === lk.pbbId; });
+        const rem = (state.remoteStands || []).find(function(r) { return r && r.id === lk.pbbId; });
+        const tmp = (state.tempStands || []).find(function(r) { return r && r.id === lk.pbbId; });
+        const st = pbb || rem || tmp;
+        if (!st) continue;
+        const t = getTerminalForStand(st);
+        if (t && t.id != null) s.add(String(t.id));
+      }
+      return s;
+    })();
+    const pbbStandIdSet = new Set((state.pbbStands || []).map(function(p) { return p && p.id; }).filter(Boolean));
+    const ganttTermByStand = new Map();
+    stands.forEach(function(s) {
+      const term = getTerminalForStand(s);
+      if (!term) {
+        ganttTermByStand.set(s.id, null);
+        return;
+      }
+      const hasPbb = pbbStandIdSet.has(s.id);
+      ganttTermByStand.set(
+        s.id,
+        (hasPbb || terminalIdsWithApronLink.has(String(term.id))) ? term : null
+      );
+    });
+    const grouped = {};
+    const order = [];
+    const sortedStands = stands.slice().sort((a, b) => {
+      const ta = ganttTermByStand.get(a.id);
+      const tb = ganttTermByStand.get(b.id);
+      const la = ta ? (termLabelById[ta.id] || ta.name || '') : '';
+      const lb = tb ? (termLabelById[tb.id] || tb.name || '') : '';
+      if (la < lb) return -1;
+      if (la > lb) return 1;
+      const na = (a.name || '').toLowerCase();
+      const nb = (b.name || '').toLowerCase();
+      if (na < nb) return -1;
+      if (na > nb) return 1;
+      return 0;
+    });
+    sortedStands.forEach(s => {
+      const term = ganttTermByStand.get(s.id);
+      const key = term ? term.id : '__no_terminal__';
+      if (!grouped[key]) {
+        grouped[key] = { term, stands: [] };
+        order.push(key);
+      }
+      grouped[key].stands.push(s);
+    });
+    const remoteIdSet = new Set(
+      (state.remoteStands || []).map(r => r.id)
+        .concat((state.tempStands || []).map(r => r.id))
+    );
+    const allRemoteStands = [];
+    order.forEach(key => {
+      const group = grouped[key];
+      if (!group) return;
+      const term = group.term;
+      const contactStands = [];
+      const remoteStandsInTerm = [];
+      group.stands.forEach(s => {
+        if (remoteIdSet.has(s.id)) remoteStandsInTerm.push(s);
+        else contactStands.push(s);
+      });
+      if (remoteStandsInTerm.length) {
+        remoteStandsInTerm.forEach(s => allRemoteStands.push(s));
+      }
+      if (!contactStands.length) return;
+      const headerLabel = term
+        ? (termLabelById[term.id] || term.name || 'Building')
+        : 'No Building';
+      const headerEsc = escapeHtml(headerLabel);
+      labelRows.push(
+        '<div class="alloc-terminal-header" data-collapsed="0" title="' + headerEsc + '">' +
+          '<span class="alloc-section-toggle-icon">▼</span>' +
+          '<span class="alloc-terminal-header-text">' + headerEsc + '</span>' +
+        '</div>'
+      );
+      trackRows.push('<div class="alloc-row" data-stand-id="">' +
+        '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:20px;"></div>' +
+      '</div>');
+      contactStands.forEach(s => {
+        const label = (s.name || '') + ' (' + (s.category || '') + ')';
+        const row = buildRowHtml(label, s.id);
+        labelRows.push(row.labelHtml);
+        trackRows.push(row.trackHtml);
+      });
+    });
+    if (allRemoteStands.length) {
+      labelRows.push('<div class="alloc-gantt-section-spacer" aria-hidden="true"></div>');
+      trackRows.push(
+        '<div class="alloc-row" data-stand-id="">' +
+          '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:4px;min-height:4px;"></div>' +
+        '</div>'
+      );
+      labelRows.push(
+        '<div class="alloc-remote-header" data-collapsed="0">' +
+          '<span class="alloc-section-toggle-icon">▼</span>' +
+          'Remote stands' +
+        '</div>'
+      );
+      trackRows.push(
+        '<div class="alloc-row" data-stand-id="">' +
+          '<div class="alloc-row-track" data-stand-id="" style="background:transparent;border:none;height:18px;min-height:18px;"></div>' +
+        '</div>'
+      );
+      allRemoteStands.forEach(s => {
+        const label = (s.name || '') + ' (' + (s.category || '') + ')';
+        const row = buildRowHtml(label, s.id);
+        labelRows.push(row.labelHtml);
+        trackRows.push(row.trackHtml);
+      });
+    }
+    const axisTicks = tickPositions.map(tp =>
+      '<div class="alloc-time-tick" style="left:' + tp.leftPct + '%;">' +
+        '<div class="alloc-time-tick-label">' + tp.label + '</div>' +
+      '</div>'
+    );
+    const axisHtml =
+      '<div class="alloc-time-axis-overlay">' +
+        '<div class="alloc-time-axis-inner">' + axisTicks.join('') + '</div>' +
+      '</div>';
+
+    labelRows.push('<div class="alloc-label-axis-spacer"></div>');
+
+    const labelColHtml =
+      '<div class="alloc-gantt-label-col">' +
+        labelRows.join('') +
+      '</div>';
+    const gridOverlayHtml =
+      '<div class="alloc-gantt-grid-overlay">' +
+        tickPositions.map(function(tp) {
+          return '<div class="alloc-time-grid-line" style="left:' + tp.leftPct + '%;"></div>';
+        }).join('') +
+      '</div>';
+    const simMinPlay = state.simTimeSec / 60;
+    const simPhVisible = isFinite(simMinPlay) && simMinPlay >= winStart - 1e-9 && simMinPlay <= winEnd + 1e-9;
+    const simPhLeft = allocLeftPct(simMinPlay);
+    const simPlayheadHtml =
+      '<div class="alloc-gantt-sim-playhead-layer">' +
+        '<div class="alloc-gantt-sim-playhead" style="left:' + simPhLeft + '%;' + (simPhVisible ? '' : 'display:none;') +
+        '" title="Simulation time — drag to scrub"></div>' +
+      '</div>';
+    const trackColHtml =
+      '<div class="alloc-gantt-scroll-col">' +
+        '<div class="alloc-gantt-inner" style="min-width:' + innerMinWidthPct + '%;">' +
+          gridOverlayHtml +
+          simPlayheadHtml +
+          trackRows.join('') +
+          axisHtml +
+        '</div>' +
+      '</div>';
+    const rootHtml =
+      '<div class="alloc-gantt-root">' +
+        labelColHtml +
+        trackColHtml +
+      '</div>';
+
+    ganttEl.innerHTML = rootHtml;
+    const labWin = document.getElementById('allocGanttWindowLabel');
+    if (labWin) labWin.textContent = formatMinutesToHHMM(winStart) + ' – ' + formatMinutesToHHMM(winEnd);
+    if (!state._allocGanttPanWired) {
+      state._allocGanttPanWired = true;
+      const bPrev = document.getElementById('btnAllocGanttPrev');
+      const bNext = document.getElementById('btnAllocGanttNext');
+      function allocGanttPanStep(deltaMin) {
+        const c = state._allocGanttClamp;
+        if (!c) return;
+        let w = state.allocGanttWindowStartMin != null ? state.allocGanttWindowStartMin : c.baseMinT;
+        w += deltaMin;
+        const maxW = Math.max(c.baseMinT, c.baseMaxT - c.visibleSpan);
+        state.allocGanttWindowStartMin = Math.min(Math.max(w, c.baseMinT), maxW);
+        renderFlightGantt({ skipPathPrep: true });
+      }
+      if (bPrev) bPrev.addEventListener('click', function() { allocGanttPanStep(-GANTT_PAN_STEP_MIN); });
+      if (bNext) bNext.addEventListener('click', function() { allocGanttPanStep(GANTT_PAN_STEP_MIN); });
+    }
+    const newScrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
+    const newLabelCol = ganttEl.querySelector('.alloc-gantt-label-col');
+    function syncAllocLabelToScrollCol() {
+      if (newScrollCol && newLabelCol) {
+        newLabelCol.scrollTop = newScrollCol.scrollTop;
+      }
+    }
+    if (newScrollCol) {
+      newScrollCol.scrollLeft = prevScrollLeft;
+      newScrollCol.scrollTop = prevScrollTop;
+    }
+    syncAllocLabelToScrollCol();
+    if (newScrollCol && newLabelCol) {
+      newScrollCol.addEventListener('scroll', function() { newLabelCol.scrollTop = newScrollCol.scrollTop; });
+      newLabelCol.addEventListener('scroll', function() { newScrollCol.scrollTop = newLabelCol.scrollTop; });
+    }
+    if (newScrollCol && newLabelCol) {
+      const labelChildren = Array.from(newLabelCol.children);
+      const innerEl = newScrollCol.querySelector('.alloc-gantt-inner');
+      const trackChildren = innerEl ? Array.from(innerEl.children).filter(function(el) {
+        return el.classList.contains('alloc-row');
+      }) : [];
+      function _toggleSectionRows(labelArr, trackArr, fromIdx, collapsed) {
+        const STOP = ['alloc-terminal-header','alloc-remote-header','alloc-label-axis-spacer','alloc-gantt-section-spacer'];
+        for (let j = fromIdx; j < labelArr.length; j++) {
+          const lbl = labelArr[j];
+          if (STOP.some(function(c) { return lbl.classList.contains(c); })) break;
+          lbl.style.display = collapsed ? 'none' : '';
+          if (trackArr[j]) trackArr[j].style.display = collapsed ? 'none' : '';
+        }
+      }
+      function _wireSectionHeader(el, idx, shouldStartCollapsed) {
+        el.style.cursor = 'pointer';
+        if (shouldStartCollapsed) {
+          el.setAttribute('data-collapsed', '1');
+          const icon0 = el.querySelector('.alloc-section-toggle-icon');
+          if (icon0) icon0.textContent = '▶';
+          _toggleSectionRows(labelChildren, trackChildren, idx + 1, true);
+        }
+        el.addEventListener('click', function() {
+          const wasCollapsed = el.getAttribute('data-collapsed') === '1';
+          const nowCollapsed = !wasCollapsed;
+          el.setAttribute('data-collapsed', nowCollapsed ? '1' : '0');
+          const icon = el.querySelector('.alloc-section-toggle-icon');
+          if (icon) icon.textContent = nowCollapsed ? '▶' : '▼';
+          _toggleSectionRows(labelChildren, trackChildren, idx + 1, nowCollapsed);
+        });
+      }
+      labelChildren.forEach(function(el, idx) {
+        if (el.classList.contains('alloc-terminal-header')) {
+          let txt = (el.textContent || '').trim().replace(/^[▶▼]\s*/, '');
+          _wireSectionHeader(el, idx, txt && prevCollapsedTerminals.has(txt));
+        }
+        if (el.classList.contains('alloc-remote-header')) {
+          _wireSectionHeader(el, idx, prevRemoteCollapsed);
+        }
+      });
+    }
+    syncAllocLabelToScrollCol();
+    requestAnimationFrame(syncAllocLabelToScrollCol);
+    if (newScrollCol && !newScrollCol._allocWheelBound) {
+      newScrollCol._allocWheelBound = true;
+      newScrollCol.addEventListener('wheel', function(ev) {
+        if (!ev.ctrlKey) return;
+        ev.preventDefault();
+        const delta = ev.deltaY || ev.deltaX || 0;
+        newScrollCol.scrollLeft += delta;
+      }, { passive: false });
+    }
+
+    _ganttWireInteractions(ganttEl, state);
+    if (!ganttEl._allocSimPlayheadPtrBound) {
+      ganttEl._allocSimPlayheadPtrBound = true;
+      ganttEl.addEventListener('pointerdown', function(ev) {
+        const t = ev.target && ev.target.closest ? ev.target.closest('.alloc-gantt-sim-playhead') : null;
+        if (!t || !ganttEl.contains(t)) return;
+        if (ev.button != null && ev.button !== 0) return;
+        if (ev.isPrimary === false) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        state._allocGanttSimPlayheadDragging = true;
+        try { t.setPointerCapture(ev.pointerId); } catch (e2) {}
+      });
+    }
+    if (!window._allocGanttSimPlayheadDocWired) {
+      window._allocGanttSimPlayheadDocWired = true;
+      document.addEventListener('pointermove', function(ev) {
+        if (!state._allocGanttSimPlayheadDragging) return;
+        const gE = document.getElementById('allocationGantt');
+        const m = _ganttClientXToMinutes(ev.clientX, gE);
+        if (m == null || !isFinite(m)) return;
+        const secRaw = m * 60;
+        const lo = state.simStartSec, hi = state.simDurationSec;
+        const sec = snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, secRaw)));
+        state.simTimeSec = sec;
+        const sldr = document.getElementById('flightSimSlider');
+        if (sldr) sldr.value = String(sec);
+        if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+        syncAllocGanttSimPlayheadPosition();
+        try { draw(); } catch (e3) {}
+        update3DSceneWhenVisible();
+        ev.preventDefault();
+      }, true);
+      document.addEventListener('pointerup', function() {
+        if (!state._allocGanttSimPlayheadDragging) return;
+        state._allocGanttSimPlayheadDragging = false;
+        try { draw(); } catch (e4) {}
+        update3DSceneWhenVisible();
+      }, true);
+      document.addEventListener('pointercancel', function() {
+        state._allocGanttSimPlayheadDragging = false;
+      }, true);
+    }
+    syncAllocGanttSimPlayheadPosition();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  }
+
+  function _ganttFindTrackAtPoint(scrollCol, clientX, clientY) {
+    if (!scrollCol) return null;
+    const inner = scrollCol.querySelector('.alloc-gantt-inner');
+    if (!inner) return null;
+    const rows = inner.querySelectorAll('.alloc-row');
+    const tol = 2;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i].getBoundingClientRect();
+      if (clientY >= r.top - tol && clientY <= r.bottom + tol) {
+        const track = rows[i].querySelector('.alloc-row-track');
+        if (track) return track;
+      }
+    }
+    return null;
+  }
+
+  function _ganttClientXToMinutes(clientX, ganttEl) {
+    const scrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
+    const inner = scrollCol && scrollCol.querySelector('.alloc-gantt-inner');
+    if (!scrollCol || !inner) return null;
+    const rect = inner.getBoundingClientRect();
+    const x = clientX - rect.left + scrollCol.scrollLeft;
+    const w = inner.scrollWidth;
+    if (!(w > 0)) return null;
+    const frac = Math.max(0, Math.min(1, x / w));
+    const c = state._allocGanttClamp;
+    const winStart = state.allocGanttWindowStartMin;
+    if (!c || winStart == null || !isFinite(winStart)) return null;
+    return winStart + frac * c.visibleSpan;
+  }
+
+  function _ganttEnsureSibtSobtTooltipEl() {
+    let el = document.getElementById('allocGanttSibtSobtTooltip');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'allocGanttSibtSobtTooltip';
+      el.className = 'alloc-gantt-sibt-sobt-tooltip';
+      el.setAttribute('hidden', '');
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  var _allocGanttPreviewTimer = null;
   var _allocGanttPreviewLastKey = '';
   function _allocGanttDragStandPreviewAllowed(f, standId) {
     if (!standId) return true;
@@ -1088,582 +1667,3 @@
       f.minDwellMin = minDwell;
       const sobt = f.sobtMin != null ? Math.max(f.sobtMin, tArrMin + minDwell) : (tArrMin + dwell);
       f.timeMin = tArrMin;
-      f.sibtMin = tArrMin;
-      f.sobtMin = sobt;
-      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobt - tArrMin);
-      applySOffsetsFromSibtSobt(f);
-    });
-  }
-
-  function computeScheduledDisplayTimesIncremental(allFlights, dirtyFlightIds, touchedStandIds) {
-    if (!allFlights || !allFlights.length) return;
-    const dirty = (dirtyFlightIds instanceof Set) ? dirtyFlightIds : new Set(dirtyFlightIds || []);
-    const touchedStands = (touchedStandIds instanceof Set) ? touchedStandIds : new Set(touchedStandIds || []);
-    const standsToRecompute = new Set();
-    touchedStands.forEach(function(sid) { if (sid != null && sid !== '') standsToRecompute.add(sid); });
-    const needStep1 = new Set();
-    dirty.forEach(function(id) { if (id != null && id !== '') needStep1.add(id); });
-    allFlights.forEach(function(f) {
-      if (!f || flightBlockedLikeNoWay(f)) return;
-      if (f.standId && standsToRecompute.has(f.standId)) needStep1.add(f.id);
-    });
-    allFlights.forEach(function(f) {
-      if (!f || !needStep1.has(f.id)) return;
-      if (flightBlockedLikeNoWay(f)) return;
-      const tArrMin = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
-      let dwell = f.dwellMin != null ? f.dwellMin : 0;
-      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
-      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
-      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
-      if (minDwell > dwell) minDwell = dwell;
-      f.dwellMin = dwell;
-      f.minDwellMin = minDwell;
-      const sobt = f.sobtMin != null ? Math.max(f.sobtMin, tArrMin + minDwell) : (tArrMin + dwell);
-      f.timeMin = tArrMin;
-      f.sibtMin = tArrMin;
-      f.sobtMin = sobt;
-      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobt - tArrMin);
-      applySOffsetsFromSibtSobt(f);
-    });
-  }
-
-  function rsepGetSec(val) {
-    const n = Number(val);
-    return isFinite(n) && n >= 0 ? n : RSEP_MISSING_MATRIX_SEC;
-  }
-
-  function rsepApplySeparationToEvents(events, cfg) {
-    const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {};
-    const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {};
-    const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {};
-    const rot = (cfg.rot) ? cfg.rot : {};
-    const getSec = rsepGetSec;
-    events.sort((a, b) => a.time - b.time || a.index - b.index);
-    let lastArrETime = -1e9, lastArrCat = null;
-    let lastDepETime = -1e9, lastDepCat = null;
-    events.forEach(ev => {
-      if (ev.type === 'arr') {
-        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
-        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
-        const eTime = Math.max(ev.time, minFromArr, minFromDep);
-        ev.flight.eldtMin = eTime;
-        lastArrETime = eTime;
-        lastArrCat = ev.cat;
-      } else {
-        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
-        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
-        const etotSep = Math.max(ev.time, minFromArr, minFromDep);
-        const rotM = (ev.rotArrMin != null && isFinite(ev.rotArrMin)) ? ev.rotArrMin : getArrRotMinutes(ev.flight);
-        const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + rotM + (ev.vttArrMin || 0);
-        const vttDep = ev.vttDepMin || 0;
-        const etotMin = etotSep;
-        const eobtMin = etotMin - vttDep;
-        ev.flight.etotMin = etotMin;
-        lastDepETime = etotMin;
-        lastDepCat = ev.cat;
-      }
-    });
-    let minT = Infinity, maxT = -Infinity;
-    events.forEach(ev => {
-      const s = ev.time;
-      const e = ev.type === 'arr'
-        ? (ev.flight && ev.flight.eldtMin != null ? ev.flight.eldtMin : s)
-        : (ev.flight && ev.flight.etotMin != null ? ev.flight.etotMin : s);
-      if (s < minT) minT = s;
-      if (e < minT) minT = e;
-      if (s > maxT) maxT = s;
-      if (e > maxT) maxT = e;
-    });
-    if (!isFinite(minT) || !isFinite(maxT)) { minT = 0; maxT = 60; } else if (maxT <= minT) { maxT = minT + 60; }
-    return { minT, maxT };
-  }
-
-  function rsepCollectEventsForRunway(rwy, flights, runways) {
-    const cfg = rsepGetConfigForRunway(rwy);
-    if (!cfg) return null;
-    const stdKey = cfg.standard || 'ICAO';
-    const events = [];
-    let eventIndex = 0;
-    flights.forEach((f, flightIdx) => {
-      if (flightBlockedLikeNoWay(f)) return;
-      let arrRwy = f.arrRunwayId || (f.token && f.token.runwayId);
-      let depRwy = f.depRunwayId || (f.token && f.token.depRunwayId);
-      if (arrRwy == null && depRwy == null && runways.length === 1) { arrRwy = rwy.id; depRwy = rwy.id; }
-      else if (depRwy == null && arrRwy === rwy.id) depRwy = rwy.id;
-      else if (arrRwy == null && depRwy === rwy.id) arrRwy = rwy.id;
-      if (arrRwy !== rwy.id && depRwy !== rwy.id) return;
-      const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-      const cat = stdKey === 'ICAO' ? (ac && ac.icaoJHL ? ac.icaoJHL : 'M') : (ac && ac.recatEu ? ac.recatEu : 'D');
-      const sldtMin = f.sldtMin != null ? f.sldtMin : 0;
-      const stotMin = f.stotMin != null ? f.stotMin : 0;
-      const sobtMin = f.sobtMin != null ? f.sobtMin : 0;
-      const vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
-      const vttDepMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-      if (arrRwy === rwy.id) events.push({ time: sldtMin, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ });
-      if (depRwy === rwy.id) {
-        events.push({ time: stotMin, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin, index: eventIndex++ });
-      }
-    });
-    return { cfg, events };
-  }
-
-  function runSeparationPass(runways, flights, byRunway, phase) {
-    if (phase === 'initial') {
-      runways.forEach(rwy => {
-        const pack = rsepCollectEventsForRunway(rwy, flights, runways);
-        if (!pack) return;
-        const { cfg, events } = pack;
-        if (!events.length) {
-          byRunway[rwy.id] = { events: [], minT: 0, maxT: 0 };
-          return;
-        }
-        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg);
-        byRunway[rwy.id] = { events, minT, maxT };
-      });
-    } else {
-      runways.forEach(rwy => {
-        const cfg = rsepGetConfigForRunway(rwy);
-        if (!cfg) return;
-        const data = byRunway[rwy.id];
-        if (!data || !data.events || !data.events.length) return;
-        const events = data.events;
-        events.forEach(ev => {
-          ev.time = ev.type === 'arr'
-            ? (ev.flight.eldtMin != null ? ev.flight.eldtMin : ev.time)
-            : (ev.flight.etotMin != null ? ev.flight.etotMin : ev.time);
-        });
-        const { minT, maxT } = rsepApplySeparationToEvents(events, cfg);
-        byRunway[rwy.id] = { events, minT, maxT };
-      });
-    }
-  }
-
-  function buildRunwaySeparationTimelineByRunwaySnapshot(flights) {
-    const snapGen = state.rwySepSnapshotStaleGen | 0;
-    if (state.__rwySepSnapCacheGen === snapGen && state.__rwySepSnapCache) return state.__rwySepSnapCache;
-    const list = flights || state.flights || [];
-    const runwaysRaw = (state.taxiways || []).filter(t => t.pathType === 'runway');
-    if (!runwaysRaw.length) {
-      state.__rwySepSnapCache = {};
-      state.__rwySepSnapCacheGen = snapGen;
-      return state.__rwySepSnapCache;
-    }
-    const runways = (function() {
-      const idToIndex = {};
-      runwaysRaw.forEach((r, i) => { if (r && r.id != null) idToIndex[r.id] = i; });
-      const n = runwaysRaw.length;
-      const indeg = new Array(n).fill(0);
-      const adj = new Array(n).fill(0).map(() => []);
-      list.forEach(f => {
-        if (!f) return;
-        let arrRwy = f.arrRunwayId || (f.token && f.token.runwayId);
-        let depRwy = f.depRunwayId || (f.token && f.token.depRunwayId);
-        if (!arrRwy || !depRwy || arrRwy === depRwy) return;
-        const ai = idToIndex[arrRwy];
-        const di = idToIndex[depRwy];
-        if (ai == null || di == null) return;
-        adj[ai].push(di);
-        indeg[di] += 1;
-      });
-      const q = [];
-      for (let i = 0; i < n; i++) if (indeg[i] === 0) q.push(i);
-      const orderIdx = [];
-      while (q.length) {
-        const i = q.shift();
-        orderIdx.push(i);
-        adj[i].forEach(j => {
-          indeg[j] -= 1;
-          if (indeg[j] === 0) q.push(j);
-        });
-      }
-      if (orderIdx.length !== n) return runwaysRaw;
-      return orderIdx.map(i => runwaysRaw[i]);
-    })();
-    const byRunway = {};
-    runways.forEach(rwy => {
-      const pack = rsepCollectEventsForRunway(rwy, list, runways);
-      if (!pack || !pack.events.length) {
-        byRunway[rwy.id] = { events: [], minT: 0, maxT: 0 };
-        return;
-      }
-      const events = pack.events.slice().sort((a, b) => a.time - b.time || a.index - b.index);
-      let minT = Infinity, maxT = -Infinity;
-      events.forEach(ev => {
-        const s = ev.time;
-        const f = ev.flight;
-        const e = ev.type === 'arr'
-          ? (f && f.eldtMin != null && isFinite(f.eldtMin) ? f.eldtMin : s)
-          : (f && f.etotMin != null && isFinite(f.etotMin) ? f.etotMin : s);
-        if (s < minT) minT = s;
-        if (e < minT) minT = e;
-        if (s > maxT) maxT = s;
-        if (e > maxT) maxT = e;
-      });
-      if (!isFinite(minT) || !isFinite(maxT)) { minT = 0; maxT = 60; } else if (maxT <= minT) maxT = minT + 60;
-      byRunway[rwy.id] = { events, minT, maxT };
-
-
-    });
-    state.__rwySepSnapCache = byRunway;
-    state.__rwySepSnapCacheGen = snapGen;
-    return byRunway;
-  }
-
-  function computeSeparationAdjustedTimes() {
-    return {};
-  }
-
-  function getRunwayPath(runwayId) {
-    const taxiways = state.taxiways || [];
-    let rw = runwayId ? taxiways.find(t => t.id === runwayId && t.pathType === 'runway' && t.vertices && t.vertices.length >= 2) : null;
-    if (!rw) rw = taxiways.find(t => t.pathType === 'runway' && t.vertices && t.vertices.length >= 2);
-    if (!rw || !rw.vertices.length) return null;
-    const pts = rw.vertices.map(v => cellToPixel(v.col, v.row));
-    return { startPx: pts[0], endPx: pts[pts.length-1], pts };
-  }
-
-  function getRunwayPointAtDistance(runwayId, distM) {
-    const path = getRunwayPath(runwayId);
-    if (!path || !path.pts || path.pts.length < 2) return null;
-    const pts = path.pts;
-    let acc = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const segLen = pathDist(p1, p2);
-      if (!(segLen > 1e-6)) continue;
-      if (acc + segLen >= distM) {
-        const t = Math.max(0, Math.min(1, (distM - acc) / segLen));
-        return [
-          p1[0] + (p2[0] - p1[0]) * t,
-          p1[1] + (p2[1] - p1[1]) * t
-        ];
-      }
-      acc += segLen;
-    }
-    return pts[pts.length - 1];
-  }
-
-  function flightEMinutesPrefer(f, keys, fallback) {
-    for (let ki = 0; ki < keys.length; ki++) {
-      const v = f[keys[ki]];
-      if (typeof v === 'number' && isFinite(v)) return v;
-    }
-    return fallback;
-  }
-  function touchdownDistMForTimeline(f) {
-    if (typeof f.arrTdDistM === 'number' && isFinite(f.arrTdDistM) && f.arrTdDistM >= 0) return f.arrTdDistM;
-    const ac = (typeof getAircraftInfoByType === 'function') ? getAircraftInfoByType(f.aircraftType) : null;
-    const z = ac && typeof ac.touchdown_zone_avg_m === 'number' ? ac.touchdown_zone_avg_m : null;
-    if (typeof z === 'number' && z > 0) return z;
-    return 400;
-  }
-  function touchdownSpeedMsForTimeline(f) {
-    let v = f.arrVTdMs;
-    if (typeof v === 'number' && isFinite(v) && v > 0) return Math.max(1, v);
-    const ac = (typeof getAircraftInfoByType === 'function') ? getAircraftInfoByType(f.aircraftType) : null;
-    v = ac && typeof ac.touchdown_speed_avg_ms === 'number' ? ac.touchdown_speed_avg_ms : 70;
-    return Math.max(1, v);
-  }
-  
-  function getRunwayInboundUxyAtDistance(runwayId, rwDir, distAlong) {
-    const r = getRunwayPath(runwayId);
-    const anchor = getRunwayPointAtDistance(runwayId, distAlong);
-    if (!r || !r.pts || r.pts.length < 2 || !anchor) return null;
-    const pts = r.pts;
-    let segIdx = Math.max(0, pts.length - 2);
-    let acc = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const segLen = pathDist(pts[i], pts[i + 1]);
-      if (segLen < 1e-9) continue;
-      if (acc + segLen >= distAlong - 1e-6) { segIdx = i; break; }
-      acc += segLen;
-    }
-    const p1 = pts[segIdx], p2 = pts[segIdx + 1];
-    const segLen = pathDist(p1, p2) || 1;
-    let ux = (p2[0] - p1[0]) / segLen, uy = (p2[1] - p1[1]) / segLen;
-    if (rwDir === 'counter_clockwise') { ux = -ux; uy = -uy; }
-    return { td: anchor, ux, uy };
-  }
-  
-  function buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDistAlong, totalM) {
-    const ax = getRunwayInboundUxyAtDistance(runwayId, rwDir, anchorDistAlong);
-    if (!ax) return null;
-    const td = ax.td, ux = ax.ux, uy = ax.uy;
-    const tm = Math.max(0, Number(totalM) || 0);
-    const tdxy = [td[0], td[1]];
-    if (tm < 1e-6) return { pts: [tdxy, tdxy], pathLen: 0 };
-    const outer = [td[0] - ux * tm, td[1] - uy * tm];
-    return { pts: [outer, tdxy], pathLen: pathDist(outer, tdxy) };
-  }
-  
-  function arrivalApproachAnchorDistM(runwayId, tdDistAlong) {
-    let anchorDist = runwayApproachThresholdDistAlongM(runwayId, tdDistAlong);
-    if (!(typeof anchorDist === 'number' && isFinite(anchorDist) && anchorDist >= 0)) anchorDist = tdDistAlong;
-    else if (anchorDist > tdDistAlong + 1e-3) anchorDist = tdDistAlong;
-    return anchorDist;
-  }
-  function buildArrivalApproachPolylinePts(runwayId, rwDir, anchorDist, offset, tdPt) {
-    const pack = buildStraightApproachPolylineWorld(runwayId, rwDir, anchorDist, offset);
-    let apprPts;
-    if (pack && pack.pts && pack.pts.length >= 2) {
-      apprPts = pack.pts.slice();
-      const lastAp = apprPts[apprPts.length - 1];
-      if (Math.hypot(lastAp[0] - tdPt[0], lastAp[1] - tdPt[1]) > 1e-3) apprPts.push([tdPt[0], tdPt[1]]);
-    } else {
-      const rsPt = getRunwayPointAtDistance(runwayId, anchorDist);
-      const outer = approachPointBeforeThresholdJs(runwayId, rwDir, offset, anchorDist);
-      const mid = rsPt ? [rsPt[0], rsPt[1]] : [tdPt[0], tdPt[1]];
-      apprPts = [outer, mid];
-      if (rsPt && Math.hypot(rsPt[0] - tdPt[0], rsPt[1] - tdPt[1]) > 1e-3) apprPts.push([tdPt[0], tdPt[1]]);
-    }
-    return { pack: pack, apprPts: apprPts };
-  }
-  function arrivalApproachDurationSecBeforeEldt(f) {
-    const vTd = Math.max(1, touchdownSpeedMsForTimeline(f));
-    const token = f.token || {};
-    const runwayId = f.arrRunwayIdUsed || token.arrRunwayId || token.runwayId || f.arrRunwayId;
-    if (runwayId == null || runwayId === '') return APPROACH_OFFSET_WORLD_M / vTd;
-    const rwDir = String(f.arrRunwayDirUsed || 'clockwise');
-    const tdDist = touchdownDistMForTimeline(f);
-    const anchorDist = arrivalApproachAnchorDistM(runwayId, tdDist);
-    const tdPt = getRunwayPointAtDistance(runwayId, tdDist);
-    if (!tdPt) return APPROACH_OFFSET_WORLD_M / vTd;
-    const built = buildArrivalApproachPolylinePts(runwayId, rwDir, anchorDist, APPROACH_OFFSET_WORLD_M, tdPt);
-    const apprPts = built.apprPts;
-    if (!apprPts || apprPts.length < 2) return APPROACH_OFFSET_WORLD_M / vTd;
-    return polylineRawDurationSegmentVelocities(apprPts, function() { return vTd; });
-  }
-  
-  function getFlightAirsideWindowSec(f) {
-    if (!f) return null;
-    if (f.noWayArr && f.noWayDep) return null;
-    if (f.arrDep === 'Dep') {
-      const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], flightEMinutesPrefer(f, ['timeMin'], 0) + (typeof f.dwellMin === 'number' ? f.dwellMin : 0));
-      const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
-      const eobtS = eobtMin * 60;
-      const etotS = etotMin * 60;
-      const depRotS = Math.max(0, (typeof computeDepRotSecondsForFlight === 'function')
-        ? computeDepRotSecondsForFlight(f)
-        : (Math.max(0, Number(SCHED_DEP_ROT_MIN) || 0) * 60));
-      let depMoveStart = eobtS + depRotS;
-      if (depMoveStart > etotS) depMoveStart = eobtS;
-      return { t0: depMoveStart, t1: etotS };
-    }
-    const eldtMin = flightEMinutesPrefer(f, ['eldtMin'], flightEMinutesPrefer(f, ['timeMin'], 0));
-    const eibtMin = flightEMinutesPrefer(f, ['eibtMin'], eldtMin + 15);
-    const eobtMin = flightEMinutesPrefer(f, ['eobtMin'], eibtMin + (typeof f.dwellMin === 'number' && isFinite(f.dwellMin) ? f.dwellMin : 45));
-    const etotMin = flightEMinutesPrefer(f, ['etotMin'], eobtMin + 30);
-    const eldtS = eldtMin * 60;
-    const etotS = etotMin * 60;
-    const tAppr = arrivalApproachDurationSecBeforeEldt(f);
-    if (!isFinite(tAppr) || tAppr < 0) return null;
-    const t0 = eldtS - tAppr;
-    if (!isFinite(t0) || !isFinite(etotS)) return null;
-    return { t0: t0, t1: etotS };
-  }
-  
-  function simAirsideLazyPadSec() {
-    return Math.max(90, SIM_TIME_SLIDER_SNAP_SEC + 45);
-  }
-  function isFlightAirsideActiveAtSimSec(f, tSec) {
-    const w = getFlightAirsideWindowSec(f);
-    if (!w || !isFinite(Number(tSec))) return false;
-    const t = Number(tSec);
-    return t >= w.t0 - 1e-3 && t <= w.t1 + 1e-3;
-  }
-  function isFlightAirsideLazyTimelineBuildEligible(f, tSec) {
-    const w = getFlightAirsideWindowSec(f);
-    if (!w || !isFinite(Number(tSec))) return false;
-    const t = Number(tSec);
-    const pad = simAirsideLazyPadSec();
-    return t >= w.t0 - pad - 1e-3 && t <= w.t1 + 1e-3;
-  }
-  function nearestIndexOnPolylineForTd(pts, q) {
-    if (!pts || pts.length < 2) return 0;
-    let bestI = 0, bestD2 = Infinity;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const pr = projectOnSegment(pts[i], pts[i + 1], q);
-      const d2 = dist2(pr.p, q);
-      if (d2 < bestD2) { bestD2 = d2; bestI = i; }
-    }
-    return bestI;
-  }
-  function trimPolylineFromNearPoint(pts, nearPt) {
-    if (!pts || pts.length < 2) return pts ? pts.slice() : [];
-    const idx = nearestIndexOnPolylineForTd(pts, nearPt);
-    const a = pts[idx], b = pts[idx + 1];
-    const pr = projectOnSegment(a, b, nearPt);
-    const t = Math.max(0, Math.min(1, pr.t));
-    const start = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
-    const out = [start];
-    for (let j = idx + 1; j < pts.length; j++) out.push([pts[j][0], pts[j][1]]);
-    return out.length >= 2 ? out : pts.slice();
-  }
-  function approachPointBeforeThresholdJs(runwayId, rwDir, offsetWorld, touchdownDistAlong) {
-    const r = getRunwayPath(runwayId);
-    const td = getRunwayPointAtDistance(runwayId, touchdownDistAlong);
-    if (!r || !r.pts || r.pts.length < 2) return td || [0, 0];
-    const pts = r.pts;
-    let segIdx = Math.max(0, pts.length - 2);
-    let acc = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const segLen = pathDist(pts[i], pts[i + 1]);
-      if (segLen < 1e-9) continue;
-      if (acc + segLen >= touchdownDistAlong - 1e-6) { segIdx = i; break; }
-      acc += segLen;
-    }
-    const p1 = pts[segIdx], p2 = pts[segIdx + 1];
-    const segLen = pathDist(p1, p2) || 1;
-    let ux = (p2[0] - p1[0]) / segLen, uy = (p2[1] - p1[1]) / segLen;
-    if (rwDir === 'counter_clockwise') { ux = -ux; uy = -uy; }
-    return [td[0] - ux * offsetWorld, td[1] - uy * offsetWorld];
-  }
-  function mergeTimelineSegments(a, b) {
-    if (!a || !a.length) return b ? b.slice() : [];
-    if (!b || !b.length) return a.slice();
-    const out = a.slice();
-    const last = out[out.length - 1], first = b[0];
-    if (Math.abs(last.t - first.t) < 1e-3 && Math.abs(last.x - first.x) < 0.1) out.pop();
-    for (let i = 0; i < b.length; i++) out.push(b[i]);
-    return out;
-  }
-  function polylineTotalLength(pts) {
-    if (!pts || pts.length < 2) return 0;
-    let s = 0;
-    for (let i = 0; i < pts.length - 1; i++) s += pathDist(pts[i], pts[i + 1]);
-    return s;
-  }
-  function polylinePointAtDistance(pts, distAlong) {
-    if (!pts || !pts.length) return [0, 0];
-    const d = Math.max(0, Number(distAlong) || 0);
-    if (d <= 1e-12) return [pts[0][0], pts[0][1]];
-    let acc = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const seg = pathDist(a, b);
-      if (seg < 1e-9) continue;
-      if (acc + seg >= d - 1e-9) {
-        const t = Math.max(0, Math.min(1, (d - acc) / seg));
-        return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
-      }
-      acc += seg;
-    }
-    const last = pts[pts.length - 1];
-    return [last[0], last[1]];
-  }
-  function polylineSplitAtDistance(pts, cutDist) {
-    if (!pts || pts.length < 2) return { first: pts ? pts.slice() : [], second: [] };
-    const cut = Math.max(0, Number(cutDist) || 0);
-    if (cut <= 1e-9) return { first: [[pts[0][0], pts[0][1]]], second: pts.slice() };
-    let acc = 0;
-    const first = [[pts[0][0], pts[0][1]]];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const seg = pathDist(a, b);
-      if (seg < 1e-9) continue;
-      if (acc + seg >= cut - 1e-9) {
-        const t = Math.max(0, Math.min(1, (cut - acc) / seg));
-        const px = a[0] + t * (b[0] - a[0]), py = a[1] + t * (b[1] - a[1]);
-        if (dist2(first[first.length - 1], [px, py]) > 1e-8) first.push([px, py]);
-        const second = [[px, py]];
-        for (let j = i + 1; j < pts.length; j++) second.push([pts[j][0], pts[j][1]]);
-        return { first: dedupePathPoints(first), second: dedupePathPoints(second) };
-      }
-      acc += seg;
-      if (dist2(first[first.length - 1], b) > 1e-8) first.push([b[0], b[1]]);
-    }
-    return { first: dedupePathPoints(first), second: [[pts[pts.length - 1][0], pts[pts.length - 1][1]]] };
-  }
-  function aircraftDecelMs2ForTimeline(f) {
-    const ac = (typeof getAircraftInfoByType === 'function') ? getAircraftInfoByType(f && f.aircraftType) : null;
-    const a = ac && typeof ac.deceleration_avg_ms2 === 'number' ? ac.deceleration_avg_ms2 : null;
-    if (typeof a === 'number' && isFinite(a) && a > 0.05) return Math.min(5, Math.max(0.05, a));
-    return 1.2;
-  }
-  function nearestTaxiInfraD2ForMidpoint(mid) {
-    let bestApronD2 = Infinity;
-    let bestTaxiD2 = Infinity;
-    let bestTw = null;
-    const apronList = state.apronLinks || [];
-    for (let ai = 0; ai < apronList.length; ai++) {
-      const poly = getApronLinkPolylineWorldPts(apronList[ai]);
-      if (!poly || poly.length < 2) continue;
-      for (let j = 0; j < poly.length - 1; j++) {
-        const pr = projectOnSegment(poly[j], poly[j + 1], mid);
-        const d2 = dist2(pr.p, mid);
-        if (d2 < bestApronD2) bestApronD2 = d2;
-      }
-    }
-    const list = state.taxiways || [];
-    for (let ti = 0; ti < list.length; ti++) {
-      const tw = list[ti];
-      const ot = getOrderedPoints(tw);
-      if (!ot || ot.length < 2) continue;
-      for (let j = 0; j < ot.length - 1; j++) {
-        const pr = projectOnSegment(ot[j], ot[j + 1], mid);
-        const d2 = dist2(pr.p, mid);
-        if (d2 < bestTaxiD2) { bestTaxiD2 = d2; bestTw = tw; }
-      }
-    }
-    return { bestApronD2, bestTaxiD2, bestTw };
-  }
-  function taxiHitFromMidpoint(mid) {
-    const { bestApronD2, bestTaxiD2, bestTw } = nearestTaxiInfraD2ForMidpoint(mid);
-    const hasA = bestApronD2 < Infinity;
-    const hasT = bestTaxiD2 < Infinity;
-    if (hasA && (!hasT || bestApronD2 <= bestTaxiD2)) return { kind: 'apron' };
-    if (hasT && bestTw) return { kind: 'tw', tw: bestTw };
-    return { kind: 'tw', tw: null };
-  }
-  function taxiSegmentVelocityMsFromHit(hit, carry) {
-    const fallback = getTaxiwayAvgMoveVelocityForPath(null);
-    if (hit.kind === 'apron') return Math.max(0.1, APRON_TAXIWAY_SPEED_MS);
-    const tw = hit.tw;
-    if (!tw) return Math.max(1, fallback);
-    const pt = tw.pathType || 'taxiway';
-    if (pt === 'runway_exit') {
-      const v = carry.lastTaxiwayMs;
-      return Math.max(1, (typeof v === 'number' && v > 0) ? v : fallback);
-    }
-    if (pt === 'taxiway') {
-      const v = getTaxiwayAvgMoveVelocityForPath(tw);
-      carry.lastTaxiwayMs = v;
-      return Math.max(1, v);
-    }
-    if (pt === 'runway') return Math.max(1, getTaxiwayAvgMoveVelocityForPath(tw));
-    return Math.max(1, getTaxiwayAvgMoveVelocityForPath(tw));
-  }
-  function taxiSegmentVelocityMsForPolylineSegment(p1, p2, carry) {
-    const mx = (p1[0] + p2[0]) * 0.5, my = (p1[1] + p2[1]) * 0.5;
-    const hit = taxiHitFromMidpoint([mx, my]);
-    return taxiSegmentVelocityMsFromHit(hit, carry);
-  }
-  function makeTaxiSegmentVelocityCallback() {
-    const carry = { lastTaxiwayMs: null };
-    return function(i, a, b) { return taxiSegmentVelocityMsForPolylineSegment(a, b, carry); };
-  }
-  function polylineRawDurationSegmentVelocities(pts, velForSeg) {
-    if (!pts || pts.length < 2) return 0;
-    let total = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const len = pathDist(pts[i], pts[i + 1]);
-      if (len < 1e-9) continue;
-      const v = Math.max(1, velForSeg(i, pts[i], pts[i + 1]));
-      total += len / v;
-    }
-    return total;
-  }
-  function polylineTimelineBySegmentSpeeds(pts, tStart, tEnd, velForSeg) {
-    if (!pts || pts.length < 2 || tEnd <= tStart + 1e-9) {
-      const p = pts && pts.length ? pts[0] : [0, 0];
-      return [{ t: tStart, x: p[0], y: p[1] }];
-    }
-    const lengths = [];
-    for (let i = 0; i < pts.length - 1; i++) lengths.push(pathDist(pts[i], pts[i + 1]));
-    const rawDts = [];
-    for (let i = 0; i < lengths.length; i++) {
-      const v = Math.max(1, velForSeg(i, pts[i], pts[i + 1]));
-      rawDts.push((lengths[i] < 1e-9 ? 0 : lengths[i] / v));
-    }
