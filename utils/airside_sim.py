@@ -5151,6 +5151,26 @@ def _intersection_node_id(node_idx: int) -> str:
     return f"N{int(node_idx)}"
 
 
+def _exit_intersection_id_after_edge(agent: Flight, edge_index: int, er: EdgeResource) -> Optional[str]:
+    """Directed exit junction after traversing ``agent.edge_ids[edge_index]`` (matches motion, not layout row order)."""
+
+    eids = agent.edge_ids
+    guv = agent.segment_graph_uv
+    if not eids or not guv:
+        return None
+    if len(guv) != len(eids):
+        return None
+    ei = int(edge_index)
+    if ei < 0 or ei >= len(eids):
+        return None
+    try:
+        guv_l = list(guv)
+        _u, v = guv_l[ei]
+        return _intersection_node_id(int(v))
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
 def _directed_rec_for_pair(
     g: PathGraph, a: int, b: int
 ) -> Optional[DirectedEdgeRecord]:
@@ -7516,7 +7536,7 @@ def can_reserve_path(
         ):
             return False, f"separation:{eid}"
         if idx < len(lookahead) - 1:
-            ir_id = er.intersection_out
+            ir_id = _exit_intersection_id_after_edge(agent, idx, er) or er.intersection_out
             if ir_id:
                 ir = ir_get_crp(ir_id)
                 if ir is not None and not ir.forced_open:
@@ -7527,7 +7547,13 @@ def can_reserve_path(
                     interior_ir = not _edge_uses_full_depth_reservation(
                         agent, idx, control_state
                     )
-                    if interior_ir or billed_ir > depth_ir:
+                    # Imminent junction (edge after the current front segment): always honour
+                    # other agents' intersection ``reserved_by``. Deep lookahead slots use the
+                    # depth-based shortcut so billing stacks (e.g. apron_link + stand slot) do not
+                    # suppress reservation visibility at the next physical junction.
+                    if int(idx) == 0:
+                        iu = _resource_use_count(ir.occupied_by, ir.reserved_by, aid)
+                    elif interior_ir or billed_ir > depth_ir:
                         iu = _resource_use_count(ir.occupied_by, [], aid)
                     else:
                         iu = _resource_use_count(ir.occupied_by, ir.reserved_by, aid)
@@ -7680,20 +7706,23 @@ def reserve_path(
                         er.reserved_by.append(aid)
         if idx >= n_la - 1:
             continue
-        if er is None or not er.intersection_out:
+        if er is None:
             continue
-        k = idx
-        er_k = er
-        if er_k.runway_id:
-            if k >= depth_cap:
+        if er.runway_id:
+            if idx >= depth_cap:
                 continue
         else:
-            if not _edge_uses_full_depth_reservation(agent, k, control_state):
+            if not _edge_uses_full_depth_reservation(agent, idx, control_state):
                 continue
-            bk = _billed_at(k)
-            if bk > depth_cap:
+            bk = _billed_at(idx)
+            # Always reserve the junction immediately after the current front edge (``idx == 0``)
+            # so apron / pipeline billing (can push ``bk`` above ``depth_cap`` on the first hop)
+            # does not skip intersection claims.
+            if bk > depth_cap and int(idx) > 0:
                 continue
-        iid = er_k.intersection_out
+        iid = _exit_intersection_id_after_edge(agent, idx, er) or er.intersection_out
+        if not iid:
+            continue
         ir = ir_get_rp(iid)
         if ir is not None and aid not in ir.reserved_by:
             ir.reserved_by.append(aid)
