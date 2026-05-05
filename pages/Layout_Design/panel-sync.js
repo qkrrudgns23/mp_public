@@ -1,3 +1,68 @@
+  }
+  /** Area markers are drawn under other layout objects; keep them at the front of the array (low z in reverse hit-test). */
+  function normalizeLayoutMarkerAreaZOrder(markers) {
+    if (!Array.isArray(markers) || !markers.length) return markers || [];
+    const areas = [];
+    const rest = [];
+    for (let i = 0; i < markers.length; i++) {
+      const m = markers[i];
+      if (!m) continue;
+      if (m.kind === 'area') areas.push(m);
+      else rest.push(m);
+    }
+    return areas.concat(rest);
+  }
+  function _flightApronFallbackStandId(f) {
+    if (!f) return null;
+    const t = f.token && typeof f.token === 'object' ? f.token : {};
+    const raw = f.depApronId != null ? f.depApronId
+      : (f.standId != null ? f.standId
+        : (t.apronId != null ? t.apronId
+          : (f.arrApronId != null ? f.arrApronId : null)));
+    return raw != null && String(raw).trim() !== '' ? String(raw) : null;
+  }
+  function _flightApronBaseSibtMin(f) {
+    const v = f && f.sibtMin != null ? Number(f.sibtMin) : (f && f.timeMin != null ? Number(f.timeMin) : 0);
+    return isFinite(v) ? Math.max(0, v) : 0;
+  }
+  function _flightApronBaseSobtMin(f, sibtMin) {
+    const raw = f && f.sobtMin != null ? Number(f.sobtMin) : NaN;
+    if (isFinite(raw) && raw > sibtMin) return raw;
+    const dwell = f && f.dwellMin != null && isFinite(Number(f.dwellMin)) ? Math.max(0, Number(f.dwellMin)) : 0;
+    return Math.max(sibtMin, sibtMin + dwell);
+  }
+  function normalizeFlightApronStaySegments(f) {
+    if (!f) return [];
+    const fallbackStandId = _flightApronFallbackStandId(f);
+    const rawSegs = Array.isArray(f.apronStaySegments) ? f.apronStaySegments : [];
+    let segs = rawSegs.map(function(seg) {
+      if (!seg || typeof seg !== 'object') return null;
+      const sibt = Number(seg.sibtMin);
+      const sobt = Number(seg.sobtMin);
+      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return null;
+      const sidRaw = seg.standId != null ? seg.standId : fallbackStandId;
+      return {
+        standId: sidRaw != null && String(sidRaw).trim() !== '' ? String(sidRaw) : null,
+        sibtMin: Math.max(0, sibt),
+        sobtMin: Math.max(0, sobt)
+      };
+    }).filter(Boolean);
+    if (!segs.length) {
+      const sibt = _flightApronBaseSibtMin(f);
+      segs = [{
+        standId: fallbackStandId,
+        sibtMin: sibt,
+        sobtMin: _flightApronBaseSobtMin(f, sibt)
+      }];
+    }
+    segs.sort(function(a, b) {
+      if (a.sibtMin !== b.sibtMin) return a.sibtMin - b.sibtMin;
+      return a.sobtMin - b.sobtMin;
+    });
+    f.apronStaySegments = segs;
+    return segs;
+  }
+  function mergeAdjacentSameStandApronSegments(segs) {
     const out = [];
     (segs || []).forEach(function(seg) {
       if (!seg) return;
@@ -608,68 +673,3 @@
     const out = [];
     let s0 = nums[0], e0 = nums[0];
     for (let j = 1; j < nums.length; j++) {
-      const n = nums[j];
-      if (n <= e0 + 1) e0 = n;
-      else {
-        out.push([s0, e0]);
-        s0 = e0 = n;
-      }
-    }
-    out.push([s0, e0]);
-    return out;
-  }
-  /** True if compact playback track records any deadlock ghost sample (simulation seconds). */
-  function allocFlightTrackHasDeadlock(trDead) {
-    return !!(trDead && Array.isArray(trDead.dghost_t) && trDead.dghost_t.length > 0);
-  }
-  /** Flight Schedule row: deadlock from last Pro Sim compact playback, timeline ghost, or persisted id set. */
-  function flightScheduleRowHasDeadlock(f) {
-    if (!f || f.id == null) return false;
-    const idStr = String(f.id);
-    if (state.deadlockFlightIdsFromLastSim && state.deadlockFlightIdsFromLastSim[idStr]) return true;
-    const tr = compactPlaybackTrackForFlight(f);
-    if (allocFlightTrackHasDeadlock(tr)) return true;
-    if (f.timeline && Array.isArray(f.timeline)) {
-      for (let i = 0; i < f.timeline.length; i++) {
-        if (f.timeline[i] && f.timeline[i].deadlockGhost === true) return true;
-      }
-    }
-    return false;
-  }
-  /** Gantt apron bar: red overlay only where sim seconds fall in merged dghost ranges (time axis = sec/60). */
-  function allocFlightDeadlockOverlayHtml(trDead, segT0Min, segT1Min, visT0Min, visT1Min) {
-    if (!trDead || !Array.isArray(trDead.dghost_t) || !trDead.dghost_t.length) return '';
-    const ranges = compactPlaybackDghostMergedRangesSec(trDead);
-    if (!ranges.length) return '';
-    const denom = visT1Min - visT0Min;
-    if (!(denom > 1e-12)) return '';
-    const parts = [];
-    for (let r = 0; r < ranges.length; r++) {
-      const ds = ranges[r][0], de = ranges[r][1];
-      const m0 = ds / 60;
-      const m1 = (de + 1) / 60;
-      const a = Math.max(visT0Min, m0, segT0Min);
-      const b = Math.min(visT1Min, m1, segT1Min);
-      if (!(b > a + 1e-12)) continue;
-      const leftRel = ((a - visT0Min) / denom) * 100;
-      const wRel = Math.max(0.5, ((b - a) / denom) * 100);
-      parts.push('<div class="alloc-flight-deadlock-seg" style="left:' + leftRel + '%;width:' + wRel + '%;"></div>');
-    }
-    return parts.length ? parts.join('') : '';
-  }
-  function compactPlaybackTugIntervals(track) {
-    if (!track) return [];
-    if (Array.isArray(track.__tugIntervals)) return track.__tugIntervals;
-    const raw = Array.isArray(track.tug_intervals) ? track.tug_intervals : [];
-    const out = [];
-    for (let i = 0; i < raw.length; i++) {
-      const it = raw[i];
-      if (!it || typeof it !== 'object') continue;
-      const start = Number(it.start != null ? it.start : it.t0);
-      const end = Number(it.end != null ? it.end : it.t1);
-      if (isFinite(start) && isFinite(end) && end > start) out.push({ start: start, end: end });
-    }
-    track.__tugIntervals = out;
-    return out;
-  }
-  function compactPlaybackNeedsTugAt(track, tSec) {

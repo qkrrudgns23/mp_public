@@ -1,3 +1,66 @@
+        dlBanT.textContent = '';
+      }
+    }
+    const allow = !!state.designerPageUpdateFresh && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap;
+    if (btn) {
+      btn.disabled = !allow;
+      btn.classList.toggle('global-update-blocked-arr-ret', hasRetFail);
+      btn.classList.toggle('global-update-blocked-apron', hasApronDuplicated);
+      btn.classList.toggle('global-update-blocked-stand-overlap', hasStandWindowOverlap && !hasRetFail && !hasApronDuplicated);
+      if (!state.designerPageUpdateFresh) {
+        btn.setAttribute('title', 'Run Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
+      } else if (hasRetFail) {
+        const n = failedRegs.length;
+        const shortList = n > 5 ? (failedRegs.slice(0, 3).join(', ') + ', etc. (' + n + ' total)') : failedRegs.join(', ');
+        btn.setAttribute('title', 'Pro Sim is disabled: no valid runway exit. ' + shortList);
+      } else if (hasApronDuplicated) {
+        const n = apronIssues.length;
+        const shortList = n > 5 ? (apronIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' total)') : apronIssues.map(function(it) { return it.reg; }).join(', ');
+        btn.setAttribute('title', 'Pro Sim is disabled: Apron duplicated. ' + shortList);
+      } else if (hasStandWindowOverlap) {
+        const n = standOverlapIssues.length;
+        const shortList = n > 5 ? (standOverlapIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' flights)') : standOverlapIssues.map(function(it) { return it.reg; }).join(', ');
+        btn.setAttribute('title', 'Pro Sim is disabled: overlapping stand SIBT–SOBT windows. ' + shortList);
+      } else {
+        btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
+      }
+    }
+    if (dot) {
+      if (hasRetFail) {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Runway exit failure — resolve all arrival RET issues before Pro Sim.');
+      } else if (hasApronDuplicated) {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Apron duplicated — resolve all red Apron Gantt bars before Pro Sim.');
+      } else if (hasStandWindowOverlap) {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Resolve overlapping stand SIBT–SOBT windows before Pro Sim.');
+      } else if (state.globalUpdateFresh) {
+        dot.classList.remove('stale');
+        dot.classList.add('fresh');
+        dot.setAttribute('title', 'All views match the last Pro Sim run');
+      } else {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Layout or schedule changed — run Pro Sim again to refresh (results apply when done)');
+      }
+    }
+    const playDock = document.getElementById('btnShowPlayDock');
+    const playbackFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !!state.globalUpdateFresh;
+    const allowPlay = !!state.hasSimulationResult && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap;
+    if (playDock) {
+      playDock.disabled = !allowPlay;
+      if (!state.hasSimulationResult) {
+        playDock.setAttribute('title', '시뮬레이션 결과가 있을 때 재생 바를 엽니다');
+      } else if (hasRetFail) {
+        playDock.setAttribute('title', 'Runway exit failure가 있어 재생을 막았습니다');
+      } else if (hasApronDuplicated) {
+        playDock.setAttribute('title', 'Apron duplicated가 있어 Pro Sim/재생을 막았습니다');
+      } else if (hasStandWindowOverlap) {
+        playDock.setAttribute('title', 'Overlapping stand schedule blocks Pro Sim and playback.');
       } else if (playbackFresh) {
         playDock.setAttribute('title', '최신 Pro Sim 결과를 재생합니다');
       } else {
@@ -257,7 +320,9 @@
     const hasRetFail = failedRegs.length > 0;
     const apronIssues = typeof getApronDuplicatedRegsForProSimUi === 'function' ? getApronDuplicatedRegsForProSimUi() : [];
     const hasApronDuplicated = apronIssues.length > 0;
-    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !!state.globalUpdateFresh;
+    const standOv = typeof getApronStandWindowOverlapRegsForProSimUi === 'function' ? getApronStandWindowOverlapRegsForProSimUi() : [];
+    const hasStandWindowOverlap = standOv.length > 0;
+    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !!state.globalUpdateFresh;
     const heatmapAllowed = heatOk && proSimUiFresh;
     if (!heatmapAllowed && state.mapTypeMode === 'heatmap') state.mapTypeMode = 'normal';
     if (!heatOk && state.mapTypeMode !== 'normal') state.mapTypeMode = 'normal';
@@ -665,68 +730,3 @@
   }
   function isLayoutPolygonMarkerKind(kind) {
     return kind === 'island' || kind === 'area';
-  }
-  /** Area markers are drawn under other layout objects; keep them at the front of the array (low z in reverse hit-test). */
-  function normalizeLayoutMarkerAreaZOrder(markers) {
-    if (!Array.isArray(markers) || !markers.length) return markers || [];
-    const areas = [];
-    const rest = [];
-    for (let i = 0; i < markers.length; i++) {
-      const m = markers[i];
-      if (!m) continue;
-      if (m.kind === 'area') areas.push(m);
-      else rest.push(m);
-    }
-    return areas.concat(rest);
-  }
-  function _flightApronFallbackStandId(f) {
-    if (!f) return null;
-    const t = f.token && typeof f.token === 'object' ? f.token : {};
-    const raw = f.depApronId != null ? f.depApronId
-      : (f.standId != null ? f.standId
-        : (t.apronId != null ? t.apronId
-          : (f.arrApronId != null ? f.arrApronId : null)));
-    return raw != null && String(raw).trim() !== '' ? String(raw) : null;
-  }
-  function _flightApronBaseSibtMin(f) {
-    const v = f && f.sibtMin != null ? Number(f.sibtMin) : (f && f.timeMin != null ? Number(f.timeMin) : 0);
-    return isFinite(v) ? Math.max(0, v) : 0;
-  }
-  function _flightApronBaseSobtMin(f, sibtMin) {
-    const raw = f && f.sobtMin != null ? Number(f.sobtMin) : NaN;
-    if (isFinite(raw) && raw > sibtMin) return raw;
-    const dwell = f && f.dwellMin != null && isFinite(Number(f.dwellMin)) ? Math.max(0, Number(f.dwellMin)) : 0;
-    return Math.max(sibtMin, sibtMin + dwell);
-  }
-  function normalizeFlightApronStaySegments(f) {
-    if (!f) return [];
-    const fallbackStandId = _flightApronFallbackStandId(f);
-    const rawSegs = Array.isArray(f.apronStaySegments) ? f.apronStaySegments : [];
-    let segs = rawSegs.map(function(seg) {
-      if (!seg || typeof seg !== 'object') return null;
-      const sibt = Number(seg.sibtMin);
-      const sobt = Number(seg.sobtMin);
-      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return null;
-      const sidRaw = seg.standId != null ? seg.standId : fallbackStandId;
-      return {
-        standId: sidRaw != null && String(sidRaw).trim() !== '' ? String(sidRaw) : null,
-        sibtMin: Math.max(0, sibt),
-        sobtMin: Math.max(0, sobt)
-      };
-    }).filter(Boolean);
-    if (!segs.length) {
-      const sibt = _flightApronBaseSibtMin(f);
-      segs = [{
-        standId: fallbackStandId,
-        sibtMin: sibt,
-        sobtMin: _flightApronBaseSobtMin(f, sibt)
-      }];
-    }
-    segs.sort(function(a, b) {
-      if (a.sibtMin !== b.sibtMin) return a.sibtMin - b.sibtMin;
-      return a.sobtMin - b.sobtMin;
-    });
-    f.apronStaySegments = segs;
-    return segs;
-  }
-  function mergeAdjacentSameStandApronSegments(segs) {

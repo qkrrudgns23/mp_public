@@ -1,3 +1,68 @@
+    return out;
+  }
+  function pathArcComputePreviewWorldPxFromAB(Ax, Ay, Bx, By, wx, wy) {
+    const dx = Bx - Ax, dy = By - Ay;
+    const chordLen = Math.hypot(dx, dy) || 1;
+    const ex = dx / chordLen, ey = dy / chordLen;
+    const nx = -ey, ny = ex;
+    const M = [(Ax + Bx) * 0.5, (Ay + By) * 0.5];
+    let h = (wx - M[0]) * nx + (wy - M[1]) * ny;
+    const maxH = chordLen * PATH_ARC_MAX_BULGE_FRAC;
+    h = Math.max(-maxH, Math.min(maxH, h));
+    if (Math.abs(h) < PATH_ARC_MIN_BULGE_PX) return [[Ax, Ay], [Bx, By]];
+    const Cx = M[0] + nx * h, Cy = M[1] + ny * h;
+    return pathArcSampleThreePointWorldPx(Ax, Ay, Bx, By, Cx, Cy, Math.max(CELL_SIZE * 0.28, chordLen / 28));
+  }
+  function pathArcComputePreviewWorldPx(tw, vertexIndex, wx, wy) {
+    if (!tw || tw.pathType === 'runway') return null;
+    const verts = tw.vertices;
+    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return null;
+    const A = cellToPixel(verts[vertexIndex - 1].col, verts[vertexIndex - 1].row);
+    const B = cellToPixel(verts[vertexIndex + 1].col, verts[vertexIndex + 1].row);
+    return pathArcComputePreviewWorldPxFromAB(A[0], A[1], B[0], B[1], wx, wy);
+  }
+  function pathArcCommitIslandVertexFromPreview(mk, vertexIndex, previewPx, snapToGrid) {
+    if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !previewPx || previewPx.length < 2) return;
+    const verts = mk.points;
+    const n = verts ? verts.length : 0;
+    if (!verts || n < 3 || vertexIndex < 0 || vertexIndex >= n) return;
+    const prev = verts[(vertexIndex - 1 + n) % n];
+    const next = verts[(vertexIndex + 1) % n];
+    const Apx = [Number(prev.x), Number(prev.y)];
+    const Bpx = [Number(next.x), Number(next.y)];
+    const workPx = previewPx.map(function(p, j) {
+      if (j === 0) return [Apx[0], Apx[1]];
+      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
+      return [p[0], p[1]];
+    });
+    const cells = [];
+    if (previewPx.length > 2) {
+      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
+      for (let k = 0; k < densePx.length; k++) {
+        const snap = worldPointToPixel(densePx[k][0], densePx[k][1], snapToGrid);
+        const c = { x: snap[0], y: snap[1] };
+        if (cells.length && cells[cells.length - 1].x === c.x && cells[cells.length - 1].y === c.y) continue;
+        if (c.x === prev.x && c.y === prev.y) continue;
+        cells.push(c);
+      }
+      while (cells.length && cells[cells.length - 1].x === next.x && cells[cells.length - 1].y === next.y) cells.pop();
+    }
+    if (!cells.length) {
+      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
+      const snap = worldPointToPixel(M[0], M[1], snapToGrid);
+      cells.push({ x: snap[0], y: snap[1] });
+    }
+    const newArr = verts.slice();
+    newArr.splice(vertexIndex, 1, ...cells);
+    mk.points = newArr;
+    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
+    state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: midSel };
+  }
+  function pathArcCommitFromPreview(tw, vertexIndex, previewPx, snapToGrid) {
+    if (!tw || tw.pathType === 'runway') return;
+    if (!previewPx || previewPx.length < 2) return;
+    const verts = tw.vertices;
+    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return;
     const prev = verts[vertexIndex - 1], next = verts[vertexIndex + 1];
     const Apx = cellToPixel(prev.col, prev.row);
     const Bpx = cellToPixel(next.col, next.row);
@@ -1052,68 +1117,3 @@
         layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
         directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
         flights: cloneFlightsWithoutPathPolylineCache(state.flights),
-        layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))
-      });
-      if (undoStack.length > maxUndoLevels) undoStack.shift();
-      syncPanelFromState();
-      invalidateGridUnderlay();
-      draw();
-    });
-  }
-  const gridLayoutImageFileEl = document.getElementById('gridLayoutImageFile');
-  if (gridLayoutImageFileEl) {
-    gridLayoutImageFileEl.addEventListener('change', function() {
-      const file = this.files && this.files[0];
-      if (!file) return;
-      const fileType = String(file.type || '').toLowerCase();
-      const fileName = String(file.name || 'Layout image');
-      const accepted = fileType === 'image/png' || fileType === 'image/jpeg' || fileType === 'image/svg+xml' ||
-        /\.(png|jpe?g|svg)$/i.test(fileName);
-      if (!accepted) {
-        alert('Only PNG, JPG, JPEG, and SVG files are supported.');
-        this.value = '';
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = function(ev) {
-        const dataUrl = ev && ev.target ? String(ev.target.result || '') : '';
-        if (!dataUrl) return;
-        const img = new Image();
-        img.onload = function() {
-          const widthM = state.layoutImageOverlay ? clampLayoutImageSize(state.layoutImageOverlay.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM) : GRID_LAYOUT_IMAGE_DEFAULTS.widthM;
-          const aspect = (img.naturalWidth > 0 && img.naturalHeight > 0)
-            ? (img.naturalHeight / img.naturalWidth)
-            : (GRID_LAYOUT_IMAGE_DEFAULTS.heightM / Math.max(GRID_LAYOUT_IMAGE_DEFAULTS.widthM, 1e-9));
-          const heightM = state.layoutImageOverlay
-            ? clampLayoutImageSize(state.layoutImageOverlay.heightM, Math.max(1, widthM * aspect))
-            : Math.max(1, widthM * aspect);
-          pushUndo();
-          state.layoutImageOverlay = normalizeLayoutImageOverlay({
-            name: fileName,
-            type: fileType || 'image/png',
-            dataUrl: dataUrl,
-            opacity: state.layoutImageOverlay ? state.layoutImageOverlay.opacity : GRID_LAYOUT_IMAGE_DEFAULTS.opacity,
-            widthM: widthM,
-            heightM: heightM,
-            originalWidthPx: img.naturalWidth || widthM,
-            originalHeightPx: img.naturalHeight || heightM,
-            topLeftCol: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftCol : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol,
-            topLeftRow: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftRow : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow
-          });
-          syncLayoutImageBitmap();
-          syncPanelFromState();
-          draw();
-        };
-        img.onerror = function() {
-          alert('Failed to read the selected layout image.');
-          gridLayoutImageFileEl.value = '';
-        };
-        img.src = dataUrl;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-  const clearGridLayoutImageBtn = document.getElementById('btnClearGridLayoutImage');
-  if (clearGridLayoutImageBtn) {
-    clearGridLayoutImageBtn.addEventListener('click', function() {
-      if (!state.layoutImageOverlay) return;

@@ -36,7 +36,8 @@
     .deadlock-ghost-banner__title { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: #fff; }
     .deadlock-ghost-banner__text { white-space: pre-line; }
     .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-arr-ret:disabled,
-    .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-apron:disabled { opacity: 1; cursor: not-allowed; pointer-events: none; color: #fecdd3; border-color: rgba(248, 113, 113, 0.5); background: rgba(127, 29, 29, 0.45); }
+    .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-apron:disabled,
+    .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-stand-overlap:disabled { opacity: 1; cursor: not-allowed; pointer-events: none; color: #fecdd3; border-color: rgba(248, 113, 113, 0.5); background: rgba(127, 29, 29, 0.45); }
     #grid-canvas {
       position: absolute;
       left: 0;
@@ -1057,6 +1058,13 @@
       color:#fee2e2;
       border:1px solid #f87171;
       box-shadow:0 0 0 1px rgba(248,113,113,0.35), 0 1px 4px rgba(127,29,29,0.55);
+    }
+    /** SIBT–SOBT window overlaps another flight on this stand or safety-linked stand (same rule as assignment reject). */
+    .alloc-flight.alloc-stand-window-overlap {
+      background:repeating-linear-gradient(135deg, #dc2626 0, #dc2626 5px, #1c1917 5px, #1c1917 10px);
+      color:#fecaca;
+      border:1px solid #f87171;
+      box-shadow:0 0 0 1px rgba(248,113,113,0.4), 0 1px 4px rgba(127,29,29,0.5);
     }
     
     .alloc-flight.alloc-flight-sbar-dim { opacity:var(--style-gantt-flight-dim-opacity, 0.4); }

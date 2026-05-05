@@ -1,3 +1,68 @@
+    const minLen = getStandDepthMeters(category) / 2 + 3;
+    const lenMeters = Number(document.getElementById('pbbLength').value || 15);
+    const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
+    const standAngleDeg = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
+    const bwEl = document.getElementById('pbbBoardingWidth');
+    const bhEl = document.getElementById('pbbBoardingHeight');
+    const boardingW = Math.max(0.5, Number(bwEl && bwEl.value) || 5);
+    const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
+    const wallX = ex, wallY = ey;
+    const bxOut = wallX + nx * boardingH, byOut = wallY + ny * boardingH;
+    const offM = PBB_NEW_CONTACT_STAND_SITE_OFFSET_M;
+    const newPbb = {
+      x1: wallX, y1: wallY, x2: bxOut, y2: byOut, category,
+      angleDeg: standAngleDeg,
+      apronSiteX: wallX + nx * offM,
+      apronSiteY: wallY + ny * offM,
+      terminalContactSetbackM: offM,
+      boardingWidthM: boardingW,
+      boardingHeightM: boardingH
+    };
+    if (pbbStandOverlapsExisting(newPbb)) return false;
+    const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
+    if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
+      alertDuplicateLayoutName();
+      return false;
+    }
+    pushUndo();
+    state.pbbStands.push(normalizePbbStandObject({
+      id: id(),
+      name: pbbNameCandidate,
+      x1: wallX, y1: wallY, x2: bxOut, y2: byOut,
+      category: newPbb.category,
+      terminalContactSetbackM: offM,
+      categoryMode: categoryMode,
+      allowedIcaoCategories: allowedIcaoCategories,
+      allowedAircraftTypes: panelAllowedTypes,
+      pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
+      angleDeg: standAngleDeg,
+      apronSiteX: newPbb.apronSiteX,
+      apronSiteY: newPbb.apronSiteY,
+      boardingWidthM: boardingW,
+      boardingHeightM: boardingH,
+      pbbArmLenM: armLen,
+      edgeCol: bestEdge.col,
+      edgeRow: bestEdge.row
+    }));
+    return true;
+  }
+  function tryPlaceRemoteAt(wx, wy) {
+    if (!isFinite(wx) || !isFinite(wy)) return false;
+    const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
+    if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) return false;
+    const uRm = readUnifiedNewStandConstraintFromPanel('remoteIcaoCategories', 'remoteAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uRm.categoryMode;
+    const category = uRm.category;
+    const allowedIcaoCategoriesR = uRm.allowedIcaoCategories;
+    const panelAllowedTypesR = uRm.allowedAircraftTypes;
+    const angleDeg = 0;
+    const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
+    const candCorners = getRemoteStandCorners(candidate);
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const o = state.remoteStands[i];
+      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
       const o = state.pbbStands[i];
       if (standFootprintsTooClose(candCorners, category, getPBBStandCorners(o), o.category || 'C')) return false;
     }
@@ -793,68 +858,3 @@
   }
   function formatMinutesToHHMM(m) {
     const parts = _splitTotalSeconds(_normalizeTimeToSeconds(m, 'minutes', 'floor'));
-    return parts.h + ':' + parts.mm;
-  }
-  function findNearestItem(candidates, getPoint, wx, wy, maxD2) {
-    const click = [wx, wy];
-    let best = null;
-    let bestD2 = maxD2;
-    for (let i = 0; i < candidates.length; i++) {
-      const c = candidates[i];
-      const pt = getPoint(c);
-      if (!pt || pt.length < 2) continue;
-      const d2 = dist2(pt, click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = c;
-      }
-    }
-    return best;
-  }
-  function closestPointOnSegment(p1, p2, p) {
-    const [x1,y1]=p1,[x2,y2]=p2,[px,py]=p;
-    const dx=x2-x1,dy=y2-y1,len2=dx*dx+dy*dy;
-    if (len2===0) return null;
-    let t = ((px-x1)*dx+(py-y1)*dy)/len2;
-    t = Math.max(0,Math.min(1,t));
-    return [x1+t*dx,y1+t*dy];
-  }
-  function getClosestTerminalEdgePoint(wx, wy) {
-    const click = [wx, wy];
-    let best = null;
-    let bestD2 = Infinity;
-    (state.terminals || []).forEach(function(term) {
-      if (!term || !term.closed || !Array.isArray(term.vertices) || term.vertices.length < 2) return;
-      for (let i = 0; i < term.vertices.length; i++) {
-        const v1 = term.vertices[i];
-        const v2 = term.vertices[(i + 1) % term.vertices.length];
-        const p1 = cellToPixel(v1.col, v1.row);
-        const p2 = cellToPixel(v2.col, v2.row);
-        const near = closestPointOnSegment(p1, p2, click);
-        if (!near) continue;
-        const d2 = dist2(near, click);
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = { point: near, term: term, edgeIndex: i };
-        }
-      }
-    });
-    return best;
-  }
-  function getPbbBoardingWidthM(pbb) {
-    const w = Number(pbb && pbb.boardingWidthM);
-    if (isFinite(w) && w > 0) return w;
-    return 5;
-  }
-  function getPbbBoardingHeightM(pbb) {
-    const h = Number(pbb && pbb.boardingHeightM);
-    if (isFinite(h) && h > 0) return h;
-    return 15;
-  }
-  function getPbbTerminalContactSetbackM(pbb) {
-    const v = Number(pbb && pbb.terminalContactSetbackM);
-    if (isFinite(v) && v >= 0) return v;
-    return 0;
-  }
-  function getPbbTerminalFrameFromEdge(term, edgeIndex, wallX, wallY) {
-    const v1 = term.vertices[edgeIndex], v2 = term.vertices[(edgeIndex + 1) % term.vertices.length];

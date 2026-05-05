@@ -1,3 +1,68 @@
+        layoutMarkers: JSON.parse(JSON.stringify(state.layoutMarkers || []))
+      });
+      if (undoStack.length > maxUndoLevels) undoStack.shift();
+      syncPanelFromState();
+      invalidateGridUnderlay();
+      draw();
+    });
+  }
+  const gridLayoutImageFileEl = document.getElementById('gridLayoutImageFile');
+  if (gridLayoutImageFileEl) {
+    gridLayoutImageFileEl.addEventListener('change', function() {
+      const file = this.files && this.files[0];
+      if (!file) return;
+      const fileType = String(file.type || '').toLowerCase();
+      const fileName = String(file.name || 'Layout image');
+      const accepted = fileType === 'image/png' || fileType === 'image/jpeg' || fileType === 'image/svg+xml' ||
+        /\.(png|jpe?g|svg)$/i.test(fileName);
+      if (!accepted) {
+        alert('Only PNG, JPG, JPEG, and SVG files are supported.');
+        this.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const dataUrl = ev && ev.target ? String(ev.target.result || '') : '';
+        if (!dataUrl) return;
+        const img = new Image();
+        img.onload = function() {
+          const widthM = state.layoutImageOverlay ? clampLayoutImageSize(state.layoutImageOverlay.widthM, GRID_LAYOUT_IMAGE_DEFAULTS.widthM) : GRID_LAYOUT_IMAGE_DEFAULTS.widthM;
+          const aspect = (img.naturalWidth > 0 && img.naturalHeight > 0)
+            ? (img.naturalHeight / img.naturalWidth)
+            : (GRID_LAYOUT_IMAGE_DEFAULTS.heightM / Math.max(GRID_LAYOUT_IMAGE_DEFAULTS.widthM, 1e-9));
+          const heightM = state.layoutImageOverlay
+            ? clampLayoutImageSize(state.layoutImageOverlay.heightM, Math.max(1, widthM * aspect))
+            : Math.max(1, widthM * aspect);
+          pushUndo();
+          state.layoutImageOverlay = normalizeLayoutImageOverlay({
+            name: fileName,
+            type: fileType || 'image/png',
+            dataUrl: dataUrl,
+            opacity: state.layoutImageOverlay ? state.layoutImageOverlay.opacity : GRID_LAYOUT_IMAGE_DEFAULTS.opacity,
+            widthM: widthM,
+            heightM: heightM,
+            originalWidthPx: img.naturalWidth || widthM,
+            originalHeightPx: img.naturalHeight || heightM,
+            topLeftCol: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftCol : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftCol,
+            topLeftRow: state.layoutImageOverlay ? state.layoutImageOverlay.topLeftRow : GRID_LAYOUT_IMAGE_DEFAULTS.topLeftRow
+          });
+          syncLayoutImageBitmap();
+          syncPanelFromState();
+          draw();
+        };
+        img.onerror = function() {
+          alert('Failed to read the selected layout image.');
+          gridLayoutImageFileEl.value = '';
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  const clearGridLayoutImageBtn = document.getElementById('btnClearGridLayoutImage');
+  if (clearGridLayoutImageBtn) {
+    clearGridLayoutImageBtn.addEventListener('click', function() {
+      if (!state.layoutImageOverlay) return;
       pushUndo();
       state.layoutImageOverlay = null;
       layoutImageBitmap = null;
@@ -2532,3 +2597,143 @@
 
   function warmFlightPathsForSchedule(flights) {
     void flights;
+  }
+
+  function warmPathsEnsureArrRetRot(flights, forceResampleRet) {
+    warmFlightPathsForSchedule(flights);
+    return (typeof ensureArrRetRotSampled === 'function')
+      ? ensureArrRetRotSampled(flights, !!forceResampleRet)
+      : getScheduleRetStatsAll();
+  }
+
+  function mutRotCfgEntryForType(configByType, f) {
+    const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+    const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
+    if (!typeKey) return null;
+    if (configByType[typeKey]) return configByType[typeKey];
+    const tdMu = (typeof ac?.touchdown_zone_avg_m === 'number') ? ac.touchdown_zone_avg_m : 900;
+    const vMu = (typeof ac?.touchdown_speed_avg_ms === 'number') ? ac.touchdown_speed_avg_ms : 70;
+    const aMu = (typeof ac?.deceleration_avg_ms2 === 'number') ? ac.deceleration_avg_ms2 : 2.5;
+    const tdSigma = Math.round(tdMu * 0.1);
+    const vSigma = Math.round(vMu * 0.1);
+    const aSigma = Math.round(aMu * 0.1 * 10) / 10;
+    configByType[typeKey] = { tdMu, tdSigma, vMu, vSigma, aMu, aSigma };
+    return configByType[typeKey];
+  }
+  /** Same runway resolution as graphPathArrival (token.arrRunwayId before generic runwayId). */
+  function resolveArrivalRunwayIdForFlight(f) {
+    if (!f) return null;
+    const t = f.token || {};
+    return t.arrRunwayId || t.runwayId || f.arrRunwayId || null;
+  }
+  function isValidSampledArrRetForFlight(f, retStatsAll) {
+    if (!f || f.sampledArrRet == null) return false;
+    if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
+    return retStatsAll.some(function(r) {
+      if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
+      if (arrRunwayId == null) return true;
+      return !!(r.runway && r.runway.id === arrRunwayId);
+    });
+  }
+  /** Runway-exit (RET) sampling for Arrival Configuration / schedule RET column. ROT(arr) seconds come from Pro Sim schedule (``ARR_ROT_SEC``), not from this function. */
+  function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {
+    if (!f) return;
+    const rev = state.vttArrCacheRev | 0;
+    if (!forceResample && f.timeline_meta && typeof f.timeline_meta === 'object' &&
+        f.timeline_meta.playbackSource === 'des_result') {
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
+    if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
+        f.sampledArrRet != null && f.arrRetFailed === false &&
+        isValidSampledArrRetForFlight(f, retStatsAll)) {
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    if (f.sampledArrRet != null && !isValidSampledArrRetForFlight(f, retStatsAll)) {
+      f.sampledArrRet = null;
+      f.arrRetFailed = false;
+      f.arrDecelMs2 = null;
+    }
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
+    const cfg = mutRotCfgEntryForType(configByType, f);
+    if (!cfg || !retStatsAll || !retStatsAll.length || arrRunwayId == null) {
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
+    const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
+    const tdMin = cfg.tdMu * 0.85;
+    const tdMax = cfg.tdMu * 1.15;
+    const dTd = clamp(tdSample, Math.max(0, tdMin), Math.max(0, tdMax));
+    const vSample = sampleNormal(cfg.vMu, cfg.vSigma);
+    const vMin = cfg.vMu * 0.85;
+    const vMax = cfg.vMu * 1.15;
+    const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
+    const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
+    const aMin = Math.max(0.1, cfg.aMu * 0.85);
+    const aMax = Math.min(6,   cfg.aMu * 1.15);
+    const aDec = clamp(aSample, aMin, aMax);
+    const candidates = retStatsAll.filter(function(r) {
+      return !!(r && r.runway && r.runway.id === arrRunwayId && r.exit);
+    });
+    if (!candidates.length) {
+      f.arrDecelMs2 = null;
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    let chosen = null;
+    candidates.forEach(r => {
+      if (chosen) return;
+      const distFromTd = Math.max(0, r.distM - dTd);
+      const vAt = runwayArrSpeedAndTimeToRet(v0, aDec, distFromTd, minArrVelRwy).vAtRet;
+      if (vAt <= r.maxExitVelocity) { chosen = r; }
+    });
+    if (chosen) {
+      f.sampledArrRet = chosen.exit && chosen.exit.id || null;
+      f.arrRetFailed = false;
+      const MAX_DECEL_MS2 = 15;
+      const distFromTdChosen = Math.max(0, chosen.distM - dTd);
+      const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
+      const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
+      const vAtChosen = rtRunway.vAtRet;
+      const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
+        ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
+        : 15;
+      f.arrRunwayIdUsed = arrRunwayId;
+      f.arrTdDistM = dTd;
+      f.arrRetDistM = chosen.distM;
+      f.arrVTdMs = v0;
+      f.arrVRetInMs = vAtChosen;
+      f.arrVRetOutMs = minExitVel;
+      f.arrDecelMs2 = aDecRot;
+    } else {
+      f.sampledArrRet = null;
+      f.arrRetFailed = true;
+      f.arrDecelMs2 = null;
+    }
+    f.__schedRetRotRev = rev;
+  }
+  function ensureArrRetRotSampled(flights, forceResampleRet) {
+    if (!Array.isArray(flights) || !flights.length) return [];
+    const configByType = {};
+    flights.forEach(f => { mutRotCfgEntryForType(configByType, f); });
+    const retStatsAll = getScheduleRetStatsAll();
+    flights.forEach(function(f) {
+      sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, !!forceResampleRet);
+    });
+    return retStatsAll;
+  }
+
+  function _flightListEmptyHtml(message) {
+    return '<div style="font-size:11px;color:#9ca3af;">' + message + '</div>';
+  }
+
+  function _renderEmptyFlightListState(listEl, cfgEl) {
+    state.flightSchedulePage = 0;
+    const pgr = document.getElementById('flightSchedulePager');
+    if (pgr) pgr.style.display = 'none';
+    _flightListTeardownVirtual(listEl);
+    listEl.innerHTML = _flightListEmptyHtml('No flights yet.');

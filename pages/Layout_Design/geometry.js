@@ -209,6 +209,43 @@
     });
     return issues;
   }
+  function getApronStandWindowOverlapRegsForProSimUi() {
+    const issues = [];
+    const seen = new Set();
+    (state.flights || []).forEach(function(f) {
+      if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return;
+      const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+      if (segs.length) {
+        for (let j = 0; j < segs.length; j++) {
+          const sid = segs[j] && segs[j].standId;
+          if (!sid) continue;
+          if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, sid, j)) {
+            const reg = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
+            if (!seen.has(reg)) {
+              seen.add(reg);
+              issues.push({ reg: reg });
+            }
+          }
+        }
+      } else if (f.standId) {
+        if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, f.standId, null)) {
+          const reg = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
+          if (!seen.has(reg)) {
+            seen.add(reg);
+            issues.push({ reg: reg });
+          }
+        }
+      }
+    });
+    return issues;
+  }
+  function formatStandWindowOverlapBannerDetail(issues) {
+    const n = (issues && issues.length) || 0;
+    if (n < 1) return '';
+    const regs = issues.map(function(it) { return String(it.reg || '—'); });
+    if (n <= 5) return regs.join(', ');
+    return regs.slice(0, 3).join(', ') + ', etc. — ' + n + ' flight(s)';
+  }
   function formatApronDuplicatedBannerEnglish(issues) {
     const n = (issues && issues.length) || 0;
     if (n < 1) return '';
@@ -228,10 +265,14 @@
     const banT = document.getElementById('arrRetFailedBannerText');
     const apronBan = document.getElementById('apronDuplicatedBanner');
     const apronBanT = document.getElementById('apronDuplicatedBannerText');
+    const overlapBan = document.getElementById('standWindowOverlapBanner');
+    const overlapBanT = document.getElementById('standWindowOverlapBannerText');
     const failedRegs = getArrRetFailedRegsForProSimUi();
     const hasRetFail = failedRegs.length > 0;
     const apronIssues = getApronDuplicatedRegsForProSimUi();
     const hasApronDuplicated = apronIssues.length > 0;
+    const standOverlapIssues = getApronStandWindowOverlapRegsForProSimUi();
+    const hasStandWindowOverlap = standOverlapIssues.length > 0;
     if (ban && banT) {
       if (hasRetFail) {
         ban.hidden = false;
@@ -254,6 +295,17 @@
         apronBanT.textContent = '';
       }
     }
+    if (overlapBan && overlapBanT) {
+      if (hasStandWindowOverlap) {
+        overlapBan.hidden = false;
+        overlapBan.setAttribute('aria-hidden', 'false');
+        overlapBanT.textContent = formatStandWindowOverlapBannerDetail(standOverlapIssues);
+      } else {
+        overlapBan.hidden = true;
+        overlapBan.setAttribute('aria-hidden', 'true');
+        overlapBanT.textContent = '';
+      }
+    }
     const dlBan = document.getElementById('deadlockGhostBanner');
     const dlBanT = document.getElementById('deadlockGhostBannerText');
     const dlp = state.simDeadlockGhostPlayback || { events: [], bodyLines: '', resolveCount: 0 };
@@ -266,55 +318,3 @@
       } else {
         dlBan.hidden = true;
         dlBan.setAttribute('aria-hidden', 'true');
-        dlBanT.textContent = '';
-      }
-    }
-    const allow = !!state.designerPageUpdateFresh && !hasRetFail && !hasApronDuplicated;
-    if (btn) {
-      btn.disabled = !allow;
-      btn.classList.toggle('global-update-blocked-arr-ret', hasRetFail);
-      btn.classList.toggle('global-update-blocked-apron', hasApronDuplicated);
-      if (!state.designerPageUpdateFresh) {
-        btn.setAttribute('title', 'Run Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
-      } else if (hasRetFail) {
-        const n = failedRegs.length;
-        const shortList = n > 5 ? (failedRegs.slice(0, 3).join(', ') + ', etc. (' + n + ' total)') : failedRegs.join(', ');
-        btn.setAttribute('title', 'Pro Sim is disabled: no valid runway exit. ' + shortList);
-      } else if (hasApronDuplicated) {
-        const n = apronIssues.length;
-        const shortList = n > 5 ? (apronIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' total)') : apronIssues.map(function(it) { return it.reg; }).join(', ');
-        btn.setAttribute('title', 'Pro Sim is disabled: Apron duplicated. ' + shortList);
-      } else {
-        btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
-      }
-    }
-    if (dot) {
-      if (hasRetFail) {
-        dot.classList.remove('fresh');
-        dot.classList.add('stale');
-        dot.setAttribute('title', 'Runway exit failure — resolve all arrival RET issues before Pro Sim.');
-      } else if (hasApronDuplicated) {
-        dot.classList.remove('fresh');
-        dot.classList.add('stale');
-        dot.setAttribute('title', 'Apron duplicated — resolve all red Apron Gantt bars before Pro Sim.');
-      } else if (state.globalUpdateFresh) {
-        dot.classList.remove('stale');
-        dot.classList.add('fresh');
-        dot.setAttribute('title', 'All views match the last Pro Sim run');
-      } else {
-        dot.classList.remove('fresh');
-        dot.classList.add('stale');
-        dot.setAttribute('title', 'Layout or schedule changed — run Pro Sim again to refresh (results apply when done)');
-      }
-    }
-    const playDock = document.getElementById('btnShowPlayDock');
-    const playbackFresh = !hasRetFail && !hasApronDuplicated && !!state.globalUpdateFresh;
-    const allowPlay = !!state.hasSimulationResult && !hasRetFail && !hasApronDuplicated;
-    if (playDock) {
-      playDock.disabled = !allowPlay;
-      if (!state.hasSimulationResult) {
-        playDock.setAttribute('title', '시뮬레이션 결과가 있을 때 재생 바를 엽니다');
-      } else if (hasRetFail) {
-        playDock.setAttribute('title', 'Runway exit failure가 있어 재생을 막았습니다');
-      } else if (hasApronDuplicated) {
-        playDock.setAttribute('title', 'Apron duplicated가 있어 Pro Sim/재생을 막았습니다');

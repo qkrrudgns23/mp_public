@@ -1,3 +1,68 @@
+    if (hasPositions && positions && typeof positions === 'object') {
+      if (!state.deadlockFlightIdsFromLastSim) state.deadlockFlightIdsFromLastSim = Object.create(null);
+      Object.keys(positions).forEach(function(pid) {
+        const tr = positions[pid];
+        if (allocFlightTrackHasDeadlock(tr)) state.deadlockFlightIdsFromLastSim[String(pid)] = true;
+      });
+    }
+    if (state.hasSimulationResult) {
+      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
+      if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+    } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+    else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+    if (typeof resizeCanvas === 'function') resizeCanvas();
+    if (typeof reset2DView === 'function') reset2DView();
+    if (typeof syncPanelFromState === 'function') syncPanelFromState();
+    if (typeof renderFlightList === 'function') renderFlightList(false, false);
+    if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
+    if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
+    if (typeof draw === 'function') draw();
+    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  }
+  function applyInitialLayoutFromJson() {
+    if (!INITIAL_LAYOUT || typeof INITIAL_LAYOUT !== 'object') return;
+    applyLayoutObject(INITIAL_LAYOUT);
+  }
+  function updateLayoutNameBar(name) {
+    const n = (name && String(name).trim()) || '';
+    state.currentLayoutName = n || state.currentLayoutName || 'default_layout';
+    const bar = document.getElementById('layout-name-bar');
+    if (bar) bar.textContent = n || state.currentLayoutName;
+  }
+  function uniqueNameAgainstSet(baseName, usedNames) {
+    const base = (baseName && String(baseName).trim()) || 'Untitled';
+    const used = usedNames instanceof Set ? usedNames : new Set();
+    if (!used.has(base)) return base;
+    let idx = 1;
+    while (used.has(base + ' (' + idx + ')')) idx++;
+    return base + ' (' + idx + ')';
+  }
+  function zeroPadNumber(num, width) {
+    return String(Math.max(0, Number(num) || 0)).padStart(width, '0');
+  }
+  function getDefaultPathName(pathType, currentId) {
+    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : (pathType === 'apron_taxiway' ? 'ATX' : (pathType === 'general_queue_taxiway' ? 'QTX' : 'TX')));
+    const sameType = (state.taxiways || []).filter(function(tw) { return tw && tw.id !== currentId && tw.pathType === pathType; });
+    const used = new Set(sameType.map(function(tw) { return (tw.name && String(tw.name).trim()) || ''; }).filter(Boolean));
+    let n = 1;
+    let candidate = prefix + String(n);
+    while (used.has(candidate)) {
+      n++;
+      candidate = prefix + String(n);
+      if (n > 100000) break;
+    }
+    return candidate;
+  }
+  function getDefaultTerminalName(currentId) {
+    return getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, currentId);
+  }
+  function getDefaultPbbStandName(currentId) {
+    const stands = (state.pbbStands || []).filter(function(st) { return st && st.id !== currentId; });
+    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet('C' + zeroPadNumber(stands.length + 1, 3), used);
+  }
   function getDefaultRemoteStandName(currentId) {
     const stands = (state.remoteStands || []).filter(function(st) { return st && st.id !== currentId; });
     const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
@@ -1292,68 +1357,3 @@
     const category = uPbb.category;
     const allowedIcaoCategories = uPbb.allowedIcaoCategories;
     const panelAllowedTypes = uPbb.allowedAircraftTypes;
-    const minLen = getStandDepthMeters(category) / 2 + 3;
-    const lenMeters = Number(document.getElementById('pbbLength').value || 15);
-    const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
-    const standAngleDeg = normalizeAngleDeg(Math.atan2(ny, nx) * 180 / Math.PI);
-    const bwEl = document.getElementById('pbbBoardingWidth');
-    const bhEl = document.getElementById('pbbBoardingHeight');
-    const boardingW = Math.max(0.5, Number(bwEl && bwEl.value) || 5);
-    const boardingH = Math.max(0.5, Number(bhEl && bhEl.value) || 15);
-    const wallX = ex, wallY = ey;
-    const bxOut = wallX + nx * boardingH, byOut = wallY + ny * boardingH;
-    const offM = PBB_NEW_CONTACT_STAND_SITE_OFFSET_M;
-    const newPbb = {
-      x1: wallX, y1: wallY, x2: bxOut, y2: byOut, category,
-      angleDeg: standAngleDeg,
-      apronSiteX: wallX + nx * offM,
-      apronSiteY: wallY + ny * offM,
-      terminalContactSetbackM: offM,
-      boardingWidthM: boardingW,
-      boardingHeightM: boardingH
-    };
-    if (pbbStandOverlapsExisting(newPbb)) return false;
-    const pbbNameCandidate = document.getElementById('standName').value.trim() || getDefaultPbbStandName();
-    if (findDuplicateLayoutName('pbb', null, pbbNameCandidate)) {
-      alertDuplicateLayoutName();
-      return false;
-    }
-    pushUndo();
-    state.pbbStands.push(normalizePbbStandObject({
-      id: id(),
-      name: pbbNameCandidate,
-      x1: wallX, y1: wallY, x2: bxOut, y2: byOut,
-      category: newPbb.category,
-      terminalContactSetbackM: offM,
-      categoryMode: categoryMode,
-      allowedIcaoCategories: allowedIcaoCategories,
-      allowedAircraftTypes: panelAllowedTypes,
-      pbbCount: Math.max(1, Math.min(8, parseInt(document.getElementById('pbbBridgeCount') ? document.getElementById('pbbBridgeCount').value : (_pbbTier.defaultBridgeCount || 1), 10) || 1)),
-      angleDeg: standAngleDeg,
-      apronSiteX: newPbb.apronSiteX,
-      apronSiteY: newPbb.apronSiteY,
-      boardingWidthM: boardingW,
-      boardingHeightM: boardingH,
-      pbbArmLenM: armLen,
-      edgeCol: bestEdge.col,
-      edgeRow: bestEdge.row
-    }));
-    return true;
-  }
-  function tryPlaceRemoteAt(wx, wy) {
-    if (!isFinite(wx) || !isFinite(wy)) return false;
-    const maxX = GRID_COLS * CELL_SIZE, maxY = GRID_ROWS * CELL_SIZE;
-    if (wx < 0 || wy < 0 || wx > maxX || wy > maxY) return false;
-    const uRm = readUnifiedNewStandConstraintFromPanel('remoteIcaoCategories', 'remoteAircraftAccess', ['A', 'B', 'C']);
-    const categoryMode = uRm.categoryMode;
-    const category = uRm.category;
-    const allowedIcaoCategoriesR = uRm.allowedIcaoCategories;
-    const panelAllowedTypesR = uRm.allowedAircraftTypes;
-    const angleDeg = 0;
-    const candidate = { x: Number(wx), y: Number(wy), category, angleDeg };
-    const candCorners = getRemoteStandCorners(candidate);
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      const o = state.remoteStands[i];
-      if (standFootprintsTooClose(candCorners, category, getRemoteStandCorners(o), o.category || 'C')) return false;
-    }
-    for (let i = 0; i < state.pbbStands.length; i++) {

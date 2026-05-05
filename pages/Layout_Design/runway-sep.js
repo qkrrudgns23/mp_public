@@ -1,3 +1,68 @@
+    const input = document.getElementById('markerTextDraftInput');
+    if (!layer || !input) return;
+    layer.removeAttribute('hidden');
+    layer.setAttribute('aria-hidden', 'false');
+    input.value = '';
+    syncMarkerTextDraftInputPosition();
+    setTimeout(function() {
+      try {
+        input.focus();
+      } catch (e) {}
+    }, 0);
+  }
+  function commitMarkerTextDraft() {
+    const d = state.markerTextDraft;
+    if (!d || !d.active) return;
+    const input = document.getElementById('markerTextDraftInput');
+    const text = input ? String(input.value || '').trim().slice(0, 500) : '';
+    const sx = d.x, sy = d.y;
+    state.markerTextDraft = null;
+    hideMarkerTextDraftEditor();
+    if (text) {
+      pushUndo();
+      state.layoutMarkers.push({ kind: 'text', id: id(), x: sx, y: sy, text: text });
+      syncPanelFromState();
+    }
+    scheduleDraw();
+  }
+  function cancelMarkerTextDraftWithoutCommit() {
+    if (!state.markerTextDraft || !state.markerTextDraft.active) return;
+    state.markerTextDraft = null;
+    hideMarkerTextDraftEditor();
+    scheduleDraw();
+  }
+  function handleMarkerPlacement(wx, wy, shiftKey) {
+    const placePx = worldPointToPixel(wx, wy, shiftKey);
+    const sub = getMarkerSubKindFromPanel();
+    const placeUse = sub === 'area' ? markerAreaSnapWorldToPlacementPx(wx, wy, shiftKey) : placePx;
+    const px = placeUse[0], py = placeUse[1];
+    if (sub !== 'text' && state.markerTextDraft && state.markerTextDraft.active) {
+      commitMarkerTextDraft();
+    }
+    if (sub === 'text') {
+      commitMarkerTextDraft();
+      state.markerTextDraft = { x: px, y: py, active: true };
+      showMarkerTextDraftEditor();
+      scheduleDraw();
+      return;
+    }
+    if (sub === 'ruler') {
+      if (!state.markerRulerDraft) {
+        state.markerRulerDraft = { x: px, y: py };
+        state.markerRulerHoverWorld = [px, py];
+      } else {
+        const x1 = state.markerRulerDraft.x, y1 = state.markerRulerDraft.y;
+        state.markerRulerDraft = null;
+        state.markerRulerHoverWorld = null;
+        const dx = px - x1, dy = py - y1;
+        if (dx * dx + dy * dy < 2.25) return;
+        pushUndo();
+        state.layoutMarkers.push({ kind: 'ruler', id: id(), x1: x1, y1: y1, x2: px, y2: py });
+        syncPanelFromState();
+      }
+      return;
+    }
+    if (sub === 'island') {
       if (!state.markerIslandDraft) state.markerIslandDraft = { points: [] };
       const draft = state.markerIslandDraft;
       const list = draft.points;
@@ -318,68 +383,3 @@
         out.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
       }
     }
-    return out;
-  }
-  function pathArcComputePreviewWorldPxFromAB(Ax, Ay, Bx, By, wx, wy) {
-    const dx = Bx - Ax, dy = By - Ay;
-    const chordLen = Math.hypot(dx, dy) || 1;
-    const ex = dx / chordLen, ey = dy / chordLen;
-    const nx = -ey, ny = ex;
-    const M = [(Ax + Bx) * 0.5, (Ay + By) * 0.5];
-    let h = (wx - M[0]) * nx + (wy - M[1]) * ny;
-    const maxH = chordLen * PATH_ARC_MAX_BULGE_FRAC;
-    h = Math.max(-maxH, Math.min(maxH, h));
-    if (Math.abs(h) < PATH_ARC_MIN_BULGE_PX) return [[Ax, Ay], [Bx, By]];
-    const Cx = M[0] + nx * h, Cy = M[1] + ny * h;
-    return pathArcSampleThreePointWorldPx(Ax, Ay, Bx, By, Cx, Cy, Math.max(CELL_SIZE * 0.28, chordLen / 28));
-  }
-  function pathArcComputePreviewWorldPx(tw, vertexIndex, wx, wy) {
-    if (!tw || tw.pathType === 'runway') return null;
-    const verts = tw.vertices;
-    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return null;
-    const A = cellToPixel(verts[vertexIndex - 1].col, verts[vertexIndex - 1].row);
-    const B = cellToPixel(verts[vertexIndex + 1].col, verts[vertexIndex + 1].row);
-    return pathArcComputePreviewWorldPxFromAB(A[0], A[1], B[0], B[1], wx, wy);
-  }
-  function pathArcCommitIslandVertexFromPreview(mk, vertexIndex, previewPx, snapToGrid) {
-    if (!mk || !isLayoutPolygonMarkerKind(mk.kind) || !previewPx || previewPx.length < 2) return;
-    const verts = mk.points;
-    const n = verts ? verts.length : 0;
-    if (!verts || n < 3 || vertexIndex < 0 || vertexIndex >= n) return;
-    const prev = verts[(vertexIndex - 1 + n) % n];
-    const next = verts[(vertexIndex + 1) % n];
-    const Apx = [Number(prev.x), Number(prev.y)];
-    const Bpx = [Number(next.x), Number(next.y)];
-    const workPx = previewPx.map(function(p, j) {
-      if (j === 0) return [Apx[0], Apx[1]];
-      if (j === previewPx.length - 1) return [Bpx[0], Bpx[1]];
-      return [p[0], p[1]];
-    });
-    const cells = [];
-    if (previewPx.length > 2) {
-      const densePx = pathArcDensifyPolylinePx(workPx, Math.max(3, CELL_SIZE * 0.11));
-      for (let k = 0; k < densePx.length; k++) {
-        const snap = worldPointToPixel(densePx[k][0], densePx[k][1], snapToGrid);
-        const c = { x: snap[0], y: snap[1] };
-        if (cells.length && cells[cells.length - 1].x === c.x && cells[cells.length - 1].y === c.y) continue;
-        if (c.x === prev.x && c.y === prev.y) continue;
-        cells.push(c);
-      }
-      while (cells.length && cells[cells.length - 1].x === next.x && cells[cells.length - 1].y === next.y) cells.pop();
-    }
-    if (!cells.length) {
-      const M = [(Apx[0] + Bpx[0]) * 0.5, (Apx[1] + Bpx[1]) * 0.5];
-      const snap = worldPointToPixel(M[0], M[1], snapToGrid);
-      cells.push({ x: snap[0], y: snap[1] });
-    }
-    const newArr = verts.slice();
-    newArr.splice(vertexIndex, 1, ...cells);
-    mk.points = newArr;
-    const midSel = vertexIndex + Math.max(0, Math.floor((cells.length - 1) / 2));
-    state.selectedVertex = { type: 'layoutMarkerHandle', id: mk.id, handle: 'islandVertex', vertexIndex: midSel };
-  }
-  function pathArcCommitFromPreview(tw, vertexIndex, previewPx, snapToGrid) {
-    if (!tw || tw.pathType === 'runway') return;
-    if (!previewPx || previewPx.length < 2) return;
-    const verts = tw.vertices;
-    if (!verts || vertexIndex <= 0 || vertexIndex >= verts.length - 1) return;

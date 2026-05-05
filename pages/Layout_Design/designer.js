@@ -1659,6 +1659,43 @@
     });
     return issues;
   }
+  function getApronStandWindowOverlapRegsForProSimUi() {
+    const issues = [];
+    const seen = new Set();
+    (state.flights || []).forEach(function(f) {
+      if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return;
+      const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+      if (segs.length) {
+        for (let j = 0; j < segs.length; j++) {
+          const sid = segs[j] && segs[j].standId;
+          if (!sid) continue;
+          if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, sid, j)) {
+            const reg = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
+            if (!seen.has(reg)) {
+              seen.add(reg);
+              issues.push({ reg: reg });
+            }
+          }
+        }
+      } else if (f.standId) {
+        if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, f.standId, null)) {
+          const reg = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
+          if (!seen.has(reg)) {
+            seen.add(reg);
+            issues.push({ reg: reg });
+          }
+        }
+      }
+    });
+    return issues;
+  }
+  function formatStandWindowOverlapBannerDetail(issues) {
+    const n = (issues && issues.length) || 0;
+    if (n < 1) return '';
+    const regs = issues.map(function(it) { return String(it.reg || '—'); });
+    if (n <= 5) return regs.join(', ');
+    return regs.slice(0, 3).join(', ') + ', etc. — ' + n + ' flight(s)';
+  }
   function formatApronDuplicatedBannerEnglish(issues) {
     const n = (issues && issues.length) || 0;
     if (n < 1) return '';
@@ -1678,10 +1715,14 @@
     const banT = document.getElementById('arrRetFailedBannerText');
     const apronBan = document.getElementById('apronDuplicatedBanner');
     const apronBanT = document.getElementById('apronDuplicatedBannerText');
+    const overlapBan = document.getElementById('standWindowOverlapBanner');
+    const overlapBanT = document.getElementById('standWindowOverlapBannerText');
     const failedRegs = getArrRetFailedRegsForProSimUi();
     const hasRetFail = failedRegs.length > 0;
     const apronIssues = getApronDuplicatedRegsForProSimUi();
     const hasApronDuplicated = apronIssues.length > 0;
+    const standOverlapIssues = getApronStandWindowOverlapRegsForProSimUi();
+    const hasStandWindowOverlap = standOverlapIssues.length > 0;
     if (ban && banT) {
       if (hasRetFail) {
         ban.hidden = false;
@@ -1704,6 +1745,17 @@
         apronBanT.textContent = '';
       }
     }
+    if (overlapBan && overlapBanT) {
+      if (hasStandWindowOverlap) {
+        overlapBan.hidden = false;
+        overlapBan.setAttribute('aria-hidden', 'false');
+        overlapBanT.textContent = formatStandWindowOverlapBannerDetail(standOverlapIssues);
+      } else {
+        overlapBan.hidden = true;
+        overlapBan.setAttribute('aria-hidden', 'true');
+        overlapBanT.textContent = '';
+      }
+    }
     const dlBan = document.getElementById('deadlockGhostBanner');
     const dlBanT = document.getElementById('deadlockGhostBannerText');
     const dlp = state.simDeadlockGhostPlayback || { events: [], bodyLines: '', resolveCount: 0 };
@@ -1719,11 +1771,12 @@
         dlBanT.textContent = '';
       }
     }
-    const allow = !!state.designerPageUpdateFresh && !hasRetFail && !hasApronDuplicated;
+    const allow = !!state.designerPageUpdateFresh && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap;
     if (btn) {
       btn.disabled = !allow;
       btn.classList.toggle('global-update-blocked-arr-ret', hasRetFail);
       btn.classList.toggle('global-update-blocked-apron', hasApronDuplicated);
+      btn.classList.toggle('global-update-blocked-stand-overlap', hasStandWindowOverlap && !hasRetFail && !hasApronDuplicated);
       if (!state.designerPageUpdateFresh) {
         btn.setAttribute('title', 'Run Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
       } else if (hasRetFail) {
@@ -1734,6 +1787,10 @@
         const n = apronIssues.length;
         const shortList = n > 5 ? (apronIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' total)') : apronIssues.map(function(it) { return it.reg; }).join(', ');
         btn.setAttribute('title', 'Pro Sim is disabled: Apron duplicated. ' + shortList);
+      } else if (hasStandWindowOverlap) {
+        const n = standOverlapIssues.length;
+        const shortList = n > 5 ? (standOverlapIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' flights)') : standOverlapIssues.map(function(it) { return it.reg; }).join(', ');
+        btn.setAttribute('title', 'Pro Sim is disabled: overlapping stand SIBT–SOBT windows. ' + shortList);
       } else {
         btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
       }
@@ -1747,6 +1804,10 @@
         dot.classList.remove('fresh');
         dot.classList.add('stale');
         dot.setAttribute('title', 'Apron duplicated — resolve all red Apron Gantt bars before Pro Sim.');
+      } else if (hasStandWindowOverlap) {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        dot.setAttribute('title', 'Resolve overlapping stand SIBT–SOBT windows before Pro Sim.');
       } else if (state.globalUpdateFresh) {
         dot.classList.remove('stale');
         dot.classList.add('fresh');
@@ -1758,8 +1819,8 @@
       }
     }
     const playDock = document.getElementById('btnShowPlayDock');
-    const playbackFresh = !hasRetFail && !hasApronDuplicated && !!state.globalUpdateFresh;
-    const allowPlay = !!state.hasSimulationResult && !hasRetFail && !hasApronDuplicated;
+    const playbackFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !!state.globalUpdateFresh;
+    const allowPlay = !!state.hasSimulationResult && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap;
     if (playDock) {
       playDock.disabled = !allowPlay;
       if (!state.hasSimulationResult) {
@@ -1768,6 +1829,8 @@
         playDock.setAttribute('title', 'Runway exit failure가 있어 재생을 막았습니다');
       } else if (hasApronDuplicated) {
         playDock.setAttribute('title', 'Apron duplicated가 있어 Pro Sim/재생을 막았습니다');
+      } else if (hasStandWindowOverlap) {
+        playDock.setAttribute('title', 'Overlapping stand schedule blocks Pro Sim and playback.');
       } else if (playbackFresh) {
         playDock.setAttribute('title', '최신 Pro Sim 결과를 재생합니다');
       } else {
@@ -2027,7 +2090,9 @@
     const hasRetFail = failedRegs.length > 0;
     const apronIssues = typeof getApronDuplicatedRegsForProSimUi === 'function' ? getApronDuplicatedRegsForProSimUi() : [];
     const hasApronDuplicated = apronIssues.length > 0;
-    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !!state.globalUpdateFresh;
+    const standOv = typeof getApronStandWindowOverlapRegsForProSimUi === 'function' ? getApronStandWindowOverlapRegsForProSimUi() : [];
+    const hasStandWindowOverlap = standOv.length > 0;
+    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !!state.globalUpdateFresh;
     const heatmapAllowed = heatOk && proSimUiFresh;
     if (!heatmapAllowed && state.mapTypeMode === 'heatmap') state.mapTypeMode = 'normal';
     if (!heatOk && state.mapTypeMode !== 'normal') state.mapTypeMode = 'normal';
@@ -12076,6 +12141,8 @@
         const segStandId = it.segmentStandId != null ? it.segmentStandId : standId;
         const segStand = segStandId != null && typeof findStandById === 'function' ? findStandById(segStandId) : null;
         const invalidClass = (segStand && typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, segStand, segIdx, segCount)) ? ' alloc-invalid' : '';
+        const standWindowOverlapInvalid = !!(segStandId && typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, segStandId, segIdx));
+        const standOverlapClass = standWindowOverlapInvalid ? ' alloc-stand-window-overlap' : '';
         const isFirstSeg = segIdx === 0;
         const isLastSeg = segIdx >= segCount - 1;
         const segName = segCount > 1 ? ('AP' + (segIdx + 1)) : '';
@@ -12137,7 +12204,7 @@
         const deadlockOverlayHtml = allocFlightDeadlockOverlayHtml(trDead, t0, t1, tStart, tEnd);
         const deadlockBarClass = allocFlightTrackHasDeadlock(trDead) ? ' alloc-flight-deadlock' : '';
         return '' +
-          '<div class="alloc-flight' + conflictClass + invalidClass + selectedClass + sbarDimClass + deadlockBarClass + '" draggable="true" data-flight-id="' + f.id + '" data-segment-idx="' + segIdx + '" ' +
+          '<div class="alloc-flight' + conflictClass + invalidClass + standOverlapClass + selectedClass + sbarDimClass + deadlockBarClass + '" draggable="true" data-flight-id="' + f.id + '" data-segment-idx="' + segIdx + '" ' +
             'style="left:' + leftPct + '%;width:' + widthPct + '%;min-width:4px;"' +
             ' title="' + barTitle + '">' +
             deadlockOverlayHtml +
@@ -12551,7 +12618,42 @@
     var segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
     var segCount = Math.max(1, segs.length || 1);
     var segIdx = ctx && ctx.flightId === f.id && ctx.segmentIdx != null ? ctx.segmentIdx : 0;
-    return typeof flightCanUseStandForSegment === 'function' ? flightCanUseStandForSegment(f, stand, segIdx, segCount) : true;
+    if (typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, stand, segIdx, segCount)) return false;
+    if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, standId, segIdx)) return false;
+    return true;
+  }
+  /** Undo alloc Gantt drag preview (mutated stand/segments) when drop is rejected or cancelled. */
+  function _allocGanttRevertUncommittedDragPreview(st) {
+    var ctx = st._allocGanttDrag;
+    if (!ctx || !ctx.flightId) return;
+    var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
+    var restoredFromSegSnap = false;
+    if (f && ctx.prevApronSegmentsJson) {
+      try {
+        var prevSegs = JSON.parse(ctx.prevApronSegmentsJson);
+        if (Array.isArray(prevSegs) && prevSegs.length > 0) {
+          f.apronStaySegments = prevSegs;
+          if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
+          restoredFromSegSnap = true;
+        }
+      } catch (eRestore) {}
+    }
+    if (f && !restoredFromSegSnap) {
+      f.standId = ctx.prevStandId || null;
+      if (f.token) f.token.apronId = ctx.prevApron != null ? ctx.prevApron : (ctx.prevStandId || null);
+    }
+    var ctxFid = ctx.flightId;
+    var prevSt = ctx.prevStandId;
+    st._allocGanttDrag = null;
+    st._allocGanttDropHandled = false;
+    _allocGanttPreviewLastKey = '';
+    if (f && typeof renderFlightList === 'function') {
+      var touched = [];
+      if (prevSt) touched.push(prevSt);
+      if (f.standId) touched.push(f.standId);
+      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctxFid], touchedStandIds: touched, skipGanttRefresh: true });
+    }
+    if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
   }
   function _scheduleAllocGanttDragSchedulePreview(st, candStandId) {
     var ctxAtSchedule = st._allocGanttDrag;
@@ -12605,31 +12707,7 @@
         _allocGanttPreviewLastKey = '';
         return;
       }
-      var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
-      if (f && ctx.prevApronSegmentsJson) {
-        try {
-          var prevSegs = JSON.parse(ctx.prevApronSegmentsJson);
-          if (Array.isArray(prevSegs)) {
-            f.apronStaySegments = prevSegs;
-            if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
-          }
-        } catch (eRestore) {}
-      } else if (f) {
-        f.standId = ctx.prevStandId || null;
-        if (f.token) f.token.apronId = ctx.prevApron != null ? ctx.prevApron : (ctx.prevStandId || null);
-      }
-      var ctxFid = ctx.flightId;
-      var prevSt = ctx.prevStandId;
-      st._allocGanttDrag = null;
-      st._allocGanttDropHandled = false;
-      _allocGanttPreviewLastKey = '';
-      if (f && typeof renderFlightList === 'function') {
-        var touched = [];
-        if (prevSt) touched.push(prevSt);
-        if (f.standId) touched.push(f.standId);
-        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctxFid], touchedStandIds: touched, skipGanttRefresh: true });
-      }
-      if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+      _allocGanttRevertUncommittedDragPreview(st);
     });
   }
 
@@ -12697,6 +12775,7 @@
         if (track.getAttribute('data-runway-legend') === '1') return;
         if (track.getAttribute('data-apron-link-ok') === '0') {
           showAllocationConstraintModal("This stand has no apron taxiway link, so it cannot accept a flight.");
+          _allocGanttRevertUncommittedDragPreview(st);
           return;
         }
         const flightId = ev.dataTransfer.getData('text/plain');
@@ -12704,7 +12783,10 @@
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
         const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
-        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null, segIdx)) return;
+        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null, segIdx)) {
+          _allocGanttRevertUncommittedDragPreview(st);
+          return;
+        }
         st._allocGanttDropHandled = true;
       }, true);
     }
@@ -12854,6 +12936,7 @@
         if (this.getAttribute('data-runway-legend') === '1') return;
         if (this.getAttribute('data-apron-link-ok') === '0') {
           showAllocationConstraintModal("This stand has no apron taxiway link, so it cannot accept a flight.");
+          _allocGanttRevertUncommittedDragPreview(st);
           return;
         }
         const flightId = ev.dataTransfer.getData('text/plain');
@@ -12861,7 +12944,10 @@
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
         const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
-        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null, segIdx)) return;
+        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null, segIdx)) {
+          _allocGanttRevertUncommittedDragPreview(st);
+          return;
+        }
         st._allocGanttDropHandled = true;
       });
     });
@@ -18942,7 +19028,7 @@
         const sibt = f.sibtMin != null ? f.sibtMin : (typeof f.timeMin === 'number' ? f.timeMin : 0);
         if (isFinite(sibt) && sibt > maxT) maxT = sibt;
       });
-      return maxT + 5;
+      return maxT + 3;
     }
     if (dwellEl) {
       const syncDwell = () => {
@@ -19049,6 +19135,16 @@
           const errMsg = n > 5
             ? (regs.slice(0, 3).join(', ') + ', etc. — ' + n + ' apron assignment issue(s).')
             : ('Apron duplicated: ' + regs.join(' · '));
+          failProSim(errMsg);
+          return;
+        }
+        const standOvIssues = typeof getApronStandWindowOverlapRegsForProSimUi === 'function' ? getApronStandWindowOverlapRegsForProSimUi() : [];
+        if (standOvIssues.length) {
+          const n = standOvIssues.length;
+          const regs = standOvIssues.map(function(it) { return String(it.reg); });
+          const errMsg = n > 5
+            ? ('Stand SIBT–SOBT overlap: ' + regs.slice(0, 3).join(', ') + ', etc. (' + n + ' flights)')
+            : ('Stand SIBT–SOBT overlap: ' + regs.join(' · '));
           failProSim(errMsg);
           return;
         }

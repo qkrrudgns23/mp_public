@@ -1,141 +1,3 @@
-      const clippedEnd = Math.min(endT, winEnd);
-      if (clippedEnd <= clippedStart) return;
-      arr.push(allocTrackSpanHtml(cls, allocLeftPct(clippedStart), ((clippedEnd - clippedStart) / displaySpan) * 100 * zoomLayout, minWidthPct));
-    }
-    function pushAllocTriangle(arr, t, cls) {
-      if (!arr || !isFinite(t) || t < winStart || t > winEnd) return;
-      arr.push(allocTrackMarkerHtml(cls, allocLeftPct(t)));
-    }
-
-    /** O(flights) — avoid per-row intervals.filter (was O(stands * flights) per gantt pass). */
-    const intervalsByStandKey = (function() {
-      const o = { __unassigned: [] };
-      for (let gi = 0; gi < intervals.length; gi++) {
-        const it = intervals[gi];
-        const raw = it.segmentStandId != null ? it.segmentStandId : (it.f && it.f.standId);
-        if (raw == null || raw === '') o.__unassigned.push(it);
-        else {
-          const sid = String(raw);
-          if (!o[sid]) o[sid] = [];
-          o[sid].push(it);
-        }
-      }
-      return o;
-    })();
-
-    function buildRowHtml(label, standId) {
-      const showSPointsEl = document.getElementById('chkShowSPoints');
-      const showSPoints = !showSPointsEl || showSPointsEl.checked;
-      const showSBarsEl = document.getElementById('chkShowSBars');
-      const dimSBars = !!(showSBarsEl && !showSBarsEl.checked);
-      const showEBarEl = document.getElementById('chkShowEBar');
-      const showEBar = !showEBarEl || showEBarEl.checked;
-      const showEPointsEl = document.getElementById('chkShowEPoints');
-      const showEPoints = !showEPointsEl || showEPointsEl.checked;
-      const showAuxBars = showSPoints;
-      const showEibtBars = showEBar;
-      const showEldtBars = showEPoints;
-      const showSDots = showSPoints;
-      const showSdDots = showSPoints;
-      const showEDots = showEPoints;
-      const rowFlights = (standId == null)
-        ? (intervalsByStandKey.__unassigned || [])
-        : (intervalsByStandKey[String(standId)] || []);
-      const duplicateBg = [];
-      if (standId != null) {
-        const dupIds = duplicateApronStandIdsForStand(standId);
-        for (let di = 0; di < dupIds.length; di++) {
-          const dupFlights = intervalsByStandKey[String(dupIds[di])] || [];
-          for (let ii = 0; ii < dupFlights.length; ii++) {
-            const dit = dupFlights[ii];
-            if (dit && isFinite(dit.t0) && isFinite(dit.t1) && dit.t1 > dit.t0) {
-              pushAllocSpan(duplicateBg, dit.t0, dit.t1, 'alloc-duplicate-bg', 0.5);
-            }
-          }
-        }
-      }
-      const conflictMap = {};
-      for (let i = 0; i < rowFlights.length; i++) {
-        for (let j = i + 1; j < rowFlights.length; j++) {
-          const a = rowFlights[i];
-          const b = rowFlights[j];
-          if (a.f && b.f && a.f.id === b.f.id) continue;
-          if (a.t0 < b.t1 && b.t0 < a.t1) { // Section overlap
-            conflictMap[a.f.id] = true;
-            conflictMap[b.f.id] = true;
-          }
-        }
-      }
-      const sBars = showAuxBars ? [] : null;
-      const eBars = showEibtBars ? [] : null;
-      const e2Bars = showEldtBars ? [] : null;
-      const sDots = showSDots ? [] : null;
-      const sdDots = showSdDots ? [] : null;
-      const eDots = showEDots ? [] : null;
-      const sLines = showSPoints ? [] : null;      // SOBT(orig) vertical line
-      const sTrisDown = showSPoints ? [] : null;   // SLDTtriangle under dragon
-      const sTrisUp = showSPoints ? [] : null;     // STOTtriangle above dragon
-      const eTrisDown = showEPoints ? [] : null;   // ELDTtriangle under dragon
-      const eTrisUp = showEPoints ? [] : null;     // ETOTtriangle above dragon
-      const blocks = rowFlights.map(it => {
-        const f = it.f;
-        const t0 = it.t0;
-        const t1 = it.t1;
-        const sldt = it.sldt;
-        const stot = it.stot;
-        const eibt = it.eibt;
-        const eobt = it.eobt;
-        const eldt = it.eldt;
-        const etot = it.etot;
-        const depBlk = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-        const sobtOrig = (it.sobtOrig != null) ? it.sobtOrig : (it.stotOrig - depBlk);
-        const tStart = Math.max(t0, winStart);
-        const tEnd = Math.min(t1, winEnd);
-        if (tEnd <= tStart) return '';
-        const leftPct = ((tStart - winStart) / displaySpan) * 100 * zoomLayout;
-        const widthPct = Math.max(2, ((tEnd - tStart) / displaySpan) * 100 * zoomLayout);
-        const regSafe = escapeHtml(f.reg || '');
-        const codeSafe = escapeHtml((f.code || '').toUpperCase());
-        const typeSafe = escapeHtml(String(f.aircraftType || '').trim());
-        const codeHtml = codeSafe ? ('<span class="alloc-flight-code">' + codeSafe + '</span>') : '';
-        const typeHtml = typeSafe
-          ? ((codeSafe ? '<span class="alloc-flight-type-sep"> · </span>' : '') + '<span class="alloc-flight-type">' + typeSafe + '</span>')
-          : '';
-        const metaHtml = (codeHtml || typeHtml)
-          ? ('<div class="alloc-flight-meta">' + codeHtml + typeHtml + '</div>')
-          : '';
-        const conflictClass = (conflictMap[f.id] || flightBlockedLikeNoWay(f)) ? ' conflict' : '';
-        const selectedClass = (state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id) ? ' alloc-flight-selected' : '';
-        const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
-        const segIdx = it.segmentIdx != null ? Number(it.segmentIdx) : 0;
-        const segCount = it.segmentCount != null ? Number(it.segmentCount) : 1;
-        const segStandId = it.segmentStandId != null ? it.segmentStandId : standId;
-        const segStand = segStandId != null && typeof findStandById === 'function' ? findStandById(segStandId) : null;
-        const invalidClass = (segStand && typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, segStand, segIdx, segCount)) ? ' alloc-invalid' : '';
-        const isFirstSeg = segIdx === 0;
-        const isLastSeg = segIdx >= segCount - 1;
-        const segName = segCount > 1 ? ('AP' + (segIdx + 1)) : '';
-        const sibtLabel = formatFlightScheduleDateTime(f, t0);
-        const sobtLabel = formatFlightScheduleDateTime(f, t1);
-        const handleHoverSibt = escapeAttr((segCount > 1 ? ('SIBT' + (segIdx + 1)) : 'SIBT') + ': ' + sibtLabel);
-        const handleHoverSobt = escapeAttr((segCount > 1 ? ('SOBT' + (segIdx + 1)) : 'SOBT') + ': ' + sobtLabel);
-        const barTitle =
-          (segName ? (segName + '\\n') : '') +
-          (segCount > 1 ? ('SIBT' + (segIdx + 1)) : 'SIBT') + ': ' + sibtLabel +
-          '\\n' + (segCount > 1 ? ('SOBT' + (segIdx + 1)) : 'SOBT') + ': ' + sobtLabel +
-          '\\nReg: ' + (f.reg || '') +
-          '\\nAirline: ' + (f.airlineCode || '') + ' ' + (f.flightNumber || '');
-        if (showEibtBars && eBars && (it.eBarSegmented || isFirstSeg) && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {
-          pushAllocSpan(eBars, eibt, eobt, 'alloc-e-bar', 2);
-        }
-        if (showEldtBars && e2Bars && isFirstSeg) {
-          if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) pushAllocSpan(e2Bars, eldt, eibt, 'alloc-e2-bar', 0.5);
-          if (isFinite(eobt) && isFinite(etot) && etot >= eobt) pushAllocSpan(e2Bars, eobt, etot, 'alloc-e2-bar', 0.5);
-        }
-        if (showAuxBars && sBars) {
-          if (isFirstSeg && isFinite(sldt) && sldt <= t0) pushAllocSpan(sBars, sldt, t0, 'alloc-s-bar', 0.5);
-          if (isLastSeg && isFinite(stot) && stot >= t1) pushAllocSpan(sBars, t1, stot, 'alloc-s-bar', 0.5);
-        }
         if (showSDots && sDots) {
           if (isFirstSeg) pushAllocDot(sDots, sldt, 'alloc-time-dot-s');
           if (isLastSeg) pushAllocDot(sDots, stot, 'alloc-time-dot-s');
@@ -173,7 +35,7 @@
         const deadlockOverlayHtml = allocFlightDeadlockOverlayHtml(trDead, t0, t1, tStart, tEnd);
         const deadlockBarClass = allocFlightTrackHasDeadlock(trDead) ? ' alloc-flight-deadlock' : '';
         return '' +
-          '<div class="alloc-flight' + conflictClass + invalidClass + selectedClass + sbarDimClass + deadlockBarClass + '" draggable="true" data-flight-id="' + f.id + '" data-segment-idx="' + segIdx + '" ' +
+          '<div class="alloc-flight' + conflictClass + invalidClass + standOverlapClass + selectedClass + sbarDimClass + deadlockBarClass + '" draggable="true" data-flight-id="' + f.id + '" data-segment-idx="' + segIdx + '" ' +
             'style="left:' + leftPct + '%;width:' + widthPct + '%;min-width:4px;"' +
             ' title="' + barTitle + '">' +
             deadlockOverlayHtml +
@@ -587,7 +449,42 @@
     var segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
     var segCount = Math.max(1, segs.length || 1);
     var segIdx = ctx && ctx.flightId === f.id && ctx.segmentIdx != null ? ctx.segmentIdx : 0;
-    return typeof flightCanUseStandForSegment === 'function' ? flightCanUseStandForSegment(f, stand, segIdx, segCount) : true;
+    if (typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, stand, segIdx, segCount)) return false;
+    if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, standId, segIdx)) return false;
+    return true;
+  }
+  /** Undo alloc Gantt drag preview (mutated stand/segments) when drop is rejected or cancelled. */
+  function _allocGanttRevertUncommittedDragPreview(st) {
+    var ctx = st._allocGanttDrag;
+    if (!ctx || !ctx.flightId) return;
+    var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
+    var restoredFromSegSnap = false;
+    if (f && ctx.prevApronSegmentsJson) {
+      try {
+        var prevSegs = JSON.parse(ctx.prevApronSegmentsJson);
+        if (Array.isArray(prevSegs) && prevSegs.length > 0) {
+          f.apronStaySegments = prevSegs;
+          if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
+          restoredFromSegSnap = true;
+        }
+      } catch (eRestore) {}
+    }
+    if (f && !restoredFromSegSnap) {
+      f.standId = ctx.prevStandId || null;
+      if (f.token) f.token.apronId = ctx.prevApron != null ? ctx.prevApron : (ctx.prevStandId || null);
+    }
+    var ctxFid = ctx.flightId;
+    var prevSt = ctx.prevStandId;
+    st._allocGanttDrag = null;
+    st._allocGanttDropHandled = false;
+    _allocGanttPreviewLastKey = '';
+    if (f && typeof renderFlightList === 'function') {
+      var touched = [];
+      if (prevSt) touched.push(prevSt);
+      if (f.standId) touched.push(f.standId);
+      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctxFid], touchedStandIds: touched, skipGanttRefresh: true });
+    }
+    if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
   }
   function _scheduleAllocGanttDragSchedulePreview(st, candStandId) {
     var ctxAtSchedule = st._allocGanttDrag;
@@ -641,31 +538,7 @@
         _allocGanttPreviewLastKey = '';
         return;
       }
-      var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
-      if (f && ctx.prevApronSegmentsJson) {
-        try {
-          var prevSegs = JSON.parse(ctx.prevApronSegmentsJson);
-          if (Array.isArray(prevSegs)) {
-            f.apronStaySegments = prevSegs;
-            if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
-          }
-        } catch (eRestore) {}
-      } else if (f) {
-        f.standId = ctx.prevStandId || null;
-        if (f.token) f.token.apronId = ctx.prevApron != null ? ctx.prevApron : (ctx.prevStandId || null);
-      }
-      var ctxFid = ctx.flightId;
-      var prevSt = ctx.prevStandId;
-      st._allocGanttDrag = null;
-      st._allocGanttDropHandled = false;
-      _allocGanttPreviewLastKey = '';
-      if (f && typeof renderFlightList === 'function') {
-        var touched = [];
-        if (prevSt) touched.push(prevSt);
-        if (f.standId) touched.push(f.standId);
-        renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctxFid], touchedStandIds: touched, skipGanttRefresh: true });
-      }
-      if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+      _allocGanttRevertUncommittedDragPreview(st);
     });
   }
 
@@ -733,6 +606,7 @@
         if (track.getAttribute('data-runway-legend') === '1') return;
         if (track.getAttribute('data-apron-link-ok') === '0') {
           showAllocationConstraintModal("This stand has no apron taxiway link, so it cannot accept a flight.");
+          _allocGanttRevertUncommittedDragPreview(st);
           return;
         }
         const flightId = ev.dataTransfer.getData('text/plain');
@@ -740,7 +614,10 @@
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
         const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
-        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null, segIdx)) return;
+        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null, segIdx)) {
+          _allocGanttRevertUncommittedDragPreview(st);
+          return;
+        }
         st._allocGanttDropHandled = true;
       }, true);
     }
@@ -890,6 +767,7 @@
         if (this.getAttribute('data-runway-legend') === '1') return;
         if (this.getAttribute('data-apron-link-ok') === '0') {
           showAllocationConstraintModal("This stand has no apron taxiway link, so it cannot accept a flight.");
+          _allocGanttRevertUncommittedDragPreview(st);
           return;
         }
         const flightId = ev.dataTransfer.getData('text/plain');
@@ -897,7 +775,10 @@
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
         const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
-        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null, segIdx)) return;
+        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null, segIdx)) {
+          _allocGanttRevertUncommittedDragPreview(st);
+          return;
+        }
         st._allocGanttDropHandled = true;
       });
     });
@@ -1667,3 +1548,122 @@
       f.minDwellMin = minDwell;
       const sobt = f.sobtMin != null ? Math.max(f.sobtMin, tArrMin + minDwell) : (tArrMin + dwell);
       f.timeMin = tArrMin;
+      f.sibtMin = tArrMin;
+      f.sobtMin = sobt;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobt - tArrMin);
+      applySOffsetsFromSibtSobt(f);
+    });
+  }
+
+  function computeScheduledDisplayTimesIncremental(allFlights, dirtyFlightIds, touchedStandIds) {
+    if (!allFlights || !allFlights.length) return;
+    const dirty = (dirtyFlightIds instanceof Set) ? dirtyFlightIds : new Set(dirtyFlightIds || []);
+    const touchedStands = (touchedStandIds instanceof Set) ? touchedStandIds : new Set(touchedStandIds || []);
+    const standsToRecompute = new Set();
+    touchedStands.forEach(function(sid) { if (sid != null && sid !== '') standsToRecompute.add(sid); });
+    const needStep1 = new Set();
+    dirty.forEach(function(id) { if (id != null && id !== '') needStep1.add(id); });
+    allFlights.forEach(function(f) {
+      if (!f || flightBlockedLikeNoWay(f)) return;
+      if (f.standId && standsToRecompute.has(f.standId)) needStep1.add(f.id);
+    });
+    allFlights.forEach(function(f) {
+      if (!f || !needStep1.has(f.id)) return;
+      if (flightBlockedLikeNoWay(f)) return;
+      const tArrMin = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+      let dwell = f.dwellMin != null ? f.dwellMin : 0;
+      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+      if (minDwell > dwell) minDwell = dwell;
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      const sobt = f.sobtMin != null ? Math.max(f.sobtMin, tArrMin + minDwell) : (tArrMin + dwell);
+      f.timeMin = tArrMin;
+      f.sibtMin = tArrMin;
+      f.sobtMin = sobt;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobt - tArrMin);
+      applySOffsetsFromSibtSobt(f);
+    });
+  }
+
+  function rsepGetSec(val) {
+    const n = Number(val);
+    return isFinite(n) && n >= 0 ? n : RSEP_MISSING_MATRIX_SEC;
+  }
+
+  function rsepApplySeparationToEvents(events, cfg) {
+    const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {};
+    const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {};
+    const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {};
+    const rot = (cfg.rot) ? cfg.rot : {};
+    const getSec = rsepGetSec;
+    events.sort((a, b) => a.time - b.time || a.index - b.index);
+    let lastArrETime = -1e9, lastArrCat = null;
+    let lastDepETime = -1e9, lastDepCat = null;
+    events.forEach(ev => {
+      if (ev.type === 'arr') {
+        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
+        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
+        const eTime = Math.max(ev.time, minFromArr, minFromDep);
+        ev.flight.eldtMin = eTime;
+        lastArrETime = eTime;
+        lastArrCat = ev.cat;
+      } else {
+        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
+        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
+        const etotSep = Math.max(ev.time, minFromArr, minFromDep);
+        const rotM = (ev.rotArrMin != null && isFinite(ev.rotArrMin)) ? ev.rotArrMin : getArrRotMinutes(ev.flight);
+        const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + rotM + (ev.vttArrMin || 0);
+        const vttDep = ev.vttDepMin || 0;
+        const etotMin = etotSep;
+        const eobtMin = etotMin - vttDep;
+        ev.flight.etotMin = etotMin;
+        lastDepETime = etotMin;
+        lastDepCat = ev.cat;
+      }
+    });
+    let minT = Infinity, maxT = -Infinity;
+    events.forEach(ev => {
+      const s = ev.time;
+      const e = ev.type === 'arr'
+        ? (ev.flight && ev.flight.eldtMin != null ? ev.flight.eldtMin : s)
+        : (ev.flight && ev.flight.etotMin != null ? ev.flight.etotMin : s);
+      if (s < minT) minT = s;
+      if (e < minT) minT = e;
+      if (s > maxT) maxT = s;
+      if (e > maxT) maxT = e;
+    });
+    if (!isFinite(minT) || !isFinite(maxT)) { minT = 0; maxT = 60; } else if (maxT <= minT) { maxT = minT + 60; }
+    return { minT, maxT };
+  }
+
+  function rsepCollectEventsForRunway(rwy, flights, runways) {
+    const cfg = rsepGetConfigForRunway(rwy);
+    if (!cfg) return null;
+    const stdKey = cfg.standard || 'ICAO';
+    const events = [];
+    let eventIndex = 0;
+    flights.forEach((f, flightIdx) => {
+      if (flightBlockedLikeNoWay(f)) return;
+      let arrRwy = f.arrRunwayId || (f.token && f.token.runwayId);
+      let depRwy = f.depRunwayId || (f.token && f.token.depRunwayId);
+      if (arrRwy == null && depRwy == null && runways.length === 1) { arrRwy = rwy.id; depRwy = rwy.id; }
+      else if (depRwy == null && arrRwy === rwy.id) depRwy = rwy.id;
+      else if (arrRwy == null && depRwy === rwy.id) arrRwy = rwy.id;
+      if (arrRwy !== rwy.id && depRwy !== rwy.id) return;
+      const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+      const cat = stdKey === 'ICAO' ? (ac && ac.icaoJHL ? ac.icaoJHL : 'M') : (ac && ac.recatEu ? ac.recatEu : 'D');
+      const sldtMin = f.sldtMin != null ? f.sldtMin : 0;
+      const stotMin = f.stotMin != null ? f.stotMin : 0;
+      const sobtMin = f.sobtMin != null ? f.sobtMin : 0;
+      const vttArrMin = getBaseVttArrMinutes(f);
+      const rotArrMin = getArrRotMinutes(f);
+      const vttDepMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+      if (arrRwy === rwy.id) events.push({ time: sldtMin, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ });
+      if (depRwy === rwy.id) {
+        events.push({ time: stotMin, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin, index: eventIndex++ });
+      }
+    });
+    return { cfg, events };
+  }

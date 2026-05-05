@@ -1,3 +1,68 @@
+    return parts.h + ':' + parts.mm;
+  }
+  function findNearestItem(candidates, getPoint, wx, wy, maxD2) {
+    const click = [wx, wy];
+    let best = null;
+    let bestD2 = maxD2;
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      const pt = getPoint(c);
+      if (!pt || pt.length < 2) continue;
+      const d2 = dist2(pt, click);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = c;
+      }
+    }
+    return best;
+  }
+  function closestPointOnSegment(p1, p2, p) {
+    const [x1,y1]=p1,[x2,y2]=p2,[px,py]=p;
+    const dx=x2-x1,dy=y2-y1,len2=dx*dx+dy*dy;
+    if (len2===0) return null;
+    let t = ((px-x1)*dx+(py-y1)*dy)/len2;
+    t = Math.max(0,Math.min(1,t));
+    return [x1+t*dx,y1+t*dy];
+  }
+  function getClosestTerminalEdgePoint(wx, wy) {
+    const click = [wx, wy];
+    let best = null;
+    let bestD2 = Infinity;
+    (state.terminals || []).forEach(function(term) {
+      if (!term || !term.closed || !Array.isArray(term.vertices) || term.vertices.length < 2) return;
+      for (let i = 0; i < term.vertices.length; i++) {
+        const v1 = term.vertices[i];
+        const v2 = term.vertices[(i + 1) % term.vertices.length];
+        const p1 = cellToPixel(v1.col, v1.row);
+        const p2 = cellToPixel(v2.col, v2.row);
+        const near = closestPointOnSegment(p1, p2, click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          best = { point: near, term: term, edgeIndex: i };
+        }
+      }
+    });
+    return best;
+  }
+  function getPbbBoardingWidthM(pbb) {
+    const w = Number(pbb && pbb.boardingWidthM);
+    if (isFinite(w) && w > 0) return w;
+    return 5;
+  }
+  function getPbbBoardingHeightM(pbb) {
+    const h = Number(pbb && pbb.boardingHeightM);
+    if (isFinite(h) && h > 0) return h;
+    return 15;
+  }
+  function getPbbTerminalContactSetbackM(pbb) {
+    const v = Number(pbb && pbb.terminalContactSetbackM);
+    if (isFinite(v) && v >= 0) return v;
+    return 0;
+  }
+  function getPbbTerminalFrameFromEdge(term, edgeIndex, wallX, wallY) {
+    const v1 = term.vertices[edgeIndex], v2 = term.vertices[(edgeIndex + 1) % term.vertices.length];
     const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
     const edx = p2[0] - p1[0], edy = p2[1] - p1[1];
     const el = Math.hypot(edx, edy) || 1;
@@ -483,68 +548,3 @@
       if (wy > maxY) maxY = wy;
     }
     if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
-    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
-  }
-  function syncMarkerFlightBlazerOverlayButton() {
-    if (!markerFlightBlazerOverlayBtn || !container) return;
-    const sel = state.selectedObject;
-    const show = !!(layoutMarkersVisible() && sel && sel.type === 'layoutMarker' && sel.obj && sel.obj.kind === 'flight');
-    if (!show) {
-      markerFlightBlazerOverlayBtn.style.display = 'none';
-      markerFlightHeadingOverlayBtn.style.display = 'none';
-      markerFlightBlazerPaletteWrap.style.display = 'none';
-      return;
-    }
-    const mk = sel.obj;
-    ensureMarkerFlightBlazerState(mk);
-    const b = markerFlightBoundsWorld(mk);
-    if (!b) {
-      markerFlightBlazerOverlayBtn.style.display = 'none';
-      markerFlightHeadingOverlayBtn.style.display = 'none';
-      markerFlightBlazerPaletteWrap.style.display = 'none';
-      return;
-    }
-    const sc = worldToScreenCanvas(b.minX, b.minY);
-    const left = Math.max(6, sc[0] - 8);
-    const top = Math.max(6, sc[1] - 32);
-    markerFlightBlazerOverlayBtn.textContent = 'Blazer: ' + (mk.blazerEnabled ? 'ON' : 'OFF');
-    markerFlightBlazerOverlayBtn.style.left = left.toFixed(1) + 'px';
-    markerFlightBlazerOverlayBtn.style.top = top.toFixed(1) + 'px';
-    markerFlightBlazerOverlayBtn.style.display = 'inline-block';
-    markerFlightHeadingOverlayBtn.textContent = 'Heading: ' + (mk.headingReversed ? 'REV' : 'FWD');
-    markerFlightHeadingOverlayBtn.style.left = (left + 94).toFixed(1) + 'px';
-    markerFlightHeadingOverlayBtn.style.top = top.toFixed(1) + 'px';
-    markerFlightHeadingOverlayBtn.style.display = 'inline-block';
-    markerFlightBlazerPaletteWrap.style.left = left.toFixed(1) + 'px';
-    markerFlightBlazerPaletteWrap.style.top = (top + 34).toFixed(1) + 'px';
-    markerFlightBlazerPaletteWrap.style.display = 'flex';
-    markerFlightBlazerPaletteWrap.querySelectorAll('button[data-blazer-color]').forEach(function(btn) {
-      const on = String(btn.getAttribute('data-blazer-color') || '') === String(mk.blazerColor || '');
-      btn.style.outline = on ? '2px solid #ffffff' : 'none';
-    });
-  }
-  /** PAPI bar/lamp size vs original (~30% smaller → scale 0.7). */
-  const PAPI_VISUAL_SCALE = 0.7;
-  /** World units between adjacent PAPI lamp centers (layout coordinates). */
-  const PAPI_LAMP_SPACING_WORLD = 14 * PAPI_VISUAL_SCALE;
-  function papiLampCenterXsWorld(cx) {
-    const sp = PAPI_LAMP_SPACING_WORLD;
-    return [cx - 1.5 * sp, cx - 0.5 * sp, cx + 0.5 * sp, cx + 1.5 * sp];
-  }
-  function layoutMarkerHandleHitRadiusWorld() {
-    return Math.max(CELL_SIZE * 0.28, 8 / Math.max(state.scale, 0.1));
-  }
-  function hitTestLayoutMarkerHandle(wx, wy) {
-    if (!layoutMarkersVisible() || state.markerDrawing) return null;
-    const sel = state.selectedObject;
-    if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return null;
-    const mk = sel.obj;
-    if (!mk || String(mk.id) !== String(sel.id)) return null;
-    const click = [wx, wy];
-    const r = layoutMarkerHandleHitRadiusWorld();
-    const r2 = r * r;
-    if (mk.kind === 'text') {
-      const x = Number(mk.x), y = Number(mk.y);
-      if (isFinite(x) && isFinite(y) && dist2(click, [x, y]) <= r2)
-        return { markerId: mk.id, handle: 'textAnchor' };
-    } else if (mk.kind === 'ruler') {

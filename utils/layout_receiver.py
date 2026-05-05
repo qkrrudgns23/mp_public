@@ -1067,31 +1067,6 @@ def _atomic_write_json(path: Path, obj: Dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-class _TeeTextStream:
-    """Duplicate ``write``/``flush`` to multiple text streams (e.g. console + ProSim log)."""
-
-    def __init__(self, *streams: Any) -> None:
-        self._streams = streams
-
-    def write(self, data: str) -> int:
-        for s in self._streams:
-            try:
-                s.write(data)
-            except Exception:
-                pass
-        return len(data)
-
-    def flush(self) -> None:
-        for s in self._streams:
-            try:
-                s.flush()
-            except Exception:
-                pass
-
-    def isatty(self) -> bool:
-        return False
-
-
 def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
     safe_stem = _sanitize_layout_name(result_stem) or "default_layout"
     try:
@@ -1117,9 +1092,6 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
             metrics_path.parent == rs_resolved or rs_resolved in metrics_path.parents
         ):
             raise ValueError("invalid metrics path")
-        log_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_worker.log").resolve()
-        if not (log_path.parent == rs_resolved or rs_resolved in log_path.parents):
-            raise ValueError("invalid worker log path")
         status_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_status.json").resolve()
         if not (
             status_path.parent == rs_resolved or rs_resolved in status_path.parents
@@ -1192,28 +1164,16 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
         try:
             from harness.run import run_simulation_job
 
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            with log_path.open("a", encoding="utf-8", errors="replace") as log_fp:
-                log_fp.write(
-                    f"\n--- ProSim inline job {job_id} start {time.time():.3f} ---\n"
-                )
-                log_fp.flush()
-                old_out, old_err = sys.stdout, sys.stderr
-                sys.stdout = _TeeTextStream(old_out, log_fp)
-                sys.stderr = _TeeTextStream(old_err, log_fp)
-                try:
-                    rc = run_simulation_job(
-                        input_path=sim_input_path,
-                        output_path=named_path,
-                        progress_path=progress_path,
-                        metrics_path=metrics_path,
-                        stem=safe_stem,
-                        no_validate=True,
-                        compact_output=True,
-                        progress_step_percent=5.0,
-                    )
-                finally:
-                    sys.stdout, sys.stderr = old_out, old_err
+            rc = run_simulation_job(
+                input_path=sim_input_path,
+                output_path=named_path,
+                progress_path=progress_path,
+                metrics_path=metrics_path,
+                stem=safe_stem,
+                no_validate=True,
+                compact_output=True,
+                progress_step_percent=5.0,
+            )
             if rc == 0:
                 _atomic_write_json(
                     status_path,
@@ -1237,9 +1197,7 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
                         "completedAt": time.time(),
                     },
                 )
-                raise RuntimeError(
-                    f"simulation failed (harness.run exit {rc}); see {log_path}"
-                )
+                raise RuntimeError(f"simulation failed (harness.run exit {rc})")
         finally:
             poller_stop.set()
             poller.join(timeout=3.0)

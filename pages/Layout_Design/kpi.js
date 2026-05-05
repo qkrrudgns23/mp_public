@@ -1,3 +1,68 @@
+    return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+  }
+  function syncMarkerFlightBlazerOverlayButton() {
+    if (!markerFlightBlazerOverlayBtn || !container) return;
+    const sel = state.selectedObject;
+    const show = !!(layoutMarkersVisible() && sel && sel.type === 'layoutMarker' && sel.obj && sel.obj.kind === 'flight');
+    if (!show) {
+      markerFlightBlazerOverlayBtn.style.display = 'none';
+      markerFlightHeadingOverlayBtn.style.display = 'none';
+      markerFlightBlazerPaletteWrap.style.display = 'none';
+      return;
+    }
+    const mk = sel.obj;
+    ensureMarkerFlightBlazerState(mk);
+    const b = markerFlightBoundsWorld(mk);
+    if (!b) {
+      markerFlightBlazerOverlayBtn.style.display = 'none';
+      markerFlightHeadingOverlayBtn.style.display = 'none';
+      markerFlightBlazerPaletteWrap.style.display = 'none';
+      return;
+    }
+    const sc = worldToScreenCanvas(b.minX, b.minY);
+    const left = Math.max(6, sc[0] - 8);
+    const top = Math.max(6, sc[1] - 32);
+    markerFlightBlazerOverlayBtn.textContent = 'Blazer: ' + (mk.blazerEnabled ? 'ON' : 'OFF');
+    markerFlightBlazerOverlayBtn.style.left = left.toFixed(1) + 'px';
+    markerFlightBlazerOverlayBtn.style.top = top.toFixed(1) + 'px';
+    markerFlightBlazerOverlayBtn.style.display = 'inline-block';
+    markerFlightHeadingOverlayBtn.textContent = 'Heading: ' + (mk.headingReversed ? 'REV' : 'FWD');
+    markerFlightHeadingOverlayBtn.style.left = (left + 94).toFixed(1) + 'px';
+    markerFlightHeadingOverlayBtn.style.top = top.toFixed(1) + 'px';
+    markerFlightHeadingOverlayBtn.style.display = 'inline-block';
+    markerFlightBlazerPaletteWrap.style.left = left.toFixed(1) + 'px';
+    markerFlightBlazerPaletteWrap.style.top = (top + 34).toFixed(1) + 'px';
+    markerFlightBlazerPaletteWrap.style.display = 'flex';
+    markerFlightBlazerPaletteWrap.querySelectorAll('button[data-blazer-color]').forEach(function(btn) {
+      const on = String(btn.getAttribute('data-blazer-color') || '') === String(mk.blazerColor || '');
+      btn.style.outline = on ? '2px solid #ffffff' : 'none';
+    });
+  }
+  /** PAPI bar/lamp size vs original (~30% smaller → scale 0.7). */
+  const PAPI_VISUAL_SCALE = 0.7;
+  /** World units between adjacent PAPI lamp centers (layout coordinates). */
+  const PAPI_LAMP_SPACING_WORLD = 14 * PAPI_VISUAL_SCALE;
+  function papiLampCenterXsWorld(cx) {
+    const sp = PAPI_LAMP_SPACING_WORLD;
+    return [cx - 1.5 * sp, cx - 0.5 * sp, cx + 0.5 * sp, cx + 1.5 * sp];
+  }
+  function layoutMarkerHandleHitRadiusWorld() {
+    return Math.max(CELL_SIZE * 0.28, 8 / Math.max(state.scale, 0.1));
+  }
+  function hitTestLayoutMarkerHandle(wx, wy) {
+    if (!layoutMarkersVisible() || state.markerDrawing) return null;
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return null;
+    const mk = sel.obj;
+    if (!mk || String(mk.id) !== String(sel.id)) return null;
+    const click = [wx, wy];
+    const r = layoutMarkerHandleHitRadiusWorld();
+    const r2 = r * r;
+    if (mk.kind === 'text') {
+      const x = Number(mk.x), y = Number(mk.y);
+      if (isFinite(x) && isFinite(y) && dist2(click, [x, y]) <= r2)
+        return { markerId: mk.id, handle: 'textAnchor' };
+    } else if (mk.kind === 'ruler') {
       const x1 = Number(mk.x1), y1 = Number(mk.y1), x2 = Number(mk.x2), y2 = Number(mk.y2);
       if (![x1, y1, x2, y2].every(isFinite)) return null;
       const dA = dist2(click, [x1, y1]);
@@ -303,68 +368,3 @@
   }
   function showMarkerTextDraftEditor() {
     const layer = document.getElementById('marker-text-edit-layer');
-    const input = document.getElementById('markerTextDraftInput');
-    if (!layer || !input) return;
-    layer.removeAttribute('hidden');
-    layer.setAttribute('aria-hidden', 'false');
-    input.value = '';
-    syncMarkerTextDraftInputPosition();
-    setTimeout(function() {
-      try {
-        input.focus();
-      } catch (e) {}
-    }, 0);
-  }
-  function commitMarkerTextDraft() {
-    const d = state.markerTextDraft;
-    if (!d || !d.active) return;
-    const input = document.getElementById('markerTextDraftInput');
-    const text = input ? String(input.value || '').trim().slice(0, 500) : '';
-    const sx = d.x, sy = d.y;
-    state.markerTextDraft = null;
-    hideMarkerTextDraftEditor();
-    if (text) {
-      pushUndo();
-      state.layoutMarkers.push({ kind: 'text', id: id(), x: sx, y: sy, text: text });
-      syncPanelFromState();
-    }
-    scheduleDraw();
-  }
-  function cancelMarkerTextDraftWithoutCommit() {
-    if (!state.markerTextDraft || !state.markerTextDraft.active) return;
-    state.markerTextDraft = null;
-    hideMarkerTextDraftEditor();
-    scheduleDraw();
-  }
-  function handleMarkerPlacement(wx, wy, shiftKey) {
-    const placePx = worldPointToPixel(wx, wy, shiftKey);
-    const sub = getMarkerSubKindFromPanel();
-    const placeUse = sub === 'area' ? markerAreaSnapWorldToPlacementPx(wx, wy, shiftKey) : placePx;
-    const px = placeUse[0], py = placeUse[1];
-    if (sub !== 'text' && state.markerTextDraft && state.markerTextDraft.active) {
-      commitMarkerTextDraft();
-    }
-    if (sub === 'text') {
-      commitMarkerTextDraft();
-      state.markerTextDraft = { x: px, y: py, active: true };
-      showMarkerTextDraftEditor();
-      scheduleDraw();
-      return;
-    }
-    if (sub === 'ruler') {
-      if (!state.markerRulerDraft) {
-        state.markerRulerDraft = { x: px, y: py };
-        state.markerRulerHoverWorld = [px, py];
-      } else {
-        const x1 = state.markerRulerDraft.x, y1 = state.markerRulerDraft.y;
-        state.markerRulerDraft = null;
-        state.markerRulerHoverWorld = null;
-        const dx = px - x1, dy = py - y1;
-        if (dx * dx + dy * dy < 2.25) return;
-        pushUndo();
-        state.layoutMarkers.push({ kind: 'ruler', id: id(), x1: x1, y1: y1, x2: px, y2: py });
-        syncPanelFromState();
-      }
-      return;
-    }
-    if (sub === 'island') {

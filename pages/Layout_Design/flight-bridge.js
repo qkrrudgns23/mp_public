@@ -1,3 +1,68 @@
+      const n = nums[j];
+      if (n <= e0 + 1) e0 = n;
+      else {
+        out.push([s0, e0]);
+        s0 = e0 = n;
+      }
+    }
+    out.push([s0, e0]);
+    return out;
+  }
+  /** True if compact playback track records any deadlock ghost sample (simulation seconds). */
+  function allocFlightTrackHasDeadlock(trDead) {
+    return !!(trDead && Array.isArray(trDead.dghost_t) && trDead.dghost_t.length > 0);
+  }
+  /** Flight Schedule row: deadlock from last Pro Sim compact playback, timeline ghost, or persisted id set. */
+  function flightScheduleRowHasDeadlock(f) {
+    if (!f || f.id == null) return false;
+    const idStr = String(f.id);
+    if (state.deadlockFlightIdsFromLastSim && state.deadlockFlightIdsFromLastSim[idStr]) return true;
+    const tr = compactPlaybackTrackForFlight(f);
+    if (allocFlightTrackHasDeadlock(tr)) return true;
+    if (f.timeline && Array.isArray(f.timeline)) {
+      for (let i = 0; i < f.timeline.length; i++) {
+        if (f.timeline[i] && f.timeline[i].deadlockGhost === true) return true;
+      }
+    }
+    return false;
+  }
+  /** Gantt apron bar: red overlay only where sim seconds fall in merged dghost ranges (time axis = sec/60). */
+  function allocFlightDeadlockOverlayHtml(trDead, segT0Min, segT1Min, visT0Min, visT1Min) {
+    if (!trDead || !Array.isArray(trDead.dghost_t) || !trDead.dghost_t.length) return '';
+    const ranges = compactPlaybackDghostMergedRangesSec(trDead);
+    if (!ranges.length) return '';
+    const denom = visT1Min - visT0Min;
+    if (!(denom > 1e-12)) return '';
+    const parts = [];
+    for (let r = 0; r < ranges.length; r++) {
+      const ds = ranges[r][0], de = ranges[r][1];
+      const m0 = ds / 60;
+      const m1 = (de + 1) / 60;
+      const a = Math.max(visT0Min, m0, segT0Min);
+      const b = Math.min(visT1Min, m1, segT1Min);
+      if (!(b > a + 1e-12)) continue;
+      const leftRel = ((a - visT0Min) / denom) * 100;
+      const wRel = Math.max(0.5, ((b - a) / denom) * 100);
+      parts.push('<div class="alloc-flight-deadlock-seg" style="left:' + leftRel + '%;width:' + wRel + '%;"></div>');
+    }
+    return parts.length ? parts.join('') : '';
+  }
+  function compactPlaybackTugIntervals(track) {
+    if (!track) return [];
+    if (Array.isArray(track.__tugIntervals)) return track.__tugIntervals;
+    const raw = Array.isArray(track.tug_intervals) ? track.tug_intervals : [];
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+      const it = raw[i];
+      if (!it || typeof it !== 'object') continue;
+      const start = Number(it.start != null ? it.start : it.t0);
+      const end = Number(it.end != null ? it.end : it.t1);
+      if (isFinite(start) && isFinite(end) && end > start) out.push({ start: start, end: end });
+    }
+    track.__tugIntervals = out;
+    return out;
+  }
+  function compactPlaybackNeedsTugAt(track, tSec) {
     const t = Number(tSec);
     if (!isFinite(t)) return false;
     const intervals = compactPlaybackTugIntervals(track);
@@ -383,68 +448,3 @@
     state.simPlaybackScheduleSnapshot = scheduleList.length ? scheduleList.slice() : null;
     state.simPlaybackTimelinesEvictedForMemory = false;
     state.simDeadlockGhostPlayback = deriveDeadlockGhostPlaybackFromPayload(payload, state.flights);
-    if (hasPositions && positions && typeof positions === 'object') {
-      if (!state.deadlockFlightIdsFromLastSim) state.deadlockFlightIdsFromLastSim = Object.create(null);
-      Object.keys(positions).forEach(function(pid) {
-        const tr = positions[pid];
-        if (allocFlightTrackHasDeadlock(tr)) state.deadlockFlightIdsFromLastSim[String(pid)] = true;
-      });
-    }
-    if (state.hasSimulationResult) {
-      if (typeof markGlobalUpdateFresh === 'function') markGlobalUpdateFresh();
-      if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
-    } else if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
-    else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-    if (typeof resizeCanvas === 'function') resizeCanvas();
-    if (typeof reset2DView === 'function') reset2DView();
-    if (typeof syncPanelFromState === 'function') syncPanelFromState();
-    if (typeof renderFlightList === 'function') renderFlightList(false, false);
-    if (typeof renderKpiDashboard === 'function') renderKpiDashboard('Updated');
-    if (typeof renderRunwaySeparation === 'function') renderRunwaySeparation();
-    if (typeof draw === 'function') draw();
-    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
-  }
-  function applyInitialLayoutFromJson() {
-    if (!INITIAL_LAYOUT || typeof INITIAL_LAYOUT !== 'object') return;
-    applyLayoutObject(INITIAL_LAYOUT);
-  }
-  function updateLayoutNameBar(name) {
-    const n = (name && String(name).trim()) || '';
-    state.currentLayoutName = n || state.currentLayoutName || 'default_layout';
-    const bar = document.getElementById('layout-name-bar');
-    if (bar) bar.textContent = n || state.currentLayoutName;
-  }
-  function uniqueNameAgainstSet(baseName, usedNames) {
-    const base = (baseName && String(baseName).trim()) || 'Untitled';
-    const used = usedNames instanceof Set ? usedNames : new Set();
-    if (!used.has(base)) return base;
-    let idx = 1;
-    while (used.has(base + ' (' + idx + ')')) idx++;
-    return base + ' (' + idx + ')';
-  }
-  function zeroPadNumber(num, width) {
-    return String(Math.max(0, Number(num) || 0)).padStart(width, '0');
-  }
-  function getDefaultPathName(pathType, currentId) {
-    const prefix = pathType === 'runway' ? 'RW' : (pathType === 'runway_exit' ? 'RTX' : (pathType === 'apron_taxiway' ? 'ATX' : (pathType === 'general_queue_taxiway' ? 'QTX' : 'TX')));
-    const sameType = (state.taxiways || []).filter(function(tw) { return tw && tw.id !== currentId && tw.pathType === pathType; });
-    const used = new Set(sameType.map(function(tw) { return (tw.name && String(tw.name).trim()) || ''; }).filter(Boolean));
-    let n = 1;
-    let candidate = prefix + String(n);
-    while (used.has(candidate)) {
-      n++;
-      candidate = prefix + String(n);
-      if (n > 100000) break;
-    }
-    return candidate;
-  }
-  function getDefaultTerminalName(currentId) {
-    return getDefaultBuildingNameForType(BUILDING_TYPE_DEFAULT, currentId);
-  }
-  function getDefaultPbbStandName(currentId) {
-    const stands = (state.pbbStands || []).filter(function(st) { return st && st.id !== currentId; });
-    const used = new Set(stands.map(function(st) { return (st.name && String(st.name).trim()) || ''; }).filter(Boolean));
-    return uniqueNameAgainstSet('C' + zeroPadNumber(stands.length + 1, 3), used);
-  }
