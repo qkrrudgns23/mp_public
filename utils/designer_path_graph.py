@@ -714,6 +714,7 @@ def build_path_graph(
     opts = path_graph_opts if isinstance(path_graph_opts, dict) else {}
     pure_ground_exclude_runway = bool(opts.get("pureGroundExcludeRunway"))
     omit_other_runway_exits = bool(opts.get("omitOtherRunwayExits"))
+    omit_apron_link_edges = bool(opts.get("omitApronLinkEdges"))
     try:
         queue_spacing_m = float(opts.get("queueTaxiwayJunctionSpacingM", 20.0))
     except (TypeError, ValueError):
@@ -1015,34 +1016,35 @@ def build_path_graph(
             )
 
     stand_id_to_node_index: Dict[str, int] = {}
-    for entry in apron_node_stand:
-        node_p = entry["nodeP"]
-        stand_pt = entry["standPt"]
-        stand_id = entry.get("standId")
-        i = get_or_add(node_p)
-        j = get_or_add(stand_pt)
-        if stand_id is not None:
-            stand_id_to_node_index[str(stand_id)] = j
-        chain_pts = entry.get("chain") or []
-        d_pts = dedupe_path_points(chain_pts if len(chain_pts) >= 2 else [node_p, stand_pt])
-        if len(d_pts) < 2 or i == j:
-            continue
-        total_dist = sum(path_dist(d_pts[k], d_pts[k + 1]) for k in range(len(d_pts) - 1))
-        if total_dist <= 1e-6:
-            continue
-        lid = "apron_link"
-        adj[i].append((j, total_dist))
-        adj[j].append((i, total_dist))
-        register_directed_edge(
-            DirectedEdgeRecord(
-                i, j, total_dist, total_dist, list(reversed(d_pts)), lid, "apron_link", "both"
+    if not omit_apron_link_edges:
+        for entry in apron_node_stand:
+            node_p = entry["nodeP"]
+            stand_pt = entry["standPt"]
+            stand_id = entry.get("standId")
+            i = get_or_add(node_p)
+            j = get_or_add(stand_pt)
+            if stand_id is not None:
+                stand_id_to_node_index[str(stand_id)] = j
+            chain_pts = entry.get("chain") or []
+            d_pts = dedupe_path_points(chain_pts if len(chain_pts) >= 2 else [node_p, stand_pt])
+            if len(d_pts) < 2 or i == j:
+                continue
+            total_dist = sum(path_dist(d_pts[k], d_pts[k + 1]) for k in range(len(d_pts) - 1))
+            if total_dist <= 1e-6:
+                continue
+            lid = "apron_link"
+            adj[i].append((j, total_dist))
+            adj[j].append((i, total_dist))
+            register_directed_edge(
+                DirectedEdgeRecord(
+                    i, j, total_dist, total_dist, list(reversed(d_pts)), lid, "apron_link", "both"
+                )
             )
-        )
-        register_directed_edge(
-            DirectedEdgeRecord(
-                j, i, total_dist, total_dist, d_pts, lid, "apron_link", "both"
+            register_directed_edge(
+                DirectedEdgeRecord(
+                    j, i, total_dist, total_dist, d_pts, lid, "apron_link", "both"
+                )
             )
-        )
 
     for tst in layout.get("tempStands") or []:
         if not isinstance(tst, dict):
@@ -1128,6 +1130,7 @@ def path_graph_from_layout_sim_export(
     merge_radius_px: float,
     taxiway_heuristic_bonus: float,
     apply_taxiway_ret_heuristic: bool,
+    omit_apron_link_edges: bool = False,
 ) -> Optional[PathGraph]:
     """
     Assemble PathGraph from Layout_Design serializeCurrentLayout().simPathGraph (designer.js
@@ -1223,6 +1226,8 @@ def path_graph_from_layout_sim_export(
             pts = [nodes[a], nodes[b]]
         link_id = str(e.get("linkId") or "")
         path_type = str(e.get("pathType") or "taxiway")
+        if omit_apron_link_edges and path_type == "apron_link":
+            continue
         path_dir_raw = e.get("pathDir")
         pd = _norm_sim_edge_path_dir(path_dir_raw)
         if path_type == "runway":

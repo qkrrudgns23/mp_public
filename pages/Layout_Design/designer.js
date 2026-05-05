@@ -23878,7 +23878,12 @@
     if (overlayCanvas && !overlayCtx) overlayCtx = overlayCanvas.getContext('2d');
     if (state.simSliderScrubbing && !(drawOpts && drawOpts.bypassSimScrubGuard)) return;
     const interactiveLite = layoutViewSkipsTaxiDetail(drawOpts);
-    const simPlaybackSkipHeavyPathOverlays = !!(state.simPlaying && state.hasSimulationResult && !(drawOpts && drawOpts.forceFullLayoutDraw));
+    const flightPathRevealActive =
+      state.flightPathRevealFlightId != null &&
+      String(state.flightPathRevealFlightId).trim() !== '';
+    const simPlaybackSkipHeavyPathOverlays =
+      !flightPathRevealActive &&
+      !!(state.simPlaying && state.hasSimulationResult && !(drawOpts && drawOpts.forceFullLayoutDraw));
     const skipPathGeometryOverlays = !!(drawOpts && drawOpts.skipPathGeometryOverlays);
     function drawSimPlaybackBackgroundLayers() {
       drawGrid(interactiveLite);

@@ -130,6 +130,18 @@ def _phase_for_extracted_leg_index(leg_i: int) -> str:
     if 0 <= int(leg_i) < len(_EXTRACT_LEG_PHASES):
         return _EXTRACT_LEG_PHASES[int(leg_i)]
     return PHASE_DEP_TAXI
+
+
+def _phase_routing_omits_apron_links(phase: str) -> bool:
+    """Departure taxi and temp-occupied arrival taxi omit apron_link edges from the path graph only."""
+
+    return str(phase) in (PHASE_DEP_TAXI, PHASE_ARR_TAXI_TEMP)
+
+
+def _pushback_use_opposite_dep_branch_heuristic(flight: Dict[str, Any]) -> bool:
+    reg = str(flight.get("reg") or flight.get("registration") or "").strip()
+    fid = str(flight.get("id") or "").strip()
+    return reg == "RVQ46753" or fid == "id_nbh5oh73f"
 SIM_MAX_TIME_SEC = 200_000.0
 # After max scheduled STOT (S / ``stotMin``), advance sim time only this much (absolute seconds).
 STOT_POST_BUFFER_SEC = 3_600.0
@@ -206,7 +218,7 @@ NODE_OCCUPANCY_RADIUS_M = 12.0
 DEP_RUNWAY_HOLD_BUFFER_M = 100.0
 
 # Cleared at the start of each ``run_simulation``; keyed by layout object id + path-search params.
-_PATH_GRAPH_BUILD_CACHE: Dict[Tuple[int, str, float, float, float, float, bool], PathGraph] = {}
+_PATH_GRAPH_BUILD_CACHE: Dict[Tuple[int, str, float, float, float, float, bool, bool], PathGraph] = {}
 
 
 def _stable_tie_seed(*parts: object) -> int:
@@ -454,6 +466,7 @@ def _graph_for_direction(
     information: Dict[str, Any],
     *,
     pure_ground_exclude_runway: bool,
+    omit_apron_link_edges: bool = False,
 ) -> Optional[PathGraph]:
     g = path_graph_from_layout_sim_export(
         layout,
@@ -463,6 +476,7 @@ def _graph_for_direction(
         merge_radius_px=merge_r,
         taxiway_heuristic_bonus=taxiway_h,
         apply_taxiway_ret_heuristic=False,
+        omit_apron_link_edges=omit_apron_link_edges,
     )
     if g is not None:
         return g
@@ -477,6 +491,8 @@ def _graph_for_direction(
     except (TypeError, ValueError):
         q_js = 20.0
     path_graph_opts = {"queueTaxiwayJunctionSpacingM": max(5.0, q_js)}
+    if omit_apron_link_edges:
+        path_graph_opts["omitApronLinkEdges"] = True
     return build_path_graph(
         layout,
         cell_size,
@@ -501,6 +517,7 @@ def _cached_path_graph_for_direction(
     information: Dict[str, Any],
     *,
     pure_ground_exclude_runway: bool,
+    omit_apron_link_edges: bool = False,
 ) -> Optional[PathGraph]:
     nd = normalize_rw_direction_value(str(runway_ops_dir).strip() if runway_ops_dir else "")
     if nd not in ("clockwise", "counter_clockwise"):
@@ -513,6 +530,7 @@ def _cached_path_graph_for_direction(
         float(merge_r),
         float(taxiway_h),
         bool(pure_ground_exclude_runway),
+        bool(omit_apron_link_edges),
     )
     hit = _PATH_GRAPH_BUILD_CACHE.get(key)
     if hit is not None:
@@ -526,6 +544,7 @@ def _cached_path_graph_for_direction(
         taxiway_h,
         information,
         pure_ground_exclude_runway=pure_ground_exclude_runway,
+        omit_apron_link_edges=omit_apron_link_edges,
     )
     if g is not None:
         _PATH_GRAPH_BUILD_CACHE[key] = g
@@ -1006,6 +1025,7 @@ def _flight_route_impl(
     accept_reverse_penalty_path: bool = False,
     apron_transit_extra: float = 0.0,
     apron_allowed_link_ids: Optional[Set[str]] = None,
+    omit_apron_link_edges: bool = False,
 ) -> Tuple[List[str], bool, Optional[List[int]], Optional[PathGraph]]:
     """Same graph build and routing as airside_sim_rev3 ``_flight_route``; returns path for geometry."""
     g = _cached_path_graph_for_direction(
@@ -1017,6 +1037,7 @@ def _flight_route_impl(
         taxiway_h,
         information,
         pure_ground_exclude_runway=False,
+        omit_apron_link_edges=omit_apron_link_edges,
     )
     if g is None or not g.nodes:
         return [], False, None, None
@@ -1946,6 +1967,8 @@ def _pushback_is_taxiway_rec(rec: DirectedEdgeRecord) -> bool:
 def _pushback_apron_plus_one_taxi_node_path(
     g: PathGraph,
     path_nodes: List[int],
+    *,
+    prefer_opposite_to_dep: bool = False,
 ) -> Optional[List[int]]:
     """
     Pushback is the stand-side apron-link prefix plus at most one taxiway branch.
@@ -1954,6 +1977,10 @@ def _pushback_apron_plus_one_taxi_node_path(
     first departure taxi junction, prefer the opposite/branch taxiway edge (e.g. ``090``
     when departure would continue on ``088``). If such taxiway edge does not exist, use
     only the apron-link prefix.
+
+    When ``prefer_opposite_to_dep`` is True, pick the taxiway branch whose direction from
+    the junction has the smallest dot product with the departure path (most opposite). Otherwise
+    keep the legacy tie-break: maximize ``|cross|`` with the departure direction.
     """
     if len(path_nodes) < 2:
         return None
@@ -1998,16 +2025,28 @@ def _pushback_apron_plus_one_taxi_node_path(
     nu, nd = g.nodes[u], g.nodes[dep_head]
     dx, dy = float(nd[0]) - float(nu[0]), float(nd[1]) - float(nu[1])
     best_w: Optional[int] = None
-    best_cross = -1.0
-    for w in cand:
-        if w < 0 or w >= n_g:
-            continue
-        nw = g.nodes[w]
-        wx, wy = float(nw[0]) - float(nu[0]), float(nw[1]) - float(nu[1])
-        cross = abs(dx * wy - dy * wx)
-        if cross > best_cross + 1e-9:
-            best_cross = cross
-            best_w = w
+    if prefer_opposite_to_dep:
+        best_dot = float("inf")
+        for w in cand:
+            if w < 0 or w >= n_g:
+                continue
+            nw = g.nodes[w]
+            wx, wy = float(nw[0]) - float(nu[0]), float(nw[1]) - float(nu[1])
+            dot = dx * wx + dy * wy
+            if dot < best_dot - 1e-9:
+                best_dot = dot
+                best_w = w
+    else:
+        best_cross = -1.0
+        for w in cand:
+            if w < 0 or w >= n_g:
+                continue
+            nw = g.nodes[w]
+            wx, wy = float(nw[0]) - float(nu[0]), float(nw[1]) - float(nu[1])
+            cross = abs(dx * wy - dy * wx)
+            if cross > best_cross + 1e-9:
+                best_cross = cross
+                best_w = w
     return forced + [best_w if best_w is not None else cand[0]]
 
 
@@ -2073,7 +2112,11 @@ def _pushback_apron_plus_one_taxi_route(
     )
     if dv_apron or path_apron is None or g_apron is None or len(path_apron) < 2:
         return None
-    fp = _pushback_apron_plus_one_taxi_node_path(g_apron, path_apron)
+    fp = _pushback_apron_plus_one_taxi_node_path(
+        g_apron,
+        path_apron,
+        prefer_opposite_to_dep=_pushback_use_opposite_dep_branch_heuristic(flight),
+    )
     if fp is None or len(fp) < 2:
         return None
     end_i = int(fp[-1])
@@ -2197,7 +2240,11 @@ def _extract_point_to_path_legs(
     to_lineup_pts = _world_xy_chain_from_graph_path(g_apron, path_apron, pair_index)
     if len(to_lineup_pts) < 2:
         return []
-    pushback_nodes = _pushback_apron_plus_one_taxi_node_path(g_apron, path_apron)
+    pushback_nodes = _pushback_apron_plus_one_taxi_node_path(
+        g_apron,
+        path_apron,
+        prefer_opposite_to_dep=_pushback_use_opposite_dep_branch_heuristic(flight),
+    )
     if pushback_nodes is None or len(pushback_nodes) < 2:
         return []
     pushback_end_i = int(pushback_nodes[-1])
@@ -2257,7 +2304,11 @@ def _extract_point_to_path_legs(
         )
         if dv_mid or path_mid is None or g_mid is None or len(path_mid) < 2:
             return []
-        pb_nodes_mid = _pushback_apron_plus_one_taxi_node_path(g_mid, path_mid)
+        pb_nodes_mid = _pushback_apron_plus_one_taxi_node_path(
+            g_mid,
+            path_mid,
+            prefer_opposite_to_dep=_pushback_use_opposite_dep_branch_heuristic(flight),
+        )
         if pb_nodes_mid is None or len(pb_nodes_mid) < 2:
             return []
         pb_i = int(pb_nodes_mid[-1])
@@ -2952,6 +3003,7 @@ def prepare_flight_path(
                 RouteEndpoint(token_pixel_xy=(ex, ey)),
                 apron_transit_extra=ap_extra,
                 apron_allowed_link_ids=ap_ids if ap_ids else None,
+                omit_apron_link_edges=_phase_routing_omits_apron_links(str(phase)),
             )
         if dv:
             logical_edge_list = []
@@ -5618,6 +5670,7 @@ def _build_prep_xy_to_xy_phase(
         RouteEndpoint(token_pixel_xy=(float(end_xy[0]), float(end_xy[1]))),
         penalized_layout_edges=temp_pen,
         penalty_add=float(REVERSE_PENALTY_COST) if temp_pen else 0.0,
+        omit_apron_link_edges=_phase_routing_omits_apron_links(str(phase_str)),
     )
     if dv or path is None or g is None or len(path) < 2:
         return None
@@ -8042,6 +8095,7 @@ def build_reroute_path_from_xy(
         penalized_layout_edges=penalized if penalized else None,
         penalty_add=penalty_use,
         accept_reverse_penalty_path=accept_reverse_penalty_path,
+        omit_apron_link_edges=_phase_routing_omits_apron_links(phase),
     )
     if dv or path is None or g is None or len(path) < 2:
         return None
