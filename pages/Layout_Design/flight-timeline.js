@@ -1,3 +1,8 @@
+    const span = Number(state.simDurationSec) - Number(state.simStartSec);
+    if (!(span > 1e-6)) return;
+    const dlp = state.simDeadlockGhostPlayback;
+    const evs = (dlp && Array.isArray(dlp.events)) ? dlp.events : [];
+    const lo = Number(state.simStartSec);
     const hi = Number(state.simDurationSec);
     evs.forEach(function(ev) {
       const t = Number(ev.t_abs);
@@ -1387,8 +1392,3 @@
     const g = Number(r.gap), ws = Number(r.wingspan);
     const halfD = depM / 2, halfW = widM / 2;
     const eps = 0.12;
-    if (!(isFinite(g) && g > eps && isFinite(ws) && ws > 0)) return [];
-    const yLim = halfW - g;
-    if (!(yLim > eps && yLim < halfW - eps)) return [];
-    const a0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, yLim);
-    const a1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, yLim);

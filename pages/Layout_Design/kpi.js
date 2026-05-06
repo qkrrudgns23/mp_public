@@ -1,3 +1,8 @@
+      if (!pts || pts.length < 2) return;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const near = closestPointOnSegment(pts[i], pts[i + 1], click);
+        if (!near) continue;
+        const d2 = dist2(near, click);
         if (d2 < bestD2 && d2 <= maxD2) {
           bestD2 = d2;
           const ax = pts[i][0], ay = pts[i][1], bx = pts[i + 1][0], by = pts[i + 1][1];
@@ -363,8 +368,3 @@
           }
         }
         if (nearVertex) return { type: 'layoutMarker', id: m.id, obj: m };
-        if (!contourLineOnly && pointInPolygonXY(click, poly)) return { type: 'layoutMarker', id: m.id, obj: m };
-        const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
-        const tol2 = tol * tol;
-        const nn = poly.length;
-        for (let ei = 0; ei < nn; ei++) {

@@ -1,3 +1,8 @@
+        if (!contourLineOnly && pointInPolygonXY(click, poly)) return { type: 'layoutMarker', id: m.id, obj: m };
+        const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
+        const tol2 = tol * tol;
+        const nn = poly.length;
+        for (let ei = 0; ei < nn; ei++) {
           const p0 = poly[ei], p1 = poly[(ei + 1) % nn];
           const pr = projectOnSegment(p0, p1, click);
           if (pr.t < 0 || pr.t > 1) continue;
@@ -378,8 +383,3 @@
     });
     return best;
   }
-  function hitTestPbbEditablePoint(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'pbb') return null;
-    const pbb = state.selectedObject.obj;
-    if (!pbb || pbb.id !== state.selectedObject.id) return null;
-    const click = [wx, wy];

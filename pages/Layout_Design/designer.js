@@ -300,7 +300,7 @@
     if (!tw) return false;
     const pt = String(tw.pathType || '');
     if (pt === 'general_queue_taxiway') return true;
-    if (pt === 'runway_exit' || pt === 'runway_taxiway') return tw.queueFlow !== false;
+    if (pt === 'runway_exit' || pt === 'runway_taxiway') return tw.queueFlow === true;
     return false;
   }
   function normalizeTaxiwayWidthInPlace(tw) {
@@ -1433,7 +1433,7 @@
       if (!tw || !tw.vertices) return '';
       const verts = tw.vertices.map(function(v) { return String(Number(v.col)) + ',' + String(Number(v.row)); }).join(';');
       const ptSig = String(tw.pathType || '');
-      const qf = (ptSig === 'runway_exit' || ptSig === 'runway_taxiway') ? String(tw.queueFlow !== false ? '1' : '0') : '';
+      const qf = (ptSig === 'runway_exit' || ptSig === 'runway_taxiway') ? String(tw.queueFlow === true ? '1' : '0') : '';
       return String(tw.id || '') + '|' + ptSig + '|' + String(tw.direction || '') + '|' + qf + '|' + verts;
     }).join('||');
   }
@@ -2409,6 +2409,11 @@
     if (minExitWrap) minExitWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
     if (rwDirWrap) rwDirWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
     refreshTaxiwayDirectionModeSelect(pt);
+    const pathTypeKindEl = document.getElementById('taxiwayPathTypeKind');
+    if (pathTypeKindEl && (pt === 'runway_exit' || pt === 'runway_taxiway')) {
+      const taxiwayPanelSelected = state && state.selectedObject && state.selectedObject.type === 'taxiway';
+      if (!taxiwayPanelSelected) pathTypeKindEl.value = 'normal';
+    }
   }
   function refreshTaxiwayDirectionModeSelect(pathType) {
     const sel = document.getElementById('taxiwayDirectionMode');
@@ -5430,7 +5435,7 @@
     if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
     else delete copy.rwySepConfig;
     if (tw.pathType === 'runway_exit' || tw.pathType === 'runway_taxiway') {
-      copy.queueFlow = tw.queueFlow !== false;
+      copy.queueFlow = tw.queueFlow === true;
     } else {
       delete copy.queueFlow;
     }
@@ -7978,7 +7983,7 @@
       if (kindSel) {
         const ptk = tw.pathType || 'taxiway';
         if (ptk === 'general_queue_taxiway') kindSel.value = 'queue';
-        else if (ptk === 'runway_exit' || ptk === 'runway_taxiway') kindSel.value = (tw.queueFlow === false) ? 'normal' : 'queue';
+        else if (ptk === 'runway_exit' || ptk === 'runway_taxiway') kindSel.value = (tw.queueFlow === true) ? 'queue' : 'normal';
         else kindSel.value = 'normal';
       }
       syncPathPavementRadiosToValue(pathPavementResolvedForTaxiway(tw));
@@ -8001,7 +8006,7 @@
         }
         const twKindIdle = document.getElementById('taxiwayPathTypeKind');
         if (twKindIdle && ptx === 'taxiway') twKindIdle.value = 'normal';
-        if (twKindIdle && (ptx === 'runway_exit' || ptx === 'runway_taxiway')) twKindIdle.value = 'queue';
+        if (twKindIdle && (ptx === 'runway_exit' || ptx === 'runway_taxiway')) twKindIdle.value = 'normal';
         syncPathPavementRadiosToValue(pathPavementDefaultForPathType(ptx));
       }
       else {
@@ -8234,9 +8239,8 @@
           tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
           delete tw.queueFlow;
         } else if (ptCur === 'runway_exit' || ptCur === 'runway_taxiway') {
-          const kindR = String(el('taxiwayPathTypeKind').value || 'queue');
-          if (kindR === 'normal') tw.queueFlow = false;
-          else delete tw.queueFlow;
+          const kindR = String(el('taxiwayPathTypeKind').value || 'normal');
+          tw.queueFlow = kindR === 'queue';
         }
       }
       if (el('taxiwayAvgMoveVelocity')) {
@@ -8323,7 +8327,7 @@
           if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
         }
         const pathKindIdleSt = document.getElementById('taxiwayPathTypeKind');
-        if (pathKindIdleSt && (pt === 'runway_exit' || pt === 'runway_taxiway')) pathKindIdleSt.value = 'queue';
+        if (pathKindIdleSt && (pt === 'runway_exit' || pt === 'runway_taxiway')) pathKindIdleSt.value = 'normal';
       }
     }
     if (typeof renderObjectList === 'function') renderObjectList();
@@ -9111,9 +9115,8 @@
           tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
           delete tw.queueFlow;
         } else if (ptCur === 'runway_exit' || ptCur === 'runway_taxiway') {
-          const kindRx = String(this.value || 'queue');
-          if (kindRx === 'normal') tw.queueFlow = false;
-          else delete tw.queueFlow;
+          const kindRx = String(this.value || 'normal');
+          tw.queueFlow = kindRx === 'queue';
         }
         updateObjectInfo();
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
@@ -16901,7 +16904,7 @@
           }
         }
       }
-      if (obj.pathType === 'general_queue_taxiway') {
+      if (taxiwayUsesQueueJunctionSpacing(obj)) {
         queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
           junctions.push(qj);
         });
@@ -20484,11 +20487,10 @@
       const v = el ? Number(el.value) : 10;
       return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
     })(), startDisplacedThresholdM, startBlastPadM, endDisplacedThresholdM, endBlastPadM };
-    if (pathType === 'runway_exit') {
+    if (pathType === 'runway_exit' || pathType === 'runway_taxiway') {
       const kEl = document.getElementById('taxiwayPathTypeKind');
-      const kr = kEl ? String(kEl.value || 'queue') : 'queue';
-      if (kr === 'normal') taxiway.queueFlow = false;
-      else delete taxiway.queueFlow;
+      const kr = kEl ? String(kEl.value || 'normal') : 'normal';
+      taxiway.queueFlow = kr === 'queue';
     } else {
       delete taxiway.queueFlow;
     }

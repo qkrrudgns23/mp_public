@@ -1,3 +1,8 @@
+    }
+    return [];
+  }
+  function normalizeLayoutMarkerFromLoad(m) {
+    if (!m || typeof m !== 'object') return null;
     const k = m.kind || m.type;
     if (k === 'text') {
       const x = Number(m.x), y = Number(m.y);
@@ -668,8 +673,3 @@
     const vttArrS = secOpt('VTT_ARR_SEC');
     if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
     else delete f.proSimVttArrSec;
-    const pushbackS = secOpt('PUSHBACK_SEC');
-    if (isFinite(pushbackS)) f.proSimPushbackSec = pushbackS;
-    else delete f.proSimPushbackSec;
-    const vttDepS = secOpt('VTT_DEP_SEC');
-    if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;

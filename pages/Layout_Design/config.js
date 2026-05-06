@@ -300,7 +300,7 @@
     if (!tw) return false;
     const pt = String(tw.pathType || '');
     if (pt === 'general_queue_taxiway') return true;
-    if (pt === 'runway_exit' || pt === 'runway_taxiway') return tw.queueFlow !== false;
+    if (pt === 'runway_exit' || pt === 'runway_taxiway') return tw.queueFlow === true;
     return false;
   }
   function normalizeTaxiwayWidthInPlace(tw) {

@@ -1,3 +1,6 @@
+    if (field === 'stot') {
+      const sibt = f.timeMin != null ? f.timeMin : 0;
+      const sobtGuess = scheduledSobtFromStotMinutes(f, m);
       let sobtAdj = Math.max(sobtGuess, sibt + minDwell);
       f.sobtMin = sobtAdj;
       f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobtAdj - sibt);
@@ -3026,7 +3029,7 @@
           }
         }
       }
-      if (obj.pathType === 'general_queue_taxiway') {
+      if (taxiwayUsesQueueJunctionSpacing(obj)) {
         queueTaxiwayAutoJunctionMarkersAlong(obj, QUEUE_TAXIWAY_JUNCTION_SPACING_M).forEach(function(qj) {
           junctions.push(qj);
         });
@@ -6609,11 +6612,10 @@
       const v = el ? Number(el.value) : 10;
       return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
     })(), startDisplacedThresholdM, startBlastPadM, endDisplacedThresholdM, endBlastPadM };
-    if (pathType === 'runway_exit') {
+    if (pathType === 'runway_exit' || pathType === 'runway_taxiway') {
       const kEl = document.getElementById('taxiwayPathTypeKind');
-      const kr = kEl ? String(kEl.value || 'queue') : 'queue';
-      if (kr === 'normal') taxiway.queueFlow = false;
-      else delete taxiway.queueFlow;
+      const kr = kEl ? String(kEl.value || 'normal') : 'normal';
+      taxiway.queueFlow = kr === 'queue';
     } else {
       delete taxiway.queueFlow;
     }

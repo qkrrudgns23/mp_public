@@ -930,7 +930,7 @@ def build_path_graph(
         pt_flow = str(obj.get("pathType") or "")
         use_queue_spacing = pt_flow == "general_queue_taxiway" or (
             pt_flow in ("runway_exit", "runway_taxiway")
-            and bool(obj.get("queueFlow", True))
+            and obj.get("queueFlow") is True
         )
         if use_queue_spacing:
             for t_along_q, p_q in _queue_taxiway_junction_along_vertices(

@@ -441,6 +441,28 @@ def _sim_progress_elapsed_total_sec(
     return float(span)
 
 
+def _layout_requires_path_graph_rebuild_for_queue_splits(layout: Dict[str, Any]) -> bool:
+    """True when queue-style along-path junction splits must be applied from geometry.
+
+    ``layout["simPathGraph"]`` may have been exported before ``queueFlow`` / queue taxiway types
+    changed; using it would keep a single long edge per RET path. Rebuild from primitives so
+    ``designer_path_graph.build_path_graph`` inserts queue-spacing junctions as separate edges.
+    """
+    for key in ("runwayTaxiways", "taxiways"):
+        arr = layout.get(key)
+        if not isinstance(arr, list):
+            continue
+        for tw in arr:
+            if not isinstance(tw, dict):
+                continue
+            pt = str(tw.get("pathType") or "")
+            if pt == "general_queue_taxiway":
+                return True
+            if pt in ("runway_exit", "runway_taxiway") and tw.get("queueFlow") is True:
+                return True
+    return False
+
+
 def _path_search_params(information: Dict[str, Any]) -> Tuple[float, float, float]:
     algo = _deep_get(information, "tiers", "algorithm", default={}) or {}
     path_cfg = algo.get("pathSearch") if isinstance(algo.get("pathSearch"), dict) else {}
@@ -468,18 +490,21 @@ def _graph_for_direction(
     pure_ground_exclude_runway: bool,
     omit_apron_link_edges: bool = False,
 ) -> Optional[PathGraph]:
-    g = path_graph_from_layout_sim_export(
-        layout,
-        rw_dir,
-        pure_ground_exclude_runway=pure_ground_exclude_runway,
-        reverse_cost=reverse_cost,
-        merge_radius_px=merge_r,
-        taxiway_heuristic_bonus=taxiway_h,
-        apply_taxiway_ret_heuristic=False,
-        omit_apron_link_edges=omit_apron_link_edges,
-    )
-    if g is not None:
-        return g
+    use_export = not _layout_requires_path_graph_rebuild_for_queue_splits(layout)
+    g: Optional[PathGraph] = None
+    if use_export:
+        g = path_graph_from_layout_sim_export(
+            layout,
+            rw_dir,
+            pure_ground_exclude_runway=pure_ground_exclude_runway,
+            reverse_cost=reverse_cost,
+            merge_radius_px=merge_r,
+            taxiway_heuristic_bonus=taxiway_h,
+            apply_taxiway_ret_heuristic=False,
+            omit_apron_link_edges=omit_apron_link_edges,
+        )
+        if g is not None:
+            return g
     flight_sched = _deep_get(information, "tiers", "flight_schedule", default={}) or {}
     rw_exit_default = normalize_allowed_runway_directions(flight_sched.get("rwExitAllowedDefaultRaw"))
     direction_modes = layout.get("directionModes") or []

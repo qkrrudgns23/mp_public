@@ -1,3 +1,7 @@
+      syncPathFieldVisibilityForPathType(pt);
+      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
+        const nameInput = document.getElementById('taxiwayName');
+        if (nameInput) nameInput.value = '';
         const widthInput = document.getElementById('taxiwayWidth');
         if (widthInput) {
           widthInput.value = pt === 'runway'
@@ -16,7 +20,7 @@
           if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
         }
         const pathKindIdleSt = document.getElementById('taxiwayPathTypeKind');
-        if (pathKindIdleSt && (pt === 'runway_exit' || pt === 'runway_taxiway')) pathKindIdleSt.value = 'queue';
+        if (pathKindIdleSt && (pt === 'runway_exit' || pt === 'runway_taxiway')) pathKindIdleSt.value = 'normal';
       }
     }
     if (typeof renderObjectList === 'function') renderObjectList();
@@ -804,9 +808,8 @@
           tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
           delete tw.queueFlow;
         } else if (ptCur === 'runway_exit' || ptCur === 'runway_taxiway') {
-          const kindRx = String(this.value || 'queue');
-          if (kindRx === 'normal') tw.queueFlow = false;
-          else delete tw.queueFlow;
+          const kindRx = String(this.value || 'normal');
+          tw.queueFlow = kindRx === 'queue';
         }
         updateObjectInfo();
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
@@ -2734,6 +2737,3 @@
       __schedRetExitDistMemo = __schedRetStatsCached;
     }
     __schedRetStatsCached = null;
-  }
-  function getScheduleRetStatsAll() {
-    if (__schedRetStatsBatchActive) {

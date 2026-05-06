@@ -1,3 +1,6 @@
+    state._allocGanttPlayheadCtx = { winStart: winStart, winEnd: winEnd, displaySpan: displaySpan, zoom: zoomLayout };
+
+    const tickPositions = buildTimeAxisTicks(winStart, winEnd, winStart, displaySpan, zoomLayout);
 
     function allocLeftPct(t) {
       return ((t - winStart) / displaySpan) * 100 * zoomLayout;
@@ -1664,6 +1667,3 @@
       f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
       return true;
     }
-    if (field === 'stot') {
-      const sibt = f.timeMin != null ? f.timeMin : 0;
-      const sobtGuess = scheduledSobtFromStotMinutes(f, m);

@@ -1,3 +1,8 @@
+    if (!(isFinite(g) && g > eps && isFinite(ws) && ws > 0)) return [];
+    const yLim = halfW - g;
+    if (!(yLim > eps && yLim < halfW - eps)) return [];
+    const a0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, yLim);
+    const a1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, yLim);
     const b0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, -yLim);
     const b1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, -yLim);
     return [[a0, a1], [b0, b1]];
@@ -407,7 +412,7 @@
     if (tw.pathType === 'runway' && tw.rwySepConfig) copy.rwySepConfig = tw.rwySepConfig;
     else delete copy.rwySepConfig;
     if (tw.pathType === 'runway_exit' || tw.pathType === 'runway_taxiway') {
-      copy.queueFlow = tw.queueFlow !== false;
+      copy.queueFlow = tw.queueFlow === true;
     } else {
       delete copy.queueFlow;
     }
@@ -853,8 +858,3 @@
         bootHref = w.location && w.location.href ? String(w.location.href) : '';
       } catch (eLoc) {
         bootHref = '';
-      }
-      if (bootHref.indexOf('data:') !== 0) {
-        try {
-          w.document.open();
-          w.document.write(bootHtml);

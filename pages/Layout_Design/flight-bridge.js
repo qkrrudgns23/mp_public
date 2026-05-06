@@ -1,3 +1,8 @@
+    const pushbackS = secOpt('PUSHBACK_SEC');
+    if (isFinite(pushbackS)) f.proSimPushbackSec = pushbackS;
+    else delete f.proSimPushbackSec;
+    const vttDepS = secOpt('VTT_DEP_SEC');
+    if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
     else delete f.proSimVttDepSec;
     const dttArrS = secOpt('DTT_ARR_SEC');
     if (isFinite(dttArrS)) f.proSimDttArrSec = dttArrS;
@@ -443,8 +448,3 @@
     const host = document.getElementById('flightSimSliderMarkers');
     if (!host) return;
     host.textContent = '';
-    const span = Number(state.simDurationSec) - Number(state.simStartSec);
-    if (!(span > 1e-6)) return;
-    const dlp = state.simDeadlockGhostPlayback;
-    const evs = (dlp && Array.isArray(dlp.events)) ? dlp.events : [];
-    const lo = Number(state.simStartSec);

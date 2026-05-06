@@ -599,6 +599,11 @@
     if (minExitWrap) minExitWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
     if (rwDirWrap) rwDirWrap.style.display = (pt === 'runway_exit') ? 'grid' : 'none';
     refreshTaxiwayDirectionModeSelect(pt);
+    const pathTypeKindEl = document.getElementById('taxiwayPathTypeKind');
+    if (pathTypeKindEl && (pt === 'runway_exit' || pt === 'runway_taxiway')) {
+      const taxiwayPanelSelected = state && state.selectedObject && state.selectedObject.type === 'taxiway';
+      if (!taxiwayPanelSelected) pathTypeKindEl.value = 'normal';
+    }
   }
   function refreshTaxiwayDirectionModeSelect(pathType) {
     const sel = document.getElementById('taxiwayDirectionMode');
@@ -687,8 +692,3 @@
         normalizePathPavementInPlace(tw);
       });
       return sliced;
-    }
-    return [];
-  }
-  function normalizeLayoutMarkerFromLoad(m) {
-    if (!m || typeof m !== 'object') return null;

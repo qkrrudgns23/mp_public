@@ -813,7 +813,7 @@
       if (!tw || !tw.vertices) return '';
       const verts = tw.vertices.map(function(v) { return String(Number(v.col)) + ',' + String(Number(v.row)); }).join(';');
       const ptSig = String(tw.pathType || '');
-      const qf = (ptSig === 'runway_exit' || ptSig === 'runway_taxiway') ? String(tw.queueFlow !== false ? '1' : '0') : '';
+      const qf = (ptSig === 'runway_exit' || ptSig === 'runway_taxiway') ? String(tw.queueFlow === true ? '1' : '0') : '';
       return String(tw.id || '') + '|' + ptSig + '|' + String(tw.direction || '') + '|' + qf + '|' + verts;
     }).join('||');
   }

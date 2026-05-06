@@ -1,3 +1,6 @@
+  }
+  function getScheduleRetStatsAll() {
+    if (__schedRetStatsBatchActive) {
       if (__schedRetStatsCached === null) {
         __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
       }
@@ -1155,6 +1158,3 @@
     const zoomRaw = (state.allocTimeZoom && state.allocTimeZoom > 1) ? state.allocTimeZoom : 1;
     const innerMinWidthPct = Math.max(100, Math.round(zoomRaw * 100));
     const zoomLayout = innerMinWidthPct / 100;
-    state._allocGanttPlayheadCtx = { winStart: winStart, winEnd: winEnd, displaySpan: displaySpan, zoom: zoomLayout };
-
-    const tickPositions = buildTimeAxisTicks(winStart, winEnd, winStart, displaySpan, zoomLayout);

@@ -1,3 +1,8 @@
+      }
+      if (bootHref.indexOf('data:') !== 0) {
+        try {
+          w.document.open();
+          w.document.write(bootHtml);
           w.document.close();
         } catch (eOpen) {
           console.error(eOpen);
@@ -543,8 +548,3 @@
       if (!tw || !isMarkerFlightAllowedPathType(tw.pathType || 'taxiway')) return;
       if (lockTaxiwayId && String(tw.id) !== lockTaxiwayId) return;
       const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
-      if (!pts || pts.length < 2) return;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const near = closestPointOnSegment(pts[i], pts[i + 1], click);
-        if (!near) continue;
-        const d2 = dist2(near, click);

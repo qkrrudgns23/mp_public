@@ -1,3 +1,8 @@
+  function hitTestPbbEditablePoint(wx, wy) {
+    if (!state.selectedObject || state.selectedObject.type !== 'pbb') return null;
+    const pbb = state.selectedObject.obj;
+    if (!pbb || pbb.id !== state.selectedObject.id) return null;
+    const click = [wx, wy];
     const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
     let best = null;
     let bestD2 = maxD2;
@@ -790,7 +795,7 @@
       if (kindSel) {
         const ptk = tw.pathType || 'taxiway';
         if (ptk === 'general_queue_taxiway') kindSel.value = 'queue';
-        else if (ptk === 'runway_exit' || ptk === 'runway_taxiway') kindSel.value = (tw.queueFlow === false) ? 'normal' : 'queue';
+        else if (ptk === 'runway_exit' || ptk === 'runway_taxiway') kindSel.value = (tw.queueFlow === true) ? 'queue' : 'normal';
         else kindSel.value = 'normal';
       }
       syncPathPavementRadiosToValue(pathPavementResolvedForTaxiway(tw));
@@ -813,7 +818,7 @@
         }
         const twKindIdle = document.getElementById('taxiwayPathTypeKind');
         if (twKindIdle && ptx === 'taxiway') twKindIdle.value = 'normal';
-        if (twKindIdle && (ptx === 'runway_exit' || ptx === 'runway_taxiway')) twKindIdle.value = 'queue';
+        if (twKindIdle && (ptx === 'runway_exit' || ptx === 'runway_taxiway')) twKindIdle.value = 'normal';
         syncPathPavementRadiosToValue(pathPavementDefaultForPathType(ptx));
       }
       else {
@@ -1046,9 +1051,8 @@
           tw.pathType = (kind === 'queue') ? 'general_queue_taxiway' : 'taxiway';
           delete tw.queueFlow;
         } else if (ptCur === 'runway_exit' || ptCur === 'runway_taxiway') {
-          const kindR = String(el('taxiwayPathTypeKind').value || 'queue');
-          if (kindR === 'normal') tw.queueFlow = false;
-          else delete tw.queueFlow;
+          const kindR = String(el('taxiwayPathTypeKind').value || 'normal');
+          tw.queueFlow = kindR === 'queue';
         }
       }
       if (el('taxiwayAvgMoveVelocity')) {
@@ -1113,7 +1117,3 @@
     }
     if (isPathLayoutMode(mode)) {
       const pt = pathTypeFromLayoutMode(mode);
-      syncPathFieldVisibilityForPathType(pt);
-      if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
-        const nameInput = document.getElementById('taxiwayName');
-        if (nameInput) nameInput.value = '';
