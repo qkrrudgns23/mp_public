@@ -1,3 +1,70 @@
+          const p0 = poly[ei], p1 = poly[(ei + 1) % nn];
+          const pr = projectOnSegment(p0, p1, click);
+          if (pr.t < 0 || pr.t > 1) continue;
+          if (dist2(pr.p, click) <= tol2) return { type: 'layoutMarker', id: m.id, obj: m };
+        }
+      } else if (m.kind === 'navaid') {
+        const ax = Number(m.x), ay = Number(m.y);
+        if (!isFinite(ax) || !isFinite(ay)) continue;
+        const tol = Math.max(CELL_SIZE * 0.8, 18 / Math.max(state.scale, 0.12));
+        const tol2 = tol * tol;
+        const sub = (m.subType === 'ils') ? 'ils' : 'papi';
+        if (sub === 'papi') {
+          const xs = papiLampCenterXsWorld(ax);
+          let hitP = false;
+          for (let pi = 0; pi < 4; pi++) {
+            if (dist2(click, [xs[pi], ay]) <= tol2) { hitP = true; break; }
+          }
+          if (!hitP && dist2(click, [ax, ay]) <= tol2) hitP = true;
+          if (!hitP) {
+            const half = 1.5 * PAPI_LAMP_SPACING_WORLD + tol;
+            if (Math.abs(click[1] - ay) <= tol && click[0] >= ax - half && click[0] <= ax + half) hitP = true;
+          }
+          if (hitP) return { type: 'layoutMarker', id: m.id, obj: m };
+        } else if (dist2(click, [ax, ay]) <= tol2) {
+          return { type: 'layoutMarker', id: m.id, obj: m };
+        }
+      }
+    }
+    return null;
+  }
+  /** Navaid: PAPI as four lamps (2 white, 2 red); ILS dot + ILS label at (m.x, m.y). */
+  function drawNavaidMarker2D(ctx2, m, selected, interactiveLite) {
+    if (!m) return;
+    const x = Number(m.x), y = Number(m.y);
+    if (!isFinite(x) || !isFinite(y)) return;
+    const sub = (m.subType === 'ils') ? 'ils' : 'papi';
+    const isIls = sub === 'ils';
+    const scaleRef = Math.max(state.scale, 0.1);
+    const etcMono = layerMonoEtcOn() && !selected;
+    ctx2.save();
+    if (!isIls) {
+      const lampXs = papiLampCenterXsWorld(x);
+      const rLight = Math.max(2.4 * PAPI_VISUAL_SCALE, 2.9 * PAPI_VISUAL_SCALE / scaleRef);
+      const fills = selected
+        ? ['#ffffff', '#ffffff', '#fca5a5', '#fca5a5']
+        : (etcMono
+          ? [C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE]
+          : ['#f8fafc', '#f8fafc', '#ef4444', '#ef4444']);
+      const strokes = selected
+        ? [c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke()]
+        : (etcMono
+          ? [c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss()]
+          : ['rgba(148,163,184,0.95)', 'rgba(148,163,184,0.95)', 'rgba(127,29,29,0.98)', 'rgba(127,29,29,0.98)']);
+      for (let i = 0; i < 4; i++) {
+        ctx2.beginPath();
+        ctx2.arc(lampXs[i], y, rLight, 0, Math.PI * 2);
+        ctx2.fillStyle = fills[i];
+        ctx2.strokeStyle = strokes[i];
+        ctx2.lineWidth = Math.max(0.35, 0.55 / scaleRef);
+        ctx2.fill();
+        ctx2.stroke();
+      }
+      if (selected) {
+        const pad = 2 * PAPI_VISUAL_SCALE;
+        const x0 = lampXs[0] - rLight - pad;
+        const x1 = lampXs[3] + rLight + pad;
+        const y0 = y - rLight - pad;
         const y1 = y + rLight + pad;
         ctx2.strokeStyle = c2dObjectSelectedStroke();
         ctx2.lineWidth = Math.max(0.55, 0.8 / scaleRef);
@@ -316,70 +383,3 @@
     const pbb = state.selectedObject.obj;
     if (!pbb || pbb.id !== state.selectedObject.id) return null;
     const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    (Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : []).forEach(function(bridge, bridgeIdx) {
-      (Array.isArray(bridge.points) ? bridge.points : []).forEach(function(pt, ptIdx) {
-        if (ptIdx === 1) return;
-        const d2 = dist2([Number(pt.x) || 0, Number(pt.y) || 0], click);
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = { type: 'bridge', bridgeIndex: bridgeIdx, pointIndex: ptIdx };
-        }
-      });
-    });
-    const apronPt = getStandAircraftMarkerWorldPxForPbb(pbb);
-    const apronD2 = dist2(apronPt, click);
-    if (apronD2 < bestD2) best = { type: 'apronSite' };
-    return best;
-  }
-  function hitTestRemoteStandDragPoint(wx, wy) {
-    if (!state.selectedObject || state.selectedObject.type !== 'remote') return null;
-    const st = state.selectedObject.obj;
-    if (!st || st.id !== state.selectedObject.id) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
-    const mk = getStandAircraftMarkerWorldPxForRemoteLike(st);
-    if (dist2(mk, click) <= maxD2) return { type: 'remoteCenter' };
-    return null;
-  }
-  function findInsertSegment(vertices, closed, wx, wy) {
-    if (!Array.isArray(vertices) || vertices.length < 2) return null;
-    const click = [wx, wy];
-    const maxD2 = (CELL_SIZE * INSERT_VERTEX_HIT_CF) ** 2;
-    let best = null;
-    let bestD2 = maxD2;
-    const lastSeg = closed ? vertices.length : (vertices.length - 1);
-    function vertexToPixel(v) {
-      if (Array.isArray(v) && v.length >= 2) return [Number(v[0]) || 0, Number(v[1]) || 0];
-      if (v && v.x != null && v.y != null) return [Number(v.x) || 0, Number(v.y) || 0];
-      return cellToPixel(v.col, v.row);
-    }
-    for (let i = 0; i < lastSeg; i++) {
-      const curr = vertices[i];
-      const next = vertices[(i + 1) % vertices.length];
-      const p1 = vertexToPixel(curr);
-      const p2 = vertexToPixel(next);
-      const near = closestPointOnSegment(p1, p2, click);
-      if (!near) continue;
-      const d2 = dist2(near, click);
-      if (d2 < bestD2) {
-        bestD2 = d2;
-        best = { insertIndex: i + 1, near: near };
-      }
-    }
-    return best;
-  }
-  const PATH_ARC_MIN_BULGE_PX = 2;
-  const PATH_ARC_MAX_BULGE_FRAC = 0.45;
-  function pathArcAngleDiffCCW(t0, t1) {
-    let d = t1 - t0;
-    while (d < 0) d += 2 * Math.PI;
-    while (d >= 2 * Math.PI) d -= 2 * Math.PI;
-    return d;
-  }
-  function pathArcPointBetweenAnglesCCW(tStart, tProbe, spanCCW) {
-    return pathArcAngleDiffCCW(tStart, tProbe) <= spanCCW + 1e-10;
-  }
-  function pathArcCircumcircle(ax, ay, bx, by, cx, cy) {

@@ -1,3 +1,70 @@
+          w.document.close();
+        } catch (eOpen) {
+          console.error(eOpen);
+          try {
+            w.close();
+          } catch (eClose) { /* ignore */ }
+          alert('Could not open the 3D viewer window.');
+          return;
+        }
+      }
+    }
+    let payload;
+    try {
+      payload = typeof buildLayout3DViewerPayload === 'function' ? buildLayout3DViewerPayload() : null;
+    } catch (e) {
+      console.error('buildLayout3DViewerPayload failed:', e);
+      try {
+        w.close();
+      } catch (eClose2) { /* ignore */ }
+      alert('Could not serialize layout for 3D: ' + (e && e.message ? e.message : e));
+      return;
+    }
+    if (!payload || !payload.layout) {
+      try {
+        w.close();
+      } catch (eClose3) { /* ignore */ }
+      alert('Could not serialize layout for 3D.');
+      return;
+    }
+    function sendGrid3dInit() {
+      try {
+        w.postMessage({ kind: 'grid3dViewerInit', payload: payload }, '*');
+      } catch (e4) {
+        console.error('postMessage to 3D viewer failed:', e4);
+        alert('Could not send layout data to the 3D window. Try again or check the browser console.');
+      }
+    }
+    state.grid3dPopupRef = w;
+    if (state.prosimBusy) {
+      try { w.postMessage({ type: 'prosim:pause' }, '*'); } catch (eP) { /* ignore */ }
+    }
+    if (!openedViaReceiverShell) {
+      try {
+        w.document.open();
+        w.document.write(tpl);
+        w.document.close();
+      } catch (e3) {
+        console.error(e3);
+        try {
+          w.close();
+        } catch (eClose4) { /* ignore */ }
+        alert('Could not write the 3D viewer document.');
+        return;
+      }
+      setTimeout(sendGrid3dInit, 0);
+    } else {
+      function onShellReady() {
+        setTimeout(sendGrid3dInit, 0);
+      }
+      try {
+        if (w.document && w.document.readyState === 'complete') {
+          onShellReady();
+        } else {
+          w.addEventListener('load', function grid3dShellLoad() {
+            w.removeEventListener('load', grid3dShellLoad);
+            onShellReady();
+          });
         }
       } catch (eReady) {
         setTimeout(sendGrid3dInit, 150);
@@ -481,70 +548,3 @@
         const near = closestPointOnSegment(pts[i], pts[i + 1], click);
         if (!near) continue;
         const d2 = dist2(near, click);
-        if (d2 < bestD2 && d2 <= maxD2) {
-          bestD2 = d2;
-          const ax = pts[i][0], ay = pts[i][1], bx = pts[i + 1][0], by = pts[i + 1][1];
-          const dx = bx - ax, dy = by - ay;
-          const segLen2 = dx * dx + dy * dy;
-          const t = segLen2 < 1e-12 ? 0.5 : Math.max(0, Math.min(1, ((near[0] - ax) * dx + (near[1] - ay) * dy) / segLen2));
-          best = { taxiwayId: tw.id, segIndex: i, t: t };
-        }
-      }
-    });
-    return best;
-  }
-  function resolveMarkerFlightPose(m) {
-    if (!m || m.kind !== 'flight') return null;
-    const tw = (state.taxiways || []).find(function(x) { return x && x.id === m.taxiwayId; });
-    if (!tw) return null;
-    const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
-    if (!pts || pts.length < 2) return null;
-    let si = typeof m.segIndex === 'number' && isFinite(m.segIndex) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
-    si = Math.max(0, Math.min(si, pts.length - 2));
-    let t = Number(m.t);
-    if (!isFinite(t)) t = 0.5;
-    t = Math.max(0, Math.min(1, t));
-    const a = pts[si], b = pts[si + 1];
-    const x = a[0] + t * (b[0] - a[0]);
-    const y = a[1] + t * (b[1] - a[1]);
-    let ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
-    if (m.headingReversed === true) ang += Math.PI;
-    return { x: x, y: y, ang: ang };
-  }
-  function getMarkerFlightWingtipWorldPoints(m) {
-    if (!m || m.kind !== 'flight') return null;
-    const pose = resolveMarkerFlightPose(m);
-    if (!pose) return null;
-    const ac = getAircraftInfoByType(m.aircraftType);
-    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
-    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
-    const silhouette2D = getApronAircraftDetailedSilhouettePoints();
-    let leftLocal = [0, -spanM];
-    let rightLocal = [0, spanM];
-    if (_ac2d.useDetailedSilhouette === true && silhouette2D.length >= 3) {
-      let minY = Infinity, maxY = -Infinity;
-      let minPt = null, maxPt = null;
-      for (let i = 0; i < silhouette2D.length; i++) {
-        const p = silhouette2D[i];
-        if (!p || p.length < 2) continue;
-        const lx = Number(p[0]) * lenM;
-        const ly = Number(p[1]) * spanM;
-        if (!isFinite(lx) || !isFinite(ly)) continue;
-        if (ly < minY) { minY = ly; minPt = [lx, ly]; }
-        if (ly > maxY) { maxY = ly; maxPt = [lx, ly]; }
-      }
-      if (minPt && maxPt) {
-        leftLocal = minPt;
-        rightLocal = maxPt;
-      }
-    }
-    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
-    function localToWorld(pt) {
-      return {
-        x: pose.x + pt[0] * cs - pt[1] * sn,
-        y: pose.y + pt[0] * sn + pt[1] * cs,
-      };
-    }
-    return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
-  }
-  function ensureMarkerFlightBlazerState(m) {

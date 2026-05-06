@@ -188,7 +188,12 @@
       intervals.forEach(function(it) {
         const stand = typeof findStandById === 'function' ? findStandById(it.standId) : null;
         if (stand && typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, stand, it.segmentIdx, it.segmentCount)) {
-          addIssue(f, 'Invalid apron/building assignment.');
+          if (typeof flightStandAircraftConstraintOk === 'function' && !flightStandAircraftConstraintOk(f, stand)) {
+            const apronNo = String((stand.name && String(stand.name).trim()) || stand.id || it.standId || '—').trim();
+            addIssue(f, '__apron_size__:' + apronNo);
+          } else {
+            addIssue(f, 'Invalid apron/building assignment.');
+          }
         }
         if (!intervalsByStand[it.standId]) intervalsByStand[it.standId] = [];
         intervalsByStand[it.standId].push(it);
@@ -239,23 +244,100 @@
     });
     return issues;
   }
-  function formatStandWindowOverlapBannerDetail(issues) {
-    const n = (issues && issues.length) || 0;
-    if (n < 1) return '';
-    const regs = issues.map(function(it) { return String(it.reg || '—'); });
-    if (n <= 5) return regs.join(', ');
-    return regs.slice(0, 3).join(', ') + ', etc. — ' + n + ' flight(s)';
+  function flightRegForStandOverlapBanner(f) {
+    if (!f) return '—';
+    return String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
   }
-  function formatApronDuplicatedBannerEnglish(issues) {
-    const n = (issues && issues.length) || 0;
-    if (n < 1) return '';
-    if (n <= 5) {
-      return issues.map(function(it) {
-        return String(it.reg) + ': ' + String(it.reason || 'Apron duplicated.');
-      }).join('\n');
+  function flightStandStayWindowsForOverlapPair(f) {
+    if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return [];
+    const out = [];
+    const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+    if (segs.length) {
+      for (let j = 0; j < segs.length; j++) {
+        const sid = segs[j] && segs[j].standId;
+        if (!sid) continue;
+        const t0 = Number(segs[j].sibtMin), t1 = Number(segs[j].sobtMin);
+        if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) continue;
+        out.push({ standId: String(sid), t0: t0, t1: t1 });
+      }
+      return out;
     }
-    const head = issues.slice(0, 3).map(function(it) { return it.reg; }).join(', ');
-    return head + ', etc. — ' + n + ' apron assignment issue(s).';
+    if (f.standId) {
+      const w = typeof flightScheduleStandWindowMinutes === 'function' ? flightScheduleStandWindowMinutes(f) : null;
+      if (w && isFinite(w.sibt) && isFinite(w.sobt) && w.sobt > w.sibt) {
+        out.push({ standId: String(f.standId), t0: w.sibt, t1: w.sobt });
+      }
+    }
+    return out;
+  }
+  function flightPairOverlapsStandWindow(f, g) {
+    if (!f || !g || f === g) return false;
+    if (typeof flightBlockedLikeNoWay === 'function' && (flightBlockedLikeNoWay(f) || flightBlockedLikeNoWay(g))) return false;
+    const fa = flightStandStayWindowsForOverlapPair(f);
+    const ga = flightStandStayWindowsForOverlapPair(g);
+    for (let i = 0; i < fa.length; i++) {
+      const a = fa[i];
+      const blockedA = new Set([a.standId].concat(typeof duplicateApronStandIdsForStand === 'function' ? duplicateApronStandIdsForStand(a.standId) : []));
+      for (let k = 0; k < ga.length; k++) {
+        const b = ga[k];
+        if (!blockedA.has(String(b.standId))) continue;
+        if (a.t0 < b.t1 && b.t0 < a.t1) return true;
+      }
+    }
+    for (let k = 0; k < ga.length; k++) {
+      const b = ga[k];
+      const blockedB = new Set([b.standId].concat(typeof duplicateApronStandIdsForStand === 'function' ? duplicateApronStandIdsForStand(b.standId) : []));
+      for (let i = 0; i < fa.length; i++) {
+        const a = fa[i];
+        if (!blockedB.has(String(a.standId))) continue;
+        if (a.t0 < b.t1 && b.t0 < a.t1) return true;
+      }
+    }
+    return false;
+  }
+  function formatStandWindowOverlapBannerDetail() {
+    const flights = (state.flights || []).filter(function(f) {
+      return f && !(typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f));
+    });
+    if (flights.length < 2) return '';
+    const parent = flights.map(function(_, i) { return i; });
+    function find(i) {
+      return parent[i] === i ? i : (parent[i] = find(parent[i]));
+    }
+    function union(i, j) {
+      const pi = find(i), pj = find(j);
+      if (pi !== pj) parent[pj] = pi;
+    }
+    for (let i = 0; i < flights.length; i++) {
+      for (let j = i + 1; j < flights.length; j++) {
+        if (flightPairOverlapsStandWindow(flights[i], flights[j])) union(i, j);
+      }
+    }
+    const compRegs = new Map();
+    for (let i = 0; i < flights.length; i++) {
+      const r = find(i);
+      const reg = flightRegForStandOverlapBanner(flights[i]);
+      if (!compRegs.has(r)) compRegs.set(r, []);
+      compRegs.get(r).push(reg);
+    }
+    const lines = [];
+    compRegs.forEach(function(regs) {
+      const uniq = [];
+      const seen = new Set();
+      for (let u = 0; u < regs.length; u++) {
+        const rg = regs[u];
+        if (!seen.has(rg)) {
+          seen.add(rg);
+          uniq.push(rg);
+        }
+      }
+      if (uniq.length >= 2) {
+        uniq.sort();
+        lines.push(uniq.join(', ') + ' Overlapped');
+      }
+    });
+    lines.sort();
+    return lines.join('\n');
   }
   function syncProSimButtonFromDesignerPageState() {
     const btn = document.getElementById('btnGlobalUpdate');
@@ -263,8 +345,6 @@
     const playDot = document.getElementById('playbackFreshSyncDot');
     const ban = document.getElementById('arrRetFailedBanner');
     const banT = document.getElementById('arrRetFailedBannerText');
-    const apronBan = document.getElementById('apronDuplicatedBanner');
-    const apronBanT = document.getElementById('apronDuplicatedBannerText');
     const overlapBan = document.getElementById('standWindowOverlapBanner');
     const overlapBanT = document.getElementById('standWindowOverlapBannerText');
     const failedRegs = getArrRetFailedRegsForProSimUi();
@@ -273,48 +353,8 @@
     const hasApronDuplicated = apronIssues.length > 0;
     const standOverlapIssues = getApronStandWindowOverlapRegsForProSimUi();
     const hasStandWindowOverlap = standOverlapIssues.length > 0;
+    const standOverlapBannerBody = hasStandWindowOverlap ? formatStandWindowOverlapBannerDetail() : '';
     if (ban && banT) {
       if (hasRetFail) {
         ban.hidden = false;
         ban.setAttribute('aria-hidden', 'false');
-        banT.textContent = formatArrRetFailedBannerEnglish(failedRegs);
-      } else {
-        ban.hidden = true;
-        ban.setAttribute('aria-hidden', 'true');
-        banT.textContent = '';
-      }
-    }
-    if (apronBan && apronBanT) {
-      if (hasApronDuplicated) {
-        apronBan.hidden = false;
-        apronBan.setAttribute('aria-hidden', 'false');
-        apronBanT.textContent = formatApronDuplicatedBannerEnglish(apronIssues);
-      } else {
-        apronBan.hidden = true;
-        apronBan.setAttribute('aria-hidden', 'true');
-        apronBanT.textContent = '';
-      }
-    }
-    if (overlapBan && overlapBanT) {
-      if (hasStandWindowOverlap) {
-        overlapBan.hidden = false;
-        overlapBan.setAttribute('aria-hidden', 'false');
-        overlapBanT.textContent = formatStandWindowOverlapBannerDetail(standOverlapIssues);
-      } else {
-        overlapBan.hidden = true;
-        overlapBan.setAttribute('aria-hidden', 'true');
-        overlapBanT.textContent = '';
-      }
-    }
-    const dlBan = document.getElementById('deadlockGhostBanner');
-    const dlBanT = document.getElementById('deadlockGhostBannerText');
-    const dlp = state.simDeadlockGhostPlayback || { events: [], bodyLines: '', resolveCount: 0 };
-    const showDeadlock = !!state.hasSimulationResult && ((dlp.events && dlp.events.length > 0) || (dlp.resolveCount > 0));
-    if (dlBan && dlBanT) {
-      if (showDeadlock) {
-        dlBan.hidden = false;
-        dlBan.setAttribute('aria-hidden', 'false');
-        dlBanT.textContent = dlp.bodyLines || (dlp.resolveCount > 0 ? ('Deadlock auto-resolve recorded ' + dlp.resolveCount + ' time(s).') : '');
-      } else {
-        dlBan.hidden = true;
-        dlBan.setAttribute('aria-hidden', 'true');

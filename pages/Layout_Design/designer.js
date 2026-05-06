@@ -1638,7 +1638,12 @@
       intervals.forEach(function(it) {
         const stand = typeof findStandById === 'function' ? findStandById(it.standId) : null;
         if (stand && typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, stand, it.segmentIdx, it.segmentCount)) {
-          addIssue(f, 'Invalid apron/building assignment.');
+          if (typeof flightStandAircraftConstraintOk === 'function' && !flightStandAircraftConstraintOk(f, stand)) {
+            const apronNo = String((stand.name && String(stand.name).trim()) || stand.id || it.standId || '—').trim();
+            addIssue(f, '__apron_size__:' + apronNo);
+          } else {
+            addIssue(f, 'Invalid apron/building assignment.');
+          }
         }
         if (!intervalsByStand[it.standId]) intervalsByStand[it.standId] = [];
         intervalsByStand[it.standId].push(it);
@@ -1689,23 +1694,100 @@
     });
     return issues;
   }
-  function formatStandWindowOverlapBannerDetail(issues) {
-    const n = (issues && issues.length) || 0;
-    if (n < 1) return '';
-    const regs = issues.map(function(it) { return String(it.reg || '—'); });
-    if (n <= 5) return regs.join(', ');
-    return regs.slice(0, 3).join(', ') + ', etc. — ' + n + ' flight(s)';
+  function flightRegForStandOverlapBanner(f) {
+    if (!f) return '—';
+    return String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
   }
-  function formatApronDuplicatedBannerEnglish(issues) {
-    const n = (issues && issues.length) || 0;
-    if (n < 1) return '';
-    if (n <= 5) {
-      return issues.map(function(it) {
-        return String(it.reg) + ': ' + String(it.reason || 'Apron duplicated.');
-      }).join('\n');
+  function flightStandStayWindowsForOverlapPair(f) {
+    if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return [];
+    const out = [];
+    const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+    if (segs.length) {
+      for (let j = 0; j < segs.length; j++) {
+        const sid = segs[j] && segs[j].standId;
+        if (!sid) continue;
+        const t0 = Number(segs[j].sibtMin), t1 = Number(segs[j].sobtMin);
+        if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) continue;
+        out.push({ standId: String(sid), t0: t0, t1: t1 });
+      }
+      return out;
     }
-    const head = issues.slice(0, 3).map(function(it) { return it.reg; }).join(', ');
-    return head + ', etc. — ' + n + ' apron assignment issue(s).';
+    if (f.standId) {
+      const w = typeof flightScheduleStandWindowMinutes === 'function' ? flightScheduleStandWindowMinutes(f) : null;
+      if (w && isFinite(w.sibt) && isFinite(w.sobt) && w.sobt > w.sibt) {
+        out.push({ standId: String(f.standId), t0: w.sibt, t1: w.sobt });
+      }
+    }
+    return out;
+  }
+  function flightPairOverlapsStandWindow(f, g) {
+    if (!f || !g || f === g) return false;
+    if (typeof flightBlockedLikeNoWay === 'function' && (flightBlockedLikeNoWay(f) || flightBlockedLikeNoWay(g))) return false;
+    const fa = flightStandStayWindowsForOverlapPair(f);
+    const ga = flightStandStayWindowsForOverlapPair(g);
+    for (let i = 0; i < fa.length; i++) {
+      const a = fa[i];
+      const blockedA = new Set([a.standId].concat(typeof duplicateApronStandIdsForStand === 'function' ? duplicateApronStandIdsForStand(a.standId) : []));
+      for (let k = 0; k < ga.length; k++) {
+        const b = ga[k];
+        if (!blockedA.has(String(b.standId))) continue;
+        if (a.t0 < b.t1 && b.t0 < a.t1) return true;
+      }
+    }
+    for (let k = 0; k < ga.length; k++) {
+      const b = ga[k];
+      const blockedB = new Set([b.standId].concat(typeof duplicateApronStandIdsForStand === 'function' ? duplicateApronStandIdsForStand(b.standId) : []));
+      for (let i = 0; i < fa.length; i++) {
+        const a = fa[i];
+        if (!blockedB.has(String(a.standId))) continue;
+        if (a.t0 < b.t1 && b.t0 < a.t1) return true;
+      }
+    }
+    return false;
+  }
+  function formatStandWindowOverlapBannerDetail() {
+    const flights = (state.flights || []).filter(function(f) {
+      return f && !(typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f));
+    });
+    if (flights.length < 2) return '';
+    const parent = flights.map(function(_, i) { return i; });
+    function find(i) {
+      return parent[i] === i ? i : (parent[i] = find(parent[i]));
+    }
+    function union(i, j) {
+      const pi = find(i), pj = find(j);
+      if (pi !== pj) parent[pj] = pi;
+    }
+    for (let i = 0; i < flights.length; i++) {
+      for (let j = i + 1; j < flights.length; j++) {
+        if (flightPairOverlapsStandWindow(flights[i], flights[j])) union(i, j);
+      }
+    }
+    const compRegs = new Map();
+    for (let i = 0; i < flights.length; i++) {
+      const r = find(i);
+      const reg = flightRegForStandOverlapBanner(flights[i]);
+      if (!compRegs.has(r)) compRegs.set(r, []);
+      compRegs.get(r).push(reg);
+    }
+    const lines = [];
+    compRegs.forEach(function(regs) {
+      const uniq = [];
+      const seen = new Set();
+      for (let u = 0; u < regs.length; u++) {
+        const rg = regs[u];
+        if (!seen.has(rg)) {
+          seen.add(rg);
+          uniq.push(rg);
+        }
+      }
+      if (uniq.length >= 2) {
+        uniq.sort();
+        lines.push(uniq.join(', ') + ' Overlapped');
+      }
+    });
+    lines.sort();
+    return lines.join('\n');
   }
   function syncProSimButtonFromDesignerPageState() {
     const btn = document.getElementById('btnGlobalUpdate');
@@ -1713,8 +1795,6 @@
     const playDot = document.getElementById('playbackFreshSyncDot');
     const ban = document.getElementById('arrRetFailedBanner');
     const banT = document.getElementById('arrRetFailedBannerText');
-    const apronBan = document.getElementById('apronDuplicatedBanner');
-    const apronBanT = document.getElementById('apronDuplicatedBannerText');
     const overlapBan = document.getElementById('standWindowOverlapBanner');
     const overlapBanT = document.getElementById('standWindowOverlapBannerText');
     const failedRegs = getArrRetFailedRegsForProSimUi();
@@ -1723,6 +1803,7 @@
     const hasApronDuplicated = apronIssues.length > 0;
     const standOverlapIssues = getApronStandWindowOverlapRegsForProSimUi();
     const hasStandWindowOverlap = standOverlapIssues.length > 0;
+    const standOverlapBannerBody = hasStandWindowOverlap ? formatStandWindowOverlapBannerDetail() : '';
     if (ban && banT) {
       if (hasRetFail) {
         ban.hidden = false;
@@ -1734,22 +1815,11 @@
         banT.textContent = '';
       }
     }
-    if (apronBan && apronBanT) {
-      if (hasApronDuplicated) {
-        apronBan.hidden = false;
-        apronBan.setAttribute('aria-hidden', 'false');
-        apronBanT.textContent = formatApronDuplicatedBannerEnglish(apronIssues);
-      } else {
-        apronBan.hidden = true;
-        apronBan.setAttribute('aria-hidden', 'true');
-        apronBanT.textContent = '';
-      }
-    }
     if (overlapBan && overlapBanT) {
       if (hasStandWindowOverlap) {
         overlapBan.hidden = false;
         overlapBan.setAttribute('aria-hidden', 'false');
-        overlapBanT.textContent = formatStandWindowOverlapBannerDetail(standOverlapIssues);
+        overlapBanT.textContent = standOverlapBannerBody || standOverlapIssues.map(function(it) { return String(it.reg || '—'); }).join(', ');
       } else {
         overlapBan.hidden = true;
         overlapBan.setAttribute('aria-hidden', 'true');
@@ -1788,9 +1858,8 @@
         const shortList = n > 5 ? (apronIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' total)') : apronIssues.map(function(it) { return it.reg; }).join(', ');
         btn.setAttribute('title', 'Pro Sim is disabled: Apron duplicated. ' + shortList);
       } else if (hasStandWindowOverlap) {
-        const n = standOverlapIssues.length;
-        const shortList = n > 5 ? (standOverlapIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' flights)') : standOverlapIssues.map(function(it) { return it.reg; }).join(', ');
-        btn.setAttribute('title', 'Pro Sim is disabled: overlapping stand SIBT–SOBT windows. ' + shortList);
+        const tt = standOverlapBannerBody ? standOverlapBannerBody.replace(/\n/g, ' | ') : standOverlapIssues.map(function(it) { return it.reg; }).join(', ');
+        btn.setAttribute('title', 'Pro Sim is disabled: ' + tt);
       } else {
         btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
       }
@@ -9443,8 +9512,7 @@
     if (idx >= count - 1) return resolveFlightDepTerminalId(f);
     return null;
   }
-  function flightCanUseStandForSegment(f, stand, segmentIdx, segmentCount) {
-    if (!flightStandAircraftConstraintOk(f, stand)) return false;
+  function flightStandTerminalConstraintsOk(f, stand, segmentIdx, segmentCount) {
     const count = Math.max(1, Number(segmentCount) || 1);
     if (count === 1) {
       const arrTermId = resolveFlightArrTerminalId(f);
@@ -9456,12 +9524,23 @@
     const termId = flightSegmentTerminalIdForValidation(f, segmentIdx, segmentCount);
     return standCanUseTerminalForFlight(stand, termId);
   }
+  function flightCanUseStandForSegment(f, stand, segmentIdx, segmentCount) {
+    if (!flightStandAircraftConstraintOk(f, stand)) return false;
+    return flightStandTerminalConstraintsOk(f, stand, segmentIdx, segmentCount);
+  }
   function flightCanUseStand(f, stand) {
     const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
     return flightCanUseStandForSegment(f, stand, 0, Math.max(1, segs.length || 1));
   }
-  function showAllocationConstraintModal(message) {
+  function showAllocationConstraintModal(message, optTitle) {
     const msg = String(message || 'This stand assignment is not allowed.');
+    const ttl =
+      arguments.length >= 2 &&
+      optTitle !== undefined &&
+      optTitle !== null &&
+      String(optTitle).trim() !== ''
+        ? String(optTitle).trim()
+        : 'Assignment not allowed';
     let el = document.getElementById('allocConstraintModal');
     if (!el) {
       el = document.createElement('div');
@@ -9473,21 +9552,45 @@
       if (btn) btn.addEventListener('click', function() { el.classList.remove('is-open'); });
       el.addEventListener('click', function(ev) { if (ev.target === el) el.classList.remove('is-open'); });
     }
+    const titleEl = el.querySelector('.alloc-constraint-modal__title');
+    if (titleEl) titleEl.textContent = ttl;
     const msgEl = el.querySelector('.alloc-constraint-modal__message');
     if (msgEl) msgEl.textContent = msg;
     el.classList.add('is-open');
   }
 
-  function assignStandToFlight(f, standId, segmentIdx) {
+  function assignStandToFlight(f, standId, segmentIdx, opts) {
     if (!f) return false;
+    const fromGantt = !!(opts && opts.fromAllocGantt);
+    const ganttConstraintMsg =
+      'Stand constraints or selected Arr/Dep Building do not match this aircraft, so it cannot be assigned.';
     if (standId) {
       const allStands = allStandsForFlightAssignment();
       const stand = allStands.find(function(s) { return s.id === standId; });
       const segsForValidation = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
       const segCount = Math.max(1, segsForValidation.length || 1);
       const segIdxForValidation = segmentIdx != null && isFinite(Number(segmentIdx)) ? Math.max(0, parseInt(segmentIdx, 10) || 0) : 0;
-      if (!flightCanUseStandForSegment(f, stand, segIdxForValidation, segCount)) {
-        showAllocationConstraintModal("Stand constraints or selected Arr/Dep Building do not match this aircraft, so it cannot be assigned.");
+      if (!stand) {
+        showAllocationConstraintModal(ganttConstraintMsg, 'Assignment not allowed');
+        return false;
+      }
+      if (!flightStandAircraftConstraintOk(f, stand)) {
+        if (fromGantt) {
+          showAllocationConstraintModal(ganttConstraintMsg, 'Assignment not allowed');
+        } else {
+          const apronNo = String((stand.name && String(stand.name).trim()) || stand.id || standId || '—').trim();
+          const regNo =
+            String(
+              f.reg != null && String(f.reg).trim() !== ''
+                ? f.reg
+                : f.flightNumber || f.id || ''
+            ).trim() || '—';
+          showAllocationConstraintModal(apronNo + '\n' + regNo, 'Apron size 오류발생');
+        }
+        return false;
+      }
+      if (!flightStandTerminalConstraintsOk(f, stand, segIdxForValidation, segCount)) {
+        showAllocationConstraintModal(ganttConstraintMsg, 'Assignment not allowed');
         return false;
       }
       if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
@@ -12839,7 +12942,7 @@
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
         const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
-        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null, segIdx)) {
+        if (!assignStandToFlight(f, track.getAttribute('data-stand-id') || null, segIdx, { fromAllocGantt: true })) {
           _allocGanttRevertUncommittedDragPreview(st);
           return;
         }
@@ -13000,7 +13103,7 @@
         const f = st.flights.find(function(x) { return x.id === flightId; });
         if (!f) return;
         const segIdx = st._allocGanttDrag && st._allocGanttDrag.flightId === flightId ? st._allocGanttDrag.segmentIdx : null;
-        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null, segIdx)) {
+        if (!assignStandToFlight(f, this.getAttribute('data-stand-id') || null, segIdx, { fromAllocGantt: true })) {
           _allocGanttRevertUncommittedDragPreview(st);
           return;
         }

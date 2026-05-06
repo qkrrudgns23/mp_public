@@ -1,3 +1,70 @@
+    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    (Array.isArray(pbb.pbbBridges) ? pbb.pbbBridges : []).forEach(function(bridge, bridgeIdx) {
+      (Array.isArray(bridge.points) ? bridge.points : []).forEach(function(pt, ptIdx) {
+        if (ptIdx === 1) return;
+        const d2 = dist2([Number(pt.x) || 0, Number(pt.y) || 0], click);
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          best = { type: 'bridge', bridgeIndex: bridgeIdx, pointIndex: ptIdx };
+        }
+      });
+    });
+    const apronPt = getStandAircraftMarkerWorldPxForPbb(pbb);
+    const apronD2 = dist2(apronPt, click);
+    if (apronD2 < bestD2) best = { type: 'apronSite' };
+    return best;
+  }
+  function hitTestRemoteStandDragPoint(wx, wy) {
+    if (!state.selectedObject || state.selectedObject.type !== 'remote') return null;
+    const st = state.selectedObject.obj;
+    if (!st || st.id !== state.selectedObject.id) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_PBB_END_CF) ** 2;
+    const mk = getStandAircraftMarkerWorldPxForRemoteLike(st);
+    if (dist2(mk, click) <= maxD2) return { type: 'remoteCenter' };
+    return null;
+  }
+  function findInsertSegment(vertices, closed, wx, wy) {
+    if (!Array.isArray(vertices) || vertices.length < 2) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * INSERT_VERTEX_HIT_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    const lastSeg = closed ? vertices.length : (vertices.length - 1);
+    function vertexToPixel(v) {
+      if (Array.isArray(v) && v.length >= 2) return [Number(v[0]) || 0, Number(v[1]) || 0];
+      if (v && v.x != null && v.y != null) return [Number(v.x) || 0, Number(v.y) || 0];
+      return cellToPixel(v.col, v.row);
+    }
+    for (let i = 0; i < lastSeg; i++) {
+      const curr = vertices[i];
+      const next = vertices[(i + 1) % vertices.length];
+      const p1 = vertexToPixel(curr);
+      const p2 = vertexToPixel(next);
+      const near = closestPointOnSegment(p1, p2, click);
+      if (!near) continue;
+      const d2 = dist2(near, click);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = { insertIndex: i + 1, near: near };
+      }
+    }
+    return best;
+  }
+  const PATH_ARC_MIN_BULGE_PX = 2;
+  const PATH_ARC_MAX_BULGE_FRAC = 0.45;
+  function pathArcAngleDiffCCW(t0, t1) {
+    let d = t1 - t0;
+    while (d < 0) d += 2 * Math.PI;
+    while (d >= 2 * Math.PI) d -= 2 * Math.PI;
+    return d;
+  }
+  function pathArcPointBetweenAnglesCCW(tStart, tProbe, spanCCW) {
+    return pathArcAngleDiffCCW(tStart, tProbe) <= spanCCW + 1e-10;
+  }
+  function pathArcCircumcircle(ax, ay, bx, by, cx, cy) {
     const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
     if (Math.abs(d) < 1e-12) return null;
     const a2 = ax * ax + ay * ay;
@@ -1050,70 +1117,3 @@
       if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
         const nameInput = document.getElementById('taxiwayName');
         if (nameInput) nameInput.value = '';
-        const widthInput = document.getElementById('taxiwayWidth');
-        if (widthInput) {
-          widthInput.value = pt === 'runway'
-            ? RUNWAY_PATH_DEFAULT_WIDTH
-            : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-        }
-        syncPathPavementRadiosToValue(pathPavementDefaultForPathType(pt));
-        if (pt === 'runway') {
-          const startDispInput = document.getElementById('runwayStartDisplacedThresholdM');
-          if (startDispInput) startDispInput.value = String(RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
-          const startBlastInput = document.getElementById('runwayStartBlastPadM');
-          if (startBlastInput) startBlastInput.value = String(RUNWAY_START_BLAST_PAD_DEFAULT_M);
-          const endDispInput = document.getElementById('runwayEndDisplacedThresholdM');
-          if (endDispInput) endDispInput.value = String(RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
-          const endBlastInput = document.getElementById('runwayEndBlastPadM');
-          if (endBlastInput) endBlastInput.value = String(RUNWAY_END_BLAST_PAD_DEFAULT_M);
-        }
-        const pathKindIdleSt = document.getElementById('taxiwayPathTypeKind');
-        if (pathKindIdleSt && (pt === 'runway_exit' || pt === 'runway_taxiway')) pathKindIdleSt.value = 'queue';
-      }
-    }
-    if (typeof renderObjectList === 'function') renderObjectList();
-  }
-
-  settingModeSelect.addEventListener('change', function() {
-    cancelActiveLayoutDrawingState();
-    state.selectedObject = null;
-    syncSettingsPaneToMode();
-  });
-  if (layoutModeTabs && settingModeSelect) {
-    layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const mode = this.getAttribute('data-mode') || 'grid';
-        if (settingModeSelect.value === mode) {
-          cancelActiveLayoutDrawingState();
-          syncSettingsPaneToMode();
-          return;
-        }
-        settingModeSelect.value = mode;
-        settingModeSelect.dispatchEvent(new Event('change'));
-      });
-    });
-  }
-  syncSettingsPaneToMode();
-
-  let activeTab = 'settings';
-  function switchToTab(tabId) {
-    activeTab = tabId;
-    cancelActiveLayoutDrawingState();
-    document.querySelectorAll('.right-panel-tab').forEach(btn => btn.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    const tabBtn = document.querySelector('.right-panel-tab[data-tab="' + tabId + '"]');
-    const tabEl = document.getElementById('tab-' + tabId);
-    if (tabBtn) tabBtn.classList.add('active');
-    if (tabEl) tabEl.classList.add('active');
-    if (tabId === 'flight') {
-      if (state.selectedObject && state.selectedObject.type === 'flight' && typeof hookSyncFlightPanelFromSelection === 'function')
-        hookSyncFlightPanelFromSelection();
-      if (typeof renderFlightList === 'function') {
-        const flightListEl = document.getElementById('flightList');
-        const needsRerender = !flightListEl || !flightListEl.querySelector('.flight-schedule-table tbody tr:not(.flight-virt-spacer)');
-        if (needsRerender) renderFlightList();
-      }
-    }
-    if (tabId === 'allocation' && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
-    if (tabId === 'rwysep') {
-      const rwyPanel = document.getElementById('rwySepPanel');

@@ -1,3 +1,70 @@
+    const b0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, -yLim);
+    const b1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, -yLim);
+    return [[a0, a1], [b0, b1]];
+  }
+  function standGapSegmentsIntersectOuterPolygon(gapSegs, polygon) {
+    if (!Array.isArray(gapSegs) || !gapSegs.length || !Array.isArray(polygon) || polygon.length < 2) return false;
+    for (let i = 0; i < gapSegs.length; i++) {
+      const seg = gapSegs[i];
+      if (!seg || seg.length < 2) continue;
+      const g0 = seg[0], g1 = seg[1];
+      for (let j = 0; j < polygon.length; j++) {
+        const p0 = polygon[j], p1 = polygon[(j + 1) % polygon.length];
+        if (segIntersect(g0, g1, p0, p1)) return true;
+      }
+    }
+    return false;
+  }
+  function standGapLineHitsExistingOuterContours(candidateCenter, candidateAngleRad, candidateCategory) {
+    const depC = getStandDepthMeters(candidateCategory || 'C');
+    const widC = getStandWidthMeters(candidateCategory || 'C');
+    const gapSegs = standGapSegmentsWorldForSpec(candidateCenter[0], candidateCenter[1], candidateAngleRad, depC, widC, candidateCategory || 'C');
+    if (!gapSegs.length) return false;
+    function hitWithPolygon(poly) { return standGapSegmentsIntersectOuterPolygon(gapSegs, poly); }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const o = state.remoteStands[i];
+      const oc = getRemoteStandCenterPx(o);
+      const oa = getRemoteStandAngleRad(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    const temps = state.tempStands || [];
+    for (let i = 0; i < temps.length; i++) {
+      const o = temps[i];
+      const oc = getRemoteStandCenterPx(o);
+      const oa = getRemoteStandAngleRad(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const o = state.pbbStands[i];
+      const oc = getStandConnectionPx(o);
+      const oa = getPBBStandAngle(o);
+      const od = getStandDepthMeters(o.category || 'C');
+      const ow = getStandWidthMeters(o.category || 'C');
+      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
+    }
+    return false;
+  }
+  function pbbStandOverlapsTerminal(pbb) {
+    const corners = getPBBStandCorners(pbb);
+    for (let t = 0; t < state.terminals.length; t++) {
+      const term = state.terminals[t];
+      if (!term.closed || term.vertices.length < 3) continue;
+      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
+      for (let k = 0; k < 4; k++) {
+        if (pointInPolygonXY(corners[k], termPix)) return true;
+      }
+      for (let k = 0; k < termPix.length; k++) {
+        if (pointInPolygonXY(termPix[k], corners)) return true;
+      }
+    }
+    return false;
+  }
+  function pbbStandOverlapsExisting(pbb, excludeId) {
+    if (pbbStandOverlapsTerminal(pbb)) return true;
     const cat = pbb.category || 'C';
     const center = getStandConnectionPx(pbb);
     const angle = getPBBStandAngle(pbb);
@@ -791,70 +858,3 @@
         try {
           w.document.open();
           w.document.write(bootHtml);
-          w.document.close();
-        } catch (eOpen) {
-          console.error(eOpen);
-          try {
-            w.close();
-          } catch (eClose) { /* ignore */ }
-          alert('Could not open the 3D viewer window.');
-          return;
-        }
-      }
-    }
-    let payload;
-    try {
-      payload = typeof buildLayout3DViewerPayload === 'function' ? buildLayout3DViewerPayload() : null;
-    } catch (e) {
-      console.error('buildLayout3DViewerPayload failed:', e);
-      try {
-        w.close();
-      } catch (eClose2) { /* ignore */ }
-      alert('Could not serialize layout for 3D: ' + (e && e.message ? e.message : e));
-      return;
-    }
-    if (!payload || !payload.layout) {
-      try {
-        w.close();
-      } catch (eClose3) { /* ignore */ }
-      alert('Could not serialize layout for 3D.');
-      return;
-    }
-    function sendGrid3dInit() {
-      try {
-        w.postMessage({ kind: 'grid3dViewerInit', payload: payload }, '*');
-      } catch (e4) {
-        console.error('postMessage to 3D viewer failed:', e4);
-        alert('Could not send layout data to the 3D window. Try again or check the browser console.');
-      }
-    }
-    state.grid3dPopupRef = w;
-    if (state.prosimBusy) {
-      try { w.postMessage({ type: 'prosim:pause' }, '*'); } catch (eP) { /* ignore */ }
-    }
-    if (!openedViaReceiverShell) {
-      try {
-        w.document.open();
-        w.document.write(tpl);
-        w.document.close();
-      } catch (e3) {
-        console.error(e3);
-        try {
-          w.close();
-        } catch (eClose4) { /* ignore */ }
-        alert('Could not write the 3D viewer document.');
-        return;
-      }
-      setTimeout(sendGrid3dInit, 0);
-    } else {
-      function onShellReady() {
-        setTimeout(sendGrid3dInit, 0);
-      }
-      try {
-        if (w.document && w.document.readyState === 'complete') {
-          onShellReady();
-        } else {
-          w.addEventListener('load', function grid3dShellLoad() {
-            w.removeEventListener('load', grid3dShellLoad);
-            onShellReady();
-          });

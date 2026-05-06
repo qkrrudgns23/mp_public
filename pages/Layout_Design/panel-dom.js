@@ -1,3 +1,104 @@
+      if (__schedRetStatsCached === null) {
+        __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+      }
+      return __schedRetStatsCached;
+    }
+    const sig = scheduleRetExitDistLayoutSig();
+    if (sig === __schedRetExitDistSig && __schedRetExitDistMemo && Array.isArray(__schedRetExitDistMemo)) {
+      return __schedRetExitDistMemo;
+    }
+    const res = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+    __schedRetExitDistSig = sig;
+    __schedRetExitDistMemo = res;
+    return res;
+  }
+
+  function warmFlightPathsForSchedule(flights) {
+    void flights;
+  }
+
+  function warmPathsEnsureArrRetRot(flights, forceResampleRet) {
+    warmFlightPathsForSchedule(flights);
+    return (typeof ensureArrRetRotSampled === 'function')
+      ? ensureArrRetRotSampled(flights, !!forceResampleRet)
+      : getScheduleRetStatsAll();
+  }
+
+  function mutRotCfgEntryForType(configByType, f) {
+    const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
+    const typeKey = f.aircraftType || (ac && ac.id) || (ac && ac.name) || '';
+    if (!typeKey) return null;
+    if (configByType[typeKey]) return configByType[typeKey];
+    const tdMu = (typeof ac?.touchdown_zone_avg_m === 'number') ? ac.touchdown_zone_avg_m : 900;
+    const vMu = (typeof ac?.touchdown_speed_avg_ms === 'number') ? ac.touchdown_speed_avg_ms : 70;
+    const aMu = (typeof ac?.deceleration_avg_ms2 === 'number') ? ac.deceleration_avg_ms2 : 2.5;
+    const tdSigma = Math.round(tdMu * 0.1);
+    const vSigma = Math.round(vMu * 0.1);
+    const aSigma = Math.round(aMu * 0.1 * 10) / 10;
+    configByType[typeKey] = { tdMu, tdSigma, vMu, vSigma, aMu, aSigma };
+    return configByType[typeKey];
+  }
+  /** Same runway resolution as graphPathArrival (token.arrRunwayId before generic runwayId). */
+  function resolveArrivalRunwayIdForFlight(f) {
+    if (!f) return null;
+    const t = f.token || {};
+    return t.arrRunwayId || t.runwayId || f.arrRunwayId || null;
+  }
+  function isValidSampledArrRetForFlight(f, retStatsAll) {
+    if (!f || f.sampledArrRet == null) return false;
+    if (!Array.isArray(retStatsAll) || !retStatsAll.length) return false;
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
+    return retStatsAll.some(function(r) {
+      if (!r || !r.exit || r.exit.id !== f.sampledArrRet) return false;
+      if (arrRunwayId == null) return true;
+      return !!(r.runway && r.runway.id === arrRunwayId);
+    });
+  }
+  /** Runway-exit (RET) sampling for Arrival Configuration / schedule RET column. ROT(arr) seconds come from Pro Sim schedule (``ARR_ROT_SEC``), not from this function. */
+  function sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, forceResample) {
+    if (!f) return;
+    const rev = state.vttArrCacheRev | 0;
+    if (!forceResample && f.timeline_meta && typeof f.timeline_meta === 'object' &&
+        f.timeline_meta.playbackSource === 'des_result') {
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
+    if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
+        f.sampledArrRet != null && f.arrRetFailed === false &&
+        isValidSampledArrRetForFlight(f, retStatsAll)) {
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    if (f.sampledArrRet != null && !isValidSampledArrRetForFlight(f, retStatsAll)) {
+      f.sampledArrRet = null;
+      f.arrRetFailed = false;
+      f.arrDecelMs2 = null;
+    }
+    const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
+    const cfg = mutRotCfgEntryForType(configByType, f);
+    if (!cfg || !retStatsAll || !retStatsAll.length || arrRunwayId == null) {
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
+    const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
+    const tdMin = cfg.tdMu * 0.85;
+    const tdMax = cfg.tdMu * 1.15;
+    const dTd = clamp(tdSample, Math.max(0, tdMin), Math.max(0, tdMax));
+    const vSample = sampleNormal(cfg.vMu, cfg.vSigma);
+    const vMin = cfg.vMu * 0.85;
+    const vMax = cfg.vMu * 1.15;
+    const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
+    const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
+    const aMin = Math.max(0.1, cfg.aMu * 0.85);
+    const aMax = Math.min(6,   cfg.aMu * 1.15);
+    const aDec = clamp(aSample, aMin, aMax);
+    const candidates = retStatsAll.filter(function(r) {
+      return !!(r && r.runway && r.runway.id === arrRunwayId && r.exit);
+    });
+    if (!candidates.length) {
+      f.arrDecelMs2 = null;
       f.__schedRetRotRev = rev;
       return;
     }
@@ -1057,104 +1158,3 @@
     state._allocGanttPlayheadCtx = { winStart: winStart, winEnd: winEnd, displaySpan: displaySpan, zoom: zoomLayout };
 
     const tickPositions = buildTimeAxisTicks(winStart, winEnd, winStart, displaySpan, zoomLayout);
-
-    function allocLeftPct(t) {
-      return ((t - winStart) / displaySpan) * 100 * zoomLayout;
-    }
-    function allocTrackSpanHtml(cls, leftPct, widthPct, minWidthPct) {
-      return '<div class="' + cls + '" style="left:' + leftPct + '%;width:' + Math.max(minWidthPct, widthPct) + '%;"></div>';
-    }
-    function allocTrackMarkerHtml(cls, leftPct) {
-      return '<div class="' + cls + '" style="left:' + leftPct + '%;"></div>';
-    }
-    function pushAllocDot(arr, t, cls) {
-      if (!arr || !isFinite(t) || t < winStart || t > winEnd) return;
-      arr.push(allocTrackMarkerHtml('alloc-time-dot ' + cls, allocLeftPct(t)));
-    }
-    function pushAllocSpan(arr, startT, endT, cls, minWidthPct) {
-      if (!arr || !isFinite(startT) || !isFinite(endT) || endT <= startT) return;
-      const clippedStart = Math.max(startT, winStart);
-      const clippedEnd = Math.min(endT, winEnd);
-      if (clippedEnd <= clippedStart) return;
-      arr.push(allocTrackSpanHtml(cls, allocLeftPct(clippedStart), ((clippedEnd - clippedStart) / displaySpan) * 100 * zoomLayout, minWidthPct));
-    }
-    function pushAllocTriangle(arr, t, cls) {
-      if (!arr || !isFinite(t) || t < winStart || t > winEnd) return;
-      arr.push(allocTrackMarkerHtml(cls, allocLeftPct(t)));
-    }
-
-    /** O(flights) — avoid per-row intervals.filter (was O(stands * flights) per gantt pass). */
-    const intervalsByStandKey = (function() {
-      const o = { __unassigned: [] };
-      for (let gi = 0; gi < intervals.length; gi++) {
-        const it = intervals[gi];
-        const raw = it.segmentStandId != null ? it.segmentStandId : (it.f && it.f.standId);
-        if (raw == null || raw === '') o.__unassigned.push(it);
-        else {
-          const sid = String(raw);
-          if (!o[sid]) o[sid] = [];
-          o[sid].push(it);
-        }
-      }
-      return o;
-    })();
-
-    function buildRowHtml(label, standId) {
-      const showSPointsEl = document.getElementById('chkShowSPoints');
-      const showSPoints = !showSPointsEl || showSPointsEl.checked;
-      const showSBarsEl = document.getElementById('chkShowSBars');
-      const dimSBars = !!(showSBarsEl && !showSBarsEl.checked);
-      const showEBarEl = document.getElementById('chkShowEBar');
-      const showEBar = !showEBarEl || showEBarEl.checked;
-      const showEPointsEl = document.getElementById('chkShowEPoints');
-      const showEPoints = !showEPointsEl || showEPointsEl.checked;
-      const showAuxBars = showSPoints;
-      const showEibtBars = showEBar;
-      const showEldtBars = showEPoints;
-      const showSDots = showSPoints;
-      const showSdDots = showSPoints;
-      const showEDots = showEPoints;
-      const rowFlights = (standId == null)
-        ? (intervalsByStandKey.__unassigned || [])
-        : (intervalsByStandKey[String(standId)] || []);
-      const duplicateBg = [];
-      if (standId != null) {
-        const dupIds = duplicateApronStandIdsForStand(standId);
-        for (let di = 0; di < dupIds.length; di++) {
-          const dupFlights = intervalsByStandKey[String(dupIds[di])] || [];
-          for (let ii = 0; ii < dupFlights.length; ii++) {
-            const dit = dupFlights[ii];
-            if (dit && isFinite(dit.t0) && isFinite(dit.t1) && dit.t1 > dit.t0) {
-              pushAllocSpan(duplicateBg, dit.t0, dit.t1, 'alloc-duplicate-bg', 0.5);
-            }
-          }
-        }
-      }
-      const conflictMap = {};
-      for (let i = 0; i < rowFlights.length; i++) {
-        for (let j = i + 1; j < rowFlights.length; j++) {
-          const a = rowFlights[i];
-          const b = rowFlights[j];
-          if (a.f && b.f && a.f.id === b.f.id) continue;
-          if (a.t0 < b.t1 && b.t0 < a.t1) { // Section overlap
-            conflictMap[a.f.id] = true;
-            conflictMap[b.f.id] = true;
-          }
-        }
-      }
-      const sBars = showAuxBars ? [] : null;
-      const eBars = showEibtBars ? [] : null;
-      const e2Bars = showEldtBars ? [] : null;
-      const sDots = showSDots ? [] : null;
-      const sdDots = showSdDots ? [] : null;
-      const eDots = showEDots ? [] : null;
-      const sLines = showSPoints ? [] : null;      // SOBT(orig) vertical line
-      const sTrisDown = showSPoints ? [] : null;   // SLDTtriangle under dragon
-      const sTrisUp = showSPoints ? [] : null;     // STOTtriangle above dragon
-      const eTrisDown = showEPoints ? [] : null;   // ELDTtriangle under dragon
-      const eTrisUp = showEPoints ? [] : null;     // ETOTtriangle above dragon
-      const blocks = rowFlights.map(it => {
-        const f = it.f;
-        const t0 = it.t0;
-        const t1 = it.t1;
-        const sldt = it.sldt;

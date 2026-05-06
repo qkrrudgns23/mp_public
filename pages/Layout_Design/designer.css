@@ -19,7 +19,6 @@
     .grid-left-floating-stack .deadlock-ghost-banner,
     .grid-left-floating-stack .object-info-dock { pointer-events: auto; }
     .arr-ret-failed-banner[hidden] { display: none !important; }
-    .apron-duplicated-banner[hidden] { display: none !important; }
     .deadlock-ghost-banner[hidden] { display: none !important; }
     #object-info-dock { position: relative; max-height: min(40vh, 320px); display: flex; flex-direction: column; min-height: 0; box-sizing: border-box; padding: 3px 7px; border-radius: 6px; font-size: 10px; line-height: 1.25; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; color: var(--ui-text-secondary); background: color-mix(in srgb, var(--ui-bg-elevated) 88%, transparent); border: 1px solid var(--ui-border-subtle); box-shadow: 0 2px 8px rgba(0,0,0,0.35); overflow: hidden; }
     #object-info-dock .object-info-panel { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; }
@@ -30,10 +29,11 @@
     .arr-ret-failed-banner__title { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #fff; }
     .arr-ret-failed-banner__warn { margin: 0; font-size: 10px; line-height: 1.45; color: #fecdd3; opacity: 0.95; }
     .arr-ret-failed-banner__text { white-space: pre-line; font-weight: 500; }
-    .deadlock-ghost-banner { flex: 0 0 auto; display: flex; align-items: flex-start; gap: 8px; width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 6px; background: linear-gradient(165deg, rgba(88, 28, 28, 0.98) 0%, rgba(60, 15, 15, 0.99) 100%); border: 1px solid rgba(252, 165, 165, 0.5); color: #fee2e2; font-size: 10px; line-height: 1.45; font-weight: 500; box-shadow: 0 1px 0 rgba(0,0,0,0.2) inset, 0 2px 8px rgba(0,0,0,0.25); }
-    .deadlock-ghost-banner__icon { width: 18px; height: 18px; flex-shrink: 0; color: #f87171; margin-top: 0.5px; }
+    /* Match .arr-ret-failed-banner / Apron size error dock chrome (same bright red icon + panel). */
+    .deadlock-ghost-banner { flex: 0 0 auto; display: flex; align-items: flex-start; gap: 8px; width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 6px; background: linear-gradient(165deg, rgba(127, 29, 29, 0.98) 0%, rgba(91, 17, 17, 0.99) 100%); border: 1px solid rgba(248, 113, 113, 0.45); color: #fecdd3; font-size: 10px; line-height: 1.4; font-weight: 500; box-shadow: 0 1px 0 rgba(0,0,0,0.2) inset, 0 2px 8px rgba(0,0,0,0.25); }
+    .deadlock-ghost-banner__icon { width: 18px; height: 18px; flex-shrink: 0; color: #fca5a5; margin-top: 0.5px; }
     .deadlock-ghost-banner__content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-    .deadlock-ghost-banner__title { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: #fff; }
+    .deadlock-ghost-banner__title { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #fff; }
     .deadlock-ghost-banner__text { white-space: pre-line; font-variant-numeric: tabular-nums; font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace; font-size: 10px; }
     .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-arr-ret:disabled,
     .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-apron:disabled,
@@ -921,8 +921,28 @@
     .flight-schedule-table tbody tr.flight-sched-row-deadlock > td .flight-sched-cell-text { color: #dc2626; }
     .flight-schedule-table tbody tr.flight-sched-row-deadlock .obj-item-delete { color: #fca5a5; }
     .flight-schedule-table tbody tr.flight-sched-row-deadlock.obj-item.selected > td {
-      background-color: #000000;
-      box-shadow: inset 3px 0 0 0 var(--ui-accent);
+      background-color: rgba(124, 58, 237, 0.48);
+      color: #faf5ff;
+      box-shadow: none;
+      border-bottom-color: rgba(167, 139, 250, 0.38);
+    }
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock.obj-item.selected > td .flight-sched-cell-text {
+      color: #faf5ff;
+    }
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock.obj-item.selected > td.flight-td-readonly {
+      color: rgba(250, 245, 255, 0.88);
+    }
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock.obj-item.selected > td.flight-td-arr-ret-failed {
+      color: #fde68a;
+    }
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock.obj-item.selected select,
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock.obj-item.selected .flight-assign-select {
+      background: rgba(15, 23, 42, 0.55);
+      color: #faf5ff;
+      border-color: rgba(196, 181, 253, 0.55);
+    }
+    .flight-schedule-table tbody tr.flight-sched-row-deadlock.obj-item.selected .obj-item-delete {
+      color: #e9d5ff;
     }
     .flight-config-input { width:72px; font-size:11px; text-align:right; }
     .flight-config-table th.sticky-col,
@@ -1110,6 +1130,7 @@
       line-height:1.5;
       color:#d4d4d8;
       margin-bottom:14px;
+      white-space:pre-line;
     }
     .alloc-constraint-modal__button {
       height:32px;

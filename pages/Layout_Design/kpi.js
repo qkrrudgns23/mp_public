@@ -1,3 +1,70 @@
+        if (d2 < bestD2 && d2 <= maxD2) {
+          bestD2 = d2;
+          const ax = pts[i][0], ay = pts[i][1], bx = pts[i + 1][0], by = pts[i + 1][1];
+          const dx = bx - ax, dy = by - ay;
+          const segLen2 = dx * dx + dy * dy;
+          const t = segLen2 < 1e-12 ? 0.5 : Math.max(0, Math.min(1, ((near[0] - ax) * dx + (near[1] - ay) * dy) / segLen2));
+          best = { taxiwayId: tw.id, segIndex: i, t: t };
+        }
+      }
+    });
+    return best;
+  }
+  function resolveMarkerFlightPose(m) {
+    if (!m || m.kind !== 'flight') return null;
+    const tw = (state.taxiways || []).find(function(x) { return x && x.id === m.taxiwayId; });
+    if (!tw) return null;
+    const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
+    if (!pts || pts.length < 2) return null;
+    let si = typeof m.segIndex === 'number' && isFinite(m.segIndex) ? Math.floor(m.segIndex) : (parseInt(m.segIndex, 10) || 0);
+    si = Math.max(0, Math.min(si, pts.length - 2));
+    let t = Number(m.t);
+    if (!isFinite(t)) t = 0.5;
+    t = Math.max(0, Math.min(1, t));
+    const a = pts[si], b = pts[si + 1];
+    const x = a[0] + t * (b[0] - a[0]);
+    const y = a[1] + t * (b[1] - a[1]);
+    let ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    if (m.headingReversed === true) ang += Math.PI;
+    return { x: x, y: y, ang: ang };
+  }
+  function getMarkerFlightWingtipWorldPoints(m) {
+    if (!m || m.kind !== 'flight') return null;
+    const pose = resolveMarkerFlightPose(m);
+    if (!pose) return null;
+    const ac = getAircraftInfoByType(m.aircraftType);
+    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
+    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
+    const silhouette2D = getApronAircraftDetailedSilhouettePoints();
+    let leftLocal = [0, -spanM];
+    let rightLocal = [0, spanM];
+    if (_ac2d.useDetailedSilhouette === true && silhouette2D.length >= 3) {
+      let minY = Infinity, maxY = -Infinity;
+      let minPt = null, maxPt = null;
+      for (let i = 0; i < silhouette2D.length; i++) {
+        const p = silhouette2D[i];
+        if (!p || p.length < 2) continue;
+        const lx = Number(p[0]) * lenM;
+        const ly = Number(p[1]) * spanM;
+        if (!isFinite(lx) || !isFinite(ly)) continue;
+        if (ly < minY) { minY = ly; minPt = [lx, ly]; }
+        if (ly > maxY) { maxY = ly; maxPt = [lx, ly]; }
+      }
+      if (minPt && maxPt) {
+        leftLocal = minPt;
+        rightLocal = maxPt;
+      }
+    }
+    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
+    function localToWorld(pt) {
+      return {
+        x: pose.x + pt[0] * cs - pt[1] * sn,
+        y: pose.y + pt[0] * sn + pt[1] * cs,
+      };
+    }
+    return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
+  }
+  function ensureMarkerFlightBlazerState(m) {
     if (!m || m.kind !== 'flight') return;
     if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
     if (typeof m.headingReversed !== 'boolean') m.headingReversed = false;
@@ -301,70 +368,3 @@
         const tol2 = tol * tol;
         const nn = poly.length;
         for (let ei = 0; ei < nn; ei++) {
-          const p0 = poly[ei], p1 = poly[(ei + 1) % nn];
-          const pr = projectOnSegment(p0, p1, click);
-          if (pr.t < 0 || pr.t > 1) continue;
-          if (dist2(pr.p, click) <= tol2) return { type: 'layoutMarker', id: m.id, obj: m };
-        }
-      } else if (m.kind === 'navaid') {
-        const ax = Number(m.x), ay = Number(m.y);
-        if (!isFinite(ax) || !isFinite(ay)) continue;
-        const tol = Math.max(CELL_SIZE * 0.8, 18 / Math.max(state.scale, 0.12));
-        const tol2 = tol * tol;
-        const sub = (m.subType === 'ils') ? 'ils' : 'papi';
-        if (sub === 'papi') {
-          const xs = papiLampCenterXsWorld(ax);
-          let hitP = false;
-          for (let pi = 0; pi < 4; pi++) {
-            if (dist2(click, [xs[pi], ay]) <= tol2) { hitP = true; break; }
-          }
-          if (!hitP && dist2(click, [ax, ay]) <= tol2) hitP = true;
-          if (!hitP) {
-            const half = 1.5 * PAPI_LAMP_SPACING_WORLD + tol;
-            if (Math.abs(click[1] - ay) <= tol && click[0] >= ax - half && click[0] <= ax + half) hitP = true;
-          }
-          if (hitP) return { type: 'layoutMarker', id: m.id, obj: m };
-        } else if (dist2(click, [ax, ay]) <= tol2) {
-          return { type: 'layoutMarker', id: m.id, obj: m };
-        }
-      }
-    }
-    return null;
-  }
-  /** Navaid: PAPI as four lamps (2 white, 2 red); ILS dot + ILS label at (m.x, m.y). */
-  function drawNavaidMarker2D(ctx2, m, selected, interactiveLite) {
-    if (!m) return;
-    const x = Number(m.x), y = Number(m.y);
-    if (!isFinite(x) || !isFinite(y)) return;
-    const sub = (m.subType === 'ils') ? 'ils' : 'papi';
-    const isIls = sub === 'ils';
-    const scaleRef = Math.max(state.scale, 0.1);
-    const etcMono = layerMonoEtcOn() && !selected;
-    ctx2.save();
-    if (!isIls) {
-      const lampXs = papiLampCenterXsWorld(x);
-      const rLight = Math.max(2.4 * PAPI_VISUAL_SCALE, 2.9 * PAPI_VISUAL_SCALE / scaleRef);
-      const fills = selected
-        ? ['#ffffff', '#ffffff', '#fca5a5', '#fca5a5']
-        : (etcMono
-          ? [C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE, C2D_LAYER_MONO_ETC_WHITE]
-          : ['#f8fafc', '#f8fafc', '#ef4444', '#ef4444']);
-      const strokes = selected
-        ? [c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke(), c2dObjectSelectedStroke()]
-        : (etcMono
-          ? [c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss(), c2dLayerMonoLineStrokeCss()]
-          : ['rgba(148,163,184,0.95)', 'rgba(148,163,184,0.95)', 'rgba(127,29,29,0.98)', 'rgba(127,29,29,0.98)']);
-      for (let i = 0; i < 4; i++) {
-        ctx2.beginPath();
-        ctx2.arc(lampXs[i], y, rLight, 0, Math.PI * 2);
-        ctx2.fillStyle = fills[i];
-        ctx2.strokeStyle = strokes[i];
-        ctx2.lineWidth = Math.max(0.35, 0.55 / scaleRef);
-        ctx2.fill();
-        ctx2.stroke();
-      }
-      if (selected) {
-        const pad = 2 * PAPI_VISUAL_SCALE;
-        const x0 = lampXs[0] - rLight - pad;
-        const x1 = lampXs[3] + rLight + pad;
-        const y0 = y - rLight - pad;

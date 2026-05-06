@@ -1,3 +1,104 @@
+      let sobtAdj = Math.max(sobtGuess, sibt + minDwell);
+      f.sobtMin = sobtAdj;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobtAdj - sibt);
+      if (f.minDwellMin != null) {
+        f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
+      }
+      f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
+      return true;
+    }
+    return false;
+  }
+
+  function applySOffsetsFromSibtSobt(f) {
+    if (!f || flightBlockedLikeNoWay(f)) return;
+    const sibt = f.sibtMin;
+    const sobt = f.sobtMin;
+    if (typeof sibt === 'number' && isFinite(sibt)) {
+      f.sldtMin = Math.max(0, sibt - SCHED_SIBT_MINUS_SLDT_MIN);
+    }
+    if (typeof sobt === 'number' && isFinite(sobt)) {
+      f.stotMin = sobt + SCHED_STOT_MINUS_SOBT_MIN;
+    }
+  }
+
+  function computeScheduledDisplayTimes(flights) {
+    if (!flights || !flights.length) return;
+    flights.forEach(f => {
+      if (flightBlockedLikeNoWay(f)) return;
+      const tArrMin = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+      let dwell = f.dwellMin != null ? f.dwellMin : 0;
+      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+      if (minDwell > dwell) minDwell = dwell;
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      const sobt = f.sobtMin != null ? Math.max(f.sobtMin, tArrMin + minDwell) : (tArrMin + dwell);
+      f.timeMin = tArrMin;
+      f.sibtMin = tArrMin;
+      f.sobtMin = sobt;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobt - tArrMin);
+      applySOffsetsFromSibtSobt(f);
+    });
+  }
+
+  function computeScheduledDisplayTimesIncremental(allFlights, dirtyFlightIds, touchedStandIds) {
+    if (!allFlights || !allFlights.length) return;
+    const dirty = (dirtyFlightIds instanceof Set) ? dirtyFlightIds : new Set(dirtyFlightIds || []);
+    const touchedStands = (touchedStandIds instanceof Set) ? touchedStandIds : new Set(touchedStandIds || []);
+    const standsToRecompute = new Set();
+    touchedStands.forEach(function(sid) { if (sid != null && sid !== '') standsToRecompute.add(sid); });
+    const needStep1 = new Set();
+    dirty.forEach(function(id) { if (id != null && id !== '') needStep1.add(id); });
+    allFlights.forEach(function(f) {
+      if (!f || flightBlockedLikeNoWay(f)) return;
+      if (f.standId && standsToRecompute.has(f.standId)) needStep1.add(f.id);
+    });
+    allFlights.forEach(function(f) {
+      if (!f || !needStep1.has(f.id)) return;
+      if (flightBlockedLikeNoWay(f)) return;
+      const tArrMin = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+      let dwell = f.dwellMin != null ? f.dwellMin : 0;
+      let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+      dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+      minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+      if (minDwell > dwell) minDwell = dwell;
+      f.dwellMin = dwell;
+      f.minDwellMin = minDwell;
+      const sobt = f.sobtMin != null ? Math.max(f.sobtMin, tArrMin + minDwell) : (tArrMin + dwell);
+      f.timeMin = tArrMin;
+      f.sibtMin = tArrMin;
+      f.sobtMin = sobt;
+      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobt - tArrMin);
+      applySOffsetsFromSibtSobt(f);
+    });
+  }
+
+  function rsepGetSec(val) {
+    const n = Number(val);
+    return isFinite(n) && n >= 0 ? n : RSEP_MISSING_MATRIX_SEC;
+  }
+
+  function rsepApplySeparationToEvents(events, cfg) {
+    const arrArr = (cfg.seqData && cfg.seqData['ARR→ARR']) ? cfg.seqData['ARR→ARR'] : {};
+    const depDep = (cfg.seqData && cfg.seqData['DEP→DEP']) ? cfg.seqData['DEP→DEP'] : {};
+    const depArr = (cfg.seqData && cfg.seqData['DEP→ARR']) ? cfg.seqData['DEP→ARR'] : {};
+    const rot = (cfg.rot) ? cfg.rot : {};
+    const getSec = rsepGetSec;
+    events.sort((a, b) => a.time - b.time || a.index - b.index);
+    let lastArrETime = -1e9, lastArrCat = null;
+    let lastDepETime = -1e9, lastDepCat = null;
+    events.forEach(ev => {
+      if (ev.type === 'arr') {
+        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec((arrArr[lastArrCat] && arrArr[lastArrCat][ev.cat]) != null ? arrArr[lastArrCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
+        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec(depArr[ev.cat]) / 60 : -1e9;
+        const eTime = Math.max(ev.time, minFromArr, minFromDep);
+        ev.flight.eldtMin = eTime;
+        lastArrETime = eTime;
+        lastArrCat = ev.cat;
+      } else {
+        let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
         let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
         const etotSep = Math.max(ev.time, minFromArr, minFromDep);
         const rotM = (ev.rotArrMin != null && isFinite(ev.rotArrMin)) ? ev.rotArrMin : getArrRotMinutes(ev.flight);

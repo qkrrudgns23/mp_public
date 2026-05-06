@@ -1,3 +1,70 @@
+    else delete f.proSimVttDepSec;
+    const dttArrS = secOpt('DTT_ARR_SEC');
+    if (isFinite(dttArrS)) f.proSimDttArrSec = dttArrS;
+    else delete f.proSimDttArrSec;
+    const dttDepS = secOpt('DTT_DEP_SEC');
+    if (isFinite(dttDepS)) f.proSimDttDepSec = dttDepS;
+    else delete f.proSimDttDepSec;
+    const depRotS = secOpt('DEP_ROT_SEC');
+    if (isFinite(depRotS)) f.proSimDepLineupSec = depRotS;
+    else delete f.proSimDepLineupSec;
+  }
+  function flightEMinListForSchedule(f, listKey, metaSecListKey, scalarKey) {
+    const raw = f && Array.isArray(f[listKey]) ? f[listKey] : null;
+    if (raw && raw.length) return raw.map(function(v) {
+      const n = Number(v);
+      return isFinite(n) ? n : null;
+    });
+    const meta = f && f.timeline_meta && typeof f.timeline_meta === 'object' ? f.timeline_meta : null;
+    const mraw = meta && Array.isArray(meta[metaSecListKey]) ? meta[metaSecListKey] : null;
+    if (mraw && mraw.length) return mraw.map(function(v) {
+      const n = Number(v);
+      return isFinite(n) ? n / 60 : null;
+    });
+    const scalar = f && f[scalarKey] != null ? Number(f[scalarKey]) : NaN;
+    return isFinite(scalar) ? [scalar] : [];
+  }
+  function isCompactPlaybackTrack(raw) {
+    return !!(
+      raw && typeof raw === 'object' && raw.format === 'compact_v2' &&
+      Array.isArray(raw.t) && Array.isArray(raw.x) && Array.isArray(raw.y) && Array.isArray(raw.v) &&
+      raw.t.length === raw.x.length && raw.t.length === raw.y.length && raw.t.length === raw.v.length
+    );
+  }
+  function compactPlaybackTrackLength(raw) {
+    return isCompactPlaybackTrack(raw) ? raw.t.length : 0;
+  }
+  function compactPlaybackTrackForFlight(f) {
+    if (!f || f.id == null) return null;
+    const map = state.simPlaybackPositionsByFlightId;
+    if (!map || typeof map !== 'object') return null;
+    const tr = map[String(f.id)];
+    return isCompactPlaybackTrack(tr) ? tr : null;
+  }
+  function compactPlaybackDghostIntsMergedRangesSec(arr) {
+    if (!Array.isArray(arr) || !arr.length) return [];
+    const nums = [];
+    for (let i = 0; i < arr.length; i++) {
+      const v = Math.round(Number(arr[i]));
+      if (isFinite(v)) nums.push(v);
+    }
+    if (!nums.length) return [];
+    nums.sort(function(a, b) { return a - b; });
+    const out = [];
+    let s0 = nums[0], e0 = nums[0];
+    for (let j = 1; j < nums.length; j++) {
+      const n = nums[j];
+      if (n <= e0 + 1) e0 = n;
+      else {
+        out.push([s0, e0]);
+        s0 = e0 = n;
+      }
+    }
+    out.push([s0, e0]);
+    return out;
+  }
+  function compactPlaybackDghostSet(track) {
+    const s = new Set();
     function addArr(a) {
       if (!Array.isArray(a)) return;
       for (let i = 0; i < a.length; i++) {
@@ -381,70 +448,3 @@
     const dlp = state.simDeadlockGhostPlayback;
     const evs = (dlp && Array.isArray(dlp.events)) ? dlp.events : [];
     const lo = Number(state.simStartSec);
-    const hi = Number(state.simDurationSec);
-    evs.forEach(function(ev) {
-      const t = Number(ev.t_abs);
-      if (!isFinite(t)) return;
-      if (t < lo - 2 || t > hi + 2) return;
-      const pct = 100 * (t - lo) / span;
-      const dot = document.createElement('span');
-      dot.className = 'sim-slider-deadlock-dot';
-      dot.style.left = Math.max(0, Math.min(100, pct)) + '%';
-      dot.setAttribute('title', 'Deadlock @ ' + formatTotalSecondsToHHMMSS(t) + ' — click to jump');
-      dot.setAttribute('role', 'button');
-      dot.setAttribute('tabindex', '0');
-      dot.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        seekSimToDeadlockMarkerEvent(ev);
-      });
-      dot.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          e.stopPropagation();
-          seekSimToDeadlockMarkerEvent(ev);
-        }
-      });
-      host.appendChild(dot);
-    });
-  }
-  function applyAirsideSimulationResultPayload(payload) {
-    if (!payload || typeof payload !== 'object') return;
-    const truncCap = (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true)
-      ? (function() {
-        const rawCap = payload.simulation_playback_end_abs_sec;
-        const c = Number(rawCap);
-        return isFinite(c) ? c : null;
-      })()
-      : null;
-    const flightsDetail = Array.isArray(payload.flights_detail) ? payload.flights_detail : null;
-    if (flightsDetail) {
-      const byId = {};
-      flightsDetail.forEach(function(row) {
-        if (!row || row.flight_id == null) return;
-        const fid = String(row.flight_id);
-        const fin = row.edge_list_finished;
-        const planned = row.edge_list;
-        if (Array.isArray(fin) && fin.length) {
-          byId[fid] = fin.slice();
-        } else if (Array.isArray(planned) && planned.length) {
-          byId[fid] = planned.slice();
-        } else {
-          byId[fid] = [];
-        }
-      });
-      (state.flights || []).forEach(function(f) {
-        if (!f || f.id == null) return;
-        const raw = byId[String(f.id)];
-        if (Array.isArray(raw) && raw.length) {
-          f.edge_list = raw.slice();
-          f.proSimEdgeList = f.edge_list.slice();
-        } else {
-          delete f.edge_list;
-          delete f.proSimEdgeList;
-        }
-      });
-    }
-    const positions = payload.positions;
-    const hasPositions = positions && typeof positions === 'object' && Object.keys(positions).length > 0;
-    const scheduleList = Array.isArray(payload.schedule) ? payload.schedule : [];

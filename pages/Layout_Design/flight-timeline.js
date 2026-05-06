@@ -1,3 +1,70 @@
+    const hi = Number(state.simDurationSec);
+    evs.forEach(function(ev) {
+      const t = Number(ev.t_abs);
+      if (!isFinite(t)) return;
+      if (t < lo - 2 || t > hi + 2) return;
+      const pct = 100 * (t - lo) / span;
+      const dot = document.createElement('span');
+      dot.className = 'sim-slider-deadlock-dot';
+      dot.style.left = Math.max(0, Math.min(100, pct)) + '%';
+      dot.setAttribute('title', 'Deadlock @ ' + formatTotalSecondsToHHMMSS(t) + ' — click to jump');
+      dot.setAttribute('role', 'button');
+      dot.setAttribute('tabindex', '0');
+      dot.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        seekSimToDeadlockMarkerEvent(ev);
+      });
+      dot.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          seekSimToDeadlockMarkerEvent(ev);
+        }
+      });
+      host.appendChild(dot);
+    });
+  }
+  function applyAirsideSimulationResultPayload(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const truncCap = (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true)
+      ? (function() {
+        const rawCap = payload.simulation_playback_end_abs_sec;
+        const c = Number(rawCap);
+        return isFinite(c) ? c : null;
+      })()
+      : null;
+    const flightsDetail = Array.isArray(payload.flights_detail) ? payload.flights_detail : null;
+    if (flightsDetail) {
+      const byId = {};
+      flightsDetail.forEach(function(row) {
+        if (!row || row.flight_id == null) return;
+        const fid = String(row.flight_id);
+        const fin = row.edge_list_finished;
+        const planned = row.edge_list;
+        if (Array.isArray(fin) && fin.length) {
+          byId[fid] = fin.slice();
+        } else if (Array.isArray(planned) && planned.length) {
+          byId[fid] = planned.slice();
+        } else {
+          byId[fid] = [];
+        }
+      });
+      (state.flights || []).forEach(function(f) {
+        if (!f || f.id == null) return;
+        const raw = byId[String(f.id)];
+        if (Array.isArray(raw) && raw.length) {
+          f.edge_list = raw.slice();
+          f.proSimEdgeList = f.edge_list.slice();
+        } else {
+          delete f.edge_list;
+          delete f.proSimEdgeList;
+        }
+      });
+    }
+    const positions = payload.positions;
+    const hasPositions = positions && typeof positions === 'object' && Object.keys(positions).length > 0;
+    const scheduleList = Array.isArray(payload.schedule) ? payload.schedule : [];
     const layout = payload.layout;
     if (layout && typeof layout === 'object') {
       applyLayoutObject(layout);
@@ -1290,70 +1357,3 @@
     if (!(yLim > eps && yLim < halfW - eps)) return [];
     const a0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, yLim);
     const a1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, yLim);
-    const b0 = standFootprintLocalToWorld(cx, cy, angleRad, -halfD, -yLim);
-    const b1 = standFootprintLocalToWorld(cx, cy, angleRad, halfD, -yLim);
-    return [[a0, a1], [b0, b1]];
-  }
-  function standGapSegmentsIntersectOuterPolygon(gapSegs, polygon) {
-    if (!Array.isArray(gapSegs) || !gapSegs.length || !Array.isArray(polygon) || polygon.length < 2) return false;
-    for (let i = 0; i < gapSegs.length; i++) {
-      const seg = gapSegs[i];
-      if (!seg || seg.length < 2) continue;
-      const g0 = seg[0], g1 = seg[1];
-      for (let j = 0; j < polygon.length; j++) {
-        const p0 = polygon[j], p1 = polygon[(j + 1) % polygon.length];
-        if (segIntersect(g0, g1, p0, p1)) return true;
-      }
-    }
-    return false;
-  }
-  function standGapLineHitsExistingOuterContours(candidateCenter, candidateAngleRad, candidateCategory) {
-    const depC = getStandDepthMeters(candidateCategory || 'C');
-    const widC = getStandWidthMeters(candidateCategory || 'C');
-    const gapSegs = standGapSegmentsWorldForSpec(candidateCenter[0], candidateCenter[1], candidateAngleRad, depC, widC, candidateCategory || 'C');
-    if (!gapSegs.length) return false;
-    function hitWithPolygon(poly) { return standGapSegmentsIntersectOuterPolygon(gapSegs, poly); }
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      const o = state.remoteStands[i];
-      const oc = getRemoteStandCenterPx(o);
-      const oa = getRemoteStandAngleRad(o);
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    const temps = state.tempStands || [];
-    for (let i = 0; i < temps.length; i++) {
-      const o = temps[i];
-      const oc = getRemoteStandCenterPx(o);
-      const oa = getRemoteStandAngleRad(o);
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      const o = state.pbbStands[i];
-      const oc = getStandConnectionPx(o);
-      const oa = getPBBStandAngle(o);
-      const od = getStandDepthMeters(o.category || 'C');
-      const ow = getStandWidthMeters(o.category || 'C');
-      if (hitWithPolygon(standOuterContourWorldPolygonForSpec(oc[0], oc[1], oa, od, ow, o.category || 'C'))) return true;
-    }
-    return false;
-  }
-  function pbbStandOverlapsTerminal(pbb) {
-    const corners = getPBBStandCorners(pbb);
-    for (let t = 0; t < state.terminals.length; t++) {
-      const term = state.terminals[t];
-      if (!term.closed || term.vertices.length < 3) continue;
-      const termPix = term.vertices.map(v => cellToPixel(v.col, v.row));
-      for (let k = 0; k < 4; k++) {
-        if (pointInPolygonXY(corners[k], termPix)) return true;
-      }
-      for (let k = 0; k < termPix.length; k++) {
-        if (pointInPolygonXY(termPix[k], corners)) return true;
-      }
-    }
-    return false;
-  }
-  function pbbStandOverlapsExisting(pbb, excludeId) {
-    if (pbbStandOverlapsTerminal(pbb)) return true;

@@ -1,3 +1,70 @@
+    const k = m.kind || m.type;
+    if (k === 'text') {
+      const x = Number(m.x), y = Number(m.y);
+      if (!isFinite(x) || !isFinite(y)) return null;
+      const text = m.text != null ? String(m.text).slice(0, 500) : '';
+      return { kind: 'text', id: m.id || id(), x: x, y: y, text: text || 'Text' };
+    }
+    if (k === 'ruler') {
+      const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
+      if (![x1, y1, x2, y2].every(isFinite)) return null;
+      return { kind: 'ruler', id: m.id || id(), x1: x1, y1: y1, x2: x2, y2: y2 };
+    }
+    if (k === 'island') {
+      const rawPts = Array.isArray(m.points) ? m.points : [];
+      const points = rawPts.map(function(p) {
+        return { x: Number(p && p.x), y: Number(p && p.y) };
+      }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
+      if (points.length < 3) return null;
+      let w = Number(m.widthM);
+      if (!isFinite(w) || w < 0) {
+        const legacy = Number(m.outerWidthM);
+        w = (isFinite(legacy) && legacy >= 0) ? Math.min(200, legacy) : LAYOUT_ISLAND_WIDTH_DEFAULT_M;
+      } else {
+        w = Math.min(200, w);
+      }
+      return { kind: 'island', id: m.id || id(), points: points, widthM: w };
+    }
+    if (k === 'area') {
+      const rawPts = Array.isArray(m.points) ? m.points : [];
+      const points = rawPts.map(function(p) {
+        return { x: Number(p && p.x), y: Number(p && p.y) };
+      }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
+      if (points.length < 3) return null;
+      return { kind: 'area', id: m.id || id(), points: points };
+    }
+    if (k === 'flight') {
+      if (m.taxiwayId == null || m.taxiwayId === '') return null;
+      const segIndex = Math.max(0, parseInt(m.segIndex, 10) || 0);
+      let t = Number(m.t);
+      if (!isFinite(t)) t = 0.5;
+      const leftTrail = Array.isArray(m.blazerLeftTrail) ? m.blazerLeftTrail : [];
+      const rightTrail = Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail : [];
+      return {
+        kind: 'flight',
+        id: m.id || id(),
+        taxiwayId: m.taxiwayId,
+        segIndex: segIndex,
+        t: Math.max(0, Math.min(1, t)),
+        aircraftType: String(m.aircraftType || '').trim() || ((AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320'),
+        blazerEnabled: !!m.blazerEnabled,
+        headingReversed: !!m.headingReversed,
+        blazerColor: MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) >= 0 ? String(m.blazerColor).trim() : MARKER_BLAZER_COLOR_OPTIONS[0],
+        blazerLeftTrail: leftTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }),
+        blazerRightTrail: rightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); })
+      };
+    }
+    if (k === 'navaid') {
+      const x = Number(m.x), y = Number(m.y);
+      if (!isFinite(x) || !isFinite(y)) return null;
+      const subRaw = String(m.subType || m.sub || 'papi').trim().toLowerCase();
+      const sub = subRaw === 'ils' ? 'ils' : 'papi';
+      return { kind: 'navaid', id: m.id || id(), subType: sub, x: x, y: y };
+    }
+    return null;
+  }
+  function isLayoutPolygonMarkerKind(kind) {
+    return kind === 'island' || kind === 'area';
   }
   /** Area markers are drawn under other layout objects; keep them at the front of the array (low z in reverse hit-test). */
   function normalizeLayoutMarkerAreaZOrder(markers) {
@@ -606,70 +673,3 @@
     else delete f.proSimPushbackSec;
     const vttDepS = secOpt('VTT_DEP_SEC');
     if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
-    else delete f.proSimVttDepSec;
-    const dttArrS = secOpt('DTT_ARR_SEC');
-    if (isFinite(dttArrS)) f.proSimDttArrSec = dttArrS;
-    else delete f.proSimDttArrSec;
-    const dttDepS = secOpt('DTT_DEP_SEC');
-    if (isFinite(dttDepS)) f.proSimDttDepSec = dttDepS;
-    else delete f.proSimDttDepSec;
-    const depRotS = secOpt('DEP_ROT_SEC');
-    if (isFinite(depRotS)) f.proSimDepLineupSec = depRotS;
-    else delete f.proSimDepLineupSec;
-  }
-  function flightEMinListForSchedule(f, listKey, metaSecListKey, scalarKey) {
-    const raw = f && Array.isArray(f[listKey]) ? f[listKey] : null;
-    if (raw && raw.length) return raw.map(function(v) {
-      const n = Number(v);
-      return isFinite(n) ? n : null;
-    });
-    const meta = f && f.timeline_meta && typeof f.timeline_meta === 'object' ? f.timeline_meta : null;
-    const mraw = meta && Array.isArray(meta[metaSecListKey]) ? meta[metaSecListKey] : null;
-    if (mraw && mraw.length) return mraw.map(function(v) {
-      const n = Number(v);
-      return isFinite(n) ? n / 60 : null;
-    });
-    const scalar = f && f[scalarKey] != null ? Number(f[scalarKey]) : NaN;
-    return isFinite(scalar) ? [scalar] : [];
-  }
-  function isCompactPlaybackTrack(raw) {
-    return !!(
-      raw && typeof raw === 'object' && raw.format === 'compact_v2' &&
-      Array.isArray(raw.t) && Array.isArray(raw.x) && Array.isArray(raw.y) && Array.isArray(raw.v) &&
-      raw.t.length === raw.x.length && raw.t.length === raw.y.length && raw.t.length === raw.v.length
-    );
-  }
-  function compactPlaybackTrackLength(raw) {
-    return isCompactPlaybackTrack(raw) ? raw.t.length : 0;
-  }
-  function compactPlaybackTrackForFlight(f) {
-    if (!f || f.id == null) return null;
-    const map = state.simPlaybackPositionsByFlightId;
-    if (!map || typeof map !== 'object') return null;
-    const tr = map[String(f.id)];
-    return isCompactPlaybackTrack(tr) ? tr : null;
-  }
-  function compactPlaybackDghostIntsMergedRangesSec(arr) {
-    if (!Array.isArray(arr) || !arr.length) return [];
-    const nums = [];
-    for (let i = 0; i < arr.length; i++) {
-      const v = Math.round(Number(arr[i]));
-      if (isFinite(v)) nums.push(v);
-    }
-    if (!nums.length) return [];
-    nums.sort(function(a, b) { return a - b; });
-    const out = [];
-    let s0 = nums[0], e0 = nums[0];
-    for (let j = 1; j < nums.length; j++) {
-      const n = nums[j];
-      if (n <= e0 + 1) e0 = n;
-      else {
-        out.push([s0, e0]);
-        s0 = e0 = n;
-      }
-    }
-    out.push([s0, e0]);
-    return out;
-  }
-  function compactPlaybackDghostSet(track) {
-    const s = new Set();

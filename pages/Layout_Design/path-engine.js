@@ -1,3 +1,33 @@
+        banT.textContent = formatArrRetFailedBannerEnglish(failedRegs);
+      } else {
+        ban.hidden = true;
+        ban.setAttribute('aria-hidden', 'true');
+        banT.textContent = '';
+      }
+    }
+    if (overlapBan && overlapBanT) {
+      if (hasStandWindowOverlap) {
+        overlapBan.hidden = false;
+        overlapBan.setAttribute('aria-hidden', 'false');
+        overlapBanT.textContent = standOverlapBannerBody || standOverlapIssues.map(function(it) { return String(it.reg || '—'); }).join(', ');
+      } else {
+        overlapBan.hidden = true;
+        overlapBan.setAttribute('aria-hidden', 'true');
+        overlapBanT.textContent = '';
+      }
+    }
+    const dlBan = document.getElementById('deadlockGhostBanner');
+    const dlBanT = document.getElementById('deadlockGhostBannerText');
+    const dlp = state.simDeadlockGhostPlayback || { events: [], bodyLines: '', resolveCount: 0 };
+    const showDeadlock = !!state.hasSimulationResult && ((dlp.events && dlp.events.length > 0) || (dlp.resolveCount > 0));
+    if (dlBan && dlBanT) {
+      if (showDeadlock) {
+        dlBan.hidden = false;
+        dlBan.setAttribute('aria-hidden', 'false');
+        dlBanT.textContent = dlp.bodyLines || (dlp.resolveCount > 0 ? ('Deadlock auto-resolve recorded ' + dlp.resolveCount + ' time(s).') : '');
+      } else {
+        dlBan.hidden = true;
+        dlBan.setAttribute('aria-hidden', 'true');
         dlBanT.textContent = '';
       }
     }
@@ -18,9 +48,8 @@
         const shortList = n > 5 ? (apronIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' total)') : apronIssues.map(function(it) { return it.reg; }).join(', ');
         btn.setAttribute('title', 'Pro Sim is disabled: Apron duplicated. ' + shortList);
       } else if (hasStandWindowOverlap) {
-        const n = standOverlapIssues.length;
-        const shortList = n > 5 ? (standOverlapIssues.slice(0, 3).map(function(it) { return it.reg; }).join(', ') + ', etc. (' + n + ' flights)') : standOverlapIssues.map(function(it) { return it.reg; }).join(', ');
-        btn.setAttribute('title', 'Pro Sim is disabled: overlapping stand SIBT–SOBT windows. ' + shortList);
+        const tt = standOverlapBannerBody ? standOverlapBannerBody.replace(/\n/g, ' | ') : standOverlapIssues.map(function(it) { return it.reg; }).join(', ');
+        btn.setAttribute('title', 'Pro Sim is disabled: ' + tt);
       } else {
         btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
       }
@@ -663,70 +692,3 @@
   }
   function normalizeLayoutMarkerFromLoad(m) {
     if (!m || typeof m !== 'object') return null;
-    const k = m.kind || m.type;
-    if (k === 'text') {
-      const x = Number(m.x), y = Number(m.y);
-      if (!isFinite(x) || !isFinite(y)) return null;
-      const text = m.text != null ? String(m.text).slice(0, 500) : '';
-      return { kind: 'text', id: m.id || id(), x: x, y: y, text: text || 'Text' };
-    }
-    if (k === 'ruler') {
-      const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
-      if (![x1, y1, x2, y2].every(isFinite)) return null;
-      return { kind: 'ruler', id: m.id || id(), x1: x1, y1: y1, x2: x2, y2: y2 };
-    }
-    if (k === 'island') {
-      const rawPts = Array.isArray(m.points) ? m.points : [];
-      const points = rawPts.map(function(p) {
-        return { x: Number(p && p.x), y: Number(p && p.y) };
-      }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
-      if (points.length < 3) return null;
-      let w = Number(m.widthM);
-      if (!isFinite(w) || w < 0) {
-        const legacy = Number(m.outerWidthM);
-        w = (isFinite(legacy) && legacy >= 0) ? Math.min(200, legacy) : LAYOUT_ISLAND_WIDTH_DEFAULT_M;
-      } else {
-        w = Math.min(200, w);
-      }
-      return { kind: 'island', id: m.id || id(), points: points, widthM: w };
-    }
-    if (k === 'area') {
-      const rawPts = Array.isArray(m.points) ? m.points : [];
-      const points = rawPts.map(function(p) {
-        return { x: Number(p && p.x), y: Number(p && p.y) };
-      }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); });
-      if (points.length < 3) return null;
-      return { kind: 'area', id: m.id || id(), points: points };
-    }
-    if (k === 'flight') {
-      if (m.taxiwayId == null || m.taxiwayId === '') return null;
-      const segIndex = Math.max(0, parseInt(m.segIndex, 10) || 0);
-      let t = Number(m.t);
-      if (!isFinite(t)) t = 0.5;
-      const leftTrail = Array.isArray(m.blazerLeftTrail) ? m.blazerLeftTrail : [];
-      const rightTrail = Array.isArray(m.blazerRightTrail) ? m.blazerRightTrail : [];
-      return {
-        kind: 'flight',
-        id: m.id || id(),
-        taxiwayId: m.taxiwayId,
-        segIndex: segIndex,
-        t: Math.max(0, Math.min(1, t)),
-        aircraftType: String(m.aircraftType || '').trim() || ((AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320'),
-        blazerEnabled: !!m.blazerEnabled,
-        headingReversed: !!m.headingReversed,
-        blazerColor: MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) >= 0 ? String(m.blazerColor).trim() : MARKER_BLAZER_COLOR_OPTIONS[0],
-        blazerLeftTrail: leftTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); }),
-        blazerRightTrail: rightTrail.map(function(p) { return { x: Number(p && p.x), y: Number(p && p.y) }; }).filter(function(p) { return isFinite(p.x) && isFinite(p.y); })
-      };
-    }
-    if (k === 'navaid') {
-      const x = Number(m.x), y = Number(m.y);
-      if (!isFinite(x) || !isFinite(y)) return null;
-      const subRaw = String(m.subType || m.sub || 'papi').trim().toLowerCase();
-      const sub = subRaw === 'ils' ? 'ils' : 'papi';
-      return { kind: 'navaid', id: m.id || id(), subType: sub, x: x, y: y };
-    }
-    return null;
-  }
-  function isLayoutPolygonMarkerKind(kind) {
-    return kind === 'island' || kind === 'area';
