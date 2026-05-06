@@ -684,6 +684,7 @@ class Flight:
     """
 
     id: str
+    registration: Optional[str] = None
     edge_ids: Deque[str] = field(default_factory=deque)
     edge_phases: Deque[str] = field(default_factory=deque)
     edge_ids_finished: List[Dict[str, str]] = field(default_factory=list)
@@ -867,6 +868,22 @@ class SimulationControlState:
 
 
 CLEARANCE_DEADLOCK_GHOST = "DEADLOCK_GHOST"
+
+
+def _sim_abs_sec_to_hhmmss(sec: float) -> str:
+    """Format absolute simulation seconds as ``HH:MM:SS`` for terminal logs."""
+
+    try:
+        s = float(sec)
+    except (TypeError, ValueError):
+        return "??:??:?"
+    if not math.isfinite(s):
+        return "??:??:?"
+    sec_i = max(0, int(math.floor(s + 1e-9)))
+    hh = sec_i // 3600
+    mm = (sec_i % 3600) // 60
+    ss = sec_i % 60
+    return f"{hh:02d}:{mm:02d}:{ss:02d}"
 
 
 def _agent_deadlock_ghost_at_time(
@@ -8738,9 +8755,7 @@ def resolve_deadlock(
         return
     id_set = {str(x) for x in deadlocked_ids}
     control_state.deadlock_resolve_event_count = int(control_state.deadlock_resolve_event_count) + 1
-    wait_snap: Dict[str, float] = {}
     stall_snap: Dict[str, Optional[float]] = {}
-    ghost_until_snap: Dict[str, float] = {}
     agent_states_get_rd = control_state.agent_states.get
     agents_by_id_rd: Dict[str, Flight] = {str(ag.id): ag for ag in agents}
 
@@ -8763,23 +8778,32 @@ def resolve_deadlock(
         st.clearance = CLEARANCE_DEADLOCK_GHOST
         st.wait_reason = "deadlock_ghost"
         st.deadlock_ghost_until_abs_sec = ghost_until
-        wait_snap[fid] = float(st.total_wait_sec)
         stall_snap[fid] = st.stagnation_anchor_sec
-        ghost_until_snap[fid] = float(ghost_until)
         st.stagnation_anchor_sec = None
         st.progress_snapshot_edge_id = None
         st.wait_start_sec = None
-    _LOG.warning(
-        "DEADLOCK_GHOST t=%.1f flights=%s total_wait_sec=%s stagnation_anchor_sec=%s "
-        "ghost_until_by_flight=%s duration_sec=%.1f release_stagger_sec=%.1f",
-        float(sim_time),
-        ordered_ids,
-        wait_snap,
-        stall_snap,
-        ghost_until_snap,
-        float(DEADLOCK_FORCE_MOVE_DURATION_SEC),
-        stagger,
-    )
+    t_hms = _sim_abs_sec_to_hhmmss(float(sim_time))
+    for fid_ln in ordered_ids:
+        ag_ln = agents_by_id_rd.get(str(fid_ln))
+        reg_ln = (
+            str(ag_ln.registration).strip()
+            if ag_ln is not None and ag_ln.registration
+            else "-"
+        )
+        anc_ln = stall_snap.get(str(fid_ln))
+        if anc_ln is not None and math.isfinite(float(anc_ln)):
+            duration_sec_ln = max(
+                0, int(round(float(sim_time) - float(anc_ln)))
+            )
+        else:
+            duration_sec_ln = 0
+        _LOG.warning(
+            "DEADLOCK_GHOST %s %s %s %s",
+            t_hms,
+            reg_ln,
+            str(fid_ln),
+            duration_sec_ln,
+        )
 
 
 def _single_full_reservation_pass(
@@ -9279,6 +9303,7 @@ def run_simulation(
             _la_taxi = _lookahead_taxi_edges_from_fobj(_fobj_dict)
             ag_new = Flight(
                 id=fid,
+                registration=_flight_opt_str(_fobj_dict, "reg", "registration"),
                 edge_ids=deque(eids),
                 edge_phases=deque(eph),
                 edge_ids_finished=list(fin_pre),
@@ -9691,8 +9716,8 @@ def run_simulation(
         if int(control_state.deadlock_resolve_event_count) >= int(deadlock_resolve_stop_n):
             truncation_abs_sec = t_tick
             _LOG.warning(
-                "SIM_STOP_DEADLOCK_CAP t=%.1f count=%s cap=%s",
-                t_tick,
+                "SIM_STOP_DEADLOCK_CAP %s count=%s cap=%s",
+                _sim_abs_sec_to_hhmmss(float(t_tick)),
                 int(control_state.deadlock_resolve_event_count),
                 int(deadlock_resolve_stop_n),
             )
