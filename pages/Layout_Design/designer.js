@@ -9918,6 +9918,19 @@
     return NaN;
   }
 
+  /** First on-block arrival time (sim s): ``timeline_meta.eibtSec`` or first ``eibtSecList`` entry. */
+  function getFlightEibtSimSecFirstFromFlight(flight) {
+    const m = flight && flight.timeline_meta;
+    if (!m || typeof m !== 'object') return NaN;
+    if (typeof m.eibtSec === 'number' && isFinite(m.eibtSec)) return Number(m.eibtSec);
+    const L = m.eibtSecList;
+    if (Array.isArray(L) && L.length) {
+      const x = Number(L[0]);
+      if (isFinite(x)) return x;
+    }
+    return NaN;
+  }
+
   /**
    * Longest compact/timeline chord whose endpoints are phase Pushback (motion direction nose follows via reverse-draw).
    * Used so apron-link + taxi pushback legs share one stable compass instead of jittering across micro stationary segments.
@@ -10129,14 +10142,30 @@
       const u = (tSec - a.t) / span;
       const x = a.x + (b.x - a.x) * u;
       const y = a.y + (b.y - a.y) * u;
-      const va = Number(a.v), vb = Number(b.v);
-      const vThreshMps = 0.05;
-      const velocityStill = isFinite(va) && isFinite(vb) && va <= vThreshMps && vb <= vThreshMps;
       const curPbInterval = String(tl[useI].phase || '') === 'Pushback';
       let h = headingForInterval(useI);
       if (tr && !lastMotionUnitDirBefore(useI, { skipPushback: !curPbInterval })) {
         const fb = playbackLastMotionUnitDirBeforeTime(tr, tSec, !curPbInterval);
         if (fb) h = { dx: fb.dx, dy: fb.dy };
+      }
+      if (flight.arrDep !== 'Dep' && useI >= 1) {
+        const eibt0 = getFlightEibtSimSecFirstFromFlight(flight);
+        const tN = Number(tSec);
+        const inFirstArrBlock = isFinite(eibt0) && isFinite(tN) && tN <= eibt0 + 1e-6;
+        if (inFirstArrBlock) {
+          const p0 = tl[useI - 1], p1 = tl[useI], p2 = tl[useI + 1];
+          if (p0 && p1 && p2) {
+            const px = p1.x - p0.x, py = p1.y - p0.y;
+            const cx = p2.x - p1.x, cy = p2.y - p1.y;
+            const lp = Math.hypot(px, py), lc = Math.hypot(cx, cy);
+            if (lp >= motionChordEps && lc >= motionChordEps) {
+              const dotBb = (px * cx + py * cy) / (lp * lc);
+              if (dotBb < -0.5) {
+                h = { dx: px / lp, dy: py / lp };
+              }
+            }
+          }
+        }
       }
       const dg = !!(a.deadlockGhost || b.deadlockGhost);
       let hDraw = h;
@@ -10145,17 +10174,6 @@
           lastNonDghostMotionUnitDirBeforeEnd(useI + 1) ||
           firstNonDghostMotionUnitDirFrom(useI + 1);
         if (live) hDraw = { dx: live.dx, dy: live.dy };
-      }
-      if (!dg && velocityStill) {
-        let back = null;
-        if (!curPbInterval) {
-          back = firstMotionUnitDirFrom(useI, { skipPushback: true });
-          if (!back && tr) back = playbackFirstMotionUnitDirFromTime(tr, tSec, true);
-        }
-        if (!back) back = lastMotionUnitDirBefore(useI, { skipPushback: !curPbInterval });
-        if (!back) back = lastNonDghostMotionUnitDirBeforeEnd(useI + 1);
-        if (!back && tr) back = playbackLastMotionUnitDirBeforeTime(tr, tSec, !curPbInterval);
-        if (back) hDraw = { dx: back.dx, dy: back.dy };
       }
       const hn = normHeadingVec(hDraw);
       return { x: x, y: y, dx: hn.dx, dy: hn.dy, deadlockGhost: dg };
@@ -10343,24 +10361,11 @@
     return null;
   }
   /**
-   * On-block dwell (EIBT–EOBT) with no motion: align nose opposite stand layout axis (+180°) so parked
-   * silhouette matches nose-out / drawing convention vs anchor→connection geometry.
+   * Formerly rotated nose to stand layout axis while on-block stationary; kept as a no-op so heading
+   * comes only from timeline/pose logic (no velocity- or dwell-based direction overrides).
    */
   function applyParkedStandHeadingToPoseIfNeeded(flight, tSec, pose) {
-    if (!pose || !flight) return pose;
-    if (pose.deadlockGhost === true) return pose;
-    if (!isFlightParkedAtSimTime(flight, tSec)) return pose;
-    if (!isFlightTimelineStationaryAtSimTime(flight, tSec)) return pose;
-    const sid = standIdForParkedApronInterval(flight, tSec);
-    if (!sid || typeof findStandById !== 'function') return pose;
-    const stand = findStandById(sid);
-    if (!stand) return pose;
-    const id = String(stand.id || '');
-    const isPbb = (state.pbbStands || []).some(function(s) { return s && String(s.id) === id; });
-    const ang = isPbb ? getPBBStandAngle(stand) : getRemoteStandAngleRad(stand);
-    if (!isFinite(ang)) return pose;
-    const dx = -Math.cos(ang), dy = -Math.sin(ang);
-    return { x: pose.x, y: pose.y, dx: dx, dy: dy, deadlockGhost: !!pose.deadlockGhost };
+    return pose;
   }
   /** EIBT–EOBT on-block stationary: pose unchanged for the dwell; skip repeat getFlightPoseAtTime sampling. */
   function getParkedOnBlockStationaryPoseCacheCtx(flight, tSec) {
