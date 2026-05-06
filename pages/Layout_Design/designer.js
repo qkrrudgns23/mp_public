@@ -217,6 +217,9 @@
   const DEP_MTOW_REF_LARGE_KG = Math.max(DEP_MTOW_REF_SMALL_KG + 1, Number(_flightTier.depTakeoffAccelMtowRefLargeKg) || 350000);
   const APRON_TAXIWAY_SPEED_MS = Math.max(0.1, Number(_flightTier.apronTaxiwaySpeedMs) || 1.5);
   const SIM_TIME_SLIDER_SNAP_SEC = Math.max(1, Number(_dc.flightSimSliderSnapSec) || 1);
+  /** Playback axis: min(SIBT) − 10 min, max(SOBT) + 20 min (seconds). */
+  const SIM_AXIS_SIBT_BEFORE_SEC = 600;
+  const SIM_AXIS_SOBT_AFTER_SEC = 1200;
   /** 재생 타임 미세 모드 드래그: ``(dx/trackW)*span/이값`` 으로 시각 증분(값이 클수록 같은 픽셀에 더 적게 반응). */
   const SIM_TIME_SLIDER_FINE_DIVISOR = 200;
   const DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT = _dc.defaultAllowRunwayInGroundSegment;
@@ -1186,6 +1189,10 @@
     simTimeSec: 0,
     simStartSec: 0,
     simDurationSec: 0,
+    /** Replay / Pro Sim SIBT window [simWindowStartSec, simWindowEndSec]; full slider axis is [simStartSec, simDurationSec]. */
+    simWindowStartSec: 0,
+    simWindowEndSec: 0,
+    _simScheduleAxisKey: '',
     /** ``true``: 재생 타임 슬라이더 미세 드래그 모드에서 시각 변경을 대략 일반 스크럽 대비 SIM_TIME_SLIDER_FINE_DIVISOR 배 더 미세하게. 썹은 빨간색 표시. */
     simTimeSliderFineMode: false,
     simPlaybackEndCapSec: null,
@@ -3483,9 +3490,11 @@
     const lo = Number(state.simStartSec), hi = Number(state.simDurationSec);
     if (!isFinite(lo) || !isFinite(hi)) return;
     const snapped =
-      typeof snapSimTimeSecForSlider === 'function'
-        ? snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, tAbs)))
-        : Math.max(lo, Math.min(hi, tAbs));
+      typeof snapSimTimeToPlaybackWindowSec === 'function'
+        ? snapSimTimeToPlaybackWindowSec(tAbs)
+        : (typeof snapSimTimeSecForSlider === 'function'
+          ? snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, tAbs)))
+          : Math.max(lo, Math.min(hi, tAbs)));
     state.simTimeSec = snapped;
     const slider = document.getElementById('flightSimSlider');
     if (slider) slider.value = String(snapped);
@@ -9291,6 +9300,113 @@
     return snapped;
   }
 
+  /** Min SIBT (minutes) / max SOBT (minutes) across apron stay segments / flight fields. */
+  function computeFleetSibtSobtMinMaxMinutesAmongFlights() {
+    let minSibtM = Infinity;
+    let maxSobtM = -Infinity;
+    (state.flights || []).forEach(function(f) {
+      if (!f) return;
+      const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+      if (segs && segs.length) {
+        segs.forEach(function(seg) {
+          const s = Number(seg && seg.sibtMin);
+          const t = Number(seg && seg.sobtMin);
+          if (isFinite(s)) minSibtM = Math.min(minSibtM, s);
+          if (isFinite(t)) maxSobtM = Math.max(maxSobtM, t);
+        });
+      } else {
+        const s = f.sibtMin != null ? Number(f.sibtMin) : (f.timeMin != null ? Number(f.timeMin) : NaN);
+        let t = f.sobtMin != null ? Number(f.sobtMin) : NaN;
+        if (!isFinite(t) && isFinite(s)) t = s + Math.max(0, Number(f.dwellMin) || 45);
+        if (isFinite(s)) minSibtM = Math.min(minSibtM, s);
+        if (isFinite(t)) maxSobtM = Math.max(maxSobtM, t);
+      }
+    });
+    return { minSibtM: minSibtM, maxSobtM: maxSobtM };
+  }
+
+  function getSimAxisLoHiSec() {
+    const lo = Number(state.simStartSec), hi = Number(state.simDurationSec);
+    return {
+      axisLo: isFinite(lo) ? lo : 0,
+      axisHi: isFinite(hi) ? hi : 0,
+      span: (isFinite(lo) && isFinite(hi) && hi > lo) ? hi - lo : 0,
+    };
+  }
+
+  function getSimPlaybackWindowLoHiSec() {
+    const ax = getSimAxisLoHiSec();
+    const axisLo = ax.axisLo, axisHi = ax.axisHi;
+    let wLo = Number(state.simWindowStartSec), wHi = Number(state.simWindowEndSec);
+    if (!isFinite(wLo) || !isFinite(wHi)) {
+      return { lo: axisLo, hi: axisHi, axisLo: axisLo, axisHi: axisHi };
+    }
+    wLo = Math.max(axisLo, Math.min(axisHi, wLo));
+    wHi = Math.max(axisLo, Math.min(axisHi, wHi));
+    if (wHi < wLo + SIM_TIME_SLIDER_SNAP_SEC * 0.5) {
+      wHi = Math.min(axisHi, wLo + SIM_TIME_SLIDER_SNAP_SEC);
+    }
+    return { lo: wLo, hi: wHi, axisLo: axisLo, axisHi: axisHi };
+  }
+
+  function snapSimTimeToPlaybackWindowSec(tSec) {
+    const b = getSimPlaybackWindowLoHiSec();
+    const step = SIM_TIME_SLIDER_SNAP_SEC;
+    const t = Number(tSec);
+    if (!isFinite(t)) return b.lo;
+    let clamped = Math.max(b.lo, Math.min(b.hi, t));
+    if (!(step > 0)) return clamped;
+    let snapped = b.lo + Math.round((clamped - b.lo) / step) * step;
+    if (snapped < b.lo) snapped = b.lo;
+    if (snapped > b.hi) snapped = b.hi;
+    return snapped;
+  }
+
+  function flightHasSibtInSimWindowSec(f, wLo, wHi) {
+    if (!f || !isFinite(Number(wLo)) || !isFinite(Number(wHi))) return false;
+    const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+    if (segs && segs.length) {
+      for (let si = 0; si < segs.length; si++) {
+        const s = Number(segs[si].sibtMin);
+        if (!isFinite(s)) continue;
+        const sSec = s * 60;
+        if (sSec >= wLo - 1e-6 && sSec <= wHi + 1e-6) return true;
+      }
+      return false;
+    }
+    const s = f.sibtMin != null ? Number(f.sibtMin) : (f.timeMin != null ? Number(f.timeMin) : NaN);
+    if (!isFinite(s)) return false;
+    const sSec = s * 60;
+    return sSec >= wLo - 1e-6 && sSec <= wHi + 1e-6;
+  }
+
+  function syncSimPlaybackRangeInputsDom() {
+    const ax = getSimAxisLoHiSec();
+    const wh = getSimPlaybackWindowLoHiSec();
+    const lo = ax.axisLo, hi = ax.axisHi;
+    const startEl = document.getElementById('flightSimSliderWindowStart');
+    const curEl = document.getElementById('flightSimSlider');
+    const endEl = document.getElementById('flightSimSliderWindowEnd');
+    const stepStr = String(SIM_TIME_SLIDER_SNAP_SEC);
+    [startEl, curEl, endEl].forEach(function(el) {
+      if (!el) return;
+      el.min = String(lo);
+      el.max = String(hi);
+      el.step = stepStr;
+    });
+    if (startEl) startEl.value = String(wh.lo);
+    if (endEl) endEl.value = String(wh.hi);
+    if (curEl) curEl.value = String(state.simTimeSec);
+  }
+
+  try {
+    window.__getSimPlaybackWindowLoHiSec = getSimPlaybackWindowLoHiSec;
+    window.__snapSimTimeToPlaybackWindowSec = snapSimTimeToPlaybackWindowSec;
+    window.__flightHasSibtInSimWindowSec = flightHasSibtInSimWindowSec;
+  } catch (__expWin) {
+    /* ignore */
+  }
+
   /**
    * 더블 클릭으로 미세 모드 토글 후, 같은 슬라이더에서 포인터 드래그 시 (전체 타임축 폭 대비 픽셀 이동량)×(span)/SIM_TIME_SLIDER_FINE_DIVISOR 만큼만 시각 변경.
    * 중복 초기화 방지 위해 ``dataset.airsideFineBind`` 사용.
@@ -9318,11 +9434,15 @@
       const lo = Number(state.simStartSec);
       const hi = Number(state.simDurationSec);
       if (!isFinite(lo) || !isFinite(hi) || !(hi > lo + 1e-9)) return;
-      const startClientX = ev.clientX;
+      const wh = typeof getSimPlaybackWindowLoHiSec === 'function' ? getSimPlaybackWindowLoHiSec() : { lo: lo, hi: hi };
+      const wLo = Number(wh.lo), wHi = Number(wh.hi);
       const rect = sliderEl.getBoundingClientRect();
       const wTrack = rect.width > 1 ? rect.width : 1;
-      const span = hi - lo;
-      const startT = snapSimTimeSecForSlider(Number(state.simTimeSec));
+      const span = Math.max(1e-9, wHi - wLo);
+      const startT = typeof snapSimTimeToPlaybackWindowSec === 'function'
+        ? snapSimTimeToPlaybackWindowSec(Number(state.simTimeSec))
+        : Number(state.simTimeSec);
+      const startClientX = ev.clientX;
 
       fineDragPid = ev.pointerId;
       let dragged = false;
@@ -9342,8 +9462,8 @@
         }
         const dx = me.clientX - startClientX;
         const deltaSec = (dx / wTrack) * span / SIM_TIME_SLIDER_FINE_DIVISOR;
-        let next = snapSimTimeSecForSlider(startT + deltaSec);
-        next = Math.max(lo, Math.min(hi, next));
+        let next = snapSimTimeToPlaybackWindowSec(startT + deltaSec);
+        next = Math.max(wLo, Math.min(wHi, next));
         state.simTimeSec = next;
         sliderEl.value = String(next);
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
@@ -9428,57 +9548,56 @@
     return (isFinite(minS) && minS < Infinity) ? minS : null;
   }
   function recomputeSimDuration() {
-    let minT = Infinity;
-    let maxT = -Infinity;
-    (state.flights || []).forEach(function(f) {
-      if (!f) return;
-      const trWin = compactPlaybackTrackStartEnd(compactPlaybackTrackForFlight(f));
-      if (trWin) {
-        if (trWin.t0 < minT) minT = trWin.t0;
-        if (trWin.t1 > maxT) maxT = trWin.t1;
-      }
-      const w = trWin ? null : getFlightAirsideWindowSec(f);
-      if (w) {
-        if (w.t0 < minT) minT = w.t0;
-        if (w.t1 > maxT) maxT = w.t1;
-      }
-      const m = f.timeline_meta;
-      const etotSec = m && typeof m.etotSec === 'number' ? Number(m.etotSec) : NaN;
-      if (isFinite(etotSec) && etotSec > maxT) maxT = etotSec;
-    });
-    if (!isFinite(minT) || !isFinite(maxT)) {
-      minT = 0;
-      maxT = 0;
+    const fleet = computeFleetSibtSobtMinMaxMinutesAmongFlights();
+    let axisMinSec = 0;
+    let axisMaxSec = 0;
+    if (isFinite(fleet.minSibtM) && isFinite(fleet.maxSobtM) && fleet.maxSobtM >= fleet.minSibtM - 1e-9) {
+      axisMinSec = Math.max(0, fleet.minSibtM * 60 - SIM_AXIS_SIBT_BEFORE_SEC);
+      axisMaxSec = fleet.maxSobtM * 60 + SIM_AXIS_SOBT_AFTER_SEC;
     }
-    let simLo = minT;
-    const firstTdS = minFirstArrivalTouchdownSecAmongFlights();
-    if (firstTdS != null) {
-      simLo = Math.max(0, firstTdS - 10);
-    }
-    let durSec = Math.max(maxT, minT);
     const capAbs = state.simPlaybackEndCapSec;
     if (capAbs != null && isFinite(Number(capAbs))) {
-      durSec = Math.min(durSec, Number(capAbs));
+      axisMaxSec = Math.min(axisMaxSec, Number(capAbs));
     }
-    state.simDurationSec = durSec;
-    if (simLo > state.simDurationSec - 1e-6) {
-      simLo = Math.max(0, state.simDurationSec - 1);
+    if (!(axisMaxSec > axisMinSec + 1e-9)) {
+      axisMaxSec = axisMinSec + Math.max(SIM_TIME_SLIDER_SNAP_SEC, 60);
     }
-    state.simStartSec = simLo;
-    if ((state.flights || []).length > 0 && isFinite(minT) && isFinite(maxT) && state.simDurationSec <= state.simStartSec) {
-      state.simDurationSec = state.simStartSec + 1;
+    state.simStartSec = axisMinSec;
+    state.simDurationSec = axisMaxSec;
+    const nFl = (state.flights || []).length;
+    const axisKey =
+      String(fleet.minSibtM) + '|' + String(fleet.maxSobtM) + '|' + String(nFl);
+    let resetWindow = state._simScheduleAxisKey !== axisKey;
+    state._simScheduleAxisKey = axisKey;
+    if (resetWindow) {
+      state.simWindowStartSec = snapSimTimeSecForSlider(axisMinSec);
+      state.simWindowEndSec = snapSimTimeSecForSlider(axisMaxSec);
+    } else {
+      state.simWindowStartSec = snapSimTimeSecForSlider(
+        Math.max(axisMinSec, Math.min(axisMaxSec, Number(state.simWindowStartSec)))
+      );
+      state.simWindowEndSec = snapSimTimeSecForSlider(
+        Math.max(axisMinSec, Math.min(axisMaxSec, Number(state.simWindowEndSec)))
+      );
+      if (state.simWindowEndSec < state.simWindowStartSec + SIM_TIME_SLIDER_SNAP_SEC * 0.5) {
+        state.simWindowEndSec = snapSimTimeSecForSlider(
+          Math.min(axisMaxSec, state.simWindowStartSec + SIM_TIME_SLIDER_SNAP_SEC)
+        );
+      }
     }
-    state.simTimeSec = Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simTimeSec));
-    state.simTimeSec = snapSimTimeSecForSlider(state.simTimeSec);
-    const slider = document.getElementById('flightSimSlider');
-    if (slider) {
-      slider.min = state.simStartSec;
-      slider.max = state.simDurationSec;
-      slider.step = String(SIM_TIME_SLIDER_SNAP_SEC);
-      slider.value = state.simTimeSec;
-      if (state.simDurationSec <= state.simStartSec) slider.disabled = true;
-      else slider.disabled = false;
-    }
+    const wh = getSimPlaybackWindowLoHiSec();
+    state.simWindowStartSec = snapSimTimeSecForSlider(wh.lo);
+    state.simWindowEndSec = snapSimTimeSecForSlider(wh.hi);
+    state.simTimeSec = snapSimTimeToPlaybackWindowSec(state.simTimeSec);
+    syncSimPlaybackRangeInputsDom();
+    const anySlider = document.getElementById('flightSimSlider');
+    const axisBad = !(state.simDurationSec > state.simStartSec + 1e-9);
+    const sStart = document.getElementById('flightSimSliderWindowStart');
+    const sEnd = document.getElementById('flightSimSliderWindowEnd');
+    if (anySlider) anySlider.disabled = axisBad;
+    if (sStart) sStart.disabled = axisBad;
+    if (sEnd) sEnd.disabled = axisBad;
+    if (typeof bindFlightSimSliderFineOnce === 'function') bindFlightSimSliderFineOnce(anySlider);
     if (typeof renderFlightSimSliderDeadlockMarkers === 'function') renderFlightSimSliderDeadlockMarkers();
     updateFlightSimPlaybackLabelsDom();
     syncAllocGanttSimPlayheadPosition();
@@ -9501,9 +9620,8 @@
   function syncSimulationPlaybackAfterTimelines() {
     if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (!state.hasSimulationResult) return;
-    const simSliderAfter = document.getElementById('flightSimSlider');
-    state.simTimeSec = snapSimTimeSecForSlider(Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simStartSec)));
-    if (simSliderAfter) simSliderAfter.value = state.simTimeSec;
+    state.simTimeSec = snapSimTimeToPlaybackWindowSec(state.simWindowStartSec);
+    if (typeof syncSimPlaybackRangeInputsDom === 'function') syncSimPlaybackRangeInputsDom();
     updateFlightSimPlaybackLabelsDom();
     syncAllocGanttSimPlayheadPosition();
   }
@@ -14369,7 +14487,12 @@
     if (!w || !isFinite(Number(tSec))) return false;
     const t = Number(tSec);
     const pad = simAirsideLazyPadSec();
-    return t >= w.t0 - pad - 1e-3 && t <= w.t1 + 1e-3;
+    if (!(t >= w.t0 - pad - 1e-3 && t <= w.t1 + 1e-3)) return false;
+    if (typeof flightHasSibtInSimWindowSec === 'function' && typeof getSimPlaybackWindowLoHiSec === 'function') {
+      const wh = getSimPlaybackWindowLoHiSec();
+      if (!flightHasSibtInSimWindowSec(f, wh.lo, wh.hi)) return false;
+    }
+    return true;
   }
   function nearestIndexOnPolylineForTd(pts, q) {
     if (!pts || pts.length < 2) return 0;
@@ -18895,6 +19018,10 @@
     const fcKeyIdx = buildFlightSim2DColorKeyIndexMap();
     state.flights.forEach(f => {
       if (flightBlockedLikeNoWay(f)) return;
+      if (state.hasSimulationResult && typeof flightHasSibtInSimWindowSec === 'function') {
+        const wh = getSimPlaybackWindowLoHiSec();
+        if (!flightHasSibtInSimWindowSec(f, wh.lo, wh.hi)) return;
+      }
       const pose = getFlightPoseAtTimeForDraw(f, tSecDraw);
       if (!pose) return;
       const x = pose.x, y = pose.y, dx = pose.dx, dy = pose.dy;
@@ -19078,7 +19205,12 @@
       }
       ensureSimLoop._lastTs = ts;
       if (state.simPlaying) {
-        const lo = state.simStartSec, hi = state.simDurationSec;
+        const axisLo = Number(state.simStartSec), axisHi = Number(state.simDurationSec);
+        const wh =
+          typeof getSimPlaybackWindowLoHiSec === 'function'
+            ? getSimPlaybackWindowLoHiSec()
+            : { lo: axisLo, hi: axisHi };
+        const lo = Number(wh.lo), hi = Number(wh.hi);
         const speedRaw = state.simSpeed;
         const speed = (typeof speedRaw === 'number' && isFinite(speedRaw) && speedRaw > 0) ? speedRaw : 1;
         if (hi > lo + 1e-9) {
@@ -19668,6 +19800,7 @@
             didProSimPathGraphSync = true;
           }
           if (didProSimPathGraphSync && typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+          if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
           state.pathGraphAllowHeavySimExport = true;
           layoutPayload = serializeCurrentLayout();
         } catch (e1) {
@@ -19684,6 +19817,18 @@
         } catch (eStrip) {
           layoutForSim = layoutPayload;
         }
+        try {
+          if (typeof getSimPlaybackWindowLoHiSec === 'function' && typeof flightHasSibtInSimWindowSec === 'function') {
+            const whPs = getSimPlaybackWindowLoHiSec();
+            layoutForSim.simWindowStartSec = whPs.lo;
+            layoutForSim.simWindowEndSec = whPs.hi;
+            if (Array.isArray(layoutForSim.flights)) {
+              layoutForSim.flights = layoutForSim.flights.filter(function(f) {
+                return flightHasSibtInSimWindowSec(f, whPs.lo, whPs.hi);
+              });
+            }
+          }
+        } catch (_ePsWin) { /* ignore */ }
         if (typeof setGlobalUpdateProgressUi === 'function') {
           setGlobalUpdateProgressUi(true, '00sec', 0);
         }
@@ -20074,6 +20219,41 @@
           renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: rs4 ? [rs4] : [] });
       });
     }
+    function applySimWindowSliderChange(movedEnd) {
+      const axLo = Number(state.simStartSec), axHi = Number(state.simDurationSec);
+      const step = SIM_TIME_SLIDER_SNAP_SEC;
+      const startEl = document.getElementById('flightSimSliderWindowStart');
+      const endEl = document.getElementById('flightSimSliderWindowEnd');
+      let ws = startEl ? Number(startEl.value) : Number(state.simWindowStartSec);
+      let we = endEl ? Number(endEl.value) : Number(state.simWindowEndSec);
+      if (!isFinite(ws)) ws = axLo;
+      if (!isFinite(we)) we = axHi;
+      ws = Math.max(axLo, Math.min(axHi, ws));
+      we = Math.max(axLo, Math.min(axHi, we));
+      if (movedEnd === 'start' && we < ws + step * 0.5) we = Math.min(axHi, ws + step);
+      if (movedEnd === 'end' && ws > we - step * 0.5) ws = Math.max(axLo, we - step);
+      state.simWindowStartSec = snapSimTimeSecForSlider(ws);
+      state.simWindowEndSec = snapSimTimeSecForSlider(we);
+      if (state.simWindowEndSec < state.simWindowStartSec + step * 0.5) {
+        state.simWindowEndSec = snapSimTimeSecForSlider(Math.min(axHi, state.simWindowStartSec + step));
+      }
+      state.simTimeSec = snapSimTimeToPlaybackWindowSec(state.simTimeSec);
+      syncSimPlaybackRangeInputsDom();
+      if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+      syncAllocGanttSimPlayheadPosition();
+      try { draw(); } catch (e) { /* ignore */ }
+      update3DSceneWhenVisible();
+    }
+    const simWinStartEl = document.getElementById('flightSimSliderWindowStart');
+    const simWinEndEl = document.getElementById('flightSimSliderWindowEnd');
+    if (simWinStartEl) {
+      simWinStartEl.addEventListener('input', function() { applySimWindowSliderChange('start'); });
+      simWinStartEl.addEventListener('change', function() { applySimWindowSliderChange('start'); });
+    }
+    if (simWinEndEl) {
+      simWinEndEl.addEventListener('input', function() { applySimWindowSliderChange('end'); });
+      simWinEndEl.addEventListener('change', function() { applySimWindowSliderChange('end'); });
+    }
     if (playBtn) {
       playBtn.addEventListener('click', function() {
         const errs = validateNetworkForFlights();
@@ -20089,9 +20269,11 @@
           return;
         }
         if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
-        const lo = state.simStartSec, hi = state.simDurationSec;
-        let t = snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, state.simTimeSec)));
-        if (hi > lo && t >= hi - 1e-3) t = snapSimTimeSecForSlider(lo);
+        const wh = typeof getSimPlaybackWindowLoHiSec === 'function' ? getSimPlaybackWindowLoHiSec() : null;
+        const lo = wh && isFinite(Number(wh.lo)) ? Number(wh.lo) : Number(state.simStartSec);
+        const hi = wh && isFinite(Number(wh.hi)) ? Number(wh.hi) : Number(state.simDurationSec);
+        let t = snapSimTimeToPlaybackWindowSec(state.simTimeSec);
+        if (hi > lo + 1e-9 && t >= hi - 1e-3) t = snapSimTimeToPlaybackWindowSec(lo);
         state.simTimeSec = t;
         if (simSlider) simSlider.value = state.simTimeSec;
         state.simSliderScrubbing = false;
@@ -20117,7 +20299,9 @@
       resetBtn.addEventListener('click', function() {
         state.simPlaying = false;
         if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
-        state.simTimeSec = snapSimTimeSecForSlider(state.simStartSec);
+        const whR = typeof getSimPlaybackWindowLoHiSec === 'function' ? getSimPlaybackWindowLoHiSec() : null;
+        const loR = whR && isFinite(Number(whR.lo)) ? Number(whR.lo) : Number(state.simStartSec);
+        state.simTimeSec = snapSimTimeToPlaybackWindowSec(loR);
         if (simSlider) simSlider.value = state.simTimeSec;
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
         syncAllocGanttSimPlayheadPosition();
@@ -20160,7 +20344,7 @@
       simSlider.addEventListener('input', function() {
         const secs = parseFloat(this.value);
         if (!isNaN(secs)) {
-          const snapped = snapSimTimeSecForSlider(secs);
+          const snapped = snapSimTimeToPlaybackWindowSec(secs);
           state.simTimeSec = snapped;
           this.value = snapped;
           if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();

@@ -4230,6 +4230,22 @@ def _apron_stay_segments_from_flight(fobj: Dict[str, Any]) -> List[Dict[str, Any
     return merged
 
 
+def _flight_has_sibt_in_sim_window_sec(fobj: Dict[str, Any], w_lo: float, w_hi: float) -> bool:
+    """True if any apron-stay SIBT (minutes→seconds) falls in ``[w_lo, w_hi]`` (Designer replay window)."""
+
+    if not math.isfinite(w_lo) or not math.isfinite(w_hi):
+        return True
+    segs = _apron_stay_segments_from_flight(fobj)
+    for seg in segs:
+        sibt_m = _safe_float(seg.get("sibtMin"), float("nan"))
+        if not math.isfinite(sibt_m):
+            continue
+        sibt_s = float(sibt_m) * 60.0
+        if sibt_s >= w_lo - 1e-6 and sibt_s <= w_hi + 1e-6:
+            return True
+    return False
+
+
 def _apron_stay_dwell_sec_list(fobj: Dict[str, Any]) -> List[float]:
     segs = _apron_stay_segments_from_flight(fobj)
     vals: List[float] = []
@@ -9218,6 +9234,28 @@ def run_simulation(
     pair_index_share = layout_pair_index_base if layout_pair_index_base else None
 
     flights_raw = layout.get("flights") if isinstance(layout.get("flights"), list) else []
+    w_lo_raw = layout.get("simWindowStartSec")
+    w_hi_raw = layout.get("simWindowEndSec")
+    wl: Optional[float]
+    wh: Optional[float]
+    try:
+        wl = float(w_lo_raw) if w_lo_raw is not None else None
+        wh = float(w_hi_raw) if w_hi_raw is not None else None
+    except (TypeError, ValueError):
+        wl, wh = None, None
+    if (
+        wl is not None
+        and wh is not None
+        and math.isfinite(wl)
+        and math.isfinite(wh)
+        and wh >= wl - 1e-9
+    ):
+        flights_raw = [
+            f
+            for f in flights_raw
+            if isinstance(f, dict) and _flight_has_sibt_in_sim_window_sec(f, wl, wh)
+        ]
+        layout["flights"] = flights_raw
     total = max(1, len(flights_raw))
     prep_list: List[PreparedFlightPath] = []
     agents_by_id: Dict[str, Flight] = {}

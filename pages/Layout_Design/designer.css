@@ -114,11 +114,163 @@
     #sim-controls-container select { width: auto; min-width: 70px; margin: 0; padding: 4px 8px; font-size: 11px; background: var(--ui-bg-input); color: var(--ui-text-primary); border: 1px solid var(--ui-border-default); border-radius: 4px; transition: var(--ui-transition); flex-shrink: 0; }
     #sim-controls-container select:focus { outline: none; border-color: var(--ui-accent-ring); box-shadow: 0 0 0 2px var(--ui-accent-muted); }
     #sim-controls-container label { font-size: 11px; color: var(--ui-text-secondary); margin: 0 4px 0 0; flex-shrink: 0; }
+    #sim-controls-container .sim-playback-slider-block {
+      flex: 1;
+      min-width: 120px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      justify-content: center;
+      min-height: 0;
+      border: none;
+      outline: none;
+      box-shadow: none;
+      background: transparent;
+    }
+    #sim-controls-container .sim-playback-slider-block-inline { flex-direction: row; align-items: center; gap: 8px; }
+    #sim-controls-container .sim-current-time-label { font-size: 11px; margin: 0; flex-shrink: 0; }
     #sim-controls-container .sim-slider-stack { flex: 1; min-width: 80px; display: flex; flex-direction: column; gap: 1px; justify-content: center; min-height: 0; }
+    #sim-controls-container .sim-slider-stack-triple { position: relative; height: 22px; margin: 0 6px 0 4px; flex: 1; min-height: 22px; align-self: stretch; min-width: 0; border: none; outline: none; box-shadow: none; overflow: visible; }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-markers { position: absolute; left: 0; right: 0; top: 4px; height: 14px; pointer-events: none; margin: 0; z-index: 5; }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 5px;
+      width: 100%;
+      margin: 0;
+      height: 12px;
+      background: transparent;
+      z-index: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      border: none;
+      outline: none;
+      box-shadow: none;
+      accent-color: transparent;
+    }
+    #sim-controls-container .sim-slider-stack-triple input.sim-slider-layer:focus,
+    #sim-controls-container .sim-slider-stack-triple input.sim-slider-layer:focus-visible,
+    #sim-controls-container .sim-slider-stack-triple input.sim-slider-layer:active {
+      outline: none !important;
+      box-shadow: none !important;
+      border-color: transparent !important;
+    }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-start { z-index: 2; }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-current { z-index: 4; }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-end { z-index: 3; }
+    /* Start: vertical bar + small arrow to the right; End: arrow left + vertical bar */
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-start::-webkit-slider-thumb {
+      pointer-events: auto;
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 20px;
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+      cursor: ew-resize;
+      margin-top: -17px;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 20'%3E%3Crect x='0' y='2' width='3' height='16' rx='0.75' fill='%2322c55e'/%3E%3Cpath d='M4 8L11 10L4 12Z' fill='%2322c55e'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-end::-webkit-slider-thumb {
+      pointer-events: auto;
+      -webkit-appearance: none;
+      appearance: none;
+      width: 13px;
+      height: 20px;
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+      cursor: ew-resize;
+      margin-top: -17px;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 20'%3E%3Cpath d='M9 8L2 10L9 12Z' fill='%23ea580c'/%3E%3Crect x='10' y='2' width='3' height='16' rx='0.75' fill='%23ea580c'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    /* 12px thumb on 2px track → −5 centers thumb on rail (WebKit) */
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-current::-webkit-slider-thumb {
+      pointer-events: auto;
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: none;
+      background: var(--ui-accent, #7c6af7);
+      box-shadow: none;
+      cursor: grab;
+      margin-top: -5px;
+    }
+    #sim-controls-container .sim-slider-stack-triple #flightSimSlider.sim-time-slider-fine::-webkit-slider-thumb {
+      background: #ef4444;
+      border: none;
+      box-shadow: none;
+      margin-top: -5px;
+    }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-start::-moz-range-thumb {
+      pointer-events: auto;
+      width: 13px;
+      height: 20px;
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+      cursor: ew-resize;
+      transform: translateY(-11px);
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 20'%3E%3Crect x='0' y='2' width='3' height='16' rx='0.75' fill='%2322c55e'/%3E%3Cpath d='M4 8L11 10L4 12Z' fill='%2322c55e'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-end::-moz-range-thumb {
+      pointer-events: auto;
+      width: 13px;
+      height: 20px;
+      border-radius: 0;
+      border: none;
+      box-shadow: none;
+      cursor: ew-resize;
+      transform: translateY(-11px);
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 20'%3E%3Cpath d='M9 8L2 10L9 12Z' fill='%23ea580c'/%3E%3Crect x='10' y='2' width='3' height='16' rx='0.75' fill='%23ea580c'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
+    /* Firefox aligns thumb/track in the slider box — no vertical nudge */
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-current::-moz-range-thumb {
+      pointer-events: auto;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: none;
+      background: var(--ui-accent, #7c6af7);
+      cursor: grab;
+      box-shadow: none;
+      transform: none;
+    }
+    #sim-controls-container .sim-slider-stack-triple #flightSimSlider.sim-time-slider-fine::-moz-range-thumb {
+      background: #ef4444;
+      border: none;
+      box-shadow: none;
+      transform: none;
+    }
+    /* Thin rail on current layer only — thumb/visual center aligns to 2px line */
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-start::-webkit-slider-runnable-track,
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-end::-webkit-slider-runnable-track { background: transparent; height: 2px; border: none; }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-current::-webkit-slider-runnable-track {
+      height: 2px;
+      border-radius: 1px;
+      background: rgba(148,163,184,0.38);
+      border: none;
+      box-sizing: border-box;
+    }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-start::-moz-range-track,
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-end::-moz-range-track { background: transparent; height: 2px; border: none; }
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-layer-current::-moz-range-track {
+      height: 2px;
+      border-radius: 1px;
+      background: rgba(148,163,184,0.38);
+      border: none;
+      box-sizing: border-box;
+    }
     #sim-controls-container .sim-slider-markers { position: relative; height: 11px; pointer-events: none; margin: 0 7px 0 4px; }
-    #sim-controls-container .sim-slider-deadlock-dot { position: absolute; top: 2px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 1px rgba(0,0,0,0.4); z-index: 2; pointer-events: auto; cursor: pointer; }
-    #sim-controls-container #flightSimSlider { width: 100%; min-width: 0; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); height: 10px; }
-    #sim-controls-container #flightSimSlider.sim-time-slider-fine { accent-color: #ef4444; }
+    /* Deadlock ticks — above rail, aligned with raised window handles */
+    #sim-controls-container .sim-slider-stack-triple .sim-slider-deadlock-dot { position: absolute; top: 50%; width: 8px; height: 8px; margin-left: -4px; margin-top: -21px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 1px rgba(0,0,0,0.35); z-index: 2; pointer-events: auto; cursor: pointer; }
+    #sim-controls-container .sim-slider-deadlock-dot { position: absolute; top: 50%; width: 8px; height: 8px; margin-left: -4px; margin-top: -4px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 1px rgba(0,0,0,0.4); z-index: 2; pointer-events: auto; cursor: pointer; }
+    #sim-controls-container #flightSimSlider { width: 100%; min-width: 0; margin: 0; vertical-align: middle; accent-color: transparent; height: 12px; }
+    #sim-controls-container #flightSimSlider.sim-time-slider-fine { accent-color: transparent; }
     #sim-controls-container #flightSimTimeLabel { font-size: 11px; color: var(--ui-text-primary); min-width: 120px; flex-shrink: 0; display: inline-block; }
     #view-toggle-stack { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
     /* overflow must be visible so the Layer popover (positioned above the bar) is not clipped */
