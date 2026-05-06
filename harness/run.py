@@ -56,8 +56,11 @@ def run_simulation_job(
     compact_output: bool = False,
     progress_step_percent: float = 5.0,
     metrics_json: bool = False,
+    harness_job: Optional[Dict[str, Any]] = None,
 ) -> int:
-    """Run ``run_simulation``, write result/metrics/progress; same behavior as CLI ``main``."""
+    """Run ``run_simulation``, write ``{stem}_sim_result.json`` with embedded ``prosimHarness``
+    (metrics and optional job metadata); optionally write a separate metrics file when
+    ``metrics_path`` is set (CLI / legacy). Same behavior as CLI ``main``."""
     in_path = Path(input_path)
     out_path = Path(output_path)
     if not in_path.exists():
@@ -155,15 +158,14 @@ def run_simulation_job(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     t_dump0 = time.perf_counter()
-    payload = json.dumps(output, ensure_ascii=False, indent=2, default=str)
+    payload_core = json.dumps(output, ensure_ascii=False, indent=2, default=str)
     t_dump1 = time.perf_counter()
     tmp = out_path.with_suffix(out_path.suffix + ".tmp")
-    tmp.write_text(payload, encoding="utf-8")
+    tmp.write_text(payload_core, encoding="utf-8")
     tmp.replace(out_path)
     t_write1 = time.perf_counter()
-    payload_bytes = len(payload.encode("utf-8"))
-    print(f"run: wrote {out_path} ({dt_wall:.2f}s)")
-    metrics_obj = {
+    payload_core_bytes = len(payload_core.encode("utf-8"))
+    metrics_obj: Dict[str, Any] = {
         "ok": True,
         "resultStem": str(stem or ""),
         "pythonExecutable": sys.executable,
@@ -179,8 +181,20 @@ def run_simulation_job(
         "progressWrites": int(progress_counts["writes"]),
         "jsonDumpsWallSec": round(t_dump1 - t_dump0, 6),
         "resultWriteWallSec": round(t_write1 - t_dump1, 6),
-        "payloadUtf8Bytes": int(payload_bytes),
+        "payloadUtf8Bytes": int(payload_core_bytes),
     }
+    ph: Dict[str, Any] = {"metrics": metrics_obj}
+    if harness_job:
+        hj = dict(harness_job)
+        hj["completedAt"] = time.time()
+        hj.setdefault("state", "completed")
+        hj.setdefault("ok", True)
+        ph["job"] = hj
+    output["prosimHarness"] = ph
+    payload_final = json.dumps(output, ensure_ascii=False, indent=2, default=str)
+    tmp.write_text(payload_final, encoding="utf-8")
+    tmp.replace(out_path)
+    print(f"run: wrote {out_path} ({dt_wall:.2f}s)")
     if metrics_path is not None:
         metrics_path.parent.mkdir(parents=True, exist_ok=True)
         metrics_tmp = metrics_path.with_suffix(metrics_path.suffix + ".tmp")

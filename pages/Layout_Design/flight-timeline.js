@@ -931,27 +931,62 @@
     const pad = function(n) { return String(n).padStart(2, '0'); };
     return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
   }
+  function _svgLayoutToastCheckIcon() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'layout-toast__icon');
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.setAttribute('viewBox', '0 0 20 20');
+    svg.setAttribute('fill', 'currentColor');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('fill-rule', 'evenodd');
+    path.setAttribute('d', 'M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z');
+    path.setAttribute('clip-rule', 'evenodd');
+    svg.appendChild(path);
+    return svg;
+  }
+  function _svgLayoutToastWarnIcon() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'layout-toast__icon');
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.setAttribute('viewBox', '0 0 20 20');
+    svg.setAttribute('fill', 'currentColor');
+    svg.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('fill-rule', 'evenodd');
+    path.setAttribute('d', 'M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.63-1.516 2.63H3.72c-1.347 0-2.189-1.463-1.515-2.63L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z');
+    path.setAttribute('clip-rule', 'evenodd');
+    svg.appendChild(path);
+    return svg;
+  }
   function showLayoutSavedToast(layoutName, kind, subText) {
     const stack = _ensureLayoutToastStack();
     const el = document.createElement('div');
     const variant = kind === 'error' ? 'is-error' : 'is-success';
     el.className = 'layout-toast ' + variant;
-    const title = document.createElement('div');
-    title.className = 'layout-toast-title';
+    el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    const icon = kind === 'error' ? _svgLayoutToastWarnIcon() : _svgLayoutToastCheckIcon();
+    const content = document.createElement('div');
+    content.className = 'layout-toast__content';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'layout-toast__title';
+    titleEl.textContent = kind === 'error' ? 'Save failed' : 'Saved';
+    const textEl = document.createElement('span');
+    textEl.className = 'layout-toast__text';
     const ts = _formatToastTimestamp(new Date());
     const name = String(layoutName || '').trim() || 'layout';
-    if (kind === 'error') {
-      title.textContent = ts + ' · save failed · ' + name;
-    } else {
-      title.textContent = ts + ' · saved · ' + name;
+    var body = ts + ' · ' + name;
+    if (kind !== 'error' && !name.endsWith('.json')) {
+      body = body + '.json';
     }
-    el.appendChild(title);
     if (subText) {
-      const sub = document.createElement('div');
-      sub.className = 'layout-toast-sub';
-      sub.textContent = String(subText);
-      el.appendChild(sub);
+      body = body + '\n' + String(subText);
     }
+    textEl.textContent = body;
+    content.appendChild(titleEl);
+    content.appendChild(textEl);
+    el.appendChild(icon);
+    el.appendChild(content);
     stack.appendChild(el);
     requestAnimationFrame(function() { el.classList.add('is-visible'); });
     const lifeMs = kind === 'error' ? 4200 : 2600;

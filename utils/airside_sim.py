@@ -188,8 +188,8 @@ HEAVY_DECISION_INTERVAL_SEC = 15
 # Between heavy ticks, re-run full reservation pass this often so Arr_taxi / Dep_taxi agents
 # re-observe stand + departure-runway resources and regain PROCEED when slots free.
 LIGHT_RESERVATION_RETRY_INTERVAL_SEC = 1.0
-DEADLOCK_THRESHOLD_SEC = 300.0
-DEADLOCK_FORCE_MOVE_DURATION_SEC = 60.0
+DEADLOCK_THRESHOLD_SEC = 180.0
+DEADLOCK_FORCE_MOVE_DURATION_SEC = 120.0
 DEADLOCK_RELEASE_STAGGER_SEC = 30.0
 DEADLOCK_RESOLVE_STOP_COUNT = 7
 # Per flight: stagnation duration before deadlock uses base threshold × multiplier in [1-f, 1+f].
@@ -487,7 +487,7 @@ def _graph_for_direction(
         direction_modes = []
     tw_info = _deep_get(information, "tiers", "layout", "taxiway", default={}) or {}
     try:
-        q_js = float(tw_info.get("queueJunctionSpacingM", 20.0))
+        q_js = float(tw_info.get("queueJunctionSpacingM", 30.0))
     except (TypeError, ValueError):
         q_js = 20.0
     path_graph_opts = {"queueTaxiwayJunctionSpacingM": max(5.0, q_js)}

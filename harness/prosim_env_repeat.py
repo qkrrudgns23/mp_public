@@ -4,7 +4,7 @@ Repeat harness.run with the **same subprocess contract** as ``harness.prosim_job
 This cannot reproduce Chromium WebGL/tab GPU contention exactly, but matches:
 ``PYTHONHASHSEED`` (from ``PROSIM_HASH_SEED`` or ``1``), Windows
 ``HIGH_PRIORITY_CLASS`` child, ``--compact-output``, ``--no-validate``, 5%
-progress stepping, metrics file writing.
+progress stepping; metrics are read from ``prosimHarness.metrics`` in the written ``*_sim_result.json``.
 
 Examples:
 
@@ -98,9 +98,8 @@ def main(argv: list[str] | None = None) -> int:
         stem = f"{prefix}_{i}_{int(time.time() * 1000)}"
         out_path = _RESULT_STORAGE / f"{stem}_sim_result.json"
         progress_path = _RESULT_STORAGE / f".{stem}_prosim_progress.json"
-        metrics_path = _RESULT_STORAGE / f".{stem}_prosim_metrics.json"
 
-        for p in (out_path, progress_path, metrics_path):
+        for p in (out_path, progress_path):
             try:
                 p.unlink()
             except FileNotFoundError:
@@ -122,8 +121,6 @@ def main(argv: list[str] | None = None) -> int:
             str(progress_path),
             "--progress-step-percent",
             str(float(args.progress_step_percent)),
-            "--metrics-file",
-            str(metrics_path),
         ]
 
         tw0 = time.perf_counter()
@@ -144,9 +141,12 @@ def main(argv: list[str] | None = None) -> int:
 
         m: Dict[str, Any] = {}
         try:
-            m = json.loads(metrics_path.read_text(encoding="utf-8"))
-            if not isinstance(m, dict):
-                m = {}
+            res_obj = json.loads(out_path.read_text(encoding="utf-8"))
+            if isinstance(res_obj, dict):
+                ph = res_obj.get("prosimHarness")
+                if isinstance(ph, dict):
+                    m_raw = ph.get("metrics")
+                    m = m_raw if isinstance(m_raw, dict) else {}
         except Exception as exc:
             print(f"run {i + 1}: metrics read failed: {exc}", file=sys.stderr, flush=True)
 
@@ -163,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
             flush=True,
         )
 
-        for p in (out_path, progress_path, metrics_path):
+        for p in (out_path, progress_path):
             try:
                 p.unlink()
             except OSError:

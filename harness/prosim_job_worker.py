@@ -74,12 +74,16 @@ def _run_job(job_path: Path) -> int:
     input_path = Path(str(job.get("inputPath") or "")).resolve()
     output_path = Path(str(job.get("outputPath") or "")).resolve()
     progress_path = Path(str(job.get("progressPath") or "")).resolve()
-    metrics_path = Path(str(job.get("metricsPath") or "")).resolve()
+    metrics_raw = str(job.get("metricsPath") or "").strip()
+    metrics_path = Path(metrics_raw).resolve() if metrics_raw else None
     status_path = Path(str(job.get("statusPath") or "")).resolve()
     log_path = Path(str(job.get("logPath") or "")).resolve()
     progress_step = float(job.get("progressStepPercent") or 5.0)
 
-    for p in (input_path, output_path, progress_path, metrics_path, status_path, log_path):
+    paths_check = [input_path, output_path, progress_path, status_path, log_path]
+    if metrics_path is not None:
+        paths_check.append(metrics_path)
+    for p in paths_check:
         if not _is_safe_result_path(p):
             raise ValueError(f"unsafe job path: {p}")
 
@@ -110,9 +114,9 @@ def _run_job(job_path: Path) -> int:
         str(progress_path),
         "--progress-step-percent",
         str(progress_step),
-        "--metrics-file",
-        str(metrics_path),
     ]
+    if metrics_path is not None:
+        cmd.extend(["--metrics-file", str(metrics_path)])
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8", errors="replace") as log_fp:
         log_fp.write(f"\n--- terminal ProSim job {job_id} start {time.time():.3f} ---\n")

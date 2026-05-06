@@ -8,7 +8,7 @@ Save Layout/load: data/Layout_storage/ Save by name to.
 - POST /api/fetch-airport-map: body { "icao": "RPLL" } → download OSM bundle, write ``{ICAO}_map.json``, build ``{ICAO}_OSM.json``.
 - POST /api/process-stored-airport-map: body { "icao": "RPLL" } → read saved ``{ICAO}_map.json`` only, rebuild ``{ICAO}_OSM.json``.
 - POST /api/ai-chat: body ``{ "messages": [ {"role":"user","content":"..."} ], "model": "kimi-k2.5" }`` → Moonshot Kimi (OpenAI-compatible). Set ``MOONSHOT_API_KEY`` (or ``KIMI_API_KEY``) in the process environment, or in project-root ``.env`` (loaded at import; not sent from the browser).
-- POST /api/run-simulation: ProSim runs in-process via ``harness.run.run_simulation_job`` (no separate ``python -m harness.prosim_job_worker`` terminal). Progress/status/metrics files match the old worker contract; optional ``harness.prosim_job_worker`` remains for subprocess-isolated runs.
+- POST /api/run-simulation: ProSim runs in-process via ``harness.run.run_simulation_job``. Progress uses ``.<stem>_prosim_progress.json`` during the run only; harness metrics and optional job metadata are stored under ``prosimHarness`` in ``<stem>_sim_result.json``. Subprocess workers may still use ``harness.prosim_job_worker`` with status files on disk.
 """
 
 from __future__ import annotations
@@ -1060,13 +1060,6 @@ def _run_simulation_progress_label(pct: int, t0_mono: float) -> str:
     return f"{pct_i}% · {_run_simulation_elapsed_sec_label(t0_mono)}"
 
 
-def _atomic_write_json(path: Path, obj: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(path)
-
-
 def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
     safe_stem = _sanitize_layout_name(result_stem) or "default_layout"
     try:
@@ -1087,16 +1080,16 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
             progress_path.parent == rs_resolved or rs_resolved in progress_path.parents
         ):
             raise ValueError("invalid progress path")
-        metrics_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_metrics.json").resolve()
+        legacy_metrics_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_metrics.json").resolve()
+        legacy_status_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_status.json").resolve()
         if not (
-            metrics_path.parent == rs_resolved or rs_resolved in metrics_path.parents
+            legacy_metrics_path.parent == rs_resolved or rs_resolved in legacy_metrics_path.parents
         ):
-            raise ValueError("invalid metrics path")
-        status_path = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_status.json").resolve()
+            raise ValueError("invalid legacy metrics path")
         if not (
-            status_path.parent == rs_resolved or rs_resolved in status_path.parents
+            legacy_status_path.parent == rs_resolved or rs_resolved in legacy_status_path.parents
         ):
-            raise ValueError("invalid status path")
+            raise ValueError("invalid legacy status path")
         try:
             progress_path.unlink()
         except FileNotFoundError:
@@ -1104,13 +1097,13 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
         except OSError:
             pass
         try:
-            metrics_path.unlink()
+            legacy_metrics_path.unlink()
         except FileNotFoundError:
             pass
         except OSError:
             pass
         try:
-            status_path.unlink()
+            legacy_status_path.unlink()
         except FileNotFoundError:
             pass
         except OSError:
@@ -1118,16 +1111,7 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
 
         _engine_wall_mono0 = time.monotonic()
         job_id = f"{safe_stem}-{int(time.time() * 1000)}"
-        _atomic_write_json(
-            status_path,
-            {
-                "ok": True,
-                "state": "running",
-                "jobId": job_id,
-                "stem": safe_stem,
-                "startedAt": time.time(),
-            },
-        )
+        job_started_wall = time.time()
         poller_stop = threading.Event()
 
         def _poll_progress_loop() -> None:
@@ -1168,35 +1152,18 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
                 input_path=sim_input_path,
                 output_path=named_path,
                 progress_path=progress_path,
-                metrics_path=metrics_path,
+                metrics_path=None,
                 stem=safe_stem,
                 no_validate=True,
                 compact_output=True,
                 progress_step_percent=5.0,
+                harness_job={
+                    "jobId": job_id,
+                    "stem": safe_stem,
+                    "startedAt": job_started_wall,
+                },
             )
-            if rc == 0:
-                _atomic_write_json(
-                    status_path,
-                    {
-                        "ok": True,
-                        "state": "completed",
-                        "jobId": job_id,
-                        "stem": safe_stem,
-                        "completedAt": time.time(),
-                    },
-                )
-            else:
-                _atomic_write_json(
-                    status_path,
-                    {
-                        "ok": False,
-                        "state": "failed",
-                        "jobId": job_id,
-                        "stem": safe_stem,
-                        "returnCode": int(rc),
-                        "completedAt": time.time(),
-                    },
-                )
+            if rc != 0:
                 raise RuntimeError(f"simulation failed (harness.run exit {rc})")
         finally:
             poller_stop.set()
@@ -1222,19 +1189,6 @@ def _run_simulation_thread(sim_input_path: Path, result_stem: str) -> None:
     except Exception as e:
         import traceback
         traceback.print_exc()
-        try:
-            status_p = (RESULT_STORAGE_DIR / f".{safe_stem}_prosim_status.json").resolve()
-            _atomic_write_json(
-                status_p,
-                {
-                    "ok": False,
-                    "state": "failed",
-                    "error": str(e),
-                    "completedAt": time.time(),
-                },
-            )
-        except Exception:
-            pass
         with _sim_lock:
             _sim_progress.update(running=False, error=str(e), runningClockLabel="")
 

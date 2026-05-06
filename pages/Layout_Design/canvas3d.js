@@ -3155,9 +3155,20 @@
     const standReachable = standNodeIndices.length ? bfsReachable(standNodeIndices) : new Set();
     const connected = new Set();
     runwayReachable.forEach(function(i) { if (standReachable.has(i)) connected.add(i); });
+    function pathGraphUndirectedNeighborCount(i) {
+      if (i == null || i < 0) return 0;
+      const neigh = new Set();
+      (adj[i] || []).forEach(function(tuple) { neigh.add(tuple[0]); });
+      for (let u = 0; u < adj.length; u++) {
+        (adj[u] || []).forEach(function(tuple) {
+          if (tuple[0] === i) neigh.add(u);
+        });
+      }
+      return neigh.size;
+    }
     const validJunctionsForDraw = junctionPts.filter(function(p) {
       const i = findNodeIndexWithinMergeRadius(p);
-      return i != null && adj[i] && adj[i].length >= 2;
+      return i != null && pathGraphUndirectedNeighborCount(i) >= 2;
     });
     const connectedJunctionsForDraw = validJunctionsForDraw.filter(function(p) {
       const i = findNodeIndexWithinMergeRadius(p);
@@ -10369,7 +10380,7 @@
       drawFlights2D();
       if (!interactiveLite) {
         if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) drawPathJunctions();
-        if (!skipPathGeometryOverlays) {
+        if (!simPlaybackSkipHeavyPathOverlays && !skipPathGeometryOverlays) {
           drawTaxiwayDanglingEndpointMarks();
           drawQueueTaxiwayLaneMarkers();
         }

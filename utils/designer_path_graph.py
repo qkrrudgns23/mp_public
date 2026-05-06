@@ -716,9 +716,9 @@ def build_path_graph(
     omit_other_runway_exits = bool(opts.get("omitOtherRunwayExits"))
     omit_apron_link_edges = bool(opts.get("omitApronLinkEdges"))
     try:
-        queue_spacing_m = float(opts.get("queueTaxiwayJunctionSpacingM", 20.0))
+        queue_spacing_m = float(opts.get("queueTaxiwayJunctionSpacingM", 30.0))
     except (TypeError, ValueError):
-        queue_spacing_m = 20.0
+        queue_spacing_m = 30.0
     queue_spacing_m = max(5.0, queue_spacing_m)
 
     nodes: List[Point] = []
@@ -1511,10 +1511,23 @@ def motion_span_for_record(g: PathGraph, rec: DirectedEdgeRecord) -> Tuple[Point
     return g.nodes[rec.from_idx], g.nodes[rec.to_idx]
 
 
+def path_graph_undirected_neighbor_count(g: PathGraph, i: int) -> int:
+    """Count distinct neighbors in the directed adjacency (treat edges as undirected)."""
+    neigh: set = set()
+    if 0 <= i < len(g.adj):
+        for v, _cst in g.adj[i]:
+            neigh.add(int(v))
+    for u in range(len(g.adj)):
+        for v, _cst in g.adj[u]:
+            if int(v) == i:
+                neigh.add(int(u))
+    return len(neigh)
+
+
 def polyline_apron_junctions_xy_for_sim_result(g: PathGraph) -> List[dict]:
     """Degree>=2 nodes (valid junctions), designer.js validJunctionsForDraw analogue."""
     out: List[dict] = []
     for i, p in enumerate(g.nodes):
-        if i < len(g.adj) and len(g.adj[i]) >= 2:
+        if path_graph_undirected_neighbor_count(g, i) >= 2:
             out.append({"x": round(float(p[0]), 3), "y": round(float(p[1]), 3)})
     return out
