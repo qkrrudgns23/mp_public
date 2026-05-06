@@ -10132,6 +10132,13 @@
   function getFlightPoseAtTimeForDraw(flight, tSec) {
     let t = Number(tSec);
     if (!isFinite(t)) return null;
+    if (isFlightAirsideCycleCompleteAtSimTime(flight, t)) {
+      if (flight) {
+        flight.__parkedStationaryPoseCache = undefined;
+        flight.__parkedSilBmpCache = undefined;
+      }
+      return null;
+    }
     const trWin = compactPlaybackTrackStartEnd(compactPlaybackTrackForFlight(flight));
     const tl = flight && flight.timeline;
     const t0 = trWin ? trWin.t0 : (tl && tl.length ? tl[0].t : NaN);
