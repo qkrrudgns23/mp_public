@@ -5967,7 +5967,9 @@
       update3DSceneWhenVisible();
     }
     if (simSlider) {
+      if (typeof window.__bindFlightSimSliderFineOnce === 'function') window.__bindFlightSimSliderFineOnce(simSlider);
       simSlider.addEventListener('pointerdown', function(e) {
+        if (state.simTimeSliderFineMode) return;
         if (e.button != null && e.button !== 0) return;
         if (e.isPrimary === false) return;
         simSliderPointerActive = true;

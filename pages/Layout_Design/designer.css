@@ -117,7 +117,8 @@
     #sim-controls-container .sim-slider-stack { flex: 1; min-width: 80px; display: flex; flex-direction: column; gap: 1px; justify-content: center; min-height: 0; }
     #sim-controls-container .sim-slider-markers { position: relative; height: 11px; pointer-events: none; margin: 0 7px 0 4px; }
     #sim-controls-container .sim-slider-deadlock-dot { position: absolute; top: 2px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 1px rgba(0,0,0,0.4); z-index: 2; pointer-events: auto; cursor: pointer; }
-    #sim-controls-container #flightSimSlider { width: 100%; min-width: 0; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); }
+    #sim-controls-container #flightSimSlider { width: 100%; min-width: 0; margin: 0; vertical-align: middle; accent-color: var(--ui-accent); height: 10px; }
+    #sim-controls-container #flightSimSlider.sim-time-slider-fine { accent-color: #ef4444; }
     #sim-controls-container #flightSimTimeLabel { font-size: 11px; color: var(--ui-text-primary); min-width: 120px; flex-shrink: 0; display: inline-block; }
     #view-toggle-stack { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
     /* overflow must be visible so the Layer popover (positioned above the bar) is not clipped */

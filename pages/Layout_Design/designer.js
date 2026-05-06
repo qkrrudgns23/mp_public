@@ -1184,6 +1184,8 @@
     simTimeSec: 0,
     simStartSec: 0,
     simDurationSec: 0,
+    /** ``true``: 재생 타임 슬라이더를 더블클릭한 뒤 드래그 시 시각 변경을 100배 미세하게. 썹은 빨간색 표시. */
+    simTimeSliderFineMode: false,
     simPlaybackEndCapSec: null,
     simPlaying: false,
     simSliderScrubbing: false,
@@ -9308,6 +9310,99 @@
     if (snapped > hi) snapped = hi;
     return snapped;
   }
+
+  /**
+   * 더블 클릭으로 미세 모드 토글 후, 같은 슬라이더에서 포인터 드래그 시 (전체 타임축 폭 대비 픽셀 이동량)×(span)/100 만큼만 시각 변경.
+   * 중복 초기화 방지 위해 ``dataset.airsideFineBind`` 사용.
+   */
+  function bindFlightSimSliderFineOnce(sliderEl) {
+    if (!sliderEl || sliderEl.dataset.airsideFineBind === '1') return;
+    sliderEl.dataset.airsideFineBind = '1';
+    let fineDragPid = null;
+
+    sliderEl.addEventListener('dblclick', function(ev) {
+      ev.preventDefault();
+      state.simTimeSliderFineMode = !state.simTimeSliderFineMode;
+      if (state.simTimeSliderFineMode) {
+        sliderEl.classList.add('sim-time-slider-fine');
+      } else {
+        sliderEl.classList.remove('sim-time-slider-fine');
+      }
+    });
+
+    /** 미세 모드에서 ``pointerdown`` 시 바로 ``preventDefault`` 하면 브라우저가 ``click``/``dblclick`` 을 만들지 않아 꺼짐 토글이 안 될 수 있음 → 임계 이동 후에만 캡처·차단 */
+    sliderEl.addEventListener('pointerdown', function(ev) {
+      if (!state.simTimeSliderFineMode) return;
+      if (ev.button != null && ev.button !== 0) return;
+      if (ev.isPrimary === false) return;
+      const lo = Number(state.simStartSec);
+      const hi = Number(state.simDurationSec);
+      if (!isFinite(lo) || !isFinite(hi) || !(hi > lo + 1e-9)) return;
+      const startClientX = ev.clientX;
+      const rect = sliderEl.getBoundingClientRect();
+      const wTrack = rect.width > 1 ? rect.width : 1;
+      const span = hi - lo;
+      const startT = snapSimTimeSecForSlider(Number(state.simTimeSec));
+
+      fineDragPid = ev.pointerId;
+      let dragged = false;
+
+      function onMove(me) {
+        if (fineDragPid === null || me.pointerId !== fineDragPid) return;
+        const dxAbs = Math.abs(me.clientX - startClientX);
+        if (!dragged && dxAbs < 4) return;
+        if (!dragged) {
+          dragged = true;
+          try {
+            sliderEl.setPointerCapture(me.pointerId);
+          } catch (_) { /* ignore */ }
+          me.preventDefault();
+          me.stopPropagation();
+          state.simSliderScrubbing = true;
+        }
+        const dx = me.clientX - startClientX;
+        const deltaSec = (dx / wTrack) * span / 100;
+        let next = snapSimTimeSecForSlider(startT + deltaSec);
+        next = Math.max(lo, Math.min(hi, next));
+        state.simTimeSec = next;
+        sliderEl.value = String(next);
+        if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+        syncAllocGanttSimPlayheadPosition();
+        try { draw(); } catch (_) { /* ignore */ }
+        update3DSceneWhenVisible();
+      }
+
+      function finish(me) {
+        if (fineDragPid === null) return;
+        if (me && me.pointerId != null && me.pointerId !== fineDragPid) return;
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', finish, true);
+        document.removeEventListener('pointercancel', finish, true);
+        if (dragged) {
+          try {
+            sliderEl.releasePointerCapture(fineDragPid);
+          } catch (_) { /* ignore */ }
+        }
+        fineDragPid = null;
+        state.simSliderScrubbing = false;
+        if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+        syncAllocGanttSimPlayheadPosition();
+        try { draw(); } catch (_) { /* ignore */ }
+        update3DSceneWhenVisible();
+      }
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', finish, true);
+      document.addEventListener('pointercancel', finish, true);
+    }, true);
+  }
+
+  try {
+    window.__bindFlightSimSliderFineOnce = bindFlightSimSliderFineOnce;
+  } catch (_eFineWin) {
+    /* ignore */
+  }
+
   function updateFlightSimPlaybackLabelsDom() {
     const label = document.getElementById('flightSimTimeLabel');
     const t = state.simTimeSec;
@@ -9918,19 +10013,6 @@
     return NaN;
   }
 
-  /** First on-block arrival time (sim s): ``timeline_meta.eibtSec`` or first ``eibtSecList`` entry. */
-  function getFlightEibtSimSecFirstFromFlight(flight) {
-    const m = flight && flight.timeline_meta;
-    if (!m || typeof m !== 'object') return NaN;
-    if (typeof m.eibtSec === 'number' && isFinite(m.eibtSec)) return Number(m.eibtSec);
-    const L = m.eibtSecList;
-    if (Array.isArray(L) && L.length) {
-      const x = Number(L[0]);
-      if (isFinite(x)) return x;
-    }
-    return NaN;
-  }
-
   /**
    * Longest compact/timeline chord whose endpoints are phase Pushback (motion direction nose follows via reverse-draw).
    * Used so apron-link + taxi pushback legs share one stable compass instead of jittering across micro stationary segments.
@@ -10147,25 +10229,6 @@
       if (tr && !lastMotionUnitDirBefore(useI, { skipPushback: !curPbInterval })) {
         const fb = playbackLastMotionUnitDirBeforeTime(tr, tSec, !curPbInterval);
         if (fb) h = { dx: fb.dx, dy: fb.dy };
-      }
-      if (flight.arrDep !== 'Dep' && useI >= 1) {
-        const eibt0 = getFlightEibtSimSecFirstFromFlight(flight);
-        const tN = Number(tSec);
-        const inFirstArrBlock = isFinite(eibt0) && isFinite(tN) && tN <= eibt0 + 1e-6;
-        if (inFirstArrBlock) {
-          const p0 = tl[useI - 1], p1 = tl[useI], p2 = tl[useI + 1];
-          if (p0 && p1 && p2) {
-            const px = p1.x - p0.x, py = p1.y - p0.y;
-            const cx = p2.x - p1.x, cy = p2.y - p1.y;
-            const lp = Math.hypot(px, py), lc = Math.hypot(cx, cy);
-            if (lp >= motionChordEps && lc >= motionChordEps) {
-              const dotBb = (px * cx + py * cy) / (lp * lc);
-              if (dotBb < -0.5) {
-                h = { dx: px / lp, dy: py / lp };
-              }
-            }
-          }
-        }
       }
       const dg = !!(a.deadlockGhost || b.deadlockGhost);
       let hDraw = h;
@@ -20213,7 +20276,9 @@
       update3DSceneWhenVisible();
     }
     if (simSlider) {
+      bindFlightSimSliderFineOnce(simSlider);
       simSlider.addEventListener('pointerdown', function(e) {
+        if (state.simTimeSliderFineMode) return;
         if (e.button != null && e.button !== 0) return;
         if (e.isPrimary === false) return;
         simSliderPointerActive = true;

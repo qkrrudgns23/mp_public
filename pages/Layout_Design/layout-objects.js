@@ -564,6 +564,8 @@
     simTimeSec: 0,
     simStartSec: 0,
     simDurationSec: 0,
+    /** ``true``: 타임 재생 슬라이더 미세 드래그 모드 — 더블 클릭으로 토글. */
+    simTimeSliderFineMode: false,
     simPlaybackEndCapSec: null,
     simPlaying: false,
     simSliderScrubbing: false,
