@@ -119,7 +119,7 @@
             __FLIGHT_SPEED_OPTIONS_HTML__
           </select>
           <label for="flightSimSlider" title="스케줄 기준 시각(ELDT/ETOT 등으로부터 계산된 절대 시간). 재생 시작은 최소 ELDT − 10초(도착 편이 있으면); 접근 구간 포함. 스탠드 할당 간트 축과는 별개입니다.">Current</label>
-          <div class="sim-slider-stack" title="Red dots: deadlock ghost timestamps on the playback timeline">
+          <div class="sim-slider-stack" title="Deadlock markers: ghost resolve ticks (sim time).">
             <div class="sim-slider-markers" id="flightSimSliderMarkers" aria-hidden="true"></div>
             <input type="range" id="flightSimSlider" min="0" max="100" value="0" step="any" title="스케줄 절대 시각(HH:MM:SS). 범위 최솟값: 도착 ELDT 최소값 −10초(해당 편 없으면 타임라인 시작)." />
           </div>

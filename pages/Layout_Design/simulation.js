@@ -1,3 +1,59 @@
+    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    if (Math.abs(d) < 1e-12) return null;
+    const a2 = ax * ax + ay * ay;
+    const b2 = bx * bx + by * by;
+    const c2 = cx * cx + cy * cy;
+    const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
+    const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
+    const r = Math.hypot(ax - ux, ay - uy);
+    if (!(r > 1e-9)) return null;
+    return { ox: ux, oy: uy, r: r };
+  }
+  /** Endpoints A,B and point C on arc; returns world px polyline A→B along the circle through C. */
+  function pathArcSampleThreePointWorldPx(ax, ay, bx, by, cx, cy, maxChordStepPx) {
+    const cc = pathArcCircumcircle(ax, ay, bx, by, cx, cy);
+    if (!cc) return [[ax, ay], [bx, by]];
+    const ta = Math.atan2(ay - cc.oy, ax - cc.ox);
+    const tb = Math.atan2(by - cc.oy, bx - cc.ox);
+    const tc = Math.atan2(cy - cc.oy, cx - cc.ox);
+    const spanAB = pathArcAngleDiffCCW(ta, tb);
+    let tStart, span, reverseOrder;
+    if (pathArcPointBetweenAnglesCCW(ta, tc, spanAB)) {
+      tStart = ta;
+      span = spanAB;
+      reverseOrder = false;
+    } else {
+      tStart = tb;
+      span = pathArcAngleDiffCCW(tb, ta);
+      reverseOrder = true;
+    }
+    const arcLen = cc.r * span;
+    const mcs = Math.max(3, typeof maxChordStepPx === 'number' && maxChordStepPx > 0 ? maxChordStepPx : CELL_SIZE * 0.28);
+    const n = Math.max(8, Math.min(96, Math.ceil(arcLen / mcs)));
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const ang = tStart + (span * i) / n;
+      pts.push([cc.ox + cc.r * Math.cos(ang), cc.oy + cc.r * Math.sin(ang)]);
+    }
+    if (reverseOrder) pts.reverse();
+    pts[0] = [ax, ay];
+    pts[pts.length - 1] = [bx, by];
+    return pts;
+  }
+  /** Subdivide polyline so each segment length ≤ maxStepPx (smoother grid snap for arcs). */
+  function pathArcDensifyPolylinePx(pts, maxStepPx) {
+    if (!pts || pts.length < 2) return pts ? pts.slice() : [];
+    const m = Math.max(1e-6, maxStepPx);
+    const out = [[pts[0][0], pts[0][1]]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const x0 = pts[i][0], y0 = pts[i][1], x1 = pts[i + 1][0], y1 = pts[i + 1][1];
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      const steps = Math.max(1, Math.ceil(len / m));
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps;
+        out.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
+      }
+    }
     return out;
   }
   function pathArcComputePreviewWorldPxFromAB(Ax, Ay, Bx, By, wx, wy) {
@@ -1061,59 +1117,3 @@
     if (tabId === 'allocation' && typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
     if (tabId === 'rwysep') {
       const rwyPanel = document.getElementById('rwySepPanel');
-      if (
-        state.rwySepPanelDirty === false &&
-        rwyPanel &&
-        document.getElementById('rwysep-standard') &&
-        typeof drawRwySeparationTimeline === 'function'
-      ) {
-        drawRwySeparationTimeline(rwyPanel);
-      } else if (typeof renderRunwaySeparation === 'function') {
-        renderRunwaySeparation();
-      }
-    }
-  }
-  document.querySelectorAll('.right-panel-tab').forEach(btn => {
-    btn.addEventListener('click', function() { switchToTab(this.getAttribute('data-tab')); });
-  });
-
-  ['chkShowSPoints', 'chkShowEBar', 'chkShowEPoints', 'chkShowSBars'].forEach(function(chkId) {
-    const el = document.getElementById(chkId);
-    if (el) el.addEventListener('change', function() {
-      if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
-    });
-  });
-
-  document.getElementById('gridCellSize').addEventListener('change', function() { CELL_SIZE = Math.max(5, Number(this.value) || 5); invalidateGridUnderlay(); draw(); });
-  document.getElementById('gridCols').addEventListener('change', function() { GRID_COLS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); invalidateGridUnderlay(); draw(); });
-  document.getElementById('gridRows').addEventListener('change', function() { GRID_ROWS = Math.max(5, Math.min(1000, parseInt(this.value,10)||400)); invalidateGridUnderlay(); draw(); });
-  function commitGridLayoutImageNumericChange(inputId, applyFn) {
-    const input = document.getElementById(inputId);
-    if (!input) return;
-    input.addEventListener('change', function() {
-      if (!state.layoutImageOverlay) {
-        syncPanelFromState();
-        return;
-      }
-      const before = JSON.stringify(state.layoutImageOverlay);
-      const snapshot = JSON.parse(before);
-      applyFn(this);
-      const after = JSON.stringify(state.layoutImageOverlay);
-      if (before === after) {
-        syncPanelFromState();
-        invalidateGridUnderlay();
-        draw();
-        return;
-      }
-      undoStack.push({
-        terminals: JSON.parse(JSON.stringify(state.terminals || [])),
-        pbbStands: JSON.parse(JSON.stringify(state.pbbStands || [])),
-        remoteStands: JSON.parse(JSON.stringify(state.remoteStands || [])),
-        tempStands: JSON.parse(JSON.stringify(state.tempStands || [])),
-        holdingPoints: JSON.parse(JSON.stringify(state.holdingPoints || [])),
-        taxiways: JSON.parse(JSON.stringify(state.taxiways || [])),
-        apronLinks: JSON.parse(JSON.stringify(state.apronLinks || [])),
-        layoutImageOverlay: snapshot,
-        layoutEdgeNames: JSON.parse(JSON.stringify(state.layoutEdgeNames || {})),
-        directionModes: JSON.parse(JSON.stringify(state.directionModes || [])),
-        flights: cloneFlightsWithoutPathPolylineCache(state.flights),

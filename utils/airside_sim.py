@@ -4471,7 +4471,8 @@ def _compress_agent_history_for_dwell_export(
             last_dst,
         )
         history = hist_mut
-    drop = set(in_band[1:-1])
+    interior = list(in_band[1:-1])
+    drop = set(interior)
     return [history[i] for i in range(n) if i not in drop]
 
 
@@ -7728,6 +7729,10 @@ def _update_deadlock_stagnation_probe(
             st.stagnation_anchor_sec = None
             st.progress_snapshot_edge_id = None
             continue
+        if _agent_deadlock_detection_suppressed_in_turnaround_before_offblocks(ag, t):
+            st.stagnation_anchor_sec = None
+            st.progress_snapshot_edge_id = None
+            continue
         eid = ag.edge_ids[0] if ag.edge_ids else ""
         along_m = float(ag.edge_s_along_px) / ppm
         if st.stagnation_anchor_sec is None:
@@ -8716,6 +8721,35 @@ def _try_one_aggressive_deadlock_reroute(
     return False
 
 
+def _agent_deadlock_detection_suppressed_in_turnaround_before_offblocks(
+    ag: Flight, sim_time_abs: float
+) -> bool:
+    """
+    ``True`` on ``[EIBT, measured first off-blocks motion)`` for the active apron segment.
+
+    WAIT/YIELD in this window is excluded from deadlock detection and does not accumulate
+    stagnation toward the deadlock threshold (anchor cleared separately each tick).
+    """
+
+    t_ag = float(sim_time_abs)
+    ai = _agent_current_apron_index(ag)
+    eibt: Optional[float] = None
+    if ag.actual_apron_inblocks_abs_sec_list and ai < len(ag.actual_apron_inblocks_abs_sec_list):
+        eibt = ag.actual_apron_inblocks_abs_sec_list[ai]
+    if eibt is None and ag.actual_apron_inblocks_abs_sec is not None:
+        eibt = float(ag.actual_apron_inblocks_abs_sec)
+    if eibt is None or not math.isfinite(float(eibt)) or t_ag + 1e-9 < float(eibt):
+        return False
+    ob: Optional[float] = None
+    if ag.actual_apron_offblocks_abs_sec_list and ai < len(ag.actual_apron_offblocks_abs_sec_list):
+        ob = ag.actual_apron_offblocks_abs_sec_list[ai]
+    if ob is None and ag.actual_apron_offblocks_abs_sec is not None:
+        ob = float(ag.actual_apron_offblocks_abs_sec)
+    if ob is not None and math.isfinite(float(ob)) and t_ag + 1e-9 >= float(ob):
+        return False
+    return True
+
+
 def detect_deadlock(
     control_state: SimulationControlState,
     agents: List[Flight],
@@ -8732,6 +8766,8 @@ def detect_deadlock(
         if _agent_deadlock_ghost_at_time(st, t):
             continue
         if st.clearance not in ("WAIT", "YIELD"):
+            continue
+        if _agent_deadlock_detection_suppressed_in_turnaround_before_offblocks(ag, t):
             continue
         anchor = st.stagnation_anchor_sec
         if anchor is None:
@@ -8754,7 +8790,6 @@ def resolve_deadlock(
     if not deadlocked_ids:
         return
     id_set = {str(x) for x in deadlocked_ids}
-    control_state.deadlock_resolve_event_count = int(control_state.deadlock_resolve_event_count) + 1
     stall_snap: Dict[str, Optional[float]] = {}
     agent_states_get_rd = control_state.agent_states.get
     agents_by_id_rd: Dict[str, Flight] = {str(ag.id): ag for ag in agents}
@@ -8767,6 +8802,9 @@ def resolve_deadlock(
         return (rank, -total_wait, str(fid))
 
     ordered_ids = sorted(id_set, key=_release_sort_key)
+    control_state.deadlock_resolve_event_count = int(
+        control_state.deadlock_resolve_event_count
+    ) + len(ordered_ids)
     base_ghost_until = float(sim_time) + float(DEADLOCK_FORCE_MOVE_DURATION_SEC)
     stagger = max(0.0, float(DEADLOCK_RELEASE_STAGGER_SEC))
     for idx, fid in enumerate(ordered_ids):

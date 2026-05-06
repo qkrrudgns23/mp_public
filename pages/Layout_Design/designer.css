@@ -34,7 +34,7 @@
     .deadlock-ghost-banner__icon { width: 18px; height: 18px; flex-shrink: 0; color: #f87171; margin-top: 0.5px; }
     .deadlock-ghost-banner__content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
     .deadlock-ghost-banner__title { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: #fff; }
-    .deadlock-ghost-banner__text { white-space: pre-line; }
+    .deadlock-ghost-banner__text { white-space: pre-line; font-variant-numeric: tabular-nums; font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace; font-size: 10px; }
     .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-arr-ret:disabled,
     .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-apron:disabled,
     .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-stand-overlap:disabled { opacity: 1; cursor: not-allowed; pointer-events: none; color: #fecdd3; border-color: rgba(248, 113, 113, 0.5); background: rgba(127, 29, 29, 0.45); }

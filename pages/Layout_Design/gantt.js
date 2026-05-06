@@ -1,3 +1,59 @@
+        }
+      } catch (eReady) {
+        setTimeout(sendGrid3dInit, 150);
+      }
+    }
+  }
+  function getExistingStandBounds() {
+    const list = [];
+    state.remoteStands.forEach(st => {
+      const corners = getRemoteStandCorners(st);
+      let left = corners[0][0], right = corners[0][0], top = corners[0][1], bottom = corners[0][1];
+      for (let k = 1; k < 4; k++) {
+        left = Math.min(left, corners[k][0]); right = Math.max(right, corners[k][0]);
+        top = Math.min(top, corners[k][1]); bottom = Math.max(bottom, corners[k][1]);
+      }
+      list.push({ left, right, top, bottom });
+    });
+    state.pbbStands.forEach(pbb => {
+      const corners = getPBBStandCorners(pbb);
+      let left = corners[0][0], right = corners[0][0], top = corners[0][1], bottom = corners[0][1];
+      for (let k = 1; k < 4; k++) {
+        left = Math.min(left, corners[k][0]); right = Math.max(right, corners[k][0]);
+        top = Math.min(top, corners[k][1]); bottom = Math.max(bottom, corners[k][1]);
+      }
+      list.push({ left, right, top, bottom });
+    });
+    return list;
+  }
+  function standOverlapsExisting(bounds) {
+    const existing = getExistingStandBounds();
+    for (let i = 0; i < existing.length; i++) if (rectsOverlap(bounds, existing[i])) return true;
+    return false;
+  }
+  function dist2(a, b) { const dx = a[0]-b[0], dy = a[1]-b[1]; return dx*dx+dy*dy; }
+  function _normalizeTimeToSeconds(value, unit, roundingMode) {
+    const raw = Number(value || 0);
+    const scaled = unit === 'minutes' ? raw * 60 : raw;
+    const rounded = roundingMode === 'round' ? Math.round(scaled) : Math.floor(scaled);
+    return Math.max(0, rounded);
+  }
+  function _splitTotalSeconds(totalSec) {
+    const safeSec = Math.max(0, Math.floor(totalSec || 0));
+    const h = Math.floor(safeSec / 3600);
+    const m = Math.floor((safeSec % 3600) / 60);
+    const s = safeSec % 60;
+    return {
+      h,
+      m,
+      s,
+      hh: (h < 10 ? '0' : '') + h,
+      mm: (m < 10 ? '0' : '') + m,
+      ss: (s < 10 ? '0' : '') + s,
+    };
+  }
+  function formatMinutesToHHMM(m) {
+    const parts = _splitTotalSeconds(_normalizeTimeToSeconds(m, 'minutes', 'floor'));
     return parts.h + ':' + parts.mm;
   }
   function findNearestItem(candidates, getPoint, wx, wy, maxD2) {
@@ -492,59 +548,3 @@
     return { left: localToWorld(leftLocal), right: localToWorld(rightLocal) };
   }
   function ensureMarkerFlightBlazerState(m) {
-    if (!m || m.kind !== 'flight') return;
-    if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
-    if (typeof m.headingReversed !== 'boolean') m.headingReversed = false;
-    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) < 0) m.blazerColor = MARKER_BLAZER_COLOR_OPTIONS[0];
-    if (!Array.isArray(m.blazerLeftTrail)) m.blazerLeftTrail = [];
-    if (!Array.isArray(m.blazerRightTrail)) m.blazerRightTrail = [];
-  }
-  function appendMarkerFlightBlazerTrail(m) {
-    if (!m || m.kind !== 'flight') return;
-    ensureMarkerFlightBlazerState(m);
-    if (!m.blazerEnabled) return;
-    const tips = getMarkerFlightWingtipWorldPoints(m);
-    if (!tips || !tips.left || !tips.right) return;
-    const minStep = Math.max(0.25, CELL_SIZE * 0.03);
-    const minStep2 = minStep * minStep;
-    function append(trail, pt) {
-      const last = trail.length ? trail[trail.length - 1] : null;
-      if (!last || dist2([last.x, last.y], [pt.x, pt.y]) >= minStep2) trail.push({ x: pt.x, y: pt.y });
-      if (trail.length > 4000) trail.splice(0, trail.length - 4000);
-    }
-    append(m.blazerLeftTrail, tips.left);
-    append(m.blazerRightTrail, tips.right);
-  }
-  function markerFlightBoundsWorld(m) {
-    if (!m || m.kind !== 'flight') return null;
-    const pose = resolveMarkerFlightPose(m);
-    if (!pose) return null;
-    const ac = getAircraftInfoByType(m.aircraftType);
-    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
-    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
-    const sil = getApronAircraftDetailedSilhouettePoints();
-    const localPts = [];
-    if (_ac2d.useDetailedSilhouette === true && sil.length >= 3) {
-      for (let i = 0; i < sil.length; i++) {
-        const p = sil[i];
-        if (!p || p.length < 2) continue;
-        const lx = Number(p[0]) * lenM;
-        const ly = Number(p[1]) * spanM;
-        if (isFinite(lx) && isFinite(ly)) localPts.push([lx, ly]);
-      }
-    }
-    if (!localPts.length) {
-      localPts.push([lenM * 0.5, 0], [-lenM * 0.5, -spanM], [-lenM * 0.5, spanM], [0, -spanM], [0, spanM]);
-    }
-    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (let i = 0; i < localPts.length; i++) {
-      const pt = localPts[i];
-      const wx = pose.x + pt[0] * cs - pt[1] * sn;
-      const wy = pose.y + pt[0] * sn + pt[1] * cs;
-      if (wx < minX) minX = wx;
-      if (wy < minY) minY = wy;
-      if (wx > maxX) maxX = wx;
-      if (wy > maxY) maxY = wy;
-    }
-    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;

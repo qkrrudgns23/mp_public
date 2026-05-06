@@ -1,3 +1,59 @@
+        const y1 = y + rLight + pad;
+        ctx2.strokeStyle = c2dObjectSelectedStroke();
+        ctx2.lineWidth = Math.max(0.55, 0.8 / scaleRef);
+        ctx2.setLineDash([4, 3]);
+        ctx2.strokeRect(x0, y0, x1 - x0, y1 - y0);
+        ctx2.setLineDash([]);
+      }
+      ctx2.restore();
+      return;
+    }
+    const label = 'ILS';
+    const fill = selected ? c2dObjectSelectedFill() : (etcMono ? C2D_LAYER_MONO_ETC_WHITE : 'rgba(56, 189, 248, 0.85)');
+    const stroke = selected ? c2dObjectSelectedStroke() : (etcMono ? c2dLayerMonoLineStrokeCss() : 'rgba(2, 132, 199, 0.95)');
+    const fg = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#0c4a6e';
+    const r = Math.max(3, 3.6 / scaleRef);
+    ctx2.beginPath();
+    ctx2.arc(x, y, r, 0, Math.PI * 2);
+    ctx2.fillStyle = fill;
+    ctx2.strokeStyle = stroke;
+    ctx2.lineWidth = Math.max(0.4, 0.6 / scaleRef);
+    ctx2.fill();
+    ctx2.stroke();
+    if (!interactiveLite) {
+      const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
+      ctx2.font = '700 ' + fs + 'px system-ui,sans-serif';
+      ctx2.textAlign = 'left';
+      ctx2.textBaseline = 'middle';
+      ctx2.lineWidth = 2.4;
+      ctx2.strokeStyle = 'rgba(15,23,42,0.85)';
+      ctx2.fillStyle = fg;
+      const lx = x + r + 3;
+      const ly = y;
+      ctx2.strokeText(label, lx, ly);
+      ctx2.fillText(label, lx, ly);
+    }
+    ctx2.restore();
+  }
+  function hideMarkerTextDraftEditor() {
+    const layer = document.getElementById('marker-text-edit-layer');
+    const input = document.getElementById('markerTextDraftInput');
+    if (layer) {
+      layer.setAttribute('hidden', '');
+      layer.setAttribute('aria-hidden', 'true');
+    }
+    if (input) input.value = '';
+  }
+  function syncMarkerTextDraftInputPosition() {
+    const draft = state.markerTextDraft;
+    const input = document.getElementById('markerTextDraftInput');
+    if (!draft || !draft.active || !input) return;
+    const sc = worldToScreenCanvas(draft.x, draft.y);
+    input.style.left = Math.round(sc[0] + 4) + 'px';
+    input.style.top = Math.round(sc[1] + 4) + 'px';
+  }
+  function showMarkerTextDraftEditor() {
+    const layer = document.getElementById('marker-text-edit-layer');
     const input = document.getElementById('markerTextDraftInput');
     if (!layer || !input) return;
     layer.removeAttribute('hidden');
@@ -327,59 +383,3 @@
     return pathArcAngleDiffCCW(tStart, tProbe) <= spanCCW + 1e-10;
   }
   function pathArcCircumcircle(ax, ay, bx, by, cx, cy) {
-    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
-    if (Math.abs(d) < 1e-12) return null;
-    const a2 = ax * ax + ay * ay;
-    const b2 = bx * bx + by * by;
-    const c2 = cx * cx + cy * cy;
-    const ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
-    const uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
-    const r = Math.hypot(ax - ux, ay - uy);
-    if (!(r > 1e-9)) return null;
-    return { ox: ux, oy: uy, r: r };
-  }
-  /** Endpoints A,B and point C on arc; returns world px polyline A→B along the circle through C. */
-  function pathArcSampleThreePointWorldPx(ax, ay, bx, by, cx, cy, maxChordStepPx) {
-    const cc = pathArcCircumcircle(ax, ay, bx, by, cx, cy);
-    if (!cc) return [[ax, ay], [bx, by]];
-    const ta = Math.atan2(ay - cc.oy, ax - cc.ox);
-    const tb = Math.atan2(by - cc.oy, bx - cc.ox);
-    const tc = Math.atan2(cy - cc.oy, cx - cc.ox);
-    const spanAB = pathArcAngleDiffCCW(ta, tb);
-    let tStart, span, reverseOrder;
-    if (pathArcPointBetweenAnglesCCW(ta, tc, spanAB)) {
-      tStart = ta;
-      span = spanAB;
-      reverseOrder = false;
-    } else {
-      tStart = tb;
-      span = pathArcAngleDiffCCW(tb, ta);
-      reverseOrder = true;
-    }
-    const arcLen = cc.r * span;
-    const mcs = Math.max(3, typeof maxChordStepPx === 'number' && maxChordStepPx > 0 ? maxChordStepPx : CELL_SIZE * 0.28);
-    const n = Math.max(8, Math.min(96, Math.ceil(arcLen / mcs)));
-    const pts = [];
-    for (let i = 0; i <= n; i++) {
-      const ang = tStart + (span * i) / n;
-      pts.push([cc.ox + cc.r * Math.cos(ang), cc.oy + cc.r * Math.sin(ang)]);
-    }
-    if (reverseOrder) pts.reverse();
-    pts[0] = [ax, ay];
-    pts[pts.length - 1] = [bx, by];
-    return pts;
-  }
-  /** Subdivide polyline so each segment length ≤ maxStepPx (smoother grid snap for arcs). */
-  function pathArcDensifyPolylinePx(pts, maxStepPx) {
-    if (!pts || pts.length < 2) return pts ? pts.slice() : [];
-    const m = Math.max(1e-6, maxStepPx);
-    const out = [[pts[0][0], pts[0][1]]];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const x0 = pts[i][0], y0 = pts[i][1], x1 = pts[i + 1][0], y1 = pts[i + 1][1];
-      const len = Math.hypot(x1 - x0, y1 - y0);
-      const steps = Math.max(1, Math.ceil(len / m));
-      for (let s = 1; s <= steps; s++) {
-        const t = s / steps;
-        out.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]);
-      }
-    }

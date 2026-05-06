@@ -1,3 +1,59 @@
+        const stot = it.stot;
+        const eibt = it.eibt;
+        const eobt = it.eobt;
+        const eldt = it.eldt;
+        const etot = it.etot;
+        const depBlk = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+        const sobtOrig = (it.sobtOrig != null) ? it.sobtOrig : (it.stotOrig - depBlk);
+        const tStart = Math.max(t0, winStart);
+        const tEnd = Math.min(t1, winEnd);
+        if (tEnd <= tStart) return '';
+        const leftPct = ((tStart - winStart) / displaySpan) * 100 * zoomLayout;
+        const widthPct = Math.max(2, ((tEnd - tStart) / displaySpan) * 100 * zoomLayout);
+        const regSafe = escapeHtml(f.reg || '');
+        const codeSafe = escapeHtml((f.code || '').toUpperCase());
+        const typeSafe = escapeHtml(String(f.aircraftType || '').trim());
+        const codeHtml = codeSafe ? ('<span class="alloc-flight-code">' + codeSafe + '</span>') : '';
+        const typeHtml = typeSafe
+          ? ((codeSafe ? '<span class="alloc-flight-type-sep"> · </span>' : '') + '<span class="alloc-flight-type">' + typeSafe + '</span>')
+          : '';
+        const metaHtml = (codeHtml || typeHtml)
+          ? ('<div class="alloc-flight-meta">' + codeHtml + typeHtml + '</div>')
+          : '';
+        const conflictClass = (conflictMap[f.id] || flightBlockedLikeNoWay(f)) ? ' conflict' : '';
+        const selectedClass = (state.selectedObject && state.selectedObject.type === 'flight' && state.selectedObject.id === f.id) ? ' alloc-flight-selected' : '';
+        const sbarDimClass = dimSBars ? ' alloc-flight-sbar-dim' : '';
+        const segIdx = it.segmentIdx != null ? Number(it.segmentIdx) : 0;
+        const segCount = it.segmentCount != null ? Number(it.segmentCount) : 1;
+        const segStandId = it.segmentStandId != null ? it.segmentStandId : standId;
+        const segStand = segStandId != null && typeof findStandById === 'function' ? findStandById(segStandId) : null;
+        const invalidClass = (segStand && typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, segStand, segIdx, segCount)) ? ' alloc-invalid' : '';
+        const standWindowOverlapInvalid = !!(segStandId && typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, segStandId, segIdx));
+        const standOverlapClass = standWindowOverlapInvalid ? ' alloc-stand-window-overlap' : '';
+        const isFirstSeg = segIdx === 0;
+        const isLastSeg = segIdx >= segCount - 1;
+        const segName = segCount > 1 ? ('AP' + (segIdx + 1)) : '';
+        const sibtLabel = formatFlightScheduleDateTime(f, t0);
+        const sobtLabel = formatFlightScheduleDateTime(f, t1);
+        const handleHoverSibt = escapeAttr((segCount > 1 ? ('SIBT' + (segIdx + 1)) : 'SIBT') + ': ' + sibtLabel);
+        const handleHoverSobt = escapeAttr((segCount > 1 ? ('SOBT' + (segIdx + 1)) : 'SOBT') + ': ' + sobtLabel);
+        const barTitle =
+          (segName ? (segName + '\\n') : '') +
+          (segCount > 1 ? ('SIBT' + (segIdx + 1)) : 'SIBT') + ': ' + sibtLabel +
+          '\\n' + (segCount > 1 ? ('SOBT' + (segIdx + 1)) : 'SOBT') + ': ' + sobtLabel +
+          '\\nReg: ' + (f.reg || '') +
+          '\\nAirline: ' + (f.airlineCode || '') + ' ' + (f.flightNumber || '');
+        if (showEibtBars && eBars && (it.eBarSegmented || isFirstSeg) && isFinite(eibt) && isFinite(eobt) && eobt > eibt) {
+          pushAllocSpan(eBars, eibt, eobt, 'alloc-e-bar', 2);
+        }
+        if (showEldtBars && e2Bars && isFirstSeg) {
+          if (isFinite(eldt) && isFinite(eibt) && eibt >= eldt) pushAllocSpan(e2Bars, eldt, eibt, 'alloc-e2-bar', 0.5);
+          if (isFinite(eobt) && isFinite(etot) && etot >= eobt) pushAllocSpan(e2Bars, eobt, etot, 'alloc-e2-bar', 0.5);
+        }
+        if (showAuxBars && sBars) {
+          if (isFirstSeg && isFinite(sldt) && sldt <= t0) pushAllocSpan(sBars, sldt, t0, 'alloc-s-bar', 0.5);
+          if (isLastSeg && isFinite(stot) && stot >= t1) pushAllocSpan(sBars, t1, stot, 'alloc-s-bar', 0.5);
+        }
         if (showSDots && sDots) {
           if (isFirstSeg) pushAllocDot(sDots, sldt, 'alloc-time-dot-s');
           if (isLastSeg) pushAllocDot(sDots, stot, 'alloc-time-dot-s');
@@ -1611,59 +1667,3 @@
         lastArrCat = ev.cat;
       } else {
         let minFromArr = lastArrETime >= -1e8 && lastArrCat ? lastArrETime + getSec(rot[lastArrCat]) / 60 : -1e9;
-        let minFromDep = lastDepETime >= -1e8 && lastDepCat ? lastDepETime + getSec((depDep[lastDepCat] && depDep[lastDepCat][ev.cat]) != null ? depDep[lastDepCat][ev.cat] : RSEP_MISSING_MATRIX_SEC) / 60 : -1e9;
-        const etotSep = Math.max(ev.time, minFromArr, minFromDep);
-        const rotM = (ev.rotArrMin != null && isFinite(ev.rotArrMin)) ? ev.rotArrMin : getArrRotMinutes(ev.flight);
-        const eibtMin = (ev.flight.eldtMin != null ? ev.flight.eldtMin : 0) + rotM + (ev.vttArrMin || 0);
-        const vttDep = ev.vttDepMin || 0;
-        const etotMin = etotSep;
-        const eobtMin = etotMin - vttDep;
-        ev.flight.etotMin = etotMin;
-        lastDepETime = etotMin;
-        lastDepCat = ev.cat;
-      }
-    });
-    let minT = Infinity, maxT = -Infinity;
-    events.forEach(ev => {
-      const s = ev.time;
-      const e = ev.type === 'arr'
-        ? (ev.flight && ev.flight.eldtMin != null ? ev.flight.eldtMin : s)
-        : (ev.flight && ev.flight.etotMin != null ? ev.flight.etotMin : s);
-      if (s < minT) minT = s;
-      if (e < minT) minT = e;
-      if (s > maxT) maxT = s;
-      if (e > maxT) maxT = e;
-    });
-    if (!isFinite(minT) || !isFinite(maxT)) { minT = 0; maxT = 60; } else if (maxT <= minT) { maxT = minT + 60; }
-    return { minT, maxT };
-  }
-
-  function rsepCollectEventsForRunway(rwy, flights, runways) {
-    const cfg = rsepGetConfigForRunway(rwy);
-    if (!cfg) return null;
-    const stdKey = cfg.standard || 'ICAO';
-    const events = [];
-    let eventIndex = 0;
-    flights.forEach((f, flightIdx) => {
-      if (flightBlockedLikeNoWay(f)) return;
-      let arrRwy = f.arrRunwayId || (f.token && f.token.runwayId);
-      let depRwy = f.depRunwayId || (f.token && f.token.depRunwayId);
-      if (arrRwy == null && depRwy == null && runways.length === 1) { arrRwy = rwy.id; depRwy = rwy.id; }
-      else if (depRwy == null && arrRwy === rwy.id) depRwy = rwy.id;
-      else if (arrRwy == null && depRwy === rwy.id) arrRwy = rwy.id;
-      if (arrRwy !== rwy.id && depRwy !== rwy.id) return;
-      const ac = typeof getAircraftInfoByType === 'function' ? getAircraftInfoByType(f.aircraftType) : null;
-      const cat = stdKey === 'ICAO' ? (ac && ac.icaoJHL ? ac.icaoJHL : 'M') : (ac && ac.recatEu ? ac.recatEu : 'D');
-      const sldtMin = f.sldtMin != null ? f.sldtMin : 0;
-      const stotMin = f.stotMin != null ? f.stotMin : 0;
-      const sobtMin = f.sobtMin != null ? f.sobtMin : 0;
-      const vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
-      const vttDepMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-      if (arrRwy === rwy.id) events.push({ time: sldtMin, type: 'arr', flight: f, cat: cat, vttArrMin, rotArrMin, index: eventIndex++ });
-      if (depRwy === rwy.id) {
-        events.push({ time: stotMin, type: 'dep', flight: f, cat: cat, vttDepMin, vttArrMin, rotArrMin, sobtMin: sobtMin, index: eventIndex++ });
-      }
-    });
-    return { cfg, events };
-  }

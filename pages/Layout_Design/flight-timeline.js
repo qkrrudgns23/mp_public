@@ -1,3 +1,59 @@
+    const layout = payload.layout;
+    if (layout && typeof layout === 'object') {
+      applyLayoutObject(layout);
+    }
+    state.simPlaybackEndCapSec = truncCap;
+    const schedById = {};
+    scheduleList.forEach(function(s) {
+      if (s && s.flight_id != null) schedById[String(s.flight_id)] = s;
+    });
+    let mergedTimelines = 0;
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const srec = schedById[String(f.id)] || null;
+      const track = hasPositions ? positions[String(f.id)] : null;
+      const hasTrack = compactPlaybackTrackLength(track) >= 2;
+      f.timeline = null;
+      if (hasTrack) {
+        mergedTimelines++;
+        if (f.arrDep !== 'Dep') f.arrRetFailed = false;
+      }
+      if (srec && hasTrack) {
+        const eldtS = srec.ELDT != null ? Number(srec.ELDT) : NaN;
+        const eibtS = srec.EIBT != null ? Number(srec.EIBT) : NaN;
+        const eobtS = srec.EOBT != null ? Number(srec.EOBT) : NaN;
+        const etotS = srec.ETOT != null ? Number(srec.ETOT) : NaN;
+        const prevMeta = f.timeline_meta || {};
+        const builtDep = (typeof buildDepartureSurfaceTimelineSegments === 'function' && f.arrDep === 'Dep'
+          && isFinite(eobtS) && isFinite(etotS))
+          ? buildDepartureSurfaceTimelineSegments(f, eobtS, etotS)
+          : null;
+        const builtDepMeta = (builtDep && builtDep.meta) ? builtDep.meta : null;
+        f.timeline_meta = Object.assign(
+          {},
+          prevMeta,
+          builtDepMeta || {},
+          {
+            playbackSource: 'des_result',
+            eldtSec: isFinite(eldtS) ? eldtS : undefined,
+            eibtSec: isFinite(eibtS) ? eibtS : undefined,
+            eobtSec: isFinite(eobtS) ? eobtS : undefined,
+            etotSec: isFinite(etotS) ? etotS : undefined,
+            eibtSecList: Array.isArray(srec.EIBT_LIST) ? srec.EIBT_LIST.slice() : undefined,
+            eobtSecList: Array.isArray(srec.EOBT_LIST) ? srec.EOBT_LIST.slice() : undefined,
+            ePushFinishedSecList: Array.isArray(srec.E_PUSH_FINISHED_LIST) ? srec.E_PUSH_FINISHED_LIST.slice() : undefined,
+          }
+        );
+      } else {
+        delete f.timeline_meta;
+      }
+      applyAirsideScheduleRowToFlight(f, srec);
+    });
+    state.hasSimulationResult = mergedTimelines > 0;
+    state.simPlaybackPositionsByFlightId = hasPositions ? positions : null;
+    state.simPlaybackScheduleSnapshot = scheduleList.length ? scheduleList.slice() : null;
+    state.simPlaybackTimelinesEvictedForMemory = false;
+    state.simDeadlockGhostPlayback = deriveDeadlockGhostPlaybackFromPayload(payload, state.flights);
     if (hasPositions && positions && typeof positions === 'object') {
       if (!state.deadlockFlightIdsFromLastSim) state.deadlockFlightIdsFromLastSim = Object.create(null);
       Object.keys(positions).forEach(function(pid) {
@@ -1301,59 +1357,3 @@
   }
   function pbbStandOverlapsExisting(pbb, excludeId) {
     if (pbbStandOverlapsTerminal(pbb)) return true;
-    const cat = pbb.category || 'C';
-    const center = getStandConnectionPx(pbb);
-    const angle = getPBBStandAngle(pbb);
-    if (standGapLineHitsExistingOuterContours(center, angle, cat)) return true;
-    return false;
-  }
-  function pbbStandOuterContoursOverlapExisting(pbb, excludeId) {
-    const corners = getPBBStandCorners(pbb);
-    for (let i = 0; i < state.pbbStands.length; i++) {
-      const other = state.pbbStands[i];
-      if (!other) continue;
-      if (excludeId && other.id === excludeId) continue;
-      if (rotatedRectsOverlap(corners, getPBBStandCorners(other))) return true;
-    }
-    for (let i = 0; i < state.remoteStands.length; i++) {
-      const st = state.remoteStands[i];
-      if (!st) continue;
-      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
-    }
-    const temps = state.tempStands || [];
-    for (let i = 0; i < temps.length; i++) {
-      const st = temps[i];
-      if (!st) continue;
-      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
-    }
-    return false;
-  }
-  function tryPlacePbbAt(wx, wy) {
-    let bestEdge = null, bestD2 = Infinity;
-    state.terminals.forEach(t => {
-      if (!t.closed || t.vertices.length < 2) return;
-      let cx = 0, cy = 0;
-      t.vertices.forEach(v => { const [px, py] = cellToPixel(v.col, v.row); cx += px; cy += py; });
-      cx /= t.vertices.length || 1; cy /= t.vertices.length || 1;
-      for (let i = 0; i < t.vertices.length; i++) {
-        const v1 = t.vertices[i], v2 = t.vertices[(i + 1) % t.vertices.length];
-        const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
-        const near = closestPointOnSegment(p1, p2, [wx, wy]);
-        if (near) {
-          const d2 = dist2(near, [wx, wy]);
-          if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2, col: v1.col, row: v1.row, cx, cy }; }
-        }
-      }
-    });
-    const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
-    if (!bestEdge || bestD2 >= maxD2) return false;
-    const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
-    let nx = -(y2 - y1), ny = x2 - x1;
-    const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
-    const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
-    if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
-    const uPbb = readUnifiedNewStandConstraintFromPanel('standIcaoCategories', 'standAircraftAccess', ['A', 'B', 'C']);
-    const categoryMode = uPbb.categoryMode;
-    const category = uPbb.category;
-    const allowedIcaoCategories = uPbb.allowedIcaoCategories;
-    const panelAllowedTypes = uPbb.allowedAircraftTypes;

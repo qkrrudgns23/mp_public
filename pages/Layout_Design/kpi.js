@@ -1,3 +1,59 @@
+    if (!m || m.kind !== 'flight') return;
+    if (typeof m.blazerEnabled !== 'boolean') m.blazerEnabled = false;
+    if (typeof m.headingReversed !== 'boolean') m.headingReversed = false;
+    if (MARKER_BLAZER_COLOR_OPTIONS.indexOf(String(m.blazerColor || '').trim()) < 0) m.blazerColor = MARKER_BLAZER_COLOR_OPTIONS[0];
+    if (!Array.isArray(m.blazerLeftTrail)) m.blazerLeftTrail = [];
+    if (!Array.isArray(m.blazerRightTrail)) m.blazerRightTrail = [];
+  }
+  function appendMarkerFlightBlazerTrail(m) {
+    if (!m || m.kind !== 'flight') return;
+    ensureMarkerFlightBlazerState(m);
+    if (!m.blazerEnabled) return;
+    const tips = getMarkerFlightWingtipWorldPoints(m);
+    if (!tips || !tips.left || !tips.right) return;
+    const minStep = Math.max(0.25, CELL_SIZE * 0.03);
+    const minStep2 = minStep * minStep;
+    function append(trail, pt) {
+      const last = trail.length ? trail[trail.length - 1] : null;
+      if (!last || dist2([last.x, last.y], [pt.x, pt.y]) >= minStep2) trail.push({ x: pt.x, y: pt.y });
+      if (trail.length > 4000) trail.splice(0, trail.length - 4000);
+    }
+    append(m.blazerLeftTrail, tips.left);
+    append(m.blazerRightTrail, tips.right);
+  }
+  function markerFlightBoundsWorld(m) {
+    if (!m || m.kind !== 'flight') return null;
+    const pose = resolveMarkerFlightPose(m);
+    if (!pose) return null;
+    const ac = getAircraftInfoByType(m.aircraftType);
+    const lenM = ac && isFinite(Number(ac.length_m)) ? Math.max(1, Number(ac.length_m)) : 40;
+    const spanM = ac && isFinite(Number(ac.wingspan_m)) ? Math.max(1, Number(ac.wingspan_m)) : 40;
+    const sil = getApronAircraftDetailedSilhouettePoints();
+    const localPts = [];
+    if (_ac2d.useDetailedSilhouette === true && sil.length >= 3) {
+      for (let i = 0; i < sil.length; i++) {
+        const p = sil[i];
+        if (!p || p.length < 2) continue;
+        const lx = Number(p[0]) * lenM;
+        const ly = Number(p[1]) * spanM;
+        if (isFinite(lx) && isFinite(ly)) localPts.push([lx, ly]);
+      }
+    }
+    if (!localPts.length) {
+      localPts.push([lenM * 0.5, 0], [-lenM * 0.5, -spanM], [-lenM * 0.5, spanM], [0, -spanM], [0, spanM]);
+    }
+    const cs = Math.cos(pose.ang), sn = Math.sin(pose.ang);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < localPts.length; i++) {
+      const pt = localPts[i];
+      const wx = pose.x + pt[0] * cs - pt[1] * sn;
+      const wy = pose.y + pt[0] * sn + pt[1] * cs;
+      if (wx < minX) minX = wx;
+      if (wy < minY) minY = wy;
+      if (wx > maxX) maxX = wx;
+      if (wy > maxY) maxY = wy;
+    }
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
     return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
   }
   function syncMarkerFlightBlazerOverlayButton() {
@@ -312,59 +368,3 @@
         const x0 = lampXs[0] - rLight - pad;
         const x1 = lampXs[3] + rLight + pad;
         const y0 = y - rLight - pad;
-        const y1 = y + rLight + pad;
-        ctx2.strokeStyle = c2dObjectSelectedStroke();
-        ctx2.lineWidth = Math.max(0.55, 0.8 / scaleRef);
-        ctx2.setLineDash([4, 3]);
-        ctx2.strokeRect(x0, y0, x1 - x0, y1 - y0);
-        ctx2.setLineDash([]);
-      }
-      ctx2.restore();
-      return;
-    }
-    const label = 'ILS';
-    const fill = selected ? c2dObjectSelectedFill() : (etcMono ? C2D_LAYER_MONO_ETC_WHITE : 'rgba(56, 189, 248, 0.85)');
-    const stroke = selected ? c2dObjectSelectedStroke() : (etcMono ? c2dLayerMonoLineStrokeCss() : 'rgba(2, 132, 199, 0.95)');
-    const fg = etcMono ? C2D_LAYER_MONO_ETC_WHITE : '#0c4a6e';
-    const r = Math.max(3, 3.6 / scaleRef);
-    ctx2.beginPath();
-    ctx2.arc(x, y, r, 0, Math.PI * 2);
-    ctx2.fillStyle = fill;
-    ctx2.strokeStyle = stroke;
-    ctx2.lineWidth = Math.max(0.4, 0.6 / scaleRef);
-    ctx2.fill();
-    ctx2.stroke();
-    if (!interactiveLite) {
-      const fs = Math.max(9, 10 / Math.max(state.scale, 0.12));
-      ctx2.font = '700 ' + fs + 'px system-ui,sans-serif';
-      ctx2.textAlign = 'left';
-      ctx2.textBaseline = 'middle';
-      ctx2.lineWidth = 2.4;
-      ctx2.strokeStyle = 'rgba(15,23,42,0.85)';
-      ctx2.fillStyle = fg;
-      const lx = x + r + 3;
-      const ly = y;
-      ctx2.strokeText(label, lx, ly);
-      ctx2.fillText(label, lx, ly);
-    }
-    ctx2.restore();
-  }
-  function hideMarkerTextDraftEditor() {
-    const layer = document.getElementById('marker-text-edit-layer');
-    const input = document.getElementById('markerTextDraftInput');
-    if (layer) {
-      layer.setAttribute('hidden', '');
-      layer.setAttribute('aria-hidden', 'true');
-    }
-    if (input) input.value = '';
-  }
-  function syncMarkerTextDraftInputPosition() {
-    const draft = state.markerTextDraft;
-    const input = document.getElementById('markerTextDraftInput');
-    if (!draft || !draft.active || !input) return;
-    const sc = worldToScreenCanvas(draft.x, draft.y);
-    input.style.left = Math.round(sc[0] + 4) + 'px';
-    input.style.top = Math.round(sc[1] + 4) + 'px';
-  }
-  function showMarkerTextDraftEditor() {
-    const layer = document.getElementById('marker-text-edit-layer');

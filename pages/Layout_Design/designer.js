@@ -3151,23 +3151,11 @@
     const tr = map[String(f.id)];
     return isCompactPlaybackTrack(tr) ? tr : null;
   }
-  function compactPlaybackDghostSet(track) {
-    if (!track) return new Set();
-    if (track.__dghostSet instanceof Set) return track.__dghostSet;
-    const s = new Set();
-    const arr = Array.isArray(track.dghost_t) ? track.dghost_t : [];
-    for (let i = 0; i < arr.length; i++) {
-      const t = Math.round(Number(arr[i]));
-      if (isFinite(t)) s.add(t);
-    }
-    track.__dghostSet = s;
-    return s;
-  }
-  function compactPlaybackDghostMergedRangesSec(track) {
-    if (!track || !Array.isArray(track.dghost_t) || !track.dghost_t.length) return [];
+  function compactPlaybackDghostIntsMergedRangesSec(arr) {
+    if (!Array.isArray(arr) || !arr.length) return [];
     const nums = [];
-    for (let i = 0; i < track.dghost_t.length; i++) {
-      const v = Math.round(Number(track.dghost_t[i]));
+    for (let i = 0; i < arr.length; i++) {
+      const v = Math.round(Number(arr[i]));
       if (isFinite(v)) nums.push(v);
     }
     if (!nums.length) return [];
@@ -3185,9 +3173,31 @@
     out.push([s0, e0]);
     return out;
   }
+  function compactPlaybackDghostSet(track) {
+    const s = new Set();
+    function addArr(a) {
+      if (!Array.isArray(a)) return;
+      for (let i = 0; i < a.length; i++) {
+        const t = Math.round(Number(a[i]));
+        if (isFinite(t)) s.add(t);
+      }
+    }
+    if (track) {
+      addArr(track.dghost_t);
+    }
+    return s;
+  }
+  function compactPlaybackDghostMergedRangesSec(track) {
+    if (!track) return [];
+    return compactPlaybackDghostIntsMergedRangesSec(track.dghost_t);
+  }
   /** True if compact playback track records any deadlock ghost sample (simulation seconds). */
   function allocFlightTrackHasDeadlock(trDead) {
-    return !!(trDead && Array.isArray(trDead.dghost_t) && trDead.dghost_t.length > 0);
+    return !!(
+      trDead &&
+      Array.isArray(trDead.dghost_t) &&
+      trDead.dghost_t.length > 0
+    );
   }
   /** Flight Schedule row: deadlock from last Pro Sim compact playback, timeline ghost, or persisted id set. */
   function flightScheduleRowHasDeadlock(f) {
@@ -3203,26 +3213,37 @@
     }
     return false;
   }
-  /** Gantt apron bar: red overlay only where sim seconds fall in merged dghost ranges (time axis = sec/60). */
+  /** Gantt apron bar: timeline ghost overlay (time axis = sec/60). */
   function allocFlightDeadlockOverlayHtml(trDead, segT0Min, segT1Min, visT0Min, visT1Min) {
-    if (!trDead || !Array.isArray(trDead.dghost_t) || !trDead.dghost_t.length) return '';
-    const ranges = compactPlaybackDghostMergedRangesSec(trDead);
-    if (!ranges.length) return '';
+    const rN = trDead ? compactPlaybackDghostIntsMergedRangesSec(trDead.dghost_t) : [];
+    if (!rN.length) return '';
     const denom = visT1Min - visT0Min;
     if (!(denom > 1e-12)) return '';
-    const parts = [];
-    for (let r = 0; r < ranges.length; r++) {
-      const ds = ranges[r][0], de = ranges[r][1];
-      const m0 = ds / 60;
-      const m1 = (de + 1) / 60;
-      const a = Math.max(visT0Min, m0, segT0Min);
-      const b = Math.min(visT1Min, m1, segT1Min);
-      if (!(b > a + 1e-12)) continue;
-      const leftRel = ((a - visT0Min) / denom) * 100;
-      const wRel = Math.max(0.5, ((b - a) / denom) * 100);
-      parts.push('<div class="alloc-flight-deadlock-seg" style="left:' + leftRel + '%;width:' + wRel + '%;"></div>');
+    function segmentsForRanges(ranges, cls) {
+      const parts = [];
+      for (let r = 0; r < ranges.length; r++) {
+        const ds = ranges[r][0], de = ranges[r][1];
+        const m0 = ds / 60;
+        const m1 = (de + 1) / 60;
+        const a = Math.max(visT0Min, m0, segT0Min);
+        const b = Math.min(visT1Min, m1, segT1Min);
+        if (!(b > a + 1e-12)) continue;
+        const leftRel = ((a - visT0Min) / denom) * 100;
+        const wRel = Math.max(0.5, ((b - a) / denom) * 100);
+        parts.push(
+          '<div class="' +
+            cls +
+            '" style="left:' +
+            leftRel +
+            '%;width:' +
+            wRel +
+            '%;"></div>'
+        );
+      }
+      return parts;
     }
-    return parts.length ? parts.join('') : '';
+    const outHtml = segmentsForRanges(rN, 'alloc-flight-deadlock-seg');
+    return outHtml.length ? outHtml.join('') : '';
   }
   function compactPlaybackTugIntervals(track) {
     if (!track) return [];
@@ -3272,7 +3293,9 @@
     const y = Number(track.y[i]);
     if (!isFinite(t) || !isFinite(x) || !isFinite(y)) return null;
     const o = { t: t, x: x, y: y, v: Number(track.v[i]) || 0 };
-    o.deadlockGhost = compactPlaybackDghostSet(track).has(Math.round(t));
+    const trR = Math.round(Number(t));
+    o.deadlockGhost = compactPlaybackDghostSet(track).has(trR);
+
     const m = compactPlaybackMetaStateAt(track, t);
     if (m.phase) o.phase = m.phase;
     if (m.pathType) o.pathType = m.pathType;
@@ -3455,25 +3478,49 @@
     const resolveCount = Number(payload.deadlock_resolve_event_count);
     const rc = isFinite(resolveCount) && resolveCount > 0 ? Math.floor(resolveCount) : 0;
     const byT = new Map();
+    function ghostSessionStartTimestampsSec(arr, gapSec) {
+      const g = Math.max(30, Number(gapSec) || 120);
+      const nums = [];
+      for (let i = 0; i < arr.length; i++) {
+        const v = Math.round(Number(arr[i]));
+        if (isFinite(v)) nums.push(v);
+      }
+      if (!nums.length) return [];
+      nums.sort(function(a, b) {
+        return a - b;
+      });
+      const out = [nums[0]];
+      for (let j = 1; j < nums.length; j++) {
+        if (nums[j] - nums[j - 1] > g) out.push(nums[j]);
+      }
+      return out;
+    }
+    function ingestTrackArray(raw, f, arr) {
+      if (!Array.isArray(arr) || !arr.length) return;
+      const starts = ghostSessionStartTimestampsSec(arr, 120);
+      for (let si = 0; si < starts.length; si++) {
+        const tr = starts[si];
+        const label =
+          String(f.reg || '').trim() ||
+          String(f.flightNumber || f.id || '').trim() ||
+          String(f.id);
+        if (!byT.has(tr))
+          byT.set(tr, { labels: [] });
+        const bx = byT.get(tr);
+        if (bx.labels.indexOf(label) < 0) bx.labels.push(label);
+      }
+    }
     (flights || []).forEach(function(f) {
       if (!f || f.id == null) return;
       const raw = positions[String(f.id)];
-      if (!isCompactPlaybackTrack(raw) || !Array.isArray(raw.dghost_t) || !raw.dghost_t.length) return;
-      for (let i = 0; i < raw.dghost_t.length; i++) {
-        const t = Number(raw.dghost_t[i]);
-        if (!isFinite(t)) continue;
-        const tr = Math.round(t);
-        const label = String(f.reg || '').trim() || String(f.flightNumber || f.id || '').trim() || String(f.id);
-        if (!byT.has(tr)) byT.set(tr, []);
-        const arr = byT.get(tr);
-        if (arr.indexOf(label) < 0) arr.push(label);
-        break;
-      }
+      if (!isCompactPlaybackTrack(raw)) return;
+      ingestTrackArray(raw, f, raw.dghost_t);
     });
     const entries = Array.from(byT.entries()).sort(function(a, b) { return a[0] - b[0]; });
     const events = entries.map(function(e) {
       const tR = e[0];
-      const ev = { t_abs: tR, labels: e[1].slice() };
+      const bx = e[1];
+      const ev = { t_abs: tR, labels: bx.labels.slice() };
       const fw = deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR);
       if (fw && isFinite(fw.x) && isFinite(fw.y)) {
         ev.focusWorldX = fw.x;
@@ -3483,15 +3530,24 @@
     });
     let bodyLines = '';
     if (events.length) {
-      bodyLines = events.map(function(ev) {
-        const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
-        const names = ev.labels.join(', ');
-        return timeStr + ' — Aircraft ' + names + ' entered deadlock ghost.';
-      }).join('\n');
+      bodyLines = events
+        .map(function(ev) {
+          const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
+          const reg0 =
+            ev.labels && ev.labels.length ? String(ev.labels[0]).trim() : '';
+          const reg = reg0 || '—';
+          return timeStr + '  ' + reg;
+        })
+        .join('\n');
     } else if (rc > 0) {
-      bodyLines = 'Deadlock resolve was recorded ' + rc + ' time(s), but no ghost samples were found in positions.';
+      bodyLines =
+        'Resolves: ' + rc + '  (no ghost ticks in positions)';
     }
-    return { events: events, bodyLines: bodyLines, resolveCount: rc };
+    return {
+      events: events,
+      bodyLines: bodyLines,
+      resolveCount: rc,
+    };
   }
   function renderFlightSimSliderDeadlockMarkers() {
     const host = document.getElementById('flightSimSliderMarkers');

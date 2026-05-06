@@ -649,23 +649,11 @@
     const tr = map[String(f.id)];
     return isCompactPlaybackTrack(tr) ? tr : null;
   }
-  function compactPlaybackDghostSet(track) {
-    if (!track) return new Set();
-    if (track.__dghostSet instanceof Set) return track.__dghostSet;
-    const s = new Set();
-    const arr = Array.isArray(track.dghost_t) ? track.dghost_t : [];
-    for (let i = 0; i < arr.length; i++) {
-      const t = Math.round(Number(arr[i]));
-      if (isFinite(t)) s.add(t);
-    }
-    track.__dghostSet = s;
-    return s;
-  }
-  function compactPlaybackDghostMergedRangesSec(track) {
-    if (!track || !Array.isArray(track.dghost_t) || !track.dghost_t.length) return [];
+  function compactPlaybackDghostIntsMergedRangesSec(arr) {
+    if (!Array.isArray(arr) || !arr.length) return [];
     const nums = [];
-    for (let i = 0; i < track.dghost_t.length; i++) {
-      const v = Math.round(Number(track.dghost_t[i]));
+    for (let i = 0; i < arr.length; i++) {
+      const v = Math.round(Number(arr[i]));
       if (isFinite(v)) nums.push(v);
     }
     if (!nums.length) return [];
@@ -673,3 +661,15 @@
     const out = [];
     let s0 = nums[0], e0 = nums[0];
     for (let j = 1; j < nums.length; j++) {
+      const n = nums[j];
+      if (n <= e0 + 1) e0 = n;
+      else {
+        out.push([s0, e0]);
+        s0 = e0 = n;
+      }
+    }
+    out.push([s0, e0]);
+    return out;
+  }
+  function compactPlaybackDghostSet(track) {
+    const s = new Set();

@@ -1,3 +1,59 @@
+    const cat = pbb.category || 'C';
+    const center = getStandConnectionPx(pbb);
+    const angle = getPBBStandAngle(pbb);
+    if (standGapLineHitsExistingOuterContours(center, angle, cat)) return true;
+    return false;
+  }
+  function pbbStandOuterContoursOverlapExisting(pbb, excludeId) {
+    const corners = getPBBStandCorners(pbb);
+    for (let i = 0; i < state.pbbStands.length; i++) {
+      const other = state.pbbStands[i];
+      if (!other) continue;
+      if (excludeId && other.id === excludeId) continue;
+      if (rotatedRectsOverlap(corners, getPBBStandCorners(other))) return true;
+    }
+    for (let i = 0; i < state.remoteStands.length; i++) {
+      const st = state.remoteStands[i];
+      if (!st) continue;
+      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
+    }
+    const temps = state.tempStands || [];
+    for (let i = 0; i < temps.length; i++) {
+      const st = temps[i];
+      if (!st) continue;
+      if (rotatedRectsOverlap(corners, getRemoteStandCorners(st))) return true;
+    }
+    return false;
+  }
+  function tryPlacePbbAt(wx, wy) {
+    let bestEdge = null, bestD2 = Infinity;
+    state.terminals.forEach(t => {
+      if (!t.closed || t.vertices.length < 2) return;
+      let cx = 0, cy = 0;
+      t.vertices.forEach(v => { const [px, py] = cellToPixel(v.col, v.row); cx += px; cy += py; });
+      cx /= t.vertices.length || 1; cy /= t.vertices.length || 1;
+      for (let i = 0; i < t.vertices.length; i++) {
+        const v1 = t.vertices[i], v2 = t.vertices[(i + 1) % t.vertices.length];
+        const p1 = cellToPixel(v1.col, v1.row), p2 = cellToPixel(v2.col, v2.row);
+        const near = closestPointOnSegment(p1, p2, [wx, wy]);
+        if (near) {
+          const d2 = dist2(near, [wx, wy]);
+          if (d2 < bestD2) { bestD2 = d2; bestEdge = { near, p1, p2, col: v1.col, row: v1.row, cx, cy }; }
+        }
+      }
+    });
+    const maxD2 = (CELL_SIZE * TRY_PBB_MAX_EDGE_CF) ** 2;
+    if (!bestEdge || bestD2 >= maxD2) return false;
+    const [ex, ey] = bestEdge.near, [x1, y1] = bestEdge.p1, [x2, y2] = bestEdge.p2;
+    let nx = -(y2 - y1), ny = x2 - x1;
+    const len = Math.hypot(nx, ny) || 1; nx /= len; ny /= len;
+    const inX = bestEdge.cx - ex, inY = bestEdge.cy - ey;
+    if (nx * inX + ny * inY > 0) { nx *= -1; ny *= -1; }
+    const uPbb = readUnifiedNewStandConstraintFromPanel('standIcaoCategories', 'standAircraftAccess', ['A', 'B', 'C']);
+    const categoryMode = uPbb.categoryMode;
+    const category = uPbb.category;
+    const allowedIcaoCategories = uPbb.allowedIcaoCategories;
+    const panelAllowedTypes = uPbb.allowedAircraftTypes;
     const minLen = getStandDepthMeters(category) / 2 + 3;
     const lenMeters = Number(document.getElementById('pbbLength').value || 15);
     const armLen = Math.max(isFinite(lenMeters) && lenMeters > 0 ? lenMeters : 15, minLen);
@@ -802,59 +858,3 @@
             w.removeEventListener('load', grid3dShellLoad);
             onShellReady();
           });
-        }
-      } catch (eReady) {
-        setTimeout(sendGrid3dInit, 150);
-      }
-    }
-  }
-  function getExistingStandBounds() {
-    const list = [];
-    state.remoteStands.forEach(st => {
-      const corners = getRemoteStandCorners(st);
-      let left = corners[0][0], right = corners[0][0], top = corners[0][1], bottom = corners[0][1];
-      for (let k = 1; k < 4; k++) {
-        left = Math.min(left, corners[k][0]); right = Math.max(right, corners[k][0]);
-        top = Math.min(top, corners[k][1]); bottom = Math.max(bottom, corners[k][1]);
-      }
-      list.push({ left, right, top, bottom });
-    });
-    state.pbbStands.forEach(pbb => {
-      const corners = getPBBStandCorners(pbb);
-      let left = corners[0][0], right = corners[0][0], top = corners[0][1], bottom = corners[0][1];
-      for (let k = 1; k < 4; k++) {
-        left = Math.min(left, corners[k][0]); right = Math.max(right, corners[k][0]);
-        top = Math.min(top, corners[k][1]); bottom = Math.max(bottom, corners[k][1]);
-      }
-      list.push({ left, right, top, bottom });
-    });
-    return list;
-  }
-  function standOverlapsExisting(bounds) {
-    const existing = getExistingStandBounds();
-    for (let i = 0; i < existing.length; i++) if (rectsOverlap(bounds, existing[i])) return true;
-    return false;
-  }
-  function dist2(a, b) { const dx = a[0]-b[0], dy = a[1]-b[1]; return dx*dx+dy*dy; }
-  function _normalizeTimeToSeconds(value, unit, roundingMode) {
-    const raw = Number(value || 0);
-    const scaled = unit === 'minutes' ? raw * 60 : raw;
-    const rounded = roundingMode === 'round' ? Math.round(scaled) : Math.floor(scaled);
-    return Math.max(0, rounded);
-  }
-  function _splitTotalSeconds(totalSec) {
-    const safeSec = Math.max(0, Math.floor(totalSec || 0));
-    const h = Math.floor(safeSec / 3600);
-    const m = Math.floor((safeSec % 3600) / 60);
-    const s = safeSec % 60;
-    return {
-      h,
-      m,
-      s,
-      hh: (h < 10 ? '0' : '') + h,
-      mm: (m < 10 ? '0' : '') + m,
-      ss: (s < 10 ? '0' : '') + s,
-    };
-  }
-  function formatMinutesToHHMM(m) {
-    const parts = _splitTotalSeconds(_normalizeTimeToSeconds(m, 'minutes', 'floor'));
