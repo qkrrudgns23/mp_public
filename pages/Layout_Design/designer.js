@@ -217,6 +217,8 @@
   const DEP_MTOW_REF_LARGE_KG = Math.max(DEP_MTOW_REF_SMALL_KG + 1, Number(_flightTier.depTakeoffAccelMtowRefLargeKg) || 350000);
   const APRON_TAXIWAY_SPEED_MS = Math.max(0.1, Number(_flightTier.apronTaxiwaySpeedMs) || 1.5);
   const SIM_TIME_SLIDER_SNAP_SEC = Math.max(1, Number(_dc.flightSimSliderSnapSec) || 1);
+  /** 재생 타임 미세 모드 드래그: ``(dx/trackW)*span/이값`` 으로 시각 증분(값이 클수록 같은 픽셀에 더 적게 반응). */
+  const SIM_TIME_SLIDER_FINE_DIVISOR = 200;
   const DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT = _dc.defaultAllowRunwayInGroundSegment;
   const _algoTier = _tiers.algorithm || {};
   const _algoSimTier = (_algoTier.simulation && typeof _algoTier.simulation === 'object') ? _algoTier.simulation : {};
@@ -1184,7 +1186,7 @@
     simTimeSec: 0,
     simStartSec: 0,
     simDurationSec: 0,
-    /** ``true``: 재생 타임 슬라이더를 더블클릭한 뒤 드래그 시 시각 변경을 100배 미세하게. 썹은 빨간색 표시. */
+    /** ``true``: 재생 타임 슬라이더 미세 드래그 모드에서 시각 변경을 대략 일반 스크럽 대비 SIM_TIME_SLIDER_FINE_DIVISOR 배 더 미세하게. 썹은 빨간색 표시. */
     simTimeSliderFineMode: false,
     simPlaybackEndCapSec: null,
     simPlaying: false,
@@ -9312,7 +9314,7 @@
   }
 
   /**
-   * 더블 클릭으로 미세 모드 토글 후, 같은 슬라이더에서 포인터 드래그 시 (전체 타임축 폭 대비 픽셀 이동량)×(span)/100 만큼만 시각 변경.
+   * 더블 클릭으로 미세 모드 토글 후, 같은 슬라이더에서 포인터 드래그 시 (전체 타임축 폭 대비 픽셀 이동량)×(span)/SIM_TIME_SLIDER_FINE_DIVISOR 만큼만 시각 변경.
    * 중복 초기화 방지 위해 ``dataset.airsideFineBind`` 사용.
    */
   function bindFlightSimSliderFineOnce(sliderEl) {
@@ -9361,14 +9363,14 @@
           state.simSliderScrubbing = true;
         }
         const dx = me.clientX - startClientX;
-        const deltaSec = (dx / wTrack) * span / 100;
+        const deltaSec = (dx / wTrack) * span / SIM_TIME_SLIDER_FINE_DIVISOR;
         let next = snapSimTimeSecForSlider(startT + deltaSec);
         next = Math.max(lo, Math.min(hi, next));
         state.simTimeSec = next;
         sliderEl.value = String(next);
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
         syncAllocGanttSimPlayheadPosition();
-        try { draw(); } catch (_) { /* ignore */ }
+        try { draw({ bypassSimScrubGuard: true }); } catch (_) { /* ignore */ }
         update3DSceneWhenVisible();
       }
 
@@ -9387,7 +9389,7 @@
         state.simSliderScrubbing = false;
         if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
         syncAllocGanttSimPlayheadPosition();
-        try { draw(); } catch (_) { /* ignore */ }
+        try { draw({ bypassSimScrubGuard: true }); } catch (_) { /* ignore */ }
         update3DSceneWhenVisible();
       }
 
