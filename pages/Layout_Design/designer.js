@@ -3406,7 +3406,8 @@
     return (t + 1e-9 >= Number(track.t[idx]) && t - 1e-9 <= Number(track.t[idx + 1])) ? idx : -1;
   }
   /** Last unit direction of a non-trivial chord strictly before the segment containing ``tSec`` (full track — not windowed). */
-  function playbackLastMotionUnitDirBeforeTime(track, tSec) {
+  function playbackLastMotionUnitDirBeforeTime(track, tSec, skipPushbackOpt) {
+    const skipPushback = skipPushbackOpt === true;
     const eps = 0.08;
     const eps2 = eps * eps;
     if (!isCompactPlaybackTrack(track)) return null;
@@ -3416,6 +3417,29 @@
       const p = compactPlaybackSampleAtIndex(track, j);
       const q = compactPlaybackSampleAtIndex(track, j + 1);
       if (!p || !q) continue;
+      if (skipPushback && String(p.phase || '') === 'Pushback') continue;
+      const ddx = q.x - p.x, ddy = q.y - p.y;
+      const l2 = ddx * ddx + ddy * ddy;
+      if (l2 >= eps2) {
+        const inv = 1 / Math.sqrt(l2);
+        return { dx: ddx * inv, dy: ddy * inv };
+      }
+    }
+    return null;
+  }
+  /** First non-degenerate chord from the segment at ``tSec`` forward; optional skip Pushback legs (post-pushback heading). */
+  function playbackFirstMotionUnitDirFromTime(track, tSec, skipPushbackOpt) {
+    const skipPushback = skipPushbackOpt === true;
+    const eps = 0.08;
+    const eps2 = eps * eps;
+    if (!isCompactPlaybackTrack(track)) return null;
+    const idx = compactPlaybackIndexAtTime(track, tSec, true);
+    if (idx < 0) return null;
+    for (let j = idx; j <= track.t.length - 2; j++) {
+      const p = compactPlaybackSampleAtIndex(track, j);
+      const q = compactPlaybackSampleAtIndex(track, j + 1);
+      if (!p || !q) continue;
+      if (skipPushback && String(p.phase || '') === 'Pushback') continue;
       const ddx = q.x - p.x, ddy = q.y - p.y;
       const l2 = ddx * ddx + ddy * ddy;
       if (l2 >= eps2) {
@@ -9841,61 +9865,6 @@
     return timeline;
   }
 
-  /**
-   * Walk distM on the timeline polyline from (fx,fy) on segment segIndex.
-   * forward: toward +t; !forward: toward earlier samples (e.g. rear reference from front point).
-   */
-  function walkTimelinePolylineFromPoint(tl, segIndex, fx, fy, distM, forward) {
-    const eps = 1e-6;
-    if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
-      return null;
-    }
-    if (segIndex < 0 || segIndex > tl.length - 2) return null;
-    let rem = distM;
-    let x = fx, y = fy;
-    let s = segIndex;
-    while (rem > eps) {
-      if (forward) {
-        if (s > tl.length - 2) {
-          if (tl.length < 2) return { x, y };
-          const n = tl.length, pa = tl[n - 2], pb = tl[n - 1];
-          const bx = pb.x - pa.x, by = pb.y - pa.y;
-          const bl = Math.hypot(bx, by);
-          if (bl < eps) return { x, y };
-          const inv = 1 / bl;
-          return { x: x + bx * inv * rem, y: y + by * inv * rem };
-        }
-        const b = tl[s + 1];
-        const ddx = b.x - x, ddy = b.y - y;
-        const dlen = Math.hypot(ddx, ddy);
-        if (dlen < eps) { x = b.x; y = b.y; s++; continue; }
-        const step = Math.min(rem, dlen), inv = 1 / dlen;
-        x += ddx * inv * step; y += ddy * inv * step; rem -= step;
-        if (rem < eps) return { x, y };
-        if (dlen - step < eps) { x = b.x; y = b.y; s++; }
-      } else {
-        if (s < 0) {
-          if (tl.length < 2) return { x, y };
-          const p0 = tl[0], p1 = tl[1];
-          const bx = p0.x - p1.x, by = p0.y - p1.y;
-          const bl = Math.hypot(bx, by);
-          if (bl < eps) return { x, y };
-          const inv = 1 / bl;
-          return { x: x + bx * inv * rem, y: y + by * inv * rem };
-        }
-        const tx = tl[s].x, ty = tl[s].y;
-        const ddx = tx - x, ddy = ty - y;
-        const dlen = Math.hypot(ddx, ddy);
-        if (dlen < eps) { x = tx; y = ty; s--; continue; }
-        const step = Math.min(rem, dlen), inv = 1 / dlen;
-        x += ddx * inv * step; y += ddy * inv * step; rem -= step;
-        if (rem < eps) return { x, y };
-        if (dlen - step < eps) { x = tx; y = ty; s--; }
-      }
-    }
-    return { x, y };
-  }
-
   function getFlightPositionAtTime(flight, tSec) {
     const tr = compactPlaybackTrackForFlight(flight);
     const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 4) : flight.timeline;
@@ -9936,6 +9905,124 @@
     return (t + 1e-9 >= Number(tl[idx].t) && t - 1e-9 <= Number(tl[idx + 1].t)) ? idx : -1;
   }
 
+  /** Pro Sim departure: first ``E_PUSH_FINISHED_LIST`` simulation second (same units as timeline ``t``). */
+  function getDeparturePushFinishedSimSecFromFlight(flight) {
+    const m = flight && flight.timeline_meta;
+    if (!m || typeof m !== 'object') return NaN;
+    if (typeof m.ePushFinishedSec === 'number' && isFinite(m.ePushFinishedSec)) return Number(m.ePushFinishedSec);
+    const L = m.ePushFinishedSecList;
+    if (Array.isArray(L) && L.length) {
+      const x = Number(L[0]);
+      if (isFinite(x)) return x;
+    }
+    return NaN;
+  }
+
+  /**
+   * Longest compact/timeline chord whose endpoints are phase Pushback (motion direction nose follows via reverse-draw).
+   * Used so apron-link + taxi pushback legs share one stable compass instead of jittering across micro stationary segments.
+   */
+  function dominantPushbackMotionUnitDirFullFlight(flight) {
+    let bestLen = 0;
+    let bestUx = NaN;
+    let bestUy = NaN;
+    const tr = compactPlaybackTrackForFlight(flight);
+    if (tr && isCompactPlaybackTrack(tr) && tr.t.length >= 2) {
+      for (let i = 0; i < tr.t.length - 1; i++) {
+        const p = compactPlaybackSampleAtIndex(tr, i);
+        const q = compactPlaybackSampleAtIndex(tr, i + 1);
+        if (!p || !q) continue;
+        if (String(p.phase || '') !== 'Pushback' || String(q.phase || '') !== 'Pushback') continue;
+        const ddx = q.x - p.x, ddy = q.y - p.y;
+        const L = Math.hypot(ddx, ddy);
+        if (L > bestLen && L >= 0.08) {
+          bestLen = L;
+          bestUx = ddx / L;
+          bestUy = ddy / L;
+        }
+      }
+    }
+    if (bestLen < 0.08) {
+      const full = flight && flight.timeline;
+      if (full && full.length >= 2) {
+        for (let i = 0; i < full.length - 1; i++) {
+          const p = full[i], q = full[i + 1];
+          if (String(p.phase || '') !== 'Pushback' || String(q.phase || '') !== 'Pushback') continue;
+          const ddx = q.x - p.x, ddy = q.y - p.y;
+          const L = Math.hypot(ddx, ddy);
+          if (L > bestLen && L >= 0.08) {
+            bestLen = L;
+            bestUx = ddx / L;
+            bestUy = ddy / L;
+          }
+        }
+      }
+    }
+    if (bestLen < 0.08 || !isFinite(bestUx) || !isFinite(bestUy)) return null;
+    return { ux: bestUx, uy: bestUy };
+  }
+
+  /**
+   * First substantial non–Pushback/Pushback chord whose midpoint time is strictly after ``tCutSec``
+   * (captures outbound taxi tangent right after ``E_PUSH_FINISHED``).
+   */
+  function firstOutboundMotionUnitDirAfterCut(flight, tCutSec) {
+    const cut = Number(tCutSec);
+    if (!isFinite(cut)) return null;
+    const eps = 0.08;
+    const eps2 = eps * eps;
+    function considerPair(p, q) {
+      if (!p || !q) return null;
+      const tmid = (Number(p.t) + Number(q.t)) / 2;
+      if (!(tmid > cut + 1e-9)) return null;
+      const pa = String(p.phase || ''), qa = String(q.phase || '');
+      if (pa === 'Pushback' && qa === 'Pushback') return null;
+      const ddx = q.x - p.x, ddy = q.y - p.y;
+      const l2 = ddx * ddx + ddy * ddy;
+      if (l2 < eps2) return null;
+      const L = Math.sqrt(l2);
+      return { dx: ddx / L, dy: ddy / L };
+    }
+    const tr = compactPlaybackTrackForFlight(flight);
+    if (tr && isCompactPlaybackTrack(tr) && tr.t.length >= 2) {
+      for (let i = 0; i < tr.t.length - 1; i++) {
+        const hit = considerPair(compactPlaybackSampleAtIndex(tr, i), compactPlaybackSampleAtIndex(tr, i + 1));
+        if (hit) return hit;
+      }
+    }
+    const full = flight && flight.timeline;
+    if (full && full.length >= 2) {
+      for (let i = 0; i < full.length - 1; i++) {
+        const hit = considerPair(full[i], full[i + 1]);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+
+  var DEP_POST_PB_HEAD_FORWARD_HOLD_SEC = 42;
+
+  /**
+   * One stable nose (+dx,+dy) for apron/link + pushback through ``E_PUSH_FINISHED``; freeze outbound tangent briefly after
+   * push completes so short-chord / phase-boundary segments cannot flip silhouette for a few seconds (e.g. R4 @ ``E_PUSH_FINISHED`` knot).
+   */
+  function applyDeparturePushHeadingContinuityClamp(flight, tSec, pose) {
+    if (!flight || flight.arrDep !== 'Dep' || !pose || pose.deadlockGhost === true) return pose;
+    const tPf = getDeparturePushFinishedSimSecFromFlight(flight);
+    const tNum = Number(tSec);
+    if (!isFinite(tPf) || !isFinite(tNum)) return pose;
+    const dom = dominantPushbackMotionUnitDirFullFlight(flight);
+    const x = pose.x, y = pose.y, dg = !!pose.deadlockGhost;
+    if (dom && tNum <= tPf + 1e-7) {
+      return { x: x, y: y, dx: -dom.ux, dy: -dom.uy, deadlockGhost: dg };
+    }
+    if (tNum > tPf + 1e-7 && tNum < tPf + DEP_POST_PB_HEAD_FORWARD_HOLD_SEC) {
+      const outb = firstOutboundMotionUnitDirAfterCut(flight, tPf);
+      if (outb) return { x: x, y: y, dx: outb.dx, dy: outb.dy, deadlockGhost: dg };
+    }
+    return pose;
+  }
+
   function getFlightPoseAtTime(flight, tSec) {
     const tr = compactPlaybackTrackForFlight(flight);
     const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 80) : flight.timeline;
@@ -9963,8 +10050,19 @@
       const inv = 1 / Math.sqrt(l2);
       return { dx: ddx * inv, dy: ddy * inv };
     }
-    function lastMotionUnitDirBefore(i) {
+    function lastMotionUnitDirBefore(i, opts) {
+      const skipPb = opts && opts.skipPushback === true;
       for (let j = i - 1; j >= 0; j--) {
+        if (skipPb && String(tl[j].phase || '') === 'Pushback') continue;
+        const u = segmentUnitDir(j);
+        if (u) return u;
+      }
+      return null;
+    }
+    function firstMotionUnitDirFrom(i, opts) {
+      const skipPb = opts && opts.skipPushback === true;
+      for (let j = i; j <= tl.length - 2; j++) {
+        if (skipPb && String(tl[j].phase || '') === 'Pushback') continue;
         const u = segmentUnitDir(j);
         if (u) return u;
       }
@@ -9975,15 +10073,14 @@
       const dx = b.x - a.x, dy = b.y - a.y;
       const l2 = dx * dx + dy * dy;
       if (l2 >= motionChordEps2) return { dx: dx, dy: dy };
-      const prev = lastMotionUnitDirBefore(i);
+      const curPb = String(tl[i].phase || '') === 'Pushback';
+      if (!curPb) {
+        const fwd = firstMotionUnitDirFrom(i, { skipPushback: true });
+        if (fwd) return { dx: fwd.dx, dy: fwd.dy };
+      }
+      const prev = lastMotionUnitDirBefore(i, { skipPushback: !curPb });
       if (prev) return { dx: prev.dx, dy: prev.dy };
       return { dx: 1, dy: 0 };
-    }
-    function frBicyclePose(R, x, y, lenM, bmin, dg) {
-      if (!R || lenM <= 1e-6) return null;
-      const vdx = x - R.x, vdy = y - R.y, vl = Math.hypot(vdx, vdy);
-      if (vl < bmin) return null;
-      return { x, y, dx: vdx / vl, dy: vdy / vl, deadlockGhost: dg };
     }
     function normHeadingVec(h) {
       const hl = Math.hypot(h.dx, h.dy);
@@ -10035,9 +10132,10 @@
       const va = Number(a.v), vb = Number(b.v);
       const vThreshMps = 0.05;
       const velocityStill = isFinite(va) && isFinite(vb) && va <= vThreshMps && vb <= vThreshMps;
+      const curPbInterval = String(tl[useI].phase || '') === 'Pushback';
       let h = headingForInterval(useI);
-      if (tr && !lastMotionUnitDirBefore(useI)) {
-        const fb = playbackLastMotionUnitDirBeforeTime(tr, tSec);
+      if (tr && !lastMotionUnitDirBefore(useI, { skipPushback: !curPbInterval })) {
+        const fb = playbackLastMotionUnitDirBeforeTime(tr, tSec, !curPbInterval);
         if (fb) h = { dx: fb.dx, dy: fb.dy };
       }
       const dg = !!(a.deadlockGhost || b.deadlockGhost);
@@ -10049,29 +10147,18 @@
         if (live) hDraw = { dx: live.dx, dy: live.dy };
       }
       if (!dg && velocityStill) {
-        let back = lastMotionUnitDirBefore(useI) || lastNonDghostMotionUnitDirBeforeEnd(useI + 1);
-        if (!back && tr) back = playbackLastMotionUnitDirBeforeTime(tr, tSec);
+        let back = null;
+        if (!curPbInterval) {
+          back = firstMotionUnitDirFrom(useI, { skipPushback: true });
+          if (!back && tr) back = playbackFirstMotionUnitDirFromTime(tr, tSec, true);
+        }
+        if (!back) back = lastMotionUnitDirBefore(useI, { skipPushback: !curPbInterval });
+        if (!back) back = lastNonDghostMotionUnitDirBeforeEnd(useI + 1);
+        if (!back && tr) back = playbackLastMotionUnitDirBeforeTime(tr, tSec, !curPbInterval);
         if (back) hDraw = { dx: back.dx, dy: back.dy };
       }
       const hn = normHeadingVec(hDraw);
-      const dxAB = b.x - a.x, dyAB = b.y - a.y;
-      const dist2 = dxAB * dxAB + dyAB * dyAB;
-      const geomStill = dist2 < motionChordEps2;
-      const stationary = geomStill || dg || velocityStill;
-      const { lenM } = getSimAircraftWorldDimsM(flight);
-      const wheelBaseM = 0.55 * lenM;
-      const bicycleMin = Math.max(0.15 * motionChordEps, 0.005 * lenM, 0.04);
-      let out;
-      if (stationary) {
-        out = { x, y, dx: hn.dx, dy: hn.dy, deadlockGhost: dg };
-      } else {
-        out = frBicyclePose(
-          walkTimelinePolylineFromPoint(tl, useI, x, y, wheelBaseM, false), x, y, lenM, bicycleMin, dg);
-        if (!out) {
-          out = { x, y, dx: hn.dx, dy: hn.dy, deadlockGhost: dg };
-        }
-      }
-      return out;
+      return { x: x, y: y, dx: hn.dx, dy: hn.dy, deadlockGhost: dg };
     }
     return null;
   }
@@ -10100,6 +10187,7 @@
     const segA = tl[segIdx];
     const segB = tl[segIdx + 1];
     if (String(segA.phase || '') !== 'Pushback') return pose;
+    if (String(segB.phase || '') !== 'Pushback') return pose;
     let sdx = segB.x - segA.x;
     let sdy = segB.y - segA.y;
     let sl = Math.hypot(sdx, sdy);
@@ -10150,12 +10238,13 @@
     if (parkedCtx) {
       const cached = flight.__parkedStationaryPoseCache;
       if (cached && cached.key === parkedCtx.key && cached.pose) {
-        return cached.pose;
+        return applyDeparturePushHeadingContinuityClamp(flight, t, cached.pose);
       }
       let poseP = getFlightPoseAtTime(flight, parkedCtx.anchorT);
       if (!poseP) return null;
       poseP = getPushbackReversePoseForDraw(flight, parkedCtx.anchorT, poseP);
       poseP = applyParkedStandHeadingToPoseIfNeeded(flight, parkedCtx.anchorT, poseP);
+      poseP = applyDeparturePushHeadingContinuityClamp(flight, t, poseP);
       flight.__parkedStationaryPoseCache = { key: parkedCtx.key, pose: poseP };
       return poseP;
     }
@@ -10163,7 +10252,7 @@
     if (!pose) return null;
     pose = getPushbackReversePoseForDraw(flight, t, pose);
     pose = applyParkedStandHeadingToPoseIfNeeded(flight, t, pose);
-    return pose;
+    return applyDeparturePushHeadingContinuityClamp(flight, t, pose);
   }
   function simFlightSilhouetteWorldPolygon(f, pose, tSecOpt) {
     if (!f || !pose) return [];
@@ -10210,7 +10299,12 @@
   function simFlightPhaseAtTime(f, tSec, pose) {
     if (pose && pose.phase != null) return String(pose.phase || '');
     const seg = typeof flightTimelineSegmentAtSimTime === 'function' ? flightTimelineSegmentAtSimTime(f, tSec) : null;
-    return seg && seg.a && seg.a.phase != null ? String(seg.a.phase || '') : '';
+    if (!seg || !seg.a) return '';
+    const pa = seg.a.phase != null ? String(seg.a.phase || '') : '';
+    const pb = seg.b && seg.b.phase != null ? String(seg.b.phase || '') : pa;
+    if (pa === 'Pushback' && pb === 'Pushback') return 'Pushback';
+    if (pa === 'Pushback' && pb && pb !== 'Pushback') return pb;
+    return pa || pb || '';
   }
   function isFlightParkedAtSimTime(f, tSec) {
     const m = f && f.timeline_meta;
