@@ -3706,37 +3706,63 @@ def _touchdown_arrival_prefix_index(
 ) -> TouchdownArrivalPrefixIndex:
     """For each arrival flight, aggregate predecessors on the same runway.
 
-    Preserves the legacy predecessor rule exactly: a predecessor is counted only
-    when ``other.eldt_anchor_sec + 1e-9 < my_eldt_anchor_sec``.
+    Predecessors are all flights **sorted before** this one on
+    ``(eldt_anchor_sec, str(flight_id))`` (same arrival runway only). This makes
+    simultaneous-ELDT arrivals a strict single-file queue; identical ELDT alone
+    never implied “no predecessor”.
     """
 
     out: TouchdownArrivalPrefixIndex = {}
-    eps = 1e-9
     for group in agents_by_arr_runway.values():
-        rows: List[Tuple[float, Any, Optional[float]]] = []
+        rows: List[Tuple[float, str, Any, Optional[float]]] = []
         for ag in group:
             if ag.eldt_anchor_sec is None:
                 continue
-            rows.append((float(ag.eldt_anchor_sec), ag.id, ag.exit_runway_abs_sec))
+            anch = float(ag.eldt_anchor_sec)
+            fid = ag.id
+            rows.append((anch, str(fid), fid, ag.exit_runway_abs_sec))
         if not rows:
             continue
-        rows.sort(key=_SORT_KEY_ALONG_M_PAIR)
-        j = 0
-        pred_count = 0
-        pred_missing_count = 0
-        max_exit = 0.0
-        n_rows = len(rows)
-        for anch, fid, _ex in rows:
-            while j < n_rows and rows[j][0] + eps < anch:
-                _a0, _fid0, ex0 = rows[j]
-                pred_count += 1
-                if ex0 is None:
-                    pred_missing_count += 1
-                else:
-                    max_exit = max(max_exit, float(ex0))
-                j += 1
-            out[fid] = (pred_count > 0, pred_missing_count > 0, max_exit)
+        rows.sort(key=itemgetter(0, 1))
+        pref_missing_any = False
+        pref_max_exit = 0.0
+        for k, (_anch, _fs, fid, ex) in enumerate(rows):
+            pred_count_gt0 = k > 0
+            out[fid] = (pred_count_gt0, pref_missing_any, pref_max_exit)
+            if ex is None:
+                pref_missing_any = True
+            else:
+                pref_max_exit = max(pref_max_exit, float(ex))
     return out
+
+
+def _touchdown_peer_pred_spacing_same_runway(
+    agent: Flight,
+    agents_iter: Iterable[Flight],
+    rwid: str,
+) -> Tuple[bool, bool, float]:
+    """Predecessors = same-arr-runway agents sorted before ``agent`` on (ELDT anchor, ``id``)."""
+
+    peers: List[Flight] = [
+        o
+        for o in agents_iter
+        if _agent_runway_id_key(o.arr_runway_id) == rwid and o.eldt_anchor_sec is not None
+    ]
+    peers.sort(key=lambda ag: (float(ag.eldt_anchor_sec), str(ag.id)))
+    try:
+        ix = next(j for j, o in enumerate(peers) if o.id == agent.id)
+    except StopIteration:
+        return False, False, 0.0
+    prior = peers[:ix]
+    if not prior:
+        return False, False, 0.0
+    pred_missing_exit = any(p.exit_runway_abs_sec is None for p in prior)
+    need_exit = 0.0
+    for p in prior:
+        ex = p.exit_runway_abs_sec
+        if ex is not None:
+            need_exit = max(need_exit, float(ex))
+    return True, pred_missing_exit, need_exit
 
 
 def _compute_arr_touchdown_motion_abs_sec(
@@ -3753,7 +3779,10 @@ def _compute_arr_touchdown_motion_abs_sec(
 
     동일 ``arr_runway_id`` 선행편(간격 조정 후 ``eldt_anchor``가 앞선 기체)이 모두
     ``exit_runway_abs_sec``를 가지면 ``max(입력 ELDT 초, max(선행 EXIT)+lag)``.
-    선행이 아직 이탈 기록 전이면 간격 조정 ELDT까지 롤을 미룬다.
+    선행 중 하나라도 이탈 기록 전이면 실제 착륙 롤 시작 시각을 ``+∞`` 로 두어
+    (매 틱 캐시 갱신) 선행 전원이 이탈 기록할 때까지 움직임·점유·예약 시간 하한에서
+    막는다 — 조정 ELDT까지만 허용하는 것은 같은 시각 두 기체 롤 시작을 허용할 여지가
+    있다.
     """
     if agent.eldt_anchor_sec is None:
         return None
@@ -3763,12 +3792,8 @@ def _compute_arr_touchdown_motion_abs_sec(
     rw = _agent_runway_id_key(agent.arr_runway_id)
     if not rw:
         return anch_f
-    my = anch_f
     lag = max(0.0, float(runway_release_lag_sec))
     dep_release_buffer_sec = 20.0
-    need_exit = 0.0
-    any_pred = False
-    pred_missing_exit = False
     dep_windows: List[Tuple[float, Optional[float]]] = []
     if dep_window_rows_by_runway is None:
         for o in agents:
@@ -3784,18 +3809,6 @@ def _compute_arr_touchdown_motion_abs_sec(
                         else None
                     )
                     dep_windows.append((float(dep_entry), dep_end))
-            if _agent_runway_id_key(o.arr_runway_id) != rw:
-                continue
-            if o.eldt_anchor_sec is None:
-                continue
-            if float(o.eldt_anchor_sec) + 1e-9 >= my:
-                continue
-            any_pred = True
-            ex = o.exit_runway_abs_sec
-            if ex is None:
-                pred_missing_exit = True
-                continue
-            need_exit = max(need_exit, float(ex))
     else:
         dep_rows_sel = dep_window_rows_by_runway.get(rw)
         if dep_rows_sel is None:
@@ -3804,38 +3817,29 @@ def _compute_arr_touchdown_motion_abs_sec(
             if fid == agent.id:
                 continue
             dep_windows.append((float(dep_entry), dep_end))
-        apk = arrival_prefix_by_id
-        if apk is None:
-            prefix = None
-        else:
-            prefix = apk.get(agent.id)
-            if prefix is None:
-                prefix = apk.get(str(agent.id))
-        if prefix is not None:
-            any_pred, pred_missing_exit, need_exit = prefix
-        else:
-            scan_agents: Iterable[Flight] = agents
-            if agents_by_arr_runway is not None:
-                scan_agents = agents_by_arr_runway.get(rw, ())
-            for o in scan_agents:
-                if o.id == agent.id:
-                    continue
-                if agents_by_arr_runway is None and _agent_runway_id_key(o.arr_runway_id) != rw:
-                    continue
-                if o.eldt_anchor_sec is None:
-                    continue
-                if float(o.eldt_anchor_sec) + 1e-9 >= my:
-                    continue
-                any_pred = True
-                ex = o.exit_runway_abs_sec
-                if ex is None:
-                    pred_missing_exit = True
-                    continue
-                need_exit = max(need_exit, float(ex))
+    apk = arrival_prefix_by_id
+    prefix: Optional[Tuple[bool, bool, float]] = None
+    if apk is not None:
+        prefix = apk.get(agent.id)
+        if prefix is None:
+            prefix = apk.get(str(agent.id))
+    if prefix is not None:
+        any_pred, pred_missing_exit, need_exit = prefix
+    else:
+        scan_agents_arr: Iterable[Flight] = (
+            agents_by_arr_runway.get(rw, ()) if agents_by_arr_runway is not None else agents
+        )
+        any_pred, pred_missing_exit, need_exit = _touchdown_peer_pred_spacing_same_runway(
+            agent,
+            scan_agents_arr,
+            rw,
+        )
     if not any_pred:
         base = max(raw, anch_f)
+    elif pred_missing_exit:
+        base = float("inf")
     else:
-        base = anch_f if pred_missing_exit else max(raw, need_exit + lag)
+        base = max(raw, need_exit + lag)
     # DEP runway occupancy windows: [runway_entry_abs_sec, ETOT + 20s).
     # If touchdown candidate falls inside any window, push it to that window end
     # and repeat to account for overlapping / chained windows.
@@ -3875,6 +3879,45 @@ def _refresh_touchdown_motion_cache(
     }
     for ag in agents:
         ag._td_cache_input_dirty = False
+
+
+def _converge_eldt_anchor_with_touchdown_motion(
+    control_state: SimulationControlState,
+    agents: List[Flight],
+    runway_release_lag_sec: float,
+) -> None:
+    """실시간으로 ``eldt_anchor_sec``를 (유한) ``touchdown_motion`` 하한에 맞춰 올린다.
+
+    선행 편 지연·이탈 미기록·출발 점유 윈도우 밀림 등으로 매 틱 ``touchdown_motion``이
+    커지면 동일 활주로 후속 편의 앵커만 앞당겨 순서표와 접두 로직과 맞춘다. 고정점까지
+    캐시를 재계산한다(최대 반복 상한으로 안전).
+    """
+
+    lag = float(runway_release_lag_sec)
+    cap = max(24, len(agents) + 8)
+    for _ in range(cap):
+        tmap = control_state.touchdown_motion_by_id
+        if tmap is None:
+            return
+        bumped = False
+        for ag in agents:
+            if ag.eldt_anchor_sec is None:
+                continue
+            if not _agent_runway_id_key(ag.arr_runway_id):
+                continue
+            td = tmap.get(ag.id)
+            if td is None:
+                continue
+            tdf = float(td)
+            if not math.isfinite(tdf):
+                continue
+            cur = float(ag.eldt_anchor_sec)
+            if tdf > cur + 1e-6:
+                ag.eldt_anchor_sec = tdf
+                bumped = True
+        if not bumped:
+            return
+        _refresh_touchdown_motion_cache(control_state, agents, lag)
 
 
 def _arr_touchdown_motion_abs_sec(
@@ -6496,6 +6539,10 @@ def refresh_resource_occupancy(
         st_ag = agent_states_get(ag.id)
         if st_ag is not None and _agent_deadlock_ghost_at_time(st_ag, t_abs):
             continue
+        # ``exit_runway_abs_sec`` 논리 이탈 이후 같은 틱에도 활주로-tagged 마이크로레그가
+        # 남을 수 있다. RR ``occupied_by``에 넣어 두면 ``runway_occupied`` 유발.
+        _ex_rw = ag.exit_runway_abs_sec
+        omit_arrival_runway_rr = _ex_rw is not None and t_abs + 1e-9 >= float(_ex_rw)
         if not ag.edge_ids:
             temp_wait = _agent_occupies_temp_stand_slot(ag, t_abs, control_state)
             if temp_wait:
@@ -6510,7 +6557,7 @@ def refresh_resource_occupancy(
             rwid0 = str(er.runway_id)
         if er and ag.id not in er.occupied_by:
             er.occupied_by.append(ag.id)
-        if rwid0:
+        if rwid0 and not omit_arrival_runway_rr:
             rr = rw_get_occ(rwid0)
             if rr and ag.id not in rr.occupied_by:
                 rr.occupied_by.append(ag.id)
@@ -7191,9 +7238,10 @@ def _runway_rot_reservation_blocked(
     """동일 도착 활주로: 다른 기체가 아직 이탈 전이면 점유로 본다.
 
     구간은 ``[ELDT, release)`` 이고, ``release``는 ``exit_runway_abs_sec``가
-    있으면 그 절대 시각이다. 이탈 시각이 아직 없으면 **착륙/활주로(또는 활주로
-    연결 활주로) 상의 도착 레그**에 있을 때만 점유로 본다. 경로가 끝났거나 이미
-    일반 택시로 이탈한 기체는 ``arr_runway_id``만 같아도 무한 점유로 막지 않는다.
+    있으면 그 절대 시각이다. 이탈 시각이 아직 없으면 현재 선행머리 엣지가
+    ``EdgeResource.runway_id`` 로 이 활주로에 묶이면 점유로 본다(``pathType``이
+    ``taxiway`` 등으로 라벨돼 회전대에서 빠져나오는 레그도 처리). 추가로 레거시
+    보강으로 랜딩 페이즈 및 ``runway``/``runway_taxiway`` 첫 레그 타입 검사도 남긴다.
     """
     w = str(rwid).strip()
     if not w:
@@ -7222,6 +7270,10 @@ def _runway_rot_reservation_blocked(
             if tt + 1e-9 < float(ex):
                 return True
             continue
+        if control_state is not None:
+            cur_rid = _agent_current_runway_id(o, control_state)
+            if cur_rid and _agent_runway_id_key(cur_rid) == _agent_runway_id_key(w):
+                return True
         if not o.edge_ids or not o.edge_phases:
             continue
         ph0 = str(o.edge_phases[0])
@@ -7496,8 +7548,27 @@ def can_reserve_path(
             rwid = str(er.runway_id)
             rr = rw_get_crp(rwid)
             if rr is not None:
-                # Hard invariant: runway occupancy by another aircraft blocks reservation.
-                if any(x != aid for x in rr.occupied_by):
+                # 활주로 점유: RR 스냅샷에는 이탈 기록 후에도 잠깐 남을 수 있으므로
+                # ``exit_runway_abs_sec <= t_abs`` 인 도착편은 ``runway_occupied`` 차단 대상에서 제외.
+                t_abs_eff = float(t_abs)
+                other_blocks_rr = False
+                for oid in rr.occupied_by:
+                    if str(oid) == str(aid):
+                        continue
+                    ag_o: Optional[Flight] = None
+                    for gx in agents:
+                        if str(gx.id) == str(oid):
+                            ag_o = gx
+                            break
+                    if ag_o is None:
+                        other_blocks_rr = True
+                        break
+                    ex_o = ag_o.exit_runway_abs_sec
+                    if ex_o is not None and t_abs_eff + 1e-9 >= float(ex_o):
+                        continue
+                    other_blocks_rr = True
+                    break
+                if other_blocks_rr:
                     return False, f"runway_occupied:{rwid}"
                 if rr.forced_open:
                     continue
@@ -9277,12 +9348,12 @@ def run_simulation(
     agents = list(agents_by_id.values())
 
     # Per-agent scalar arrays (NumPy) for the vectorized touchdown-motion refresh.
-    # Built once: ``eldt_anchor`` / ``eldt_raw`` / ``arr_runway_id`` / ``dep_runway_id``
-    # are all immutable post-construction, and the mutable columns
-    # (``runway_entry`` / ``path_completed`` / ``exit_runway``) are synced in
-    # place from agent attributes inside ``_refresh_touchdown_motion_cache``
-    # whenever ``_td_cache_input_dirty`` is set by the three real mutators
-    # (``_finish_edge_segment`` ×2 and ``_try_record_exit_runway_abs_sec``).
+    # ``eldt_raw`` / ``arr_runway_id`` / ``dep_runway_id`` are immutable post-construction;
+    # ``eldt_anchor_sec`` may be raised each tick by ``_converge_eldt_anchor_with_touchdown_motion``
+    # to match finite ``touchdown_motion`` minima. Mutable timing columns
+    # (``runway_entry`` / ``path_completed`` / ``exit_runway``) are synced in place from agent
+    # attributes inside ``_refresh_touchdown_motion_cache`` when ``_td_cache_input_dirty`` is set
+    # by the three real mutators (``_finish_edge_segment`` ×2 and ``_try_record_exit_runway_abs_sec``).
     control_state = build_resource_model(
         layout,
         information,
@@ -9343,6 +9414,9 @@ def run_simulation(
         current_time_abs += dt_sec
         t_tick = float(current_time_abs)
         _refresh_touchdown_motion_cache(control_state, agents, rw_release_lag)
+        _converge_eldt_anchor_with_touchdown_motion(
+            control_state, agents, rw_release_lag
+        )
         refresh_resource_occupancy(
             control_state,
             agents,
@@ -9469,6 +9543,9 @@ def run_simulation(
         # by ``_refresh_touchdown_motion_cache``.
         if any(ag._td_cache_input_dirty for ag in agents):
             _refresh_touchdown_motion_cache(control_state, agents, rw_release_lag)
+            _converge_eldt_anchor_with_touchdown_motion(
+                control_state, agents, rw_release_lag
+            )
         stand_cooldown_index = _get_stand_pushback_clearance_index(control_state, agents)
         # Per-tick stand occupancy snapshot for `_destination_stand_history_snap`.
         # `sr.occupied_by` is not mutated inside the agent loop below
@@ -9586,9 +9663,15 @@ def run_simulation(
                     (_rw0 or None),
                 )
             )
-            rel_after_td = (
-                current_time_abs - float(td_h) if td_h is not None else 0.0
-            )
+            if td_h is None:
+                rel_after_td = 0.0
+            else:
+                _td_hf = float(td_h)
+                rel_after_td = (
+                    float(current_time_abs) - _td_hf
+                    if math.isfinite(_td_hf)
+                    else 0.0
+                )
             _try_record_exit_runway_abs_sec(
                 ag,
                 layout,
