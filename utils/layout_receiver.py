@@ -294,7 +294,7 @@ def _layout_path_for_read(name: str) -> Optional[Path]:
     path = LAYOUT_STORAGE_DIR / f"{safe}.json"
     if path.is_file():
         return path
-    # streamlit etc. other cwdContrast when running on: Based on project root data/Layout_storage
+    # Regardless of process cwd, layouts are always under project-root data/Layout_storage
     try:
         cwd_path = Path.cwd() / "data" / "Layout_storage" / f"{safe}.json"
         if cwd_path.is_file():
@@ -502,6 +502,24 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         req_path = (urlparse(self.path).path or self.path or "/").split("?", 1)[0].rstrip("/") or "/"
+        if req_path == "/home":
+            try:
+                from utils.home_globe import build_home_globe_html, home_cookie_header_is_valid
+
+                cookie_ok = home_cookie_header_is_valid(self.headers.get("Cookie"))
+                body = build_home_globe_html(authenticated=cookie_ok)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(body.encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(str(e).encode("utf-8", errors="replace"))
+            return
         if req_path in ("/", "/layout-design"):
             try:
                 from utils.layout_designer_standalone import build_designer_html
@@ -808,6 +826,62 @@ class LayoutReceiverHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body_bytes = self.rfile.read(length) if length > 0 else b"{}"
         body = body_bytes.decode("utf-8") if body_bytes else "{}"
+        if path == "/api/home-auth":
+            try:
+                from utils.home_globe import (
+                    HOME_AUTH_COOKIE_NAME,
+                    build_home_cookie_value,
+                    validate_home_login,
+                )
+
+                obj = json.loads(body) if body.strip() else {}
+                if not isinstance(obj, dict):
+                    raise ValueError("expected_json_object")
+                u = str(obj.get("username") or "").strip()
+                p = str(obj.get("password") or "")
+                if not validate_home_login(u, p):
+                    self.send_response(401)
+                    self.send_header("Content-Type", "application/json")
+                    self._send_cors()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": False, "error": "unauthorized"}).encode("utf-8"))
+                    return
+                token = build_home_cookie_value(u)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header(
+                    "Set-Cookie",
+                    f"{HOME_AUTH_COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400",
+                )
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
+            except ValueError:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": "bad_request"}).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self._send_cors()
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+            return
+        if path == "/api/home-logout":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            from utils.home_globe import HOME_AUTH_COOKIE_NAME
+
+            self.send_header(
+                "Set-Cookie",
+                f"{HOME_AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0",
+            )
+            self._send_cors()
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
+            return
         if path == "/api/delete-layout" or path.startswith("/api/delete-layout"):
             try:
                 obj = json.loads(body)
@@ -1200,13 +1274,12 @@ _receiver_restart_lock = threading.Lock()
 
 
 def start_layout_receiver(port: int = LAYOUT_RECEIVER_PORT) -> str:
-    """Launch the layout receiving server in the background and connect to it URLreturns.
+    """Launch the layout receiving server in the background and return its base URL.
 
-    When ``layout_receiver.py`` changes on disk (e.g. Streamlit reruns after a git pull), the
-    embedded HTTP server is shut down and the module is reloaded so new routes (such as
-    ``POST /api/fetch-airport-map``) take effect without a full Python process restart.
+    When ``layout_receiver.py`` changes on disk (e.g. after a git pull), the embedded HTTP server
+    is shut down and the module is reloaded so new routes take effect without restarting Python.
     """
-    global _server, _thread, _receiver_boot_mtime
+    global _server, _thread, _receiver_boot_mtime, _PORT
     with _receiver_restart_lock:
         try:
             cur_mtime = Path(__file__).stat().st_mtime
@@ -1219,7 +1292,7 @@ def start_layout_receiver(port: int = LAYOUT_RECEIVER_PORT) -> str:
                 and cur_mtime <= _receiver_boot_mtime + 0.01
             )
             if unchanged:
-                return f"http://127.0.0.1:{_PORT}"
+                return f"http://127.0.0.1:{port}"
             try:
                 _server.shutdown()
             except Exception:
@@ -1235,6 +1308,7 @@ def start_layout_receiver(port: int = LAYOUT_RECEIVER_PORT) -> str:
             _receiver_boot_mtime = None
             reloaded = importlib.reload(sys.modules[__name__])
             return reloaded.start_layout_receiver(port)
+        _PORT = int(port)
         _server = HTTPServer(("127.0.0.1", port), LayoutReceiverHandler)
         _thread = threading.Thread(target=_server.serve_forever, daemon=True)
         _thread.start()
@@ -1250,7 +1324,8 @@ def serve_layout_receiver_forever(
     _PORT = int(port)
     server = HTTPServer((host, int(port)), LayoutReceiverHandler)
     url_host = host if host not in ("0.0.0.0", "") else "127.0.0.1"
-    print(f"Standalone Layout Design: http://{url_host}:{port}/", flush=True)
+    print(f"Layout designer: http://{url_host}:{port}/", flush=True)
+    print(f"Home globe: http://{url_host}:{port}/home", flush=True)
     print(f"Health: http://{url_host}:{port}/health", flush=True)
     try:
         server.serve_forever()

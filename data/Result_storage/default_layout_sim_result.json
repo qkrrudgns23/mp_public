@@ -59279,5 +59279,33 @@
     }
   ],
   "deadlock_resolve_event_count": 0,
-  "positions_format": "compact_v2"
+  "positions_format": "compact_v2",
+  "prosimHarness": {
+    "metrics": {
+      "ok": true,
+      "resultStem": "default_layout",
+      "pythonExecutable": "C:\\Users\\qkrru\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+      "pythonHashSeed": "",
+      "processPriorityClass": "32",
+      "ompNumThreads": "",
+      "pythonPath": "",
+      "inputSha256": "1a9c16f24bb0273a10edfd9b66a3fca1f35919d198e0e51fc015077b74f6188a",
+      "inputLoadWallSec": 0.442377,
+      "runSimulationWallSec": 26.372147,
+      "runSimulationCpuSec": 25.46875,
+      "progressCbCalls": 19,
+      "progressWrites": 19,
+      "jsonDumpsWallSec": 0.061332,
+      "resultWriteWallSec": 0.006225,
+      "payloadUtf8Bytes": 1255476
+    },
+    "job": {
+      "jobId": "default_layout-1778056750152",
+      "stem": "default_layout",
+      "startedAt": 1778056750.1523058,
+      "completedAt": 1778056777.1440632,
+      "state": "completed",
+      "ok": true
+    }
+  }
 }

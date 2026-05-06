@@ -11,31 +11,17 @@ from pathlib import Path
 
 _logger = logging.getLogger(__name__)
 
-import streamlit as st
-import streamlit.components.v1 as components
-
 from utils.layout_flight_meta import ensure_flight_service_dates
 from utils.layout_receiver import (
     DEFAULT_LAYOUT_PATH,
     LAYOUT_STORAGE_DIR,
     list_layout_names,
     _safe_layout_path,
-    start_layout_receiver,
 )
 
-if os.environ.get("LAYOUT_SAME_PORT") == "1":
-    LAYOUT_API_URL = os.environ.get("LAYOUT_API_BASE_URL", "http://127.0.0.1:8501")
-else:
-    LAYOUT_API_URL = start_layout_receiver()
-
-# Grid 3D vehicle GLBs / Poly Haven bundles: always from layout receiver /api/grid3d-asset/
-_GRID3D_ASSET_API_URL = (os.environ.get("GRID3D_ASSET_API_URL") or "").strip() or start_layout_receiver()
-
-st.set_page_config(
-    page_title="Terminal & Airside Designer",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+# Set per-call by ``build_layout_design_html`` (Streamlit standalone uses env defaults only in the wrapper).
+LAYOUT_API_URL: str = "http://127.0.0.1:8501"
+_GRID3D_ASSET_API_URL: str = "http://127.0.0.1:8501"
 
 
 GRID_COLS = 200
@@ -332,27 +318,7 @@ _flight_speed_options_html = "".join(
     for v in _ui_sim_speeds
 )
 
-layout_for_html = DEFAULT_LAYOUT
-
-
-def _get_query_one(key: str):
-    """Streamlit Extract single value from query parameter (query_params / experimental_get_query_params handle it all)."""
-    try:
-        _qp = getattr(st, "query_params", None)
-        if _qp is not None:
-            val = _qp.get(key) if hasattr(_qp, "get") else getattr(_qp, key, None)
-        else:
-            _qp = st.experimental_get_query_params()
-            val = _qp.get(key) if isinstance(_qp, dict) else None
-        if val is None:
-            return None
-        if isinstance(val, str):
-            return val.strip() or None
-        if isinstance(val, (list, tuple)) and len(val):
-            return (val[0] or "").strip() or None
-        return None
-    except Exception:
-        return None
+layout_for_html = json.loads(json.dumps(DEFAULT_LAYOUT))
 
 
 def _sync_grid_globals_from_layout(layout: dict) -> None:
@@ -385,18 +351,6 @@ def _sync_grid_globals_from_layout(layout: dict) -> None:
         except (TypeError, ValueError):
             pass
 
-
-try:
-    load_name = _get_query_one("load_layout")
-    if load_name:
-        _load_path = _safe_layout_path(load_name)
-        if _load_path and _load_path.is_file():
-            layout_for_html = json.loads(_load_path.read_text(encoding="utf-8"))
-            _ensure_random_regs(layout_for_html)
-            ensure_flight_service_dates(layout_for_html, _default_flight_service_date)
-            layout_display_name = load_name
-except Exception:
-    _logger.exception("Failed to load layout from query param")
 
 _sync_grid_globals_from_layout(layout_for_html)
 
@@ -616,6 +570,10 @@ _ui_g_minor_grid_min_scale = max(0.0, _cfg_float(_grid_info, "minorGridMinScale"
 
 layout_display_name = "default_layout"
 
+_BASE_GRID_COLS = GRID_COLS
+_BASE_GRID_ROWS = GRID_ROWS
+_BASE_CELL_SIZE = CELL_SIZE
+
 _IMAGE_DIR = _data_dir / "image"
 _AIRPORT_CSV_PATH = _data_dir / "raw" / "airport" / "airports.csv"
 
@@ -773,7 +731,7 @@ def _build_designer_context() -> dict:
     }
 
 
-_DESIGNER_ASSET_DIR = Path(__file__).resolve().parent / "Layout_Design"
+_DESIGNER_ASSET_DIR = Path(__file__).resolve().parents[1] / "pages" / "Layout_Design"
 
 # Split chunks (`split_designer_js.py`) use fixed line cuts; when `designer.js` changes length they drift and
 # produce invalid JS. The iframe must load the monolithic bundle so Layout Design matches the repo.
@@ -990,43 +948,39 @@ def _build_designer_html() -> str:
     return out
 
 
-html = _build_designer_html()
-
-def _designer_background_base() -> str:
+def designer_shell_background_base() -> str:
     ui_theme = _dict_or_empty(_info_path("tiers", "style", "uiTheme"))
     return _cfg_str(ui_theme, "bgBase", "#0d0d0f")
 
 
-def _build_streamlit_shell_css(ui_bg_base: str) -> str:
-    return """
-  <style>
-    .stApp, [data-testid="stAppViewContainer"], section.main { background-color: """ + ui_bg_base + """ !important; }
-    [data-testid="stHeader"], header[data-testid="stHeader"] { display: none !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; overflow: hidden !important; }
-    [data-testid="stAppViewContainer"] { padding: 0 !important; }
-    .block-container { padding: 0 !important; max-width: 100% !important; overflow: visible !important; min-height: 100vh !important; margin: 0 !important; }
-    section.main [data-testid="stVerticalBlock"] { padding-top: 0 !important; }
-    .block-container iframe, section.main iframe[title="streamlit_component"], section.main iframe[title="Streamlit component"] {
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      min-height: 100vh !important;
-      display: block !important;
-      border: none !important;
-      z-index: 0 !important;
-    }
-  </style>
-"""
-
-
-def _mount_designer_component(component_html: str) -> None:
-    st.markdown(_build_streamlit_shell_css(_designer_background_base()), unsafe_allow_html=True)
-    components.html(
-        component_html,
-        height=2000,
-        scrolling=False,
-    )
-
-
-_mount_designer_component(html)
+def build_layout_design_html(
+    *,
+    layout_api_url: str,
+    grid3d_asset_api_url: str,
+    load_layout: str | None = None,
+) -> str:
+    """Assemble full designer iframe HTML (no Streamlit runtime)."""
+    global LAYOUT_API_URL, _GRID3D_ASSET_API_URL, layout_for_html, layout_display_name, GRID_COLS, GRID_ROWS, CELL_SIZE
+    LAYOUT_API_URL = layout_api_url
+    _GRID3D_ASSET_API_URL = grid3d_asset_api_url
+    GRID_COLS = _BASE_GRID_COLS
+    GRID_ROWS = _BASE_GRID_ROWS
+    CELL_SIZE = _BASE_CELL_SIZE
+    layout_for_html = json.loads(json.dumps(DEFAULT_LAYOUT))
+    _ensure_random_regs(layout_for_html)
+    ensure_flight_service_dates(layout_for_html, _default_flight_service_date)
+    layout_display_name = "default_layout"
+    if load_layout:
+        load_name = str(load_layout).strip() or None
+        if load_name:
+            try:
+                _load_path = _safe_layout_path(load_name)
+                if _load_path and _load_path.is_file():
+                    layout_for_html = json.loads(_load_path.read_text(encoding="utf-8"))
+                    _ensure_random_regs(layout_for_html)
+                    ensure_flight_service_dates(layout_for_html, _default_flight_service_date)
+                    layout_display_name = load_name
+            except Exception:
+                _logger.exception("Failed to load layout from load_layout=%s", load_name)
+    _sync_grid_globals_from_layout(layout_for_html)
+    return _build_designer_html()
