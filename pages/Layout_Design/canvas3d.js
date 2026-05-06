@@ -480,6 +480,44 @@
     for (let i = 0; i < b.length; i++) out.push(b[i]);
     return out;
   }
+  /**
+   * Snap polyline terminal to apron stand attach (site); drop vertices that lie past the site along the ray
+   * from their predecessor toward the site (avoids headings that briefly face backward into the leg).
+   */
+  function clampPolylineFinalApproachToApronSite(pts, targetXY) {
+    const tx = targetXY != null ? Number(targetXY[0]) : NaN;
+    const ty = targetXY != null ? Number(targetXY[1]) : NaN;
+    if (!pts || pts.length < 2 || !isFinite(tx) || !isFinite(ty)) {
+      return pts ? pts.map(function(p) { return [Number(p[0]), Number(p[1])]; }) : [];
+    }
+    const out = pts.map(function(p) { return [Number(p[0]), Number(p[1])]; });
+    const vvEps = 1e-4;
+    const dotEps = 0.06;
+    out[out.length - 1] = [tx, ty];
+    while (out.length >= 3) {
+      const i = out.length - 2;
+      const ax = out[i - 1][0], ay = out[i - 1][1];
+      const bx = out[i][0], by = out[i][1];
+      const vx = tx - ax, vy = ty - ay;
+      const vv = vx * vx + vy * vy;
+      if (vv < vvEps) {
+        out.splice(i, 1);
+        continue;
+      }
+      const wx = bx - ax, wy = by - ay;
+      const dot = wx * vx + wy * vy;
+      if (dot > vv + dotEps) {
+        out.splice(i, 1);
+        continue;
+      }
+      break;
+    }
+    out[out.length - 1] = [tx, ty];
+    const duped = dedupePathPoints(out);
+    if (duped.length >= 2) return duped;
+    if (duped.length === 1) return [[duped[0][0], duped[0][1]], [tx, ty]];
+    return [[tx, ty], [tx, ty]];
+  }
   function polylineTotalLength(pts) {
     if (!pts || pts.length < 2) return 0;
     let s = 0;
@@ -1174,7 +1212,12 @@
     if (tTaxiStart < runwayEndT) tTaxiStart = runwayEndT;
 
 
-    const taxiInPts = trimPolylineFromNearPoint(arrPts, tdPt);
+    let taxiInPts = trimPolylineFromNearPoint(arrPts, tdPt);
+    const standForClamp = f.standId != null && f.standId !== '' ? findStandById(f.standId) : null;
+    if (standForClamp && taxiInPts && taxiInPts.length >= 2) {
+      const siteWp = getStandApronTaxiwayAttachWorldPx(standForClamp);
+      taxiInPts = clampPolylineFinalApproachToApronSite(taxiInPts, siteWp);
+    }
     let taxiInTl;
     if (runwayEndT > eldtS + 1e-3) {
       taxiInTl = buildRunwayAndRetTimelineInWindow(f, runwayId, taxiInPts, eldtS, runwayEndT);

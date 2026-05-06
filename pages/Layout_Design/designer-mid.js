@@ -1669,21 +1669,8 @@
     }
     const idxAtTime = timelineSegmentIndexAtTime(tl, tSec, false);
     if (idxAtTime >= 0) {
-      let i = idxAtTime;
-      let a = tl[i], b = tl[i+1];
-      let useI = i;
-      // At a time-key at the end of [a,b], prefer the outgoing segment so F/R wheels
-      // stay consistent with time-forward motion. Last segment has no outgoing.
-      if (i + 1 < tl.length - 1) {
-        const a2 = tl[i+1], b2 = tl[i+2];
-        if (a2 && b2 && b2.t > a2.t && Math.abs(tSec - b.t) < 1e-5) {
-          if (Math.abs(b.t - a2.t) < 1e-5) {
-            useI = i + 1;
-            a = a2;
-            b = b2;
-          }
-        }
-      }
+      const i = idxAtTime;
+      const a = tl[i], b = tl[i+1];
       const span = b.t - a.t || 1;
       const u = (tSec - a.t) / span;
       const x = a.x + (b.x - a.x) * u;
@@ -1691,8 +1678,8 @@
       const va = Number(a.v), vb = Number(b.v);
       const vThreshMps = 0.05;
       const velocityStill = isFinite(va) && isFinite(vb) && va <= vThreshMps && vb <= vThreshMps;
-      let h = headingForInterval(useI);
-      if (tr && !lastMotionUnitDirBefore(useI)) {
+      let h = headingForInterval(i);
+      if (tr && !lastMotionUnitDirBefore(i)) {
         const fb = playbackLastMotionUnitDirBeforeTime(tr, tSec);
         if (fb) h = { dx: fb.dx, dy: fb.dy };
       }
@@ -1700,12 +1687,12 @@
       let hDraw = h;
       if (dg) {
         const live =
-          lastNonDghostMotionUnitDirBeforeEnd(useI + 1) ||
-          firstNonDghostMotionUnitDirFrom(useI + 1);
+          lastNonDghostMotionUnitDirBeforeEnd(i + 1) ||
+          firstNonDghostMotionUnitDirFrom(i + 1);
         if (live) hDraw = { dx: live.dx, dy: live.dy };
       }
       if (!dg && velocityStill) {
-        let back = lastMotionUnitDirBefore(useI) || lastNonDghostMotionUnitDirBeforeEnd(useI + 1);
+        let back = lastMotionUnitDirBefore(i) || lastNonDghostMotionUnitDirBeforeEnd(i + 1);
         if (!back && tr) back = playbackLastMotionUnitDirBeforeTime(tr, tSec);
         if (back) hDraw = { dx: back.dx, dy: back.dy };
       }
@@ -1722,7 +1709,7 @@
         out = { x, y, dx: hn.dx, dy: hn.dy, deadlockGhost: dg };
       } else {
         out = frBicyclePose(
-          walkTimelinePolylineFromPoint(tl, useI, x, y, wheelBaseM, false), x, y, lenM, bicycleMin, dg);
+          walkTimelinePolylineFromPoint(tl, i, x, y, wheelBaseM, false), x, y, lenM, bicycleMin, dg);
         if (!out) {
           out = { x, y, dx: hn.dx, dy: hn.dy, deadlockGhost: dg };
         }
