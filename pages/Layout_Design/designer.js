@@ -1557,7 +1557,12 @@
     if (dot) {
       dot.classList.remove('fresh');
       dot.classList.add('stale');
-      dot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
+      dot.setAttribute('title', '레이아웃/객체 변경됨 — Layout Update를 눌러 경로 그래프·뷰를 동기화하세요');
+    }
+    const layoutUpdBtn = document.getElementById('btnDesignerPageUpdate');
+    if (layoutUpdBtn) {
+      layoutUpdBtn.classList.add('layout-update-stale');
+      layoutUpdBtn.classList.remove('layout-update-fresh');
     }
     if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
@@ -1567,9 +1572,19 @@
     if (dot) {
       dot.classList.remove('stale');
       dot.classList.add('fresh');
-      dot.setAttribute('title', 'Update 기준으로 경로·뷰가 최신입니다');
+      dot.setAttribute('title', 'Layout Update 기준으로 경로·뷰가 최신입니다');
+    }
+    const layoutUpdBtn = document.getElementById('btnDesignerPageUpdate');
+    if (layoutUpdBtn) {
+      layoutUpdBtn.classList.remove('layout-update-stale');
+      layoutUpdBtn.classList.add('layout-update-fresh');
     }
     if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  }
+  /** Any Layout tab (settings pane) field commit: Pro Sim + path graph need refresh; Layout Update goes stale (red). */
+  function markLayoutPanelFieldDirty() {
+    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+    if (typeof markDesignerPageUpdateStale === 'function') markDesignerPageUpdateStale();
   }
   /** English multi-line (≤5 aircraft) or summary (6+) for arrival RET failure dock banner. */
   function formatArrRetFailedBannerEnglish(regs) {
@@ -1848,7 +1863,7 @@
       btn.classList.toggle('global-update-blocked-apron', hasApronDuplicated);
       btn.classList.toggle('global-update-blocked-stand-overlap', hasStandWindowOverlap && !hasRetFail && !hasApronDuplicated);
       if (!state.designerPageUpdateFresh) {
-        btn.setAttribute('title', 'Run Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
+        btn.setAttribute('title', 'Run Layout Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
       } else if (hasRetFail) {
         const n = failedRegs.length;
         const shortList = n > 5 ? (failedRegs.slice(0, 3).join(', ') + ', etc. (' + n + ' total)') : failedRegs.join(', ');
@@ -3097,14 +3112,8 @@
       if (!didAutoPathGraphSync) {
         if (dp.designerPageUpdateFresh === true) {
           if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
-        } else {
-          state.designerPageUpdateFresh = false;
-          const ddot = document.getElementById('designerPageUpdateSyncDot');
-          if (ddot) {
-            ddot.classList.remove('fresh');
-            ddot.classList.add('stale');
-            ddot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
-          }
+        } else if (typeof markDesignerPageUpdateStale === 'function') {
+          markDesignerPageUpdateStale();
         }
       }
       if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
@@ -4624,6 +4633,34 @@
     stack.appendChild(el);
     requestAnimationFrame(function() { el.classList.add('is-visible'); });
     const lifeMs = kind === 'error' ? 4200 : 2600;
+    setTimeout(function() {
+      el.classList.remove('is-visible');
+      setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
+    }, lifeMs);
+  }
+  /** Same visuals as Save success toast; custom title/detail (no `.json` suffix). */
+  function showDesignerSuccessToast(title, detailLine) {
+    const stack = _ensureLayoutToastStack();
+    const el = document.createElement('div');
+    el.className = 'layout-toast is-success';
+    el.setAttribute('role', 'status');
+    const icon = _svgLayoutToastCheckIcon();
+    const content = document.createElement('div');
+    content.className = 'layout-toast__content';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'layout-toast__title';
+    titleEl.textContent = String(title || '').trim() || 'Done';
+    const textEl = document.createElement('span');
+    textEl.className = 'layout-toast__text';
+    const ts = _formatToastTimestamp(new Date());
+    textEl.textContent = detailLine != null && String(detailLine).trim() !== '' ? ts + ' · ' + String(detailLine).trim() : ts;
+    content.appendChild(titleEl);
+    content.appendChild(textEl);
+    el.appendChild(icon);
+    el.appendChild(content);
+    stack.appendChild(el);
+    requestAnimationFrame(function() { el.classList.add('is-visible'); });
+    const lifeMs = 2600;
     setTimeout(function() {
       el.classList.remove('is-visible');
       setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
@@ -11941,6 +11978,9 @@
     cfgEl.innerHTML = cfgHeader + rows.join('') + '</tbody></table>' +
       '<div style="font-size:10px;color:#6b7280;margin-top:8px;">' +
         'Note: sampling is clipped to stay within ±15% of each mean value.' +
+      '</div>' +
+      '<div class="flight-config-resample-row">' +
+        '<button type="button" id="btnArrivalConfigResample" class="flight-panel-accent-btn" title="Re-sample arrival runway exit (RET) and related values from the current layout">Resampling</button>' +
       '</div>' +
       perFlightBlock;
   }
@@ -19317,7 +19357,7 @@
           return;
         }
         if (!state.designerPageUpdateFresh) {
-          failProSim('먼저 Update로 경로 그래프·뷰를 동기화하세요.');
+          failProSim('먼저 Layout Update로 경로 그래프·뷰를 동기화하세요.');
           return;
         }
         const arrRetFailRegs = typeof getArrRetFailedRegsForProSimUi === 'function' ? getArrRetFailedRegsForProSimUi() : [];
@@ -24459,6 +24499,7 @@
           state.pathArcDrag = null;
         }
         const soEsc = state.selectedObject;
+        const escFromLayoutEdge = !!(soEsc && soEsc.type === 'layoutEdge');
         if (soEsc && soEsc.type === 'terminal' && state.currentTerminalId === soEsc.id) {
           state.currentTerminalId = state.terminals.length ? state.terminals[0].id : null;
         }
@@ -24466,6 +24507,10 @@
         state.selectedObject = null;
         state.selectedVertex = null;
         state.flightPathRevealFlightId = null;
+        if (escFromLayoutEdge && settingModeSelect) {
+          settingModeSelect.value = 'grid';
+          settingModeSelect.dispatchEvent(new Event('change'));
+        }
         syncPanelFromState();
         updateObjectInfo();
         updatePathArcHud();
@@ -25956,7 +26001,6 @@
       if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
       if (typeof renderObjectList === 'function') renderObjectList();
       if (typeof updateObjectInfo === 'function') updateObjectInfo();
-      if (typeof triggerArrivalConfigResampleFromLayoutEdit === 'function') triggerArrivalConfigResampleFromLayoutEdit();
       if (collapsedApronFlights.length && typeof renderFlightList === 'function') {
         renderFlightList(false, false, {
           scheduleMode: 'incremental',
@@ -25972,6 +26016,39 @@
       /** Path graph is fresh but last Pro Sim no longer matches (e.g. arrival RET / layout resample). */
       if (typeof markProSimSyncStaleFromSchedule === 'function') markProSimSyncStaleFromSchedule();
       if (typeof draw === 'function') draw();
+      if (typeof showDesignerSuccessToast === 'function') {
+        showDesignerSuccessToast('Layout Update', 'Path graph · views synced');
+      }
+    });
+  }
+  const tabSettingsEl = document.getElementById('tab-settings');
+  if (tabSettingsEl) {
+    const LAYOUT_TAB_CHANGE_IGNORE_IDS = new Set(['flightDefaultIntDom']);
+    tabSettingsEl.addEventListener('change', function(ev) {
+      const t = ev.target;
+      if (!t || typeof t.closest !== 'function') return;
+      if (!t.closest('.settings-pane')) return;
+      const tid = t.id != null && String(t.id).trim() !== '' ? String(t.id) : '';
+      if (LAYOUT_TAB_CHANGE_IGNORE_IDS.has(tid)) return;
+      if (typeof markLayoutPanelFieldDirty === 'function') markLayoutPanelFieldDirty();
+    });
+  }
+  const flightPaneConfigRoot = document.getElementById('flightPaneConfig');
+  if (flightPaneConfigRoot) {
+    flightPaneConfigRoot.addEventListener('click', function(ev) {
+      let node = ev.target;
+      if (node && node.nodeType === 3 && node.parentElement) node = node.parentElement;
+      const btn = node && typeof node.closest === 'function'
+        ? node.closest('#btnArrivalConfigResample')
+        : null;
+      if (!btn) return;
+      if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
+      if (typeof triggerArrivalConfigResampleFromLayoutEdit === 'function') triggerArrivalConfigResampleFromLayoutEdit();
+      if (typeof markProSimSyncStaleFromSchedule === 'function') markProSimSyncStaleFromSchedule();
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+      if (typeof showDesignerSuccessToast === 'function') {
+        showDesignerSuccessToast('Resampling', 'Arrival configuration updated');
+      }
     });
   }
   if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();

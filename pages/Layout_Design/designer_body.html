@@ -99,8 +99,8 @@
             </div>
             <button type="button" class="tool-btn" data-ai-mode-toggle aria-pressed="false" title="Toggle Kimi chat (MOONSHOT_API_KEY on layout receiver)">AI mode</button>
             <span class="global-update-wrap">
-              <span id="designerPageUpdateSyncDot" class="global-update-sync-dot stale" title="레이아웃/객체가 변경됨 — Update로 경로 그래프·뷰 동기화" role="status" aria-label="Designer Update sync status"></span>
-              <button type="button" class="tool-btn" id="btnDesignerPageUpdate" title="Re-apply settings, refresh views, and sync path graph / junction data (heavy work runs here, not while panning or zooming)">Update</button>
+              <span id="designerPageUpdateSyncDot" class="global-update-sync-dot stale" title="레이아웃/객체가 변경됨 — Layout Update로 경로 그래프·뷰 동기화" role="status" aria-label="Layout Update sync status"></span>
+              <button type="button" class="tool-btn layout-update-stale" id="btnDesignerPageUpdate" title="Re-apply layout settings, refresh views, and sync path graph / junction data (heavy work runs here; Arrival sampling uses the separate Resampling control)">Layout Update</button>
             </span>
             <span class="global-update-wrap">
               <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Pro Sim loads the latest sim JSON into the designer when it finishes" role="status" aria-label="Pro Sim sync status"></span>
@@ -612,7 +612,7 @@
                 </div>
               </div>
             </div>
-            <button class="small" id="btnAddFlight">+ Add Flight</button>
+            <button type="button" id="btnAddFlight">+ Add Flight</button>
             <div id="flightError" class="flight-schedule-inline-msg" style="color:#f97316;font-size:11px;"></div>
             <div class="section-title">Flight schedule</div>
             <div id="flightSchedulePager" class="flight-schedule-pager" style="display:none;">

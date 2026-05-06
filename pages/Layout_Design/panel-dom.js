@@ -896,6 +896,9 @@
       '<div style="font-size:10px;color:#6b7280;margin-top:8px;">' +
         'Note: sampling is clipped to stay within ±15% of each mean value.' +
       '</div>' +
+      '<div class="flight-config-resample-row">' +
+        '<button type="button" id="btnArrivalConfigResample" class="flight-panel-accent-btn" title="Re-sample arrival runway exit (RET) and related values from the current layout">Resampling</button>' +
+      '</div>' +
       perFlightBlock;
   }
 
