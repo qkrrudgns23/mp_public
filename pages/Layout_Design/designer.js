@@ -10139,6 +10139,19 @@
     if (!isFinite(t0) || !isFinite(t1)) return null;
     if (t + 1e-9 < t0) return null;
     if (t > t1) t = t1;
+    const parkedCtx = getParkedOnBlockStationaryPoseCacheCtx(flight, t);
+    if (parkedCtx) {
+      const cached = flight.__parkedStationaryPoseCache;
+      if (cached && cached.key === parkedCtx.key && cached.pose) {
+        return cached.pose;
+      }
+      let poseP = getFlightPoseAtTime(flight, parkedCtx.anchorT);
+      if (!poseP) return null;
+      poseP = getPushbackReversePoseForDraw(flight, parkedCtx.anchorT, poseP);
+      poseP = applyParkedStandHeadingToPoseIfNeeded(flight, parkedCtx.anchorT, poseP);
+      flight.__parkedStationaryPoseCache = { key: parkedCtx.key, pose: poseP };
+      return poseP;
+    }
     let pose = getFlightPoseAtTime(flight, t);
     if (!pose) return null;
     pose = getPushbackReversePoseForDraw(flight, t, pose);
@@ -10247,6 +10260,34 @@
     if (!isFinite(ang)) return pose;
     const dx = -Math.cos(ang), dy = -Math.sin(ang);
     return { x: pose.x, y: pose.y, dx: dx, dy: dy, deadlockGhost: !!pose.deadlockGhost };
+  }
+  /** EIBT–EOBT on-block stationary: pose unchanged for the dwell; skip repeat getFlightPoseAtTime sampling. */
+  function getParkedOnBlockStationaryPoseCacheCtx(flight, tSec) {
+    const t = Number(tSec);
+    if (!flight || !isFinite(t)) return null;
+    if (!isFlightParkedAtSimTime(flight, t)) return null;
+    if (typeof isFlightTimelineStationaryAtSimTime !== 'function' || !isFlightTimelineStationaryAtSimTime(flight, t)) return null;
+    const m = flight.timeline_meta;
+    if (!m) return null;
+    const eibtList = Array.isArray(m.eibtSecList) ? m.eibtSecList : (typeof m.eibtSec === 'number' ? [m.eibtSec] : []);
+    const eobtList = Array.isArray(m.eobtSecList) ? m.eobtSecList : (typeof m.eobtSec === 'number' ? [m.eobtSec] : []);
+    const nInt = Math.min(eibtList.length, eobtList.length);
+    for (let i = 0; i < nInt; i++) {
+      const a = Number(eibtList[i]), b = Number(eobtList[i]);
+      if (!(isFinite(a) && isFinite(b) && t >= a - 1e-3 && t <= b + 1e-3)) continue;
+      const sid = typeof standIdForParkedApronInterval === 'function' ? standIdForParkedApronInterval(flight, t) : '';
+      let trTag = '|0|||';
+      const cpt = typeof compactPlaybackTrackForFlight === 'function' ? compactPlaybackTrackForFlight(flight) : null;
+      if (cpt && Array.isArray(cpt.t) && cpt.t.length) {
+        trTag = '|cp|' + cpt.t.length + '|' + cpt.t[0] + '|' + cpt.t[cpt.t.length - 1];
+      } else if (flight.timeline && flight.timeline.length) {
+        const tl0 = flight.timeline[0], tlZ = flight.timeline[flight.timeline.length - 1];
+        trTag = '|tl|' + flight.timeline.length + '|' + tl0.t + '|' + tlZ.t;
+      }
+      const key = String(flight.id) + '|' + String(sid || '') + '|' + i + '|' + a + '|' + b + trTag;
+      return { key: key, anchorT: a };
+    }
+    return null;
   }
   function isSecondOrLaterArrTaxiAtTime(f, tSec) {
     const tl = f && Array.isArray(f.timeline) ? f.timeline : null;
@@ -18663,6 +18704,152 @@
     ctx.restore();
   }
 
+  /** Rasterize parked-on-block silhouette once (px/m); invalidated by pose/viz keys on ``flight``. */
+  var PARKED_FLIGHT_SIL_BMAP_PX_PER_M = 6;
+  function tryDrawParkedStationaryFlightSilhouetteCached(
+    flight,
+    parkedPoseKey,
+    ctxDest,
+    drawX,
+    drawY,
+    ang,
+    glyphFillCss,
+    useDetailSil,
+    silhouette2D,
+    scaleX,
+    scaleY,
+    nX,
+    wRx,
+    tX,
+    uY,
+    lY,
+    outlineWidth,
+    outlineColor,
+    isDeadlockGhost,
+    fuselageStationFrac,
+    lenM,
+    wingM,
+    silhouettePointHash
+  ) {
+    void lenM;
+    void wingM;
+    const vx = parkedPoseKey + '|viz|' +
+      glyphFillCss + '|det=' + (useDetailSil ? '1' : '0') +
+      '|sx=' + scaleX.toFixed(5) + '|sy=' + scaleY.toFixed(5) +
+      '|fu=' + fuselageStationFrac.toFixed(3) +
+      '|ow=' + outlineWidth + '|oc=' + (outlineColor || '') +
+      '|dg=' + (isDeadlockGhost ? '1' : '0') +
+      '|sh=' + silhouettePointHash +
+      '|ppm=' + PARKED_FLIGHT_SIL_BMAP_PX_PER_M;
+    const prev = flight.__parkedSilBmpCache;
+    if (prev && prev.pkey === parkedPoseKey && prev.vkey === vx && prev.canvas && prev.canvas.width > 0) {
+      ctxDest.save();
+      ctxDest.translate(drawX, drawY);
+      ctxDest.rotate(ang);
+      ctxDest.imageSmoothingEnabled = true;
+      ctxDest.drawImage(
+        prev.canvas,
+        0,
+        0,
+        prev.canvas.width,
+        prev.canvas.height,
+        prev.lx,
+        prev.ly,
+        prev.lw,
+        prev.lh
+      );
+      ctxDest.restore();
+      return true;
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    function boxPt(px, py) {
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (py < minY) minY = py;
+      if (py > maxY) maxY = py;
+    }
+    if (useDetailSil && silhouette2D && silhouette2D.length >= 3) {
+      for (let si = 0; si < silhouette2D.length; si++) {
+        boxPt(silhouette2D[si][0] * scaleX, silhouette2D[si][1] * scaleY);
+      }
+    } else {
+      boxPt(scaleX * nX, 0);
+      boxPt(scaleX * wRx, scaleY * uY);
+      boxPt(scaleX * tX, 0);
+      boxPt(scaleX * wRx, scaleY * lY);
+    }
+    if (!(minX < maxX && minY < maxY)) return false;
+    const padStroke = useDetailSil ? 1.15 : 0;
+    const pad = (outlineWidth > 0 ? outlineWidth * 0.55 : padStroke * 0.55) + 0.75;
+    const lx = minX - pad;
+    const ly = minY - pad;
+    const lw = maxX - minX + 2 * pad;
+    const lh = maxY - minY + 2 * pad;
+    const pxPerM = PARKED_FLIGHT_SIL_BMAP_PX_PER_M;
+    const cw = Math.max(1, Math.ceil(lw * pxPerM));
+    const ch = Math.max(1, Math.ceil(lh * pxPerM));
+    let off = prev && prev.canvas &&
+        prev.canvas._parkSilW === cw && prev.canvas._parkSilH === ch
+      ? prev.canvas
+      : null;
+    if (!off) {
+      off = document.createElement('canvas');
+    }
+    off._parkSilW = cw;
+    off._parkSilH = ch;
+    off.width = cw;
+    off.height = ch;
+    const g = off.getContext('2d');
+    if (!g) return false;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, cw, ch);
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+    g.setTransform(pxPerM, 0, 0, pxPerM, -lx * pxPerM, -ly * pxPerM);
+    g.fillStyle = glyphFillCss;
+    g.beginPath();
+    if (useDetailSil && silhouette2D && silhouette2D.length >= 3) {
+      g.moveTo(silhouette2D[0][0] * scaleX, silhouette2D[0][1] * scaleY);
+      for (let si = 1; si < silhouette2D.length; si++) g.lineTo(silhouette2D[si][0] * scaleX, silhouette2D[si][1] * scaleY);
+      g.closePath();
+    } else {
+      g.moveTo(scaleX * nX, 0);
+      g.lineTo(scaleX * wRx, scaleY * uY);
+      g.lineTo(scaleX * tX, 0);
+      g.lineTo(scaleX * wRx, scaleY * lY);
+      g.closePath();
+    }
+    g.fill();
+    if (outlineWidth > 0 && outlineColor) {
+      g.strokeStyle = isDeadlockGhost ? 'rgba(100, 116, 139, 0.55)' : outlineColor;
+      g.lineWidth = outlineWidth;
+      g.stroke();
+    } else if (useDetailSil) {
+      g.strokeStyle = isDeadlockGhost ? 'rgba(100, 116, 139, 0.5)' : 'rgba(15,23,42,0.85)';
+      g.lineWidth = 1.15;
+      g.stroke();
+    }
+    flight.__parkedSilBmpCache = {
+      pkey: parkedPoseKey,
+      vkey: vx,
+      canvas: off,
+      lx: lx,
+      ly: ly,
+      lw: lw,
+      lh: lh,
+    };
+    ctxDest.save();
+    ctxDest.translate(drawX, drawY);
+    ctxDest.rotate(ang);
+    ctxDest.imageSmoothingEnabled = true;
+    ctxDest.drawImage(off, 0, 0, cw, ch, lx, ly, lw, lh);
+    ctxDest.restore();
+    return true;
+  }
+
   function drawFlights2D() {
     if (!simPlaybackVisualsActive() || !state.flights.length) return;
     const suppressHeavyFlightDetails = simPlaybackHeavyVisualsSuppressed();
@@ -18764,9 +18951,47 @@
         ctx.restore();
       }
       if (flightNeedsTugAtSimTime(f, tSecDraw, pose)) drawFlightTugCar2D(ctx, x, y, nx, ny, lenM, wingM);
+      const parkedBmpCtx = getParkedOnBlockStationaryPoseCacheCtx(f, tSecDraw);
+      let silhouettePointHash = 'quad';
+      if (useDetailSil && silhouette2D.length >= 3) {
+        const a0 = silhouette2D[0], az = silhouette2D[silhouette2D.length - 1];
+        silhouettePointHash = silhouette2D.length + ':' + a0[0] + ',' + a0[1] + ':' + az[0] + ',' + az[1];
+      }
+      const angSil = Math.atan2(ny, nx);
+      const drewBmp =
+        parkedBmpCtx &&
+        !isFlightSel &&
+        tryDrawParkedStationaryFlightSilhouetteCached(
+          f,
+          parkedBmpCtx.key,
+          ctx,
+          drawX,
+          drawY,
+          angSil,
+          glyphFillCss,
+          useDetailSil,
+          silhouette2D,
+          scaleX,
+          scaleY,
+          nX,
+          wRx,
+          tX,
+          uY,
+          lY,
+          outlineWidth,
+          outlineColor,
+          isDeadlockGhost,
+          fuselageStationFrac,
+          lenM,
+          wingM,
+          silhouettePointHash
+        );
+      if (drewBmp) {
+        return;
+      }
       ctx.save();
       ctx.translate(drawX, drawY);
-      const ang = Math.atan2(ny, nx);
+      const ang = angSil;
       ctx.rotate(ang);
       ctx.fillStyle = glyphFillCss;
       ctx.beginPath();
