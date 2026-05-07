@@ -1,3 +1,31 @@
+      }
+      if (uniq.length >= 2) {
+        uniq.sort();
+        lines.push(uniq.join(', ') + ' Overlapped');
+      }
+    });
+    lines.sort();
+    return lines.join('\n');
+  }
+  function syncProSimButtonFromDesignerPageState() {
+    const btn = document.getElementById('btnGlobalUpdate');
+    const dot = document.getElementById('globalUpdateSyncDot');
+    const playDot = document.getElementById('playbackFreshSyncDot');
+    const ban = document.getElementById('arrRetFailedBanner');
+    const banT = document.getElementById('arrRetFailedBannerText');
+    const overlapBan = document.getElementById('standWindowOverlapBanner');
+    const overlapBanT = document.getElementById('standWindowOverlapBannerText');
+    const failedRegs = getArrRetFailedRegsForProSimUi();
+    const hasRetFail = failedRegs.length > 0;
+    const apronIssues = getApronDuplicatedRegsForProSimUi();
+    const hasApronDuplicated = apronIssues.length > 0;
+    const standOverlapIssues = getApronStandWindowOverlapRegsForProSimUi();
+    const hasStandWindowOverlap = standOverlapIssues.length > 0;
+    const standOverlapBannerBody = hasStandWindowOverlap ? formatStandWindowOverlapBannerDetail() : '';
+    if (ban && banT) {
+      if (hasRetFail) {
+        ban.hidden = false;
+        ban.setAttribute('aria-hidden', 'false');
         banT.textContent = formatArrRetFailedBannerEnglish(failedRegs);
       } else {
         ban.hidden = true;
@@ -38,7 +66,7 @@
       btn.classList.toggle('global-update-blocked-apron', hasApronDuplicated);
       btn.classList.toggle('global-update-blocked-stand-overlap', hasStandWindowOverlap && !hasRetFail && !hasApronDuplicated);
       if (!state.designerPageUpdateFresh) {
-        btn.setAttribute('title', 'Run Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
+        btn.setAttribute('title', 'Run Layout Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
       } else if (hasRetFail) {
         const n = failedRegs.length;
         const shortList = n > 5 ? (failedRegs.slice(0, 3).join(', ') + ', etc. (' + n + ' total)') : failedRegs.join(', ');
@@ -664,31 +692,3 @@
         const o = Object.assign({}, tw);
         o.pathType = 'runway';
         normalizeTaxiwayVerticesFromPersistLoad(o);
-        out.push(o);
-      });
-      (obj.runwayTaxiways || []).forEach(function(tw) {
-        const o = Object.assign({}, tw);
-        o.pathType = 'runway_exit';
-        delete o.rwySepConfig;
-        normalizeTaxiwayVerticesFromPersistLoad(o);
-        out.push(o);
-      });
-      (obj.taxiways || []).forEach(function(tw) {
-        const o = Object.assign({}, tw);
-        if (o.pathType !== 'runway' && o.pathType !== 'runway_exit' && o.pathType !== 'apron_taxiway' && o.pathType !== 'general_queue_taxiway') o.pathType = 'taxiway';
-        if (o.pathType !== 'runway') delete o.rwySepConfig;
-        normalizeTaxiwayVerticesFromPersistLoad(o);
-        out.push(o);
-      });
-      out.forEach(normalizeTaxiwayWidthInPlace);
-      out.forEach(normalizePathPavementInPlace);
-      return out;
-    }
-    if (Array.isArray(obj.taxiways)) {
-      const sliced = obj.taxiways.slice();
-      sliced.forEach(function(tw) {
-        normalizeTaxiwayVerticesFromPersistLoad(tw);
-        normalizeTaxiwayWidthInPlace(tw);
-        normalizePathPavementInPlace(tw);
-      });
-      return sliced;

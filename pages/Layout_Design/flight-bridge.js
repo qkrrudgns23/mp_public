@@ -1,3 +1,34 @@
+    else delete f.eldtMin;
+    if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
+    else delete f.eibtMin;
+    if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
+    else delete f.eobtMin;
+    if (isFinite(etotS)) f.etotMin = etotS / 60;
+    else delete f.etotMin;
+    function secListToMinList(key) {
+      const raw = srec[key];
+      if (!Array.isArray(raw)) return null;
+      const out = raw.map(function(v) {
+        const n = Number(v);
+        return isFinite(n) ? n / 60 : null;
+      });
+      return out.length ? out : null;
+    }
+    const eibtList = secListToMinList('EIBT_LIST');
+    const eobtList = secListToMinList('EOBT_LIST');
+    const epushList = secListToMinList('E_PUSH_FINISHED_LIST');
+    if (eibtList) f.eibtMinList = eibtList;
+    else delete f.eibtMinList;
+    if (eobtList) f.eobtMinList = eobtList;
+    else delete f.eobtMinList;
+    if (epushList) f.ePushFinishedMinList = epushList;
+    else delete f.ePushFinishedMinList;
+    const rotS = secOpt('ARR_ROT_SEC');
+    if (isFinite(rotS)) f.arrRotSec = rotS;
+    else f.arrRotSec = null;
+    const vttArrS = secOpt('VTT_ARR_SEC');
+    if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
+    else delete f.proSimVttArrSec;
     const pushbackS = secOpt('PUSHBACK_SEC');
     if (isFinite(pushbackS)) f.proSimPushbackSec = pushbackS;
     else delete f.proSimPushbackSec;
@@ -218,7 +249,8 @@
     return (t + 1e-9 >= Number(track.t[idx]) && t - 1e-9 <= Number(track.t[idx + 1])) ? idx : -1;
   }
   /** Last unit direction of a non-trivial chord strictly before the segment containing ``tSec`` (full track — not windowed). */
-  function playbackLastMotionUnitDirBeforeTime(track, tSec) {
+  function playbackLastMotionUnitDirBeforeTime(track, tSec, skipPushbackOpt) {
+    const skipPushback = skipPushbackOpt === true;
     const eps = 0.08;
     const eps2 = eps * eps;
     if (!isCompactPlaybackTrack(track)) return null;
@@ -228,6 +260,7 @@
       const p = compactPlaybackSampleAtIndex(track, j);
       const q = compactPlaybackSampleAtIndex(track, j + 1);
       if (!p || !q) continue;
+      if (skipPushback && String(p.phase || '') === 'Pushback') continue;
       const ddx = q.x - p.x, ddy = q.y - p.y;
       const l2 = ddx * ddx + ddy * ddy;
       if (l2 >= eps2) {
@@ -289,9 +322,11 @@
     const lo = Number(state.simStartSec), hi = Number(state.simDurationSec);
     if (!isFinite(lo) || !isFinite(hi)) return;
     const snapped =
-      typeof snapSimTimeSecForSlider === 'function'
-        ? snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, tAbs)))
-        : Math.max(lo, Math.min(hi, tAbs));
+      typeof snapSimTimeToPlaybackWindowSec === 'function'
+        ? snapSimTimeToPlaybackWindowSec(tAbs)
+        : (typeof snapSimTimeSecForSlider === 'function'
+          ? snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, tAbs)))
+          : Math.max(lo, Math.min(hi, tAbs)));
     state.simTimeSec = snapped;
     const slider = document.getElementById('flightSimSlider');
     if (slider) slider.value = String(snapped);
@@ -413,38 +448,3 @@
     });
     const entries = Array.from(byT.entries()).sort(function(a, b) { return a[0] - b[0]; });
     const events = entries.map(function(e) {
-      const tR = e[0];
-      const bx = e[1];
-      const ev = { t_abs: tR, labels: bx.labels.slice() };
-      const fw = deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR);
-      if (fw && isFinite(fw.x) && isFinite(fw.y)) {
-        ev.focusWorldX = fw.x;
-        ev.focusWorldY = fw.y;
-      }
-      return ev;
-    });
-    let bodyLines = '';
-    if (events.length) {
-      bodyLines = events
-        .map(function(ev) {
-          const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
-          const reg0 =
-            ev.labels && ev.labels.length ? String(ev.labels[0]).trim() : '';
-          const reg = reg0 || '—';
-          return timeStr + '  ' + reg;
-        })
-        .join('\n');
-    } else if (rc > 0) {
-      bodyLines =
-        'Resolves: ' + rc + '  (no ghost ticks in positions)';
-    }
-    return {
-      events: events,
-      bodyLines: bodyLines,
-      resolveCount: rc,
-    };
-  }
-  function renderFlightSimSliderDeadlockMarkers() {
-    const host = document.getElementById('flightSimSliderMarkers');
-    if (!host) return;
-    host.textContent = '';

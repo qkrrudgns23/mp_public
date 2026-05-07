@@ -1,3 +1,8 @@
+    const lw = preview ? Math.max(0.2, lineW * 0.92) : (selected ? lineW + 0.14 : lineW);
+    const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
+    const dashLen = Math.max(lineW * 2.2, pathSpanM * 0.13);
+    const gapLen = Math.max(lineW * 1.6, pathSpanM * 0.09);
+    ctx.lineCap = 'butt';
     ctx.lineJoin = 'miter';
     ctx.strokeStyle = stroke;
     ctx.lineWidth = lw;
@@ -564,7 +569,13 @@
     simTimeSec: 0,
     simStartSec: 0,
     simDurationSec: 0,
-    /** ``true``: 타임 재생 슬라이더 미세 드래그 모드 — 더블 클릭으로 토글. */
+    /** Replay / Pro Sim SIBT window [simWindowStartSec, simWindowEndSec]; full slider axis is [simStartSec, simDurationSec]. */
+    simWindowStartSec: 0,
+    simWindowEndSec: 0,
+    _simScheduleAxisKey: '',
+    /** Set by applyLayoutObject when layout JSON has designerPersist sim window; consumed once in recomputeSimDuration. */
+    _pendingPersistSimWindow: null,
+    /** ``true``: 재생 타임 슬라이더 미세 드래그 모드에서 시각 변경을 대략 일반 스크럽 대비 SIM_TIME_SLIDER_FINE_DIVISOR 배 더 미세하게. 썹은 빨간색 표시. */
     simTimeSliderFineMode: false,
     simPlaybackEndCapSec: null,
     simPlaying: false,
@@ -817,16 +828,3 @@
       const ptSig = String(tw.pathType || '');
       const qf = (ptSig === 'runway_exit' || ptSig === 'runway_taxiway') ? String(tw.queueFlow === true ? '1' : '0') : '';
       return String(tw.id || '') + '|' + ptSig + '|' + String(tw.direction || '') + '|' + qf + '|' + verts;
-    }).join('||');
-  }
-  function stripPathGraphCacheJunctionsNearTaxiwayWorld(tw) {
-    const g = state.pathGraphCache;
-    if (!g || g.__junctionStale || !tw) return;
-    const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : null;
-    if (!pts || pts.length < 2) return;
-    const mergeR = (typeof PATH_JUNCTION_MERGE_RADIUS_PX === 'number' && isFinite(PATH_JUNCTION_MERGE_RADIUS_PX)) ? PATH_JUNCTION_MERGE_RADIUS_PX : 8;
-    const tol = Math.max(mergeR * 2.2, 12);
-    const tol2 = tol * tol;
-    function distPointToSegSq(p, a, b) {
-      const pr = projectOnSegment(a, b, p);
-      const dpx = p[0] - pr.p[0], dpy = p[1] - pr.p[1];

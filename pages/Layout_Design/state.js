@@ -1,3 +1,8 @@
+  function c2dTaxiwayPavementFill() {
+    const s = _canvas2dStyle.taxiwayPavementFill;
+    return (typeof s === 'string' && s.trim()) ? s.trim() : '#908e82';
+  }
+  function c2dRunwayOutline() { return _canvas2dStyle.runwayOutline || '#cbd5e1'; }
   function c2dRunwayMarkingColor() { return _canvas2dStyle.runwayMarkingColor || '#f8fafc'; }
   function c2dRunwayThresholdColor() { return _canvas2dStyle.runwayThresholdColor || c2dRunwayMarkingColor(); }
   function c2dRunwayCenterlineColor() { return _canvas2dStyle.runwayCenterlineColor || c2dRunwayMarkingColor(); }
@@ -283,8 +288,3 @@
     const stroke = preview
       ? 'rgba(250, 204, 21, 0.7)'
       : (selected ? c2dObjectSelectedStroke() : (lineMono ? c2dLayerMonoLineStrokeCss() : centerlineStroke));
-    const lw = preview ? Math.max(0.2, lineW * 0.92) : (selected ? lineW + 0.14 : lineW);
-    const pairHalf = holdingPointMarkingDoubleLineGapM(lineW) * 0.5;
-    const dashLen = Math.max(lineW * 2.2, pathSpanM * 0.13);
-    const gapLen = Math.max(lineW * 1.6, pathSpanM * 0.09);
-    ctx.lineCap = 'butt';
