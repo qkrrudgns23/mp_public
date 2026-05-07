@@ -1,38 +1,3 @@
-      const tR = e[0];
-      const bx = e[1];
-      const ev = { t_abs: tR, labels: bx.labels.slice() };
-      const fw = deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR);
-      if (fw && isFinite(fw.x) && isFinite(fw.y)) {
-        ev.focusWorldX = fw.x;
-        ev.focusWorldY = fw.y;
-      }
-      return ev;
-    });
-    let bodyLines = '';
-    if (events.length) {
-      bodyLines = events
-        .map(function(ev) {
-          const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
-          const reg0 =
-            ev.labels && ev.labels.length ? String(ev.labels[0]).trim() : '';
-          const reg = reg0 || '—';
-          return timeStr + '  ' + reg;
-        })
-        .join('\n');
-    } else if (rc > 0) {
-      bodyLines =
-        'Resolves: ' + rc + '  (no ghost ticks in positions)';
-    }
-    return {
-      events: events,
-      bodyLines: bodyLines,
-      resolveCount: rc,
-    };
-  }
-  function renderFlightSimSliderDeadlockMarkers() {
-    const host = document.getElementById('flightSimSliderMarkers');
-    if (!host) return;
-    host.textContent = '';
     const span = Number(state.simDurationSec) - Number(state.simStartSec);
     if (!(span > 1e-6)) return;
     const dlp = state.simDeadlockGhostPlayback;
@@ -1035,34 +1000,6 @@
       setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
     }, lifeMs);
   }
-  /** Same visuals as Save success toast; custom title/detail (no `.json` suffix). */
-  function showDesignerSuccessToast(title, detailLine) {
-    const stack = _ensureLayoutToastStack();
-    const el = document.createElement('div');
-    el.className = 'layout-toast is-success';
-    el.setAttribute('role', 'status');
-    const icon = _svgLayoutToastCheckIcon();
-    const content = document.createElement('div');
-    content.className = 'layout-toast__content';
-    const titleEl = document.createElement('div');
-    titleEl.className = 'layout-toast__title';
-    titleEl.textContent = String(title || '').trim() || 'Done';
-    const textEl = document.createElement('span');
-    textEl.className = 'layout-toast__text';
-    const ts = _formatToastTimestamp(new Date());
-    textEl.textContent = detailLine != null && String(detailLine).trim() !== '' ? ts + ' · ' + String(detailLine).trim() : ts;
-    content.appendChild(titleEl);
-    content.appendChild(textEl);
-    el.appendChild(icon);
-    el.appendChild(content);
-    stack.appendChild(el);
-    requestAnimationFrame(function() { el.classList.add('is-visible'); });
-    const lifeMs = 2600;
-    setTimeout(function() {
-      el.classList.remove('is-visible');
-      setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
-    }, lifeMs);
-  }
   /**
    * Render apron site anchor as a 5m × 1m rectangle. Long side (5m) is aligned
    * with the stand's stopbar direction (local Y = perpendicular to the stand
@@ -1392,3 +1329,66 @@
     }
     let out = poly.slice();
     out = clip(out, 'x', true, minX);
+    out = clip(out, 'x', false, maxX);
+    out = clip(out, 'y', true, minY);
+    out = clip(out, 'y', false, maxY);
+    return out.length >= 3 ? out : null;
+  }
+  function standDuplicateSafetyWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
+    const polyLocal = buildStandDuplicateSafetyPolygonLocalPoints(depM, widM, category);
+    if (!polyLocal || polyLocal.length < 3) return null;
+    return polyLocal.map(function(p) { return standFootprintLocalToWorld(cx, cy, angleRad, p[0], p[1]); });
+  }
+  function standSafetyOverlapSpec(stand) {
+    if (!stand || stand.id == null) return null;
+    const id = String(stand.id);
+    const isPbb = (state.pbbStands || []).some(function(s) { return s && String(s.id) === id; });
+    const center = isPbb ? getStandConnectionPx(stand) : getRemoteStandCenterPx(stand);
+    const angle = isPbb ? getPBBStandAngle(stand) : getRemoteStandAngleRad(stand);
+    const category = stand.category || 'C';
+    const dep = getStandDepthMeters(category);
+    const wid = getStandWidthMeters(category);
+    if (!center || !isFinite(center[0]) || !isFinite(center[1]) || !isFinite(dep) || !isFinite(wid)) return null;
+    const poly = standDuplicateSafetyWorldPolygonForSpec(center[0], center[1], angle, dep, wid, category);
+    const aabb = polygonAabbXY(poly);
+    return poly && aabb ? { id: id, stand: stand, poly: poly, aabb: aabb } : null;
+  }
+  function recomputeDuplicateApronByStandId() {
+    const specs = (typeof allStandsForFlightAssignment === 'function' ? allStandsForFlightAssignment() : [])
+      .map(standSafetyOverlapSpec)
+      .filter(Boolean);
+    const map = {};
+    for (let i = 0; i < specs.length; i++) {
+      const a = specs[i];
+      if (!map[a.id]) map[a.id] = [];
+      for (let j = i + 1; j < specs.length; j++) {
+        const b = specs[j];
+        if (!aabbRectOverlap(a.aabb, b.aabb)) continue;
+        if (!polygonsOverlapXY(a.poly, b.poly)) continue;
+        if (!map[a.id]) map[a.id] = [];
+        if (!map[b.id]) map[b.id] = [];
+        map[a.id].push(b.id);
+        map[b.id].push(a.id);
+      }
+    }
+    specs.forEach(function(spec) {
+      const list = (map[spec.id] || []).slice().sort();
+      spec.stand.duplicate_apron_list = list;
+      map[spec.id] = list;
+    });
+    state.duplicateApronByStandId = map;
+    return map;
+  }
+  function duplicateApronStandIdsForStand(standId) {
+    const key = standId != null ? String(standId) : '';
+    if (!key) return [];
+    const map = state.duplicateApronByStandId || {};
+    const arr = Array.isArray(map[key]) ? map[key] : [];
+    return arr.map(function(id) { return String(id); }).filter(Boolean);
+  }
+  function standGapSegmentsWorldForSpec(cx, cy, angleRad, depM, widM, category) {
+    const r = standConfigRowForIcaoCat(category);
+    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return [];
+    const g = Number(r.gap), ws = Number(r.wingspan);
+    const halfD = depM / 2, halfW = widM / 2;
+    const eps = 0.12;

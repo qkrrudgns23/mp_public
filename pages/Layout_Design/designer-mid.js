@@ -1,68 +1,3 @@
-          tw.queueFlow = kindR === 'queue';
-        }
-      }
-      if (el('taxiwayAvgMoveVelocity')) {
-        var v = Number(el('taxiwayAvgMoveVelocity').value);
-        tw.avgMoveVelocity = (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
-      }
-      if (el('runwayMinArrVelocity')) {
-        const mav = Number(el('runwayMinArrVelocity').value);
-        if (tw.pathType === 'runway') {
-          tw.minArrVelocity = (typeof mav === 'number' && isFinite(mav) && mav > 0) ? Math.max(1, Math.min(150, mav)) : 15;
-        } else {
-          delete tw.minArrVelocity;
-        }
-      }
-      if (tw.pathType === 'runway') {
-        const cwEl = el('runwayLineupDistM_CW');
-        const ccwEl = el('runwayLineupDistM_CCW');
-        const lxCw = cwEl ? Number(cwEl.value) : NaN;
-        const lxCcw = ccwEl ? Number(ccwEl.value) : NaN;
-        tw.lineupDistM_CW = (typeof lxCw === 'number' && isFinite(lxCw) && lxCw >= 0) ? lxCw : 0;
-        tw.lineupDistM_CCW = (typeof lxCcw === 'number' && isFinite(lxCcw) && lxCcw >= 0) ? lxCcw : 0;
-        tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
-      } else if (tw.pathType !== 'runway') {
-        delete tw.lineupDistM;
-        delete tw.lineupDistM_CW;
-        delete tw.lineupDistM_CCW;
-      }
-      if (tw.pathType === 'runway') {
-        const startDisp = Number(el('runwayStartDisplacedThresholdM') ? el('runwayStartDisplacedThresholdM').value : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
-        const startBlast = Number(el('runwayStartBlastPadM') ? el('runwayStartBlastPadM').value : RUNWAY_START_BLAST_PAD_DEFAULT_M);
-        const endDisp = Number(el('runwayEndDisplacedThresholdM') ? el('runwayEndDisplacedThresholdM').value : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
-        const endBlast = Number(el('runwayEndBlastPadM') ? el('runwayEndBlastPadM').value : RUNWAY_END_BLAST_PAD_DEFAULT_M);
-        tw.startDisplacedThresholdM = (typeof startDisp === 'number' && isFinite(startDisp) && startDisp >= 0) ? startDisp : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.startBlastPadM = (typeof startBlast === 'number' && isFinite(startBlast) && startBlast >= 0) ? startBlast : RUNWAY_START_BLAST_PAD_DEFAULT_M;
-        tw.endDisplacedThresholdM = (typeof endDisp === 'number' && isFinite(endDisp) && endDisp >= 0) ? endDisp : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.endBlastPadM = (typeof endBlast === 'number' && isFinite(endBlast) && endBlast >= 0) ? endBlast : RUNWAY_END_BLAST_PAD_DEFAULT_M;
-      } else {
-        delete tw.startDisplacedThresholdM;
-        delete tw.startBlastPadM;
-        delete tw.endDisplacedThresholdM;
-        delete tw.endBlastPadM;
-      }
-      if (tw.pathType !== 'runway_exit' && tw.pathType !== 'runway_taxiway') delete tw.queueFlow;
-    }
-  }
-
-  function syncSettingsPaneToMode() {
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
-    if (layoutModeTabs) {
-      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
-      });
-    }
-    document.querySelectorAll('.settings-pane').forEach(el => { el.style.display = 'none'; });
-    const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
-    const pane = document.getElementById('settings-' + paneKey);
-    if (pane) pane.style.display = 'block';
-    if (mode === 'marker') {
-      syncMarkerFlightAircraftRowVisibility();
-      syncMarkerIslandWidthRowVisibility();
-      syncMarkerNavaidRowVisibility();
-    }
-    if (isPathLayoutMode(mode)) {
-      const pt = pathTypeFromLayoutMode(mode);
       syncPathFieldVisibilityForPathType(pt);
       if (!state.selectedObject || state.selectedObject.type !== 'taxiway') {
         const nameInput = document.getElementById('taxiwayName');
@@ -1005,210 +940,6 @@
     if (snapped > hi) snapped = hi;
     return snapped;
   }
-
-  /** Min SIBT (minutes) / max SOBT (minutes) across apron stay segments / flight fields. */
-  function computeFleetSibtSobtMinMaxMinutesAmongFlights() {
-    let minSibtM = Infinity;
-    let maxSobtM = -Infinity;
-    (state.flights || []).forEach(function(f) {
-      if (!f) return;
-      const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
-      if (segs && segs.length) {
-        segs.forEach(function(seg) {
-          const s = Number(seg && seg.sibtMin);
-          const t = Number(seg && seg.sobtMin);
-          if (isFinite(s)) minSibtM = Math.min(minSibtM, s);
-          if (isFinite(t)) maxSobtM = Math.max(maxSobtM, t);
-        });
-      } else {
-        const s = f.sibtMin != null ? Number(f.sibtMin) : (f.timeMin != null ? Number(f.timeMin) : NaN);
-        let t = f.sobtMin != null ? Number(f.sobtMin) : NaN;
-        if (!isFinite(t) && isFinite(s)) t = s + Math.max(0, Number(f.dwellMin) || 45);
-        if (isFinite(s)) minSibtM = Math.min(minSibtM, s);
-        if (isFinite(t)) maxSobtM = Math.max(maxSobtM, t);
-      }
-    });
-    return { minSibtM: minSibtM, maxSobtM: maxSobtM };
-  }
-
-  function getSimAxisLoHiSec() {
-    const lo = Number(state.simStartSec), hi = Number(state.simDurationSec);
-    return {
-      axisLo: isFinite(lo) ? lo : 0,
-      axisHi: isFinite(hi) ? hi : 0,
-      span: (isFinite(lo) && isFinite(hi) && hi > lo) ? hi - lo : 0,
-    };
-  }
-
-  function getSimPlaybackWindowLoHiSec() {
-    const ax = getSimAxisLoHiSec();
-    const axisLo = ax.axisLo, axisHi = ax.axisHi;
-    let wLo = Number(state.simWindowStartSec), wHi = Number(state.simWindowEndSec);
-    if (!isFinite(wLo) || !isFinite(wHi)) {
-      return { lo: axisLo, hi: axisHi, axisLo: axisLo, axisHi: axisHi };
-    }
-    wLo = Math.max(axisLo, Math.min(axisHi, wLo));
-    wHi = Math.max(axisLo, Math.min(axisHi, wHi));
-    if (wHi < wLo + SIM_TIME_SLIDER_SNAP_SEC * 0.5) {
-      wHi = Math.min(axisHi, wLo + SIM_TIME_SLIDER_SNAP_SEC);
-    }
-    return { lo: wLo, hi: wHi, axisLo: axisLo, axisHi: axisHi };
-  }
-
-  function snapSimTimeToPlaybackWindowSec(tSec) {
-    const b = getSimPlaybackWindowLoHiSec();
-    const step = SIM_TIME_SLIDER_SNAP_SEC;
-    const t = Number(tSec);
-    if (!isFinite(t)) return b.lo;
-    let clamped = Math.max(b.lo, Math.min(b.hi, t));
-    if (!(step > 0)) return clamped;
-    let snapped = b.lo + Math.round((clamped - b.lo) / step) * step;
-    if (snapped < b.lo) snapped = b.lo;
-    if (snapped > b.hi) snapped = b.hi;
-    return snapped;
-  }
-
-  function flightHasSibtInSimWindowSec(f, wLo, wHi) {
-    if (!f || !isFinite(Number(wLo)) || !isFinite(Number(wHi))) return false;
-    const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
-    if (segs && segs.length) {
-      for (let si = 0; si < segs.length; si++) {
-        const s = Number(segs[si].sibtMin);
-        if (!isFinite(s)) continue;
-        const sSec = s * 60;
-        if (sSec >= wLo - 1e-6 && sSec <= wHi + 1e-6) return true;
-      }
-      return false;
-    }
-    const s = f.sibtMin != null ? Number(f.sibtMin) : (f.timeMin != null ? Number(f.timeMin) : NaN);
-    if (!isFinite(s)) return false;
-    const sSec = s * 60;
-    return sSec >= wLo - 1e-6 && sSec <= wHi + 1e-6;
-  }
-
-  function syncSimPlaybackRangeInputsDom() {
-    const ax = getSimAxisLoHiSec();
-    const wh = getSimPlaybackWindowLoHiSec();
-    const lo = ax.axisLo, hi = ax.axisHi;
-    const startEl = document.getElementById('flightSimSliderWindowStart');
-    const curEl = document.getElementById('flightSimSlider');
-    const endEl = document.getElementById('flightSimSliderWindowEnd');
-    const stepStr = String(SIM_TIME_SLIDER_SNAP_SEC);
-    [startEl, curEl, endEl].forEach(function(el) {
-      if (!el) return;
-      el.min = String(lo);
-      el.max = String(hi);
-      el.step = stepStr;
-    });
-    if (startEl) startEl.value = String(wh.lo);
-    if (endEl) endEl.value = String(wh.hi);
-    if (curEl) curEl.value = String(state.simTimeSec);
-  }
-
-  try {
-    window.__getSimPlaybackWindowLoHiSec = getSimPlaybackWindowLoHiSec;
-    window.__snapSimTimeToPlaybackWindowSec = snapSimTimeToPlaybackWindowSec;
-    window.__flightHasSibtInSimWindowSec = flightHasSibtInSimWindowSec;
-  } catch (__expWin) {
-    /* ignore */
-  }
-
-  /**
-   * 더블 클릭으로 미세 모드 토글 후, 같은 슬라이더에서 포인터 드래그 시 (전체 타임축 폭 대비 픽셀 이동량)×(span)/SIM_TIME_SLIDER_FINE_DIVISOR 만큼만 시각 변경.
-   * 중복 초기화 방지 위해 ``dataset.airsideFineBind`` 사용.
-   */
-  function bindFlightSimSliderFineOnce(sliderEl) {
-    if (!sliderEl || sliderEl.dataset.airsideFineBind === '1') return;
-    sliderEl.dataset.airsideFineBind = '1';
-    let fineDragPid = null;
-
-    sliderEl.addEventListener('dblclick', function(ev) {
-      ev.preventDefault();
-      state.simTimeSliderFineMode = !state.simTimeSliderFineMode;
-      if (state.simTimeSliderFineMode) {
-        sliderEl.classList.add('sim-time-slider-fine');
-      } else {
-        sliderEl.classList.remove('sim-time-slider-fine');
-      }
-    });
-
-    /** 미세 모드에서 ``pointerdown`` 시 바로 ``preventDefault`` 하면 브라우저가 ``click``/``dblclick`` 을 만들지 않아 꺼짐 토글이 안 될 수 있음 → 임계 이동 후에만 캡처·차단 */
-    sliderEl.addEventListener('pointerdown', function(ev) {
-      if (!state.simTimeSliderFineMode) return;
-      if (ev.button != null && ev.button !== 0) return;
-      if (ev.isPrimary === false) return;
-      const lo = Number(state.simStartSec);
-      const hi = Number(state.simDurationSec);
-      if (!isFinite(lo) || !isFinite(hi) || !(hi > lo + 1e-9)) return;
-      const wh = typeof getSimPlaybackWindowLoHiSec === 'function' ? getSimPlaybackWindowLoHiSec() : { lo: lo, hi: hi };
-      const wLo = Number(wh.lo), wHi = Number(wh.hi);
-      const rect = sliderEl.getBoundingClientRect();
-      const wTrack = rect.width > 1 ? rect.width : 1;
-      const span = Math.max(1e-9, wHi - wLo);
-      const startT = typeof snapSimTimeToPlaybackWindowSec === 'function'
-        ? snapSimTimeToPlaybackWindowSec(Number(state.simTimeSec))
-        : Number(state.simTimeSec);
-      const startClientX = ev.clientX;
-
-      fineDragPid = ev.pointerId;
-      let dragged = false;
-
-      function onMove(me) {
-        if (fineDragPid === null || me.pointerId !== fineDragPid) return;
-        const dxAbs = Math.abs(me.clientX - startClientX);
-        if (!dragged && dxAbs < 4) return;
-        if (!dragged) {
-          dragged = true;
-          try {
-            sliderEl.setPointerCapture(me.pointerId);
-          } catch (_) { /* ignore */ }
-          me.preventDefault();
-          me.stopPropagation();
-          state.simSliderScrubbing = true;
-        }
-        const dx = me.clientX - startClientX;
-        const deltaSec = (dx / wTrack) * span / SIM_TIME_SLIDER_FINE_DIVISOR;
-        let next = snapSimTimeToPlaybackWindowSec(startT + deltaSec);
-        next = Math.max(wLo, Math.min(wHi, next));
-        state.simTimeSec = next;
-        sliderEl.value = String(next);
-        if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
-        syncAllocGanttSimPlayheadPosition();
-        try { draw({ bypassSimScrubGuard: true }); } catch (_) { /* ignore */ }
-        update3DSceneWhenVisible();
-      }
-
-      function finish(me) {
-        if (fineDragPid === null) return;
-        if (me && me.pointerId != null && me.pointerId !== fineDragPid) return;
-        document.removeEventListener('pointermove', onMove);
-        document.removeEventListener('pointerup', finish, true);
-        document.removeEventListener('pointercancel', finish, true);
-        if (dragged) {
-          try {
-            sliderEl.releasePointerCapture(fineDragPid);
-          } catch (_) { /* ignore */ }
-        }
-        fineDragPid = null;
-        state.simSliderScrubbing = false;
-        if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
-        syncAllocGanttSimPlayheadPosition();
-        try { draw({ bypassSimScrubGuard: true }); } catch (_) { /* ignore */ }
-        update3DSceneWhenVisible();
-      }
-
-      document.addEventListener('pointermove', onMove);
-      document.addEventListener('pointerup', finish, true);
-      document.addEventListener('pointercancel', finish, true);
-    }, true);
-  }
-
-  try {
-    window.__bindFlightSimSliderFineOnce = bindFlightSimSliderFineOnce;
-  } catch (_eFineWin) {
-    /* ignore */
-  }
-
   function updateFlightSimPlaybackLabelsDom() {
     const label = document.getElementById('flightSimTimeLabel');
     const t = state.simTimeSec;
@@ -1254,66 +985,57 @@
     return (isFinite(minS) && minS < Infinity) ? minS : null;
   }
   function recomputeSimDuration() {
-    const fleet = computeFleetSibtSobtMinMaxMinutesAmongFlights();
-    let axisMinSec = 0;
-    let axisMaxSec = 0;
-    if (isFinite(fleet.minSibtM) && isFinite(fleet.maxSobtM) && fleet.maxSobtM >= fleet.minSibtM - 1e-9) {
-      axisMinSec = Math.max(0, fleet.minSibtM * 60 - SIM_AXIS_SIBT_BEFORE_SEC);
-      axisMaxSec = fleet.maxSobtM * 60 + SIM_AXIS_SOBT_AFTER_SEC;
-    }
-    if (!(axisMaxSec > axisMinSec + 1e-9)) {
-      axisMaxSec = axisMinSec + Math.max(SIM_TIME_SLIDER_SNAP_SEC, 60);
-    }
-    state.simStartSec = axisMinSec;
-    state.simDurationSec = axisMaxSec;
-    const nFl = (state.flights || []).length;
-    const axisKey =
-      String(fleet.minSibtM) + '|' + String(fleet.maxSobtM) + '|' + String(nFl);
-    const pv = state._pendingPersistSimWindow;
-    const usePersist = !!(pv && isFinite(Number(pv.lo)) && isFinite(Number(pv.hi)));
-    if (usePersist) {
-      let wLo = Math.max(axisMinSec, Math.min(axisMaxSec, Number(pv.lo)));
-      let wHi = Math.max(axisMinSec, Math.min(axisMaxSec, Number(pv.hi)));
-      if (wHi < wLo + SIM_TIME_SLIDER_SNAP_SEC * 0.5) {
-        wHi = Math.min(axisMaxSec, wLo + SIM_TIME_SLIDER_SNAP_SEC);
+    let minT = Infinity;
+    let maxT = -Infinity;
+    (state.flights || []).forEach(function(f) {
+      if (!f) return;
+      const trWin = compactPlaybackTrackStartEnd(compactPlaybackTrackForFlight(f));
+      if (trWin) {
+        if (trWin.t0 < minT) minT = trWin.t0;
+        if (trWin.t1 > maxT) maxT = trWin.t1;
       }
-      state.simWindowStartSec = snapSimTimeSecForSlider(wLo);
-      state.simWindowEndSec = snapSimTimeSecForSlider(wHi);
-      state._pendingPersistSimWindow = null;
-      state._simScheduleAxisKey = axisKey;
-    } else {
-      let resetWindow = state._simScheduleAxisKey !== axisKey;
-      state._simScheduleAxisKey = axisKey;
-      if (resetWindow) {
-        state.simWindowStartSec = snapSimTimeSecForSlider(axisMinSec);
-        state.simWindowEndSec = snapSimTimeSecForSlider(axisMaxSec);
-      } else {
-        state.simWindowStartSec = snapSimTimeSecForSlider(
-          Math.max(axisMinSec, Math.min(axisMaxSec, Number(state.simWindowStartSec)))
-        );
-        state.simWindowEndSec = snapSimTimeSecForSlider(
-          Math.max(axisMinSec, Math.min(axisMaxSec, Number(state.simWindowEndSec)))
-        );
-        if (state.simWindowEndSec < state.simWindowStartSec + SIM_TIME_SLIDER_SNAP_SEC * 0.5) {
-          state.simWindowEndSec = snapSimTimeSecForSlider(
-            Math.min(axisMaxSec, state.simWindowStartSec + SIM_TIME_SLIDER_SNAP_SEC)
-          );
-        }
+      const w = trWin ? null : getFlightAirsideWindowSec(f);
+      if (w) {
+        if (w.t0 < minT) minT = w.t0;
+        if (w.t1 > maxT) maxT = w.t1;
       }
+      const m = f.timeline_meta;
+      const etotSec = m && typeof m.etotSec === 'number' ? Number(m.etotSec) : NaN;
+      if (isFinite(etotSec) && etotSec > maxT) maxT = etotSec;
+    });
+    if (!isFinite(minT) || !isFinite(maxT)) {
+      minT = 0;
+      maxT = 0;
     }
-    const wh = getSimPlaybackWindowLoHiSec();
-    state.simWindowStartSec = snapSimTimeSecForSlider(wh.lo);
-    state.simWindowEndSec = snapSimTimeSecForSlider(wh.hi);
-    state.simTimeSec = snapSimTimeToPlaybackWindowSec(state.simTimeSec);
-    syncSimPlaybackRangeInputsDom();
-    const anySlider = document.getElementById('flightSimSlider');
-    const axisBad = !(state.simDurationSec > state.simStartSec + 1e-9);
-    const sStart = document.getElementById('flightSimSliderWindowStart');
-    const sEnd = document.getElementById('flightSimSliderWindowEnd');
-    if (anySlider) anySlider.disabled = axisBad;
-    if (sStart) sStart.disabled = axisBad;
-    if (sEnd) sEnd.disabled = axisBad;
-    if (typeof bindFlightSimSliderFineOnce === 'function') bindFlightSimSliderFineOnce(anySlider);
+    let simLo = minT;
+    const firstTdS = minFirstArrivalTouchdownSecAmongFlights();
+    if (firstTdS != null) {
+      simLo = Math.max(0, firstTdS - 10);
+    }
+    let durSec = Math.max(maxT, minT);
+    const capAbs = state.simPlaybackEndCapSec;
+    if (capAbs != null && isFinite(Number(capAbs))) {
+      durSec = Math.min(durSec, Number(capAbs));
+    }
+    state.simDurationSec = durSec;
+    if (simLo > state.simDurationSec - 1e-6) {
+      simLo = Math.max(0, state.simDurationSec - 1);
+    }
+    state.simStartSec = simLo;
+    if ((state.flights || []).length > 0 && isFinite(minT) && isFinite(maxT) && state.simDurationSec <= state.simStartSec) {
+      state.simDurationSec = state.simStartSec + 1;
+    }
+    state.simTimeSec = Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simTimeSec));
+    state.simTimeSec = snapSimTimeSecForSlider(state.simTimeSec);
+    const slider = document.getElementById('flightSimSlider');
+    if (slider) {
+      slider.min = state.simStartSec;
+      slider.max = state.simDurationSec;
+      slider.step = String(SIM_TIME_SLIDER_SNAP_SEC);
+      slider.value = state.simTimeSec;
+      if (state.simDurationSec <= state.simStartSec) slider.disabled = true;
+      else slider.disabled = false;
+    }
     if (typeof renderFlightSimSliderDeadlockMarkers === 'function') renderFlightSimSliderDeadlockMarkers();
     updateFlightSimPlaybackLabelsDom();
     syncAllocGanttSimPlayheadPosition();
@@ -1336,8 +1058,9 @@
   function syncSimulationPlaybackAfterTimelines() {
     if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
     if (!state.hasSimulationResult) return;
-    state.simTimeSec = snapSimTimeToPlaybackWindowSec(state.simWindowStartSec);
-    if (typeof syncSimPlaybackRangeInputsDom === 'function') syncSimPlaybackRangeInputsDom();
+    const simSliderAfter = document.getElementById('flightSimSlider');
+    state.simTimeSec = snapSimTimeSecForSlider(Math.max(state.simStartSec, Math.min(state.simDurationSec, state.simStartSec)));
+    if (simSliderAfter) simSliderAfter.value = state.simTimeSec;
     updateFlightSimPlaybackLabelsDom();
     syncAllocGanttSimPlayheadPosition();
   }
@@ -1774,6 +1497,61 @@
     return timeline;
   }
 
+  /**
+   * Walk distM on the timeline polyline from (fx,fy) on segment segIndex.
+   * forward: toward +t; !forward: toward earlier samples (e.g. rear reference from front point).
+   */
+  function walkTimelinePolylineFromPoint(tl, segIndex, fx, fy, distM, forward) {
+    const eps = 1e-6;
+    if (!tl || tl.length < 2 || !(distM > eps) || !isFinite(fx) || !isFinite(fy) || !isFinite(distM)) {
+      return null;
+    }
+    if (segIndex < 0 || segIndex > tl.length - 2) return null;
+    let rem = distM;
+    let x = fx, y = fy;
+    let s = segIndex;
+    while (rem > eps) {
+      if (forward) {
+        if (s > tl.length - 2) {
+          if (tl.length < 2) return { x, y };
+          const n = tl.length, pa = tl[n - 2], pb = tl[n - 1];
+          const bx = pb.x - pa.x, by = pb.y - pa.y;
+          const bl = Math.hypot(bx, by);
+          if (bl < eps) return { x, y };
+          const inv = 1 / bl;
+          return { x: x + bx * inv * rem, y: y + by * inv * rem };
+        }
+        const b = tl[s + 1];
+        const ddx = b.x - x, ddy = b.y - y;
+        const dlen = Math.hypot(ddx, ddy);
+        if (dlen < eps) { x = b.x; y = b.y; s++; continue; }
+        const step = Math.min(rem, dlen), inv = 1 / dlen;
+        x += ddx * inv * step; y += ddy * inv * step; rem -= step;
+        if (rem < eps) return { x, y };
+        if (dlen - step < eps) { x = b.x; y = b.y; s++; }
+      } else {
+        if (s < 0) {
+          if (tl.length < 2) return { x, y };
+          const p0 = tl[0], p1 = tl[1];
+          const bx = p0.x - p1.x, by = p0.y - p1.y;
+          const bl = Math.hypot(bx, by);
+          if (bl < eps) return { x, y };
+          const inv = 1 / bl;
+          return { x: x + bx * inv * rem, y: y + by * inv * rem };
+        }
+        const tx = tl[s].x, ty = tl[s].y;
+        const ddx = tx - x, ddy = ty - y;
+        const dlen = Math.hypot(ddx, ddy);
+        if (dlen < eps) { x = tx; y = ty; s--; continue; }
+        const step = Math.min(rem, dlen), inv = 1 / dlen;
+        x += ddx * inv * step; y += ddy * inv * step; rem -= step;
+        if (rem < eps) return { x, y };
+        if (dlen - step < eps) { x = tx; y = ty; s--; }
+      }
+    }
+    return { x, y };
+  }
+
   function getFlightPositionAtTime(flight, tSec) {
     const tr = compactPlaybackTrackForFlight(flight);
     const tl = tr ? compactPlaybackTimelineWindow(tr, tSec, 4) : flight.timeline;
@@ -1841,19 +1619,8 @@
       const inv = 1 / Math.sqrt(l2);
       return { dx: ddx * inv, dy: ddy * inv };
     }
-    function lastMotionUnitDirBefore(i, opts) {
-      const skipPb = opts && opts.skipPushback === true;
+    function lastMotionUnitDirBefore(i) {
       for (let j = i - 1; j >= 0; j--) {
-        if (skipPb && String(tl[j].phase || '') === 'Pushback') continue;
-        const u = segmentUnitDir(j);
-        if (u) return u;
-      }
-      return null;
-    }
-    function firstMotionUnitDirFrom(i, opts) {
-      const skipPb = opts && opts.skipPushback === true;
-      for (let j = i; j <= tl.length - 2; j++) {
-        if (skipPb && String(tl[j].phase || '') === 'Pushback') continue;
         const u = segmentUnitDir(j);
         if (u) return u;
       }
@@ -1864,19 +1631,41 @@
       const dx = b.x - a.x, dy = b.y - a.y;
       const l2 = dx * dx + dy * dy;
       if (l2 >= motionChordEps2) return { dx: dx, dy: dy };
-      const curPb = String(tl[i].phase || '') === 'Pushback';
-      const prev = lastMotionUnitDirBefore(i, { skipPushback: !curPb });
+      const prev = lastMotionUnitDirBefore(i);
       if (prev) return { dx: prev.dx, dy: prev.dy };
-      if (!curPb) {
-        const fwd = firstMotionUnitDirFrom(i, { skipPushback: true });
-        if (fwd) return { dx: fwd.dx, dy: fwd.dy };
-      }
       return { dx: 1, dy: 0 };
+    }
+    function frBicyclePose(R, x, y, lenM, bmin, dg) {
+      if (!R || lenM <= 1e-6) return null;
+      const vdx = x - R.x, vdy = y - R.y, vl = Math.hypot(vdx, vdy);
+      if (vl < bmin) return null;
+      return { x, y, dx: vdx / vl, dy: vdy / vl, deadlockGhost: dg };
     }
     function normHeadingVec(h) {
       const hl = Math.hypot(h.dx, h.dy);
       if (hl < 1e-9) return { dx: 1, dy: 0 };
       return { dx: h.dx / hl, dy: h.dy / hl };
+    }
+    function segmentIsDghostPair(p, q) {
+      return !!(p && q && p.deadlockGhost === true && q.deadlockGhost === true);
+    }
+    function lastNonDghostMotionUnitDirBeforeEnd(endSegExclusive) {
+      for (let j = endSegExclusive - 1; j >= 0; j--) {
+        const p = tl[j], q = tl[j + 1];
+        if (segmentIsDghostPair(p, q)) continue;
+        const u = segmentUnitDir(j);
+        if (u) return u;
+      }
+      return null;
+    }
+    function firstNonDghostMotionUnitDirFrom(startSeg) {
+      for (let j = startSeg; j <= tl.length - 2; j++) {
+        const p = tl[j], q = tl[j + 1];
+        if (segmentIsDghostPair(p, q)) continue;
+        const u = segmentUnitDir(j);
+        if (u) return u;
+      }
+      return null;
     }
     const idxAtTime = timelineSegmentIndexAtTime(tl, tSec, false);
     if (idxAtTime >= 0) {
@@ -1886,10 +1675,46 @@
       const u = (tSec - a.t) / span;
       const x = a.x + (b.x - a.x) * u;
       const y = a.y + (b.y - a.y) * u;
-      const h = headingForInterval(i);
+      const va = Number(a.v), vb = Number(b.v);
+      const vThreshMps = 0.05;
+      const velocityStill = isFinite(va) && isFinite(vb) && va <= vThreshMps && vb <= vThreshMps;
+      let h = headingForInterval(i);
+      if (tr && !lastMotionUnitDirBefore(i)) {
+        const fb = playbackLastMotionUnitDirBeforeTime(tr, tSec);
+        if (fb) h = { dx: fb.dx, dy: fb.dy };
+      }
       const dg = !!(a.deadlockGhost || b.deadlockGhost);
-      const hn = normHeadingVec(h);
-      return { x: x, y: y, dx: hn.dx, dy: hn.dy, deadlockGhost: dg };
+      let hDraw = h;
+      if (dg) {
+        const live =
+          lastNonDghostMotionUnitDirBeforeEnd(i + 1) ||
+          firstNonDghostMotionUnitDirFrom(i + 1);
+        if (live) hDraw = { dx: live.dx, dy: live.dy };
+      }
+      if (!dg && velocityStill) {
+        let back = lastMotionUnitDirBefore(i) || lastNonDghostMotionUnitDirBeforeEnd(i + 1);
+        if (!back && tr) back = playbackLastMotionUnitDirBeforeTime(tr, tSec);
+        if (back) hDraw = { dx: back.dx, dy: back.dy };
+      }
+      const hn = normHeadingVec(hDraw);
+      const dxAB = b.x - a.x, dyAB = b.y - a.y;
+      const dist2 = dxAB * dxAB + dyAB * dyAB;
+      const geomStill = dist2 < motionChordEps2;
+      const stationary = geomStill || dg || velocityStill;
+      const { lenM } = getSimAircraftWorldDimsM(flight);
+      const wheelBaseM = 0.55 * lenM;
+      const bicycleMin = Math.max(0.15 * motionChordEps, 0.005 * lenM, 0.04);
+      let out;
+      if (stationary) {
+        out = { x, y, dx: hn.dx, dy: hn.dy, deadlockGhost: dg };
+      } else {
+        out = frBicyclePose(
+          walkTimelinePolylineFromPoint(tl, i, x, y, wheelBaseM, false), x, y, lenM, bicycleMin, dg);
+        if (!out) {
+          out = { x, y, dx: hn.dx, dy: hn.dy, deadlockGhost: dg };
+        }
+      }
+      return out;
     }
     return null;
   }
@@ -1918,7 +1743,6 @@
     const segA = tl[segIdx];
     const segB = tl[segIdx + 1];
     if (String(segA.phase || '') !== 'Pushback') return pose;
-    if (String(segB.phase || '') !== 'Pushback') return pose;
     let sdx = segB.x - segA.x;
     let sdy = segB.y - segA.y;
     let sl = Math.hypot(sdx, sdy);
@@ -1951,13 +1775,6 @@
   function getFlightPoseAtTimeForDraw(flight, tSec) {
     let t = Number(tSec);
     if (!isFinite(t)) return null;
-    if (isFlightAirsideCycleCompleteAtSimTime(flight, t)) {
-      if (flight) {
-        flight.__parkedStationaryPoseCache = undefined;
-        flight.__parkedSilBmpCache = undefined;
-      }
-      return null;
-    }
     const trWin = compactPlaybackTrackStartEnd(compactPlaybackTrackForFlight(flight));
     const tl = flight && flight.timeline;
     const t0 = trWin ? trWin.t0 : (tl && tl.length ? tl[0].t : NaN);
@@ -1965,19 +1782,6 @@
     if (!isFinite(t0) || !isFinite(t1)) return null;
     if (t + 1e-9 < t0) return null;
     if (t > t1) t = t1;
-    const parkedCtx = getParkedOnBlockStationaryPoseCacheCtx(flight, t);
-    if (parkedCtx) {
-      const cached = flight.__parkedStationaryPoseCache;
-      if (cached && cached.key === parkedCtx.key && cached.pose) {
-        return cached.pose;
-      }
-      let poseP = getFlightPoseAtTime(flight, parkedCtx.anchorT);
-      if (!poseP) return null;
-      poseP = getPushbackReversePoseForDraw(flight, parkedCtx.anchorT, poseP);
-      poseP = applyParkedStandHeadingToPoseIfNeeded(flight, parkedCtx.anchorT, poseP);
-      flight.__parkedStationaryPoseCache = { key: parkedCtx.key, pose: poseP };
-      return poseP;
-    }
     let pose = getFlightPoseAtTime(flight, t);
     if (!pose) return null;
     pose = getPushbackReversePoseForDraw(flight, t, pose);
@@ -2029,12 +1833,7 @@
   function simFlightPhaseAtTime(f, tSec, pose) {
     if (pose && pose.phase != null) return String(pose.phase || '');
     const seg = typeof flightTimelineSegmentAtSimTime === 'function' ? flightTimelineSegmentAtSimTime(f, tSec) : null;
-    if (!seg || !seg.a) return '';
-    const pa = seg.a.phase != null ? String(seg.a.phase || '') : '';
-    const pb = seg.b && seg.b.phase != null ? String(seg.b.phase || '') : pa;
-    if (pa === 'Pushback' && pb === 'Pushback') return 'Pushback';
-    if (pa === 'Pushback' && pb && pb !== 'Pushback') return pb;
-    return pa || pb || '';
+    return seg && seg.a && seg.a.phase != null ? String(seg.a.phase || '') : '';
   }
   function isFlightParkedAtSimTime(f, tSec) {
     const m = f && f.timeline_meta;
@@ -2073,39 +1872,24 @@
     return null;
   }
   /**
-   * Formerly rotated nose to stand layout axis while on-block stationary; kept as a no-op so heading
-   * comes only from timeline/pose logic (no velocity- or dwell-based direction overrides).
+   * On-block dwell (EIBT–EOBT) with no motion: align nose opposite stand layout axis (+180°) so parked
+   * silhouette matches nose-out / drawing convention vs anchor→connection geometry.
    */
   function applyParkedStandHeadingToPoseIfNeeded(flight, tSec, pose) {
-    return pose;
-  }
-  /** EIBT–EOBT on-block stationary: pose unchanged for the dwell; skip repeat getFlightPoseAtTime sampling. */
-  function getParkedOnBlockStationaryPoseCacheCtx(flight, tSec) {
-    const t = Number(tSec);
-    if (!flight || !isFinite(t)) return null;
-    if (!isFlightParkedAtSimTime(flight, t)) return null;
-    if (typeof isFlightTimelineStationaryAtSimTime !== 'function' || !isFlightTimelineStationaryAtSimTime(flight, t)) return null;
-    const m = flight.timeline_meta;
-    if (!m) return null;
-    const eibtList = Array.isArray(m.eibtSecList) ? m.eibtSecList : (typeof m.eibtSec === 'number' ? [m.eibtSec] : []);
-    const eobtList = Array.isArray(m.eobtSecList) ? m.eobtSecList : (typeof m.eobtSec === 'number' ? [m.eobtSec] : []);
-    const nInt = Math.min(eibtList.length, eobtList.length);
-    for (let i = 0; i < nInt; i++) {
-      const a = Number(eibtList[i]), b = Number(eobtList[i]);
-      if (!(isFinite(a) && isFinite(b) && t >= a - 1e-3 && t <= b + 1e-3)) continue;
-      const sid = typeof standIdForParkedApronInterval === 'function' ? standIdForParkedApronInterval(flight, t) : '';
-      let trTag = '|0|||';
-      const cpt = typeof compactPlaybackTrackForFlight === 'function' ? compactPlaybackTrackForFlight(flight) : null;
-      if (cpt && Array.isArray(cpt.t) && cpt.t.length) {
-        trTag = '|cp|' + cpt.t.length + '|' + cpt.t[0] + '|' + cpt.t[cpt.t.length - 1];
-      } else if (flight.timeline && flight.timeline.length) {
-        const tl0 = flight.timeline[0], tlZ = flight.timeline[flight.timeline.length - 1];
-        trTag = '|tl|' + flight.timeline.length + '|' + tl0.t + '|' + tlZ.t;
-      }
-      const key = String(flight.id) + '|' + String(sid || '') + '|' + i + '|' + a + '|' + b + trTag;
-      return { key: key, anchorT: a };
-    }
-    return null;
+    if (!pose || !flight) return pose;
+    if (pose.deadlockGhost === true) return pose;
+    if (!isFlightParkedAtSimTime(flight, tSec)) return pose;
+    if (!isFlightTimelineStationaryAtSimTime(flight, tSec)) return pose;
+    const sid = standIdForParkedApronInterval(flight, tSec);
+    if (!sid || typeof findStandById !== 'function') return pose;
+    const stand = findStandById(sid);
+    if (!stand) return pose;
+    const id = String(stand.id || '');
+    const isPbb = (state.pbbStands || []).some(function(s) { return s && String(s.id) === id; });
+    const ang = isPbb ? getPBBStandAngle(stand) : getRemoteStandAngleRad(stand);
+    if (!isFinite(ang)) return pose;
+    const dx = -Math.cos(ang), dy = -Math.sin(ang);
+    return { x: pose.x, y: pose.y, dx: dx, dy: dy, deadlockGhost: !!pose.deadlockGhost };
   }
   function isSecondOrLaterArrTaxiAtTime(f, tSec) {
     const tl = f && Array.isArray(f.timeline) ? f.timeline : null;
@@ -2737,3 +2521,206 @@
     if (!vs) return;
     const tbody = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"] tbody');
     if (!tbody) return;
+    const flightsSorted = vs.flightsSorted;
+    const retStatsAll = vs.retStatsAll;
+    const total = flightsSorted.length;
+    const rowH = vs.rowH;
+    const overscan = vs.overscan;
+    const scrollTop = listEl.scrollTop || 0;
+    const vh = listEl.clientHeight || 418;
+    const start = Math.max(0, Math.floor(scrollTop / rowH) - overscan);
+    const rowCount = Math.ceil(vh / rowH) + overscan * 2 + 2;
+    const end = Math.min(total, start + rowCount);
+    const topPad = start * rowH;
+    const botPad = Math.max(0, (total - end) * rowH);
+    const parts = [];
+    const colCount = flightScheduleTableColCount(vs.apronK || flightScheduleColumnK());
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + topPad + 'px\"><td colspan=\"' + colCount + '\"></td></tr>');
+    for (let i = start; i < end; i++) {
+      parts.push(_buildFlightListRowHtml(flightsSorted[i], retStatsAll, vs.apronK));
+    }
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"' + colCount + '\"></td></tr>');
+    tbody.innerHTML = parts.join('');
+    _flightListWireEvents(listEl, state);
+    _flightListApplyScheduleSelectionHighlightDom(listEl, false);
+  }
+  function _flightListTeardownVirtual(listEl) {
+    listEl._flightVirtState = null;
+  }
+  function _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow, apronK) {
+    const prevScroll = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]') ? (listEl.scrollTop || 0) : 0;
+    listEl._flightVirtState = {
+      flightsSorted: flightsSorted,
+      retStatsAll: retStatsAll,
+      rowH: DOM_OPT_FLIGHT_VIRT_ROW_H,
+      overscan: DOM_OPT_FLIGHT_VIRT_OVERSCAN,
+      apronK: apronK,
+      raf: null
+    };
+    listEl.innerHTML = headerRow + '</tbody></table>';
+    const tbl = listEl.querySelector('.flight-schedule-table');
+    if (tbl) tbl.setAttribute('data-virtual-table', '1');
+    _flightListPaintVirtualSlice(listEl);
+    if (prevScroll > 0) listEl.scrollTop = prevScroll;
+    if (!listEl._flightVirtScrollBound) {
+      listEl._flightVirtScrollBound = true;
+      listEl.addEventListener('scroll', function() {
+        const vs = listEl._flightVirtState;
+        if (!vs || !listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]')) return;
+        if (vs.raf) cancelAnimationFrame(vs.raf);
+        vs.raf = requestAnimationFrame(function() {
+          vs.raf = null;
+          _flightListPaintVirtualSlice(listEl);
+        });
+      });
+    }
+  }
+
+  function bumpVttArrCacheRev() {
+    state.vttArrCacheRev = (state.vttArrCacheRev | 0) + 1;
+    bumpRwySepSnapshotStaleGen();
+  }
+  function getBaseVttArrMinutes(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  function getArrRotMinutes(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  function getBaseVttDepMinutes(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  
+  function getBaseVttDepMinutesToLineup(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  
+  function getDepBlockOutMin(f) {
+    const taxi = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
+    const rollBundleSec = (typeof computeDepRollAndLineupOnlySec === 'function')
+      ? computeDepRollAndLineupOnlySec(f)
+      : (DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2));
+    return taxi + rollBundleSec / 60;
+  }
+  
+  function getNormalizedStandDwellBounds(f) {
+    let dwell = f.dwellMin != null ? f.dwellMin : 0;
+    let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+    dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+    minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+    if (minDwell > dwell) minDwell = dwell;
+    return { dwell, minDwell };
+  }
+
+  /**
+   * Apron Gantt SIBT handle: if dwell can shrink (dwell > minDwell), fix SOBT at drag anchor and resize dwell;
+   * EIBT shifts by the same Δ as SIBT. If already at min dwell, translate the S block and nudge EOBT/ETOT by Δ.
+   */
+  function _ganttApplySibtHandleSnappedMinutes(f, mSnapped, dragCtx) {
+    if (!f || !dragCtx || flightBlockedLikeNoWay(f)) return false;
+    const mClamped = Math.max(0, Number(mSnapped));
+    if (!isFinite(mClamped)) return false;
+    const anchor = dragCtx.anchorSobt;
+    const startS = dragCtx.startSibt;
+    const minD = dragCtx.minDwell0;
+    const d0 = dragCtx.dwell0;
+    if (!(typeof anchor === 'number' && isFinite(anchor)) || !(typeof startS === 'number' && isFinite(startS))) return false;
+    const atMinDwell = !(d0 > minD + 1e-9);
+    if (atMinDwell) {
+      if (typeof applyScheduledGateTimingFromSField === 'function') applyScheduledGateTimingFromSField(f, 'sibt', mClamped);
+      const ds = mClamped - startS;
+      if (dragCtx.startEobt != null && isFinite(dragCtx.startEobt)) f.eobtMin = dragCtx.startEobt + ds;
+      if (dragCtx.startEtot != null && isFinite(dragCtx.startEtot)) f.etotMin = dragCtx.startEtot + ds;
+      return true;
+    }
+    let newDwell = anchor - mClamped;
+    let sibtU = mClamped;
+    if (newDwell < minD) {
+      newDwell = minD;
+      sibtU = anchor - minD;
+    }
+    f.timeMin = sibtU;
+    f.sibtMin = sibtU;
+    f.sldtMin = scheduledSldtFromSibtMinutes(f, sibtU);
+    f.sobtMin = anchor;
+    f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, newDwell);
+    if (f.minDwellMin != null) {
+      f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
+    }
+    f.stotMin = scheduledStotFromSobtMinutes(f, anchor);
+    const deibt = sibtU - startS;
+    if (dragCtx.startEibt != null && isFinite(dragCtx.startEibt)) f.eibtMin = dragCtx.startEibt + deibt;
+    return true;
+  }
+
+  function applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotRunwayCandidateMin) {
+    if (!f) return;
+    const eibt = eibtMin != null && isFinite(eibtMin) ? eibtMin : 0;
+    const block = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+    const { dwell, minDwell } = getNormalizedStandDwellBounds(f);
+    const low = eibt + minDwell;
+    const high = eibt + dwell;
+    const sobtPref = (f.sobtMin != null)
+      ? f.sobtMin
+      : (f.sibtMin != null
+        ? f.sibtMin + dwell
+        : (f.timeMin != null ? f.timeMin + dwell : low));
+    const eobt = Math.min(Math.max(sobtPref, low), high);
+    const etotDraft = eobt + block;
+    let etot = etotDraft;
+    if (etotRunwayCandidateMin != null && isFinite(etotRunwayCandidateMin)) {
+      etot = Math.max(etotRunwayCandidateMin, etotDraft);
+    }
+    f.eobtMin = eobt;
+    f.etotMin = etot;
+    f.depTaxiDelayMin = Math.max(0, etot - etotDraft);
+  }
+
+  function pinEarliestEldtToSldtPerRunway(flights) {
+    void flights;
+  }
+
+  var __schedRetStatsBatchActive = false;
+  var __schedRetStatsCached = null;
+  var __schedRetExitDistSig = '';
+  var __schedRetExitDistMemo = null;
+  function scheduleRetExitDistLayoutSig() {
+    const tws = state.taxiways || [];
+    const parts = [];
+    for (let i = 0; i < tws.length; i++) {
+      const t = tws[i];
+      if (!t || (t.pathType !== 'runway' && t.pathType !== 'runway_exit')) continue;
+      let line = String(t.id) + '\x1e' + String(t.pathType) + '\x1e' + JSON.stringify(t.vertices || []);
+      if (t.pathType === 'runway' && typeof getTaxiwayDirection === 'function') {
+        line += '\x1e' + String(getTaxiwayDirection(t));
+      }
+      if (t.pathType === 'runway_exit') {
+        line += '\x1e' + JSON.stringify(t.allowedRwDirections || []);
+        if (typeof getTaxiwayDirection === 'function') {
+          line += '\x1e' + String(getTaxiwayDirection(t));
+        }
+      }
+      parts.push(line);
+    }
+    parts.sort();
+    return parts.join('\x1f') + '\x1e' + 'arrivalRetPathEdgeF1V1';
+  }
+  function bumpScheduleRetExitDistCache() {
+    __schedRetExitDistSig = '';
+    __schedRetExitDistMemo = null;
+  }
+  function beginScheduleRetStatsBatch() {
+    __schedRetStatsBatchActive = true;
+    __schedRetStatsCached = null;
+  }
+  function endScheduleRetStatsBatch() {
+    __schedRetStatsBatchActive = false;
+    if (__schedRetStatsCached != null) {
+      const sig = scheduleRetExitDistLayoutSig();
+      __schedRetExitDistSig = sig;
+      __schedRetExitDistMemo = __schedRetStatsCached;
+    }
+    __schedRetStatsCached = null;

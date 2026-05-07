@@ -1,16 +1,3 @@
-    }).join('||');
-  }
-  function stripPathGraphCacheJunctionsNearTaxiwayWorld(tw) {
-    const g = state.pathGraphCache;
-    if (!g || g.__junctionStale || !tw) return;
-    const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : null;
-    if (!pts || pts.length < 2) return;
-    const mergeR = (typeof PATH_JUNCTION_MERGE_RADIUS_PX === 'number' && isFinite(PATH_JUNCTION_MERGE_RADIUS_PX)) ? PATH_JUNCTION_MERGE_RADIUS_PX : 8;
-    const tol = Math.max(mergeR * 2.2, 12);
-    const tol2 = tol * tol;
-    function distPointToSegSq(p, a, b) {
-      const pr = projectOnSegment(a, b, p);
-      const dpx = p[0] - pr.p[0], dpy = p[1] - pr.p[1];
       return dpx * dpx + dpy * dpy;
     }
     function pointNearDeletedTw(p) {
@@ -120,12 +107,7 @@
     if (dot) {
       dot.classList.remove('fresh');
       dot.classList.add('stale');
-      dot.setAttribute('title', '레이아웃/객체 변경됨 — Layout Update를 눌러 경로 그래프·뷰를 동기화하세요');
-    }
-    const layoutUpdBtn = document.getElementById('btnDesignerPageUpdate');
-    if (layoutUpdBtn) {
-      layoutUpdBtn.classList.add('layout-update-stale');
-      layoutUpdBtn.classList.remove('layout-update-fresh');
+      dot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
     }
     if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
   }
@@ -135,19 +117,9 @@
     if (dot) {
       dot.classList.remove('stale');
       dot.classList.add('fresh');
-      dot.setAttribute('title', 'Layout Update 기준으로 경로·뷰가 최신입니다');
-    }
-    const layoutUpdBtn = document.getElementById('btnDesignerPageUpdate');
-    if (layoutUpdBtn) {
-      layoutUpdBtn.classList.remove('layout-update-stale');
-      layoutUpdBtn.classList.add('layout-update-fresh');
+      dot.setAttribute('title', 'Update 기준으로 경로·뷰가 최신입니다');
     }
     if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
-  }
-  /** Any Layout tab (settings pane) field commit: Pro Sim + path graph need refresh; Layout Update goes stale (red). */
-  function markLayoutPanelFieldDirty() {
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    if (typeof markDesignerPageUpdateStale === 'function') markDesignerPageUpdateStale();
   }
   /** English multi-line (≤5 aircraft) or summary (6+) for arrival RET failure dock banner. */
   function formatArrRetFailedBannerEnglish(regs) {
@@ -358,3 +330,31 @@
           seen.add(rg);
           uniq.push(rg);
         }
+      }
+      if (uniq.length >= 2) {
+        uniq.sort();
+        lines.push(uniq.join(', ') + ' Overlapped');
+      }
+    });
+    lines.sort();
+    return lines.join('\n');
+  }
+  function syncProSimButtonFromDesignerPageState() {
+    const btn = document.getElementById('btnGlobalUpdate');
+    const dot = document.getElementById('globalUpdateSyncDot');
+    const playDot = document.getElementById('playbackFreshSyncDot');
+    const ban = document.getElementById('arrRetFailedBanner');
+    const banT = document.getElementById('arrRetFailedBannerText');
+    const overlapBan = document.getElementById('standWindowOverlapBanner');
+    const overlapBanT = document.getElementById('standWindowOverlapBannerText');
+    const failedRegs = getArrRetFailedRegsForProSimUi();
+    const hasRetFail = failedRegs.length > 0;
+    const apronIssues = getApronDuplicatedRegsForProSimUi();
+    const hasApronDuplicated = apronIssues.length > 0;
+    const standOverlapIssues = getApronStandWindowOverlapRegsForProSimUi();
+    const hasStandWindowOverlap = standOverlapIssues.length > 0;
+    const standOverlapBannerBody = hasStandWindowOverlap ? formatStandWindowOverlapBannerDetail() : '';
+    if (ban && banT) {
+      if (hasRetFail) {
+        ban.hidden = false;
+        ban.setAttribute('aria-hidden', 'false');
