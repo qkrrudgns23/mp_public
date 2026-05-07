@@ -1193,6 +1193,8 @@
     simWindowStartSec: 0,
     simWindowEndSec: 0,
     _simScheduleAxisKey: '',
+    /** Set by applyLayoutObject when layout JSON has designerPersist sim window; consumed once in recomputeSimDuration. */
+    _pendingPersistSimWindow: null,
     /** ``true``: 재생 타임 슬라이더 미세 드래그 모드에서 시각 변경을 대략 일반 스크럽 대비 SIM_TIME_SLIDER_FINE_DIVISOR 배 더 미세하게. 썹은 빨간색 표시. */
     simTimeSliderFineMode: false,
     simPlaybackEndCapSec: null,
@@ -3100,6 +3102,15 @@
     }
     if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
       state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
+    }
+    state._pendingPersistSimWindow = null;
+    if (dp && dp.v === 1
+        && dp.simWindowStartSec != null && dp.simWindowEndSec != null
+        && isFinite(Number(dp.simWindowStartSec)) && isFinite(Number(dp.simWindowEndSec))) {
+      state._pendingPersistSimWindow = {
+        lo: Number(dp.simWindowStartSec),
+        hi: Number(dp.simWindowEndSec),
+      };
     }
     applyDesignerPersistMapTypeAfterLoad(dp);
     syncMapTypePopoverFromState();
@@ -5783,6 +5794,8 @@
         simPlaybackEndCapSec: (state.simPlaybackEndCapSec != null && isFinite(Number(state.simPlaybackEndCapSec)))
           ? Number(state.simPlaybackEndCapSec)
           : null,
+        simWindowStartSec: isFinite(Number(state.simWindowStartSec)) ? Number(state.simWindowStartSec) : null,
+        simWindowEndSec: isFinite(Number(state.simWindowEndSec)) ? Number(state.simWindowEndSec) : null,
         mapTypeMode: (state.mapTypeMode === 'heatmap') ? 'heatmap' : 'normal',
         heatmapTrafficPhases: Object.assign({}, state.heatmapTrafficPhases || {}),
       },
@@ -9555,10 +9568,6 @@
       axisMinSec = Math.max(0, fleet.minSibtM * 60 - SIM_AXIS_SIBT_BEFORE_SEC);
       axisMaxSec = fleet.maxSobtM * 60 + SIM_AXIS_SOBT_AFTER_SEC;
     }
-    const capAbs = state.simPlaybackEndCapSec;
-    if (capAbs != null && isFinite(Number(capAbs))) {
-      axisMaxSec = Math.min(axisMaxSec, Number(capAbs));
-    }
     if (!(axisMaxSec > axisMinSec + 1e-9)) {
       axisMaxSec = axisMinSec + Math.max(SIM_TIME_SLIDER_SNAP_SEC, 60);
     }
@@ -9567,22 +9576,36 @@
     const nFl = (state.flights || []).length;
     const axisKey =
       String(fleet.minSibtM) + '|' + String(fleet.maxSobtM) + '|' + String(nFl);
-    let resetWindow = state._simScheduleAxisKey !== axisKey;
-    state._simScheduleAxisKey = axisKey;
-    if (resetWindow) {
-      state.simWindowStartSec = snapSimTimeSecForSlider(axisMinSec);
-      state.simWindowEndSec = snapSimTimeSecForSlider(axisMaxSec);
+    const pv = state._pendingPersistSimWindow;
+    const usePersist = !!(pv && isFinite(Number(pv.lo)) && isFinite(Number(pv.hi)));
+    if (usePersist) {
+      let wLo = Math.max(axisMinSec, Math.min(axisMaxSec, Number(pv.lo)));
+      let wHi = Math.max(axisMinSec, Math.min(axisMaxSec, Number(pv.hi)));
+      if (wHi < wLo + SIM_TIME_SLIDER_SNAP_SEC * 0.5) {
+        wHi = Math.min(axisMaxSec, wLo + SIM_TIME_SLIDER_SNAP_SEC);
+      }
+      state.simWindowStartSec = snapSimTimeSecForSlider(wLo);
+      state.simWindowEndSec = snapSimTimeSecForSlider(wHi);
+      state._pendingPersistSimWindow = null;
+      state._simScheduleAxisKey = axisKey;
     } else {
-      state.simWindowStartSec = snapSimTimeSecForSlider(
-        Math.max(axisMinSec, Math.min(axisMaxSec, Number(state.simWindowStartSec)))
-      );
-      state.simWindowEndSec = snapSimTimeSecForSlider(
-        Math.max(axisMinSec, Math.min(axisMaxSec, Number(state.simWindowEndSec)))
-      );
-      if (state.simWindowEndSec < state.simWindowStartSec + SIM_TIME_SLIDER_SNAP_SEC * 0.5) {
-        state.simWindowEndSec = snapSimTimeSecForSlider(
-          Math.min(axisMaxSec, state.simWindowStartSec + SIM_TIME_SLIDER_SNAP_SEC)
+      let resetWindow = state._simScheduleAxisKey !== axisKey;
+      state._simScheduleAxisKey = axisKey;
+      if (resetWindow) {
+        state.simWindowStartSec = snapSimTimeSecForSlider(axisMinSec);
+        state.simWindowEndSec = snapSimTimeSecForSlider(axisMaxSec);
+      } else {
+        state.simWindowStartSec = snapSimTimeSecForSlider(
+          Math.max(axisMinSec, Math.min(axisMaxSec, Number(state.simWindowStartSec)))
         );
+        state.simWindowEndSec = snapSimTimeSecForSlider(
+          Math.max(axisMinSec, Math.min(axisMaxSec, Number(state.simWindowEndSec)))
+        );
+        if (state.simWindowEndSec < state.simWindowStartSec + SIM_TIME_SLIDER_SNAP_SEC * 0.5) {
+          state.simWindowEndSec = snapSimTimeSecForSlider(
+            Math.min(axisMaxSec, state.simWindowStartSec + SIM_TIME_SLIDER_SNAP_SEC)
+          );
+        }
       }
     }
     const wh = getSimPlaybackWindowLoHiSec();

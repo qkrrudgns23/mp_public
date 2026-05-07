@@ -1,3 +1,209 @@
+        this.classList.add('selected', 'expanded');
+        if (typeof updateObjectInfo === 'function') updateObjectInfo();
+        if (typeof syncPanelFromState === 'function') syncPanelFromState();
+        if (typeof draw === 'function') draw();
+        if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
+      });
+    });
+  }
+
+
+  function _ganttSaveViewState(ganttEl) {
+    let scrollLeft = 0, scrollTop = 0;
+    const scrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
+    if (scrollCol) {
+      scrollLeft = scrollCol.scrollLeft || 0;
+      scrollTop = scrollCol.scrollTop || 0;
+    }
+    const collapsedTerminals = new Set();
+    let remoteCollapsed = false;
+    const labelCol = ganttEl.querySelector('.alloc-gantt-label-col');
+    if (labelCol) {
+      Array.from(labelCol.children).forEach(function (el) {
+        if (el.classList && el.classList.contains('alloc-terminal-header')) {
+          if (el.getAttribute('data-collapsed') === '1') {
+            let txt = (el.textContent || '').trim().replace(/^[▶▼]\s*/, '');
+            if (txt) collapsedTerminals.add(txt);
+          }
+        }
+        if (el.classList && el.classList.contains('alloc-remote-header')) {
+          if (el.getAttribute('data-collapsed') === '1') remoteCollapsed = true;
+        }
+      });
+    }
+    return { scrollLeft: scrollLeft, scrollTop: scrollTop, collapsedTerminals: collapsedTerminals, remoteCollapsed: remoteCollapsed };
+  }
+
+  function renderFlightGantt(opt) {
+    const skipPathPrep = opt && opt.skipPathPrep;
+    const ganttEl = document.getElementById('allocationGantt');
+    if (!ganttEl) return;
+    const viewState = _ganttSaveViewState(ganttEl);
+    const prevScrollLeft = viewState.scrollLeft;
+    const prevScrollTop = viewState.scrollTop;
+    const prevCollapsedTerminals = viewState.collapsedTerminals;
+    const prevRemoteCollapsed = viewState.remoteCollapsed;
+    if (!state.flights.length) {
+      state.allocGanttWindowStartMin = null;
+      ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
+      const labEmpty = document.getElementById('allocGanttWindowLabel');
+      if (labEmpty) labEmpty.textContent = '';
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+      return;
+    }
+    const flights = state.flights.slice();
+    const stands = allStandsForFlightAssignment();
+    if (!flights.length) {
+      state.allocGanttWindowStartMin = null;
+      ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
+      const labEmpty2 = document.getElementById('allocGanttWindowLabel');
+      if (labEmpty2) labEmpty2.textContent = '';
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+      return;
+    }
+    if (!skipPathPrep) {
+      if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
+    }
+
+    let intervals = [];
+    const intervalFlightIds = new Set();
+    function pushGanttIntervalsFromFlight(f) {
+      if (!f) return;
+      const fid = f.id != null ? String(f.id) : '';
+      const t0 = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
+      const t1 = f.sobtMin != null ? f.sobtMin : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
+      const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, t0 - SCHED_SIBT_MINUS_SLDT_MIN);
+      const stot = f.stotMin != null ? f.stotMin : (t1 + SCHED_STOT_MINUS_SOBT_MIN);
+      const eSer = ganttESeriesMinutesFromTimelineMeta(f);
+      if (Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1 && typeof buildApronStayGanttIntervalsForFlight === 'function') {
+        buildApronStayGanttIntervalsForFlight(f, eSer).forEach(function(it) { intervals.push(it); });
+        if (fid) intervalFlightIds.add(fid);
+        return;
+      }
+      const eibt = eSer.eibt;
+      const eobt = eSer.eobt;
+      const eldt = eSer.eldt;
+      const etot = eSer.etot;
+      const sldtOrig = sldt;
+      const sobtOrig = f.sobtMin != null ? f.sobtMin : t1;
+      const stotOrig = stot;
+      intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig, segmentIdx: 0, segmentCount: 1, segmentStandId: f.standId || null });
+      if (fid) intervalFlightIds.add(fid);
+    }
+    const schedTable = document.querySelector('.flight-schedule-table');
+    const domScheduleOk = schedTable && schedTable.getAttribute('data-virtual-table') !== '1';
+    if (domScheduleOk) {
+      const rows = Array.from(schedTable.querySelectorAll('tbody tr.flight-data-row'));
+      const flightById = new Map();
+      for (let fi = 0; fi < flights.length; fi++) {
+        const ff = flights[fi];
+        if (ff && ff.id != null) flightById.set(String(ff.id), ff);
+      }
+      rows.forEach(row => {
+        const id = row.getAttribute('data-id');
+        if (!id) return;
+        const f = flightById.get(String(id));
+        if (!f) return;
+        const tds = Array.from(row.querySelectorAll('td'));
+        const k = flightScheduleColumnK();
+        const sibtIdx = flightSchedColIndex('sibt', k);
+        const sobtIdx = flightSchedColIndex('sobt', k);
+        const eldtIdx = flightSchedColIndex('eldt', k);
+        const eibtIdx = flightSchedColIndex('eibt', k);
+        const eobtIdx = flightSchedColIndex('eobt', k);
+        const etotIdx = flightSchedColIndex('etot', k);
+        if (tds.length <= etotIdx) return;
+        const getMin = (idx) => {
+          const td = tds[idx];
+          if (!td) return 0;
+          const dm = td.getAttribute('data-sched-min');
+          if (dm != null && String(dm).trim() !== '') {
+            const n = parseFloat(dm);
+            return isFinite(n) ? n : 0;
+          }
+          const txt = (td.textContent || '').trim();
+          if (!txt) return 0;
+          try {
+            return parseTimeToMinutes(txt);
+          } catch (e) {
+            return 0;
+          }
+        };
+        const sibt = getMin(sibtIdx);
+        const sobt = getMin(sobtIdx);
+        const sldt = Math.max(0, sibt - SCHED_SIBT_MINUS_SLDT_MIN);
+        const stot = sobt + SCHED_STOT_MINUS_SOBT_MIN;
+        const eSer = ganttESeriesMinutesFromTimelineMeta(f);
+        const eldt = eSer.eldt != null ? eSer.eldt : getMin(eldtIdx);
+        const eibt = eSer.eibt != null ? eSer.eibt : getMin(eibtIdx);
+        const eobt = eSer.eobt != null ? eSer.eobt : getMin(eobtIdx);
+        const etot = eSer.etot != null ? eSer.etot : getMin(etotIdx);
+        if (Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1 && typeof buildApronStayGanttIntervalsForFlight === 'function') {
+          buildApronStayGanttIntervalsForFlight(f, eSer).forEach(function(it) { intervals.push(it); });
+          intervalFlightIds.add(String(f.id));
+        } else {
+          const t0 = sibt;
+          const t1 = sobt || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
+          const sldtOrig = sldt;
+          const sobtOrig = sobt || t1;
+          const stotOrig = stot;
+          intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig, segmentIdx: 0, segmentCount: 1, segmentStandId: f.standId || null });
+          intervalFlightIds.add(String(f.id));
+        }
+      });
+    }
+    if (intervals.length && intervalFlightIds.size < flights.length) {
+      flights.forEach(function(f) {
+        if (!f || f.id == null || intervalFlightIds.has(String(f.id))) return;
+        pushGanttIntervalsFromFlight(f);
+      });
+    }
+    if (!intervals.length) {
+      flights.forEach(function(f) { pushGanttIntervalsFromFlight(f); });
+    }
+
+    let minS = Infinity;
+    let maxE = -Infinity;
+    intervals.forEach(it => {
+      if (it.sldt < minS) minS = it.sldt;
+      const etot0 = (it.etot != null && isFinite(it.etot)) ? it.etot : it.stot;
+      if (etot0 > maxE) maxE = etot0;
+    });
+    if (minS <= 0 && intervals.length) {
+      const posSldt = intervals.map(function(it) { return it.sldt; }).filter(function(v) { return isFinite(v) && v > 1e-6; });
+      if (posSldt.length) minS = Math.min.apply(null, posSldt);
+    }
+    if (!isFinite(minS) || !isFinite(maxE)) {
+      ganttEl.innerHTML = '';
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+      return;
+    }
+    const baseMinT = Math.max(0, minS - GANTT_PAD_MIN);
+    const baseMaxT0 = maxE + GANTT_PAD_MIN;
+    const baseMaxT = (baseMaxT0 <= baseMinT) ? (baseMinT + 60) : baseMaxT0;
+    const baseSpan = baseMaxT - baseMinT;
+    const dataSpan = Math.max(1e-9, baseSpan);
+    const visibleSpan = Math.min(GANTT_VISIBLE_WINDOW_MIN, dataSpan);
+    const maxWinStart = Math.max(baseMinT, baseMaxT - visibleSpan);
+    let winStart = state.allocGanttWindowStartMin;
+    if (winStart == null || !isFinite(winStart)) winStart = baseMinT;
+    const vpPin = state._allocGanttHandleDragViewportPin;
+    if (vpPin && vpPin.active) {
+      let w = vpPin.winStart0;
+      if (w == null || !isFinite(w)) w = winStart;
+      if (w > maxWinStart) w = maxWinStart;
+      if (w + visibleSpan < baseMinT - 1e-6) w = Math.min(maxWinStart, baseMinT);
+      winStart = w;
+    } else {
+      winStart = Math.min(Math.max(winStart, baseMinT), maxWinStart);
+    }
+    state.allocGanttWindowStartMin = winStart;
+    const winEnd = winStart + visibleSpan;
+    state._allocGanttClamp = { baseMinT: baseMinT, baseMaxT: baseMaxT, visibleSpan: visibleSpan };
+    const displaySpan = visibleSpan;
+    const zoomRaw = (state.allocTimeZoom && state.allocTimeZoom > 1) ? state.allocTimeZoom : 1;
+    const innerMinWidthPct = Math.max(100, Math.round(zoomRaw * 100));
+    const zoomLayout = innerMinWidthPct / 100;
     state._allocGanttPlayheadCtx = { winStart: winStart, winEnd: winEnd, displaySpan: displaySpan, zoom: zoomLayout };
 
     const tickPositions = buildTimeAxisTicks(winStart, winEnd, winStart, displaySpan, zoomLayout);
@@ -1461,209 +1667,3 @@
     });
     const hourCounts = Object.create(null);
     function bumpRunwayHour(absMin, kind) {
-      if (absMin == null || !isFinite(absMin)) return;
-      const hk = Math.floor(absMin / 60);
-      if (!hourCounts[hk]) hourCounts[hk] = { arr: 0, dep: 0 };
-      hourCounts[hk][kind] += 1;
-    }
-    rows.forEach(function(r) {
-      if (r.failed) return;
-      if (!r.isDepOnly && r.eldtSched != null) {
-        const am = kpiFlightScheduleAbsMinute(r.flight, r.eldtSched);
-        bumpRunwayHour(am, 'arr');
-      }
-      if (r.isDepOnly) {
-        if (r.etotSched != null) {
-          const am = kpiFlightScheduleAbsMinute(r.flight, r.etotSched);
-          bumpRunwayHour(am, 'dep');
-        }
-      } else if (r.etotSched != null) {
-        const am = kpiFlightScheduleAbsMinute(r.flight, r.etotSched);
-        bumpRunwayHour(am, 'dep');
-      }
-    });
-    const hourKeys = Object.keys(hourCounts).map(function(x) { return parseInt(x, 10); }).filter(function(x) { return isFinite(x); }).sort(function(a, b) { return a - b; });
-    const hourlyRunway = hourKeys.map(function(hk) {
-      const c = hourCounts[hk];
-      const arr = c.arr || 0, dep = c.dep || 0;
-      const absMin0 = hk * 60;
-      const dayOff = Math.floor(absMin0 / 1440);
-      const mod = ((absMin0 % 1440) + 1440) % 1440;
-      const hh = Math.floor(mod / 60);
-      const label = (dayOff > 0 ? ('D+' + String(dayOff) + ' ') : '') + String(hh).padStart(2, '0') + ':00';
-      return { hourKey: hk, label: label, arrivals: arr, departures: dep, total: arr + dep };
-    });
-    const hourlyChart = {
-      labels: hourlyRunway.map(function(h) { return h.label; }),
-      arr: hourlyRunway.map(function(h) { return h.arrivals; }),
-      dep: hourlyRunway.map(function(h) { return h.departures; }),
-      total: hourlyRunway.map(function(h) { return h.total; })
-    };
-    let minAbs = Infinity, maxAbs = -Infinity;
-    let utilMinTotal = 0;
-    rows.forEach(function(r) {
-      if (r.failed) return;
-      const a0 = kpiFlightScheduleAbsMinute(r.flight, r.sibt);
-      const a1 = kpiFlightScheduleAbsMinute(r.flight, r.sobt);
-      if (a0 != null) { minAbs = Math.min(minAbs, a0); maxAbs = Math.max(maxAbs, a0); }
-      if (a1 != null) { minAbs = Math.min(minAbs, a1); maxAbs = Math.max(maxAbs, a1); }
-      if (a0 != null && a1 != null && a1 > a0) utilMinTotal += (a1 - a0);
-    });
-    const windowMin = (isFinite(minAbs) && isFinite(maxAbs) && maxAbs > minAbs) ? (maxAbs - minAbs) : 0;
-    const standN = kpiApronStandCountState();
-    const totalStandMin = standN * windowMin;
-    const apronUtilRatio = (totalStandMin > 1e-6) ? (utilMinTotal / totalStandMin) : null;
-    const okRows = rows.filter(function(r) { return !r.failed; });
-    const arrLegRows = okRows.filter(function(r) { return !r.isDepOnly; });
-    const depLegRows = okRows.filter(function(r) { return r.isDepOnly || r.etotSched != null; });
-    const rotArrAvgSec = kpiAverage(arrLegRows, function(r) { return r.rotSec; });
-    const arrTaxiAvgMin = kpiAverage(arrLegRows, function(r) { return r.arrTaxiSch; });
-    const depTaxiAvgMin = kpiAverage(depLegRows, function(r) { return r.depTaxiSch; });
-    const rotDepAvgSec = kpiAverage(depLegRows, function(r) { return r.depRotSec; });
-    const failedFlights = rows.filter(function(r) { return r.failed; });
-    return {
-      rows: rows,
-      totalFlights: rows.length,
-      failedFlights: failedFlights.length,
-      hourlyChart: hourlyChart,
-      hasHourlyRunway: hourKeys.length > 0,
-      apronStandCount: standN,
-      apronWindowMin: windowMin,
-      apronUtilMin: utilMinTotal,
-      apronUtilRatio: apronUtilRatio,
-      rotArrAvgSec: rotArrAvgSec,
-      arrTaxiAvgMin: arrTaxiAvgMin,
-      depTaxiAvgMin: depTaxiAvgMin,
-      rotDepAvgSec: rotDepAvgSec
-    };
-  }
-
-  function renderKpiDashboard(reasonLabel) {
-    const host = document.getElementById('kpiDashboard');
-    const status = document.getElementById('kpiSnapshotStatus');
-    if (!host) return;
-    kpiDisposeInteractiveCharts();
-    const snapshot = collectKpiSnapshot();
-    if (!snapshot.totalFlights) {
-      host.innerHTML = '<div class="kpi-empty-state">Flight schedule에 항공편이 없습니다. 스케줄을 추가하거나 불러온 뒤 KPI를 확인하세요.</div>';
-      if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · Flight schedule · ' + kpiFormatSnapshotTime();
-      return;
-    }
-    const apronMeta = 'Stands ' + kpiFormatCount(snapshot.apronStandCount) +
-      ' · Window ' + (snapshot.apronWindowMin > 0 ? (snapshot.apronWindowMin / 60).toFixed(1) + ' h span' : '—') +
-      ' · Utilization Σ(SOBT−SIBT) ' + kpiFormatMinutesValue(snapshot.apronUtilMin) + ' min (flight schedule gate block)';
-    const summaryCards = [
-      kpiBuildSummaryCard('Total flights', kpiFormatCount(snapshot.totalFlights), 'accent'),
-      kpiBuildSummaryCard('Schedule block / path issues', kpiFormatCount(snapshot.failedFlights), snapshot.failedFlights > 0 ? 'danger' : 'success')
-    ].join('');
-    const panelHtml = [
-      kpiBuildPanel('Flight schedule · movement (averages)', 'ROT(Arr/Dep) · VTT(Arr/Dep) from schedule', [
-        kpiBuildMetricRow('Avg arrival ROT', kpiFormatOptionalSecondsAvg(snapshot.rotArrAvgSec), 'ROT(Arr) · flight schedule avg · sec'),
-        kpiBuildMetricRow('Avg Arrival VTT', kpiFormatOptionalMinutesAvg(snapshot.arrTaxiAvgMin), 'VTT(Arr) · flight schedule avg · min'),
-        kpiBuildMetricRow('Avg Departure VTT', kpiFormatOptionalMinutesAvg(snapshot.depTaxiAvgMin), 'Dep_taxi after pushback finished · VTT_DEP_SEC · min'),
-        kpiBuildMetricRow('Avg Departure ROT', kpiFormatOptionalSecondsAvg(snapshot.rotDepAvgSec), 'DEP_ROT_SEC (ETOT - E_LINEUP) · else tier depRotMin · avg sec')
-      ]),
-      kpiBuildPanel('Apron utilization', 'ratio = utilization / (stands × window)', [
-        kpiBuildMetricRow('Utilization ratio', kpiFormatRatioPercent(snapshot.apronUtilRatio), apronMeta)
-      ])
-    ].join('');
-    host.innerHTML = '' +
-      '<div class="kpi-summary-grid">' + summaryCards + '</div>' +
-      '<div class="kpi-panel-grid">' + panelHtml + '</div>' +
-      '<div class="kpi-chart-grid">' +
-        '<div class="kpi-chart-card kpi-chart-card-primary kpi-chart-card--runway-only">' +
-          '<div class="kpi-chart-head">' +
-            '<div>' +
-              '<div class="kpi-chart-title">Hourly runway traffic</div>' +
-              '<div class="kpi-chart-subtitle">Flight schedule · 정각 시각(시간)별 SLDT 착륙·STOT 출발 건수 · line: total / arrivals / departures</div>' +
-            '</div>' +
-            '<div class="kpi-chart-legend">' +
-              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#c4b5fd;"></span>Total</span>' +
-              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#38bdf8;"></span>Arrivals</span>' +
-              '<span class="kpi-legend-item"><span class="kpi-legend-swatch" style="background:#fb923c;"></span>Departures</span>' +
-            '</div>' +
-          '</div>' +
-          kpiRunwayChartPlaceholder(snapshot.hasHourlyRunway) +
-        '</div>' +
-      '</div>';
-    if (status) status.textContent = (reasonLabel || 'Snapshot') + ' · Flight schedule · ' + kpiFormatSnapshotTime();
-    kpiMountRunwayHourlyChart(snapshot.hourlyChart);
-  }
-
-  function scheduledSldtFromSibtMinutes(f, sibtMin) {
-    const sibt = sibtMin != null && isFinite(sibtMin) ? sibtMin : 0;
-    const vttArrMin = getBaseVttArrMinutes(f);
-    const rotArrMin = getArrRotMinutes(f);
-    return Math.max(0, sibt - vttArrMin - rotArrMin);
-  }
-  function scheduledStotFromSobtMinutes(f, sobtMin) {
-    const sobt = sobtMin != null && isFinite(sobtMin) ? sobtMin : 0;
-    const depRotSec = (typeof computeDepRotSecondsForFlight === 'function')
-      ? computeDepRotSecondsForFlight(f)
-      : Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
-    const rotDepMin = depRotSec / 60;
-    const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-    const rollBundleSecFallback = DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2);
-    const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function')
-      ? getBaseVttDepMinutesToLineup(f)
-      : Math.max(0, depBlockOutMin - ((typeof computeDepRollAndLineupOnlySec === 'function') ? computeDepRollAndLineupOnlySec(f) : rollBundleSecFallback) / 60);
-    const sttDepMin = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
-    return sobt + rotDepMin + sttDepMin;
-  }
-  function scheduledSobtFromStotMinutes(f, stotMin) {
-    const stot = stotMin != null && isFinite(stotMin) ? stotMin : 0;
-    const depRotSec = (typeof computeDepRotSecondsForFlight === 'function')
-      ? computeDepRotSecondsForFlight(f)
-      : Math.max(0, Number(SCHED_DEP_ROT_MIN) || 2) * 60;
-    const rotDepMin = depRotSec / 60;
-    const depBlockOutMin = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
-    const rollBundleSecFallback = DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2);
-    const vttDepMinLineup = (typeof getBaseVttDepMinutesToLineup === 'function')
-      ? getBaseVttDepMinutesToLineup(f)
-      : Math.max(0, depBlockOutMin - ((typeof computeDepRollAndLineupOnlySec === 'function') ? computeDepRollAndLineupOnlySec(f) : rollBundleSecFallback) / 60);
-    const sttDepMin = (typeof getBaseVttDepMinutesToHoldingSlot === 'function') ? getBaseVttDepMinutesToHoldingSlot(f) : vttDepMinLineup;
-    return Math.max(0, stot - rotDepMin - sttDepMin);
-  }
-  function applyScheduledGateTimingFromSField(f, field, minutes) {
-    if (!f || flightBlockedLikeNoWay(f)) return false;
-    const m = Number(minutes);
-    if (!isFinite(m) || m < 0) return false;
-    let dwell = f.dwellMin != null ? f.dwellMin : 0;
-    let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
-    dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
-    minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
-    if (minDwell > dwell) minDwell = dwell;
-    if (field === 'sldt') {
-      const vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
-      f.sldtMin = m;
-      const sibt = Math.max(0, m + vttArrMin + rotArrMin);
-      f.timeMin = sibt;
-      f.sibtMin = sibt;
-      f.sobtMin = sibt + dwell;
-      f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
-      f.dwellMin = dwell;
-      f.minDwellMin = minDwell;
-      return true;
-    }
-    if (field === 'sibt') {
-      f.timeMin = m;
-      f.sibtMin = m;
-      f.sldtMin = scheduledSldtFromSibtMinutes(f, m);
-      f.sobtMin = m + dwell;
-      f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
-      f.dwellMin = dwell;
-      f.minDwellMin = minDwell;
-      return true;
-    }
-    if (field === 'sobt') {
-      const sibt = f.timeMin != null ? f.timeMin : 0;
-      let sobtAdj = Math.max(m, sibt + minDwell);
-      f.sobtMin = sobtAdj;
-      f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, sobtAdj - sibt);
-      if (f.minDwellMin != null) {
-        f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
-      }
-      f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
-      return true;
-    }

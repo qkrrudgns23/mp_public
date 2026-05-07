@@ -1,3 +1,31 @@
+        out.push(o);
+      });
+      (obj.runwayTaxiways || []).forEach(function(tw) {
+        const o = Object.assign({}, tw);
+        o.pathType = 'runway_exit';
+        delete o.rwySepConfig;
+        normalizeTaxiwayVerticesFromPersistLoad(o);
+        out.push(o);
+      });
+      (obj.taxiways || []).forEach(function(tw) {
+        const o = Object.assign({}, tw);
+        if (o.pathType !== 'runway' && o.pathType !== 'runway_exit' && o.pathType !== 'apron_taxiway' && o.pathType !== 'general_queue_taxiway') o.pathType = 'taxiway';
+        if (o.pathType !== 'runway') delete o.rwySepConfig;
+        normalizeTaxiwayVerticesFromPersistLoad(o);
+        out.push(o);
+      });
+      out.forEach(normalizeTaxiwayWidthInPlace);
+      out.forEach(normalizePathPavementInPlace);
+      return out;
+    }
+    if (Array.isArray(obj.taxiways)) {
+      const sliced = obj.taxiways.slice();
+      sliced.forEach(function(tw) {
+        normalizeTaxiwayVerticesFromPersistLoad(tw);
+        normalizeTaxiwayWidthInPlace(tw);
+        normalizePathPavementInPlace(tw);
+      });
+      return sliced;
     }
     return [];
   }
@@ -571,6 +599,15 @@
     if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
       state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
     }
+    state._pendingPersistSimWindow = null;
+    if (dp && dp.v === 1
+        && dp.simWindowStartSec != null && dp.simWindowEndSec != null
+        && isFinite(Number(dp.simWindowStartSec)) && isFinite(Number(dp.simWindowEndSec))) {
+      state._pendingPersistSimWindow = {
+        lo: Number(dp.simWindowStartSec),
+        hi: Number(dp.simWindowEndSec),
+      };
+    }
     applyDesignerPersistMapTypeAfterLoad(dp);
     syncMapTypePopoverFromState();
     if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
@@ -593,14 +630,8 @@
       if (!didAutoPathGraphSync) {
         if (dp.designerPageUpdateFresh === true) {
           if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
-        } else {
-          state.designerPageUpdateFresh = false;
-          const ddot = document.getElementById('designerPageUpdateSyncDot');
-          if (ddot) {
-            ddot.classList.remove('fresh');
-            ddot.classList.add('stale');
-            ddot.setAttribute('title', '레이아웃/객체 변경됨 — Update를 눌러 경로 그래프·뷰를 동기화하세요');
-          }
+        } else if (typeof markDesignerPageUpdateStale === 'function') {
+          markDesignerPageUpdateStale();
         }
       }
       if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
@@ -642,34 +673,3 @@
     const eobtS = secOpt('EOBT');
     const etotS = secOpt('ETOT');
     if (isFinite(eldtS)) f.eldtMin = eldtS / 60;
-    else delete f.eldtMin;
-    if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
-    else delete f.eibtMin;
-    if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
-    else delete f.eobtMin;
-    if (isFinite(etotS)) f.etotMin = etotS / 60;
-    else delete f.etotMin;
-    function secListToMinList(key) {
-      const raw = srec[key];
-      if (!Array.isArray(raw)) return null;
-      const out = raw.map(function(v) {
-        const n = Number(v);
-        return isFinite(n) ? n / 60 : null;
-      });
-      return out.length ? out : null;
-    }
-    const eibtList = secListToMinList('EIBT_LIST');
-    const eobtList = secListToMinList('EOBT_LIST');
-    const epushList = secListToMinList('E_PUSH_FINISHED_LIST');
-    if (eibtList) f.eibtMinList = eibtList;
-    else delete f.eibtMinList;
-    if (eobtList) f.eobtMinList = eobtList;
-    else delete f.eobtMinList;
-    if (epushList) f.ePushFinishedMinList = epushList;
-    else delete f.ePushFinishedMinList;
-    const rotS = secOpt('ARR_ROT_SEC');
-    if (isFinite(rotS)) f.arrRotSec = rotS;
-    else f.arrRotSec = null;
-    const vttArrS = secOpt('VTT_ARR_SEC');
-    if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
-    else delete f.proSimVttArrSec;

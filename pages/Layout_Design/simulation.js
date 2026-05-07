@@ -1,3 +1,68 @@
+          const [x2, y2] = cellToPixel(tw.vertices[j + 1].col, tw.vertices[j + 1].row);
+          const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+          if (near && dist2(near, click) < pathCenterlineHitD2) return { type: 'taxiway', id: tw.id, obj: tw };
+        }
+      }
+    }
+    if (layoutMarkersVisible()) {
+      const arHit = hitTestLayoutMarker(wx, wy, { onlyKind: 'area' });
+      if (arHit) return arHit;
+    }
+    return null;
+  }
+
+  function hitTestSimFlightAtWorld(wx, wy) {
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed() || !state.flights || !state.flights.length) return null;
+    const tSec = state.simTimeSec;
+    let best = null;
+    let bestD2 = Infinity;
+    const flights = state.flights;
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f || flightBlockedLikeNoWay(f)) continue;
+      const pose = getFlightPoseAtTimeForDraw(f, tSec);
+      if (!pose) continue;
+      const dx = pose.x - wx, dy = pose.y - wy;
+      const d2 = dx * dx + dy * dy;
+      const poly = simFlightSilhouetteWorldPolygon(f, pose, tSec);
+      if (poly.length >= 3 && pointInPolygonXY([wx, wy], poly) && d2 < bestD2) {
+        bestD2 = d2;
+        best = f;
+      }
+    }
+    return best;
+  }
+
+  function hitTestTerminalVertex(wx, wy) {
+    const maxD2 = (CELL_SIZE * HIT_TERM_VTX_CF) ** 2;
+    const cands = [];
+    state.terminals.forEach(t => {
+      t.vertices.forEach((v, idx) => {
+        cands.push({ terminalId: t.id, index: idx, v });
+      });
+    });
+    const best = findNearestItem(cands, c => cellToPixel(c.v.col, c.v.row), wx, wy, maxD2);
+    return best ? { terminalId: best.terminalId, index: best.index } : null;
+  }
+
+  function hitTestTaxiwayVertex(wx, wy) {
+    if (!state.selectedObject || state.selectedObject.type !== 'taxiway') return null;
+    const tw = state.selectedObject.obj;
+    if (!tw || !tw.vertices || tw.vertices.length === 0) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    tw.vertices.forEach((v, idx) => {
+      const [vx, vy] = cellToPixel(v.col, v.row);
+      const d2 = dist2([vx, vy], click);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = { taxiwayId: tw.id, index: idx };
+      }
+    });
+    return best;
+  }
   function hitTestPbbEditablePoint(wx, wy) {
     if (!state.selectedObject || state.selectedObject.type !== 'pbb') return null;
     const pbb = state.selectedObject.obj;
@@ -1052,68 +1117,3 @@
           delete tw.queueFlow;
         } else if (ptCur === 'runway_exit' || ptCur === 'runway_taxiway') {
           const kindR = String(el('taxiwayPathTypeKind').value || 'normal');
-          tw.queueFlow = kindR === 'queue';
-        }
-      }
-      if (el('taxiwayAvgMoveVelocity')) {
-        var v = Number(el('taxiwayAvgMoveVelocity').value);
-        tw.avgMoveVelocity = (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(1, Math.min(50, v)) : 10;
-      }
-      if (el('runwayMinArrVelocity')) {
-        const mav = Number(el('runwayMinArrVelocity').value);
-        if (tw.pathType === 'runway') {
-          tw.minArrVelocity = (typeof mav === 'number' && isFinite(mav) && mav > 0) ? Math.max(1, Math.min(150, mav)) : 15;
-        } else {
-          delete tw.minArrVelocity;
-        }
-      }
-      if (tw.pathType === 'runway') {
-        const cwEl = el('runwayLineupDistM_CW');
-        const ccwEl = el('runwayLineupDistM_CCW');
-        const lxCw = cwEl ? Number(cwEl.value) : NaN;
-        const lxCcw = ccwEl ? Number(ccwEl.value) : NaN;
-        tw.lineupDistM_CW = (typeof lxCw === 'number' && isFinite(lxCw) && lxCw >= 0) ? lxCw : 0;
-        tw.lineupDistM_CCW = (typeof lxCcw === 'number' && isFinite(lxCcw) && lxCcw >= 0) ? lxCcw : 0;
-        tw.lineupDistM = getEffectiveRunwayLineupDistM(tw);
-      } else if (tw.pathType !== 'runway') {
-        delete tw.lineupDistM;
-        delete tw.lineupDistM_CW;
-        delete tw.lineupDistM_CCW;
-      }
-      if (tw.pathType === 'runway') {
-        const startDisp = Number(el('runwayStartDisplacedThresholdM') ? el('runwayStartDisplacedThresholdM').value : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M);
-        const startBlast = Number(el('runwayStartBlastPadM') ? el('runwayStartBlastPadM').value : RUNWAY_START_BLAST_PAD_DEFAULT_M);
-        const endDisp = Number(el('runwayEndDisplacedThresholdM') ? el('runwayEndDisplacedThresholdM').value : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M);
-        const endBlast = Number(el('runwayEndBlastPadM') ? el('runwayEndBlastPadM').value : RUNWAY_END_BLAST_PAD_DEFAULT_M);
-        tw.startDisplacedThresholdM = (typeof startDisp === 'number' && isFinite(startDisp) && startDisp >= 0) ? startDisp : RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.startBlastPadM = (typeof startBlast === 'number' && isFinite(startBlast) && startBlast >= 0) ? startBlast : RUNWAY_START_BLAST_PAD_DEFAULT_M;
-        tw.endDisplacedThresholdM = (typeof endDisp === 'number' && isFinite(endDisp) && endDisp >= 0) ? endDisp : RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M;
-        tw.endBlastPadM = (typeof endBlast === 'number' && isFinite(endBlast) && endBlast >= 0) ? endBlast : RUNWAY_END_BLAST_PAD_DEFAULT_M;
-      } else {
-        delete tw.startDisplacedThresholdM;
-        delete tw.startBlastPadM;
-        delete tw.endDisplacedThresholdM;
-        delete tw.endBlastPadM;
-      }
-      if (tw.pathType !== 'runway_exit' && tw.pathType !== 'runway_taxiway') delete tw.queueFlow;
-    }
-  }
-
-  function syncSettingsPaneToMode() {
-    const mode = settingModeSelect ? settingModeSelect.value : 'grid';
-    if (layoutModeTabs) {
-      layoutModeTabs.querySelectorAll('.layout-mode-tab').forEach(function(btn) {
-        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
-      });
-    }
-    document.querySelectorAll('.settings-pane').forEach(el => { el.style.display = 'none'; });
-    const paneKey = isPathLayoutMode(mode) ? 'taxiway' : mode;
-    const pane = document.getElementById('settings-' + paneKey);
-    if (pane) pane.style.display = 'block';
-    if (mode === 'marker') {
-      syncMarkerFlightAircraftRowVisibility();
-      syncMarkerIslandWidthRowVisibility();
-      syncMarkerNavaidRowVisibility();
-    }
-    if (isPathLayoutMode(mode)) {
-      const pt = pathTypeFromLayoutMode(mode);

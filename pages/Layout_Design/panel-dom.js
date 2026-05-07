@@ -1,3 +1,206 @@
+    const flightsSorted = vs.flightsSorted;
+    const retStatsAll = vs.retStatsAll;
+    const total = flightsSorted.length;
+    const rowH = vs.rowH;
+    const overscan = vs.overscan;
+    const scrollTop = listEl.scrollTop || 0;
+    const vh = listEl.clientHeight || 418;
+    const start = Math.max(0, Math.floor(scrollTop / rowH) - overscan);
+    const rowCount = Math.ceil(vh / rowH) + overscan * 2 + 2;
+    const end = Math.min(total, start + rowCount);
+    const topPad = start * rowH;
+    const botPad = Math.max(0, (total - end) * rowH);
+    const parts = [];
+    const colCount = flightScheduleTableColCount(vs.apronK || flightScheduleColumnK());
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + topPad + 'px\"><td colspan=\"' + colCount + '\"></td></tr>');
+    for (let i = start; i < end; i++) {
+      parts.push(_buildFlightListRowHtml(flightsSorted[i], retStatsAll, vs.apronK));
+    }
+    parts.push('<tr class=\"flight-virt-spacer\" aria-hidden=\"true\" style=\"height:' + botPad + 'px\"><td colspan=\"' + colCount + '\"></td></tr>');
+    tbody.innerHTML = parts.join('');
+    _flightListWireEvents(listEl, state);
+    _flightListApplyScheduleSelectionHighlightDom(listEl, false);
+  }
+  function _flightListTeardownVirtual(listEl) {
+    listEl._flightVirtState = null;
+  }
+  function _flightListMountVirtual(listEl, flightsSorted, retStatsAll, headerRow, apronK) {
+    const prevScroll = listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]') ? (listEl.scrollTop || 0) : 0;
+    listEl._flightVirtState = {
+      flightsSorted: flightsSorted,
+      retStatsAll: retStatsAll,
+      rowH: DOM_OPT_FLIGHT_VIRT_ROW_H,
+      overscan: DOM_OPT_FLIGHT_VIRT_OVERSCAN,
+      apronK: apronK,
+      raf: null
+    };
+    listEl.innerHTML = headerRow + '</tbody></table>';
+    const tbl = listEl.querySelector('.flight-schedule-table');
+    if (tbl) tbl.setAttribute('data-virtual-table', '1');
+    _flightListPaintVirtualSlice(listEl);
+    if (prevScroll > 0) listEl.scrollTop = prevScroll;
+    if (!listEl._flightVirtScrollBound) {
+      listEl._flightVirtScrollBound = true;
+      listEl.addEventListener('scroll', function() {
+        const vs = listEl._flightVirtState;
+        if (!vs || !listEl.querySelector('.flight-schedule-table[data-virtual-table=\"1\"]')) return;
+        if (vs.raf) cancelAnimationFrame(vs.raf);
+        vs.raf = requestAnimationFrame(function() {
+          vs.raf = null;
+          _flightListPaintVirtualSlice(listEl);
+        });
+      });
+    }
+  }
+
+  function bumpVttArrCacheRev() {
+    state.vttArrCacheRev = (state.vttArrCacheRev | 0) + 1;
+    bumpRwySepSnapshotStaleGen();
+  }
+  function getBaseVttArrMinutes(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  function getArrRotMinutes(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  function getBaseVttDepMinutes(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  
+  function getBaseVttDepMinutesToLineup(f) {
+    if (!f) return 0;
+    return 0;
+  }
+  
+  function getDepBlockOutMin(f) {
+    const taxi = (typeof getBaseVttDepMinutesToLineup === 'function') ? getBaseVttDepMinutesToLineup(f) : 0;
+    const rollBundleSec = (typeof computeDepRollAndLineupOnlySec === 'function')
+      ? computeDepRollAndLineupOnlySec(f)
+      : (DEP_LINEUP_HOLD_SEC + takeoffRollSecForRunwayTailLenM(0, DEP_TAKEOFF_ACCEL_SMALL_MS2));
+    return taxi + rollBundleSec / 60;
+  }
+  
+  function getNormalizedStandDwellBounds(f) {
+    let dwell = f.dwellMin != null ? f.dwellMin : 0;
+    let minDwell = f.minDwellMin != null ? f.minDwellMin : 0;
+    dwell = Math.max(SCHED_DWELL_FLOOR_MIN, dwell);
+    minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
+    if (minDwell > dwell) minDwell = dwell;
+    return { dwell, minDwell };
+  }
+
+  /**
+   * Apron Gantt SIBT handle: if dwell can shrink (dwell > minDwell), fix SOBT at drag anchor and resize dwell;
+   * EIBT shifts by the same Δ as SIBT. If already at min dwell, translate the S block and nudge EOBT/ETOT by Δ.
+   */
+  function _ganttApplySibtHandleSnappedMinutes(f, mSnapped, dragCtx) {
+    if (!f || !dragCtx || flightBlockedLikeNoWay(f)) return false;
+    const mClamped = Math.max(0, Number(mSnapped));
+    if (!isFinite(mClamped)) return false;
+    const anchor = dragCtx.anchorSobt;
+    const startS = dragCtx.startSibt;
+    const minD = dragCtx.minDwell0;
+    const d0 = dragCtx.dwell0;
+    if (!(typeof anchor === 'number' && isFinite(anchor)) || !(typeof startS === 'number' && isFinite(startS))) return false;
+    const atMinDwell = !(d0 > minD + 1e-9);
+    if (atMinDwell) {
+      if (typeof applyScheduledGateTimingFromSField === 'function') applyScheduledGateTimingFromSField(f, 'sibt', mClamped);
+      const ds = mClamped - startS;
+      if (dragCtx.startEobt != null && isFinite(dragCtx.startEobt)) f.eobtMin = dragCtx.startEobt + ds;
+      if (dragCtx.startEtot != null && isFinite(dragCtx.startEtot)) f.etotMin = dragCtx.startEtot + ds;
+      return true;
+    }
+    let newDwell = anchor - mClamped;
+    let sibtU = mClamped;
+    if (newDwell < minD) {
+      newDwell = minD;
+      sibtU = anchor - minD;
+    }
+    f.timeMin = sibtU;
+    f.sibtMin = sibtU;
+    f.sldtMin = scheduledSldtFromSibtMinutes(f, sibtU);
+    f.sobtMin = anchor;
+    f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, newDwell);
+    if (f.minDwellMin != null) {
+      f.minDwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, Math.min(f.dwellMin, f.minDwellMin));
+    }
+    f.stotMin = scheduledStotFromSobtMinutes(f, anchor);
+    const deibt = sibtU - startS;
+    if (dragCtx.startEibt != null && isFinite(dragCtx.startEibt)) f.eibtMin = dragCtx.startEibt + deibt;
+    return true;
+  }
+
+  function applyForwardEobtEtotAndDepTaxiDelay(f, eibtMin, etotRunwayCandidateMin) {
+    if (!f) return;
+    const eibt = eibtMin != null && isFinite(eibtMin) ? eibtMin : 0;
+    const block = (typeof getDepBlockOutMin === 'function') ? getDepBlockOutMin(f) : 0;
+    const { dwell, minDwell } = getNormalizedStandDwellBounds(f);
+    const low = eibt + minDwell;
+    const high = eibt + dwell;
+    const sobtPref = (f.sobtMin != null)
+      ? f.sobtMin
+      : (f.sibtMin != null
+        ? f.sibtMin + dwell
+        : (f.timeMin != null ? f.timeMin + dwell : low));
+    const eobt = Math.min(Math.max(sobtPref, low), high);
+    const etotDraft = eobt + block;
+    let etot = etotDraft;
+    if (etotRunwayCandidateMin != null && isFinite(etotRunwayCandidateMin)) {
+      etot = Math.max(etotRunwayCandidateMin, etotDraft);
+    }
+    f.eobtMin = eobt;
+    f.etotMin = etot;
+    f.depTaxiDelayMin = Math.max(0, etot - etotDraft);
+  }
+
+  function pinEarliestEldtToSldtPerRunway(flights) {
+    void flights;
+  }
+
+  var __schedRetStatsBatchActive = false;
+  var __schedRetStatsCached = null;
+  var __schedRetExitDistSig = '';
+  var __schedRetExitDistMemo = null;
+  function scheduleRetExitDistLayoutSig() {
+    const tws = state.taxiways || [];
+    const parts = [];
+    for (let i = 0; i < tws.length; i++) {
+      const t = tws[i];
+      if (!t || (t.pathType !== 'runway' && t.pathType !== 'runway_exit')) continue;
+      let line = String(t.id) + '\x1e' + String(t.pathType) + '\x1e' + JSON.stringify(t.vertices || []);
+      if (t.pathType === 'runway' && typeof getTaxiwayDirection === 'function') {
+        line += '\x1e' + String(getTaxiwayDirection(t));
+      }
+      if (t.pathType === 'runway_exit') {
+        line += '\x1e' + JSON.stringify(t.allowedRwDirections || []);
+        if (typeof getTaxiwayDirection === 'function') {
+          line += '\x1e' + String(getTaxiwayDirection(t));
+        }
+      }
+      parts.push(line);
+    }
+    parts.sort();
+    return parts.join('\x1f') + '\x1e' + 'arrivalRetPathEdgeF1V1';
+  }
+  function bumpScheduleRetExitDistCache() {
+    __schedRetExitDistSig = '';
+    __schedRetExitDistMemo = null;
+  }
+  function beginScheduleRetStatsBatch() {
+    __schedRetStatsBatchActive = true;
+    __schedRetStatsCached = null;
+  }
+  function endScheduleRetStatsBatch() {
+    __schedRetStatsBatchActive = false;
+    if (__schedRetStatsCached != null) {
+      const sig = scheduleRetExitDistLayoutSig();
+      __schedRetExitDistSig = sig;
+      __schedRetExitDistMemo = __schedRetStatsCached;
+    }
+    __schedRetStatsCached = null;
   }
   function getScheduleRetStatsAll() {
     if (__schedRetStatsBatchActive) {
@@ -955,209 +1158,3 @@
         st.selectedObject = { type: 'flight', id: idVal, obj: f };
         state.flightPathRevealFlightId = idVal;
         listEl.querySelectorAll('.obj-item').forEach(function(r) { r.classList.remove('selected', 'expanded'); });
-        this.classList.add('selected', 'expanded');
-        if (typeof updateObjectInfo === 'function') updateObjectInfo();
-        if (typeof syncPanelFromState === 'function') syncPanelFromState();
-        if (typeof draw === 'function') draw();
-        if (typeof syncAllocGanttSelectionHighlight === 'function') syncAllocGanttSelectionHighlight();
-      });
-    });
-  }
-
-
-  function _ganttSaveViewState(ganttEl) {
-    let scrollLeft = 0, scrollTop = 0;
-    const scrollCol = ganttEl.querySelector('.alloc-gantt-scroll-col');
-    if (scrollCol) {
-      scrollLeft = scrollCol.scrollLeft || 0;
-      scrollTop = scrollCol.scrollTop || 0;
-    }
-    const collapsedTerminals = new Set();
-    let remoteCollapsed = false;
-    const labelCol = ganttEl.querySelector('.alloc-gantt-label-col');
-    if (labelCol) {
-      Array.from(labelCol.children).forEach(function (el) {
-        if (el.classList && el.classList.contains('alloc-terminal-header')) {
-          if (el.getAttribute('data-collapsed') === '1') {
-            let txt = (el.textContent || '').trim().replace(/^[▶▼]\s*/, '');
-            if (txt) collapsedTerminals.add(txt);
-          }
-        }
-        if (el.classList && el.classList.contains('alloc-remote-header')) {
-          if (el.getAttribute('data-collapsed') === '1') remoteCollapsed = true;
-        }
-      });
-    }
-    return { scrollLeft: scrollLeft, scrollTop: scrollTop, collapsedTerminals: collapsedTerminals, remoteCollapsed: remoteCollapsed };
-  }
-
-  function renderFlightGantt(opt) {
-    const skipPathPrep = opt && opt.skipPathPrep;
-    const ganttEl = document.getElementById('allocationGantt');
-    if (!ganttEl) return;
-    const viewState = _ganttSaveViewState(ganttEl);
-    const prevScrollLeft = viewState.scrollLeft;
-    const prevScrollTop = viewState.scrollTop;
-    const prevCollapsedTerminals = viewState.collapsedTerminals;
-    const prevRemoteCollapsed = viewState.remoteCollapsed;
-    if (!state.flights.length) {
-      state.allocGanttWindowStartMin = null;
-      ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
-      const labEmpty = document.getElementById('allocGanttWindowLabel');
-      if (labEmpty) labEmpty.textContent = '';
-      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
-      return;
-    }
-    const flights = state.flights.slice();
-    const stands = allStandsForFlightAssignment();
-    if (!flights.length) {
-      state.allocGanttWindowStartMin = null;
-      ganttEl.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No flights for Gantt.</div>';
-      const labEmpty2 = document.getElementById('allocGanttWindowLabel');
-      if (labEmpty2) labEmpty2.textContent = '';
-      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
-      return;
-    }
-    if (!skipPathPrep) {
-      if (typeof computeScheduledDisplayTimes === 'function') computeScheduledDisplayTimes(state.flights);
-    }
-
-    let intervals = [];
-    const intervalFlightIds = new Set();
-    function pushGanttIntervalsFromFlight(f) {
-      if (!f) return;
-      const fid = f.id != null ? String(f.id) : '';
-      const t0 = f.sibtMin != null ? f.sibtMin : (f.timeMin != null ? f.timeMin : 0);
-      const t1 = f.sobtMin != null ? f.sobtMin : (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-      const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, t0 - SCHED_SIBT_MINUS_SLDT_MIN);
-      const stot = f.stotMin != null ? f.stotMin : (t1 + SCHED_STOT_MINUS_SOBT_MIN);
-      const eSer = ganttESeriesMinutesFromTimelineMeta(f);
-      if (Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1 && typeof buildApronStayGanttIntervalsForFlight === 'function') {
-        buildApronStayGanttIntervalsForFlight(f, eSer).forEach(function(it) { intervals.push(it); });
-        if (fid) intervalFlightIds.add(fid);
-        return;
-      }
-      const eibt = eSer.eibt;
-      const eobt = eSer.eobt;
-      const eldt = eSer.eldt;
-      const etot = eSer.etot;
-      const sldtOrig = sldt;
-      const sobtOrig = f.sobtMin != null ? f.sobtMin : t1;
-      const stotOrig = stot;
-      intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig, segmentIdx: 0, segmentCount: 1, segmentStandId: f.standId || null });
-      if (fid) intervalFlightIds.add(fid);
-    }
-    const schedTable = document.querySelector('.flight-schedule-table');
-    const domScheduleOk = schedTable && schedTable.getAttribute('data-virtual-table') !== '1';
-    if (domScheduleOk) {
-      const rows = Array.from(schedTable.querySelectorAll('tbody tr.flight-data-row'));
-      const flightById = new Map();
-      for (let fi = 0; fi < flights.length; fi++) {
-        const ff = flights[fi];
-        if (ff && ff.id != null) flightById.set(String(ff.id), ff);
-      }
-      rows.forEach(row => {
-        const id = row.getAttribute('data-id');
-        if (!id) return;
-        const f = flightById.get(String(id));
-        if (!f) return;
-        const tds = Array.from(row.querySelectorAll('td'));
-        const k = flightScheduleColumnK();
-        const sibtIdx = flightSchedColIndex('sibt', k);
-        const sobtIdx = flightSchedColIndex('sobt', k);
-        const eldtIdx = flightSchedColIndex('eldt', k);
-        const eibtIdx = flightSchedColIndex('eibt', k);
-        const eobtIdx = flightSchedColIndex('eobt', k);
-        const etotIdx = flightSchedColIndex('etot', k);
-        if (tds.length <= etotIdx) return;
-        const getMin = (idx) => {
-          const td = tds[idx];
-          if (!td) return 0;
-          const dm = td.getAttribute('data-sched-min');
-          if (dm != null && String(dm).trim() !== '') {
-            const n = parseFloat(dm);
-            return isFinite(n) ? n : 0;
-          }
-          const txt = (td.textContent || '').trim();
-          if (!txt) return 0;
-          try {
-            return parseTimeToMinutes(txt);
-          } catch (e) {
-            return 0;
-          }
-        };
-        const sibt = getMin(sibtIdx);
-        const sobt = getMin(sobtIdx);
-        const sldt = Math.max(0, sibt - SCHED_SIBT_MINUS_SLDT_MIN);
-        const stot = sobt + SCHED_STOT_MINUS_SOBT_MIN;
-        const eSer = ganttESeriesMinutesFromTimelineMeta(f);
-        const eldt = eSer.eldt != null ? eSer.eldt : getMin(eldtIdx);
-        const eibt = eSer.eibt != null ? eSer.eibt : getMin(eibtIdx);
-        const eobt = eSer.eobt != null ? eSer.eobt : getMin(eobtIdx);
-        const etot = eSer.etot != null ? eSer.etot : getMin(etotIdx);
-        if (Array.isArray(f.apronStaySegments) && f.apronStaySegments.length > 1 && typeof buildApronStayGanttIntervalsForFlight === 'function') {
-          buildApronStayGanttIntervalsForFlight(f, eSer).forEach(function(it) { intervals.push(it); });
-          intervalFlightIds.add(String(f.id));
-        } else {
-          const t0 = sibt;
-          const t1 = sobt || (t0 + (f.dwellMin != null ? f.dwellMin : 0));
-          const sldtOrig = sldt;
-          const sobtOrig = sobt || t1;
-          const stotOrig = stot;
-          intervals.push({ f, t0, t1, sldt, stot, eibt, eobt, eldt, etot, sldtOrig, sobtOrig, stotOrig, segmentIdx: 0, segmentCount: 1, segmentStandId: f.standId || null });
-          intervalFlightIds.add(String(f.id));
-        }
-      });
-    }
-    if (intervals.length && intervalFlightIds.size < flights.length) {
-      flights.forEach(function(f) {
-        if (!f || f.id == null || intervalFlightIds.has(String(f.id))) return;
-        pushGanttIntervalsFromFlight(f);
-      });
-    }
-    if (!intervals.length) {
-      flights.forEach(function(f) { pushGanttIntervalsFromFlight(f); });
-    }
-
-    let minS = Infinity;
-    let maxE = -Infinity;
-    intervals.forEach(it => {
-      if (it.sldt < minS) minS = it.sldt;
-      const etot0 = (it.etot != null && isFinite(it.etot)) ? it.etot : it.stot;
-      if (etot0 > maxE) maxE = etot0;
-    });
-    if (minS <= 0 && intervals.length) {
-      const posSldt = intervals.map(function(it) { return it.sldt; }).filter(function(v) { return isFinite(v) && v > 1e-6; });
-      if (posSldt.length) minS = Math.min.apply(null, posSldt);
-    }
-    if (!isFinite(minS) || !isFinite(maxE)) {
-      ganttEl.innerHTML = '';
-      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
-      return;
-    }
-    const baseMinT = Math.max(0, minS - GANTT_PAD_MIN);
-    const baseMaxT0 = maxE + GANTT_PAD_MIN;
-    const baseMaxT = (baseMaxT0 <= baseMinT) ? (baseMinT + 60) : baseMaxT0;
-    const baseSpan = baseMaxT - baseMinT;
-    const dataSpan = Math.max(1e-9, baseSpan);
-    const visibleSpan = Math.min(GANTT_VISIBLE_WINDOW_MIN, dataSpan);
-    const maxWinStart = Math.max(baseMinT, baseMaxT - visibleSpan);
-    let winStart = state.allocGanttWindowStartMin;
-    if (winStart == null || !isFinite(winStart)) winStart = baseMinT;
-    const vpPin = state._allocGanttHandleDragViewportPin;
-    if (vpPin && vpPin.active) {
-      let w = vpPin.winStart0;
-      if (w == null || !isFinite(w)) w = winStart;
-      if (w > maxWinStart) w = maxWinStart;
-      if (w + visibleSpan < baseMinT - 1e-6) w = Math.min(maxWinStart, baseMinT);
-      winStart = w;
-    } else {
-      winStart = Math.min(Math.max(winStart, baseMinT), maxWinStart);
-    }
-    state.allocGanttWindowStartMin = winStart;
-    const winEnd = winStart + visibleSpan;
-    state._allocGanttClamp = { baseMinT: baseMinT, baseMaxT: baseMaxT, visibleSpan: visibleSpan };
-    const displaySpan = visibleSpan;
-    const zoomRaw = (state.allocTimeZoom && state.allocTimeZoom > 1) ? state.allocTimeZoom : 1;
-    const innerMinWidthPct = Math.max(100, Math.round(zoomRaw * 100));
-    const zoomLayout = innerMinWidthPct / 100;
