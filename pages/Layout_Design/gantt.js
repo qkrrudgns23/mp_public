@@ -1,3 +1,68 @@
+      let tiled = null;
+      if (typeof exportLayoutGroundTilesFor3D === 'function') tiled = exportLayoutGroundTilesFor3D();
+      if (tiled && tiled.tiles && tiled.tiles.length === 4) {
+        payload.layoutGroundTiles = tiled;
+      } else if (typeof exportLayoutGroundTextureFor3D === 'function') {
+        const gt = exportLayoutGroundTextureFor3D();
+        if (gt && gt.dataUrl) payload.layoutGroundTexture = gt;
+      }
+    } catch (eTex) {
+      console.warn('exportLayoutGroundTilesFor3D / exportLayoutGroundTextureFor3D failed', eTex);
+    }
+    return payload;
+  }
+  function openGrid3DViewerWindow() {
+    const tpl = typeof window.__GRID3D_VIEWER_HTML_TEMPLATE__ === 'string' ? window.__GRID3D_VIEWER_HTML_TEMPLATE__ : '';
+    if (!tpl || tpl.length < 80) {
+      console.error('Grid 3D viewer template missing');
+      alert('3D viewer template is not loaded. Ensure pages/Layout_Design/3D/grid3d-viewer.html exists and reload the Layout Design page.');
+      return;
+    }
+    const bootHtml = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Layout 3D</title>' +
+      '<style>html,body{margin:0;height:100%;background:#0d0d0f;color:#e2e8f0;font-family:system-ui,sans-serif;overflow:hidden}' +
+      '.wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;box-sizing:border-box}' +
+      '.sp{width:44px;height:44px;border:3px solid rgba(148,163,184,.25);border-top-color:#7c6af7;border-radius:50%;animation:g .85s linear infinite}' +
+      '@keyframes g{to{transform:rotate(360deg)}}' +
+      '.bar{width:min(360px,86vw);height:4px;border-radius:2px;background:rgba(148,163,184,.2);overflow:hidden}' +
+      '.bar>i{display:block;height:100%;width:38%;background:linear-gradient(90deg,#5b52d6,#7c6af7);border-radius:2px;animation:p 1.15s ease-in-out infinite}' +
+      '@keyframes p{0%,100%{transform:translateX(-40%)}50%{transform:translateX(200%)}}' +
+      '.t{font-size:15px;font-weight:600;color:#f1f5f9;text-align:center}.s{font-size:13px;color:#94a3b8;text-align:center;max-width:360px;line-height:1.45}' +
+      '</style></head><body><div class="wrap"><div class="sp"></div><div class="bar"><i></i></div><p class="t">3D 뷰 준비 중</p>' +
+      '<p class="s">레이아웃 스냅샷을 만들고 있습니다. 잠시만 기다려 주세요.</p></div></body></html>';
+    const g3Base = (typeof GRID3D_ASSET_API_URL === 'string' && GRID3D_ASSET_API_URL.trim()) ? GRID3D_ASSET_API_URL.trim() : '';
+    const viewerShellUrl = /^https?:\/\//i.test(g3Base) ? g3Base.replace(/\/$/, '') + '/api/grid3d-viewer-app' : '';
+    let w = null;
+    let openedViaReceiverShell = false;
+    if (viewerShellUrl) {
+      try {
+        w = window.open(viewerShellUrl, '_blank', 'width=1280,height=840');
+        openedViaReceiverShell = !!w;
+      } catch (eHttp) {
+        console.warn('Grid 3D receiver shell open failed', eHttp);
+        w = null;
+        openedViaReceiverShell = false;
+      }
+    }
+    if (!w) {
+      try {
+        w = window.open('data:text/html;charset=utf-8,' + encodeURIComponent(bootHtml), '_blank', 'width=1280,height=840');
+      } catch (eData) {
+        console.warn('Grid 3D popup data URL failed, using about:blank', eData);
+      }
+    }
+    if (!w) {
+      w = window.open('about:blank', '_blank', 'width=1280,height=840');
+    }
+    if (!w) {
+      alert('Popup was blocked. Allow popups for this site to open the 3D viewer.');
+      return;
+    }
+    if (!openedViaReceiverShell) {
+      var bootHref = '';
+      try {
+        bootHref = w.location && w.location.href ? String(w.location.href) : '';
+      } catch (eLoc) {
+        bootHref = '';
       }
       if (bootHref.indexOf('data:') !== 0) {
         try {
@@ -483,68 +548,3 @@
   function populateMarkerFlightAircraftSelect() {
     const sel = document.getElementById('markerFlightAircraftType');
     if (!sel) return;
-    const html = AIRCRAFT_TYPES.map(function(a) {
-      const id = String(a.id || a.name || '').trim();
-      if (!id) return '';
-      const name = String(a.name || a.id || id).trim();
-      const icao = String(a.icao || 'C').toUpperCase();
-      return '<option value="' + escapeAttr(id) + '">' + escapeHtml(name + ' (ICAO ' + icao + ')') + '</option>';
-    }).filter(Boolean).join('');
-    sel.innerHTML = html || '<option value="A320">Airbus A320 (ICAO C)</option>';
-    if (sel.options.length) sel.value = sel.options[0].value;
-  }
-  function syncMarkerFlightAircraftRowVisibility() {
-    const row = document.getElementById('markerFlightAircraftRow');
-    if (!row) return;
-    const show = getMarkerSubKindFromPanel() === 'flight';
-    row.hidden = !show;
-    row.style.display = show ? '' : 'none';
-  }
-  function syncMarkerIslandWidthRowVisibility() {
-    const row = document.getElementById('markerIslandWidthRow');
-    if (!row) return;
-    const show = getMarkerSubKindFromPanel() === 'island';
-    row.hidden = !show;
-    row.style.display = show ? '' : 'none';
-  }
-  function setMarkerSubKindTab(sub) {
-    const allowed = { ruler: 1, flight: 1, island: 1, area: 1, navaid: 1 };
-    const next = allowed[sub] ? sub : 'text';
-    document.querySelectorAll('.marker-tool-tab').forEach(function(btn) {
-      const on = (btn.getAttribute('data-marker-sub') || '') === next;
-      btn.classList.toggle('active', on);
-      btn.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    syncMarkerFlightAircraftRowVisibility();
-    syncMarkerIslandWidthRowVisibility();
-    syncMarkerNavaidRowVisibility();
-  }
-  function syncMarkerSubKindTabFromSelectedLayoutMarker() {
-    const sel = state.selectedObject;
-    if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return;
-    const kind = String(sel.obj.kind || '').trim();
-    if (kind !== 'text' && kind !== 'ruler' && kind !== 'island' && kind !== 'area' && kind !== 'flight' && kind !== 'navaid') return;
-    setMarkerSubKindTab(kind);
-    if (kind === 'navaid') {
-      const sel2 = document.getElementById('markerNavaidType');
-      if (sel2) {
-        const sub = (sel.obj.subType === 'ils') ? 'ils' : 'papi';
-        sel2.value = sub;
-      }
-    }
-  }
-  function isMarkerFlightAllowedPathType(pt) {
-    return pt === 'runway' || pt === 'runway_exit' || pt === 'taxiway' || pt === 'general_queue_taxiway';
-  }
-  function snapWorldToMarkerFlightTaxiway(wx, wy, opts) {
-    const click = [wx, wy];
-    const o = opts || {};
-    const lockTaxiwayId = o.taxiwayId != null ? String(o.taxiwayId) : null;
-    const allowFar = o.allowFar === true;
-    let best = null;
-    let bestD2 = Infinity;
-    const maxD2 = allowFar ? Infinity : Math.pow(CELL_SIZE * HIT_TW_SEG_CF, 2);
-    (state.taxiways || []).forEach(function(tw) {
-      if (!tw || !isMarkerFlightAllowedPathType(tw.pathType || 'taxiway')) return;
-      if (lockTaxiwayId && String(tw.id) !== lockTaxiwayId) return;
-      const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);

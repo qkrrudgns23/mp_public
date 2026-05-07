@@ -1,3 +1,68 @@
+    const html = AIRCRAFT_TYPES.map(function(a) {
+      const id = String(a.id || a.name || '').trim();
+      if (!id) return '';
+      const name = String(a.name || a.id || id).trim();
+      const icao = String(a.icao || 'C').toUpperCase();
+      return '<option value="' + escapeAttr(id) + '">' + escapeHtml(name + ' (ICAO ' + icao + ')') + '</option>';
+    }).filter(Boolean).join('');
+    sel.innerHTML = html || '<option value="A320">Airbus A320 (ICAO C)</option>';
+    if (sel.options.length) sel.value = sel.options[0].value;
+  }
+  function syncMarkerFlightAircraftRowVisibility() {
+    const row = document.getElementById('markerFlightAircraftRow');
+    if (!row) return;
+    const show = getMarkerSubKindFromPanel() === 'flight';
+    row.hidden = !show;
+    row.style.display = show ? '' : 'none';
+  }
+  function syncMarkerIslandWidthRowVisibility() {
+    const row = document.getElementById('markerIslandWidthRow');
+    if (!row) return;
+    const show = getMarkerSubKindFromPanel() === 'island';
+    row.hidden = !show;
+    row.style.display = show ? '' : 'none';
+  }
+  function setMarkerSubKindTab(sub) {
+    const allowed = { ruler: 1, flight: 1, island: 1, area: 1, navaid: 1 };
+    const next = allowed[sub] ? sub : 'text';
+    document.querySelectorAll('.marker-tool-tab').forEach(function(btn) {
+      const on = (btn.getAttribute('data-marker-sub') || '') === next;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    syncMarkerFlightAircraftRowVisibility();
+    syncMarkerIslandWidthRowVisibility();
+    syncMarkerNavaidRowVisibility();
+  }
+  function syncMarkerSubKindTabFromSelectedLayoutMarker() {
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'layoutMarker' || !sel.obj) return;
+    const kind = String(sel.obj.kind || '').trim();
+    if (kind !== 'text' && kind !== 'ruler' && kind !== 'island' && kind !== 'area' && kind !== 'flight' && kind !== 'navaid') return;
+    setMarkerSubKindTab(kind);
+    if (kind === 'navaid') {
+      const sel2 = document.getElementById('markerNavaidType');
+      if (sel2) {
+        const sub = (sel.obj.subType === 'ils') ? 'ils' : 'papi';
+        sel2.value = sub;
+      }
+    }
+  }
+  function isMarkerFlightAllowedPathType(pt) {
+    return pt === 'runway' || pt === 'runway_exit' || pt === 'taxiway' || pt === 'general_queue_taxiway';
+  }
+  function snapWorldToMarkerFlightTaxiway(wx, wy, opts) {
+    const click = [wx, wy];
+    const o = opts || {};
+    const lockTaxiwayId = o.taxiwayId != null ? String(o.taxiwayId) : null;
+    const allowFar = o.allowFar === true;
+    let best = null;
+    let bestD2 = Infinity;
+    const maxD2 = allowFar ? Infinity : Math.pow(CELL_SIZE * HIT_TW_SEG_CF, 2);
+    (state.taxiways || []).forEach(function(tw) {
+      if (!tw || !isMarkerFlightAllowedPathType(tw.pathType || 'taxiway')) return;
+      if (lockTaxiwayId && String(tw.id) !== lockTaxiwayId) return;
+      const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : getTaxiwayOrderedPoints(tw);
       if (!pts || pts.length < 2) return;
       for (let i = 0; i < pts.length - 1; i++) {
         const near = closestPointOnSegment(pts[i], pts[i + 1], click);
@@ -303,68 +368,3 @@
     if (ctx) {
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
-      tw = Math.max(tw, ctx.measureText(txt).width + 8);
-      ctx.restore();
-    }
-    const th = fs + 8;
-    return { left: hx + 2, top: hy + 2, w: tw, h: th };
-  }
-  function hitTestLayoutMarker(wx, wy, opts) {
-    if (!layoutMarkersVisible()) return null;
-    const onlyKind = opts && opts.onlyKind;
-    const skipKind = opts && opts.skipKind;
-    const click = [wx, wy];
-    const padW = 6 / Math.max(state.scale, 0.1);
-    const list = state.layoutMarkers || [];
-    for (let i = list.length - 1; i >= 0; i--) {
-      const m = list[i];
-      if (!m) continue;
-      if (onlyKind && m.kind !== onlyKind) continue;
-      if (skipKind && m.kind === skipKind) continue;
-      if (m.kind === 'text') {
-        const ax = Number(m.x), ay = Number(m.y);
-        if (isFinite(ax) && isFinite(ay)) {
-          const ar = layoutMarkerHandleHitRadiusWorld() * 1.15;
-          if (dist2(click, [ax, ay]) <= ar * ar)
-            return { type: 'layoutMarker', id: m.id, obj: m };
-        }
-        const r = layoutMarkerTextHitRect(m);
-        if (!r) continue;
-        if (click[0] >= r.left - padW && click[0] <= r.left + r.w + padW &&
-            click[1] >= r.top - padW && click[1] <= r.top + r.h + padW)
-          return { type: 'layoutMarker', id: m.id, obj: m };
-      } else if (m.kind === 'ruler') {
-        const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
-        if (![x1, y1, x2, y2].every(isFinite)) continue;
-        const er = layoutMarkerHandleHitRadiusWorld() * 1.1;
-        const er2 = er * er;
-        if (dist2(click, [x1, y1]) <= er2 || dist2(click, [x2, y2]) <= er2)
-          return { type: 'layoutMarker', id: m.id, obj: m };
-        const pr = projectOnSegment([x1, y1], [x2, y2], click);
-        if (pr.t < 0 || pr.t > 1) continue;
-        const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
-        if (dist2(pr.p, click) <= tol * tol)
-          return { type: 'layoutMarker', id: m.id, obj: m };
-      } else if (m.kind === 'flight') {
-        const pose = resolveMarkerFlightPose(m);
-        if (!pose) continue;
-        const tol = Math.max(CELL_SIZE * 1.1, 22 / Math.max(state.scale, 0.12));
-        if (dist2(click, [pose.x, pose.y]) <= tol * tol)
-          return { type: 'layoutMarker', id: m.id, obj: m };
-      } else if (m.kind === 'island' || m.kind === 'area') {
-        const pts = m.points;
-        if (!pts || pts.length < 3) continue;
-        const poly = pts.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
-        if (poly.length < 3) continue;
-        const contourLineOnly = m.kind === 'island' && m.id != null && String(m.id).indexOf('contour-') === 0;
-        const er = layoutMarkerHandleHitRadiusWorld() * 1.1;
-        const er2 = er * er;
-        let nearVertex = false;
-        for (let ii = 0; ii < poly.length; ii++) {
-          if (dist2(click, poly[ii]) <= er2) {
-            nearVertex = true;
-            break;
-          }
-        }
-        if (nearVertex) return { type: 'layoutMarker', id: m.id, obj: m };
