@@ -2059,7 +2059,9 @@
     const tolPx = basePx * s;
     return Math.max(SPLIT_TOL_D2, tolPx * tolPx);
   }
-  
+  function isRunwayAccessLayoutPathType(pathType) {
+    return pathType === 'runway_exit' || pathType === 'runway_taxiway';
+  }
   function isLineupPointTouchingRunwayTaxiwayOnRunway(runwayTw, lineupPt) {
     if (!runwayTw || runwayTw.pathType !== 'runway' || !lineupPt) return false;
     const rwPts = getOrderedPoints(runwayTw);
@@ -2068,7 +2070,7 @@
     const list = state.taxiways || [];
     for (let ti = 0; ti < list.length; ti++) {
       const tx = list[ti];
-      if (tx.pathType !== 'runway_exit') continue;
+      if (!isRunwayAccessLayoutPathType(tx.pathType)) continue;
       const rtxPts = getOrderedPoints(tx);
       if (!rtxPts || rtxPts.length < 2) continue;
       if (!polylineTouchesPolylineForGraph(rtxPts, rwPts) && !polylineTouchesPolylineForGraph(rwPts, rtxPts)) continue;
@@ -2085,7 +2087,7 @@
     const list = state.taxiways || [];
     for (let ti = 0; ti < list.length; ti++) {
       const tx = list[ti];
-      if (tx.pathType !== 'runway_exit') continue;
+      if (!isRunwayAccessLayoutPathType(tx.pathType)) continue;
       const rtxPts = getOrderedPoints(tx);
       if (!rtxPts || rtxPts.length < 2) continue;
       if (!polylineTouchesPolylineForGraph(rtxPts, rwPts) && !polylineTouchesPolylineForGraph(rwPts, rtxPts)) continue;
@@ -2106,7 +2108,7 @@
     const list = state.taxiways || [];
     for (let ti = 0; ti < list.length; ti++) {
       const b = list[ti];
-      if (!b || b.pathType !== 'runway_exit' || b.id === rtxA.id) continue;
+      if (!b || !isRunwayAccessLayoutPathType(b.pathType) || b.id === rtxA.id) continue;
       if (rtxPolylinesTouch(rtxA, b)) ids.add(b.id);
     }
     return ids;
@@ -2119,7 +2121,7 @@
     hop1.forEach(function(a) {
       for (let ti = 0; ti < list.length; ti++) {
         const b = list[ti];
-        if (!b || b.pathType !== 'runway_exit' || b.id === a.id) continue;
+        if (!b || !isRunwayAccessLayoutPathType(b.pathType) || b.id === a.id) continue;
         if (ids.has(b.id)) continue;
         if (rtxPolylinesTouch(a, b)) ids.add(b.id);
       }
@@ -2138,7 +2140,7 @@
     const list = state.taxiways || [];
     for (let ti = 0; ti < list.length; ti++) {
       const tx = list[ti];
-      if (tx.pathType !== 'runway_exit' || !candIds.has(tx.id)) continue;
+      if (!isRunwayAccessLayoutPathType(tx.pathType) || !candIds.has(tx.id)) continue;
       const rtxPts = getOrderedPoints(tx);
       if (rtxPts && rtxPts.length >= 2 && pointNearPolylineSq(p, rtxPts, tolD2)) return true;
     }
@@ -9667,8 +9669,7 @@
             for (let hi = 0; hi < hop1.length; hi++) {
               const rtx = hop1[hi];
               if (!rtx) continue;
-              const nid = rtxRunwayExitNeighborIds(rtx);
-              if (typeof rtxSetHasRunwayHoldingHp === 'function' && rtxSetHasRunwayHoldingHp(nid)) continue;
+              if (typeof rtxSetHasRunwayHoldingHp === 'function' && rtxSetHasRunwayHoldingHp(new Set([rtx.id]))) continue;
               const vts = rtx.vertices || [];
               if (vts.length < 2) continue;
               let sx = 0, sy = 0;
@@ -9677,7 +9678,9 @@
                 sx += pp[0]; sy += pp[1];
               }
               const mx = sx / vts.length, my = sy / vts.length;
-              const badgeText = 'No Holding Point';
+              const rwBadgeLab = String(tw.name || '').trim() || (tw.id != null ? String(tw.id) : '');
+              const rtxBadgeLab = String(rtx.name || '').trim() || (rtx.id != null ? String(rtx.id) : '');
+              const badgeText = rwBadgeLab + ' \u2192 ' + rtxBadgeLab;
               ctx.save();
               ctx.font = 'bold 10px system-ui, sans-serif';
               const padXB = 6, padYB = 3, radB = 4;

@@ -1832,6 +1832,9 @@
     const standOverlapIssues = getApronStandWindowOverlapRegsForProSimUi();
     const hasStandWindowOverlap = standOverlapIssues.length > 0;
     const standOverlapBannerBody = hasStandWindowOverlap ? formatStandWindowOverlapBannerDetail() : '';
+    const missingHoldingRwRtx = typeof getLayoutLineupRunwayAccessMissingHoldingPairs === 'function'
+      ? getLayoutLineupRunwayAccessMissingHoldingPairs() : [];
+    const hasNoHolding = missingHoldingRwRtx.length > 0;
     if (ban && banT) {
       if (hasRetFail) {
         ban.hidden = false;
@@ -1869,12 +1872,26 @@
         dlBanT.textContent = '';
       }
     }
-    const allow = !!state.designerPageUpdateFresh && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap;
+    const nhpBan = document.getElementById('noHoldingPointBanner');
+    const nhpBanT = document.getElementById('noHoldingPointBannerText');
+    if (nhpBan && nhpBanT) {
+      if (hasNoHolding) {
+        nhpBan.hidden = false;
+        nhpBan.setAttribute('aria-hidden', 'false');
+        nhpBanT.textContent = missingHoldingRwRtx.join('\n');
+      } else {
+        nhpBan.hidden = true;
+        nhpBan.setAttribute('aria-hidden', 'true');
+        nhpBanT.textContent = '';
+      }
+    }
+    const allow = !!state.designerPageUpdateFresh && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding;
     if (btn) {
       btn.disabled = !allow;
       btn.classList.toggle('global-update-blocked-arr-ret', hasRetFail);
       btn.classList.toggle('global-update-blocked-apron', hasApronDuplicated);
       btn.classList.toggle('global-update-blocked-stand-overlap', hasStandWindowOverlap && !hasRetFail && !hasApronDuplicated);
+      btn.classList.toggle('global-update-blocked-no-holding', hasNoHolding && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap);
       if (!state.designerPageUpdateFresh) {
         btn.setAttribute('title', 'Run Layout Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
       } else if (hasRetFail) {
@@ -1888,6 +1905,12 @@
       } else if (hasStandWindowOverlap) {
         const tt = standOverlapBannerBody ? standOverlapBannerBody.replace(/\n/g, ' | ') : standOverlapIssues.map(function(it) { return it.reg; }).join(', ');
         btn.setAttribute('title', 'Pro Sim is disabled: ' + tt);
+      } else if (hasNoHolding) {
+        const nh = missingHoldingRwRtx.length;
+        const nhShort = nh > 5
+          ? (missingHoldingRwRtx.slice(0, 3).join(' · ') + ', etc. (' + nh + ')')
+          : missingHoldingRwRtx.join(' · ');
+        btn.setAttribute('title', 'Pro Sim is disabled: missing runway holding — ' + nhShort);
       } else {
         btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
       }
@@ -1905,6 +1928,14 @@
         dot.classList.remove('fresh');
         dot.classList.add('stale');
         dot.setAttribute('title', 'Resolve overlapping stand SIBT–SOBT windows before Pro Sim.');
+      } else if (hasNoHolding) {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        const nh = missingHoldingRwRtx.length;
+        const nhShort = nh > 5
+          ? (missingHoldingRwRtx.slice(0, 3).join(' · ') + ', etc. (' + nh + ')')
+          : missingHoldingRwRtx.join(' · ');
+        dot.setAttribute('title', 'Missing runway holding at line-up — ' + nhShort);
       } else if (state.globalUpdateFresh) {
         dot.classList.remove('stale');
         dot.classList.add('fresh');
@@ -1916,8 +1947,8 @@
       }
     }
     const playDock = document.getElementById('btnShowPlayDock');
-    const playbackFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !!state.globalUpdateFresh;
-    const allowPlay = !!state.hasSimulationResult && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap;
+    const playbackFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding && !!state.globalUpdateFresh;
+    const allowPlay = !!state.hasSimulationResult && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding;
     if (playDock) {
       playDock.disabled = !allowPlay;
       if (!state.hasSimulationResult) {
@@ -1928,6 +1959,12 @@
         playDock.setAttribute('title', 'Apron duplicated가 있어 Pro Sim/재생을 막았습니다');
       } else if (hasStandWindowOverlap) {
         playDock.setAttribute('title', 'Overlapping stand schedule blocks Pro Sim and playback.');
+      } else if (hasNoHolding) {
+        const nhPd = missingHoldingRwRtx.length;
+        const nhPdShort = nhPd > 4
+          ? (missingHoldingRwRtx.slice(0, 2).join(' · ') + ' 외 ' + (nhPd - 2))
+          : missingHoldingRwRtx.join(' · ');
+        playDock.setAttribute('title', '라인업 경로 홀딩 누락: ' + nhPdShort);
       } else if (playbackFresh) {
         playDock.setAttribute('title', '최신 Pro Sim 결과를 재생합니다');
       } else {
@@ -2189,7 +2226,8 @@
     const hasApronDuplicated = apronIssues.length > 0;
     const standOv = typeof getApronStandWindowOverlapRegsForProSimUi === 'function' ? getApronStandWindowOverlapRegsForProSimUi() : [];
     const hasStandWindowOverlap = standOv.length > 0;
-    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !!state.globalUpdateFresh;
+    const hasNoHoldingLayout = typeof hasLayoutLineupRunwayAccessHoldingViolation === 'function' && hasLayoutLineupRunwayAccessHoldingViolation();
+    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHoldingLayout && !!state.globalUpdateFresh;
     const heatmapAllowed = heatOk && proSimUiFresh;
     if (!heatmapAllowed && state.mapTypeMode === 'heatmap') state.mapTypeMode = 'normal';
     if (!heatOk && state.mapTypeMode !== 'normal') state.mapTypeMode = 'normal';
@@ -2331,7 +2369,11 @@
     }
     if (mode === 'holdingPoint' && state.holdingPointDrawing) {
       const prev = state.previewHoldingPoint;
-      if (prev && tryPlaceHoldingPointAt(prev.x, prev.y, prev.pathType || 'taxiway')) { syncPanelFromState(); draw(); }
+      if (prev && tryPlaceHoldingPointAt(prev.x, prev.y, prev.pathType || 'taxiway')) {
+        syncPanelFromState();
+        draw();
+        if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+      }
       return true;
     }
     return false;
@@ -15934,7 +15976,9 @@
     const tolPx = basePx * s;
     return Math.max(SPLIT_TOL_D2, tolPx * tolPx);
   }
-  
+  function isRunwayAccessLayoutPathType(pathType) {
+    return pathType === 'runway_exit' || pathType === 'runway_taxiway';
+  }
   function isLineupPointTouchingRunwayTaxiwayOnRunway(runwayTw, lineupPt) {
     if (!runwayTw || runwayTw.pathType !== 'runway' || !lineupPt) return false;
     const rwPts = getOrderedPoints(runwayTw);
@@ -15943,7 +15987,7 @@
     const list = state.taxiways || [];
     for (let ti = 0; ti < list.length; ti++) {
       const tx = list[ti];
-      if (tx.pathType !== 'runway_exit') continue;
+      if (!isRunwayAccessLayoutPathType(tx.pathType)) continue;
       const rtxPts = getOrderedPoints(tx);
       if (!rtxPts || rtxPts.length < 2) continue;
       if (!polylineTouchesPolylineForGraph(rtxPts, rwPts) && !polylineTouchesPolylineForGraph(rwPts, rtxPts)) continue;
@@ -15960,7 +16004,7 @@
     const list = state.taxiways || [];
     for (let ti = 0; ti < list.length; ti++) {
       const tx = list[ti];
-      if (tx.pathType !== 'runway_exit') continue;
+      if (!isRunwayAccessLayoutPathType(tx.pathType)) continue;
       const rtxPts = getOrderedPoints(tx);
       if (!rtxPts || rtxPts.length < 2) continue;
       if (!polylineTouchesPolylineForGraph(rtxPts, rwPts) && !polylineTouchesPolylineForGraph(rwPts, rtxPts)) continue;
@@ -15981,7 +16025,7 @@
     const list = state.taxiways || [];
     for (let ti = 0; ti < list.length; ti++) {
       const b = list[ti];
-      if (!b || b.pathType !== 'runway_exit' || b.id === rtxA.id) continue;
+      if (!b || !isRunwayAccessLayoutPathType(b.pathType) || b.id === rtxA.id) continue;
       if (rtxPolylinesTouch(rtxA, b)) ids.add(b.id);
     }
     return ids;
@@ -15994,7 +16038,7 @@
     hop1.forEach(function(a) {
       for (let ti = 0; ti < list.length; ti++) {
         const b = list[ti];
-        if (!b || b.pathType !== 'runway_exit' || b.id === a.id) continue;
+        if (!b || !isRunwayAccessLayoutPathType(b.pathType) || b.id === a.id) continue;
         if (ids.has(b.id)) continue;
         if (rtxPolylinesTouch(a, b)) ids.add(b.id);
       }
@@ -16013,7 +16057,7 @@
     const list = state.taxiways || [];
     for (let ti = 0; ti < list.length; ti++) {
       const tx = list[ti];
-      if (tx.pathType !== 'runway_exit' || !candIds.has(tx.id)) continue;
+      if (!isRunwayAccessLayoutPathType(tx.pathType) || !candIds.has(tx.id)) continue;
       const rtxPts = getOrderedPoints(tx);
       if (rtxPts && rtxPts.length >= 2 && pointNearPolylineSq(p, rtxPts, tolD2)) return true;
     }
@@ -16136,6 +16180,49 @@
       if (runwayHoldingNearRtxCandidateSet(hp, candIds)) return true;
     }
     return false;
+  }
+  function getLayoutLineupRunwayAccessMissingHoldingPairs() {
+    const lines = [];
+    const seen = new Set();
+    function rwLabel(runwayTw) {
+      if (!runwayTw) return '—';
+      if (typeof getRunwayDisplayLabelById === 'function') {
+        const lab = getRunwayDisplayLabelById(runwayTw.id);
+        if (lab && lab !== '—') return lab;
+      }
+      const n = String(runwayTw.name || '').trim();
+      return n || (runwayTw.id != null ? String(runwayTw.id) : '—');
+    }
+    function rtxLabel(seg) {
+      if (!seg) return '—';
+      const n = String(seg.name || '').trim();
+      return n || (seg.id != null ? String(seg.id) : '—');
+    }
+    const tws = state.taxiways || [];
+    for (let wi = 0; wi < tws.length; wi++) {
+      const tw = tws[wi];
+      if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) continue;
+      const rwPts = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+      if (rwPts.length < 2) continue;
+      const lenPx = runwayPolylineLengthPx(rwPts);
+      const d = getEffectiveRunwayLineupDistFromStartM(tw, lenPx);
+      const lp = _pointOnPolylineAtDistPxForLineup(rwPts, d);
+      if (!lp) continue;
+      const hop1 = listRtxTouchingLineupOnRunway(tw, lp);
+      for (let hi = 0; hi < hop1.length; hi++) {
+        const seg = hop1[hi];
+        if (!seg || seg.id == null) continue;
+        if (rtxSetHasRunwayHoldingHp(new Set([seg.id]))) continue;
+        const key = String(tw.id) + '\0' + String(seg.id);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        lines.push(rwLabel(tw) + ' → ' + rtxLabel(seg));
+      }
+    }
+    return lines;
+  }
+  function hasLayoutLineupRunwayAccessHoldingViolation() {
+    return getLayoutLineupRunwayAccessMissingHoldingPairs().length > 0;
   }
   function computeDepHoldToLineupSecForFlight(f) {
     if (!f || f.arrDep !== 'Dep' || f.noWayDep) return 0;
@@ -19804,6 +19891,12 @@
             ? ('Stand SIBT–SOBT overlap: ' + regs.slice(0, 3).join(', ') + ', etc. (' + n + ' flights)')
             : ('Stand SIBT–SOBT overlap: ' + regs.join(' · '));
           failProSim(errMsg);
+          return;
+        }
+        const missHpPairs = typeof getLayoutLineupRunwayAccessMissingHoldingPairs === 'function'
+          ? getLayoutLineupRunwayAccessMissingHoldingPairs() : [];
+        if (missHpPairs.length) {
+          failProSim('Line-up runway holding missing: ' + missHpPairs.join(' · '));
           return;
         }
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
@@ -23542,8 +23635,7 @@
             for (let hi = 0; hi < hop1.length; hi++) {
               const rtx = hop1[hi];
               if (!rtx) continue;
-              const nid = rtxRunwayExitNeighborIds(rtx);
-              if (typeof rtxSetHasRunwayHoldingHp === 'function' && rtxSetHasRunwayHoldingHp(nid)) continue;
+              if (typeof rtxSetHasRunwayHoldingHp === 'function' && rtxSetHasRunwayHoldingHp(new Set([rtx.id]))) continue;
               const vts = rtx.vertices || [];
               if (vts.length < 2) continue;
               let sx = 0, sy = 0;
@@ -23552,7 +23644,9 @@
                 sx += pp[0]; sy += pp[1];
               }
               const mx = sx / vts.length, my = sy / vts.length;
-              const badgeText = 'No Holding Point';
+              const rwBadgeLab = String(tw.name || '').trim() || (tw.id != null ? String(tw.id) : '');
+              const rtxBadgeLab = String(rtx.name || '').trim() || (rtx.id != null ? String(rtx.id) : '');
+              const badgeText = rwBadgeLab + ' \u2192 ' + rtxBadgeLab;
               ctx.save();
               ctx.font = 'bold 10px system-ui, sans-serif';
               const padXB = 6, padYB = 3, radB = 4;
