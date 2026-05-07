@@ -217,11 +217,6 @@
   const DEP_MTOW_REF_LARGE_KG = Math.max(DEP_MTOW_REF_SMALL_KG + 1, Number(_flightTier.depTakeoffAccelMtowRefLargeKg) || 350000);
   const APRON_TAXIWAY_SPEED_MS = Math.max(0.1, Number(_flightTier.apronTaxiwaySpeedMs) || 1.5);
   const SIM_TIME_SLIDER_SNAP_SEC = Math.max(1, Number(_dc.flightSimSliderSnapSec) || 1);
-  /** Playback axis: min(SIBT) − 10 min, max(SOBT) + 20 min (seconds). */
-  const SIM_AXIS_SIBT_BEFORE_SEC = 600;
-  const SIM_AXIS_SOBT_AFTER_SEC = 1200;
-  /** 재생 타임 미세 모드 드래그: ``(dx/trackW)*span/이값`` 으로 시각 증분(값이 클수록 같은 픽셀에 더 적게 반응). */
-  const SIM_TIME_SLIDER_FINE_DIVISOR = 200;
   const DEFAULT_ALLOW_RUNWAY_IN_GROUND_SEGMENT = _dc.defaultAllowRunwayInGroundSegment;
   const _algoTier = _tiers.algorithm || {};
   const _algoSimTier = (_algoTier.simulation && typeof _algoTier.simulation === 'object') ? _algoTier.simulation : {};
@@ -328,3 +323,8 @@
     const s = _canvas2dStyle.taxiwayPavementStroke;
     return (typeof s === 'string' && s.trim()) ? s.trim() : '#827f76';
   }
+  function c2dTaxiwayPavementFill() {
+    const s = _canvas2dStyle.taxiwayPavementFill;
+    return (typeof s === 'string' && s.trim()) ? s.trim() : '#908e82';
+  }
+  function c2dRunwayOutline() { return _canvas2dStyle.runwayOutline || '#cbd5e1'; }

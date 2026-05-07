@@ -1,66 +1,3 @@
-    out = clip(out, 'x', false, maxX);
-    out = clip(out, 'y', true, minY);
-    out = clip(out, 'y', false, maxY);
-    return out.length >= 3 ? out : null;
-  }
-  function standDuplicateSafetyWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
-    const polyLocal = buildStandDuplicateSafetyPolygonLocalPoints(depM, widM, category);
-    if (!polyLocal || polyLocal.length < 3) return null;
-    return polyLocal.map(function(p) { return standFootprintLocalToWorld(cx, cy, angleRad, p[0], p[1]); });
-  }
-  function standSafetyOverlapSpec(stand) {
-    if (!stand || stand.id == null) return null;
-    const id = String(stand.id);
-    const isPbb = (state.pbbStands || []).some(function(s) { return s && String(s.id) === id; });
-    const center = isPbb ? getStandConnectionPx(stand) : getRemoteStandCenterPx(stand);
-    const angle = isPbb ? getPBBStandAngle(stand) : getRemoteStandAngleRad(stand);
-    const category = stand.category || 'C';
-    const dep = getStandDepthMeters(category);
-    const wid = getStandWidthMeters(category);
-    if (!center || !isFinite(center[0]) || !isFinite(center[1]) || !isFinite(dep) || !isFinite(wid)) return null;
-    const poly = standDuplicateSafetyWorldPolygonForSpec(center[0], center[1], angle, dep, wid, category);
-    const aabb = polygonAabbXY(poly);
-    return poly && aabb ? { id: id, stand: stand, poly: poly, aabb: aabb } : null;
-  }
-  function recomputeDuplicateApronByStandId() {
-    const specs = (typeof allStandsForFlightAssignment === 'function' ? allStandsForFlightAssignment() : [])
-      .map(standSafetyOverlapSpec)
-      .filter(Boolean);
-    const map = {};
-    for (let i = 0; i < specs.length; i++) {
-      const a = specs[i];
-      if (!map[a.id]) map[a.id] = [];
-      for (let j = i + 1; j < specs.length; j++) {
-        const b = specs[j];
-        if (!aabbRectOverlap(a.aabb, b.aabb)) continue;
-        if (!polygonsOverlapXY(a.poly, b.poly)) continue;
-        if (!map[a.id]) map[a.id] = [];
-        if (!map[b.id]) map[b.id] = [];
-        map[a.id].push(b.id);
-        map[b.id].push(a.id);
-      }
-    }
-    specs.forEach(function(spec) {
-      const list = (map[spec.id] || []).slice().sort();
-      spec.stand.duplicate_apron_list = list;
-      map[spec.id] = list;
-    });
-    state.duplicateApronByStandId = map;
-    return map;
-  }
-  function duplicateApronStandIdsForStand(standId) {
-    const key = standId != null ? String(standId) : '';
-    if (!key) return [];
-    const map = state.duplicateApronByStandId || {};
-    const arr = Array.isArray(map[key]) ? map[key] : [];
-    return arr.map(function(id) { return String(id); }).filter(Boolean);
-  }
-  function standGapSegmentsWorldForSpec(cx, cy, angleRad, depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return [];
-    const g = Number(r.gap), ws = Number(r.wingspan);
-    const halfD = depM / 2, halfW = widM / 2;
-    const eps = 0.12;
     if (!(isFinite(g) && g > eps && isFinite(ws) && ws > 0)) return [];
     const yLim = halfW - g;
     if (!(yLim > eps && yLim < halfW - eps)) return [];
@@ -771,8 +708,6 @@
         simPlaybackEndCapSec: (state.simPlaybackEndCapSec != null && isFinite(Number(state.simPlaybackEndCapSec)))
           ? Number(state.simPlaybackEndCapSec)
           : null,
-        simWindowStartSec: isFinite(Number(state.simWindowStartSec)) ? Number(state.simWindowStartSec) : null,
-        simWindowEndSec: isFinite(Number(state.simWindowEndSec)) ? Number(state.simWindowEndSec) : null,
         mapTypeMode: (state.mapTypeMode === 'heatmap') ? 'heatmap' : 'normal',
         heatmapTrafficPhases: Object.assign({}, state.heatmapTrafficPhases || {}),
       },
@@ -858,3 +793,68 @@
       enrichedApronLinkPolylines: enrichedApronLinkPolylines
     };
     try {
+      let tiled = null;
+      if (typeof exportLayoutGroundTilesFor3D === 'function') tiled = exportLayoutGroundTilesFor3D();
+      if (tiled && tiled.tiles && tiled.tiles.length === 4) {
+        payload.layoutGroundTiles = tiled;
+      } else if (typeof exportLayoutGroundTextureFor3D === 'function') {
+        const gt = exportLayoutGroundTextureFor3D();
+        if (gt && gt.dataUrl) payload.layoutGroundTexture = gt;
+      }
+    } catch (eTex) {
+      console.warn('exportLayoutGroundTilesFor3D / exportLayoutGroundTextureFor3D failed', eTex);
+    }
+    return payload;
+  }
+  function openGrid3DViewerWindow() {
+    const tpl = typeof window.__GRID3D_VIEWER_HTML_TEMPLATE__ === 'string' ? window.__GRID3D_VIEWER_HTML_TEMPLATE__ : '';
+    if (!tpl || tpl.length < 80) {
+      console.error('Grid 3D viewer template missing');
+      alert('3D viewer template is not loaded. Ensure pages/Layout_Design/3D/grid3d-viewer.html exists and reload the Layout Design page.');
+      return;
+    }
+    const bootHtml = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Layout 3D</title>' +
+      '<style>html,body{margin:0;height:100%;background:#0d0d0f;color:#e2e8f0;font-family:system-ui,sans-serif;overflow:hidden}' +
+      '.wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px;padding:24px;box-sizing:border-box}' +
+      '.sp{width:44px;height:44px;border:3px solid rgba(148,163,184,.25);border-top-color:#7c6af7;border-radius:50%;animation:g .85s linear infinite}' +
+      '@keyframes g{to{transform:rotate(360deg)}}' +
+      '.bar{width:min(360px,86vw);height:4px;border-radius:2px;background:rgba(148,163,184,.2);overflow:hidden}' +
+      '.bar>i{display:block;height:100%;width:38%;background:linear-gradient(90deg,#5b52d6,#7c6af7);border-radius:2px;animation:p 1.15s ease-in-out infinite}' +
+      '@keyframes p{0%,100%{transform:translateX(-40%)}50%{transform:translateX(200%)}}' +
+      '.t{font-size:15px;font-weight:600;color:#f1f5f9;text-align:center}.s{font-size:13px;color:#94a3b8;text-align:center;max-width:360px;line-height:1.45}' +
+      '</style></head><body><div class="wrap"><div class="sp"></div><div class="bar"><i></i></div><p class="t">3D 뷰 준비 중</p>' +
+      '<p class="s">레이아웃 스냅샷을 만들고 있습니다. 잠시만 기다려 주세요.</p></div></body></html>';
+    const g3Base = (typeof GRID3D_ASSET_API_URL === 'string' && GRID3D_ASSET_API_URL.trim()) ? GRID3D_ASSET_API_URL.trim() : '';
+    const viewerShellUrl = /^https?:\/\//i.test(g3Base) ? g3Base.replace(/\/$/, '') + '/api/grid3d-viewer-app' : '';
+    let w = null;
+    let openedViaReceiverShell = false;
+    if (viewerShellUrl) {
+      try {
+        w = window.open(viewerShellUrl, '_blank', 'width=1280,height=840');
+        openedViaReceiverShell = !!w;
+      } catch (eHttp) {
+        console.warn('Grid 3D receiver shell open failed', eHttp);
+        w = null;
+        openedViaReceiverShell = false;
+      }
+    }
+    if (!w) {
+      try {
+        w = window.open('data:text/html;charset=utf-8,' + encodeURIComponent(bootHtml), '_blank', 'width=1280,height=840');
+      } catch (eData) {
+        console.warn('Grid 3D popup data URL failed, using about:blank', eData);
+      }
+    }
+    if (!w) {
+      w = window.open('about:blank', '_blank', 'width=1280,height=840');
+    }
+    if (!w) {
+      alert('Popup was blocked. Allow popups for this site to open the 3D viewer.');
+      return;
+    }
+    if (!openedViaReceiverShell) {
+      var bootHref = '';
+      try {
+        bootHref = w.location && w.location.href ? String(w.location.href) : '';
+      } catch (eLoc) {
+        bootHref = '';

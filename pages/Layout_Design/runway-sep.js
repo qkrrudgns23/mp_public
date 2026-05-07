@@ -1,68 +1,3 @@
-      ctx.font = '600 ' + fs + 'px system-ui,sans-serif';
-      tw = Math.max(tw, ctx.measureText(txt).width + 8);
-      ctx.restore();
-    }
-    const th = fs + 8;
-    return { left: hx + 2, top: hy + 2, w: tw, h: th };
-  }
-  function hitTestLayoutMarker(wx, wy, opts) {
-    if (!layoutMarkersVisible()) return null;
-    const onlyKind = opts && opts.onlyKind;
-    const skipKind = opts && opts.skipKind;
-    const click = [wx, wy];
-    const padW = 6 / Math.max(state.scale, 0.1);
-    const list = state.layoutMarkers || [];
-    for (let i = list.length - 1; i >= 0; i--) {
-      const m = list[i];
-      if (!m) continue;
-      if (onlyKind && m.kind !== onlyKind) continue;
-      if (skipKind && m.kind === skipKind) continue;
-      if (m.kind === 'text') {
-        const ax = Number(m.x), ay = Number(m.y);
-        if (isFinite(ax) && isFinite(ay)) {
-          const ar = layoutMarkerHandleHitRadiusWorld() * 1.15;
-          if (dist2(click, [ax, ay]) <= ar * ar)
-            return { type: 'layoutMarker', id: m.id, obj: m };
-        }
-        const r = layoutMarkerTextHitRect(m);
-        if (!r) continue;
-        if (click[0] >= r.left - padW && click[0] <= r.left + r.w + padW &&
-            click[1] >= r.top - padW && click[1] <= r.top + r.h + padW)
-          return { type: 'layoutMarker', id: m.id, obj: m };
-      } else if (m.kind === 'ruler') {
-        const x1 = Number(m.x1), y1 = Number(m.y1), x2 = Number(m.x2), y2 = Number(m.y2);
-        if (![x1, y1, x2, y2].every(isFinite)) continue;
-        const er = layoutMarkerHandleHitRadiusWorld() * 1.1;
-        const er2 = er * er;
-        if (dist2(click, [x1, y1]) <= er2 || dist2(click, [x2, y2]) <= er2)
-          return { type: 'layoutMarker', id: m.id, obj: m };
-        const pr = projectOnSegment([x1, y1], [x2, y2], click);
-        if (pr.t < 0 || pr.t > 1) continue;
-        const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
-        if (dist2(pr.p, click) <= tol * tol)
-          return { type: 'layoutMarker', id: m.id, obj: m };
-      } else if (m.kind === 'flight') {
-        const pose = resolveMarkerFlightPose(m);
-        if (!pose) continue;
-        const tol = Math.max(CELL_SIZE * 1.1, 22 / Math.max(state.scale, 0.12));
-        if (dist2(click, [pose.x, pose.y]) <= tol * tol)
-          return { type: 'layoutMarker', id: m.id, obj: m };
-      } else if (m.kind === 'island' || m.kind === 'area') {
-        const pts = m.points;
-        if (!pts || pts.length < 3) continue;
-        const poly = pts.map(function(p) { return [Number(p.x), Number(p.y)]; }).filter(function(P) { return isFinite(P[0]) && isFinite(P[1]); });
-        if (poly.length < 3) continue;
-        const contourLineOnly = m.kind === 'island' && m.id != null && String(m.id).indexOf('contour-') === 0;
-        const er = layoutMarkerHandleHitRadiusWorld() * 1.1;
-        const er2 = er * er;
-        let nearVertex = false;
-        for (let ii = 0; ii < poly.length; ii++) {
-          if (dist2(click, poly[ii]) <= er2) {
-            nearVertex = true;
-            break;
-          }
-        }
-        if (nearVertex) return { type: 'layoutMarker', id: m.id, obj: m };
         if (!contourLineOnly && pointInPolygonXY(click, poly)) return { type: 'layoutMarker', id: m.id, obj: m };
         const tol = Math.max(CELL_SIZE * 0.35, 10 / Math.max(state.scale, 0.12));
         const tol2 = tol * tol;
@@ -383,3 +318,68 @@
         if (tw.vertices.length < 2) continue;
         for (let j = 0; j < tw.vertices.length - 1; j++) {
           const [x1, y1] = cellToPixel(tw.vertices[j].col, tw.vertices[j].row);
+          const [x2, y2] = cellToPixel(tw.vertices[j + 1].col, tw.vertices[j + 1].row);
+          const near = closestPointOnSegment([x1, y1], [x2, y2], click);
+          if (near && dist2(near, click) < pathCenterlineHitD2) return { type: 'taxiway', id: tw.id, obj: tw };
+        }
+      }
+    }
+    if (layoutMarkersVisible()) {
+      const arHit = hitTestLayoutMarker(wx, wy, { onlyKind: 'area' });
+      if (arHit) return arHit;
+    }
+    return null;
+  }
+
+  function hitTestSimFlightAtWorld(wx, wy) {
+    if (!simPlaybackVisualsActive() || simPlaybackHeavyVisualsSuppressed() || !state.flights || !state.flights.length) return null;
+    const tSec = state.simTimeSec;
+    let best = null;
+    let bestD2 = Infinity;
+    const flights = state.flights;
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f || flightBlockedLikeNoWay(f)) continue;
+      const pose = getFlightPoseAtTimeForDraw(f, tSec);
+      if (!pose) continue;
+      const dx = pose.x - wx, dy = pose.y - wy;
+      const d2 = dx * dx + dy * dy;
+      const poly = simFlightSilhouetteWorldPolygon(f, pose, tSec);
+      if (poly.length >= 3 && pointInPolygonXY([wx, wy], poly) && d2 < bestD2) {
+        bestD2 = d2;
+        best = f;
+      }
+    }
+    return best;
+  }
+
+  function hitTestTerminalVertex(wx, wy) {
+    const maxD2 = (CELL_SIZE * HIT_TERM_VTX_CF) ** 2;
+    const cands = [];
+    state.terminals.forEach(t => {
+      t.vertices.forEach((v, idx) => {
+        cands.push({ terminalId: t.id, index: idx, v });
+      });
+    });
+    const best = findNearestItem(cands, c => cellToPixel(c.v.col, c.v.row), wx, wy, maxD2);
+    return best ? { terminalId: best.terminalId, index: best.index } : null;
+  }
+
+  function hitTestTaxiwayVertex(wx, wy) {
+    if (!state.selectedObject || state.selectedObject.type !== 'taxiway') return null;
+    const tw = state.selectedObject.obj;
+    if (!tw || !tw.vertices || tw.vertices.length === 0) return null;
+    const click = [wx, wy];
+    const maxD2 = (CELL_SIZE * HIT_TW_VTX_CF) ** 2;
+    let best = null;
+    let bestD2 = maxD2;
+    tw.vertices.forEach((v, idx) => {
+      const [vx, vy] = cellToPixel(v.col, v.row);
+      const d2 = dist2([vx, vy], click);
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = { taxiwayId: tw.id, index: idx };
+      }
+    });
+    return best;
+  }
