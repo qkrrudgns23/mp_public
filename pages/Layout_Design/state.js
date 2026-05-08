@@ -1,3 +1,27 @@
+    if (pt === 'general_queue_taxiway') return true;
+    if (pt === 'runway_exit' || pt === 'runway_taxiway') return tw.queueFlow === true;
+    return false;
+  }
+  function normalizeTaxiwayWidthInPlace(tw) {
+    if (!tw || typeof tw !== 'object') return;
+    const pt = tw.pathType || 'taxiway';
+    const fb = pt === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
+    if (tw.width != null) tw.width = clampTaxiwayWidthM(pt, tw.width, fb);
+  }
+  const RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.startDisplacedThresholdM) || 100);
+  const RUNWAY_START_BLAST_PAD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.startBlastPadM) || 100);
+  const RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.endDisplacedThresholdM) || 100);
+  const RUNWAY_END_BLAST_PAD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.endBlastPadM) || 100);
+  function c2dObjectSelectedStroke() { return _canvas2dStyle.objectSelectedStroke || 'rgba(233, 213, 255, 0.62)'; }
+  function c2dObjectSelectedFill() { return _canvas2dStyle.objectSelectedFill || 'rgba(196, 181, 253, 0.28)'; }
+  function c2dObjectSelectedDashStroke() { return _canvas2dStyle.objectSelectedDashStroke || 'rgba(255, 252, 255, 0.55)'; }
+  function c2dObjectSelectedGlow() { return _canvas2dStyle.objectSelectedGlow || 'rgba(167, 139, 250, 0.45)'; }
+  function c2dRunwayStroke() { return _canvas2dStyle.runwayStroke || 'rgba(156, 163, 175, 0.78)'; }
+  function c2dRunwayFill() { return _canvas2dStyle.runwayFill || 'rgba(75, 85, 99, 0.78)'; }
+  function c2dTaxiwayPavementStroke() {
+    const s = _canvas2dStyle.taxiwayPavementStroke;
+    return (typeof s === 'string' && s.trim()) ? s.trim() : '#827f76';
+  }
   function c2dTaxiwayPavementFill() {
     const s = _canvas2dStyle.taxiwayPavementFill;
     return (typeof s === 'string' && s.trim()) ? s.trim() : '#908e82';
@@ -103,188 +127,164 @@
     if (v === 'asphalt' || v === 'cement') return;
     tw.pavement = pathPavementDefaultForPathType(tw.pathType);
   }
-  function islandMarkerPavementResolved(m) {
-    if (!m || typeof m !== 'object') return 'asphalt';
-    const pv = m.pavement;
-    if (pv === 'asphalt' || pv === 'cement') return pv;
-    const op = m.outerPavement;
-    if (op === 'taxiway') return 'cement';
-    if (op === 'runway') return 'asphalt';
-    return 'asphalt';
-  }
-  function islandMarkerPavementFillCss(m) {
-    return c2dRoadWidthBandForPavement(islandMarkerPavementResolved(m));
-  }
-  /** Selected road-width band only: ~1% darker than theme stroke/fill. */
-  const ROAD_WIDTH_SURFACE_RGB_MUL = 0.99;
-  function c2dObjectSelectedGlowBlur() {
-    const n = Number(_canvas2dStyle.objectSelectedGlowBlur);
-    return (isFinite(n) && n >= 0) ? n : 22;
-  }
-  function c2dFlightSelectedRingStroke() { return _canvas2dStyle.flightSelectedRingStroke || '#facc15'; }
-  function c2dFlightSelectedRingGlow() { return _canvas2dStyle.flightSelectedRingGlow || 'rgba(250, 204, 21, 0.55)'; }
-  function c2dFlightSelectedRingGlowBlur() {
-    const n = Number(_canvas2dStyle.flightSelectedRingGlowBlur);
-    return (isFinite(n) && n >= 0) ? n : 18;
-  }
-  function c2dSimPreTouchdownHaloStroke() { return _canvas2dStyle.simPreTouchdownHaloStroke || 'rgba(239, 68, 68, 0.92)'; }
-  function c2dSimPreTouchdownHaloFill() { return _canvas2dStyle.simPreTouchdownHaloFill || 'rgba(239, 68, 68, 0.18)'; }
-  function c2dSimPreTouchdownHaloBlur() {
-    const n = Number(_canvas2dStyle.simPreTouchdownHaloBlur);
-    return (isFinite(n) && n >= 0) ? n : 14;
-  }
-  function c2dSimFlightTrailStroke() { return _canvas2dStyle.simFlightTrailStroke || 'rgba(255, 47, 146, 0.97)'; }
-  function c2dSimFlightTrailStrokeEnd() { return _canvas2dStyle.simFlightTrailStrokeEnd || 'rgba(255, 47, 146, 0)'; }
-  function c2dSimFlightTrailLineWidth() {
-    const n = Number(_canvas2dStyle.simFlightTrailLineWidth);
-    return (isFinite(n) && n > 0) ? n : 3.5;
-  }
-  function c2dApproachPreviewWidthM() {
-    const n = Number(_canvas2dStyle.approachPreviewWidthM);
-    return (isFinite(n) && n > 0) ? n : 30;
-  }
-  function c2dApproachPreviewStroke() {
-    return _canvas2dStyle.approachPreviewStroke || 'rgba(255, 255, 255, 0.01)';
-  }
-  function c2dHoldingPointDiameterM() {
-    const n = Number(_canvas2dStyle.holdingPointDiameterM);
-    return (isFinite(n) && n > 0) ? n : 15;
-  }
-  function normalizeHoldingPointKind(raw) {
-    return raw === 'runway_holding' ? 'runway_holding' : 'intermediate';
-  }
-  function pathTypeToHpKind(pathType) {
-    return pathType === 'runway_exit' ? 'runway_holding' : 'intermediate';
-  }
-  function holdingPointKindDisplayLabel(kind) {
-    return normalizeHoldingPointKind(kind) === 'runway_holding' ? 'Runway Holding Position' : 'Intermediate Holding Position';
-  }
-  function c2dHoldingPointFillForKind(kind) {
-    const k = normalizeHoldingPointKind(kind);
-    if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayFill || 'rgba(239, 68, 68, 0.5)';
-    return _canvas2dStyle.holdingPointIntermediateFill || 'rgba(249, 115, 22, 0.5)';
-  }
-  function c2dHoldingPointStrokeForKind(kind) {
-    const k = normalizeHoldingPointKind(kind);
-    if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayStroke || 'rgba(220, 38, 38, 0.78)';
-    return _canvas2dStyle.holdingPointIntermediateStroke || 'rgba(234, 88, 12, 0.75)';
-  }
-  function c2dHoldingPointPreviewFillForPathType(pathType) {
-    const k = pathTypeToHpKind(pathType || 'taxiway');
-    if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayPreviewFill || 'rgba(239, 68, 68, 0.28)';
-    return _canvas2dStyle.holdingPointIntermediatePreviewFill || 'rgba(249, 115, 22, 0.28)';
-  }
-  function c2dHoldingPointPreviewStrokeForPathType(pathType) {
-    const k = pathTypeToHpKind(pathType || 'taxiway');
-    if (k === 'runway_holding') return _canvas2dStyle.holdingPointRunwayStroke || 'rgba(220, 38, 38, 0.78)';
-    return _canvas2dStyle.holdingPointIntermediateStroke || 'rgba(234, 88, 12, 0.75)';
-  }
-  function c2dHoldingPointMarkingYellow() {
-    return _canvas2dStyle.holdingPointMarkingYellow || '#facc15';
-  }
-  function c2dHoldingPointMarkingLineWidthWorld() {
-    const n = Number(_canvas2dStyle.holdingPointMarkingLineWidthWorld);
-    return (isFinite(n) && n > 0) ? n : 0.28;
-  }
-  function holdingPointMarkingDoubleLineGapM(lineW) {
-    const n = Number(_canvas2dStyle.holdingPointMarkingDoubleLineGapM);
-    const lw = Number(lineW);
-    const baseLw = (isFinite(lw) && lw > 0) ? lw : c2dHoldingPointMarkingLineWidthWorld();
-    return (isFinite(n) && n > 0) ? n : Math.max(0.28, baseLw * 1.2);
-  }
-  function taxiwayWorldWidthMForHolding(tw) {
-    if (!tw) return TAXIWAY_DEFAULT_WIDTH;
-    const typ = tw.pathType || 'taxiway';
-    const base = typ === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (typ === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-    return clampTaxiwayWidthM(typ, tw.width, base);
-  }
-  function holdingPointBarHalfLengthMFromPathWidth(pathWidthM) {
-    const w = Number(pathWidthM);
-    if (isFinite(w) && w > 0) return w * 0.5;
-    return Math.max(3, c2dHoldingPointDiameterM() * 0.5);
-  }
-  function holdingPointPerpFromTangent(ux, uy) {
-    return { px: -uy, py: ux };
-  }
-  function distPointToSegmentSq(x, y, ax, ay, bx, by) {
-    const abx = bx - ax, aby = by - ay;
-    const apx = x - ax, apy = y - ay;
-    const abLenSq = abx * abx + aby * aby;
-    if (abLenSq < 1e-12) return apx * apx + apy * apy;
-    let t = (apx * abx + apy * aby) / abLenSq;
-    t = Math.max(0, Math.min(1, t));
-    const qx = ax + t * abx, qy = ay + t * aby;
-    const dx = x - qx, dy = y - qy;
-    return dx * dx + dy * dy;
-  }
-  function findHoldingPointPathGeometry(hp) {
-    const pt = [hp.x, hp.y];
-    const wantRunway = normalizeHoldingPointKind(hp.hpKind) === 'runway_holding';
-    const maxD2 = Math.pow(Math.max(CELL_SIZE * 6, 55), 2);
-    let bestD2 = Infinity;
-    let ux = 1, uy = 0;
-    let bestTw = null;
-    (state.taxiways || []).forEach(function(tw) {
-      const typ = tw.pathType || 'taxiway';
-      if (wantRunway) {
-        if (typ !== 'runway_exit') return;
-      } else {
-        if (typ !== 'taxiway' && typ !== 'apron_taxiway' && typ !== 'general_queue_taxiway') return;
-      }
-      if (!tw.vertices || tw.vertices.length < 2) return;
-      for (let i = 0; i < tw.vertices.length - 1; i++) {
-        const p1 = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        const p2 = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
-        const near = closestPointOnSegment(p1, p2, pt);
-        if (!near) continue;
-        const d2 = dist2(near, pt);
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          bestTw = tw;
-          const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
-          const len = Math.hypot(dx, dy);
-          if (len > 1e-6) {
-            ux = dx / len;
-            uy = dy / len;
-          }
-        }
-      }
+  const ICAO_CAT_ALLOWED_MASK_FULL = 0x3f;
+  /** DOM id: same `icao-multi-checks` pattern as Contact Stand. */
+  const PATH_OPS_ICAO_HOST_ID = 'taxiwayPathOpsIcaoCategories';
+  function pathOpsIcaoLettersFromMask(mask) {
+    let m = mask;
+    if (typeof m !== 'number' || !isFinite(m)) m = ICAO_CAT_ALLOWED_MASK_FULL;
+    m = (m | 0) & ICAO_CAT_ALLOWED_MASK_FULL;
+    if (m === 0) return ICAO_LETTERS_ORDER.slice();
+    const out = [];
+    ICAO_LETTERS_ORDER.forEach(function(L, bit) {
+      if (((m >> bit) & 1) === 1) out.push(L);
     });
-    const pathWidthM = taxiwayWorldWidthMForHolding(bestTw);
-    if (bestD2 > maxD2) return { ux: 1, uy: 0, ok: false, pathWidthM, tw: bestTw };
-    return { ux, uy, ok: true, pathWidthM, tw: bestTw };
+    return out;
   }
-  function closestPointOnAnyRunwayCenterlineWorld(wx, wy) {
-    const pt = [wx, wy];
-    let best = null;
-    let bestD2 = Infinity;
-    (state.taxiways || []).forEach(function(tw) {
-      if ((tw.pathType || 'taxiway') !== 'runway') return;
-      if (!tw.vertices || tw.vertices.length < 2) return;
-      for (let i = 0; i < tw.vertices.length - 1; i++) {
-        const p1 = cellToPixel(tw.vertices[i].col, tw.vertices[i].row);
-        const p2 = cellToPixel(tw.vertices[i + 1].col, tw.vertices[i + 1].row);
-        const near = closestPointOnSegment(p1, p2, pt);
-        if (!near) continue;
-        const d2 = dist2(near, pt);
-        if (d2 < bestD2) { bestD2 = d2; best = near; }
-      }
+  function pathOpsMaskFromIcaoLetterChecks(letters) {
+    const arr = normalizeAllowedIcaoCategories(letters);
+    if (!arr.length) return ICAO_CAT_ALLOWED_MASK_FULL;
+    let mask = 0;
+    arr.forEach(function(L) {
+      const ix = ICAO_LETTERS_ORDER.indexOf(L);
+      if (ix >= 0) mask |= 1 << ix;
     });
-    return best;
+    return (mask | 0) & ICAO_CAT_ALLOWED_MASK_FULL;
   }
-  function findHoldingPointPathTangent(hp) {
-    const g = findHoldingPointPathGeometry(hp);
-    return { ux: g.ux, uy: g.uy, ok: g.ok };
+  function pathOpsEligiblePathType(pt) {
+    return pt === 'runway' || pt === 'runway_taxiway' || pt === 'runway_exit' ||
+      pt === 'taxiway' || pt === 'apron_taxiway' || pt === 'general_queue_taxiway';
   }
-  function drawHoldingPointGridMarking(ctx, cx, cy, hpKind, selected, preview) {
-    const k = normalizeHoldingPointKind(hpKind);
-    const g = findHoldingPointPathGeometry({ x: cx, y: cy, hpKind: hpKind });
-    const { px, py } = holdingPointPerpFromTangent(g.ux, g.uy);
-    const halfLen = holdingPointBarHalfLengthMFromPathWidth(g.pathWidthM);
-    const pathSpanM = halfLen * 2;
-    const lineW = c2dHoldingPointMarkingLineWidthWorld();
-    const centerlineStroke = k === 'runway_holding' ? c2dRunwayTaxiwayCenterlineStroke() : c2dTaxiwayCenterlineStroke();
-    const lineMono = layerMonoLinesOn() && !preview && !selected;
-    const stroke = preview
-      ? 'rgba(250, 204, 21, 0.7)'
-      : (selected ? c2dObjectSelectedStroke() : (lineMono ? c2dLayerMonoLineStrokeCss() : centerlineStroke));
+  /** Copy legacy slotOn48 / slotCw48 / slotCcw48 into pathOps* then remove legacy keys. */
+  function pathOpsMigrateLegacySlotKeysInPlace(tw) {
+    if (!tw || typeof tw !== 'object') return;
+    if (!Array.isArray(tw.pathOpsSlotOn) && Array.isArray(tw.slotOn48)) tw.pathOpsSlotOn = tw.slotOn48;
+    if (!Array.isArray(tw.pathOpsSlotCw) && Array.isArray(tw.slotCw48)) tw.pathOpsSlotCw = tw.slotCw48;
+    if (!Array.isArray(tw.pathOpsSlotCcw) && Array.isArray(tw.slotCcw48)) tw.pathOpsSlotCcw = tw.slotCcw48;
+    delete tw.slotOn48;
+    delete tw.slotCw48;
+    delete tw.slotCcw48;
+  }
+  function pathOpsDefaultSlotOnAllTrue() {
+    const a = [];
+    for (let i = 0; i < PATH_OPS_SLOT_COUNT; i++) a.push(true);
+    return a;
+  }
+  function pathOpsFilledSlotRow(boolVal) {
+    const a = [];
+    for (let i = 0; i < PATH_OPS_SLOT_COUNT; i++) a.push(!!boolVal);
+    return a;
+  }
+  function pathOpsNormalizeSlotRow(raw, fillMissingWith) {
+    const out = [];
+    const fm = !!fillMissingWith;
+    const src = Array.isArray(raw) ? raw : [];
+    for (let i = 0; i < PATH_OPS_SLOT_COUNT; i++) {
+      out.push(i < src.length ? !!src[i] : fm);
+    }
+    return out;
+  }
+  function pathOpsSlotsEqual(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== PATH_OPS_SLOT_COUNT || b.length !== PATH_OPS_SLOT_COUNT) {
+      return false;
+    }
+    for (let i = 0; i < PATH_OPS_SLOT_COUNT; i++) {
+      if (!!a[i] !== !!b[i]) return false;
+    }
+    return true;
+  }
+  function pathOpsCwDefaultBoolForTaxiwayDirection(tw) {
+    if (!tw) return true;
+    if (tw.pathType === 'runway') {
+      const d = String(tw.direction || 'clockwise').trim();
+      return d !== 'counter_clockwise';
+    }
+    const d2 = String(tw.direction || 'both').trim();
+    return d2 !== 'counter_clockwise';
+  }
+  /** CCW Infra column default: Both → permissive true (matches legacy omission). */
+  function pathOpsCcwDefaultBoolForTaxiwayDirection(tw) {
+    if (!tw) return true;
+    if (tw.pathType === 'runway') {
+      const d = String(tw.direction || 'clockwise').trim();
+      return d === 'counter_clockwise';
+    }
+    const d2 = String(tw.direction || 'both').trim();
+    if (d2 === 'counter_clockwise') return true;
+    if (d2 === 'clockwise') return false;
+    return true;
+  }
+  /**
+   * runway_exit: ``allowedRwDirections``가 있으면 인프라 CW/CCW 기본값을 그 목록과 맞춤.
+   * 속성이 없으면 F2 레거시(양방향 허용)와 맞추어 CW·CCW 브랜치 기본을 모두 연다
+   * (폴리선 ``direction``이 CW만으로 CCW 착지 브랜치를 닫지 않음).
+   */
+  function pathOpsCwDefaultBoolForRunwayExit(tw) {
+    if (!tw || tw.pathType !== 'runway_exit') return pathOpsCwDefaultBoolForTaxiwayDirection(tw);
+    if (Object.prototype.hasOwnProperty.call(tw, 'allowedRwDirections')) {
+      const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
+      if (arr.length === 0) return false;
+      return arr.indexOf('clockwise') >= 0;
+    }
+    return true;
+  }
+  function pathOpsCcwDefaultBoolForRunwayExit(tw) {
+    if (!tw || tw.pathType !== 'runway_exit') return pathOpsCwDefaultBoolForTaxiwayDirection(tw);
+    if (Object.prototype.hasOwnProperty.call(tw, 'allowedRwDirections')) {
+      const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
+      if (arr.length === 0) return false;
+      return arr.indexOf('counter_clockwise') >= 0;
+    }
+    return true;
+  }
+  /**
+   * Direction Mode가 CW 또는 CCW일 때만: CW 슬롯 행은 전 구간 동일 값(방향과 연동).
+   * Both일 때만 슬롯별 편집 허용.
+   */
+  function pathOpsCwRowUniformArrayForDirectionOrNull(tw) {
+    if (!tw || !pathOpsEligiblePathType(tw.pathType)) return null;
+    if (tw.pathType === 'runway_exit') return null;
+    let raw = tw.direction != null ? String(tw.direction).trim() : '';
+    if (!raw) raw = tw.pathType === 'runway' ? 'clockwise' : 'both';
+    const d = typeof normalizeRwDirectionValue === 'function' ? normalizeRwDirectionValue(raw) : 'both';
+    if (d === 'both') return null;
+    return pathOpsFilledSlotRow(pathOpsCwDefaultBoolForTaxiwayDirection(tw));
+  }
+  function pathOpsCcwRowUniformArrayForDirectionOrNull(tw) {
+    if (!tw || !pathOpsEligiblePathType(tw.pathType)) return null;
+    if (tw.pathType === 'runway_exit') return null;
+    let raw = tw.direction != null ? String(tw.direction).trim() : '';
+    if (!raw) raw = tw.pathType === 'runway' ? 'clockwise' : 'both';
+    const d = typeof normalizeRwDirectionValue === 'function' ? normalizeRwDirectionValue(raw) : 'both';
+    if (d === 'both') return null;
+    return pathOpsFilledSlotRow(pathOpsCcwDefaultBoolForTaxiwayDirection(tw));
+  }
+  /** Taxiway / Runway taxiway: each slot must allow at least one of CW or CCW (Python path-ops aligns to one branch). */
+  function pathOpsCoerceTaxiAndRunwayTaxiwayMinOneCwOrCcwSlotInPlace(tw) {
+    if (!tw || (tw.pathType !== 'taxiway' && tw.pathType !== 'runway_taxiway')) return;
+    let j = 0;
+    for (j = 0; j < PATH_OPS_SLOT_COUNT; j++) {
+      if (!tw.pathOpsSlotCw[j] && !tw.pathOpsSlotCcw[j]) {
+        if (pathOpsCwDefaultBoolForTaxiwayDirection(tw)) tw.pathOpsSlotCw[j] = true;
+        else tw.pathOpsSlotCcw[j] = true;
+      }
+    }
+  }
+  function pathOpsApplyCwRowDirectionLinkUi(tw) {
+    const linked = !!(tw && pathOpsCwRowUniformArrayForDirectionOrNull(tw));
+    [
+      ['pathOpsSlotCwGrid', 'path-ops-cw-row--direction-linked', 'path-ops-cw-grid--locked'],
+      ['pathOpsSlotCcwGrid', 'path-ops-ccw-row--direction-linked', 'path-ops-ccw-grid--locked']
+    ].forEach(function(spec) {
+      const host = document.getElementById(spec[0]);
+      const row = host && typeof host.closest === 'function' ? host.closest('.path-ops-slot-row') : null;
+      if (!row || !host) return;
+      row.classList.toggle(spec[1], linked);
+      host.classList.toggle(spec[2], linked);
+    });
+  }
+  function normalizePathOpsPayloadInPlaceForTaxiway(tw) {
+    if (!tw || typeof tw !== 'object') return;
+    if (!pathOpsEligiblePathType(tw.pathType)) {
+      delete tw.pathOpsSlotOn;
+      delete tw.pathOpsSlotCw;

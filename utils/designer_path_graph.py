@@ -715,6 +715,7 @@ def path_dijkstra(
     penalty_add: float = 0.0,
     apron_transit_extra: float = 0.0,
     apron_allowed_link_ids: Optional[Set[str]] = None,
+    runway_exit_allowed_link_ids: Optional[Set[str]] = None,
     path_ops_enabled: bool = False,
     path_ops_slot_anchor_abs_sec: float = 0.0,
     path_ops_icao_cat_letter: Optional[str] = None,
@@ -729,6 +730,10 @@ def path_dijkstra(
     When ``apron_transit_extra > 0`` and ``apron_allowed_link_ids`` is set, add that cost to
     every ``apron_link`` arc whose ``link_id`` is **not** in the allowed set (arrival taxi should
     use the taxiway network and only the assigned stand's Leadin Taxiway link for the final connect).
+
+    When ``runway_exit_allowed_link_ids`` is set, skip every arc whose exported ``path_type`` is
+    ``runway_exit`` unless its ``link_id`` is in that set (arrival touchdown→RET routing must stay
+    on the assigned runway exit taxiway link).
 
     Optional path-ops: when ``path_ops_enabled`` is true and ``g.has_path_ops_constraints``,
     skip arcs whose exported ``pathOpsSlotOn`` (legacy ``slotOn48``) denies the slot derived from
@@ -747,6 +752,7 @@ def path_dijkstra(
     p_add = float(penalty_add)
     ap_x = max(0.0, float(apron_transit_extra))
     ap_ids = apron_allowed_link_ids
+    ret_allow = runway_exit_allowed_link_ids
     use_ap = ap_x > 0.0 and ap_ids is not None
     use_po = bool(path_ops_enabled) and getattr(g, "has_path_ops_constraints", False)
     path_ops_slot_idx = slot_index_from_anchor_abs_sec(
@@ -791,6 +797,14 @@ def path_dijkstra(
                 lid = str(rec.link_id or "").strip()
                 if lid and lid not in ap_ids:
                     w += ap_x
+            if (
+                ret_allow is not None
+                and rec is not None
+                and str(rec.path_type or "") == "runway_exit"
+            ):
+                lid_r = str(rec.link_id or "").strip()
+                if not lid_r or lid_r not in ret_allow:
+                    continue
             nd = d + w
             if nd < dist[v]:
                 dist[v] = nd

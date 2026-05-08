@@ -61,6 +61,21 @@
   }
   window.flightBlockedLikeNoWay = flightBlockedLikeNoWay;
 
+  function ensureFlightLookaheadArrDepFlight(f) {
+    if (!f || typeof f !== 'object') return;
+    function clampLA(v) {
+      if (v == null || v === '' || !isFinite(Number(v))) return null;
+      return Math.max(0, Math.min(200, Math.floor(Number(v))));
+    }
+    var leg = clampLA(f.lookaheadTaxi);
+    var a = clampLA(f.lookaheadArr);
+    var dep = clampLA(f.lookaheadDep);
+    var base = leg !== null ? leg : 9;
+    f.lookaheadArr = a !== null ? a : base;
+    f.lookaheadDep = dep !== null ? dep : base;
+  }
+  window.ensureFlightLookaheadArrDepFlight = ensureFlightLookaheadArrDepFlight;
+
   const _tiers = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers) ? INFORMATION.tiers : {};
   const _layoutTier = _tiers.layout || {};
   const _pbbTier = _layoutTier.pbb || {};
@@ -313,27 +328,3 @@
   function taxiwayUsesQueueJunctionSpacing(tw) {
     if (!tw) return false;
     const pt = String(tw.pathType || '');
-    if (pt === 'general_queue_taxiway') return true;
-    if (pt === 'runway_exit' || pt === 'runway_taxiway') return tw.queueFlow === true;
-    return false;
-  }
-  function normalizeTaxiwayWidthInPlace(tw) {
-    if (!tw || typeof tw !== 'object') return;
-    const pt = tw.pathType || 'taxiway';
-    const fb = pt === 'runway' ? RUNWAY_PATH_DEFAULT_WIDTH : (pt === 'runway_exit' ? RUNWAY_EXIT_DEFAULT_WIDTH : TAXIWAY_DEFAULT_WIDTH);
-    if (tw.width != null) tw.width = clampTaxiwayWidthM(pt, tw.width, fb);
-  }
-  const RUNWAY_START_DISPLACED_THRESHOLD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.startDisplacedThresholdM) || 100);
-  const RUNWAY_START_BLAST_PAD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.startBlastPadM) || 100);
-  const RUNWAY_END_DISPLACED_THRESHOLD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.endDisplacedThresholdM) || 100);
-  const RUNWAY_END_BLAST_PAD_DEFAULT_M = Math.max(0, Number(_runwayPathTier.endBlastPadM) || 100);
-  function c2dObjectSelectedStroke() { return _canvas2dStyle.objectSelectedStroke || 'rgba(233, 213, 255, 0.62)'; }
-  function c2dObjectSelectedFill() { return _canvas2dStyle.objectSelectedFill || 'rgba(196, 181, 253, 0.28)'; }
-  function c2dObjectSelectedDashStroke() { return _canvas2dStyle.objectSelectedDashStroke || 'rgba(255, 252, 255, 0.55)'; }
-  function c2dObjectSelectedGlow() { return _canvas2dStyle.objectSelectedGlow || 'rgba(167, 139, 250, 0.45)'; }
-  function c2dRunwayStroke() { return _canvas2dStyle.runwayStroke || 'rgba(156, 163, 175, 0.78)'; }
-  function c2dRunwayFill() { return _canvas2dStyle.runwayFill || 'rgba(75, 85, 99, 0.78)'; }
-  function c2dTaxiwayPavementStroke() {
-    const s = _canvas2dStyle.taxiwayPavementStroke;
-    return (typeof s === 'string' && s.trim()) ? s.trim() : '#827f76';
-  }

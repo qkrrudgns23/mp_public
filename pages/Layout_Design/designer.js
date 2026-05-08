@@ -545,11 +545,35 @@
     return true;
   }
   /**
+   * runway_exit: ``allowedRwDirections``가 있으면 인프라 CW/CCW 기본값을 그 목록과 맞춤.
+   * 속성이 없으면 F2 레거시(양방향 허용)와 맞추어 CW·CCW 브랜치 기본을 모두 연다
+   * (폴리선 ``direction``이 CW만으로 CCW 착지 브랜치를 닫지 않음).
+   */
+  function pathOpsCwDefaultBoolForRunwayExit(tw) {
+    if (!tw || tw.pathType !== 'runway_exit') return pathOpsCwDefaultBoolForTaxiwayDirection(tw);
+    if (Object.prototype.hasOwnProperty.call(tw, 'allowedRwDirections')) {
+      const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
+      if (arr.length === 0) return false;
+      return arr.indexOf('clockwise') >= 0;
+    }
+    return true;
+  }
+  function pathOpsCcwDefaultBoolForRunwayExit(tw) {
+    if (!tw || tw.pathType !== 'runway_exit') return pathOpsCwDefaultBoolForTaxiwayDirection(tw);
+    if (Object.prototype.hasOwnProperty.call(tw, 'allowedRwDirections')) {
+      const arr = normalizeAllowedRunwayDirections(tw.allowedRwDirections);
+      if (arr.length === 0) return false;
+      return arr.indexOf('counter_clockwise') >= 0;
+    }
+    return true;
+  }
+  /**
    * Direction Mode가 CW 또는 CCW일 때만: CW 슬롯 행은 전 구간 동일 값(방향과 연동).
    * Both일 때만 슬롯별 편집 허용.
    */
   function pathOpsCwRowUniformArrayForDirectionOrNull(tw) {
     if (!tw || !pathOpsEligiblePathType(tw.pathType)) return null;
+    if (tw.pathType === 'runway_exit') return null;
     let raw = tw.direction != null ? String(tw.direction).trim() : '';
     if (!raw) raw = tw.pathType === 'runway' ? 'clockwise' : 'both';
     const d = typeof normalizeRwDirectionValue === 'function' ? normalizeRwDirectionValue(raw) : 'both';
@@ -558,6 +582,7 @@
   }
   function pathOpsCcwRowUniformArrayForDirectionOrNull(tw) {
     if (!tw || !pathOpsEligiblePathType(tw.pathType)) return null;
+    if (tw.pathType === 'runway_exit') return null;
     let raw = tw.direction != null ? String(tw.direction).trim() : '';
     if (!raw) raw = tw.pathType === 'runway' ? 'clockwise' : 'both';
     const d = typeof normalizeRwDirectionValue === 'function' ? normalizeRwDirectionValue(raw) : 'both';
@@ -603,14 +628,14 @@
     pathOpsMigrateLegacySlotKeysInPlace(tw);
     tw.pathOpsSlotOn = pathOpsNormalizeSlotRow(tw.pathOpsSlotOn, true);
     const cwUniform = pathOpsCwRowUniformArrayForDirectionOrNull(tw);
-    const cwDef = pathOpsCwDefaultBoolForTaxiwayDirection(tw);
+    const cwDef = tw.pathType === 'runway_exit' ? pathOpsCwDefaultBoolForRunwayExit(tw) : pathOpsCwDefaultBoolForTaxiwayDirection(tw);
     if (cwUniform) {
       tw.pathOpsSlotCw = pathOpsNormalizeSlotRow(cwUniform, cwDef);
     } else {
       tw.pathOpsSlotCw = pathOpsNormalizeSlotRow(tw.pathOpsSlotCw, cwDef);
     }
     const ccwUniform = pathOpsCcwRowUniformArrayForDirectionOrNull(tw);
-    const ccwDef = pathOpsCcwDefaultBoolForTaxiwayDirection(tw);
+    const ccwDef = tw.pathType === 'runway_exit' ? pathOpsCcwDefaultBoolForRunwayExit(tw) : pathOpsCcwDefaultBoolForTaxiwayDirection(tw);
     if (ccwUniform) {
       tw.pathOpsSlotCcw = pathOpsNormalizeSlotRow(ccwUniform, ccwDef);
     } else {
@@ -691,8 +716,8 @@
     if (!exitTw || exitTw.pathType !== 'runway_exit') return false;
     if (runwayEffectiveDir !== 'clockwise' && runwayEffectiveDir !== 'counter_clockwise') return false;
     pathOpsMigrateLegacySlotKeysInPlace(exitTw);
-    const cwDef = pathOpsCwDefaultBoolForTaxiwayDirection(exitTw);
-    const ccwDef = pathOpsCcwDefaultBoolForTaxiwayDirection(exitTw);
+    const cwDef = exitTw.pathType === 'runway_exit' ? pathOpsCwDefaultBoolForRunwayExit(exitTw) : pathOpsCwDefaultBoolForTaxiwayDirection(exitTw);
+    const ccwDef = exitTw.pathType === 'runway_exit' ? pathOpsCcwDefaultBoolForRunwayExit(exitTw) : pathOpsCcwDefaultBoolForTaxiwayDirection(exitTw);
     const cw = pathOpsNormalizeSlotRow(exitTw.pathOpsSlotCw, cwDef);
     const ccw = pathOpsNormalizeSlotRow(exitTw.pathOpsSlotCcw, ccwDef);
     if (slotIdx < 0 || slotIdx >= PATH_OPS_SLOT_COUNT) return false;
@@ -702,10 +727,10 @@
     if (!copy || !pathOpsEligiblePathType(copy.pathType)) return;
     normalizePathOpsPayloadInPlaceForTaxiway(copy);
     if (pathOpsSlotsEqual(copy.pathOpsSlotOn, pathOpsDefaultSlotOnAllTrue())) delete copy.pathOpsSlotOn;
-    const cwDef = pathOpsCwDefaultBoolForTaxiwayDirection(copy);
+    const cwDef = copy.pathType === 'runway_exit' ? pathOpsCwDefaultBoolForRunwayExit(copy) : pathOpsCwDefaultBoolForTaxiwayDirection(copy);
     const defCw = pathOpsFilledSlotRow(cwDef);
     if (pathOpsSlotsEqual(copy.pathOpsSlotCw, defCw)) delete copy.pathOpsSlotCw;
-    const ccwDef = pathOpsCcwDefaultBoolForTaxiwayDirection(copy);
+    const ccwDef = copy.pathType === 'runway_exit' ? pathOpsCcwDefaultBoolForRunwayExit(copy) : pathOpsCcwDefaultBoolForTaxiwayDirection(copy);
     const defCcw = pathOpsFilledSlotRow(ccwDef);
     let rawDir = copy.direction != null ? String(copy.direction).trim() : '';
     if (!rawDir) rawDir = copy.pathType === 'runway' ? 'clockwise' : 'both';
@@ -731,11 +756,11 @@
     if (typeof m !== 'number' || !isFinite(m)) m = ICAO_CAT_ALLOWED_MASK_FULL;
     m = (m | 0) & ICAO_CAT_ALLOWED_MASK_FULL;
     if (m !== ICAO_CAT_ALLOWED_MASK_FULL) edge.icaoCategoryAllowedMask = m;
-    const cwDef = pathOpsCwDefaultBoolForTaxiwayDirection(tw);
+    const cwDef = pt === 'runway_exit' ? pathOpsCwDefaultBoolForRunwayExit(tw) : pathOpsCwDefaultBoolForTaxiwayDirection(tw);
     const cwNorm = pathOpsNormalizeSlotRow(tw.pathOpsSlotCw, cwDef);
     const defCw = pathOpsFilledSlotRow(cwDef);
     if (!pathOpsSlotsEqual(cwNorm, defCw)) edge.pathOpsSlotCw = cwNorm.slice();
-    const ccwDef = pathOpsCcwDefaultBoolForTaxiwayDirection(tw);
+    const ccwDef = pt === 'runway_exit' ? pathOpsCcwDefaultBoolForRunwayExit(tw) : pathOpsCcwDefaultBoolForTaxiwayDirection(tw);
     const ccwNorm = pathOpsNormalizeSlotRow(tw.pathOpsSlotCcw, ccwDef);
     let rawDir = tw.direction != null ? String(tw.direction).trim() : '';
     if (!rawDir) rawDir = tw.pathType === 'runway' ? 'clockwise' : 'both';
@@ -749,8 +774,10 @@
   function resetPathOpsSlotCwToDirectionDefault(tw) {
     if (!tw || !pathOpsEligiblePathType(tw.pathType)) return;
     pathOpsMigrateLegacySlotKeysInPlace(tw);
-    tw.pathOpsSlotCw = pathOpsFilledSlotRow(pathOpsCwDefaultBoolForTaxiwayDirection(tw));
-    tw.pathOpsSlotCcw = pathOpsFilledSlotRow(pathOpsCcwDefaultBoolForTaxiwayDirection(tw));
+    const cwDef = tw.pathType === 'runway_exit' ? pathOpsCwDefaultBoolForRunwayExit(tw) : pathOpsCwDefaultBoolForTaxiwayDirection(tw);
+    const ccwDef = tw.pathType === 'runway_exit' ? pathOpsCcwDefaultBoolForRunwayExit(tw) : pathOpsCcwDefaultBoolForTaxiwayDirection(tw);
+    tw.pathOpsSlotCw = pathOpsFilledSlotRow(cwDef);
+    tw.pathOpsSlotCcw = pathOpsFilledSlotRow(ccwDef);
   }
   function pathOpsSlotIntervalTooltip(idx) {
     const i = Math.max(0, Math.min(PATH_OPS_SLOT_COUNT - 1, Math.floor(Number(idx))));
@@ -829,8 +856,8 @@
     const cwCbs = document.querySelectorAll('#pathOpsSlotCwGrid input.path-ops-cw');
     const ccwCbs = document.querySelectorAll('#pathOpsSlotCcwGrid input.path-ops-ccw');
     const onArr = pathOpsDefaultSlotOnAllTrue();
-    const cwDef = pathOpsCwDefaultBoolForTaxiwayDirection(tw);
-    const ccwDef = pathOpsCcwDefaultBoolForTaxiwayDirection(tw);
+    const cwDef = tw.pathType === 'runway_exit' ? pathOpsCwDefaultBoolForRunwayExit(tw) : pathOpsCwDefaultBoolForTaxiwayDirection(tw);
+    const ccwDef = tw.pathType === 'runway_exit' ? pathOpsCcwDefaultBoolForRunwayExit(tw) : pathOpsCcwDefaultBoolForTaxiwayDirection(tw);
     const cwUniform = pathOpsCwRowUniformArrayForDirectionOrNull(tw);
     const ccwUniform = pathOpsCcwRowUniformArrayForDirectionOrNull(tw);
     const cwArr = pathOpsFilledSlotRow(cwDef);
@@ -2267,6 +2294,9 @@
     const missingHoldingRwRtx = typeof getLayoutLineupRunwayAccessMissingHoldingPairs === 'function'
       ? getLayoutLineupRunwayAccessMissingHoldingPairs() : [];
     const hasNoHolding = missingHoldingRwRtx.length > 0;
+    const disconnectedLineupRw = typeof getLayoutLineupDisconnectedFromRunwayExitLabels === 'function'
+      ? getLayoutLineupDisconnectedFromRunwayExitLabels() : [];
+    const hasLineupRunwayExitDisconnect = disconnectedLineupRw.length > 0;
     if (ban && banT) {
       if (hasRetFail) {
         ban.hidden = false;
@@ -2334,13 +2364,27 @@
         nhpBanT.textContent = '';
       }
     }
-    const allow = !!state.designerPageUpdateFresh && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding;
+    const lineupRwxBan = document.getElementById('lineupRunwayExitDisconnectBanner');
+    const lineupRwxBanT = document.getElementById('lineupRunwayExitDisconnectBannerText');
+    if (lineupRwxBan && lineupRwxBanT) {
+      if (hasLineupRunwayExitDisconnect) {
+        lineupRwxBan.hidden = false;
+        lineupRwxBan.setAttribute('aria-hidden', 'false');
+        lineupRwxBanT.textContent = disconnectedLineupRw.join('\n');
+      } else {
+        lineupRwxBan.hidden = true;
+        lineupRwxBan.setAttribute('aria-hidden', 'true');
+        lineupRwxBanT.textContent = '';
+      }
+    }
+    const allow = !!state.designerPageUpdateFresh && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding && !hasLineupRunwayExitDisconnect;
     if (btn) {
       btn.disabled = !allow;
       btn.classList.toggle('global-update-blocked-arr-ret', hasRetFail);
       btn.classList.toggle('global-update-blocked-apron', hasApronDuplicated);
       btn.classList.toggle('global-update-blocked-stand-overlap', hasStandWindowOverlap && !hasRetFail && !hasApronDuplicated);
-      btn.classList.toggle('global-update-blocked-no-holding', hasNoHolding && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap);
+      btn.classList.toggle('global-update-blocked-no-holding', hasNoHolding && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasLineupRunwayExitDisconnect);
+      btn.classList.toggle('global-update-blocked-lineup-runway-exit', hasLineupRunwayExitDisconnect && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding);
       if (!state.designerPageUpdateFresh) {
         btn.setAttribute('title', 'Run Layout Update first (green sync) to refresh the path graph and views, then use Pro Sim.');
       } else if (hasRetFail) {
@@ -2360,6 +2404,12 @@
           ? (missingHoldingRwRtx.slice(0, 3).join(' · ') + ', etc. (' + nh + ')')
           : missingHoldingRwRtx.join(' · ');
         btn.setAttribute('title', 'Pro Sim is disabled: missing runway holding — ' + nhShort);
+      } else if (hasLineupRunwayExitDisconnect) {
+        const nl = disconnectedLineupRw.length;
+        const nlShort = nl > 5
+          ? (disconnectedLineupRw.slice(0, 3).join(' · ') + ', etc. (' + nl + ')')
+          : disconnectedLineupRw.join(' · ');
+        btn.setAttribute('title', 'Pro Sim is disabled: line-up not connected to runway exit — ' + nlShort);
       } else {
         btn.setAttribute('title', 'Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage');
       }
@@ -2385,6 +2435,14 @@
           ? (missingHoldingRwRtx.slice(0, 3).join(' · ') + ', etc. (' + nh + ')')
           : missingHoldingRwRtx.join(' · ');
         dot.setAttribute('title', 'Missing runway holding at line-up — ' + nhShort);
+      } else if (hasLineupRunwayExitDisconnect) {
+        dot.classList.remove('fresh');
+        dot.classList.add('stale');
+        const nl = disconnectedLineupRw.length;
+        const nlShort = nl > 5
+          ? (disconnectedLineupRw.slice(0, 3).join(' · ') + ', etc. (' + nl + ')')
+          : disconnectedLineupRw.join(' · ');
+        dot.setAttribute('title', 'Line-up not connected to runway exit — ' + nlShort);
       } else if (state.globalUpdateFresh) {
         dot.classList.remove('stale');
         dot.classList.add('fresh');
@@ -2396,8 +2454,8 @@
       }
     }
     const playDock = document.getElementById('btnShowPlayDock');
-    const playbackFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding && !!state.globalUpdateFresh;
-    const allowPlay = !!state.hasSimulationResult && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding;
+    const playbackFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding && !hasLineupRunwayExitDisconnect && !!state.globalUpdateFresh;
+    const allowPlay = !!state.hasSimulationResult && !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHolding && !hasLineupRunwayExitDisconnect;
     if (playDock) {
       playDock.disabled = !allowPlay;
       if (!state.hasSimulationResult) {
@@ -2414,6 +2472,12 @@
           ? (missingHoldingRwRtx.slice(0, 2).join(' · ') + ' 외 ' + (nhPd - 2))
           : missingHoldingRwRtx.join(' · ');
         playDock.setAttribute('title', '라인업 경로 홀딩 누락: ' + nhPdShort);
+      } else if (hasLineupRunwayExitDisconnect) {
+        const nlPd = disconnectedLineupRw.length;
+        const nlPdShort = nlPd > 4
+          ? (disconnectedLineupRw.slice(0, 2).join(' · ') + ' 외 ' + (nlPd - 2))
+          : disconnectedLineupRw.join(' · ');
+        playDock.setAttribute('title', '라인업–활주 택시구간 미연결: ' + nlPdShort);
       } else if (playbackFresh) {
         playDock.setAttribute('title', '최신 Pro Sim 결과를 재생합니다');
       } else {
@@ -2682,7 +2746,8 @@
     const standOv = typeof getApronStandWindowOverlapRegsForProSimUi === 'function' ? getApronStandWindowOverlapRegsForProSimUi() : [];
     const hasStandWindowOverlap = standOv.length > 0;
     const hasNoHoldingLayout = typeof hasLayoutLineupRunwayAccessHoldingViolation === 'function' && hasLayoutLineupRunwayAccessHoldingViolation();
-    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHoldingLayout && !!state.globalUpdateFresh;
+    const hasLineupRwxDisconnectLayout = typeof hasLayoutLineupRunwayExitDisconnectedViolation === 'function' && hasLayoutLineupRunwayExitDisconnectedViolation();
+    const proSimUiFresh = !hasRetFail && !hasApronDuplicated && !hasStandWindowOverlap && !hasNoHoldingLayout && !hasLineupRwxDisconnectLayout && !!state.globalUpdateFresh;
     const heatmapAllowed = heatOk && proSimUiFresh;
     if (!heatmapAllowed && state.mapTypeMode === 'heatmap') state.mapTypeMode = 'normal';
     if (!heatOk && state.mapTypeMode !== 'normal') state.mapTypeMode = 'normal';
@@ -11949,6 +12014,14 @@
     __schedRetExitDistSig = '';
     __schedRetExitDistMemo = null;
   }
+  /** Arrival 표/샘플 공통용: 활주로 CW·CCW(``both``는 CW 대용)만큼만 RET 행 유지(F2 가용 활주선 방향). */
+  function filterScheduleRetStatsForArrivalOperationalLayout(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(function(r) {
+      if (!r || !r.runway || !r.exit) return false;
+      return arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit);
+    });
+  }
   function beginScheduleRetStatsBatch() {
     __schedRetStatsBatchActive = true;
     __schedRetStatsCached = null;
@@ -11965,7 +12038,8 @@
   function getScheduleRetStatsAll() {
     if (__schedRetStatsBatchActive) {
       if (__schedRetStatsCached === null) {
-        __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+        const raw = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+        __schedRetStatsCached = filterScheduleRetStatsForArrivalOperationalLayout(raw);
       }
       return __schedRetStatsCached;
     }
@@ -11974,9 +12048,10 @@
       return __schedRetExitDistMemo;
     }
     const res = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
+    const filtered = filterScheduleRetStatsForArrivalOperationalLayout(res);
     __schedRetExitDistSig = sig;
-    __schedRetExitDistMemo = res;
-    return res;
+    __schedRetExitDistMemo = filtered;
+    return filtered;
   }
 
   function warmFlightPathsForSchedule(flights) {
@@ -12061,8 +12136,7 @@
       f.__schedRetRotRev = rev;
       return;
     }
-    let rVerts = rwObj.vertices ? rwObj.vertices.map(v => [v.col, v.row]) : [];
-    if (rVerts.length < 2) rVerts = [];
+    const rdLayout = getRunwayOperationalDirForArrivalRetFilter2(rwObj);
     const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
     const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
     const tdMin = cfg.tdMu * 0.85;
@@ -12078,8 +12152,7 @@
     const aDec = clamp(aSample, aMin, aMax);
     const candidates = retStatsAll.filter(function(r) {
       if (!(r && r.runway && r.runway.id === arrRunwayId && r.exit)) return false;
-      if (!arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit, effDir)) return false;
-      if (rVerts.length >= 2 && !arrivalRunwayExitPassPathDirEdgeToRunwayFilter(r.runway, r.exit, rVerts)) return false;
+      if (!arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit, rdLayout)) return false;
       const ex = r.exit;
       if (pathOpsBlockedOpenOrIcaoAtSlot(ex, slotIdx, icaoLetter)) return false;
       if (!pathOpsRetCwCcwBranchOpenAtSlot(ex, slotIdx, effDir)) return false;
@@ -12474,10 +12547,10 @@
     if (schedFull) {
       retStatsAll = (typeof ensureArrRetRotSampled === 'function')
         ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
-        : (typeof getScheduleRetStatsAll === 'function' ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []));
+        : (typeof getScheduleRetStatsAll === 'function' ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []));
     } else {
       const dirtyFlights = flightsSorted.filter(function(f) { return dirtySet.has(f.id); });
-      retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
+      retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []);
     }
     const domOpt = (scheduleOpts && scheduleOpts.skipGanttRefresh) ? { skipGanttRefresh: true } : null;
     _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, domOpt);
@@ -12502,7 +12575,7 @@
       try {
         retStatsAll2 = (typeof getScheduleRetStatsAll === 'function')
           ? getScheduleRetStatsAll()
-          : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
+          : ((typeof computeRunwayExitDistances === 'function') ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []);
         _renderFlightListDomAndSchedule(flightsSorted, false, new Set(), new Set(), listEl, cfgEl, retStatsAll2, { skipGanttRefresh: true });
       } finally {
         endScheduleRetStatsBatch();
@@ -12707,7 +12780,7 @@
     );
     const retStats = (typeof getScheduleRetStatsAll === 'function')
       ? getScheduleRetStatsAll()
-      : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
+      : (typeof computeRunwayExitDistances === 'function' ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []);
     if (retStats && retStats.length) {
       rows.push(
         '<tr>' +
@@ -16921,6 +16994,33 @@
   function hasLayoutLineupRunwayAccessHoldingViolation() {
     return getLayoutLineupRunwayAccessMissingHoldingPairs().length > 0;
   }
+  /** Runways whose lineup point (same geometry as red/green grid dot) is not near any runway_exit / runway_taxiway that touches the runway. */
+  function getLayoutLineupDisconnectedFromRunwayExitLabels() {
+    const lines = [];
+    const tws = state.taxiways || [];
+    for (let wi = 0; wi < tws.length; wi++) {
+      const tw = tws[wi];
+      if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) continue;
+      const rwPts = tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
+      if (rwPts.length < 2) continue;
+      const lenPx = runwayPolylineLengthPx(rwPts);
+      const d = getEffectiveRunwayLineupDistFromStartM(tw, lenPx);
+      const lp = _pointOnPolylineAtDistPxForLineup(rwPts, d);
+      if (!lp) continue;
+      if (isLineupPointTouchingRunwayTaxiwayOnRunway(tw, lp)) continue;
+      let lab = '';
+      if (typeof getRunwayDisplayLabelById === 'function') {
+        const lx = getRunwayDisplayLabelById(tw.id);
+        if (lx && lx !== '—') lab = lx;
+      }
+      if (!lab) lab = String(tw.name || '').trim() || (tw.id != null ? String(tw.id) : '—');
+      lines.push(lab + ': line-up not adjacent to runway exit/runway taxiway');
+    }
+    return lines;
+  }
+  function hasLayoutLineupRunwayExitDisconnectedViolation() {
+    return getLayoutLineupDisconnectedFromRunwayExitLabels().length > 0;
+  }
   function computeDepHoldToLineupSecForFlight(f) {
     if (!f || f.arrDep !== 'Dep' || f.noWayDep) return 0;
     const toLineup = (typeof graphPathDeparture === 'function') ? graphPathDeparture(f, { onlyToLineup: true }) : null;
@@ -20647,6 +20747,12 @@
           ? getLayoutLineupRunwayAccessMissingHoldingPairs() : [];
         if (missHpPairs.length) {
           failProSim('Line-up runway holding missing: ' + missHpPairs.join(' · '));
+          return;
+        }
+        const disconnectedLineup = typeof getLayoutLineupDisconnectedFromRunwayExitLabels === 'function'
+          ? getLayoutLineupDisconnectedFromRunwayExitLabels() : [];
+        if (disconnectedLineup.length) {
+          failProSim('Line-up not connected to runway exit (red line-up marker on grid): ' + disconnectedLineup.join(' · '));
           return;
         }
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();

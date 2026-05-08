@@ -1,360 +1,360 @@
-    }).join('||');
+  markerFlightHeadingOverlayBtn.addEventListener('click', function() {
+    const sel = state.selectedObject;
+    if (!sel || sel.type !== 'layoutMarker' || !sel.obj || sel.obj.kind !== 'flight') return;
+    ensureMarkerFlightBlazerState(sel.obj);
+    sel.obj.headingReversed = !sel.obj.headingReversed;
+    scheduleDraw();
+    updateObjectInfo();
+  });
+  const GRID_LAYOUT_IMAGE_DEFAULTS = {
+    opacity: _dc.gridLayoutImage.opacity,
+    opacityMin: _dc.gridLayoutImage.opacityMin,
+    opacityMax: _dc.gridLayoutImage.opacityMax,
+    widthM: _dc.gridLayoutImage.widthM,
+    heightM: _dc.gridLayoutImage.heightM,
+    topLeftCol: _dc.gridLayoutImage.topLeftCol,
+    topLeftRow: _dc.gridLayoutImage.topLeftRow
+  };
+  let layoutImageBitmap = null;
+  let layoutImageBitmapSrc = '';
+  const BUILDING_TYPE_CFG = (_layoutTier.building && typeof _layoutTier.building === 'object') ? _layoutTier.building : {};
+  const BUILDING_TYPES = Array.isArray(BUILDING_TYPE_CFG.types) && BUILDING_TYPE_CFG.types.length ? BUILDING_TYPE_CFG.types.slice() : [
+    { id: 'passenger_terminal', label: 'Passenger Terminal' },
+    { id: 'concourse', label: '위성터미널(콘코스)' },
+    { id: 'control_tower', label: 'Control Tower' },
+    { id: 'cargo_terminal', label: 'Cargo Terminal' },
+    { id: 'hanger', label: 'Hanger' },
+
+
+    { id: 'utility', label: 'Utility' },
+    { id: 'wall', label: 'Wall' },
+  ];
+  const BUILDING_TYPE_DEFAULT = String(BUILDING_TYPE_CFG.defaultType || (BUILDING_TYPES[0] && BUILDING_TYPES[0].id) || 'passenger_terminal');
+  const BUILDING_TYPE_BY_ID = {};
+  BUILDING_TYPES.forEach(function(bt) { BUILDING_TYPE_BY_ID[String(bt.id || '')] = bt; });
+  function normalizeBuildingType(rawType) {
+    const key = String(rawType || '').trim();
+    if (key && BUILDING_TYPE_BY_ID[key]) return key;
+    return BUILDING_TYPE_DEFAULT;
   }
-  function stripPathGraphCacheJunctionsNearTaxiwayWorld(tw) {
-    const g = state.pathGraphCache;
-    if (!g || g.__junctionStale || !tw) return;
-    const pts = typeof getOrderedPoints === 'function' ? getOrderedPoints(tw) : null;
-    if (!pts || pts.length < 2) return;
-    const mergeR = (typeof PATH_JUNCTION_MERGE_RADIUS_PX === 'number' && isFinite(PATH_JUNCTION_MERGE_RADIUS_PX)) ? PATH_JUNCTION_MERGE_RADIUS_PX : 8;
-    const tol = Math.max(mergeR * 2.2, 12);
-    const tol2 = tol * tol;
-    function distPointToSegSq(p, a, b) {
-      const pr = projectOnSegment(a, b, p);
-      const dpx = p[0] - pr.p[0], dpy = p[1] - pr.p[1];
-      return dpx * dpx + dpy * dpy;
-    }
-    function pointNearDeletedTw(p) {
-      if (!p || !Array.isArray(p) || p.length < 2) return false;
-      if (!isFinite(p[0]) || !isFinite(p[1])) return false;
-      for (let seg = 0; seg < pts.length - 1; seg++) {
-        const a = pts[seg], b = pts[seg + 1];
-        if (!a || !b || !isFinite(a[0]) || !isFinite(b[0])) continue;
-        if (distPointToSegSq(p, a, b) <= tol2) return true;
-      }
-      return false;
-    }
-    function filt(arr) {
-      if (!Array.isArray(arr)) return arr;
-      return arr.filter(function(pt) { return !pointNearDeletedTw(pt); });
-    }
-    if (Array.isArray(g.validJunctions)) g.validJunctions = filt(g.validJunctions);
-    if (Array.isArray(g.connectedJunctions)) g.connectedJunctions = filt(g.connectedJunctions);
-    if (Array.isArray(g.junctions)) g.junctions = filt(g.junctions);
-    if (Array.isArray(g.disconnectedValidJunctions)) g.disconnectedValidJunctions = filt(g.disconnectedValidJunctions);
+  function getBuildingTypeMeta(rawType) {
+    return BUILDING_TYPE_BY_ID[normalizeBuildingType(rawType)] || BUILDING_TYPE_BY_ID[BUILDING_TYPE_DEFAULT] || { id: BUILDING_TYPE_DEFAULT, label: 'Passenger Terminal' };
   }
-  function markPathGraphJunctionStaleShellAfterLayoutEdit() {
-    cancelPathGraphRebuildTimer();
-    state.pathGraphCache = {
-      __junctionStale: true,
-      validJunctions: [],
-      connectedJunctions: [],
-      disconnectedValidJunctions: [],
-      junctions: [],
-      nodes: [],
-      edges: [],
-      adj: [],
-      edgeMap: {},
-      runwayNodeIndicesById: {},
-      standIdToNodeIndex: {}
+  function getBuildingTypeLabel(rawType) {
+    const meta = getBuildingTypeMeta(rawType);
+    return String(meta.label || meta.id || 'Building');
+  }
+  function getBuildingTypeNamePrefix(rawType) {
+    const key = normalizeBuildingType(rawType);
+    if (key === 'passenger_terminal') return 'Terminal';
+    if (key === 'concourse') return 'Concourse';
+    if (key === 'control_tower') return 'Tower';
+    if (key === 'cargo_terminal') return 'Cargo';
+    if (key === 'hanger') return 'Hanger';
+    if (key === 'utility') return 'Utility';
+    if (key === 'wall') return 'Wall';
+    return 'Building';
+  }
+  function getBuildingTypeOptionsHtml(selectedType) {
+    const current = normalizeBuildingType(selectedType);
+    return BUILDING_TYPES.map(function(bt) {
+      const id = String(bt.id || '');
+      const label = String(bt.label || bt.id || id || 'Building');
+      return '<option value="' + escapeHtml(id) + '"' + (id === current ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+    }).join('');
+  }
+  function getBuildingTheme(building) {
+    const key = normalizeBuildingType(building && building.buildingType);
+    const themes = (_canvas2dStyle.buildingTypes && typeof _canvas2dStyle.buildingTypes === 'object') ? _canvas2dStyle.buildingTypes : {};
+    const theme = (themes && typeof themes[key] === 'object') ? themes[key] : {};
+    return {
+      key: key,
+      label: getBuildingTypeLabel(key),
+      stroke: theme.stroke || _canvas2dStyle.terminalStrokeDefault || '#0284c7',
+      fill: theme.fill || _canvas2dStyle.terminalFillDefault || 'rgba(10,34,50,0.38)',
+      labelFill: theme.labelFill || _canvas2dStyle.terminalLabelFill || 'rgba(186,230,253,0.96)',
+      fillEnabled: theme.fillEnabled !== false,
+      hatch: String(theme.hatch || '').trim().toLowerCase(),
     };
-    state.pathGraphCacheValid = true;
-    state.pathGraphCacheSig = computeTaxiwaysGraphSig();
-    state.pathGraphCacheDirty = true;
-    state.pathGraphInvalidatedAtMs = Date.now();
   }
-  function graphSigParseRecords(sig) {
-    const m = {};
-    if (!sig || typeof sig !== 'string') return m;
-    const chunks = sig.split('||');
-    for (let i = 0; i < chunks.length; i++) {
-      const rec = chunks[i];
-      if (!rec) continue;
-      const pipe = rec.indexOf('|');
-      const id = pipe >= 0 ? rec.slice(0, pipe) : rec;
-      if (id) m[id] = rec;
+  function c2dPassengerTerminalStroke() {
+    return getBuildingTheme({ buildingType: 'passenger_terminal' }).stroke;
+  }
+  function c2dRunwayTaxiwayCenterlineStroke() {
+    const s = _canvas2dStyle.runwayTaxiwayCenterlineStroke;
+    return (typeof s === 'string' && s.trim()) ? s.trim() : c2dPassengerTerminalStroke();
+  }
+  function c2dTaxiwayCenterlineStroke() {
+    const s = _canvas2dStyle.taxiwayCenterlineStroke;
+    return (typeof s === 'string' && s.trim()) ? s.trim() : c2dRunwayTaxiwayCenterlineStroke();
+  }
+  function getDefaultBuildingNameForType(buildingType, currentId) {
+    const prefix = getBuildingTypeNamePrefix(buildingType);
+    const buildings = (state.terminals || []).filter(function(t) { return t && t.id !== currentId; });
+    const used = new Set(buildings.map(function(t) { return (t.name && String(t.name).trim()) || ''; }).filter(Boolean));
+    return uniqueNameAgainstSet(prefix + String(buildings.length + 1), used);
+  }
+
+  function id() { return 'id_' + Math.random().toString(36).slice(2, 11); }
+  /** Flight Schedule default: 3 uppercase letters + 5 digits (e.g. ABC12345). */
+  function randomRegNumber() {
+    let letters = '';
+    for (let i = 0; i < 3; i++) letters += String.fromCharCode(65 + Math.floor(Math.random() * 26));
+    return letters + String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+  }
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+  function escapeAttr(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/\\r\\n|\\r|\\n/g, ' ');
+  }
+  function renderChoiceChipList(container, items, selectedIds, inputClass, inputName) {
+    if (!container) return;
+    const selected = new Set(Array.isArray(selectedIds) ? selectedIds.map(String) : []);
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+      container.innerHTML = '<div style="font-size:11px;color:#9ca3af;">No options.</div>';
+      return;
     }
-    return m;
+    container.innerHTML = '<div class="choice-chip-grid">' + list.map(function(item) {
+      const itemId = String(item.id || '');
+      const checked = selected.has(itemId);
+      return '' +
+        '<label class="choice-chip' + (checked ? ' is-checked' : '') + '">' +
+          '<input type="checkbox" class="' + escapeHtml(inputClass || '') + '" name="' + escapeHtml(inputName || '') + '" data-item-id="' + escapeHtml(itemId) + '"' + (checked ? ' checked' : '') + ' />' +
+          '<span class="choice-chip-label">' + escapeHtml(String(item.label || itemId || '')) + '</span>' +
+        '</label>';
+    }).join('') + '</div>';
   }
-  function graphSigTaxiwayDiff(oldSig, newSig) {
-    const o = graphSigParseRecords(oldSig);
-    const n = graphSigParseRecords(newSig);
-    const removed = [];
-    const changed = [];
-    Object.keys(o).forEach(function(id) {
-      if (!(id in n)) removed.push(id);
+  function syncChoiceChipStates(container) {
+    if (!container) return;
+    container.querySelectorAll('.choice-chip').forEach(function(labelEl) {
+      const input = labelEl.querySelector('input[type="checkbox"]');
+      labelEl.classList.toggle('is-checked', !!(input && input.checked));
     });
-    Object.keys(n).forEach(function(id) {
-      if (!(id in o)) changed.push(id);
-      else if (o[id] !== n[id]) changed.push(id);
-    });
-    return { removed: removed, changed: changed };
   }
-  function cloneFlightsWithoutPathPolylineCache(flights) {
-    return (flights || []).map(function(f) {
-      const raw = JSON.parse(JSON.stringify(f));
-      delete raw.cachedArrPathPts;
-      delete raw.cachedDepPathPts;
-      delete raw._pathPolylineCacheRev;
-      delete raw._pathPolylineArrRetKey;
-      return raw;
+  function getNamedBuildings() {
+    return makeUniqueNamedCopy(state.terminals || [], 'name').map(function(t) {
+      return { id: t.id, label: (t.name || '').trim() || 'Building' };
     });
   }
-  function markGlobalUpdateStale() {
-    state.globalUpdateFresh = false;
-    state.simPlaying = false;
-    state.simSliderScrubbing = false;
-    if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
-    bumpPathPolylineCacheRev();
-    state.rwySepPanelDirty = true;
-    bumpRwySepSnapshotStaleGen();
-    if (typeof clearAllFlightTimelines === 'function') clearAllFlightTimelines({ keepDesResultTimelines: true });
-    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
-    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  function renderRemoteTerminalAccessChoices(selectedIds) {
+    const container = document.getElementById('remoteTerminalAccess');
+    renderChoiceChipList(container, getNamedBuildings(), selectedIds, 'remote-term-check', 'remote-building');
   }
-  function markGlobalUpdateFresh() {
-    state.globalUpdateFresh = true;
-    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
-    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  function renderTempStandTerminalAccessChoices(selectedIds) {
+    const container = document.getElementById('tempStandTerminalAccess');
+    renderChoiceChipList(container, getNamedBuildings(), selectedIds, 'remote-term-check', 'remote-building');
   }
-  function markProSimSyncStaleFromSchedule() {
-    state.globalUpdateFresh = false;
-    state.simPlaying = false;
-    state.simSliderScrubbing = false;
-    if (typeof ensureSimLoop === 'function') ensureSimLoop._playKick = false;
-    if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
-    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  function renderRunwayDirectionChoices(selectedIds) {
+    const container = document.getElementById('runwayExitAllowedDirection');
+    renderChoiceChipList(container, [
+      { id: 'clockwise', label: 'CW' },
+      { id: 'counter_clockwise', label: 'CCW' },
+    ], selectedIds, 'runway-exit-dir-check', 'runway-exit-dir');
   }
-  function markDesignerPageUpdateStale() {
-    state.designerPageUpdateFresh = false;
-    const dot = document.getElementById('designerPageUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('fresh');
-      dot.classList.add('stale');
-      dot.setAttribute('title', '레이아웃/객체 변경됨 — Layout Update를 눌러 경로 그래프·뷰를 동기화하세요');
-    }
-    const layoutUpdBtn = document.getElementById('btnDesignerPageUpdate');
-    if (layoutUpdBtn) {
-      layoutUpdBtn.classList.add('layout-update-stale');
-      layoutUpdBtn.classList.remove('layout-update-fresh');
-    }
-    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  function renderAircraftConstraintChoices(containerId, selectedIds, icaoLetters) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    let letters = normalizeAllowedIcaoCategories(icaoLetters);
+    if (!letters.length) letters = ['C'];
+    const items = getAircraftConstraintOptionsForIcaoLetters(letters);
+    const allowedIds = {};
+    items.forEach(function(it) { allowedIds[it.id] = true; });
+    const selectedArr = Array.isArray(selectedIds) ? selectedIds.map(String) : [];
+    const filteredSelected = selectedArr.filter(function(id) { return allowedIds[id]; });
+    renderChoiceChipList(container, items, filteredSelected, 'aircraft-type-check', containerId);
   }
-  function markDesignerPageUpdateFresh() {
-    state.designerPageUpdateFresh = true;
-    const dot = document.getElementById('designerPageUpdateSyncDot');
-    if (dot) {
-      dot.classList.remove('stale');
-      dot.classList.add('fresh');
-      dot.setAttribute('title', 'Layout Update 기준으로 경로·뷰가 최신입니다');
-    }
-    const layoutUpdBtn = document.getElementById('btnDesignerPageUpdate');
-    if (layoutUpdBtn) {
-      layoutUpdBtn.classList.remove('layout-update-stale');
-      layoutUpdBtn.classList.add('layout-update-fresh');
-    }
-    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  function syncStandConstraintVisibility(prefix) {
+    const icaoWrap = document.getElementById(prefix + 'IcaoWrap');
+    const aircraftWrap = document.getElementById(prefix + 'AircraftWrap');
+    if (icaoWrap) icaoWrap.style.display = 'grid';
+    if (aircraftWrap) aircraftWrap.style.display = 'grid';
   }
-  /** Any Layout tab (settings pane) field commit: Pro Sim + path graph need refresh; Layout Update goes stale (red). */
-  function markLayoutPanelFieldDirty() {
-    if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
-    if (typeof markDesignerPageUpdateStale === 'function') markDesignerPageUpdateStale();
+
+  const state = {
+    terminals: [],
+    pbbStands: [],
+    remoteStands: [],
+    tempStands: [],
+    holdingPoints: [],
+    taxiways: [],
+    apronLinks: [],
+    layoutEdgeNames: {},
+    directionModes: [],
+    currentLayoutName: String(INITIAL_LAYOUT_DISPLAY_NAME || 'default_layout'),
+    flights: [],
+    simTimeSec: 0,
+    simStartSec: 0,
+    simDurationSec: 0,
+    /** Replay / Pro Sim SIBT window [simWindowStartSec, simWindowEndSec]; full slider axis is [simStartSec, simDurationSec]. */
+    simWindowStartSec: 0,
+    simWindowEndSec: 0,
+    _simScheduleAxisKey: '',
+    /** Set by applyLayoutObject when layout JSON has designerPersist sim window; consumed once in recomputeSimDuration. */
+    _pendingPersistSimWindow: null,
+    /** ``true``: 재생 타임 슬라이더 미세 드래그 모드에서 시각 변경을 대략 일반 스크럽 대비 SIM_TIME_SLIDER_FINE_DIVISOR 배 더 미세하게. 썹은 빨간색 표시. */
+    simTimeSliderFineMode: false,
+    simPlaybackEndCapSec: null,
+    simPlaying: false,
+    simSliderScrubbing: false,
+    prosimBusy: false,
+    grid3dPopupRef: null,
+    simSpeed: _dc.defaultSimSpeed,
+    hasSimulationResult: false,
+    /** Last Pro Sim ``payload.positions`` — keeps x,y playback samples off flights when Play is blocked (lighter pan/zoom). */
+    simPlaybackPositionsByFlightId: null,
+    /** Copy of ``payload.schedule`` for timeline_meta / E-fields when rehydrating from ``simPlaybackPositionsByFlightId``. */
+    simPlaybackScheduleSnapshot: null,
+    /** True when timelines were evicted from flights but ``simPlaybackPositionsByFlightId`` still holds data. */
+    simPlaybackTimelinesEvictedForMemory: false,
+    simPlaybackDockVisible: false,
+    /** Derived after Pro Sim: first deadlockGhost sample per flight; slider markers + left dock banner. */
+    simDeadlockGhostPlayback: { events: [], bodyLines: '', resolveCount: 0 },
+    /** After Resolve lookahead bump: show rerun hint banner until next Pro Sim result. */
+    deadlockMitigateBannerRerunHint: false,
+    /** flight_id keys with any deadlock ghost in last compact_v2 playback (survives timeline eviction). */
+    deadlockFlightIdsFromLastSim: Object.create(null),
+    showGrid: GRID_VISIBLE_DEFAULT,
+    showImage: IMAGE_VISIBLE_DEFAULT,
+    showRoadWidth: ROAD_WIDTH_VISIBLE_DEFAULT,
+    aiAssistantDockOpen: false,
+    currentTerminalId: null,
+    selectedObject: null,
+    terminalDrawingId: null,
+    taxiwayDrawingId: null,
+    dragVertex: null,
+    dragTaxiwayVertex: null,
+    dragPbbBridgeVertex: null,
+    dragStandConnection: null,
+    dragRemoteStandPosition: null,
+    dragStandRotation: null,
+    dragApronLinkVertex: null,
+    selectedVertex: null,
+    scale: 1,
+    panX: 0,
+    panY: 0,
+    isPanning: false,
+    dragStart: null,
+    layoutImageOverlay: null,
+    previewRemote: null,
+    previewTempStand: null,
+    previewPbb: null,
+    pbbDrawing: false,
+    remoteDrawing: false,
+    tempStandDrawing: false,
+    holdingPointDrawing: false,
+    previewHoldingPoint: null,
+    apronLinkDrawing: false,
+    apronLinkTemp: null,
+    apronLinkMidpoints: [],
+    apronLinkPointerWorld: null,
+    /** Map Leadin Taxiway link id -> true: draw taxiway junction overlay until path graph sync (no full graph rebuild). */
+    apronLinkJunctionOverlayDirtyIds: null,
+    layoutPathDrawPointer: null,
+    hoverCell: null,
+    vttArrCacheRev: 0,
+    derivedGraphEdges: [],
+    duplicateApronByStandId: {},
+    globalUpdateFresh: false,
+    /** Path graph / views match last Designer 'Update' (applyPathGraphSyncNow), not Pro Sim. */
+    designerPageUpdateFresh: false,
+    activeRwySepId: null,
+    activeRwySepSubtab: 'noname',
+    rwySepPanelDirty: true,
+    rwySepSnapshotStaleGen: 0,
+    pathPolylineCacheRev: 0,
+    pathGraphCache: null,
+    pathGraphCacheValid: false,
+    pathGraphCacheSig: '',
+    pathGraphCacheDirty: false,
+    pathGraphInvalidatedAtMs: 0,
+    pathGraphAllowHeavySimExport: false,
+    flightSchedulePage: 0,
+    kpiRollingDetailExpanded: false,
+    flightPathRevealFlightId: null,
+    allocGanttWindowStartMin: null,
+    layoutMarkers: [],
+    layers: Object.assign({}, DEFAULT_LAYERS),
+    showLayoutMarkers: false,
+    markerDrawing: false,
+    markerRulerDraft: null,
+    markerRulerHoverWorld: null,
+    markerIslandDraft: null,
+    markerIslandHoverWorld: null,
+    markerAreaDraft: null,
+    markerAreaHoverWorld: null,
+    markerFlightHoverSnap: null,
+    markerTextDraft: null,
+    dragLayoutMarkerHandle: null,
+    pathArcModeOn: false,
+    pathArcDrag: null,
+    /** Pro Sim 2D: all | airline | icao | intdom | building */
+    flightColorMode: 'all',
+    /** Layer popover: monotone overrides per section (Lines / Fill / ETC). */
+    layerMono: Object.assign({}, DEFAULT_LAYER_MONO),
+    /** Map Type: normal | heatmap (overlays when hasSimulationResult). */
+    mapTypeMode: 'normal',
+    heatmapTrafficPhases: { rotArr: true, vttArr: true, vttDep: true, rotDep: true },
+  };
+  const LAYER_STATE_KEYS = [
+    'grid', 'image', 'pathLines', 'pathFill', 'standLines', 'standFill',
+    'islandAreaLines', 'islandAreaFill', 'buildingLines', 'buildingFill', 'textRuler', 'dummyFlight', 'junction'
+  ];
+  const LAYER_SECTION_KEYS = {
+    lines: ['pathLines', 'standLines', 'islandAreaLines', 'buildingLines'],
+    fill: ['pathFill', 'standFill', 'islandAreaFill', 'buildingFill'],
+    etc: ['textRuler', 'dummyFlight', 'junction']
+  };
+  const LAYER_MONO_KEYS = ['lines', 'fill', 'etc'];
+  function layerMonoLinesOn() { return !!(state.layerMono && state.layerMono.lines); }
+  function layerMonoFillOn() { return !!(state.layerMono && state.layerMono.fill); }
+  function layerMonoEtcOn() { return !!(state.layerMono && state.layerMono.etc); }
+  function syncLegacyViewFlagsFromLayers() {
+    state.showGrid = !!state.layers.grid;
+    state.showImage = !!state.layers.image;
+    state.showRoadWidth = !!(state.layers.pathFill || state.layers.islandAreaFill);
+    state.showLayoutMarkers = !!(state.layers.textRuler || state.layers.dummyFlight);
   }
-  /** English multi-line (≤5 aircraft) or summary (6+) for arrival RET failure dock banner. */
-  function formatArrRetFailedBannerEnglish(regs) {
-    const n = (regs && regs.length) || 0;
-    if (n < 1) return '';
-    if (n <= 5) {
-      return regs.map(function(reg) {
-        return String(reg) + ': Runway exit assignment failed.';
-      }).join('\n');
+  function mergeLayersFromObject(raw) {
+    if (!raw || typeof raw !== 'object') return;
+    for (let i = 0; i < LAYER_STATE_KEYS.length; i++) {
+      const k = LAYER_STATE_KEYS[i];
+      if (typeof raw[k] === 'boolean') state.layers[k] = raw[k];
     }
-    const head = regs.slice(0, 3).join(', ');
-    return head + ', etc. — ' + n + ' aircraft failed.';
   }
-  /**
-   * Pro Sim: allowed only when Update is fresh (green) and no arrival Runway exit (RET) failures
-   * (`arrRetFailed` on non-departure legs). RET failure banner is in `#gridLeftFloatingStack`, separate from `#object-info-dock`.
-   */
-  function getArrRetFailedRegsForProSimUi() {
-    const failedRegs = [];
-    (state.flights || []).forEach(function(f) {
-      if (!f || f.arrDep === 'Dep') return;
-      if (f.arrRetFailed) {
-        const r = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
-        if (failedRegs.indexOf(r) < 0) failedRegs.push(r);
-      }
-    });
-    return failedRegs;
+  function mergeLayerMonoFromObject(raw) {
+    if (!raw || typeof raw !== 'object') return;
+    for (let i = 0; i < LAYER_MONO_KEYS.length; i++) {
+      const k = LAYER_MONO_KEYS[i];
+      if (typeof raw[k] === 'boolean') state.layerMono[k] = raw[k];
+    }
   }
-  function flightApronIntervalsForProSimBlock(f) {
-    if (!f || flightBlockedLikeNoWay(f)) return [];
-    const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
-    const out = [];
-    if (segs.length) {
-      const count = segs.length;
-      for (let i = 0; i < segs.length; i++) {
-        const seg = segs[i];
-        const standId = seg && seg.standId != null ? String(seg.standId) : '';
-        const t0 = Number(seg && seg.sibtMin);
-        const t1 = Number(seg && seg.sobtMin);
-        if (!standId || !isFinite(t0) || !isFinite(t1) || t1 <= t0) continue;
-        out.push({ f: f, standId: standId, t0: t0, t1: t1, segmentIdx: i, segmentCount: count });
-      }
-      return out;
-    }
-    const standId = f.standId != null ? String(f.standId) : '';
-    const t0 = f.sibtMin != null ? Number(f.sibtMin) : Number(f.timeMin || 0);
-    const t1 = f.sobtMin != null ? Number(f.sobtMin) : (t0 + Number(f.dwellMin || 0));
-    return standId && isFinite(t0) && isFinite(t1) && t1 > t0
-      ? [{ f: f, standId: standId, t0: t0, t1: t1, segmentIdx: 0, segmentCount: 1 }]
-      : [];
-  }
-  function getApronDuplicatedRegsForProSimUi() {
-    const issues = [];
-    const seen = new Set();
-    const intervalsByStand = {};
-    function addIssue(f, reason) {
-      if (!f) return;
-      const reg = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
-      const key = reg + '|' + reason;
-      if (seen.has(key)) return;
-      seen.add(key);
-      issues.push({ reg: reg, reason: reason });
-    }
-    (state.flights || []).forEach(function(f) {
-      const intervals = flightApronIntervalsForProSimBlock(f);
-      intervals.forEach(function(it) {
-        const stand = typeof findStandById === 'function' ? findStandById(it.standId) : null;
-        if (stand && typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, stand, it.segmentIdx, it.segmentCount)) {
-          if (typeof flightStandAircraftConstraintOk === 'function' && !flightStandAircraftConstraintOk(f, stand)) {
-            const apronNo = String((stand.name && String(stand.name).trim()) || stand.id || it.standId || '—').trim();
-            addIssue(f, '__apron_size__:' + apronNo);
-          } else {
-            addIssue(f, 'Invalid apron/building assignment.');
-          }
-        }
-        if (!intervalsByStand[it.standId]) intervalsByStand[it.standId] = [];
-        intervalsByStand[it.standId].push(it);
-      });
-    });
-    Object.keys(intervalsByStand).forEach(function(standId) {
-      const arr = intervalsByStand[standId];
-      for (let i = 0; i < arr.length; i++) {
-        for (let j = i + 1; j < arr.length; j++) {
-          const a = arr[i], b = arr[j];
-          if (a.f && b.f && a.f.id === b.f.id) continue;
-          if (a.t0 < b.t1 && b.t0 < a.t1) {
-            addIssue(a.f, 'Duplicated apron time window.');
-            addIssue(b.f, 'Duplicated apron time window.');
-          }
-        }
-      }
-    });
-    return issues;
-  }
-  function getApronStandWindowOverlapRegsForProSimUi() {
-    const issues = [];
-    const seen = new Set();
-    (state.flights || []).forEach(function(f) {
-      if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return;
-      const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
-      if (segs.length) {
-        for (let j = 0; j < segs.length; j++) {
-          const sid = segs[j] && segs[j].standId;
-          if (!sid) continue;
-          if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, sid, j)) {
-            const reg = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
-            if (!seen.has(reg)) {
-              seen.add(reg);
-              issues.push({ reg: reg });
-            }
-          }
-        }
-      } else if (f.standId) {
-        if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, f.standId, null)) {
-          const reg = String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
-          if (!seen.has(reg)) {
-            seen.add(reg);
-            issues.push({ reg: reg });
-          }
-        }
-      }
-    });
-    return issues;
-  }
-  function flightRegForStandOverlapBanner(f) {
-    if (!f) return '—';
-    return String(f.reg != null && String(f.reg).trim() !== '' ? f.reg : (f.flightNumber || f.id || '')).trim() || '—';
-  }
-  function flightStandStayWindowsForOverlapPair(f) {
-    if (!f || (typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f))) return [];
-    const out = [];
-    const segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
-    if (segs.length) {
-      for (let j = 0; j < segs.length; j++) {
-        const sid = segs[j] && segs[j].standId;
-        if (!sid) continue;
-        const t0 = Number(segs[j].sibtMin), t1 = Number(segs[j].sobtMin);
-        if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) continue;
-        out.push({ standId: String(sid), t0: t0, t1: t1 });
-      }
-      return out;
-    }
-    if (f.standId) {
-      const w = typeof flightScheduleStandWindowMinutes === 'function' ? flightScheduleStandWindowMinutes(f) : null;
-      if (w && isFinite(w.sibt) && isFinite(w.sobt) && w.sobt > w.sibt) {
-        out.push({ standId: String(f.standId), t0: w.sibt, t1: w.sobt });
-      }
-    }
-    return out;
-  }
-  function flightPairOverlapsStandWindow(f, g) {
-    if (!f || !g || f === g) return false;
-    if (typeof flightBlockedLikeNoWay === 'function' && (flightBlockedLikeNoWay(f) || flightBlockedLikeNoWay(g))) return false;
-    const fa = flightStandStayWindowsForOverlapPair(f);
-    const ga = flightStandStayWindowsForOverlapPair(g);
-    for (let i = 0; i < fa.length; i++) {
-      const a = fa[i];
-      const blockedA = new Set([a.standId].concat(typeof duplicateApronStandIdsForStand === 'function' ? duplicateApronStandIdsForStand(a.standId) : []));
-      for (let k = 0; k < ga.length; k++) {
-        const b = ga[k];
-        if (!blockedA.has(String(b.standId))) continue;
-        if (a.t0 < b.t1 && b.t0 < a.t1) return true;
-      }
-    }
-    for (let k = 0; k < ga.length; k++) {
-      const b = ga[k];
-      const blockedB = new Set([b.standId].concat(typeof duplicateApronStandIdsForStand === 'function' ? duplicateApronStandIdsForStand(b.standId) : []));
-      for (let i = 0; i < fa.length; i++) {
-        const a = fa[i];
-        if (!blockedB.has(String(a.standId))) continue;
-        if (a.t0 < b.t1 && b.t0 < a.t1) return true;
-      }
-    }
-    return false;
-  }
-  function formatStandWindowOverlapBannerDetail() {
-    const flights = (state.flights || []).filter(function(f) {
-      return f && !(typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f));
-    });
-    if (flights.length < 2) return '';
-    const parent = flights.map(function(_, i) { return i; });
-    function find(i) {
-      return parent[i] === i ? i : (parent[i] = find(parent[i]));
-    }
-    function union(i, j) {
-      const pi = find(i), pj = find(j);
-      if (pi !== pj) parent[pj] = pi;
-    }
-    for (let i = 0; i < flights.length; i++) {
-      for (let j = i + 1; j < flights.length; j++) {
-        if (flightPairOverlapsStandWindow(flights[i], flights[j])) union(i, j);
-      }
-    }
-    const compRegs = new Map();
-    for (let i = 0; i < flights.length; i++) {
-      const r = find(i);
-      const reg = flightRegForStandOverlapBanner(flights[i]);
-      if (!compRegs.has(r)) compRegs.set(r, []);
-      compRegs.get(r).push(reg);
-    }
-    const lines = [];
-    compRegs.forEach(function(regs) {
-      const uniq = [];
-      const seen = new Set();
-      for (let u = 0; u < regs.length; u++) {
-        const rg = regs[u];
-        if (!seen.has(rg)) {
-          seen.add(rg);
-          uniq.push(rg);
-        }
+  function hydrateLayersFromGridObject(grid, root) {
+    state.layers = Object.assign({}, DEFAULT_LAYERS);
+    state.layerMono = Object.assign({}, DEFAULT_LAYER_MONO);
+    const g = grid && typeof grid === 'object' ? grid : {};
+    const r = root && typeof root === 'object' ? root : {};
+    if (g.layers && typeof g.layers === 'object') {
+      mergeLayersFromObject(g.layers);
+    } else {
+      if (typeof g.showGrid === 'boolean') state.layers.grid = g.showGrid;
+      else if (typeof r.showGrid === 'boolean') state.layers.grid = r.showGrid;
+      if (typeof g.showImage === 'boolean') state.layers.image = g.showImage;
+      else if (typeof r.showImage === 'boolean') state.layers.image = r.showImage;
+      const sr = typeof g.showRoadWidth === 'boolean' ? g.showRoadWidth
+        : (typeof r.showRoadWidth === 'boolean' ? r.showRoadWidth : DEFAULT_LAYERS.pathFill);
+      state.layers.pathFill = !!sr;
+      state.layers.islandAreaFill = !!sr;
+      if (typeof g.showLayoutMarkers === 'boolean') {
+        state.layers.textRuler = g.showLayoutMarkers;
+        state.layers.dummyFlight = g.showLayoutMarkers;

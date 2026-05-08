@@ -1,487 +1,450 @@
-    else delete f.eldtMin;
-    if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
-    else delete f.eibtMin;
-    if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
-    else delete f.eobtMin;
-    if (isFinite(etotS)) f.etotMin = etotS / 60;
-    else delete f.etotMin;
-    function secListToMinList(key) {
-      const raw = srec[key];
-      if (!Array.isArray(raw)) return null;
-      const out = raw.map(function(v) {
-        const n = Number(v);
-        return isFinite(n) ? n / 60 : null;
-      });
-      return out.length ? out : null;
+  /** Area markers are drawn under other layout objects; keep them at the front of the array (low z in reverse hit-test). */
+  function normalizeLayoutMarkerAreaZOrder(markers) {
+    if (!Array.isArray(markers) || !markers.length) return markers || [];
+    const areas = [];
+    const rest = [];
+    for (let i = 0; i < markers.length; i++) {
+      const m = markers[i];
+      if (!m) continue;
+      if (m.kind === 'area') areas.push(m);
+      else rest.push(m);
     }
-    const eibtList = secListToMinList('EIBT_LIST');
-    const eobtList = secListToMinList('EOBT_LIST');
-    const epushList = secListToMinList('E_PUSH_FINISHED_LIST');
-    if (eibtList) f.eibtMinList = eibtList;
-    else delete f.eibtMinList;
-    if (eobtList) f.eobtMinList = eobtList;
-    else delete f.eobtMinList;
-    if (epushList) f.ePushFinishedMinList = epushList;
-    else delete f.ePushFinishedMinList;
-    const rotS = secOpt('ARR_ROT_SEC');
-    if (isFinite(rotS)) f.arrRotSec = rotS;
-    else f.arrRotSec = null;
-    const vttArrS = secOpt('VTT_ARR_SEC');
-    if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
-    else delete f.proSimVttArrSec;
-    const pushbackS = secOpt('PUSHBACK_SEC');
-    if (isFinite(pushbackS)) f.proSimPushbackSec = pushbackS;
-    else delete f.proSimPushbackSec;
-    const vttDepS = secOpt('VTT_DEP_SEC');
-    if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
-    else delete f.proSimVttDepSec;
-    const dttArrS = secOpt('DTT_ARR_SEC');
-    if (isFinite(dttArrS)) f.proSimDttArrSec = dttArrS;
-    else delete f.proSimDttArrSec;
-    const dttDepS = secOpt('DTT_DEP_SEC');
-    if (isFinite(dttDepS)) f.proSimDttDepSec = dttDepS;
-    else delete f.proSimDttDepSec;
-    const depRotS = secOpt('DEP_ROT_SEC');
-    if (isFinite(depRotS)) f.proSimDepLineupSec = depRotS;
-    else delete f.proSimDepLineupSec;
+    return areas.concat(rest);
   }
-  function flightEMinListForSchedule(f, listKey, metaSecListKey, scalarKey) {
-    const raw = f && Array.isArray(f[listKey]) ? f[listKey] : null;
-    if (raw && raw.length) return raw.map(function(v) {
-      const n = Number(v);
-      return isFinite(n) ? n : null;
+  function _flightApronFallbackStandId(f) {
+    if (!f) return null;
+    const t = f.token && typeof f.token === 'object' ? f.token : {};
+    const raw = f.depApronId != null ? f.depApronId
+      : (f.standId != null ? f.standId
+        : (t.apronId != null ? t.apronId
+          : (f.arrApronId != null ? f.arrApronId : null)));
+    return raw != null && String(raw).trim() !== '' ? String(raw) : null;
+  }
+  function _flightApronBaseSibtMin(f) {
+    const v = f && f.sibtMin != null ? Number(f.sibtMin) : (f && f.timeMin != null ? Number(f.timeMin) : 0);
+    return isFinite(v) ? Math.max(0, v) : 0;
+  }
+  function _flightApronBaseSobtMin(f, sibtMin) {
+    const raw = f && f.sobtMin != null ? Number(f.sobtMin) : NaN;
+    if (isFinite(raw) && raw > sibtMin) return raw;
+    const dwell = f && f.dwellMin != null && isFinite(Number(f.dwellMin)) ? Math.max(0, Number(f.dwellMin)) : 0;
+    return Math.max(sibtMin, sibtMin + dwell);
+  }
+  function normalizeFlightApronStaySegments(f) {
+    if (!f) return [];
+    const fallbackStandId = _flightApronFallbackStandId(f);
+    const rawSegs = Array.isArray(f.apronStaySegments) ? f.apronStaySegments : [];
+    let segs = rawSegs.map(function(seg) {
+      if (!seg || typeof seg !== 'object') return null;
+      const sibt = Number(seg.sibtMin);
+      const sobt = Number(seg.sobtMin);
+      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return null;
+      const sidRaw = seg.standId != null ? seg.standId : fallbackStandId;
+      return {
+        standId: sidRaw != null && String(sidRaw).trim() !== '' ? String(sidRaw) : null,
+        sibtMin: Math.max(0, sibt),
+        sobtMin: Math.max(0, sobt)
+      };
+    }).filter(Boolean);
+    if (!segs.length) {
+      const sibt = _flightApronBaseSibtMin(f);
+      segs = [{
+        standId: fallbackStandId,
+        sibtMin: sibt,
+        sobtMin: _flightApronBaseSobtMin(f, sibt)
+      }];
+    }
+    segs.sort(function(a, b) {
+      if (a.sibtMin !== b.sibtMin) return a.sibtMin - b.sibtMin;
+      return a.sobtMin - b.sobtMin;
     });
-    const meta = f && f.timeline_meta && typeof f.timeline_meta === 'object' ? f.timeline_meta : null;
-    const mraw = meta && Array.isArray(meta[metaSecListKey]) ? meta[metaSecListKey] : null;
-    if (mraw && mraw.length) return mraw.map(function(v) {
-      const n = Number(v);
-      return isFinite(n) ? n / 60 : null;
-    });
-    const scalar = f && f[scalarKey] != null ? Number(f[scalarKey]) : NaN;
-    return isFinite(scalar) ? [scalar] : [];
+    f.apronStaySegments = segs;
+    return segs;
   }
-  function isCompactPlaybackTrack(raw) {
-    return !!(
-      raw && typeof raw === 'object' && raw.format === 'compact_v2' &&
-      Array.isArray(raw.t) && Array.isArray(raw.x) && Array.isArray(raw.y) && Array.isArray(raw.v) &&
-      raw.t.length === raw.x.length && raw.t.length === raw.y.length && raw.t.length === raw.v.length
-    );
-  }
-  function compactPlaybackTrackLength(raw) {
-    return isCompactPlaybackTrack(raw) ? raw.t.length : 0;
-  }
-  function compactPlaybackTrackForFlight(f) {
-    if (!f || f.id == null) return null;
-    const map = state.simPlaybackPositionsByFlightId;
-    if (!map || typeof map !== 'object') return null;
-    const tr = map[String(f.id)];
-    return isCompactPlaybackTrack(tr) ? tr : null;
-  }
-  function compactPlaybackDghostIntsMergedRangesSec(arr) {
-    if (!Array.isArray(arr) || !arr.length) return [];
-    const nums = [];
-    for (let i = 0; i < arr.length; i++) {
-      const v = Math.round(Number(arr[i]));
-      if (isFinite(v)) nums.push(v);
-    }
-    if (!nums.length) return [];
-    nums.sort(function(a, b) { return a - b; });
+  function mergeAdjacentSameStandApronSegments(segs) {
     const out = [];
-    let s0 = nums[0], e0 = nums[0];
-    for (let j = 1; j < nums.length; j++) {
-      const n = nums[j];
-      if (n <= e0 + 1) e0 = n;
-      else {
-        out.push([s0, e0]);
-        s0 = e0 = n;
-      }
-    }
-    out.push([s0, e0]);
-    return out;
-  }
-  function compactPlaybackDghostSet(track) {
-    const s = new Set();
-    function addArr(a) {
-      if (!Array.isArray(a)) return;
-      for (let i = 0; i < a.length; i++) {
-        const t = Math.round(Number(a[i]));
-        if (isFinite(t)) s.add(t);
-      }
-    }
-    if (track) {
-      addArr(track.dghost_t);
-    }
-    return s;
-  }
-  function compactPlaybackDghostMergedRangesSec(track) {
-    if (!track) return [];
-    return compactPlaybackDghostIntsMergedRangesSec(track.dghost_t);
-  }
-  /** True if compact playback track records any deadlock ghost sample (simulation seconds). */
-  function allocFlightTrackHasDeadlock(trDead) {
-    return !!(
-      trDead &&
-      Array.isArray(trDead.dghost_t) &&
-      trDead.dghost_t.length > 0
-    );
-  }
-  /** Flight Schedule row: deadlock from last Pro Sim compact playback, timeline ghost, or persisted id set. */
-  function flightScheduleRowHasDeadlock(f) {
-    if (!f || f.id == null) return false;
-    const idStr = String(f.id);
-    if (state.deadlockFlightIdsFromLastSim && state.deadlockFlightIdsFromLastSim[idStr]) return true;
-    const tr = compactPlaybackTrackForFlight(f);
-    if (allocFlightTrackHasDeadlock(tr)) return true;
-    if (f.timeline && Array.isArray(f.timeline)) {
-      for (let i = 0; i < f.timeline.length; i++) {
-        if (f.timeline[i] && f.timeline[i].deadlockGhost === true) return true;
-      }
-    }
-    return false;
-  }
-  /** Gantt apron bar: timeline ghost overlay (time axis = sec/60). */
-  function allocFlightDeadlockOverlayHtml(trDead, segT0Min, segT1Min, visT0Min, visT1Min) {
-    const rN = trDead ? compactPlaybackDghostIntsMergedRangesSec(trDead.dghost_t) : [];
-    if (!rN.length) return '';
-    const denom = visT1Min - visT0Min;
-    if (!(denom > 1e-12)) return '';
-    function segmentsForRanges(ranges, cls) {
-      const parts = [];
-      for (let r = 0; r < ranges.length; r++) {
-        const ds = ranges[r][0], de = ranges[r][1];
-        const m0 = ds / 60;
-        const m1 = (de + 1) / 60;
-        const a = Math.max(visT0Min, m0, segT0Min);
-        const b = Math.min(visT1Min, m1, segT1Min);
-        if (!(b > a + 1e-12)) continue;
-        const leftRel = ((a - visT0Min) / denom) * 100;
-        const wRel = Math.max(0.5, ((b - a) / denom) * 100);
-        parts.push(
-          '<div class="' +
-            cls +
-            '" style="left:' +
-            leftRel +
-            '%;width:' +
-            wRel +
-            '%;"></div>'
-        );
-      }
-      return parts;
-    }
-    const outHtml = segmentsForRanges(rN, 'alloc-flight-deadlock-seg');
-    return outHtml.length ? outHtml.join('') : '';
-  }
-  function compactPlaybackTugIntervals(track) {
-    if (!track) return [];
-    if (Array.isArray(track.__tugIntervals)) return track.__tugIntervals;
-    const raw = Array.isArray(track.tug_intervals) ? track.tug_intervals : [];
-    const out = [];
-    for (let i = 0; i < raw.length; i++) {
-      const it = raw[i];
-      if (!it || typeof it !== 'object') continue;
-      const start = Number(it.start != null ? it.start : it.t0);
-      const end = Number(it.end != null ? it.end : it.t1);
-      if (isFinite(start) && isFinite(end) && end > start) out.push({ start: start, end: end });
-    }
-    track.__tugIntervals = out;
-    return out;
-  }
-  function compactPlaybackNeedsTugAt(track, tSec) {
-    const t = Number(tSec);
-    if (!isFinite(t)) return false;
-    const intervals = compactPlaybackTugIntervals(track);
-    for (let i = 0; i < intervals.length; i++) {
-      const it = intervals[i];
-      if (t + 1e-9 >= it.start && t <= it.end + 1e-9) return true;
-    }
-    return false;
-  }
-  function compactPlaybackMetaStateAt(track, t) {
-    const meta = Array.isArray(track && track.meta) ? track.meta : [];
-    const out = {};
-    const tt = Number(t);
-    for (let i = 0; i < meta.length; i++) {
-      const mr = meta[i];
-      if (!mr || typeof mr !== 'object') continue;
-      const mt = Number(mr.t);
-      if (!isFinite(mt) || mt > tt + 1e-9) break;
-      if (mr.phase != null) out.phase = String(mr.phase);
-      if (mr.pathType != null) out.pathType = String(mr.pathType);
-      if (mr.edgeId != null && String(mr.edgeId).trim()) out.edgeId = String(mr.edgeId).trim();
-    }
-    return out;
-  }
-  function compactPlaybackSampleAtIndex(track, idx) {
-    if (!isCompactPlaybackTrack(track)) return null;
-    const i = Math.max(0, Math.min(track.t.length - 1, idx | 0));
-    const t = Number(track.t[i]);
-    const x = Number(track.x[i]);
-    const y = Number(track.y[i]);
-    if (!isFinite(t) || !isFinite(x) || !isFinite(y)) return null;
-    const o = { t: t, x: x, y: y, v: Number(track.v[i]) || 0 };
-    const trR = Math.round(Number(t));
-    o.deadlockGhost = compactPlaybackDghostSet(track).has(trR);
-
-    const m = compactPlaybackMetaStateAt(track, t);
-    if (m.phase) o.phase = m.phase;
-    if (m.pathType) o.pathType = m.pathType;
-    if (m.edgeId) o.edgeId = m.edgeId;
-    return o;
-  }
-  function compactPlaybackIndexAtTime(track, tSec, clampEnd) {
-    if (!isCompactPlaybackTrack(track) || track.t.length < 2) return -1;
-    let t = Number(tSec);
-    if (!isFinite(t)) return -1;
-    const firstT = Number(track.t[0]);
-    const lastT = Number(track.t[track.t.length - 1]);
-    if (t + 1e-9 < firstT) return -1;
-    if (t > lastT) {
-      if (!clampEnd) return -1;
-      t = lastT;
-    }
-    let lo = 0, hi = track.t.length - 1;
-    while (lo < hi) {
-      const mid = Math.ceil((lo + hi) / 2);
-      if (Number(track.t[mid]) <= t + 1e-9) lo = mid;
-      else hi = mid - 1;
-    }
-    const idx = Math.min(lo, track.t.length - 2);
-    return (t + 1e-9 >= Number(track.t[idx]) && t - 1e-9 <= Number(track.t[idx + 1])) ? idx : -1;
-  }
-  /** Last unit direction of a non-trivial chord strictly before the segment containing ``tSec`` (full track — not windowed). */
-  function playbackLastMotionUnitDirBeforeTime(track, tSec, skipPushbackOpt) {
-    const skipPushback = skipPushbackOpt === true;
-    const eps = 0.08;
-    const eps2 = eps * eps;
-    if (!isCompactPlaybackTrack(track)) return null;
-    const idx = compactPlaybackIndexAtTime(track, tSec, true);
-    if (idx < 1) return null;
-    for (let j = idx - 1; j >= 0; j--) {
-      const p = compactPlaybackSampleAtIndex(track, j);
-      const q = compactPlaybackSampleAtIndex(track, j + 1);
-      if (!p || !q) continue;
-      if (skipPushback && String(p.phase || '') === 'Pushback') continue;
-      const ddx = q.x - p.x, ddy = q.y - p.y;
-      const l2 = ddx * ddx + ddy * ddy;
-      if (l2 >= eps2) {
-        const inv = 1 / Math.sqrt(l2);
-        return { dx: ddx * inv, dy: ddy * inv };
-      }
-    }
-    return null;
-  }
-  function compactPlaybackXYAtAbsTime(track, tSec) {
-    const idx = compactPlaybackIndexAtTime(track, tSec, true);
-    if (idx < 0 || !isCompactPlaybackTrack(track)) return null;
-    const t = Number(tSec);
-    const t0 = Number(track.t[idx]), t1 = Number(track.t[idx + 1]);
-    const x0 = Number(track.x[idx]), y0 = Number(track.y[idx]);
-    const x1 = Number(track.x[idx + 1]), y1 = Number(track.y[idx + 1]);
-    if (!isFinite(t0) || !isFinite(t1) || !isFinite(x0) || !isFinite(y0) || !isFinite(x1) || !isFinite(y1)) return null;
-    if (t1 <= t0) return { x: x0, y: y0 };
-    const u = Math.max(0, Math.min(1, (t - t0) / (t1 - t0)));
-    return { x: x0 + (x1 - x0) * u, y: y0 + (y1 - y0) * u };
-  }
-  function deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR) {
-    const tr = Math.round(Number(tR));
-    if (!isFinite(tr) || !positions || typeof positions !== 'object') return null;
-    let sx = 0, sy = 0, n = 0;
-    (flights || []).forEach(function(f) {
-      if (!f || f.id == null) return;
-      const raw = positions[String(f.id)];
-      if (!isCompactPlaybackTrack(raw)) return;
-      if (!compactPlaybackDghostSet(raw).has(tr)) return;
-      const p = compactPlaybackXYAtAbsTime(raw, tr);
-      if (p && isFinite(p.x) && isFinite(p.y)) {
-        sx += p.x;
-        sy += p.y;
-        n++;
+    (segs || []).forEach(function(seg) {
+      if (!seg) return;
+      const sid = seg.standId != null && String(seg.standId).trim() !== '' ? String(seg.standId) : null;
+      const sibt = Number(seg.sibtMin);
+      const sobt = Number(seg.sobtMin);
+      if (!isFinite(sibt) || !isFinite(sobt) || sobt <= sibt) return;
+      const prev = out.length ? out[out.length - 1] : null;
+      if (prev && String(prev.standId || '') === String(sid || '') && sibt <= prev.sobtMin + 1e-6) {
+        prev.sobtMin = Math.max(prev.sobtMin, sobt);
+      } else {
+        out.push({ standId: sid, sibtMin: sibt, sobtMin: sobt });
       }
     });
-    if (!n) return null;
-    return { x: sx / n, y: sy / n };
+    return out;
   }
-  function focusLayoutMapOnWorldXY(wx, wy) {
-    if (!isFinite(wx) || !isFinite(wy)) return;
-    const c = document.getElementById('grid-canvas');
-    if (!c) return;
-    const w = c.clientWidth || 0, h = c.clientHeight || 0;
-    if (w < 8 || h < 8) return;
-    const sc = Math.max(Number(state.scale) || 1, 1e-6);
-    state.panX = w * 0.5 - wx * sc;
-    state.panY = h * 0.5 - wy * sc;
-    if (typeof scheduleDraw === 'function') scheduleDraw();
-    else if (typeof draw === 'function') {
-      try { draw(); } catch (e) { /* ignore */ }
-    }
-  }
-  function seekSimToDeadlockMarkerEvent(ev) {
-    if (!ev || typeof ev !== 'object') return;
-    const tAbs = Number(ev.t_abs);
-    if (!isFinite(tAbs)) return;
-    const lo = Number(state.simStartSec), hi = Number(state.simDurationSec);
-    if (!isFinite(lo) || !isFinite(hi)) return;
-    const snapped =
-      typeof snapSimTimeToPlaybackWindowSec === 'function'
-        ? snapSimTimeToPlaybackWindowSec(tAbs)
-        : (typeof snapSimTimeSecForSlider === 'function'
-          ? snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, tAbs)))
-          : Math.max(lo, Math.min(hi, tAbs)));
-    state.simTimeSec = snapped;
-    const slider = document.getElementById('flightSimSlider');
-    if (slider) slider.value = String(snapped);
-    if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
-    let fx = ev.focusWorldX != null ? Number(ev.focusWorldX) : NaN;
-    let fy = ev.focusWorldY != null ? Number(ev.focusWorldY) : NaN;
-    if (!isFinite(fx) || !isFinite(fy)) {
-      const fw = deadlockFocusWorldMeanAtRoundedTime(
-        state.simPlaybackPositionsByFlightId,
-        state.flights,
-        Math.round(snapped)
-      );
-      if (fw) {
-        fx = fw.x;
-        fy = fw.y;
-      }
-    }
-    if (isFinite(fx) && isFinite(fy)) focusLayoutMapOnWorldXY(fx, fy);
-    try {
-      if (typeof draw === 'function') draw();
-    } catch (e2) { /* ignore */ }
-    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
-  }
-  function compactPlaybackTimelineWindow(track, tSec, radius) {
-    const idx = compactPlaybackIndexAtTime(track, tSec, true);
-    if (idx < 0) return null;
-    const r = Math.max(2, radius || 40);
-    const s = Math.max(0, idx - r);
-    const e = Math.min(track.t.length - 1, idx + r + 1);
-    const out = [];
-    for (let i = s; i <= e; i++) {
-      const p = compactPlaybackSampleAtIndex(track, i);
-      if (p) out.push(p);
-    }
-    return out.length >= 2 ? out : null;
-  }
-  function compactPlaybackTrackStartEnd(track) {
-    if (!isCompactPlaybackTrack(track) || track.t.length < 1) return null;
-    return { t0: Number(track.t[0]), t1: Number(track.t[track.t.length - 1]) };
-  }
-  function refreshHasSimulationResultFromPlaybackSources() {
-    const pos = state.simPlaybackPositionsByFlightId;
-    if (pos && typeof pos === 'object') {
-      for (const k in pos) {
-        if (!Object.prototype.hasOwnProperty.call(pos, k)) continue;
-        if (compactPlaybackTrackLength(pos[k]) >= 2) {
-          state.hasSimulationResult = true;
-          return;
-        }
-      }
-    }
-    state.hasSimulationResult = false;
-    state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
-  }
-  function evictFlightPlaybackTimelinesWhenPlayBlocked() {
-    if (!state.simPlaybackPositionsByFlightId || typeof state.simPlaybackPositionsByFlightId !== 'object') return false;
-    const flights = state.flights || [];
-    for (let i = 0; i < flights.length; i++) {
-      const f = flights[i];
-      if (!f) continue;
-      f.timeline = null;
-    }
-    state.simPlaybackTimelinesEvictedForMemory = true;
-    _lazyTimelineLastEvictSimSec = NaN;
-    refreshHasSimulationResultFromPlaybackSources();
+  function syncSingleApronStaySegmentFromAggregate(f) {
+    if (!f || !Array.isArray(f.apronStaySegments) || f.apronStaySegments.length !== 1) return false;
+    const sibt = f.sibtMin != null && isFinite(Number(f.sibtMin))
+      ? Number(f.sibtMin)
+      : (f.timeMin != null && isFinite(Number(f.timeMin)) ? Number(f.timeMin) : null);
+    const sobt = f.sobtMin != null && isFinite(Number(f.sobtMin))
+      ? Number(f.sobtMin)
+      : (sibt != null ? sibt + Math.max(0, Number(f.dwellMin) || 0) : null);
+    if (sibt == null || sobt == null || sobt <= sibt) return false;
+    const cur = f.apronStaySegments[0] || {};
+    const standId = cur.standId != null && String(cur.standId).trim() !== ''
+      ? String(cur.standId)
+      : (f.standId != null && String(f.standId).trim() !== '' ? String(f.standId) : null);
+    f.apronStaySegments = [{ standId: standId, sibtMin: Math.max(0, sibt), sobtMin: Math.max(0, sobt) }];
+    syncFlightApronStayAggregate(f);
     return true;
   }
-  function rehydrateFlightPlaybackTimelinesAfterPlayAllowed() {
-    if (!state.simPlaybackTimelinesEvictedForMemory) return false;
-    refreshHasSimulationResultFromPlaybackSources();
-    state.simPlaybackTimelinesEvictedForMemory = false;
+  function collapseFlightApronStaySegmentsIfSingleStand(f) {
+    if (!f || !Array.isArray(f.apronStaySegments) || f.apronStaySegments.length <= 1) return false;
+    const segs = normalizeFlightApronStaySegments(f);
+    if (segs.length <= 1) return false;
+    const firstStandKey = String(segs[0].standId || '');
+    for (let i = 1; i < segs.length; i++) {
+      if (String(segs[i].standId || '') !== firstStandKey) return false;
+    }
+    const first = segs[0];
+    const last = segs[segs.length - 1];
+    f.apronStaySegments = [{
+      standId: first.standId || null,
+      sibtMin: first.sibtMin,
+      sobtMin: last.sobtMin
+    }];
+    syncFlightApronStayAggregate(f);
     return true;
   }
-  function deriveDeadlockGhostPlaybackFromPayload(payload, flights) {
-    const empty = { events: [], bodyLines: '', resolveCount: 0 };
-    if (!payload || typeof payload !== 'object') return empty;
-    const positions = payload.positions;
-    if (!positions || typeof positions !== 'object') return empty;
-    const resolveCount = Number(payload.deadlock_resolve_event_count);
-    const rc = isFinite(resolveCount) && resolveCount > 0 ? Math.floor(resolveCount) : 0;
-    const byT = new Map();
-    function ghostSessionStartTimestampsSec(arr, gapSec) {
-      const g = Math.max(30, Number(gapSec) || 120);
-      const nums = [];
-      for (let i = 0; i < arr.length; i++) {
-        const v = Math.round(Number(arr[i]));
-        if (isFinite(v)) nums.push(v);
-      }
-      if (!nums.length) return [];
-      nums.sort(function(a, b) {
-        return a - b;
-      });
-      const out = [nums[0]];
-      for (let j = 1; j < nums.length; j++) {
-        if (nums[j] - nums[j - 1] > g) out.push(nums[j]);
-      }
-      return out;
-    }
-    function ingestTrackArray(raw, f, arr) {
-      if (!Array.isArray(arr) || !arr.length) return;
-      const starts = ghostSessionStartTimestampsSec(arr, 120);
-      for (let si = 0; si < starts.length; si++) {
-        const tr = starts[si];
-        const label =
-          String(f.reg || '').trim() ||
-          String(f.flightNumber || f.id || '').trim() ||
-          String(f.id);
-        if (!byT.has(tr))
-          byT.set(tr, { labels: [] });
-        const bx = byT.get(tr);
-        if (bx.labels.indexOf(label) < 0) bx.labels.push(label);
-      }
-    }
+  function collapseSingleStandApronStaySegmentsForFlights(flights) {
+    const changed = [];
     (flights || []).forEach(function(f) {
-      if (!f || f.id == null) return;
-      const raw = positions[String(f.id)];
-      if (!isCompactPlaybackTrack(raw)) return;
-      ingestTrackArray(raw, f, raw.dghost_t);
+      if (!f || typeof flightBlockedLikeNoWay === 'function' && flightBlockedLikeNoWay(f)) return;
+      if (collapseFlightApronStaySegmentsIfSingleStand(f)) changed.push(f);
     });
-    const entries = Array.from(byT.entries()).sort(function(a, b) { return a[0] - b[0]; });
-    const events = entries.map(function(e) {
-      const tR = e[0];
-      const bx = e[1];
-      const ev = { t_abs: tR, labels: bx.labels.slice() };
-      const fw = deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR);
-      if (fw && isFinite(fw.x) && isFinite(fw.y)) {
-        ev.focusWorldX = fw.x;
-        ev.focusWorldY = fw.y;
-      }
-      return ev;
-    });
-    let bodyLines = '';
-    if (events.length) {
-      const chunks = [];
-      for (let ei = 0; ei < events.length; ei++) {
-        const ev = events[ei];
-        const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
-        const lbls = (ev.labels && ev.labels.length) ? ev.labels : [];
-        let pushedAny = false;
-        for (let li = 0; li < lbls.length; li++) {
-          const reg = String(lbls[li] || '').trim();
-          if (!reg) continue;
-          chunks.push(timeStr + '  ' + reg);
-          pushedAny = true;
-        }
-        if (!pushedAny) chunks.push(timeStr + '  —');
-      }
-      bodyLines = chunks.join('\n');
-    } else if (rc > 0) {
-      bodyLines =
-        'Resolves: ' + rc + '  (no ghost ticks in positions)';
-    }
-    return {
-      events: events,
-      bodyLines: bodyLines,
-      resolveCount: rc,
-    };
+    return changed;
   }
+  function syncFlightApronStayAggregate(f) {
+    if (!f) return [];
+    const segs = normalizeFlightApronStaySegments(f);
+    if (!segs.length) return segs;
+    const first = segs[0];
+    const last = segs[segs.length - 1];
+    f.arrApronId = first.standId || null;
+    f.depApronId = last.standId || null;
+    f.standId = f.depApronId || null;
+    if (f.token && typeof f.token === 'object') f.token.apronId = f.depApronId || null;
+    f.sibtMin = first.sibtMin;
+    f.timeMin = first.sibtMin;
+    f.sobtMin = last.sobtMin;
+    let dwell = 0;
+    for (let i = 0; i < segs.length; i++) dwell += Math.max(0, segs[i].sobtMin - segs[i].sibtMin);
+    f.dwellMin = dwell;
+    if (typeof SCHED_SIBT_MINUS_SLDT_MIN === 'number') f.sldtMin = Math.max(0, f.sibtMin - SCHED_SIBT_MINUS_SLDT_MIN);
+    if (typeof SCHED_STOT_MINUS_SOBT_MIN === 'number') f.stotMin = f.sobtMin + SCHED_STOT_MINUS_SOBT_MIN;
+    return segs;
+  }
+  function serializableApronStaySegmentsForFlight(f) {
+    const segs = syncFlightApronStayAggregate(f).map(function(seg) {
+      return { standId: seg.standId, sibtMin: seg.sibtMin, sobtMin: seg.sobtMin };
+    });
+    return mergeAdjacentSameStandApronSegments(segs);
+  }
+  const APRON_STAY_SPLIT_MIN_PART_MIN = 20;
+  function splitFlightApronStaySegmentAtMinute(f, segIdx, cutMin) {
+    if (!f || flightBlockedLikeNoWay(f)) return false;
+    const segs = normalizeFlightApronStaySegments(f);
+    const idx = Math.max(0, parseInt(segIdx, 10) || 0);
+    if (idx >= segs.length) return false;
+    const seg = segs[idx];
+    const cut = Number(cutMin);
+    if (!isFinite(cut)) return false;
+    const snap = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0)
+      ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN
+      : 1;
+    const t = Math.max(0, Math.round(cut / snap) * snap);
+    if (t - seg.sibtMin < APRON_STAY_SPLIT_MIN_PART_MIN || seg.sobtMin - t < APRON_STAY_SPLIT_MIN_PART_MIN) {
+      return false;
+    }
+    const left = { standId: seg.standId || null, sibtMin: seg.sibtMin, sobtMin: t };
+    const right = { standId: seg.standId || null, sibtMin: t, sobtMin: seg.sobtMin };
+    segs.splice(idx, 1, left, right);
+    f.apronStaySegments = segs;
+    syncFlightApronStayAggregate(f);
+    return true;
+  }
+  function _sameApronStayStand(a, b) {
+    const sa = a && a.standId != null ? String(a.standId) : '';
+    const sb = b && b.standId != null ? String(b.standId) : '';
+    return sa === sb;
+  }
+  function applyApronStaySegmentHandleMinute(f, segIdx, role, minutes) {
+    if (!f || flightBlockedLikeNoWay(f)) return false;
+    const segs = normalizeFlightApronStaySegments(f);
+    const idx = Math.max(0, parseInt(segIdx, 10) || 0);
+    if (idx >= segs.length) return false;
+    const raw = Number(minutes);
+    if (!isFinite(raw)) return false;
+    const snap = (typeof GANTT_SIBT_SOBT_HANDLE_SNAP_MIN === 'number' && GANTT_SIBT_SOBT_HANDLE_SNAP_MIN > 0)
+      ? GANTT_SIBT_SOBT_HANDLE_SNAP_MIN
+      : 1;
+    const tRaw = Math.max(0, Math.round(raw / snap) * snap);
+    if (role === 'sibt') {
+      if (idx === 0) {
+        segs[0].sibtMin = Math.min(tRaw, segs[0].sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN);
+      } else {
+        const prev = segs[idx - 1];
+        const cur = segs[idx];
+        if (_sameApronStayStand(prev, cur)) return false;
+        const lo = prev.sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN;
+        const hi = cur.sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN;
+        if (hi < lo) return false;
+        const t = Math.max(lo, Math.min(hi, tRaw));
+        prev.sobtMin = t;
+        cur.sibtMin = t;
+      }
+    } else if (role === 'sobt') {
+      if (idx >= segs.length - 1) {
+        segs[idx].sobtMin = Math.max(tRaw, segs[idx].sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN);
+      } else {
+        const cur = segs[idx];
+        const next = segs[idx + 1];
+        if (_sameApronStayStand(cur, next)) return false;
+        const lo = cur.sibtMin + APRON_STAY_SPLIT_MIN_PART_MIN;
+        const hi = next.sobtMin - APRON_STAY_SPLIT_MIN_PART_MIN;
+        if (hi < lo) return false;
+        const t = Math.max(lo, Math.min(hi, tRaw));
+        cur.sobtMin = t;
+        next.sibtMin = t;
+      }
+    } else {
+      return false;
+    }
+    f.apronStaySegments = segs;
+    syncFlightApronStayAggregate(f);
+    return true;
+  }
+  function buildApronStayGanttIntervalsForFlight(f, eSer) {
+    const segs = normalizeFlightApronStaySegments(f);
+    if (!segs.length) return [];
+    syncFlightApronStayAggregate(f);
+    const first = segs[0];
+    const last = segs[segs.length - 1];
+    const sldt = f.sldtMin != null ? f.sldtMin : Math.max(0, first.sibtMin - SCHED_SIBT_MINUS_SLDT_MIN);
+    const stot = f.stotMin != null ? f.stotMin : (last.sobtMin + SCHED_STOT_MINUS_SOBT_MIN);
+    const eibtList = Array.isArray(eSer && eSer.eibtList) ? eSer.eibtList : [];
+    const eobtList = Array.isArray(eSer && eSer.eobtList) ? eSer.eobtList : [];
+    const hasSegmentEList = eibtList.length >= segs.length && eobtList.length >= segs.length;
+    return segs.map(function(seg, idx) {
+      const segEibt = hasSegmentEList ? eibtList[idx] : eSer.eibt;
+      const segEobt = hasSegmentEList ? eobtList[idx] : eSer.eobt;
+      return {
+        f: f,
+        t0: seg.sibtMin,
+        t1: seg.sobtMin,
+        sldt: sldt,
+        stot: stot,
+        eibt: segEibt,
+        eobt: segEobt,
+        eldt: eSer.eldt,
+        etot: eSer.etot,
+        eBarSegmented: hasSegmentEList,
+        sldtOrig: sldt,
+        sobtOrig: last.sobtMin,
+        stotOrig: stot,
+        segmentIdx: idx,
+        segmentCount: segs.length,
+        segmentStandId: seg.standId || null
+      };
+    });
+  }
+  /** If E minute fields were omitted from persist but Pro Sim left them on ``timeline_meta``, fill them for schedule UI. */
+  function hydrateEMinutesFromTimelineMetaIfMissing(f) {
+    if (!f || !f.timeline_meta || typeof f.timeline_meta !== 'object') return;
+    const m = f.timeline_meta;
+    function setMin(minKey, secKey) {
+      if (f[minKey] != null && isFinite(Number(f[minKey]))) return;
+      const n = m[secKey] != null ? Number(m[secKey]) : NaN;
+      if (isFinite(n)) f[minKey] = n / 60;
+    }
+    setMin('eldtMin', 'eldtSec');
+    setMin('eibtMin', 'eibtSec');
+    setMin('eobtMin', 'eobtSec');
+    setMin('etotMin', 'etotSec');
+  }
+  function applyLayoutObject(obj) {
+    if (!obj || typeof obj !== 'object') return;
+    state.simPlaybackEndCapSec = null;
+    const dp = obj.designerPersist;
+    const persistPlaybackSnapshot = !!(dp && dp.v === 1 && dp.hasSimulationPlayback === true);
+    if (obj.grid) {
+      if (typeof obj.grid.cols === 'number') GRID_COLS = obj.grid.cols;
+      if (typeof obj.grid.rows === 'number') GRID_ROWS = obj.grid.rows;
+      if (typeof obj.grid.cellSize === 'number') CELL_SIZE = obj.grid.cellSize;
+    }
+    hydrateLayersFromGridObject(obj.grid || null, obj);
+    state.layoutImageOverlay = normalizeLayoutImageOverlay(
+      (obj.grid && obj.grid.layoutImageOverlay) || obj.layoutImageOverlay || null
+    );
+    invalidateGridUnderlay();
+    syncLayoutImageBitmap();
+    syncLayerPopoverFromState();
+    if (Array.isArray(obj.terminals)) state.terminals = obj.terminals.map(normalizeBuildingObject);
+    if (Array.isArray(obj.pbbStands)) state.pbbStands = obj.pbbStands.map(normalizePbbStandObject);
+    if (Array.isArray(obj.remoteStands)) state.remoteStands = obj.remoteStands.map(normalizeRemoteStandObject);
+    if (Array.isArray(obj.tempStands)) state.tempStands = obj.tempStands.map(normalizeTempStandObject);
+    else state.tempStands = [];
+    state.taxiways = mergeTaxiwaysFromLayoutObject(obj);
+    invalidatePathGraphCache(true);
+    if (Array.isArray(obj.holdingPoints)) {
+      state.holdingPoints = obj.holdingPoints.map(function(h) {
+        const hx = Number(h && h.x);
+        const hy = Number(h && h.y);
+        let hpKind = null;
+        if (h && h.hpKind != null) hpKind = normalizeHoldingPointKind(h.hpKind);
+        if (!hpKind) {
+          const snap = snapHoldingPointOnAllowedTaxiways(hx, hy);
+          hpKind = (snap && snap.pathType) ? pathTypeToHpKind(snap.pathType) : 'intermediate';
+        }
+        return {
+          id: (h && h.id) ? h.id : id(),
+          name: h && h.name != null ? String(h.name) : '',
+          x: hx,
+          y: hy,
+          hpKind: hpKind
+        };
+      }).filter(function(h) { return h && isFinite(h.x) && isFinite(h.y); });
+    } else state.holdingPoints = [];
+    if (Array.isArray(obj.apronLinks)) {
+      const csAL = _layoutCellSizeForPersistLoad();
+      state.apronLinks = obj.apronLinks.map(function(lk) {
+        const copy = Object.assign({}, lk);
+        if (Array.isArray(copy.midVertices)) {
+          copy.midVertices = copy.midVertices.map(function(v) {
+            if (!v || typeof v !== 'object') return { col: 0, row: 0 };
+            const x = Number(v.x), y = Number(v.y);
+            if (isFinite(x) && isFinite(y)) return { col: x / csAL, row: y / csAL };
+            return { col: Number(v.col) || 0, row: Number(v.row) || 0 };
+          });
+        }
+        return copy;
+      });
+    }
+    if (Array.isArray(obj.directionModes) && obj.directionModes.length) {
+      state.directionModes = obj.directionModes.slice();
+    }
+    if (Array.isArray(obj.layoutMarkers)) {
+      state.layoutMarkers = normalizeLayoutMarkerAreaZOrder(obj.layoutMarkers.map(normalizeLayoutMarkerFromLoad).filter(Boolean));
+    } else if (!Array.isArray(state.layoutMarkers)) {
+      state.layoutMarkers = [];
+    }
+    if (Array.isArray(obj.flights)) {
+      state.simPlaybackPositionsByFlightId = null;
+      state.simPlaybackScheduleSnapshot = null;
+      state.simPlaybackTimelinesEvictedForMemory = false;
+      state.flights = obj.flights.slice();
+      state.flights.forEach(f => {
+        const rawTl = Array.isArray(f.timeline) ? f.timeline : null;
+        const rawMeta = f.timeline_meta;
+        const rawProSimEl = Array.isArray(f.proSimEdgeList) ? f.proSimEdgeList.slice() : null;
+        const restorePlaybackFlight = !!(rawTl && rawTl.length >= 2);
+        const t = f.token || {};
+        const exitTwPersist = (t.ExitTaxiwayId != null && t.ExitTaxiwayId !== '') ? t.ExitTaxiwayId : null;
+        const arrRetFailedPersist = f.arrRetFailed === true;
+        if (f.aircraftType && typeof getCodeForAircraft === 'function') {
+          f.code = getCodeForAircraft(f.aircraftType);
+        } else if (f.code && typeof AIRCRAFT_TYPES !== 'undefined') {
+          const match = AIRCRAFT_TYPES.find(a => a.icao === f.code);
+          f.aircraftType = match ? match.id : (AIRCRAFT_TYPES[0] && AIRCRAFT_TYPES[0].id) || 'A320';
+        }
+        f.arrRunwayId = f.arrRunwayId || t.arrRunwayId || t.runwayId || null;
+        f.depRunwayId = f.depRunwayId || t.depRunwayId || null;
+        f.terminalId = f.terminalId || t.terminalId || null;
+        f.arrTerminalId = f.arrTerminalId || t.arrTerminalId || f.terminalId || null;
+        f.depTerminalId = f.depTerminalId || t.depTerminalId || f.terminalId || null;
+        ensureFlightLookaheadArrDepFlight(f);
+        const apronId = f.depApronId != null ? f.depApronId : (t.apronId != null ? t.apronId : (f.standId != null ? f.standId : f.arrApronId || null));
+        f.standId = apronId;
+        f.token = {
+          nodes: Array.isArray(t.nodes) ? t.nodes.slice() : ['runway','taxiway','apron','terminal'],
+          runwayId: f.arrRunwayId || null,
+          apronId: apronId,
+          terminalId: f.terminalId || null,
+          arrTerminalId: f.arrTerminalId || null,
+          depTerminalId: f.depTerminalId || null,
+          depRunwayId: f.depRunwayId || null,
+        };
+        if (exitTwPersist) f.token.ExitTaxiwayId = exitTwPersist;
+        f.noWayArr = false;
+        f.noWayDep = false;
+        delete f._noWayArrDetail;
+        delete f._noWayDepDetail;
+        if (persistPlaybackSnapshot && f.arrDep !== 'Dep') {
+          if (exitTwPersist) {
+            f.sampledArrRet = exitTwPersist;
+            f.arrRetFailed = arrRetFailedPersist;
+          } else {
+            f.sampledArrRet = null;
+            f.arrRetFailed = false;
+          }
+        } else {
+          f.arrRetFailed = false;
+          f.sampledArrRet = null;
+        }
+        if (!restorePlaybackFlight) {
+          f.timeline = null;
+          if (rawMeta && typeof rawMeta === 'object') {
+            f.timeline_meta = Object.assign({}, rawMeta);
+            hydrateEMinutesFromTimelineMetaIfMissing(f);
+          } else {
+            delete f.timeline_meta;
+          }
+          if (rawProSimEl && rawProSimEl.length) f.proSimEdgeList = rawProSimEl;
+          else delete f.proSimEdgeList;
+        } else {
+          const tlNorm = rawTl.map(function(p) {
+            const x = p.x != null && p.x !== '' ? Number(p.x) : Number(p.col);
+            const y = p.y != null && p.y !== '' ? Number(p.y) : Number(p.row);
+            const dg = p.deadlockGhost === true || p.deadlock_ghost === true;
+            const o = { t: Number(p.t), x: x, y: y, deadlockGhost: dg };
+            if (p.pathType != null && p.pathType !== '') o.pathType = String(p.pathType);
+            if (p.phase != null && p.phase !== '') o.phase = String(p.phase);
+            if (p.edgeId != null && String(p.edgeId).trim()) o.edgeId = String(p.edgeId).trim();
+            return o;
+          }).filter(function(k) {
+            return isFinite(k.t) && isFinite(k.x) && isFinite(k.y);
+          }).sort(function(a, b) { return a.t - b.t; });
+          if (tlNorm.length >= 2) {
+            f.timeline = tlNorm;
+            if (rawMeta && typeof rawMeta === 'object') f.timeline_meta = Object.assign({}, rawMeta);
+            else delete f.timeline_meta;
+            if (rawProSimEl && rawProSimEl.length) {
+              f.proSimEdgeList = rawProSimEl;
+            } else if (Array.isArray(f.edge_list) && f.edge_list.length) {
+              f.proSimEdgeList = f.edge_list.slice();
+            }
+            hydrateEMinutesFromTimelineMetaIfMissing(f);
+          } else {
+            f.timeline = null;
+            if (rawMeta && typeof rawMeta === 'object') {
+              f.timeline_meta = Object.assign({}, rawMeta);
+              hydrateEMinutesFromTimelineMetaIfMissing(f);
+            } else {
+              delete f.timeline_meta;
+            }
+            if (rawProSimEl && rawProSimEl.length) f.proSimEdgeList = rawProSimEl;
+            else delete f.proSimEdgeList;
+          }
+        }
+        delete f.cachedArrPathPts;
+        delete f.cachedDepPathPts;
+        delete f._pathPolylineCacheRev;
+        delete f._pathPolylineArrRetKey;
+        f.__schedRetRotRev = null;
+        f.__schedVttArrRev = null;
+        f.__schedVttArrMin = null;
+        if (!f.airlineCode) f.airlineCode = DEFAULT_AIRLINE_CODES[Math.floor(Math.random() * DEFAULT_AIRLINE_CODES.length)];
+        if (!f.flightNumber) f.flightNumber = f.airlineCode + String(Math.floor(1000 + Math.random() * 9000));
+        if (!String(f.reg || '').trim()) f.reg = randomRegNumber();
+        {
+          const idRaw = String(f.intDom || '').trim();
+          f.intDom = (idRaw.toLowerCase() === 'dom') ? 'Dom' : 'Int';
+        }
+        if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);

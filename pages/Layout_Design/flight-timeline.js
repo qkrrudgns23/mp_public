@@ -1,3 +1,621 @@
+      });
+    } else {
+      state.flights = [];
+    }
+    if (typeof recomputeDuplicateApronByStandId === 'function') recomputeDuplicateApronByStandId();
+    if (obj.simPlaybackPositionsByFlightId && typeof obj.simPlaybackPositionsByFlightId === 'object') {
+      state.simPlaybackPositionsByFlightId = obj.simPlaybackPositionsByFlightId;
+      state.simPlaybackTimelinesEvictedForMemory = false;
+    }
+    if (Object.prototype.hasOwnProperty.call(obj, '_airsideSimApply')) delete obj._airsideSimApply;
+    state.simPlaying = false;
+    state.layoutPathDrawPointer = null;
+    if (typeof refreshHasSimulationResultFromPlaybackSources === 'function') {
+      refreshHasSimulationResultFromPlaybackSources();
+    } else {
+      let playbackFlightCount = 0;
+      (state.flights || []).forEach(function(f) {
+        if (f && f.timeline && f.timeline.length >= 2) playbackFlightCount++;
+      });
+      state.hasSimulationResult = playbackFlightCount > 0;
+    }
+    const savedDlp = obj.simDeadlockGhostPlayback;
+    let savedRc = 0;
+    if (savedDlp && isFinite(Number(savedDlp.resolveCount))) savedRc = Math.floor(Number(savedDlp.resolveCount));
+    if (state.simPlaybackPositionsByFlightId && typeof state.simPlaybackPositionsByFlightId === 'object') {
+      state.simDeadlockGhostPlayback = deriveDeadlockGhostPlaybackFromPayload(
+        { positions: state.simPlaybackPositionsByFlightId, deadlock_resolve_event_count: savedRc },
+        state.flights
+      );
+    } else if (savedDlp && typeof savedDlp === 'object' && Array.isArray(savedDlp.events) && savedDlp.events.length) {
+      state.simDeadlockGhostPlayback = {
+        events: savedDlp.events.map(function(ev) {
+          const o = { t_abs: Number(ev.t_abs), labels: Array.isArray(ev.labels) ? ev.labels.slice() : [] };
+          if (ev.focusWorldX != null && isFinite(Number(ev.focusWorldX))) o.focusWorldX = Number(ev.focusWorldX);
+          if (ev.focusWorldY != null && isFinite(Number(ev.focusWorldY))) o.focusWorldY = Number(ev.focusWorldY);
+          return o;
+        }),
+        bodyLines: typeof savedDlp.bodyLines === 'string' ? savedDlp.bodyLines : '',
+        resolveCount: savedRc,
+      };
+    } else {
+      state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
+    }
+    if (dp && dp.v === 1 && dp.simPlaybackEndCapSec != null && isFinite(Number(dp.simPlaybackEndCapSec))) {
+      state.simPlaybackEndCapSec = Number(dp.simPlaybackEndCapSec);
+    }
+    state._pendingPersistSimWindow = null;
+    if (dp && dp.v === 1
+        && dp.simWindowStartSec != null && dp.simWindowEndSec != null
+        && isFinite(Number(dp.simWindowStartSec)) && isFinite(Number(dp.simWindowEndSec))) {
+      state._pendingPersistSimWindow = {
+        lo: Number(dp.simWindowStartSec),
+        hi: Number(dp.simWindowEndSec),
+      };
+    }
+    applyDesignerPersistMapTypeAfterLoad(dp);
+    syncMapTypePopoverFromState();
+    if (typeof syncSimulationPlaybackAfterTimelines === 'function') syncSimulationPlaybackAfterTimelines();
+    else if (typeof recomputeSimDuration === 'function') recomputeSimDuration();
+    if (typeof redrawLayoutAfterEdit === 'function') redrawLayoutAfterEdit();
+    else draw();
+    let didAutoPathGraphSync = false;
+    if (PATH_GRAPH_SYNC_ONLY_ON_EXPLICIT_ACTION && state.layers && state.layers.junction) {
+      try {
+        if (typeof applyPathGraphSyncNow === 'function') applyPathGraphSyncNow();
+        didAutoPathGraphSync = true;
+        if (typeof draw === 'function') draw();
+        if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+      } catch (ePg) {
+        console.warn('applyLayoutObject: path graph sync', ePg);
+      }
+    }
+    if (dp && dp.v === 1) {
+      state.globalUpdateFresh = !!dp.globalUpdateFresh;
+      if (!didAutoPathGraphSync) {
+        if (dp.designerPageUpdateFresh === true) {
+          if (typeof markDesignerPageUpdateFresh === 'function') markDesignerPageUpdateFresh();
+        } else if (typeof markDesignerPageUpdateStale === 'function') {
+          markDesignerPageUpdateStale();
+        }
+      }
+      if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+    }
+    if (typeof renderFlightList === 'function') renderFlightList(false, false);
+    if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+  }
+  /** E-series minutes; ARR_ROT_SEC / VTT_* / DTT_* / DEP_ROT_SEC from ``airside_sim`` schedule. */
+  function applyAirsideScheduleRowToFlight(f, srec) {
+    if (!f) return;
+    if (!srec || typeof srec !== 'object') {
+      delete f.eldtMin;
+      delete f.eibtMin;
+      delete f.eobtMin;
+      delete f.etotMin;
+      delete f.eldtMin;
+      delete f.eibtMin;
+      delete f.eobtMin;
+      delete f.etotMin;
+      delete f.eibtMinList;
+      delete f.eobtMinList;
+      delete f.ePushFinishedMinList;
+      f.arrRotSec = null;
+      delete f.proSimVttArrSec;
+      delete f.proSimVttDepSec;
+      delete f.proSimDttArrSec;
+      delete f.proSimPushbackSec;
+      delete f.proSimDttDepSec;
+      delete f.proSimDepLineupSec;
+      return;
+    }
+    function secOpt(key) {
+      if (srec[key] == null || srec[key] === '') return NaN;
+      const n = Number(srec[key]);
+      return isFinite(n) ? n : NaN;
+    }
+    const eldtS = secOpt('ELDT');
+    const eibtS = secOpt('EIBT');
+    const eobtS = secOpt('EOBT');
+    const etotS = secOpt('ETOT');
+    if (isFinite(eldtS)) f.eldtMin = eldtS / 60;
+    else delete f.eldtMin;
+    if (isFinite(eibtS)) f.eibtMin = eibtS / 60;
+    else delete f.eibtMin;
+    if (isFinite(eobtS)) f.eobtMin = eobtS / 60;
+    else delete f.eobtMin;
+    if (isFinite(etotS)) f.etotMin = etotS / 60;
+    else delete f.etotMin;
+    function secListToMinList(key) {
+      const raw = srec[key];
+      if (!Array.isArray(raw)) return null;
+      const out = raw.map(function(v) {
+        const n = Number(v);
+        return isFinite(n) ? n / 60 : null;
+      });
+      return out.length ? out : null;
+    }
+    const eibtList = secListToMinList('EIBT_LIST');
+    const eobtList = secListToMinList('EOBT_LIST');
+    const epushList = secListToMinList('E_PUSH_FINISHED_LIST');
+    if (eibtList) f.eibtMinList = eibtList;
+    else delete f.eibtMinList;
+    if (eobtList) f.eobtMinList = eobtList;
+    else delete f.eobtMinList;
+    if (epushList) f.ePushFinishedMinList = epushList;
+    else delete f.ePushFinishedMinList;
+    const rotS = secOpt('ARR_ROT_SEC');
+    if (isFinite(rotS)) f.arrRotSec = rotS;
+    else f.arrRotSec = null;
+    const vttArrS = secOpt('VTT_ARR_SEC');
+    if (isFinite(vttArrS)) f.proSimVttArrSec = vttArrS;
+    else delete f.proSimVttArrSec;
+    const pushbackS = secOpt('PUSHBACK_SEC');
+    if (isFinite(pushbackS)) f.proSimPushbackSec = pushbackS;
+    else delete f.proSimPushbackSec;
+    const vttDepS = secOpt('VTT_DEP_SEC');
+    if (isFinite(vttDepS)) f.proSimVttDepSec = vttDepS;
+    else delete f.proSimVttDepSec;
+    const dttArrS = secOpt('DTT_ARR_SEC');
+    if (isFinite(dttArrS)) f.proSimDttArrSec = dttArrS;
+    else delete f.proSimDttArrSec;
+    const dttDepS = secOpt('DTT_DEP_SEC');
+    if (isFinite(dttDepS)) f.proSimDttDepSec = dttDepS;
+    else delete f.proSimDttDepSec;
+    const depRotS = secOpt('DEP_ROT_SEC');
+    if (isFinite(depRotS)) f.proSimDepLineupSec = depRotS;
+    else delete f.proSimDepLineupSec;
+  }
+  function flightEMinListForSchedule(f, listKey, metaSecListKey, scalarKey) {
+    const raw = f && Array.isArray(f[listKey]) ? f[listKey] : null;
+    if (raw && raw.length) return raw.map(function(v) {
+      const n = Number(v);
+      return isFinite(n) ? n : null;
+    });
+    const meta = f && f.timeline_meta && typeof f.timeline_meta === 'object' ? f.timeline_meta : null;
+    const mraw = meta && Array.isArray(meta[metaSecListKey]) ? meta[metaSecListKey] : null;
+    if (mraw && mraw.length) return mraw.map(function(v) {
+      const n = Number(v);
+      return isFinite(n) ? n / 60 : null;
+    });
+    const scalar = f && f[scalarKey] != null ? Number(f[scalarKey]) : NaN;
+    return isFinite(scalar) ? [scalar] : [];
+  }
+  function isCompactPlaybackTrack(raw) {
+    return !!(
+      raw && typeof raw === 'object' && raw.format === 'compact_v2' &&
+      Array.isArray(raw.t) && Array.isArray(raw.x) && Array.isArray(raw.y) && Array.isArray(raw.v) &&
+      raw.t.length === raw.x.length && raw.t.length === raw.y.length && raw.t.length === raw.v.length
+    );
+  }
+  function compactPlaybackTrackLength(raw) {
+    return isCompactPlaybackTrack(raw) ? raw.t.length : 0;
+  }
+  function compactPlaybackTrackForFlight(f) {
+    if (!f || f.id == null) return null;
+    const map = state.simPlaybackPositionsByFlightId;
+    if (!map || typeof map !== 'object') return null;
+    const tr = map[String(f.id)];
+    return isCompactPlaybackTrack(tr) ? tr : null;
+  }
+  function compactPlaybackDghostIntsMergedRangesSec(arr) {
+    if (!Array.isArray(arr) || !arr.length) return [];
+    const nums = [];
+    for (let i = 0; i < arr.length; i++) {
+      const v = Math.round(Number(arr[i]));
+      if (isFinite(v)) nums.push(v);
+    }
+    if (!nums.length) return [];
+    nums.sort(function(a, b) { return a - b; });
+    const out = [];
+    let s0 = nums[0], e0 = nums[0];
+    for (let j = 1; j < nums.length; j++) {
+      const n = nums[j];
+      if (n <= e0 + 1) e0 = n;
+      else {
+        out.push([s0, e0]);
+        s0 = e0 = n;
+      }
+    }
+    out.push([s0, e0]);
+    return out;
+  }
+  /** Starts of deadlock-ghost bursts: first tick of each contiguous group separated by gap > gapSec (deadlock banner uses 120). */
+  function ghostSessionStartTimestampsSec(arr, gapSec) {
+    const g = Math.max(30, Number(gapSec) || 120);
+    const nums = [];
+    for (let i = 0; i < arr.length; i++) {
+      const v = Math.round(Number(arr[i]));
+      if (isFinite(v)) nums.push(v);
+    }
+    if (!nums.length) return [];
+    nums.sort(function(a, b) { return a - b; });
+    const out = [nums[0]];
+    for (let j = 1; j < nums.length; j++) {
+      if (nums[j] - nums[j - 1] > g) out.push(nums[j]);
+    }
+    return out;
+  }
+  function compactPlaybackDghostSet(track) {
+    const s = new Set();
+    function addArr(a) {
+      if (!Array.isArray(a)) return;
+      for (let i = 0; i < a.length; i++) {
+        const t = Math.round(Number(a[i]));
+        if (isFinite(t)) s.add(t);
+      }
+    }
+    if (track) {
+      addArr(track.dghost_t);
+    }
+    return s;
+  }
+  function compactPlaybackDghostMergedRangesSec(track) {
+    if (!track) return [];
+    return compactPlaybackDghostIntsMergedRangesSec(track.dghost_t);
+  }
+  /** True if compact playback track records any deadlock ghost sample (simulation seconds). */
+  function allocFlightTrackHasDeadlock(trDead) {
+    return !!(
+      trDead &&
+      Array.isArray(trDead.dghost_t) &&
+      trDead.dghost_t.length > 0
+    );
+  }
+  /** Flight Schedule row: deadlock from last Pro Sim compact playback, timeline ghost, or persisted id set. */
+  function flightScheduleRowHasDeadlock(f) {
+    if (!f || f.id == null) return false;
+    const idStr = String(f.id);
+    if (state.deadlockFlightIdsFromLastSim && state.deadlockFlightIdsFromLastSim[idStr]) return true;
+    const tr = compactPlaybackTrackForFlight(f);
+    if (allocFlightTrackHasDeadlock(tr)) return true;
+    if (f.timeline && Array.isArray(f.timeline)) {
+      for (let i = 0; i < f.timeline.length; i++) {
+        if (f.timeline[i] && f.timeline[i].deadlockGhost === true) return true;
+      }
+    }
+    return false;
+  }
+  /** Gantt apron bar: timeline ghost overlay (time axis = sec/60). */
+  function allocFlightDeadlockOverlayHtml(trDead, segT0Min, segT1Min, visT0Min, visT1Min) {
+    const rN = trDead ? compactPlaybackDghostIntsMergedRangesSec(trDead.dghost_t) : [];
+    if (!rN.length) return '';
+    const denom = visT1Min - visT0Min;
+    if (!(denom > 1e-12)) return '';
+    function segmentsForRanges(ranges, cls) {
+      const parts = [];
+      for (let r = 0; r < ranges.length; r++) {
+        const ds = ranges[r][0], de = ranges[r][1];
+        const m0 = ds / 60;
+        const m1 = (de + 1) / 60;
+        const a = Math.max(visT0Min, m0, segT0Min);
+        const b = Math.min(visT1Min, m1, segT1Min);
+        if (!(b > a + 1e-12)) continue;
+        const leftRel = ((a - visT0Min) / denom) * 100;
+        const wRel = Math.max(0.5, ((b - a) / denom) * 100);
+        parts.push(
+          '<div class="' +
+            cls +
+            '" style="left:' +
+            leftRel +
+            '%;width:' +
+            wRel +
+            '%;"></div>'
+        );
+      }
+      return parts;
+    }
+    const outHtml = segmentsForRanges(rN, 'alloc-flight-deadlock-seg');
+    return outHtml.length ? outHtml.join('') : '';
+  }
+  function compactPlaybackTugIntervals(track) {
+    if (!track) return [];
+    if (Array.isArray(track.__tugIntervals)) return track.__tugIntervals;
+    const raw = Array.isArray(track.tug_intervals) ? track.tug_intervals : [];
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+      const it = raw[i];
+      if (!it || typeof it !== 'object') continue;
+      const start = Number(it.start != null ? it.start : it.t0);
+      const end = Number(it.end != null ? it.end : it.t1);
+      if (isFinite(start) && isFinite(end) && end > start) out.push({ start: start, end: end });
+    }
+    track.__tugIntervals = out;
+    return out;
+  }
+  function compactPlaybackNeedsTugAt(track, tSec) {
+    const t = Number(tSec);
+    if (!isFinite(t)) return false;
+    const intervals = compactPlaybackTugIntervals(track);
+    for (let i = 0; i < intervals.length; i++) {
+      const it = intervals[i];
+      if (t + 1e-9 >= it.start && t <= it.end + 1e-9) return true;
+    }
+    return false;
+  }
+  function compactPlaybackMetaStateAt(track, t) {
+    const meta = Array.isArray(track && track.meta) ? track.meta : [];
+    const out = {};
+    const tt = Number(t);
+    for (let i = 0; i < meta.length; i++) {
+      const mr = meta[i];
+      if (!mr || typeof mr !== 'object') continue;
+      const mt = Number(mr.t);
+      if (!isFinite(mt) || mt > tt + 1e-9) break;
+      if (mr.phase != null) out.phase = String(mr.phase);
+      if (mr.pathType != null) out.pathType = String(mr.pathType);
+      if (mr.edgeId != null && String(mr.edgeId).trim()) out.edgeId = String(mr.edgeId).trim();
+    }
+    return out;
+  }
+  /**
+   * Maps compact_v2 playback ``phase`` (airside_sim: Dep_taxi, Arr_taxi, Arr_taxi_occupied) to lookahead bump slot.
+   * @returns {'dep'|'arr'|null}
+   */
+  function lookaheadMitigationBumpKindFromPlaybackPhase(phaseRaw) {
+    const s = String(phaseRaw || '').trim().toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
+    if (s === 'dep_taxi') return 'dep';
+    if (s === 'arr_taxi' || s === 'arr_taxi_occupied') return 'arr';
+    return null;
+  }
+  /**
+   * For each flight with dghost timestamps: per ghost-session start, +6 lookaheadDep if phase is Dep_taxi,
+   * +6 lookaheadArr if Arr_taxi or Arr_taxi_occupied. Clamped 0–200 after ensureFlightLookaheadArrDepFlight.
+   * @returns {number} number of flights with at least one field changed
+   */
+  function applyDeadlockMitigationLookaheadFromPlaybackTracks() {
+    const positions = state.simPlaybackPositionsByFlightId;
+    if (!positions || typeof positions !== 'object') return 0;
+    let nFlights = 0;
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const raw = positions[String(f.id)];
+      if (!isCompactPlaybackTrack(raw) || !Array.isArray(raw.dghost_t) || !raw.dghost_t.length) return;
+      const starts = ghostSessionStartTimestampsSec(raw.dghost_t, 120);
+      let addA = 0;
+      let addD = 0;
+      for (let si = 0; si < starts.length; si++) {
+        const tr = starts[si];
+        const m = compactPlaybackMetaStateAt(raw, tr);
+        const kind = lookaheadMitigationBumpKindFromPlaybackPhase(m.phase);
+        if (kind === 'dep') addD += 6;
+        else if (kind === 'arr') addA += 6;
+      }
+      if (addA === 0 && addD === 0) return;
+      ensureFlightLookaheadArrDepFlight(f);
+      let touched = false;
+      if (addD > 0) {
+        f.lookaheadDep = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadDep) || 0) + addD));
+        touched = true;
+      }
+      if (addA > 0) {
+        f.lookaheadArr = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadArr) || 0) + addA));
+        touched = true;
+      }
+      if (touched) nFlights++;
+    });
+    return nFlights;
+  }
+  function compactPlaybackSampleAtIndex(track, idx) {
+    if (!isCompactPlaybackTrack(track)) return null;
+    const i = Math.max(0, Math.min(track.t.length - 1, idx | 0));
+    const t = Number(track.t[i]);
+    const x = Number(track.x[i]);
+    const y = Number(track.y[i]);
+    if (!isFinite(t) || !isFinite(x) || !isFinite(y)) return null;
+    const o = { t: t, x: x, y: y, v: Number(track.v[i]) || 0 };
+    const trR = Math.round(Number(t));
+    o.deadlockGhost = compactPlaybackDghostSet(track).has(trR);
+
+    const m = compactPlaybackMetaStateAt(track, t);
+    if (m.phase) o.phase = m.phase;
+    if (m.pathType) o.pathType = m.pathType;
+    if (m.edgeId) o.edgeId = m.edgeId;
+    return o;
+  }
+  function compactPlaybackIndexAtTime(track, tSec, clampEnd) {
+    if (!isCompactPlaybackTrack(track) || track.t.length < 2) return -1;
+    let t = Number(tSec);
+    if (!isFinite(t)) return -1;
+    const firstT = Number(track.t[0]);
+    const lastT = Number(track.t[track.t.length - 1]);
+    if (t + 1e-9 < firstT) return -1;
+    if (t > lastT) {
+      if (!clampEnd) return -1;
+      t = lastT;
+    }
+    let lo = 0, hi = track.t.length - 1;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (Number(track.t[mid]) <= t + 1e-9) lo = mid;
+      else hi = mid - 1;
+    }
+    const idx = Math.min(lo, track.t.length - 2);
+    return (t + 1e-9 >= Number(track.t[idx]) && t - 1e-9 <= Number(track.t[idx + 1])) ? idx : -1;
+  }
+  /** Last unit direction of a non-trivial chord strictly before the segment containing ``tSec`` (full track — not windowed). */
+  function playbackLastMotionUnitDirBeforeTime(track, tSec, skipPushbackOpt) {
+    const skipPushback = skipPushbackOpt === true;
+    const eps = 0.08;
+    const eps2 = eps * eps;
+    if (!isCompactPlaybackTrack(track)) return null;
+    const idx = compactPlaybackIndexAtTime(track, tSec, true);
+    if (idx < 1) return null;
+    for (let j = idx - 1; j >= 0; j--) {
+      const p = compactPlaybackSampleAtIndex(track, j);
+      const q = compactPlaybackSampleAtIndex(track, j + 1);
+      if (!p || !q) continue;
+      if (skipPushback && String(p.phase || '') === 'Pushback') continue;
+      const ddx = q.x - p.x, ddy = q.y - p.y;
+      const l2 = ddx * ddx + ddy * ddy;
+      if (l2 >= eps2) {
+        const inv = 1 / Math.sqrt(l2);
+        return { dx: ddx * inv, dy: ddy * inv };
+      }
+    }
+    return null;
+  }
+  function compactPlaybackXYAtAbsTime(track, tSec) {
+    const idx = compactPlaybackIndexAtTime(track, tSec, true);
+    if (idx < 0 || !isCompactPlaybackTrack(track)) return null;
+    const t = Number(tSec);
+    const t0 = Number(track.t[idx]), t1 = Number(track.t[idx + 1]);
+    const x0 = Number(track.x[idx]), y0 = Number(track.y[idx]);
+    const x1 = Number(track.x[idx + 1]), y1 = Number(track.y[idx + 1]);
+    if (!isFinite(t0) || !isFinite(t1) || !isFinite(x0) || !isFinite(y0) || !isFinite(x1) || !isFinite(y1)) return null;
+    if (t1 <= t0) return { x: x0, y: y0 };
+    const u = Math.max(0, Math.min(1, (t - t0) / (t1 - t0)));
+    return { x: x0 + (x1 - x0) * u, y: y0 + (y1 - y0) * u };
+  }
+  function deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR) {
+    const tr = Math.round(Number(tR));
+    if (!isFinite(tr) || !positions || typeof positions !== 'object') return null;
+    let sx = 0, sy = 0, n = 0;
+    (flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const raw = positions[String(f.id)];
+      if (!isCompactPlaybackTrack(raw)) return;
+      if (!compactPlaybackDghostSet(raw).has(tr)) return;
+      const p = compactPlaybackXYAtAbsTime(raw, tr);
+      if (p && isFinite(p.x) && isFinite(p.y)) {
+        sx += p.x;
+        sy += p.y;
+        n++;
+      }
+    });
+    if (!n) return null;
+    return { x: sx / n, y: sy / n };
+  }
+  function focusLayoutMapOnWorldXY(wx, wy) {
+    if (!isFinite(wx) || !isFinite(wy)) return;
+    const c = document.getElementById('grid-canvas');
+    if (!c) return;
+    const w = c.clientWidth || 0, h = c.clientHeight || 0;
+    if (w < 8 || h < 8) return;
+    const sc = Math.max(Number(state.scale) || 1, 1e-6);
+    state.panX = w * 0.5 - wx * sc;
+    state.panY = h * 0.5 - wy * sc;
+    if (typeof scheduleDraw === 'function') scheduleDraw();
+    else if (typeof draw === 'function') {
+      try { draw(); } catch (e) { /* ignore */ }
+    }
+  }
+  function seekSimToDeadlockMarkerEvent(ev) {
+    if (!ev || typeof ev !== 'object') return;
+    const tAbs = Number(ev.t_abs);
+    if (!isFinite(tAbs)) return;
+    const lo = Number(state.simStartSec), hi = Number(state.simDurationSec);
+    if (!isFinite(lo) || !isFinite(hi)) return;
+    const snapped =
+      typeof snapSimTimeToPlaybackWindowSec === 'function'
+        ? snapSimTimeToPlaybackWindowSec(tAbs)
+        : (typeof snapSimTimeSecForSlider === 'function'
+          ? snapSimTimeSecForSlider(Math.max(lo, Math.min(hi, tAbs)))
+          : Math.max(lo, Math.min(hi, tAbs)));
+    state.simTimeSec = snapped;
+    const slider = document.getElementById('flightSimSlider');
+    if (slider) slider.value = String(snapped);
+    if (typeof updateFlightSimPlaybackLabelsDom === 'function') updateFlightSimPlaybackLabelsDom();
+    let fx = ev.focusWorldX != null ? Number(ev.focusWorldX) : NaN;
+    let fy = ev.focusWorldY != null ? Number(ev.focusWorldY) : NaN;
+    if (!isFinite(fx) || !isFinite(fy)) {
+      const fw = deadlockFocusWorldMeanAtRoundedTime(
+        state.simPlaybackPositionsByFlightId,
+        state.flights,
+        Math.round(snapped)
+      );
+      if (fw) {
+        fx = fw.x;
+        fy = fw.y;
+      }
+    }
+    if (isFinite(fx) && isFinite(fy)) focusLayoutMapOnWorldXY(fx, fy);
+    try {
+      if (typeof draw === 'function') draw();
+    } catch (e2) { /* ignore */ }
+    if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+  }
+  function compactPlaybackTimelineWindow(track, tSec, radius) {
+    const idx = compactPlaybackIndexAtTime(track, tSec, true);
+    if (idx < 0) return null;
+    const r = Math.max(2, radius || 40);
+    const s = Math.max(0, idx - r);
+    const e = Math.min(track.t.length - 1, idx + r + 1);
+    const out = [];
+    for (let i = s; i <= e; i++) {
+      const p = compactPlaybackSampleAtIndex(track, i);
+      if (p) out.push(p);
+    }
+    return out.length >= 2 ? out : null;
+  }
+  function compactPlaybackTrackStartEnd(track) {
+    if (!isCompactPlaybackTrack(track) || track.t.length < 1) return null;
+    return { t0: Number(track.t[0]), t1: Number(track.t[track.t.length - 1]) };
+  }
+  function refreshHasSimulationResultFromPlaybackSources() {
+    const pos = state.simPlaybackPositionsByFlightId;
+    if (pos && typeof pos === 'object') {
+      for (const k in pos) {
+        if (!Object.prototype.hasOwnProperty.call(pos, k)) continue;
+        if (compactPlaybackTrackLength(pos[k]) >= 2) {
+          state.hasSimulationResult = true;
+          return;
+        }
+      }
+    }
+    state.hasSimulationResult = false;
+    state.deadlockMitigateBannerRerunHint = false;
+    state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
+  }
+  function evictFlightPlaybackTimelinesWhenPlayBlocked() {
+    if (!state.simPlaybackPositionsByFlightId || typeof state.simPlaybackPositionsByFlightId !== 'object') return false;
+    const flights = state.flights || [];
+    for (let i = 0; i < flights.length; i++) {
+      const f = flights[i];
+      if (!f) continue;
+      f.timeline = null;
+    }
+    state.simPlaybackTimelinesEvictedForMemory = true;
+    _lazyTimelineLastEvictSimSec = NaN;
+    refreshHasSimulationResultFromPlaybackSources();
+    return true;
+  }
+  function rehydrateFlightPlaybackTimelinesAfterPlayAllowed() {
+    if (!state.simPlaybackTimelinesEvictedForMemory) return false;
+    refreshHasSimulationResultFromPlaybackSources();
+    state.simPlaybackTimelinesEvictedForMemory = false;
+    return true;
+  }
+  function deriveDeadlockGhostPlaybackFromPayload(payload, flights) {
+    const empty = { events: [], bodyLines: '', resolveCount: 0 };
+    if (!payload || typeof payload !== 'object') return empty;
+    const positions = payload.positions;
+    if (!positions || typeof positions !== 'object') return empty;
+    const resolveCount = Number(payload.deadlock_resolve_event_count);
+    const rc = isFinite(resolveCount) && resolveCount > 0 ? Math.floor(resolveCount) : 0;
+    const byT = new Map();
+    function ingestTrackArray(raw, f, arr) {
+      if (!Array.isArray(arr) || !arr.length) return;
+      const starts = ghostSessionStartTimestampsSec(arr, 120);
+      for (let si = 0; si < starts.length; si++) {
+        const tr = starts[si];
+        const label =
+          String(f.reg || '').trim() ||
+          String(f.flightNumber || f.id || '').trim() ||
+          String(f.id);
+        if (!byT.has(tr))
+          byT.set(tr, { labels: [] });
+        const bx = byT.get(tr);
+        if (bx.labels.indexOf(label) < 0) bx.labels.push(label);
+      }
+    }
+    (flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const raw = positions[String(f.id)];
+      if (!isCompactPlaybackTrack(raw)) return;
+      ingestTrackArray(raw, f, raw.dghost_t);
+    });
+    const entries = Array.from(byT.entries()).sort(function(a, b) { return a[0] - b[0]; });
+    const events = entries.map(function(e) {
       const tR = e[0];
       const bx = e[1];
       const ev = { t_abs: tR, labels: bx.labels.slice() };
@@ -83,6 +701,7 @@
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
+    state.deadlockMitigateBannerRerunHint = false;
     const truncCap = (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true)
       ? (function() {
         const rawCap = payload.simulation_playback_end_abs_sec;
@@ -491,9 +1110,9 @@
     return allow.indexOf(d) >= 0;
   }
   /**
-   * Arrival RET sampling (F2): runways in the property panel are always stored as CW or CCW;
-   * legacy data may still have direction "both". The panel coerces "both" to the CW option for display,
-   * so we use CW as the operational match for "Available RW direction" vs the runway.
+   * Arrival RET sampling (F2): runways in the property panel use CW / CCW / Both; ``both`` keeps
+   * vertex order and relies on Infra schedule (path ops) per time slot. When matching RET "Available
+   * RW direction", we use CW as the operational stand-in for ambiguous ``both``.
    */
   function getRunwayOperationalDirForArrivalRetFilter2(rw) {
     if (!rw || rw.pathType !== 'runway') return 'clockwise';
@@ -773,638 +1392,3 @@
   const STAND_CONFIG_ROW_BY_CODE = (function() {
     const raw = _layoutTier.standConfig;
     const out = {};
-    if (!raw || typeof raw !== 'object') return out;
-    Object.keys(raw).forEach(function(k) {
-      if (k === 'description') return;
-      const row = raw[k];
-      if (!row || typeof row !== 'object') return;
-      const ws = Number(row.wingspan), g = Number(row.gap), rd = Number(row.road);
-      const ln = Number(row.length), nc = Number(row.nose_clear), pb = Number(row.pushback);
-      const dp = Number(row.depth);
-      if (![ws, g, rd, ln, nc, pb, dp].every(isFinite)) return;
-      const rowOut = { wingspan: ws, gap: g, road: rd, length: ln, nose_clear: nc, pushback: pb, depth: dp };
-      const og = Number(row.outer_gear), nsc = Number(row.nose_side_clear), nw = Number(row.nose_width);
-      if (isFinite(og)) rowOut.outer_gear = og;
-      if (isFinite(nsc)) rowOut.nose_side_clear = nsc;
-      if (isFinite(nw)) rowOut.nose_width = nw;
-      out[String(k).toUpperCase().slice(0, 1)] = rowOut;
-    });
-    return out;
-  })();
-  function standConfigRowForIcaoCat(cat) {
-    const s = String(cat == null ? 'C' : cat).toUpperCase();
-    let c = 'C';
-    for (let i = 0; i < s.length; i++) {
-      const ch = s.charAt(i);
-      if (ch >= 'A' && ch <= 'F') {
-        c = ch;
-        break;
-      }
-    }
-    return STAND_CONFIG_ROW_BY_CODE[c] || null;
-  }
-  function getStandWidthMeters(cat) {
-    const r = standConfigRowForIcaoCat(cat);
-    if (r) return r.wingspan + r.gap * 2;
-    return getStandSizeMeters(cat);
-  }
-  function getStandDepthMeters(cat) {
-    const r = standConfigRowForIcaoCat(cat);
-    if (r) return r.depth;
-    return getStandSizeMeters(cat);
-  }
-  function getStandSpacingMeters(catA, catB) {
-    const ra = standConfigRowForIcaoCat(catA);
-    const rb = standConfigRowForIcaoCat(catB);
-    if (ra && rb) return Math.max(ra.road, rb.road);
-    return 0;
-  }
-  function standFootprintLocalToWorld(cx, cy, angleRad, lx, ly) {
-    const cos = Math.cos(angleRad), sin = Math.sin(angleRad);
-    return [cx + lx * cos - ly * sin, cy + lx * sin + ly * cos];
-  }
-  function standStopbarCenterShiftLocalX(depM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || depM <= 0) return 0;
-    const nc = Number(r.nose_clear);
-    if (!isFinite(nc) || nc <= 0) return 0;
-    const halfD = depM / 2;
-    const xStopOld = -halfD + nc;
-    if (!(xStopOld > -halfD && xStopOld < halfD)) return 0;
-    return -xStopOld;
-  }
-  /** Nose (−X) width = nose_width; stop bar at nose_clear from nose edge; 45° flare to full stand width (±halfW), then rectangle to tail (+halfD). */
-  function buildStandSafetyPolygonPath(ctx, depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return false;
-    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
-    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return false;
-    const halfD = depM / 2, halfW = widM / 2;
-    const noseHalf = nw / 2;
-    const eps = 0.08;
-    if (noseHalf >= halfW - eps) return false;
-    const xNose = -halfD;
-    const xStop = -halfD + nc;
-    if (xStop <= xNose + eps || xStop >= halfD - eps) return false;
-    const latRun = halfW - noseHalf;
-    if (latRun <= eps) return false;
-    const xBendEnd = xStop + latRun;
-    if (xBendEnd > halfD + eps) return false;
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    ctx.beginPath();
-    ctx.moveTo(xNose + shiftX, -noseHalf);
-    ctx.lineTo(xNose + shiftX, noseHalf);
-    ctx.lineTo(xStop + shiftX, noseHalf);
-    ctx.lineTo(Math.min(xBendEnd, halfD) + shiftX, halfW);
-    if (xBendEnd < halfD - eps) {
-      ctx.lineTo(halfD + shiftX, halfW);
-      ctx.lineTo(halfD + shiftX, -halfW);
-      ctx.lineTo(xBendEnd + shiftX, -halfW);
-    } else {
-      ctx.lineTo(halfD + shiftX, -halfW);
-    }
-    ctx.lineTo(xStop + shiftX, -noseHalf);
-    ctx.closePath();
-    return true;
-  }
-  /** Stand-local +X = tail/apron-open, −X = nose/terminal-ward. Red dashed: stop bar (nose_clear), pushback (pushback), lateral gap bounds (wingspan ± vs stand width). Clipped to safety footprint when nose geometry applies. */
-  function drawStandApronMarkingsInLocalAxes(ctx, depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return;
-    const halfD = depM / 2, halfW = widM / 2;
-    const eps = 0.12;
-    ctx.save();
-    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
-      ctx.clip();
-    }
-    ctx.strokeStyle = layerMonoLinesOn() ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
-    ctx.lineWidth = Math.max(0.35, 0.42 / Math.max(state.scale, 0.1));
-    ctx.setLineDash([2, 2.5]);
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'miter';
-    const nc = Number(r.nose_clear), pb = Number(r.pushback);
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    if (isFinite(nc) && isFinite(pb)) {
-      const xStop = 0;
-      const xPush = (halfD - pb) + shiftX;
-      const xMin = (-halfD) + shiftX;
-      const xMax = (halfD) + shiftX;
-      if (xStop > -halfD + eps && xStop < halfD - eps) {
-        ctx.beginPath();
-        ctx.moveTo(xStop, -halfW);
-        ctx.lineTo(xStop, halfW);
-        ctx.stroke();
-      }
-      if (xPush < xMax - eps && xPush > xMin + eps) {
-        ctx.beginPath();
-        ctx.moveTo(xPush, -halfW);
-        ctx.lineTo(xPush, halfW);
-        ctx.stroke();
-      }
-    }
-    const g = Number(r.gap), ws = Number(r.wingspan);
-    if (isFinite(g) && g > eps && isFinite(ws) && ws > 0) {
-      const yLim = halfW - g;
-      if (yLim > eps && yLim < halfW - eps) {
-        ctx.beginPath();
-        ctx.moveTo(-halfD + shiftX, yLim);
-        ctx.lineTo(halfD + shiftX, yLim);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-halfD + shiftX, -yLim);
-        ctx.lineTo(halfD + shiftX, -yLim);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
-  function fillStandSafetyFootprintInLocalAxes(ctx, depM, widM, category) {
-    if (buildStandSafetyPolygonPath(ctx, depM, widM, category)) {
-      ctx.fill();
-      return;
-    }
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    ctx.beginPath();
-    ctx.rect((-depM / 2) + shiftX, -widM / 2, depM, widM);
-    ctx.fill();
-  }
-  function drawStandSafetyContourInLocalAxes(ctx, depM, widM, category, selected) {
-    if (!buildStandSafetyPolygonPath(ctx, depM, widM, category)) return;
-    ctx.save();
-    ctx.strokeStyle = (!selected && layerMonoLinesOn()) ? c2dLayerMonoLineStrokeCss() : c2dStandSafetyStroke();
-    const baseLw = Math.max(0.55, 0.65 / Math.max(state.scale, 0.1));
-    ctx.lineWidth = selected ? baseLw * 1.35 : baseLw;
-    ctx.setLineDash([]);
-    ctx.lineJoin = 'miter';
-    ctx.lineCap = 'butt';
-    if (selected) {
-      ctx.shadowColor = c2dObjectSelectedGlow();
-      ctx.shadowBlur = c2dObjectSelectedGlowBlur();
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-  /** Local +X from stand box center to end of 45° flare (full-width main body); 0 if nose geometry unused. */
-  function standSafetyAircraftCenterLocalXM(depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return 0;
-    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
-    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return 0;
-    const halfD = depM / 2, halfW = widM / 2;
-    const noseHalf = nw / 2;
-    const eps = 0.08;
-    if (noseHalf >= halfW - eps) return 0;
-    const xNose = -halfD;
-    const xStop = -halfD + nc;
-    if (xStop <= xNose + eps || xStop >= halfD - eps) return 0;
-    const latRun = halfW - noseHalf;
-    if (latRun <= eps) return 0;
-    const xBendEnd = xStop + latRun;
-    if (xBendEnd > halfD + eps) return 0;
-    return xBendEnd;
-  }
-  function getStandAircraftMarkerWorldPxForPbb(pbb) {
-    const cxy = getStandConnectionPx(pbb);
-    return [cxy[0], cxy[1]];
-  }
-  function getStandAircraftMarkerWorldPxForRemoteLike(st) {
-    const cxy = getStandConnectionPx(st);
-    return [cxy[0], cxy[1]];
-  }
-  const APRON_SITE_MARKER_WIDTH_M = 5;
-  const APRON_SITE_MARKER_HEIGHT_M = 1;
-  function _ensureLayoutToastStack() {
-    let stack = document.getElementById('layout-toast-stack');
-    if (!stack) {
-      stack = document.createElement('div');
-      stack.id = 'layout-toast-stack';
-      stack.className = 'layout-toast-stack';
-      document.body.appendChild(stack);
-    }
-    return stack;
-  }
-  function _formatToastTimestamp(d) {
-    const pad = function(n) { return String(n).padStart(2, '0'); };
-    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-  }
-  function _svgLayoutToastCheckIcon() {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'layout-toast__icon');
-    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    svg.setAttribute('viewBox', '0 0 20 20');
-    svg.setAttribute('fill', 'currentColor');
-    svg.setAttribute('aria-hidden', 'true');
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('fill-rule', 'evenodd');
-    path.setAttribute('d', 'M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z');
-    path.setAttribute('clip-rule', 'evenodd');
-    svg.appendChild(path);
-    return svg;
-  }
-  function _svgLayoutToastWarnIcon() {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'layout-toast__icon');
-    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    svg.setAttribute('viewBox', '0 0 20 20');
-    svg.setAttribute('fill', 'currentColor');
-    svg.setAttribute('aria-hidden', 'true');
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('fill-rule', 'evenodd');
-    path.setAttribute('d', 'M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.63-1.516 2.63H3.72c-1.347 0-2.189-1.463-1.515-2.63L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z');
-    path.setAttribute('clip-rule', 'evenodd');
-    svg.appendChild(path);
-    return svg;
-  }
-  function showLayoutSavedToast(layoutName, kind, subText) {
-    const stack = _ensureLayoutToastStack();
-    const el = document.createElement('div');
-    const variant = kind === 'error' ? 'is-error' : 'is-success';
-    el.className = 'layout-toast ' + variant;
-    el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
-    const icon = kind === 'error' ? _svgLayoutToastWarnIcon() : _svgLayoutToastCheckIcon();
-    const content = document.createElement('div');
-    content.className = 'layout-toast__content';
-    const titleEl = document.createElement('div');
-    titleEl.className = 'layout-toast__title';
-    titleEl.textContent = kind === 'error' ? 'Save failed' : 'Saved';
-    const textEl = document.createElement('span');
-    textEl.className = 'layout-toast__text';
-    const ts = _formatToastTimestamp(new Date());
-    const name = String(layoutName || '').trim() || 'layout';
-    var body = ts + ' · ' + name;
-    if (kind !== 'error' && !name.endsWith('.json')) {
-      body = body + '.json';
-    }
-    if (subText) {
-      body = body + '\n' + String(subText);
-    }
-    textEl.textContent = body;
-    content.appendChild(titleEl);
-    content.appendChild(textEl);
-    el.appendChild(icon);
-    el.appendChild(content);
-    stack.appendChild(el);
-    requestAnimationFrame(function() { el.classList.add('is-visible'); });
-    const lifeMs = kind === 'error' ? 4200 : 2600;
-    setTimeout(function() {
-      el.classList.remove('is-visible');
-      setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
-    }, lifeMs);
-  }
-  /** Same visuals as Save success toast; custom title/detail (no `.json` suffix). */
-  function showDesignerSuccessToast(title, detailLine) {
-    const stack = _ensureLayoutToastStack();
-    const el = document.createElement('div');
-    el.className = 'layout-toast is-success';
-    el.setAttribute('role', 'status');
-    const icon = _svgLayoutToastCheckIcon();
-    const content = document.createElement('div');
-    content.className = 'layout-toast__content';
-    const titleEl = document.createElement('div');
-    titleEl.className = 'layout-toast__title';
-    titleEl.textContent = String(title || '').trim() || 'Done';
-    const textEl = document.createElement('span');
-    textEl.className = 'layout-toast__text';
-    const ts = _formatToastTimestamp(new Date());
-    textEl.textContent = detailLine != null && String(detailLine).trim() !== '' ? ts + ' · ' + String(detailLine).trim() : ts;
-    content.appendChild(titleEl);
-    content.appendChild(textEl);
-    el.appendChild(icon);
-    el.appendChild(content);
-    stack.appendChild(el);
-    requestAnimationFrame(function() { el.classList.add('is-visible'); });
-    const lifeMs = 2600;
-    setTimeout(function() {
-      el.classList.remove('is-visible');
-      setTimeout(function() { if (el.parentNode === stack) stack.removeChild(el); }, 220);
-    }, lifeMs);
-  }
-  /**
-   * Render apron site anchor as a 5m × 1m rectangle. Long side (5m) is aligned
-   * with the stand's stopbar direction (local Y = perpendicular to the stand
-   * depth axis), so it matches the dashed stopbar line drawn near the nose.
-   * ``standAngleRad`` is the stand's depth-axis angle (same as ctx.rotate used
-   * when drawing the stand footprint). When omitted, the 5m side falls back to
-   * world horizontal.
-   */
-  function drawApronSiteMarker(ctx, cx, cy, fillStyle, strokeStyle, selected, standAngleRad) {
-    const w = APRON_SITE_MARKER_WIDTH_M;
-    const h = APRON_SITE_MARKER_HEIGHT_M;
-    const angle = (typeof standAngleRad === 'number' && isFinite(standAngleRad))
-      ? standAngleRad + Math.PI / 2
-      : 0;
-    ctx.save();
-    ctx.translate(cx, cy);
-    if (angle) ctx.rotate(angle);
-    ctx.beginPath();
-    ctx.rect(-w / 2, -h / 2, w, h);
-    if (fillStyle) {
-      ctx.fillStyle = fillStyle;
-      ctx.fill();
-    }
-    if (strokeStyle) {
-      const baseLw = Math.max(0.18, 0.24 / Math.max(state.scale, 0.1));
-      ctx.lineWidth = selected ? baseLw * 1.5 : baseLw;
-      ctx.strokeStyle = strokeStyle;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-  /** Apron–taxiway UI attach point: PBB = aircraft marker; remote/temp = same local xBendEnd offset as Contact (getStandAircraftMarkerWorldPxFor*). */
-  function getStandApronTaxiwayAttachWorldPx(stand) {
-    if (!stand) return [0, 0];
-    const isPbb = (state.pbbStands || []).some(function(s) { return s && s.id === stand.id; });
-    if (isPbb) return getStandConnectionPx(stand);
-    return getStandAircraftMarkerWorldPxForRemoteLike(stand);
-  }
-  function getStandBoundsRect(cx, cy, sizeM) {
-    const h = sizeM / 2;
-    return { left: cx - h, right: cx + h, top: cy - h, bottom: cy + h };
-  }
-  function normalizeAngleDeg(deg) {
-    let a = Number(deg);
-    if (!isFinite(a)) a = 0;
-    while (a > 180) a -= 360;
-    while (a <= -180) a += 360;
-    return a;
-  }
-  function getRemoteStandCenterPx(st) {
-    if (!st) return [0, 0];
-    if (st.apronSiteX != null && st.apronSiteY != null) {
-      return [Number(st.apronSiteX), Number(st.apronSiteY)];
-    }
-    if (typeof st.x === 'number' && isFinite(st.x) && typeof st.y === 'number' && isFinite(st.y)) {
-      return [Number(st.x), Number(st.y)];
-    }
-    return cellToPixel(st.col || 0, st.row || 0);
-  }
-  /** Temp stand: taxiway centerline snap (sim_input junctionX/Y); defaults to stand x,y. */
-  function getTempStandTaxiwayJunctionPx(st) {
-    if (!st) return [0, 0];
-    const jx = st.junctionX != null ? Number(st.junctionX) : NaN;
-    const jy = st.junctionY != null ? Number(st.junctionY) : NaN;
-    if (Number.isFinite(jx) && Number.isFinite(jy)) return [jx, jy];
-    return getRemoteStandCenterPx(st);
-  }
-  function getRemoteStandAngleRad(st) {
-    const deg = normalizeAngleDeg(st && st.angleDeg != null ? st.angleDeg : 0);
-    return deg * Math.PI / 180;
-  }
-  function getRemoteStandCorners(stLike) {
-    const [cx, cy] = getRemoteStandCenterPx(stLike);
-    const cat = (stLike && stLike.category) || 'C';
-    const dep = getStandDepthMeters(cat);
-    const halfD = dep / 2;
-    const halfW = getStandWidthMeters(cat) / 2;
-    const angle = getRemoteStandAngleRad(stLike);
-    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
-    const cos = Math.cos(angle), sin = Math.sin(angle);
-    return [
-      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
-      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
-      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
-      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
-    ];
-  }
-  function rectsOverlap(a, b) {
-    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
-  }
-  function getPbbAnchorPx(pbb) {
-    const x1 = Number(pbb && pbb.x1);
-    const y1 = Number(pbb && pbb.y1);
-    if (Number.isFinite(x1) && Number.isFinite(y1)) return [x1, y1];
-    const bridges = Array.isArray(pbb && pbb.pbbBridges) ? pbb.pbbBridges : [];
-    const starts = bridges.map(function(bridge) {
-      const pts = Array.isArray(bridge.points) ? bridge.points : [];
-      return pts.length ? [Number(pts[0].x) || 0, Number(pts[0].y) || 0] : null;
-    }).filter(Boolean);
-    if (starts.length) {
-      let sx = 0, sy = 0;
-      starts.forEach(function(pt) { sx += pt[0]; sy += pt[1]; });
-      return [sx / starts.length, sy / starts.length];
-    }
-    return [0, 0];
-  }
-  function getPBBStandAngle(pbb) {
-    if (pbb && pbb.angleDeg != null) return normalizeAngleDeg(pbb.angleDeg) * Math.PI / 180;
-    const anchor = getPbbAnchorPx(pbb);
-    const center = getStandConnectionPx(pbb);
-    return Math.atan2(center[1] - anchor[1], center[0] - anchor[0]);
-  }
-  function getPBBStandCorners(pbb) {
-    const center = getStandConnectionPx(pbb);
-    const cx = center[0], cy = center[1];
-    const cat = pbb.category || 'C';
-    const dep = getStandDepthMeters(cat);
-    const halfD = dep / 2;
-    const halfW = getStandWidthMeters(cat) / 2;
-    const angle = getPBBStandAngle(pbb);
-    const shiftX = standStopbarCenterShiftLocalX(dep, cat);
-    const cos = Math.cos(angle), sin = Math.sin(angle);
-    return [
-      [cx + ((-halfD + shiftX))*cos - (-halfW)*sin, cy + ((-halfD + shiftX))*sin + (-halfW)*cos],
-      [cx + (( halfD + shiftX))*cos - (-halfW)*sin, cy + (( halfD + shiftX))*sin + (-halfW)*cos],
-      [cx + (( halfD + shiftX))*cos - ( halfW)*sin, cy + (( halfD + shiftX))*sin + ( halfW)*cos],
-      [cx + ((-halfD + shiftX))*cos - ( halfW)*sin, cy + ((-halfD + shiftX))*sin + ( halfW)*cos]
-    ];
-  }
-  function pointInPolygonXY(p, verts) {
-    let inside = false;
-    const n = verts.length;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const vi = verts[i], vj = verts[j];
-      if (((vi[1] > p[1]) !== (vj[1] > p[1])) && (p[0] < (vj[0]-vi[0])*(p[1]-vi[1])/(vj[1]-vi[1])+vi[0])) inside = !inside;
-    }
-    return inside;
-  }
-  function segIntersect(a1, a2, b1, b2) {
-    const [ax1,ay1]=a1,[ax2,ay2]=a2,[bx1,by1]=b1,[bx2,by2]=b2;
-    const dax = ax2-ax1, day = ay2-ay1, dbx = bx2-bx1, dby = by2-by1;
-    const den = dax*dby - day*dbx;
-    if (Math.abs(den) < 1e-10) return false;
-    const t = ((bx1-ax1)*dby - (by1-ay1)*dbx) / den;
-    const s = ((bx1-ax1)*day - (by1-ay1)*dax) / den;
-    return t >= 0 && t <= 1 && s >= 0 && s <= 1;
-  }
-  function rotatedRectsOverlap(cornersA, cornersB) {
-    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersA[i], cornersB)) return true;
-    for (let i = 0; i < 4; i++) if (pointInPolygonXY(cornersB[i], cornersA)) return true;
-    for (let i = 0; i < 4; i++) {
-      const a1 = cornersA[i], a2 = cornersA[(i+1)%4];
-      for (let j = 0; j < 4; j++) {
-        if (segIntersect(a1, a2, cornersB[j], cornersB[(j+1)%4])) return true;
-      }
-    }
-    return false;
-  }
-  function polygonsOverlapXY(polyA, polyB) {
-    if (!Array.isArray(polyA) || !Array.isArray(polyB) || polyA.length < 3 || polyB.length < 3) return false;
-    for (let i = 0; i < polyA.length; i++) if (pointInPolygonXY(polyA[i], polyB)) return true;
-    for (let i = 0; i < polyB.length; i++) if (pointInPolygonXY(polyB[i], polyA)) return true;
-    for (let i = 0; i < polyA.length; i++) {
-      const a1 = polyA[i], a2 = polyA[(i + 1) % polyA.length];
-      for (let j = 0; j < polyB.length; j++) {
-        if (segIntersect(a1, a2, polyB[j], polyB[(j + 1) % polyB.length])) return true;
-      }
-    }
-    return false;
-  }
-  function polygonAabbXY(poly) {
-    if (!Array.isArray(poly) || !poly.length) return null;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (let i = 0; i < poly.length; i++) {
-      const p = poly[i];
-      const x = Number(p && p[0]), y = Number(p && p[1]);
-      if (!isFinite(x) || !isFinite(y)) continue;
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    return isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY)
-      ? { left: minX, right: maxX, top: minY, bottom: maxY }
-      : null;
-  }
-  function aabbRectOverlap(a, b) {
-    return !!(a && b && !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom));
-  }
-  function distPointToSegment(px, py, ax, ay, bx, by) {
-    const vx = bx - ax, vy = by - ay;
-    const wx = px - ax, wy = py - ay;
-    const c1 = vx * wx + vy * wy;
-    if (c1 <= 0) return Math.hypot(px - ax, py - ay);
-    const c2 = vx * vx + vy * vy;
-    if (c2 <= c1) return Math.hypot(px - bx, py - by);
-    const t = c1 / c2;
-    const projx = ax + t * vx, projy = ay + t * vy;
-    return Math.hypot(px - projx, py - projy);
-  }
-  function minDistanceConvexQuads(quadA, quadB) {
-    if (rotatedRectsOverlap(quadA, quadB)) return 0;
-    let minD = Infinity;
-    for (let i = 0; i < 4; i++) {
-      const p = quadA[i];
-      for (let j = 0; j < 4; j++) {
-        const q1 = quadB[j], q2 = quadB[(j + 1) % 4];
-        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
-      }
-    }
-    for (let i = 0; i < 4; i++) {
-      const p = quadB[i];
-      for (let j = 0; j < 4; j++) {
-        const q1 = quadA[j], q2 = quadA[(j + 1) % 4];
-        minD = Math.min(minD, distPointToSegment(p[0], p[1], q1[0], q1[1], q2[0], q2[1]));
-      }
-    }
-    return minD;
-  }
-  function standFootprintsTooClose(cornersA, catA, cornersB, catB) {
-    const need = getStandSpacingMeters(catA, catB);
-    if (need <= 0) return rotatedRectsOverlap(cornersA, cornersB);
-    return minDistanceConvexQuads(cornersA, cornersB) < need;
-  }
-  function buildStandSafetyPolygonLocalPoints(depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return null;
-    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
-    if (!isFinite(nw) || nw <= 0 || !isFinite(nc) || nc <= 0) return null;
-    const halfD = depM / 2, halfW = widM / 2;
-    const noseHalf = nw / 2;
-    const eps = 0.08;
-    if (noseHalf >= halfW - eps) return null;
-    const xNose = -halfD;
-    const xStop = -halfD + nc;
-    if (xStop <= xNose + eps || xStop >= halfD - eps) return null;
-    const latRun = halfW - noseHalf;
-    if (latRun <= eps) return null;
-    const xBendEnd = xStop + latRun;
-    if (xBendEnd > halfD + eps) return null;
-    const pts = [];
-    pts.push([xNose, -noseHalf]);
-    pts.push([xNose, noseHalf]);
-    pts.push([xStop, noseHalf]);
-    pts.push([Math.min(xBendEnd, halfD), halfW]);
-    if (xBendEnd < halfD - eps) {
-      pts.push([halfD, halfW]);
-      pts.push([halfD, -halfW]);
-      pts.push([xBendEnd, -halfW]);
-    } else {
-      pts.push([halfD, -halfW]);
-    }
-    pts.push([xStop, -noseHalf]);
-    return pts;
-  }
-  function standOuterContourWorldPolygonForSpec(cx, cy, angleRad, depM, widM, category) {
-    const polyLocal = buildStandSafetyPolygonLocalPoints(depM, widM, category);
-    if (polyLocal && polyLocal.length >= 3) {
-      return polyLocal.map(function(p) { return standFootprintLocalToWorld(cx, cy, angleRad, p[0], p[1]); });
-    }
-    return [
-      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, -widM / 2),
-      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, -widM / 2),
-      standFootprintLocalToWorld(cx, cy, angleRad, depM / 2, widM / 2),
-      standFootprintLocalToWorld(cx, cy, angleRad, -depM / 2, widM / 2),
-    ];
-  }
-  function buildStandDuplicateSafetyPolygonLocalPoints(depM, widM, category) {
-    const r = standConfigRowForIcaoCat(category);
-    if (!r || !isFinite(depM) || !isFinite(widM) || depM <= 0 || widM <= 0) return null;
-    const g = Number(r.gap), ws = Number(r.wingspan), pb = Number(r.pushback);
-    const nw = Number(r.nose_width), nc = Number(r.nose_clear);
-    if (!isFinite(g) || !isFinite(ws) || !isFinite(pb) || !isFinite(nw) || !isFinite(nc) || g <= 0 || ws <= 0 || nw <= 0 || nc <= 0) return null;
-    const halfD = depM / 2, halfW = widM / 2;
-    const noseHalf = nw / 2;
-    const shiftX = standStopbarCenterShiftLocalX(depM, category);
-    const xNose = -halfD + shiftX;
-    const xStop = 0;
-    const xBendEnd = xStop + (halfW - noseHalf);
-    const xPush = (halfD - pb) + shiftX;
-    const yLim = halfW - g;
-    const xMin = (-halfD) + shiftX;
-    const xMax = halfD + shiftX;
-    const eps = 0.12;
-    if (!(noseHalf < halfW - eps)) return null;
-    if (!(xBendEnd <= xMax + eps)) return null;
-    if (!(yLim > eps && yLim < halfW - eps)) return null;
-    if (!(xStop > xMin + eps && xStop < xMax - eps)) return null;
-    const xA = Math.max(xMin, Math.min(xMax, Math.min(xStop, xPush)));
-    const xB = Math.max(xMin, Math.min(xMax, Math.max(xStop, xPush)));
-    if (!(xB > xA + eps)) return null;
-    const contour = [
-      [xNose, -noseHalf],
-      [xNose, noseHalf],
-      [xStop, noseHalf],
-      [Math.min(xBendEnd, xMax), halfW],
-      [xMax, halfW],
-      [xMax, -halfW],
-      [Math.min(xBendEnd, xMax), -halfW],
-      [xStop, -noseHalf],
-    ];
-    return clipPolygonToAxisAlignedBox(contour, xA, xB, -yLim, yLim);
-  }
-  function clipPolygonToAxisAlignedBox(poly, minX, maxX, minY, maxY) {
-    if (!Array.isArray(poly) || poly.length < 3) return null;
-    function clip(input, axis, keepGreater, value) {
-      const out = [];
-      for (let i = 0; i < input.length; i++) {
-        const a = input[i];
-        const b = input[(i + 1) % input.length];
-        const av = axis === 'x' ? a[0] : a[1];
-        const bv = axis === 'x' ? b[0] : b[1];
-        const ain = keepGreater ? av >= value - 1e-9 : av <= value + 1e-9;
-        const bin = keepGreater ? bv >= value - 1e-9 : bv <= value + 1e-9;
-        if (ain && bin) {
-          out.push(b);
-        } else if (ain !== bin) {
-          const denom = bv - av;
-          if (Math.abs(denom) > 1e-12) {
-            const t = (value - av) / denom;
-            out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
-          }
-          if (!ain && bin) out.push(b);
-        }
-      }
-      return out;
-    }
-    let out = poly.slice();
-    out = clip(out, 'x', true, minX);

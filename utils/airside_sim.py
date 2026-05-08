@@ -1004,6 +1004,7 @@ def flight_route(
     penalty_add: float = 0.0,
     apron_transit_extra: float = 0.0,
     apron_allowed_link_ids: Optional[Set[str]] = None,
+    runway_exit_allowed_link_ids: Optional[Set[str]] = None,
     routing_path_ops_enabled: bool = True,
     routing_path_ops_anchor_abs_sec: float = 0.0,
     routing_path_ops_icao_cat_letter: Optional[str] = None,
@@ -1039,6 +1040,7 @@ def flight_route(
         penalty_add=penalty_add,
         apron_transit_extra=apron_transit_extra,
         apron_allowed_link_ids=apron_allowed_link_ids,
+        runway_exit_allowed_link_ids=runway_exit_allowed_link_ids,
         path_ops_enabled=apply_po,
         path_ops_slot_anchor_abs_sec=float(routing_path_ops_anchor_abs_sec),
         path_ops_icao_cat_letter=routing_path_ops_icao_cat_letter,
@@ -1104,6 +1106,7 @@ def _flight_route_impl(
     accept_reverse_penalty_path: bool = False,
     apron_transit_extra: float = 0.0,
     apron_allowed_link_ids: Optional[Set[str]] = None,
+    runway_exit_allowed_link_ids: Optional[Set[str]] = None,
     omit_apron_link_edges: bool = False,
     routing_path_ops_enabled: bool = True,
     routing_path_ops_anchor_abs_sec: float = 0.0,
@@ -1142,6 +1145,7 @@ def _flight_route_impl(
         penalty_add=p_add,
         apron_transit_extra=apron_transit_extra,
         apron_allowed_link_ids=apron_allowed_link_ids,
+        runway_exit_allowed_link_ids=runway_exit_allowed_link_ids,
         routing_path_ops_enabled=routing_path_ops_enabled,
         routing_path_ops_anchor_abs_sec=routing_path_ops_anchor_abs_sec,
         routing_path_ops_icao_cat_letter=routing_path_ops_icao_cat_letter,
@@ -3058,6 +3062,20 @@ def prepare_flight_path(
         ap_extra = 0.0
         if ap_ids and str(phase) == PHASE_ARR_TAXI:
             ap_extra = min(float(reverse_cost) * 0.04, 80_000.0)
+        runway_exit_allow: Optional[Set[str]] = None
+        if leg_i == 0 and str(phase) == PHASE_LANDING:
+            tok_leg_pf = (
+                flight_for_leg.get("token")
+                if isinstance(flight_for_leg.get("token"), dict)
+                else {}
+            )
+            exit_tw_pf = str(
+                flight_for_leg.get("ExitTaxiwayId")
+                or tok_leg_pf.get("ExitTaxiwayId")
+                or ""
+            ).strip()
+            if exit_tw_pf:
+                runway_exit_allow = {exit_tw_pf}
         # Leg 0 (touchdown → RET A): start Dijkstra from the runway polyline only, not from the
         # full-graph nearest node (which can sit on a taxiway behind the touchpoint; see R2 case).
         if leg_i == 0 and str(phase) == PHASE_LANDING and arr_rwy_f and str(arr_rwy_f).strip():
@@ -3098,6 +3116,7 @@ def prepare_flight_path(
                 RouteEndpoint(token_pixel_xy=(ex, ey)),
                 apron_transit_extra=ap_extra,
                 apron_allowed_link_ids=ap_ids if ap_ids else None,
+                runway_exit_allowed_link_ids=runway_exit_allow,
                 omit_apron_link_edges=_phase_routing_omits_apron_links(str(phase)),
                 routing_path_ops_anchor_abs_sec=_routing_path_ops_anchor_abs_sec(None, flight_for_leg),
                 routing_path_ops_icao_cat_letter=_flight_default_icao_category(
