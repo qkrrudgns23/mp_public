@@ -834,7 +834,6 @@
   function triggerArrivalConfigResampleFromLayoutEdit() {
     if (typeof bumpVttArrCacheRev === 'function') bumpVttArrCacheRev();
     if (typeof bumpScheduleRetExitDistCache === 'function') bumpScheduleRetExitDistCache();
-    if (typeof renderFlightList === 'function') renderFlightList(false, true);
   }
   if (runwayExitAllowedDirectionEl) {
     runwayExitAllowedDirectionEl.addEventListener('change', function(ev) {
@@ -858,10 +857,15 @@
       const v = this.value || '';
       if (tw.pathType === 'runway') {
         runwayReverseVerticesIfDirectionChanged(tw, v);
-        tw.direction = (v === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+        if (v === 'both') tw.direction = 'both';
+        else if (v === 'counter_clockwise') tw.direction = 'counter_clockwise';
+        else tw.direction = 'clockwise';
       } else tw.direction = v || 'both';
+      if (typeof resetPathOpsSlotCwToDirectionDefault === 'function') resetPathOpsSlotCwToDirectionDefault(tw);
+      if (typeof syncPathOpsPanelFromTaxiway === 'function') syncPathOpsPanelFromTaxiway(tw);
       updateObjectInfo();
       if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+      if (typeof invalidatePathGraphCache === 'function') invalidatePathGraphCache(true);
       draw();
       update3DSceneWhenVisible();
     }

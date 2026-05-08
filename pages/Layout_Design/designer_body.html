@@ -501,6 +501,33 @@
               <option value="cement">Cement</option>
             </select>
           </div>
+          <div class="compact-field wide" id="pathOpsIcaoCategoriesWrap" style="display:none;">
+            <label>ICAO Category</label>
+            <div id="taxiwayPathOpsIcaoCategories" class="icao-multi-checks" role="group" aria-label="ICAO runway/taxi categories (path routing)">
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="A" checked/> A</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="B" checked/> B</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="C" checked/> C</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="D" checked/> D</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="E" checked/> E</label>
+              <label class="icao-letter-option"><input type="checkbox" class="icao-letter-check" value="F" checked/> F</label>
+            </div>
+          </div>
+            <div id="pathOpsScheduleWrap" class="path-ops-schedule-wrap" style="display:none;">
+            <div class="path-ops-schedule-block-title">Infra schedule</div>
+            <div class="path-ops-schedule-caption">하루를 Information의 pathOpsSlotIntervalMinutes 간격으로 분할 (로컬 00–24시)</div>
+            <div class="path-ops-slot-row">
+              <span class="path-ops-row-label" title="각 슬롯에서 해당 구간 사용 여부">Open</span>
+              <div id="pathOpsSlotOnGrid" class="path-ops-slot-grid-host"></div>
+            </div>
+            <div class="path-ops-slot-row">
+              <span class="path-ops-row-label" title="Direction이 CW/CCW일 때 이 행은 방향과 연동(전 슬롯 동일). Both에서만 슬롯별 편집.">CW</span>
+              <div id="pathOpsSlotCwGrid" class="path-ops-slot-grid-host"></div>
+            </div>
+            <div class="path-ops-slot-row">
+              <span class="path-ops-row-label" title="Runway: 슬롯별 CW 또는 CCW만 허용. Both 방향에서는 CCW 열을 비워 레거시와 동등하게 생략 가능.">CCW</span>
+              <div id="pathOpsSlotCcwGrid" class="path-ops-slot-grid-host"></div>
+            </div>
+          </div>
           <button class="small draw-toggle-btn" id="btnTaxiwayDraw">Draw</button>
         </div>
         <div id="settings-apronTaxiway" class="settings-pane compact-form" style="display:none;">

@@ -464,6 +464,57 @@ def get_effective_runway_lineup_dist_from_start_m(tw: dict, runway_len_m: float)
     return max(0.0, min(ln, d))
 
 
+PATH_OPS_DAY_SEC = 86400
+DAY_MINUTES = 1440
+PATH_OPS_INTERVAL_MINUTES_FALLBACK = 30
+PATH_OPS_SLOT_INTERVAL_SEC_FALLBACK = PATH_OPS_INTERVAL_MINUTES_FALLBACK * 60  # legacy default
+PATH_OPS_SLOT_COUNT_FALLBACK = DAY_MINUTES // PATH_OPS_INTERVAL_MINUTES_FALLBACK
+ICAO_CAT_ALLOWED_MASK_FULL = 0x3F  # ICAO runway/taxi cats A–F (6 bits)
+
+
+@dataclass(frozen=True)
+class PathOpsCadence:
+    """Routing path-ops timeline: uniform buckets tiling one civil day."""
+
+    slot_count: int
+    interval_sec: int
+
+    @staticmethod
+    def default_cadence() -> PathOpsCadence:
+        return PathOpsCadence(
+            slot_count=PATH_OPS_SLOT_COUNT_FALLBACK,
+            interval_sec=PATH_OPS_SLOT_INTERVAL_SEC_FALLBACK,
+        )
+
+
+def path_ops_cadence_from_information(information: Optional[Dict[str, Any]]) -> PathOpsCadence:
+    """Read ``pathOpsSlotIntervalMinutes`` under ``tiers.algorithm.pathSearch`` (must divide 1440)."""
+    d = PathOpsCadence.default_cadence()
+    if not isinstance(information, dict):
+        return d
+    algo = information.get("tiers")
+    if not isinstance(algo, dict):
+        return d
+    alg = algo.get("algorithm")
+    if not isinstance(alg, dict):
+        return d
+    ps = alg.get("pathSearch")
+    if not isinstance(ps, dict):
+        return d
+    raw = ps.get("pathOpsSlotIntervalMinutes")
+    try:
+        m = int(raw)
+    except (TypeError, ValueError):
+        return d
+    if m < 1 or m > DAY_MINUTES or DAY_MINUTES % m != 0:
+        return d
+    iv = m * 60
+    n = DAY_MINUTES // m
+    if n < 1 or iv * n != PATH_OPS_DAY_SEC:
+        return d
+    return PathOpsCadence(slot_count=n, interval_sec=iv)
+
+
 @dataclass
 class DirectedEdgeRecord:
     """One directed arc in the path graph (designer.js edgeMap entry + metadata for sim export)."""
@@ -476,6 +527,11 @@ class DirectedEdgeRecord:
     link_id: str
     path_type: str
     direction: str
+    # Optional routing constraints from sim export (missing → legacy unconstrained routing).
+    path_ops_slot_on: Optional[Tuple[bool, ...]] = None
+    path_ops_slot_cw: Optional[Tuple[bool, ...]] = None
+    path_ops_slot_ccw: Optional[Tuple[bool, ...]] = None
+    icao_cat_mask: Optional[int] = None
 
 
 @dataclass
@@ -489,6 +545,7 @@ class PathGraph:
     stand_id_to_node_index: Dict[str, int] = field(default_factory=dict)
     merge_radius_px: float = 7.0
     reverse_cost: float = 1_000_000.0
+    has_path_ops_constraints: bool = False
 
     def node_id_str(self, idx: int) -> str:
         return f"G{idx:05d}"
@@ -518,6 +575,137 @@ class PathGraph:
         return best
 
 
+def path_graph_finalize_path_ops_flags(g: PathGraph) -> None:
+    """Set ``has_path_ops_constraints`` from edge metadata after graph assembly."""
+    h = False
+    for rec in g.edge_map.values():
+        tup = rec.path_ops_slot_on
+        if tup and any(not bool(x) for x in tup):
+            h = True
+            break
+        m = rec.icao_cat_mask
+        if m is not None:
+            mi = int(m) & ICAO_CAT_ALLOWED_MASK_FULL
+            if mi != ICAO_CAT_ALLOWED_MASK_FULL:
+                h = True
+                break
+        if rec.path_ops_slot_cw is not None:
+            h = True
+            break
+        if rec.path_ops_slot_ccw is not None:
+            h = True
+            break
+    g.has_path_ops_constraints = bool(h)
+
+
+def slot_index_from_anchor_abs_sec(
+    anchor_abs_sec: float, cadence: Optional[PathOpsCadence] = None
+) -> int:
+    """Wall-clock partition into ``cadence.slot_count`` buckets of ``cadence.interval_sec`` (24h modulus)."""
+    c = cadence if cadence is not None else PathOpsCadence.default_cadence()
+    sc = max(1, int(c.slot_count))
+    iv = max(1, int(c.interval_sec))
+    if not isinstance(anchor_abs_sec, (int, float)) or not math.isfinite(float(anchor_abs_sec)):
+        anchor_abs_sec = 0.0
+    sec = int(math.floor(float(anchor_abs_sec))) % PATH_OPS_DAY_SEC
+    return min(sc - 1, max(0, sec // iv))
+
+
+def normalize_path_ops_cat_letter(raw: Optional[str]) -> str:
+    """Single-letter ICAO runway/taxi category A–F; unknown → ``C`` (matches sim default stance)."""
+    letter = str(raw or "").strip().upper()[:1]
+    if letter in tuple("ABCDEF"):
+        return letter
+    return "C"
+
+
+def directed_edge_blocked_by_path_ops(
+    rec: DirectedEdgeRecord,
+    *,
+    reverse_cost_basis: float,
+    graph_branch_clockwise: bool,
+    path_ops_slot_index: int,
+    icao_cat_letter: str,
+) -> bool:
+    """True if this arc is closed for the given slot and flight category."""
+    tup = rec.path_ops_slot_on
+    if tup:
+        ii = int(path_ops_slot_index)
+        if 0 <= ii < len(tup) and not bool(tup[ii]):
+            return True
+    sccw = rec.path_ops_slot_ccw
+    scw = rec.path_ops_slot_cw
+    rc = max(float(reverse_cost_basis), 1.0)
+    eff_cost = float(rec.cost)
+    is_cheap = eff_cost < rc * 0.999
+    arc_aligned_clockwise_export = (
+        is_cheap if graph_branch_clockwise else (not is_cheap)
+    )
+    if sccw is not None:
+        ii = int(path_ops_slot_index)
+        if arc_aligned_clockwise_export:
+            if scw is not None and 0 <= ii < len(scw) and not bool(scw[ii]):
+                return True
+        else:
+            if 0 <= ii < len(sccw) and not bool(sccw[ii]):
+                return True
+    elif scw is not None:
+        ii_cw = int(path_ops_slot_index)
+        if 0 <= ii_cw < len(scw):
+            want_clockwise_aligned = bool(scw[ii_cw])
+            if want_clockwise_aligned != arc_aligned_clockwise_export:
+                return True
+    m_raw = rec.icao_cat_mask
+    if m_raw is None:
+        return False
+    mask = int(m_raw) & ICAO_CAT_ALLOWED_MASK_FULL
+    if mask == ICAO_CAT_ALLOWED_MASK_FULL:
+        return False
+    bit = ord(icao_cat_letter) - ord("A")
+    if bit < 0 or bit >= 6:
+        return False
+    return ((mask >> bit) & 1) == 0
+
+
+def _parse_optional_path_ops_slot_row_from_sim_edge(
+    edge: dict,
+    *,
+    primary_key: str,
+    legacy_key: str,
+    path_ops_slot_count: int,
+) -> Optional[Tuple[bool, ...]]:
+    raw = edge.get(primary_key)
+    if raw is None:
+        raw = edge.get(legacy_key)
+    if raw is None:
+        return None
+    if not isinstance(raw, (list, tuple)):
+        return None
+    n = max(1, int(path_ops_slot_count))
+    boo = list(bool(x) for x in raw[:n])
+    while len(boo) < n:
+        boo.append(True)
+    return tuple(boo[:n])
+
+
+def _parse_optional_icao_cat_mask_from_sim_edge(edge: dict) -> Optional[int]:
+    raw = edge.get("icaoCategoryAllowedMask")
+    if raw is None:
+        raw = edge.get("icao_category_allowed_mask")
+    if raw is None:
+        return None
+    try:
+        m = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(float(m)):
+        return None
+    mi = int(m) & ICAO_CAT_ALLOWED_MASK_FULL
+    if mi == ICAO_CAT_ALLOWED_MASK_FULL:
+        return None
+    return mi
+
+
 def path_dijkstra(
     g: PathGraph,
     start_idx: Optional[int],
@@ -527,6 +715,11 @@ def path_dijkstra(
     penalty_add: float = 0.0,
     apron_transit_extra: float = 0.0,
     apron_allowed_link_ids: Optional[Set[str]] = None,
+    path_ops_enabled: bool = False,
+    path_ops_slot_anchor_abs_sec: float = 0.0,
+    path_ops_icao_cat_letter: Optional[str] = None,
+    path_ops_branch_clockwise: bool = True,
+    path_ops_cadence: Optional[PathOpsCadence] = None,
 ) -> Optional[List[int]]:
     """designer.js pathDijkstra (lazy heap; skip stale).
 
@@ -536,6 +729,14 @@ def path_dijkstra(
     When ``apron_transit_extra > 0`` and ``apron_allowed_link_ids`` is set, add that cost to
     every ``apron_link`` arc whose ``link_id`` is **not** in the allowed set (arrival taxi should
     use the taxiway network and only the assigned stand's Leadin Taxiway link for the final connect).
+
+    Optional path-ops: when ``path_ops_enabled`` is true and ``g.has_path_ops_constraints``,
+    skip arcs whose exported ``pathOpsSlotOn`` (legacy ``slotOn48``) denies the slot derived from
+    the anchor time and ``path_ops_cadence``, whose ``pathOpsSlotCw`` / ``pathOpsSlotCcw``
+    (legacy ``slotCw48`` / ``slotCcw48``) reject the allowed direction for this graph branch,
+    or (when ``pathOpsSlotCcw`` is absent) whose ``pathOpsSlotCw`` uses the legacy alignment
+    inequality, or whose ``icaoCategoryAllowedMask`` rejects the routed aircraft ICAO cat letter
+    (A–F).
     """
     n = len(g.nodes)
     if start_idx is None or end_idx is None or n == 0:
@@ -547,6 +748,18 @@ def path_dijkstra(
     ap_x = max(0.0, float(apron_transit_extra))
     ap_ids = apron_allowed_link_ids
     use_ap = ap_x > 0.0 and ap_ids is not None
+    use_po = bool(path_ops_enabled) and getattr(g, "has_path_ops_constraints", False)
+    path_ops_slot_idx = slot_index_from_anchor_abs_sec(
+        float(path_ops_slot_anchor_abs_sec),
+        cadence=(
+            path_ops_cadence
+            if path_ops_cadence is not None
+            else PathOpsCadence.default_cadence()
+        ),
+    )
+    po_cat = normalize_path_ops_cat_letter(path_ops_icao_cat_letter)
+    po_basis = max(float(getattr(g, "reverse_cost", 0.0)), 1.0)
+    branch_cw = bool(path_ops_branch_clockwise)
     dist = [math.inf] * n
     prev: List[Optional[int]] = [None] * n
     dist[start_idx] = 0.0
@@ -559,6 +772,18 @@ def path_dijkstra(
             break
         for v, w_stored in g.adj[u]:
             rec = g.edge_map.get(f"{u}:{v}")
+            if (
+                use_po
+                and rec is not None
+                and directed_edge_blocked_by_path_ops(
+                    rec,
+                    reverse_cost_basis=po_basis,
+                    graph_branch_clockwise=branch_cw,
+                    path_ops_slot_index=path_ops_slot_idx,
+                    icao_cat_letter=po_cat,
+                )
+            ):
+                continue
             w = float(w_stored) if rec is None else float(rec.cost)
             if use_pen and penalized_arcs and (u, v) in penalized_arcs:
                 w += p_add
@@ -775,9 +1000,17 @@ def build_path_graph(
             return
         fwd = dedupe_path_points(pts_forward if pts_forward else [p_from, p_to])
         rev = list(reversed(fwd))
-        # Runway direction is governed by vertices order only:
-        # forward (vertices[i] -> vertices[i+1]) is allowed, reverse gets reverse_cost.
-        effective_dir = "clockwise" if str(path_type or "") == "runway" else dir_s
+        # Runway: default one-way along vertices (cheap forward / reverse_cost back). CCW vs CW is
+        # expressed by vertex order in the layout. ``direction: both`` ⇒ bidirectional cheap (Infra
+        # schedule picks allowed direction per time slot).
+        pt_str = str(path_type or "")
+        dir_norm = normalize_rw_direction_value(str(dir_s))
+        if pt_str == "runway" and dir_norm == "both":
+            effective_dir = "both"
+        elif pt_str == "runway":
+            effective_dir = "clockwise"
+        else:
+            effective_dir = str(dir_s or "both")
         meta_ij = DirectedEdgeRecord(i, j, cost, raw_dist, fwd, link_id, path_type, effective_dir)
         register_directed_edge(meta_ij)
         if effective_dir == "both":
@@ -1065,6 +1298,7 @@ def build_path_graph(
         merge_radius_px=merge_rm,
         reverse_cost=reverse_cost,
     )
+    path_graph_finalize_path_ops_flags(g)
     return g
 
 
@@ -1131,6 +1365,7 @@ def path_graph_from_layout_sim_export(
     taxiway_heuristic_bonus: float,
     apply_taxiway_ret_heuristic: bool,
     omit_apron_link_edges: bool = False,
+    path_ops_slot_count: int = PATH_OPS_SLOT_COUNT_FALLBACK,
 ) -> Optional[PathGraph]:
     """
     Assemble PathGraph from Layout_Design serializeCurrentLayout().simPathGraph (designer.js
@@ -1154,6 +1389,8 @@ def path_graph_from_layout_sim_export(
         return None
     if not isinstance(edges_raw, list):
         return None
+
+    slots_n = max(1, int(path_ops_slot_count))
 
     nodes: List[Point] = []
     for p in nodes_raw:
@@ -1179,6 +1416,10 @@ def path_graph_from_layout_sim_export(
         pdir: str,
         *,
         reverse_penalty: bool,
+        path_ops_slot_on: Optional[Tuple[bool, ...]] = None,
+        path_ops_slot_cw: Optional[Tuple[bool, ...]] = None,
+        path_ops_slot_ccw: Optional[Tuple[bool, ...]] = None,
+        icao_cat_mask: Optional[int] = None,
     ) -> None:
         if c < 1e-6:
             return
@@ -1194,6 +1435,10 @@ def path_graph_from_layout_sim_export(
             link_id=lid,
             path_type=ptype,
             direction=pdir,
+            path_ops_slot_on=path_ops_slot_on,
+            path_ops_slot_cw=path_ops_slot_cw,
+            path_ops_slot_ccw=path_ops_slot_ccw,
+            icao_cat_mask=icao_cat_mask,
         )
 
     for e in edges_raw:
@@ -1233,18 +1478,121 @@ def path_graph_from_layout_sim_export(
         if path_type == "runway":
             # Sim-exported runway edges follow vertices order only.
             pd = "clockwise"
+        slot_tuple = _parse_optional_path_ops_slot_row_from_sim_edge(
+            e,
+            primary_key="pathOpsSlotOn",
+            legacy_key="slotOn48",
+            path_ops_slot_count=slots_n,
+        )
+        slot_cw_tuple = _parse_optional_path_ops_slot_row_from_sim_edge(
+            e,
+            primary_key="pathOpsSlotCw",
+            legacy_key="slotCw48",
+            path_ops_slot_count=slots_n,
+        )
+        slot_ccw_tuple = _parse_optional_path_ops_slot_row_from_sim_edge(
+            e,
+            primary_key="pathOpsSlotCcw",
+            legacy_key="slotCcw48",
+            path_ops_slot_count=slots_n,
+        )
+        cat_mask_e = _parse_optional_icao_cat_mask_from_sim_edge(e)
         fwd_pts = dedupe_path_points(pts)
         rev_pts = dedupe_path_points(list(reversed(pts))) if len(pts) >= 2 else fwd_pts
 
         if pd == "both":
-            register_sim_arc(a, b, base_cost, raw_d, fwd_pts, link_id, path_type, pd, reverse_penalty=False)
-            register_sim_arc(b, a, base_cost, raw_d, rev_pts, link_id, path_type, pd, reverse_penalty=False)
+            register_sim_arc(
+                a,
+                b,
+                base_cost,
+                raw_d,
+                fwd_pts,
+                link_id,
+                path_type,
+                pd,
+                reverse_penalty=False,
+                path_ops_slot_on=slot_tuple,
+                path_ops_slot_cw=slot_cw_tuple,
+                path_ops_slot_ccw=slot_ccw_tuple,
+                icao_cat_mask=cat_mask_e,
+            )
+            register_sim_arc(
+                b,
+                a,
+                base_cost,
+                raw_d,
+                rev_pts,
+                link_id,
+                path_type,
+                pd,
+                reverse_penalty=False,
+                path_ops_slot_on=slot_tuple,
+                path_ops_slot_cw=slot_cw_tuple,
+                path_ops_slot_ccw=slot_ccw_tuple,
+                icao_cat_mask=cat_mask_e,
+            )
         elif pd == "counter_clockwise":
-            register_sim_arc(b, a, base_cost, raw_d, rev_pts, link_id, path_type, pd, reverse_penalty=False)
-            register_sim_arc(a, b, rc, raw_d, fwd_pts, link_id, path_type, pd, reverse_penalty=True)
+            register_sim_arc(
+                b,
+                a,
+                base_cost,
+                raw_d,
+                rev_pts,
+                link_id,
+                path_type,
+                pd,
+                reverse_penalty=False,
+                path_ops_slot_on=slot_tuple,
+                path_ops_slot_cw=slot_cw_tuple,
+                path_ops_slot_ccw=slot_ccw_tuple,
+                icao_cat_mask=cat_mask_e,
+            )
+            register_sim_arc(
+                a,
+                b,
+                rc,
+                raw_d,
+                fwd_pts,
+                link_id,
+                path_type,
+                pd,
+                reverse_penalty=True,
+                path_ops_slot_on=slot_tuple,
+                path_ops_slot_cw=slot_cw_tuple,
+                path_ops_slot_ccw=slot_ccw_tuple,
+                icao_cat_mask=cat_mask_e,
+            )
         else:
-            register_sim_arc(a, b, base_cost, raw_d, fwd_pts, link_id, path_type, pd, reverse_penalty=False)
-            register_sim_arc(b, a, rc, raw_d, rev_pts, link_id, path_type, pd, reverse_penalty=True)
+            register_sim_arc(
+                a,
+                b,
+                base_cost,
+                raw_d,
+                fwd_pts,
+                link_id,
+                path_type,
+                pd,
+                reverse_penalty=False,
+                path_ops_slot_on=slot_tuple,
+                path_ops_slot_cw=slot_cw_tuple,
+                path_ops_slot_ccw=slot_ccw_tuple,
+                icao_cat_mask=cat_mask_e,
+            )
+            register_sim_arc(
+                b,
+                a,
+                rc,
+                raw_d,
+                rev_pts,
+                link_id,
+                path_type,
+                pd,
+                reverse_penalty=True,
+                path_ops_slot_on=slot_tuple,
+                path_ops_slot_cw=slot_cw_tuple,
+                path_ops_slot_ccw=slot_ccw_tuple,
+                icao_cat_mask=cat_mask_e,
+            )
 
     stand_raw = inner.get("standIdToNodeIndex") or {}
     stand_id_to_node_index: Dict[str, int] = {}
@@ -1272,7 +1620,7 @@ def path_graph_from_layout_sim_export(
             runway_node_indices_by_id[str(rwid)] = s
 
     merge_r = float(merge_radius_px) if math.isfinite(float(merge_radius_px)) else 7.0
-    return PathGraph(
+    g_out = PathGraph(
         nodes=nodes,
         adj=adj,
         edge_map=edge_map,
@@ -1281,6 +1629,8 @@ def path_graph_from_layout_sim_export(
         merge_radius_px=max(merge_r, 1e-6),
         reverse_cost=rc,
     )
+    path_graph_finalize_path_ops_flags(g_out)
+    return g_out
 
 
 def solve_arrival_path_indices(
@@ -1313,6 +1663,7 @@ def solve_arrival_path_indices(
     else:
         taxiway_heuristic_cost = 200.0
     merge_r = float(path_cfg.get("junctionMergeRadiusPx", 7.0) or 7.0)
+    po_cad = path_ops_cadence_from_information(information)
     flight_sched = information.get("tiers", {}).get("flight_schedule", {}) if isinstance(information, dict) else {}
     allow_rw_ground = bool(flight_sched.get("defaultAllowRunwayInGroundSegment", False))
     rw_exit_raw = flight_sched.get("rwExitAllowedDefaultRaw")
@@ -1351,6 +1702,7 @@ def solve_arrival_path_indices(
             merge_radius_px=merge_r,
             taxiway_heuristic_bonus=taxiway_heuristic_cost,
             apply_taxiway_ret_heuristic=ret_heuristic,
+            path_ops_slot_count=int(po_cad.slot_count),
         )
         if g_full is None:
             g_full = build_path_graph(
@@ -1414,6 +1766,7 @@ def solve_arrival_path_indices(
             merge_radius_px=merge_r,
             taxiway_heuristic_bonus=taxiway_heuristic_cost,
             apply_taxiway_ret_heuristic=ret_heuristic,
+            path_ops_slot_count=int(po_cad.slot_count),
         )
         if g is None:
             g = build_path_graph(

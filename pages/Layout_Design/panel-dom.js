@@ -121,7 +121,7 @@
     }
     f.timeMin = sibtU;
     f.sibtMin = sibtU;
-    f.sldtMin = scheduledSldtFromSibtMinutes(f, sibtU);
+    f.sldtMin = Math.max(0, sibtU - SCHED_SIBT_MINUS_SLDT_MIN);
     f.sobtMin = anchor;
     f.dwellMin = Math.max(SCHED_DWELL_FLOOR_MIN, newDwell);
     if (f.minDwellMin != null) {
@@ -244,6 +244,77 @@
     configByType[typeKey] = { tdMu, tdSigma, vMu, vSigma, aMu, aSigma };
     return configByType[typeKey];
   }
+  /** Path-ops slot index from touchdown anchor minutes; matches ``slot_index_from_anchor_abs_sec`` (86400-mod, floor). */
+  function arrivalPathOpsSlotIndexFromFlightSimAnchor(f) {
+    const sibtNorm = (f.sibtMin != null && isFinite(f.sibtMin))
+      ? f.sibtMin
+      : (f.timeMin != null && isFinite(f.timeMin) ? f.timeMin : 0);
+    const anchorMin = Math.max(0, sibtNorm - SCHED_SIBT_MINUS_SLDT_MIN);
+    let sec = Math.floor(anchorMin * 60);
+    sec = ((sec % 86400) + 86400) % 86400;
+    const ivSec = PATH_OPS_INTERVAL_MINUTES * 60;
+    let idx = Math.floor(sec / ivSec);
+    return Math.max(0, Math.min(PATH_OPS_SLOT_COUNT - 1, idx));
+  }
+  /** A–F only; flight 필드가 없으면 ``aircraftType`` → ``getCodeForAircraft`` (기종 정의의 RECAT 글자). 둘 다 안 되면 ``null``. */
+  function flightIcaoLetterForArrivalInfra(f) {
+    if (!f) return null;
+    const raw = f.icaoCategory != null ? String(f.icaoCategory) : (f.icao_category != null ? String(f.icao_category) : '');
+    const fromField = raw.trim().toUpperCase().charAt(0);
+    if (fromField && ICAO_LETTERS_ORDER.indexOf(fromField) >= 0) return fromField;
+    const typeId = f.aircraftType != null ? String(f.aircraftType).trim() : '';
+    if (typeId && typeof getCodeForAircraft === 'function') {
+      const fromAc = String(getCodeForAircraft(typeId) || '').trim().toUpperCase().charAt(0);
+      if (fromAc && ICAO_LETTERS_ORDER.indexOf(fromAc) >= 0) return fromAc;
+    }
+    return null;
+  }
+  function resolveArrivalRunwayTaxiwayFromState(arrRunwayId) {
+    if (arrRunwayId == null) return null;
+    const tws = state.taxiways || [];
+    for (let i = 0; i < tws.length; i++) {
+      const t = tws[i];
+      if (t && t.pathType === 'runway' && t.id === arrRunwayId) return t;
+    }
+    return null;
+  }
+  /** Runway path-ops row at ``slotIdx`` → single operational direction for arrival RET F2 (fallback: layout direction). */
+  function arrivalEffectiveRunwayDirForSlot(rw, slotIdx) {
+    if (!rw || rw.pathType !== 'runway') return null;
+    if (!(slotIdx >= 0 && slotIdx < PATH_OPS_SLOT_COUNT)) return null;
+    pathOpsMigrateLegacySlotKeysInPlace(rw);
+    normalizePathOpsPayloadInPlaceForTaxiway(rw);
+    const cw = rw.pathOpsSlotCw[slotIdx];
+    const ccw = rw.pathOpsSlotCcw[slotIdx];
+    if (cw && !ccw) return 'clockwise';
+    if (ccw && !cw) return 'counter_clockwise';
+    return getRunwayOperationalDirForArrivalRetFilter2(rw);
+  }
+  /** ``true`` = blocked (off or ICAO not allowed). */
+  function pathOpsBlockedOpenOrIcaoAtSlot(tw, slotIdx, icaoLetter) {
+    if (!tw || !icaoLetter || ICAO_LETTERS_ORDER.indexOf(icaoLetter) < 0) return true;
+    if (!pathOpsEligiblePathType(tw.pathType)) return false;
+    pathOpsMigrateLegacySlotKeysInPlace(tw);
+    const onRow = pathOpsNormalizeSlotRow(tw.pathOpsSlotOn, true);
+    if (slotIdx < 0 || slotIdx >= PATH_OPS_SLOT_COUNT) return true;
+    if (!onRow[slotIdx]) return true;
+    let m = tw.icaoCategoryAllowedMask;
+    if (typeof m !== 'number' || !isFinite(m)) m = ICAO_CAT_ALLOWED_MASK_FULL;
+    m = (m | 0) & ICAO_CAT_ALLOWED_MASK_FULL;
+    const bit = ICAO_LETTERS_ORDER.indexOf(icaoLetter);
+    return ((m >> bit) & 1) === 0;
+  }
+  function pathOpsRetCwCcwBranchOpenAtSlot(exitTw, slotIdx, runwayEffectiveDir) {
+    if (!exitTw || exitTw.pathType !== 'runway_exit') return false;
+    if (runwayEffectiveDir !== 'clockwise' && runwayEffectiveDir !== 'counter_clockwise') return false;
+    pathOpsMigrateLegacySlotKeysInPlace(exitTw);
+    const cwDef = pathOpsCwDefaultBoolForTaxiwayDirection(exitTw);
+    const ccwDef = pathOpsCcwDefaultBoolForTaxiwayDirection(exitTw);
+    const cw = pathOpsNormalizeSlotRow(exitTw.pathOpsSlotCw, cwDef);
+    const ccw = pathOpsNormalizeSlotRow(exitTw.pathOpsSlotCcw, ccwDef);
+    if (slotIdx < 0 || slotIdx >= PATH_OPS_SLOT_COUNT) return false;
+    return runwayEffectiveDir === 'clockwise' ? !!cw[slotIdx] : !!ccw[slotIdx];
+  }
   /** Same runway resolution as graphPathArrival (token.arrRunwayId before generic runwayId). */
   function resolveArrivalRunwayIdForFlight(f) {
     if (!f) return null;
@@ -269,24 +340,40 @@
       f.__schedRetRotRev = rev;
       return;
     }
-    if (!forceResample && f.__schedRetRotRev === rev && isValidSampledArrRetForFlight(f, retStatsAll)) return;
-    if (!forceResample && (f.__schedRetRotRev === undefined || f.__schedRetRotRev === null) &&
-        f.sampledArrRet != null && f.arrRetFailed === false &&
-        isValidSampledArrRetForFlight(f, retStatsAll)) {
-      f.__schedRetRotRev = rev;
-      return;
-    }
-    if (f.sampledArrRet != null && !isValidSampledArrRetForFlight(f, retStatsAll)) {
-      f.sampledArrRet = null;
-      f.arrRetFailed = false;
-      f.arrDecelMs2 = null;
-    }
+    if (!forceResample) return;
     const arrRunwayId = resolveArrivalRunwayIdForFlight(f);
     const cfg = mutRotCfgEntryForType(configByType, f);
     if (!cfg || !retStatsAll || !retStatsAll.length || arrRunwayId == null) {
       f.__schedRetRotRev = rev;
       return;
     }
+    const rwObj = resolveArrivalRunwayTaxiwayFromState(arrRunwayId);
+    const slotIdx = arrivalPathOpsSlotIndexFromFlightSimAnchor(f);
+    const icaoLetter = flightIcaoLetterForArrivalInfra(f);
+    if (!icaoLetter || !rwObj) {
+      f.sampledArrRet = null;
+      f.arrRetFailed = true;
+      f.arrDecelMs2 = null;
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    if (pathOpsBlockedOpenOrIcaoAtSlot(rwObj, slotIdx, icaoLetter)) {
+      f.sampledArrRet = null;
+      f.arrRetFailed = true;
+      f.arrDecelMs2 = null;
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    const effDir = arrivalEffectiveRunwayDirForSlot(rwObj, slotIdx);
+    if (!effDir || (effDir !== 'clockwise' && effDir !== 'counter_clockwise')) {
+      f.sampledArrRet = null;
+      f.arrRetFailed = true;
+      f.arrDecelMs2 = null;
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    let rVerts = rwObj.vertices ? rwObj.vertices.map(v => [v.col, v.row]) : [];
+    if (rVerts.length < 2) rVerts = [];
     const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
     const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
     const tdMin = cfg.tdMu * 0.85;
@@ -298,12 +385,20 @@
     const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
     const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
     const aMin = Math.max(0.1, cfg.aMu * 0.85);
-    const aMax = Math.min(6,   cfg.aMu * 1.15);
+    const aMax = Math.min(6, cfg.aMu * 1.15);
     const aDec = clamp(aSample, aMin, aMax);
     const candidates = retStatsAll.filter(function(r) {
-      return !!(r && r.runway && r.runway.id === arrRunwayId && r.exit);
+      if (!(r && r.runway && r.runway.id === arrRunwayId && r.exit)) return false;
+      if (!arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit, effDir)) return false;
+      if (rVerts.length >= 2 && !arrivalRunwayExitPassPathDirEdgeToRunwayFilter(r.runway, r.exit, rVerts)) return false;
+      const ex = r.exit;
+      if (pathOpsBlockedOpenOrIcaoAtSlot(ex, slotIdx, icaoLetter)) return false;
+      if (!pathOpsRetCwCcwBranchOpenAtSlot(ex, slotIdx, effDir)) return false;
+      return true;
     });
     if (!candidates.length) {
+      f.sampledArrRet = null;
+      f.arrRetFailed = true;
       f.arrDecelMs2 = null;
       f.__schedRetRotRev = rev;
       return;
@@ -341,12 +436,13 @@
     f.__schedRetRotRev = rev;
   }
   function ensureArrRetRotSampled(flights, forceResampleRet) {
-    if (!Array.isArray(flights) || !flights.length) return [];
+    const retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : [];
+    if (!Array.isArray(flights) || !flights.length) return retStatsAll;
+    if (!forceResampleRet) return retStatsAll;
     const configByType = {};
     flights.forEach(f => { mutRotCfgEntryForType(configByType, f); });
-    const retStatsAll = getScheduleRetStatsAll();
     flights.forEach(function(f) {
-      sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, !!forceResampleRet);
+      sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, true);
     });
     return retStatsAll;
   }
@@ -692,11 +788,7 @@
         : (typeof getScheduleRetStatsAll === 'function' ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []));
     } else {
       const dirtyFlights = flightsSorted.filter(function(f) { return dirtySet.has(f.id); });
-      const dirtyForRet = dirtyFlights.filter(function(f) { return f; });
-      if (dirtyForRet.length && typeof ensureArrRetRotSampled === 'function')
-        retStatsAll = ensureArrRetRotSampled(dirtyForRet, false);
-      else
-        retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
+      retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
     }
     const domOpt = (scheduleOpts && scheduleOpts.skipGanttRefresh) ? { skipGanttRefresh: true } : null;
     _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, domOpt);

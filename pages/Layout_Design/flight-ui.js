@@ -432,6 +432,100 @@
     return tw.vertices.map(function(v) { return cellToPixel(v.col, v.row); });
   }
 
+  var FL_UI_PATH_OPS_N = (typeof PATH_OPS_SLOT_COUNT === 'number' && isFinite(PATH_OPS_SLOT_COUNT) && PATH_OPS_SLOT_COUNT >= 1)
+    ? Math.floor(PATH_OPS_SLOT_COUNT) : 48;
+  var FL_UI_ICAO_MASK_FULL = 0x3f;
+  function flUiPathOpsElig(pt) {
+    return pt === 'runway' || pt === 'runway_taxiway' || pt === 'runway_exit' ||
+      pt === 'taxiway' || pt === 'apron_taxiway' || pt === 'general_queue_taxiway';
+  }
+  function flUiPathOpsOnDef() {
+    var a = []; for (var i = 0; i < FL_UI_PATH_OPS_N; i++) a.push(true); return a;
+  }
+  function flUiPathOpsNormOn(raw) {
+    var out = []; var s = Array.isArray(raw) ? raw : [];
+    for (var i = 0; i < FL_UI_PATH_OPS_N; i++) out.push(i < s.length ? !!s[i] : true);
+    return out;
+  }
+  function flUiPathOpsCwDef(tw) {
+    if (!tw) return true;
+    if (tw.pathType === 'runway') return String(tw.direction || 'clockwise').trim() !== 'counter_clockwise';
+    return String(tw.direction || 'both').trim() !== 'counter_clockwise';
+  }
+  function flUiPathOpsCcwDef(tw) {
+    if (!tw) return true;
+    if (tw.pathType === 'runway') return String(tw.direction || 'clockwise').trim() === 'counter_clockwise';
+    var d = String(tw.direction || 'both').trim();
+    if (d === 'counter_clockwise') return true;
+    if (d === 'clockwise') return false;
+    return true;
+  }
+  function flUiPathOpsDirNForStrip(tw) {
+    var raw = tw && tw.direction != null ? String(tw.direction).trim() : '';
+    if (!raw) raw = (tw && tw.pathType === 'runway') ? 'clockwise' : 'both';
+    if (raw === 'clockwise' || raw === 'cw') return 'clockwise';
+    if (raw === 'counter_clockwise' || raw === 'ccw') return 'counter_clockwise';
+    return 'both';
+  }
+  function flUiPathOpsNormCw(raw, fill) {
+    var out = []; var s = Array.isArray(raw) ? raw : [];
+    var f = !!fill;
+    for (var i = 0; i < FL_UI_PATH_OPS_N; i++) out.push(i < s.length ? !!s[i] : f);
+    return out;
+  }
+  function flUiPathOpsEq(a, b) {
+    if (!a || !b || a.length !== FL_UI_PATH_OPS_N || b.length !== FL_UI_PATH_OPS_N) return false;
+    for (var i = 0; i < FL_UI_PATH_OPS_N; i++) if (!!a[i] !== !!b[i]) return false;
+    return true;
+  }
+  function flUiStripPathOps(copy) {
+    if (!copy || !flUiPathOpsElig(copy.pathType)) {
+      delete copy.pathOpsSlotOn;
+      delete copy.pathOpsSlotCw;
+      delete copy.pathOpsSlotCcw;
+      delete copy.slotOn48;
+      delete copy.slotCw48;
+      delete copy.slotCcw48;
+      delete copy.icaoCategoryAllowedMask;
+      return;
+    }
+    var onSrc = Array.isArray(copy.pathOpsSlotOn) ? copy.pathOpsSlotOn : (Array.isArray(copy.slotOn48) ? copy.slotOn48 : []);
+    var cwSrc = Array.isArray(copy.pathOpsSlotCw) ? copy.pathOpsSlotCw : (Array.isArray(copy.slotCw48) ? copy.slotCw48 : []);
+    var ccwSrc = Array.isArray(copy.pathOpsSlotCcw) ? copy.pathOpsSlotCcw : (Array.isArray(copy.slotCcw48) ? copy.slotCcw48 : []);
+    delete copy.slotOn48;
+    delete copy.slotCw48;
+    delete copy.slotCcw48;
+    var on = flUiPathOpsNormOn(onSrc);
+    if (flUiPathOpsEq(on, flUiPathOpsOnDef())) delete copy.pathOpsSlotOn; else copy.pathOpsSlotOn = on;
+    var cdf = flUiPathOpsCwDef(copy);
+    var defCw = []; for (var z = 0; z < FL_UI_PATH_OPS_N; z++) defCw.push(cdf);
+    var cw = flUiPathOpsNormCw(cwSrc, cdf);
+    var ccdef = flUiPathOpsCcwDef(copy);
+    var ccw = flUiPathOpsNormCw(ccwSrc, ccdef);
+    if (copy.pathType === 'taxiway' || copy.pathType === 'runway_taxiway') {
+      var ij;
+      for (ij = 0; ij < FL_UI_PATH_OPS_N; ij++) {
+        if (!cw[ij] && !ccw[ij]) {
+          if (cdf) cw[ij] = true;
+          else ccw[ij] = true;
+        }
+      }
+    }
+    if (flUiPathOpsEq(cw, defCw)) delete copy.pathOpsSlotCw; else copy.pathOpsSlotCw = cw;
+    var dn = flUiPathOpsDirNForStrip(copy);
+    var defCcw = [];
+    for (var zz = 0; zz < FL_UI_PATH_OPS_N; zz++) {
+      if (dn === 'both' && copy.pathType === 'runway') defCcw.push(false);
+      else if (dn === 'both') defCcw.push(true);
+      else defCcw.push(ccdef);
+    }
+    if (flUiPathOpsEq(ccw, defCcw)) delete copy.pathOpsSlotCcw; else copy.pathOpsSlotCcw = ccw;
+    var m = copy.icaoCategoryAllowedMask;
+    if (typeof m !== 'number' || !isFinite(m)) m = FL_UI_ICAO_MASK_FULL;
+    m = (m | 0) & FL_UI_ICAO_MASK_FULL;
+    if (m === FL_UI_ICAO_MASK_FULL) delete copy.icaoCategoryAllowedMask; else copy.icaoCategoryAllowedMask = m;
+  }
+
   function serializeTaxiwayWithEndpoints(tw) {
     const copy = Object.assign({}, tw);
     if (Array.isArray(tw.vertices)) {
@@ -479,6 +573,7 @@
     } else {
       delete copy.queueFlow;
     }
+    flUiStripPathOps(copy);
     return copy;
   }
   function partitionTaxiwaysForPersist(list) {

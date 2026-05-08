@@ -127,12 +127,6 @@
     kpiMountRunwayHourlyChart(snapshot.hourlyChart);
   }
 
-  function scheduledSldtFromSibtMinutes(f, sibtMin) {
-    const sibt = sibtMin != null && isFinite(sibtMin) ? sibtMin : 0;
-    const vttArrMin = getBaseVttArrMinutes(f);
-    const rotArrMin = getArrRotMinutes(f);
-    return Math.max(0, sibt - vttArrMin - rotArrMin);
-  }
   function scheduledStotFromSobtMinutes(f, sobtMin) {
     const sobt = sobtMin != null && isFinite(sobtMin) ? sobtMin : 0;
     const depRotSec = (typeof computeDepRotSecondsForFlight === 'function')
@@ -171,10 +165,8 @@
     minDwell = Math.max(SCHED_DWELL_FLOOR_MIN, minDwell);
     if (minDwell > dwell) minDwell = dwell;
     if (field === 'sldt') {
-      const vttArrMin = getBaseVttArrMinutes(f);
-      const rotArrMin = getArrRotMinutes(f);
       f.sldtMin = m;
-      const sibt = Math.max(0, m + vttArrMin + rotArrMin);
+      const sibt = Math.max(0, m + SCHED_SIBT_MINUS_SLDT_MIN);
       f.timeMin = sibt;
       f.sibtMin = sibt;
       f.sobtMin = sibt + dwell;
@@ -186,7 +178,7 @@
     if (field === 'sibt') {
       f.timeMin = m;
       f.sibtMin = m;
-      f.sldtMin = scheduledSldtFromSibtMinutes(f, m);
+      f.sldtMin = Math.max(0, m - SCHED_SIBT_MINUS_SLDT_MIN);
       f.sobtMin = m + dwell;
       f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
       f.dwellMin = dwell;
@@ -1954,12 +1946,17 @@
     obj.start_point = { col: first.col, row: first.row };
     obj.end_point = { col: last.col, row: last.row };
   }
-  /** CW↔CCW 전환 시 vertices 반전 → vertices[0]이 현재 direction 기준 시작점, lineup은 해당 모드 거리로 표시. */
+  /** CW↔CCW 전환 시 vertices 반전. Both는 Infra 슬롯으로 처리하므로 반전하지 않음. */
   function runwayReverseVerticesIfDirectionChanged(tw, nextDirRaw) {
     if (!tw || tw.pathType !== 'runway' || !tw.vertices || tw.vertices.length < 2) return;
-    const prevNorm = (tw.direction === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
-    const nextNorm = (String(nextDirRaw || '').trim() === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
-    if (prevNorm === nextNorm) return;
+    const prev = typeof normalizeRwDirectionValue === 'function'
+      ? normalizeRwDirectionValue(tw.direction)
+      : ((tw.direction === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise');
+    const next = typeof normalizeRwDirectionValue === 'function'
+      ? normalizeRwDirectionValue(nextDirRaw)
+      : ((String(nextDirRaw || '').trim() === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise');
+    if (prev === 'both' || next === 'both') return;
+    if (prev === next) return;
     tw.vertices.reverse();
     syncStartEndFromVertices(tw);
   }
@@ -2370,9 +2367,11 @@
   }
 
   /** F2: operational runway direction vs RET "Available RW direction" only (arrival sample — no extra geometry gate). */
-  function arrivalRetPassesFilter2RunwayAvailableDir(rw, exitTw) {
+  function arrivalRetPassesFilter2RunwayAvailableDir(rw, exitTw, effectiveRunwayDirOpt) {
     if (!rw || !exitTw || rw.pathType !== 'runway' || exitTw.pathType !== 'runway_exit') return false;
-    const rd = getRunwayOperationalDirForArrivalRetFilter2(rw);
+    const rd = (effectiveRunwayDirOpt === 'clockwise' || effectiveRunwayDirOpt === 'counter_clockwise')
+      ? effectiveRunwayDirOpt
+      : getRunwayOperationalDirForArrivalRetFilter2(rw);
     if (rd === 'clockwise') return isRunwayExitDirAllowedForArrivalFilter2(exitTw, 'clockwise');
     return isRunwayExitDirAllowedForArrivalFilter2(exitTw, 'counter_clockwise');
   }
@@ -2475,9 +2474,6 @@
               distFromRunwayPoint([rax + ovRw.t1 * rdx, ray + ovRw.t1 * rdy]);
             }
           }
-        }
-        if (best) {
-          if (!arrivalRetPassesFilter2RunwayAvailableDir(rw, tw)) best = null;
         }
         if (best && !arrivalRunwayExitPassPathDirEdgeToRunwayFilter(rw, tw, rVerts)) {
           best = null;
@@ -3050,6 +3046,93 @@
     return mergeNearbyPathPointsForDraw(raw, PATH_JUNCTION_MERGE_RADIUS_PX);
   }
 
+  const GRAPH_EXPORT_PATH_OPS_SLOT_COUNT = (typeof PATH_OPS_SLOT_COUNT === 'number' && isFinite(PATH_OPS_SLOT_COUNT) && PATH_OPS_SLOT_COUNT >= 1)
+    ? Math.floor(PATH_OPS_SLOT_COUNT) : 48;
+  const GRAPH_EXPORT_ICAO_CAT_MASK_FULL = 0x3f;
+  function graphExportPathOpsEligible(pt) {
+    return pt === 'runway' || pt === 'runway_taxiway' || pt === 'runway_exit' ||
+      pt === 'taxiway' || pt === 'apron_taxiway' || pt === 'general_queue_taxiway';
+  }
+  function graphExportPathOpsDefaultOn() {
+    const a = []; for (let i = 0; i < GRAPH_EXPORT_PATH_OPS_SLOT_COUNT; i++) a.push(true); return a;
+  }
+  function graphExportPathOpsNormalizeOnRow(raw) {
+    const out = []; const src = Array.isArray(raw) ? raw : [];
+    for (let i = 0; i < GRAPH_EXPORT_PATH_OPS_SLOT_COUNT; i++) out.push(i < src.length ? !!src[i] : true);
+    return out;
+  }
+  function graphExportPathOpsOnEq(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== GRAPH_EXPORT_PATH_OPS_SLOT_COUNT ||
+        b.length !== GRAPH_EXPORT_PATH_OPS_SLOT_COUNT) return false;
+    for (let i = 0; i < GRAPH_EXPORT_PATH_OPS_SLOT_COUNT; i++) if (!!a[i] !== !!b[i]) return false;
+    return true;
+  }
+  function graphExportPathOpsCwDefaultForTw(tw) {
+    if (!tw || typeof tw !== 'object') return true;
+    if (tw.pathType === 'runway') {
+      const d = String(tw.direction || 'clockwise').trim();
+      return d !== 'counter_clockwise';
+    }
+    const d2 = String(tw.direction || 'both').trim();
+    return d2 !== 'counter_clockwise';
+  }
+  function graphExportPathOpsCcwDefaultForTw(tw) {
+    if (!tw || typeof tw !== 'object') return true;
+    if (tw.pathType === 'runway') {
+      const d = String(tw.direction || 'clockwise').trim();
+      return d === 'counter_clockwise';
+    }
+    const d2 = String(tw.direction || 'both').trim();
+    if (d2 === 'counter_clockwise') return true;
+    if (d2 === 'clockwise') return false;
+    return true;
+  }
+  function graphExportPathOpsFilledBoolRow(defBool) {
+    const a = [];
+    for (let i = 0; i < GRAPH_EXPORT_PATH_OPS_SLOT_COUNT; i++) a.push(!!defBool);
+    return a;
+  }
+  function graphExportPathOpsNormalizeCwRow(raw, defBool) {
+    const out = [];
+    const src = Array.isArray(raw) ? raw : [];
+    for (let i = 0; i < GRAPH_EXPORT_PATH_OPS_SLOT_COUNT; i++) {
+      out.push(i < src.length ? !!src[i] : defBool);
+    }
+    return out;
+  }
+  function graphExportAttachPathOps(edge, tw) {
+    if (!edge || !tw) return;
+    const pt = edge.pathType || '';
+    if (!graphExportPathOpsEligible(pt)) return;
+    const onSrc = Array.isArray(tw.pathOpsSlotOn) ? tw.pathOpsSlotOn : (Array.isArray(tw.slotOn48) ? tw.slotOn48 : []);
+    const on = graphExportPathOpsNormalizeOnRow(onSrc);
+    if (!graphExportPathOpsOnEq(on, graphExportPathOpsDefaultOn())) edge.pathOpsSlotOn = on.slice();
+    let m = tw.icaoCategoryAllowedMask;
+    if (typeof m !== 'number' || !isFinite(m)) m = GRAPH_EXPORT_ICAO_CAT_MASK_FULL;
+    m = (m | 0) & GRAPH_EXPORT_ICAO_CAT_MASK_FULL;
+    if (m !== GRAPH_EXPORT_ICAO_CAT_MASK_FULL) edge.icaoCategoryAllowedMask = m;
+    const cwDef = graphExportPathOpsCwDefaultForTw(tw);
+    const cwSrc = Array.isArray(tw.pathOpsSlotCw) ? tw.pathOpsSlotCw : (Array.isArray(tw.slotCw48) ? tw.slotCw48 : []);
+    const cwNorm = graphExportPathOpsNormalizeCwRow(cwSrc, cwDef);
+    const cwDefFilled = graphExportPathOpsFilledBoolRow(cwDef);
+    if (!graphExportPathOpsOnEq(cwNorm, cwDefFilled)) edge.pathOpsSlotCw = cwNorm.slice();
+    const ccwDef = graphExportPathOpsCcwDefaultForTw(tw);
+    const ccwSrc = Array.isArray(tw.pathOpsSlotCcw) ? tw.pathOpsSlotCcw : (Array.isArray(tw.slotCcw48) ? tw.slotCcw48 : []);
+    const ccwNorm = graphExportPathOpsNormalizeCwRow(ccwSrc, ccwDef);
+    let rawDir = tw.direction != null ? String(tw.direction).trim() : '';
+    if (!rawDir) rawDir = tw.pathType === 'runway' ? 'clockwise' : 'both';
+    const dirN = typeof normalizeRwDirectionValue === 'function' ? normalizeRwDirectionValue(rawDir) : 'both';
+    let defCcwStrip;
+    if (dirN === 'both' && pt === 'runway') {
+      defCcwStrip = graphExportPathOpsFilledBoolRow(false);
+    } else if (dirN === 'both') {
+      defCcwStrip = graphExportPathOpsDefaultOn();
+    } else {
+      defCcwStrip = graphExportPathOpsFilledBoolRow(ccwDef);
+    }
+    if (!graphExportPathOpsOnEq(ccwNorm, defCcwStrip)) edge.pathOpsSlotCcw = ccwNorm.slice();
+  }
+
   function buildPathGraph(selectedArrRetId, runwayDirectionForExit, pathGraphOpts) {
     const opts = pathGraphOpts && typeof pathGraphOpts === 'object' ? pathGraphOpts : {};
     const pureGroundExcludeRunway = !!opts.pureGroundExcludeRunway;
@@ -3096,7 +3179,7 @@
       nodeBucket[bkey].push(idx);
       return idx;
     }
-    function registerDirectedEdge(fromIdx, toIdx, cost, rawDist, pts, linkId, pathType, pathDir) {
+    function registerDirectedEdge(fromIdx, toIdx, cost, rawDist, pts, linkId, pathType, pathDir, pathOpsTw) {
       const edge = {
         from: fromIdx,
         to: toIdx,
@@ -3107,29 +3190,30 @@
         pathType: pathType != null ? String(pathType) : 'taxiway',
         pathDir: pathDir != null ? String(pathDir) : 'both'
       };
+      if (pathOpsTw) graphExportAttachPathOps(edge, pathOpsTw);
       edges.push(edge);
       edgeMap[fromIdx + ':' + toIdx] = edge;
     }
-    function addEdgeWithDirection(pFrom, pTo, dir, cost, rawDist, ptsForward, linkId, pathType) {
+    function addEdgeWithDirection(pFrom, pTo, dir, cost, rawDist, ptsForward, linkId, pathType, pathOpsTw) {
       const i = getOrAdd(pFrom), j = getOrAdd(pTo);
       if (i === j || cost < 1e-6) return;
       const forwardPts = dedupePathPoints(ptsForward && ptsForward.length ? ptsForward : [pFrom, pTo]);
       const reversePts = forwardPts.slice().reverse();
       const lid = linkId != null ? String(linkId) : '';
       const pt = pathType != null ? String(pathType) : 'taxiway';
-      registerDirectedEdge(i, j, cost, rawDist, forwardPts, lid, pt, dir);
+      registerDirectedEdge(i, j, cost, rawDist, forwardPts, lid, pt, dir, pathOpsTw);
       if (dir === 'both') {
         adj[i].push([j, cost]);
         adj[j].push([i, cost]);
-        registerDirectedEdge(j, i, cost, rawDist, reversePts, lid, pt, dir);
+        registerDirectedEdge(j, i, cost, rawDist, reversePts, lid, pt, dir, pathOpsTw);
       } else if (dir === 'counter_clockwise') {
         adj[j].push([i, cost]);
         adj[i].push([j, REVERSE_COST]);
-        registerDirectedEdge(i, j, REVERSE_COST, rawDist, forwardPts, lid, pt, dir);
+        registerDirectedEdge(i, j, REVERSE_COST, rawDist, forwardPts, lid, pt, dir, pathOpsTw);
       } else {
         adj[i].push([j, cost]);
         adj[j].push([i, REVERSE_COST]);
-        registerDirectedEdge(j, i, REVERSE_COST, rawDist, reversePts, lid, pt, dir);
+        registerDirectedEdge(j, i, REVERSE_COST, rawDist, reversePts, lid, pt, dir, pathOpsTw);
       }
     }
 
@@ -3354,7 +3438,7 @@
           cost = d + TAXIWAY_HEURISTIC_COST;
         }
         if (pureGroundExcludeRunway && obj.pathType === 'runway') cost = REVERSE_COST;
-        addEdgeWithDirection(chain[i].p, chain[i + 1].p, dir, cost, d, segPts, tw_id, path_type);
+        addEdgeWithDirection(chain[i].p, chain[i + 1].p, dir, cost, d, segPts, tw_id, path_type, obj);
       }
     });
 
@@ -3374,8 +3458,8 @@
       if (!(totalDist > 1e-6)) return;
       adj[i].push([j, totalDist]);
       adj[j].push([i, totalDist]);
-      registerDirectedEdge(i, j, totalDist, totalDist, pts.slice().reverse(), apronLinkId, 'apron_link', 'both');
-      registerDirectedEdge(j, i, totalDist, totalDist, pts, apronLinkId, 'apron_link', 'both');
+      registerDirectedEdge(i, j, totalDist, totalDist, pts.slice().reverse(), apronLinkId, 'apron_link', 'both', null);
+      registerDirectedEdge(j, i, totalDist, totalDist, pts, apronLinkId, 'apron_link', 'both', null);
     });
     function bfsReachable(startIndices) {
       const out = new Set();
@@ -3470,7 +3554,7 @@
     return {
       nodes: g.nodes.map(function(p) { return [+p[0], +p[1]]; }),
       edges: g.edges.map(function(e) {
-        return {
+        const row = {
           from: e.from,
           to: e.to,
           dist: e.dist,
@@ -3480,6 +3564,22 @@
           pathType: e.pathType != null ? String(e.pathType) : 'taxiway',
           pathDir: e.pathDir != null ? String(e.pathDir) : 'both'
         };
+        const onSer = Array.isArray(e.pathOpsSlotOn)
+          ? e.pathOpsSlotOn
+          : (Array.isArray(e.slotOn48) ? e.slotOn48 : null);
+        const cwSer = Array.isArray(e.pathOpsSlotCw)
+          ? e.pathOpsSlotCw
+          : (Array.isArray(e.slotCw48) ? e.slotCw48 : null);
+        const ccwSer = Array.isArray(e.pathOpsSlotCcw)
+          ? e.pathOpsSlotCcw
+          : (Array.isArray(e.slotCcw48) ? e.slotCcw48 : null);
+        if (Array.isArray(onSer)) row.pathOpsSlotOn = onSer.map(function(x) { return !!x; });
+        if (Array.isArray(cwSer)) row.pathOpsSlotCw = cwSer.map(function(x) { return !!x; });
+        if (Array.isArray(ccwSer)) row.pathOpsSlotCcw = ccwSer.map(function(x) { return !!x; });
+        if (typeof e.icaoCategoryAllowedMask === 'number' && isFinite(e.icaoCategoryAllowedMask)) {
+          row.icaoCategoryAllowedMask = (e.icaoCategoryAllowedMask | 0) & GRAPH_EXPORT_ICAO_CAT_MASK_FULL;
+        }
+        return row;
       }),
       standIdToNodeIndex: standMap,
       runwayNodeIndicesById: runwayById
@@ -6336,7 +6436,7 @@
         const tArr = f.timeMin != null ? f.timeMin : 0;
         f.sobtMin = tArr + dwell;
         f.stotMin = scheduledStotFromSobtMinutes(f, f.sobtMin);
-        f.sldtMin = scheduledSldtFromSibtMinutes(f, tArr);
+        f.sldtMin = Math.max(0, tArr - SCHED_SIBT_MINUS_SLDT_MIN);
         if (typeof computeScheduledDisplayTimesIncremental === 'function') {
           const touched = f.standId ? [f.standId] : [];
           computeScheduledDisplayTimesIncremental(state.flights, new Set([f.id]), new Set(touched));
@@ -7061,7 +7161,11 @@
     const widthVal = clampTaxiwayWidthM(pathType, inputWidth, baseWidth);
     const modeVal = (function() {
       const raw = document.getElementById('taxiwayDirectionMode') ? document.getElementById('taxiwayDirectionMode').value : '';
-      if (pathType === 'runway') return (raw === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+      if (pathType === 'runway') {
+        if (raw === 'counter_clockwise') return 'counter_clockwise';
+        if (raw === 'both') return 'both';
+        return 'clockwise';
+      }
       return raw || 'both';
     })();
     const maxExitInput = document.getElementById('taxiwayMaxExitVel');
@@ -12637,6 +12741,7 @@
       if (!btn) return;
       if (typeof syncStateFromPanel === 'function') syncStateFromPanel();
       if (typeof triggerArrivalConfigResampleFromLayoutEdit === 'function') triggerArrivalConfigResampleFromLayoutEdit();
+      if (typeof renderFlightList === 'function') renderFlightList(false, true);
       if (typeof markProSimSyncStaleFromSchedule === 'function') markProSimSyncStaleFromSchedule();
       if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
       if (typeof showDesignerSuccessToast === 'function') {

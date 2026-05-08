@@ -1946,3 +1946,103 @@
       font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace;
       font-size: 10px;
     }
+
+    /* Path ops: half-hour slots (count from --path-ops-n) + ICAO cat chips (taxiway/runway panel) */
+    .path-ops-schedule-wrap {
+      margin-top: 12px;
+      padding: 10px 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.55);
+      --path-ops-n: 48;
+    }
+    .path-ops-schedule-block-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      color: #e2e8f0;
+      margin-bottom: 4px;
+    }
+    .path-ops-schedule-caption {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+    }
+    .path-ops-slot-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      min-width: 0;
+    }
+    .path-ops-row-label {
+      flex: 0 0 30px;
+      font-size: 9px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      line-height: 1.1;
+      padding-top: 0;
+      align-self: center;
+    }
+    .path-ops-slot-grid-host {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 2px;
+      scrollbar-width: thin;
+    }
+    .path-ops-slot-grid {
+      display: grid;
+      grid-template-columns: repeat(var(--path-ops-n, 48), 7px);
+      grid-auto-rows: 11px;
+      gap: 0 1px;
+      align-items: center;
+      justify-items: center;
+      width: max-content;
+      max-width: none;
+    }
+    .path-ops-slot-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 1px;
+      margin: 0;
+      padding: 0;
+      line-height: 0;
+    }
+    .path-ops-slot-cell:hover {
+      background: rgba(248, 250, 252, 0.06);
+    }
+    .path-ops-slot-cell input {
+      cursor: pointer;
+      width: 10px;
+      height: 10px;
+      margin: 0;
+      padding: 0;
+      flex-shrink: 0;
+      transform: scale(0.78);
+      transform-origin: center;
+      accent-color: #38bdf8;
+    }
+    .path-ops-slot-cell input:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+    .path-ops-cw-row--direction-linked .path-ops-row-label {
+      color: #64748b;
+    }
+    .path-ops-ccw-row--direction-linked .path-ops-row-label {
+      color: #64748b;
+    }
+    .path-ops-cw-grid--locked {
+      opacity: 0.9;
+    }
+    .path-ops-ccw-grid--locked {
+      opacity: 0.9;
+    }

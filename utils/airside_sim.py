@@ -58,6 +58,7 @@ from typing import Any, Callable, Deque, Dict, Iterable, List, Mapping, Optional
 from utils.designer_path_graph import (
     DirectedEdgeRecord,
     PathGraph,
+    PathOpsCadence,
     SPLIT_TOL_D2,
     _dist2,
     _stand_end_node_index,
@@ -72,6 +73,7 @@ from utils.designer_path_graph import (
     path_dijkstra,
     path_dist,
     path_graph_from_layout_sim_export,
+    path_ops_cadence_from_information,
     path_total_dist,
     project_on_segment,
     quantize_designer_world_geometry_inplace,
@@ -108,6 +110,14 @@ PHASE_DEP_TAXI = "Dep_taxi"
 PHASE_HOLDING_LINEUP = "Holding_lineup"
 PHASE_LINEUP_DEPARTURE = "Lineup_departure"
 _DEFAULT_RW_DIR = "clockwise"
+
+
+def _routing_path_ops_graph_branch_clockwise(runway_ops_dir: Optional[str]) -> bool:
+    """Matches ``_cached_path_graph_for_direction``: invalid/blank ops → default CW bundle."""
+    nd = normalize_rw_direction_value(str(runway_ops_dir).strip() if runway_ops_dir else "")
+    if nd not in ("clockwise", "counter_clockwise"):
+        nd = _DEFAULT_RW_DIR
+    return nd == "clockwise"
 
 
 _EXTRACT_LEG_PHASES: Tuple[str, ...] = (
@@ -305,17 +315,15 @@ def _arr_ret_decel_floor_ms(phase: str, path_type: str, accel_ms2: float) -> flo
     return 0.0
 
 
-def _runway_ops_dir_from_layout(layout: Dict[str, Any], runway_id: str) -> str:
+def _layout_runway_ops_dir_token(layout: Dict[str, Any], runway_id: str) -> str:
+    """Resolve ``runwayPaths[].direction``: ``clockwise`` / ``counter_clockwise`` / ``both``."""
     rid = str(runway_id).strip()
     if not rid:
         raise ValueError("runway_id is required to resolve runway direction")
     for rw in layout.get("runwayPaths") or []:
         if not isinstance(rw, dict) or str(rw.get("id", "")).strip() != rid:
             continue
-        nd = normalize_rw_direction_value(str(rw.get("direction") or ""))
-        if nd in ("clockwise", "counter_clockwise"):
-            return nd
-        raise ValueError(f"runway direction missing/invalid for runway_id={rid!r}")
+        return normalize_rw_direction_value(str(rw.get("direction") or ""))
     raise ValueError(f"runway not found for runway_id={rid!r}")
 
 
@@ -326,8 +334,10 @@ def _flight_rw_dir_for_leg(
     Operations direction matching Layout_Design path graph export:
     ``simPathGraph.clockwise`` vs ``simPathGraph.counter_clockwise``.
 
-    Legs 0–1 use arrival runway direction; legs 2+ use departure when present, else arrival.
-    Reads ``arrRunwayDirUsed`` / ``arrRunwayDir``, ``depRunwayDirUsed`` / ``depRunwayDir``, and token.
+    Legs 0–1 use arrival runway direction; legs 2+ use departure runway.
+    Layout row ``direction`` 가 ``both``(Direction Mode Both)면 항공편
+    ``arrRunwayDirUsed`` / ``arrRunwayDir`` 또는 ``depRunwayDirUsed`` / ``depRunwayDir``
+    (및 동명 ``token``)을 사용하고, 여전히 불명확하면 Layout_Design 과 동일하게 ``clockwise``.
     """
     token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
     if leg_index >= 2:
@@ -336,13 +346,39 @@ def _flight_rw_dir_for_leg(
             raise ValueError(
                 f"depRunwayId missing for flight_id={str(flight.get('id', ''))!r}"
             )
-        return _runway_ops_dir_from_layout(layout, str(dep_rwy))
+        rw_id = str(dep_rwy).strip()
+        nd = _layout_runway_ops_dir_token(layout, rw_id)
+        if nd in ("clockwise", "counter_clockwise"):
+            return nd
+        raw = (
+            flight.get("depRunwayDirUsed")
+            or flight.get("depRunwayDir")
+            or token.get("depRunwayDirUsed")
+            or token.get("depRunwayDir")
+        )
+        pf = normalize_rw_direction_value(str(raw or "").strip())
+        if pf in ("clockwise", "counter_clockwise"):
+            return pf
+        return "clockwise"
     arr_rwy = flight.get("arrRunwayId") or token.get("arrRunwayId")
     if arr_rwy is None or str(arr_rwy).strip() == "":
         raise ValueError(
             f"arrRunwayId missing for flight_id={str(flight.get('id', ''))!r}"
         )
-    return _runway_ops_dir_from_layout(layout, str(arr_rwy))
+    rw_id = str(arr_rwy).strip()
+    nd = _layout_runway_ops_dir_token(layout, rw_id)
+    if nd in ("clockwise", "counter_clockwise"):
+        return nd
+    raw = (
+        flight.get("arrRunwayDirUsed")
+        or flight.get("arrRunwayDir")
+        or token.get("arrRunwayDirUsed")
+        or token.get("arrRunwayDir")
+    )
+    pf = normalize_rw_direction_value(str(raw or "").strip())
+    if pf in ("clockwise", "counter_clockwise"):
+        return pf
+    return "clockwise"
 
 
 def _deep_get(obj: Any, *keys: str, default: Any = None) -> Any:
@@ -417,6 +453,22 @@ def _s_eldt_sec(flight: Dict[str, Any]) -> Optional[int]:
     return _schedule_s_sec(flight, "sldtMin")
 
 
+def _routing_path_ops_anchor_abs_sec(agent: Optional[Any], fobj: Dict[str, Any]) -> float:
+    """Simulation schedule seconds for slot-based path-ops filtering (prefer agent ELDT anchor)."""
+    if agent is not None:
+        raw_anchor = getattr(agent, "eldt_anchor_sec", None)
+        if raw_anchor is not None:
+            try:
+                t_agent = float(raw_anchor)
+            except (TypeError, ValueError):
+                t_agent = float("nan")
+            else:
+                if math.isfinite(t_agent):
+                    return t_agent
+    s_schedule = _s_eldt_sec(fobj)
+    return float(s_schedule) if s_schedule is not None else 0.0
+
+
 def _max_stot_s_sec(flights_raw: List[Any]) -> Optional[float]:
     """Largest ``stotMin`` among flights, or ``None`` if none set."""
     max_stot: Optional[float] = None
@@ -470,7 +522,9 @@ def _graph_for_direction(
     *,
     pure_ground_exclude_runway: bool,
     omit_apron_link_edges: bool = False,
+    path_ops_slot_count: int,
 ) -> Optional[PathGraph]:
+    _ = information
     g = path_graph_from_layout_sim_export(
         layout,
         rw_dir,
@@ -480,6 +534,7 @@ def _graph_for_direction(
         taxiway_heuristic_bonus=taxiway_h,
         apply_taxiway_ret_heuristic=False,
         omit_apron_link_edges=omit_apron_link_edges,
+        path_ops_slot_count=path_ops_slot_count,
     )
     if g is not None:
         return g
@@ -506,6 +561,7 @@ def _cached_path_graph_for_direction(
     nd = normalize_rw_direction_value(str(runway_ops_dir).strip() if runway_ops_dir else "")
     if nd not in ("clockwise", "counter_clockwise"):
         nd = _DEFAULT_RW_DIR
+    po_cad = path_ops_cadence_from_information(information)
     key = (
         id(layout),
         nd,
@@ -515,6 +571,8 @@ def _cached_path_graph_for_direction(
         float(taxiway_h),
         bool(pure_ground_exclude_runway),
         bool(omit_apron_link_edges),
+        int(po_cad.slot_count),
+        int(po_cad.interval_sec),
     )
     hit = _PATH_GRAPH_BUILD_CACHE.get(key)
     if hit is not None:
@@ -529,6 +587,7 @@ def _cached_path_graph_for_direction(
         information,
         pure_ground_exclude_runway=pure_ground_exclude_runway,
         omit_apron_link_edges=omit_apron_link_edges,
+        path_ops_slot_count=int(po_cad.slot_count),
     )
     if g is not None:
         _PATH_GRAPH_BUILD_CACHE[key] = g
@@ -945,6 +1004,11 @@ def flight_route(
     penalty_add: float = 0.0,
     apron_transit_extra: float = 0.0,
     apron_allowed_link_ids: Optional[Set[str]] = None,
+    routing_path_ops_enabled: bool = True,
+    routing_path_ops_anchor_abs_sec: float = 0.0,
+    routing_path_ops_icao_cat_letter: Optional[str] = None,
+    routing_path_ops_graph_branch_clockwise: bool = True,
+    routing_path_ops_cadence: Optional[PathOpsCadence] = None,
 ) -> Tuple[List[str], float, Optional[List[int]]]:
     """
     Shortest path on ``g`` between two endpoints.
@@ -959,6 +1023,14 @@ def flight_route(
     end_idx = resolve_route_endpoint_index(g, layout, cell_size, end_point)
     if start_idx is None or end_idx is None:
         return [], float("inf"), None
+    apply_po = bool(routing_path_ops_enabled) and bool(
+        getattr(g, "has_path_ops_constraints", False)
+    )
+    cad_po = (
+        routing_path_ops_cadence
+        if routing_path_ops_cadence is not None
+        else PathOpsCadence.default_cadence()
+    )
     path = path_dijkstra(
         g,
         start_idx,
@@ -967,6 +1039,11 @@ def flight_route(
         penalty_add=penalty_add,
         apron_transit_extra=apron_transit_extra,
         apron_allowed_link_ids=apron_allowed_link_ids,
+        path_ops_enabled=apply_po,
+        path_ops_slot_anchor_abs_sec=float(routing_path_ops_anchor_abs_sec),
+        path_ops_icao_cat_letter=routing_path_ops_icao_cat_letter,
+        path_ops_branch_clockwise=bool(routing_path_ops_graph_branch_clockwise),
+        path_ops_cadence=cad_po,
     )
     if not path or len(path) < 2:
         return [], float("inf"), None
@@ -1028,6 +1105,9 @@ def _flight_route_impl(
     apron_transit_extra: float = 0.0,
     apron_allowed_link_ids: Optional[Set[str]] = None,
     omit_apron_link_edges: bool = False,
+    routing_path_ops_enabled: bool = True,
+    routing_path_ops_anchor_abs_sec: float = 0.0,
+    routing_path_ops_icao_cat_letter: Optional[str] = None,
 ) -> Tuple[List[str], bool, Optional[List[int]], Optional[PathGraph]]:
     """Same graph build and routing as airside_sim_rev3 ``_flight_route``; returns path for geometry."""
     g = _cached_path_graph_for_direction(
@@ -1049,6 +1129,8 @@ def _flight_route_impl(
         p_arcs = _penalized_directed_arc_keys(layout, penalized_layout_edges)
         if p_arcs:
             p_add = float(penalty_add)
+    po_branch_cw = _routing_path_ops_graph_branch_clockwise(runway_ops_dir)
+    po_cad = path_ops_cadence_from_information(information)
     edges, _dist, path = flight_route(
         g,
         layout,
@@ -1060,6 +1142,11 @@ def _flight_route_impl(
         penalty_add=p_add,
         apron_transit_extra=apron_transit_extra,
         apron_allowed_link_ids=apron_allowed_link_ids,
+        routing_path_ops_enabled=routing_path_ops_enabled,
+        routing_path_ops_anchor_abs_sec=routing_path_ops_anchor_abs_sec,
+        routing_path_ops_icao_cat_letter=routing_path_ops_icao_cat_letter,
+        routing_path_ops_graph_branch_clockwise=po_branch_cw,
+        routing_path_ops_cadence=po_cad,
     )
     if path is None or len(path) < 2:
         return [], False, None, g
@@ -2111,6 +2198,8 @@ def _pushback_apron_plus_one_taxi_route(
         _flight_rw_dir_for_leg(flight, 3, layout),
         RouteEndpoint(token_pixel_xy=(float(px), float(py))),
         RouteEndpoint(token_pixel_xy=(float(lx), float(ly))),
+        routing_path_ops_anchor_abs_sec=_routing_path_ops_anchor_abs_sec(None, flight),
+        routing_path_ops_icao_cat_letter=_flight_default_icao_category(flight, information),
     )
     if dv_apron or path_apron is None or g_apron is None or len(path_apron) < 2:
         return None
@@ -2236,6 +2325,8 @@ def _extract_point_to_path_legs(
         _flight_rw_dir_for_leg(flight, 3, layout),
         RouteEndpoint(token_pixel_xy=(float(px), float(py))),
         RouteEndpoint(token_pixel_xy=(float(lx), float(ly))),
+        routing_path_ops_anchor_abs_sec=_routing_path_ops_anchor_abs_sec(None, flight),
+        routing_path_ops_icao_cat_letter=_flight_default_icao_category(flight, info),
     )
     if dv_apron or path_apron is None or g_apron is None or len(path_apron) < 2:
         return []
@@ -2303,6 +2394,8 @@ def _extract_point_to_path_legs(
             _flight_rw_dir_for_leg(flight, 2, layout),
             RouteEndpoint(token_pixel_xy=(fx, fy)),
             RouteEndpoint(token_pixel_xy=(tx, ty)),
+            routing_path_ops_anchor_abs_sec=_routing_path_ops_anchor_abs_sec(None, flight),
+            routing_path_ops_icao_cat_letter=_flight_default_icao_category(flight, info),
         )
         if dv_mid or path_mid is None or g_mid is None or len(path_mid) < 2:
             return []
@@ -3006,6 +3099,10 @@ def prepare_flight_path(
                 apron_transit_extra=ap_extra,
                 apron_allowed_link_ids=ap_ids if ap_ids else None,
                 omit_apron_link_edges=_phase_routing_omits_apron_links(str(phase)),
+                routing_path_ops_anchor_abs_sec=_routing_path_ops_anchor_abs_sec(None, flight_for_leg),
+                routing_path_ops_icao_cat_letter=_flight_default_icao_category(
+                    flight_for_leg, information
+                ),
             )
         if dv:
             logical_edge_list = []
@@ -5753,6 +5850,8 @@ def _build_prep_xy_to_xy_phase(
         penalized_layout_edges=temp_pen,
         penalty_add=float(REVERSE_PENALTY_COST) if temp_pen else 0.0,
         omit_apron_link_edges=_phase_routing_omits_apron_links(str(phase_str)),
+        routing_path_ops_anchor_abs_sec=_routing_path_ops_anchor_abs_sec(agent, fobj),
+        routing_path_ops_icao_cat_letter=_flight_default_icao_category(fobj, information),
     )
     if dv or path is None or g is None or len(path) < 2:
         return None
@@ -8239,6 +8338,8 @@ def build_reroute_path_from_xy(
         penalty_add=penalty_use,
         accept_reverse_penalty_path=accept_reverse_penalty_path,
         omit_apron_link_edges=_phase_routing_omits_apron_links(phase),
+        routing_path_ops_anchor_abs_sec=_routing_path_ops_anchor_abs_sec(agent, flight),
+        routing_path_ops_icao_cat_letter=_flight_default_icao_category(flight, information),
     )
     if dv or path is None or g is None or len(path) < 2:
         return None

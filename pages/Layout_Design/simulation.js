@@ -853,9 +853,13 @@
         renderRunwayDirectionChoices([]);
       }
       const modeSel = document.getElementById('taxiwayDirectionMode');
-      let d = getTaxiwayDirection(tw);
-      if (tw.pathType === 'runway' && d === 'both') d = 'clockwise';
-      if (modeSel) modeSel.value = d;
+      if (modeSel) {
+        let d = normalizeRwDirectionValue(getTaxiwayDirection(tw));
+        if (tw.pathType === 'runway') {
+          if (d !== 'clockwise' && d !== 'counter_clockwise' && d !== 'both') d = 'clockwise';
+        }
+        modeSel.value = d;
+      }
       const kindSel = document.getElementById('taxiwayPathTypeKind');
       if (kindSel) {
         const ptk = tw.pathType || 'taxiway';
@@ -1106,7 +1110,9 @@
         let dirVal = el('taxiwayDirectionMode').value || '';
         if (tw.pathType === 'runway') {
           runwayReverseVerticesIfDirectionChanged(tw, dirVal);
-          tw.direction = (dirVal === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+          if (dirVal === 'both') tw.direction = 'both';
+          else if (dirVal === 'counter_clockwise') tw.direction = 'counter_clockwise';
+          else tw.direction = 'clockwise';
         } else tw.direction = dirVal || 'both';
       }
       if (el('taxiwayPathTypeKind')) {

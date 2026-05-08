@@ -258,6 +258,15 @@
   const _pathSearchTier = (_algoTier.pathSearch && typeof _algoTier.pathSearch === 'object') ? _algoTier.pathSearch : {};
   const _junctionMergeRadiusRaw = Number(_pathSearchTier.junctionMergeRadiusPx);
   const PATH_JUNCTION_MERGE_RADIUS_PX = (isFinite(_junctionMergeRadiusRaw) && _junctionMergeRadiusRaw >= 0) ? _junctionMergeRadiusRaw : 7;
+  const PATH_OPS_INTERVAL_MINUTES = (function pathOpsSlotIntervalMinutesFromTier() {
+    const r = Number(_pathSearchTier.pathOpsSlotIntervalMinutes);
+    const v = Math.floor(r);
+    const dayMin = 24 * 60;
+    if (!isFinite(v) || v < 1) return 30;
+    if (dayMin % v !== 0) return 30;
+    return Math.min(dayMin, v);
+  })();
+  const PATH_OPS_SLOT_COUNT = (24 * 60) / PATH_OPS_INTERVAL_MINUTES;
   const _styleTier = _tiers.style || {};
   const _flightVizStyle = (_styleTier.flightVisualization && typeof _styleTier.flightVisualization === 'object') ? _styleTier.flightVisualization : {};
   const FLIGHT_SIM_VIZ_DEFAULT_PALETTE = [
