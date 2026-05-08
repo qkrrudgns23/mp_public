@@ -18132,9 +18132,16 @@
           runwayNodeSet.add(getOrAdd(wp.p));
         });
       }
-      const dir = getTaxiwayDirection(obj);
-      const tw_id = String(obj.id || '');
       const path_type = String(obj.pathType || 'taxiway');
+      let dir = getTaxiwayDirection(obj);
+      if (path_type === 'runway') {
+        const dLayout = typeof normalizeRwDirectionValue === 'function' ? normalizeRwDirectionValue(dir) : dir;
+        if (dLayout === 'both') {
+          const bundle = typeof normalizeRwDirectionValue === 'function' ? normalizeRwDirectionValue(runwayDirectionForExit) : 'both';
+          dir = (bundle === 'counter_clockwise') ? 'counter_clockwise' : 'clockwise';
+        }
+      }
+      const tw_id = String(obj.id || '');
       const isRunwayExit = obj.pathType === 'runway_exit';
       const isTaxiway = obj.pathType === 'taxiway' || obj.pathType === 'apron_taxiway' || obj.pathType === 'general_queue_taxiway';
       for (let i = 0; i < chain.length - 1; i++) {

@@ -1231,14 +1231,25 @@ def build_path_graph(
             st = runway_node_indices_by_id.setdefault(rw_id, set())
             for t_along, p, _is_j in chain:
                 st.add(get_or_add(p))
+        path_type = str(obj.get("pathType", "taxiway") or "taxiway")
         dir_s = get_taxiway_direction(obj, direction_modes)
+        if path_type == "runway":
+            d_layout = normalize_rw_direction_value(str(dir_s))
+            if d_layout == "both":
+                nd_bundle = normalize_rw_direction_value(
+                    str(runway_direction_for_exit or "")
+                )
+                dir_s = (
+                    "counter_clockwise"
+                    if nd_bundle == "counter_clockwise"
+                    else "clockwise"
+                )
         is_runway_exit = str(obj.get("pathType") or "") in ("runway_exit", "runway_taxiway")
         is_taxiway = str(obj.get("pathType") or "") in (
             "taxiway",
             "apron_taxiway",
             "general_queue_taxiway",
         )
-        path_type = str(obj.get("pathType", "taxiway") or "taxiway")
         for i in range(len(chain) - 1):
             seg_pts = polyline_points_between_along(pts, chain[i][0], chain[i + 1][0])
             dlen = polyline_distance_between_along(pts, chain[i][0], chain[i + 1][0])
