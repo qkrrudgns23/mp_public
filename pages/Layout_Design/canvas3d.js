@@ -1,3 +1,50 @@
+  var _allocGanttPreviewLastKey = '';
+  function _allocGanttDragStandPreviewAllowed(f, standId) {
+    if (!standId) return true;
+    var allStands = allStandsForFlightAssignment();
+    var stand = allStands.find(function(s) { return s.id === standId; });
+    if (!stand) return false;
+    var ctx = state && state._allocGanttDrag;
+    var segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
+    var segCount = Math.max(1, segs.length || 1);
+    var segIdx = ctx && ctx.flightId === f.id && ctx.segmentIdx != null ? ctx.segmentIdx : 0;
+    if (typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, stand, segIdx, segCount)) return false;
+    if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, standId, segIdx)) return false;
+    return true;
+  }
+  /** Undo alloc Gantt drag preview (mutated stand/segments) when drop is rejected or cancelled. */
+  function _allocGanttRevertUncommittedDragPreview(st) {
+    var ctx = st._allocGanttDrag;
+    if (!ctx || !ctx.flightId) return;
+    var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
+    var restoredFromSegSnap = false;
+    if (f && ctx.prevApronSegmentsJson) {
+      try {
+        var prevSegs = JSON.parse(ctx.prevApronSegmentsJson);
+        if (Array.isArray(prevSegs) && prevSegs.length > 0) {
+          f.apronStaySegments = prevSegs;
+          if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
+          restoredFromSegSnap = true;
+        }
+      } catch (eRestore) {}
+    }
+    if (f && !restoredFromSegSnap) {
+      f.standId = ctx.prevStandId || null;
+      if (f.token) f.token.apronId = ctx.prevApron != null ? ctx.prevApron : (ctx.prevStandId || null);
+    }
+    var ctxFid = ctx.flightId;
+    var prevSt = ctx.prevStandId;
+    st._allocGanttDrag = null;
+    st._allocGanttDropHandled = false;
+    _allocGanttPreviewLastKey = '';
+    if (f && typeof renderFlightList === 'function') {
+      var touched = [];
+      if (prevSt) touched.push(prevSt);
+      if (f.standId) touched.push(f.standId);
+      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctxFid], touchedStandIds: touched, skipGanttRefresh: true });
+    }
+    if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
+  }
   function _scheduleAllocGanttDragSchedulePreview(st, candStandId) {
     var ctxAtSchedule = st._allocGanttDrag;
     if (!ctxAtSchedule || !ctxAtSchedule.flightId) return;

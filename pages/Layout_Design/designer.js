@@ -12014,7 +12014,7 @@
     __schedRetExitDistSig = '';
     __schedRetExitDistMemo = null;
   }
-  /** Arrival 표/샘플 공통용: 활주로 CW·CCW(``both``는 CW 대용)만큼만 RET 행 유지(F2 가용 활주선 방향). */
+  /** 선택적 레이아웃 단일 방향용 F2 슬라이스(예: 폴백). 표·샘플 기본 경로는 raw + 방향 블록. */
   function filterScheduleRetStatsForArrivalOperationalLayout(raw) {
     if (!Array.isArray(raw)) return [];
     return raw.filter(function(r) {
@@ -12038,8 +12038,7 @@
   function getScheduleRetStatsAll() {
     if (__schedRetStatsBatchActive) {
       if (__schedRetStatsCached === null) {
-        const raw = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-        __schedRetStatsCached = filterScheduleRetStatsForArrivalOperationalLayout(raw);
+        __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
       }
       return __schedRetStatsCached;
     }
@@ -12048,10 +12047,71 @@
       return __schedRetExitDistMemo;
     }
     const res = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-    const filtered = filterScheduleRetStatsForArrivalOperationalLayout(res);
     __schedRetExitDistSig = sig;
-    __schedRetExitDistMemo = filtered;
-    return filtered;
+    __schedRetExitDistMemo = res;
+    return res;
+  }
+
+  /** Arrival 설정 표: 활주선 ``both`` → CW/CCW 블록, 고정 방향은 단일 블록. 행마다 ``opDir`` 기준 F2. */
+  function arrivalConfigRunwayExitTableBlocks(retStatsRaw) {
+    const raw = Array.isArray(retStatsRaw) ? retStatsRaw : [];
+    const rwIdsInData = new Set();
+    raw.forEach(function(r) {
+      if (r && r.runway && r.runway.id != null && r.runway.id !== '') rwIdsInData.add(String(r.runway.id));
+    });
+    const tws = state.taxiways || [];
+    const runwayTw = tws.filter(function(t) {
+      return t && t.pathType === 'runway' && t.id != null && rwIdsInData.has(String(t.id));
+    });
+    runwayTw.sort(function(a, b) {
+      const ra = typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById(a.id) : null;
+      const rb = typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById(b.id) : null;
+      return String(ra || a.id || '').localeCompare(String(rb || b.id || ''));
+    });
+    function baseLabelHtml(rw) {
+      return escapeHtml(String((typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById(rw.id) : null) || rw.id || ''));
+    }
+    const blocks = [];
+    const seenRw = new Set();
+    runwayTw.forEach(function(rw) {
+      seenRw.add(String(rw.id));
+      const d = normalizeRwDirectionValue(typeof getTaxiwayDirection === 'function' ? getTaxiwayDirection(rw) : 'both');
+      const base = baseLabelHtml(rw);
+      /** @type {Array<{ opDir: 'clockwise'|'counter_clockwise', suffixHtml: string }>} */
+      const dirSpecs = [];
+      if (d === 'both') {
+        dirSpecs.push({ opDir: 'clockwise', suffixHtml: ' \u2011CW' });
+        dirSpecs.push({ opDir: 'counter_clockwise', suffixHtml: ' \u2011CCW' });
+      } else if (d === 'clockwise' || d === 'counter_clockwise') {
+        dirSpecs.push({ opDir: d, suffixHtml: '' });
+      } else {
+        dirSpecs.push({ opDir: 'clockwise', suffixHtml: '' });
+      }
+      dirSpecs.forEach(function(spec) {
+        const list = raw.filter(function(r) {
+          if (!r || !r.runway || String(r.runway.id) !== String(rw.id) || !r.exit) return false;
+          return arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit, spec.opDir);
+        });
+        if (!list.length) return;
+        blocks.push({ rwId: String(rw.id), opDir: spec.opDir, displayLabelHtml: base + spec.suffixHtml, rows: list });
+      });
+    });
+    rwIdsInData.forEach(function(rid) {
+      if (seenRw.has(rid)) return;
+      const orphan = raw.filter(function(r) {
+        return r && r.runway && String(r.runway.id) === rid && r.exit;
+      });
+      const list = filterScheduleRetStatsForArrivalOperationalLayout(orphan);
+      if (!list.length) return;
+      const disp = typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById(rid) : null;
+      blocks.push({
+        rwId: rid,
+        opDir: 'clockwise',
+        displayLabelHtml: escapeHtml(String(disp || rid)),
+        rows: list,
+      });
+    });
+    return blocks;
   }
 
   function warmFlightPathsForSchedule(flights) {
@@ -12136,7 +12196,6 @@
       f.__schedRetRotRev = rev;
       return;
     }
-    const rdLayout = getRunwayOperationalDirForArrivalRetFilter2(rwObj);
     const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
     const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
     const tdMin = cfg.tdMu * 0.85;
@@ -12152,7 +12211,7 @@
     const aDec = clamp(aSample, aMin, aMax);
     const candidates = retStatsAll.filter(function(r) {
       if (!(r && r.runway && r.runway.id === arrRunwayId && r.exit)) return false;
-      if (!arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit, rdLayout)) return false;
+      if (!arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit, effDir)) return false;
       const ex = r.exit;
       if (pathOpsBlockedOpenOrIcaoAtSlot(ex, slotIdx, icaoLetter)) return false;
       if (!pathOpsRetCwCcwBranchOpenAtSlot(ex, slotIdx, effDir)) return false;
@@ -12547,10 +12606,10 @@
     if (schedFull) {
       retStatsAll = (typeof ensureArrRetRotSampled === 'function')
         ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
-        : (typeof getScheduleRetStatsAll === 'function' ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []));
+        : (typeof getScheduleRetStatsAll === 'function' ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []));
     } else {
       const dirtyFlights = flightsSorted.filter(function(f) { return dirtySet.has(f.id); });
-      retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []);
+      retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
     }
     const domOpt = (scheduleOpts && scheduleOpts.skipGanttRefresh) ? { skipGanttRefresh: true } : null;
     _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, domOpt);
@@ -12575,7 +12634,7 @@
       try {
         retStatsAll2 = (typeof getScheduleRetStatsAll === 'function')
           ? getScheduleRetStatsAll()
-          : ((typeof computeRunwayExitDistances === 'function') ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []);
+          : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
         _renderFlightListDomAndSchedule(flightsSorted, false, new Set(), new Set(), listEl, cfgEl, retStatsAll2, { skipGanttRefresh: true });
       } finally {
         endScheduleRetStatsBatch();
@@ -12780,8 +12839,11 @@
     );
     const retStats = (typeof getScheduleRetStatsAll === 'function')
       ? getScheduleRetStatsAll()
-      : (typeof computeRunwayExitDistances === 'function' ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []);
-    if (retStats && retStats.length) {
+      : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
+    const retBlocks = (typeof arrivalConfigRunwayExitTableBlocks === 'function')
+      ? arrivalConfigRunwayExitTableBlocks(retStats)
+      : [];
+    if (retBlocks.length) {
       rows.push(
         '<tr>' +
           '<td class="sticky-col" style="padding-top:10px;">Runway exits (distance from threshold)</td>' +
@@ -12790,29 +12852,14 @@
           unique.map(() => '<td></td>').join('') +
         '</tr>'
       );
-      const byRunway = new Map();
-      retStats.forEach(r => {
-        const rwId = r && r.runway && r.runway.id ? String(r.runway.id) : '';
-        const key = rwId || '__unknown__';
-        if (!byRunway.has(key)) byRunway.set(key, []);
-        byRunway.get(key).push(r);
-      });
-      function runwayGroupSortKey(rwKey) {
-        if (!rwKey || rwKey === '__unknown__') return 'zzzz__unknown__';
-        const disp = (typeof getRunwayDisplayLabelById === 'function') ? getRunwayDisplayLabelById(rwKey) : rwKey;
-        return String(disp || rwKey);
-      }
-      const runwayKeysSorted = Array.from(byRunway.keys()).sort((a, b) => runwayGroupSortKey(a).localeCompare(runwayGroupSortKey(b)));
-      runwayKeysSorted.forEach((rwKey, rwIdx) => {
-        const list = byRunway.get(rwKey) || [];
-        const rwLabel = (rwKey && rwKey !== '__unknown__')
-          ? escapeHtml(getRunwayDisplayLabelById(rwKey) || rwKey)
-          : '—';
+      retBlocks.forEach(function(blk, blkIdx) {
+        const rwLabelHtml = blk.displayLabelHtml || '—';
+        const list = blk.rows || [];
         list
           .slice()
           .sort((a, b) => (a && isFinite(a.distM) ? a.distM : 0) - (b && isFinite(b.distM) ? b.distM : 0))
-          .forEach((r, idxInRw) => {
-            void idxInRw;
+          .forEach((r, idxInBlk) => {
+            void idxInBlk;
             const counts = unique.map(info => {
               const typeKey = info.key;
               return (state.flights || []).filter(f =>
@@ -12831,7 +12878,7 @@
               '<tr>' +
                 '<td class="sticky-col">' +
                   '<span style="display:inline-flex;align-items:center;gap:4px;">' +
-                    '<span style="font-size:9px;color:#9ca3af;font-weight:700;">' + rwLabel + '</span>' +
+                    '<span style="font-size:9px;color:#9ca3af;font-weight:700;">' + rwLabelHtml + '</span>' +
                     '<span style="padding:2px 6px;border-radius:9999px;background:rgba(124,106,247,0.16);border:1px solid rgba(124,106,247,0.35);font-size:10px;color:#ede9fe;font-weight:600;">' +
                       escapeHtml(r.name) +
                     '</span>' +
@@ -12856,8 +12903,8 @@
               '</tr>'
             );
           });
-        const isLastGroup = rwIdx === runwayKeysSorted.length - 1;
-        if (!isLastGroup) {
+        const isLastBlk = blkIdx === retBlocks.length - 1;
+        if (!isLastBlk) {
           rows.push(
             '<tr>' +
               '<td class="sticky-col" style="padding:6px 0;border-bottom:1px solid rgba(107,114,128,0.35);"></td>' +

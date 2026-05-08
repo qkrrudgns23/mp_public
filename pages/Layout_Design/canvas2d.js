@@ -1,3 +1,62 @@
+    const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
+    const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
+    const aMin = Math.max(0.1, cfg.aMu * 0.85);
+    const aMax = Math.min(6, cfg.aMu * 1.15);
+    const aDec = clamp(aSample, aMin, aMax);
+    const candidates = retStatsAll.filter(function(r) {
+      if (!(r && r.runway && r.runway.id === arrRunwayId && r.exit)) return false;
+      if (!arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit, effDir)) return false;
+      const ex = r.exit;
+      if (pathOpsBlockedOpenOrIcaoAtSlot(ex, slotIdx, icaoLetter)) return false;
+      if (!pathOpsRetCwCcwBranchOpenAtSlot(ex, slotIdx, effDir)) return false;
+      return true;
+    });
+    if (!candidates.length) {
+      f.sampledArrRet = null;
+      f.arrRetFailed = true;
+      f.arrDecelMs2 = null;
+      f.__schedRetRotRev = rev;
+      return;
+    }
+    let chosen = null;
+    candidates.forEach(r => {
+      if (chosen) return;
+      const distFromTd = Math.max(0, r.distM - dTd);
+      const vAt = runwayArrSpeedAndTimeToRet(v0, aDec, distFromTd, minArrVelRwy).vAtRet;
+      if (vAt <= r.maxExitVelocity) { chosen = r; }
+    });
+    if (chosen) {
+      f.sampledArrRet = chosen.exit && chosen.exit.id || null;
+      f.arrRetFailed = false;
+      const MAX_DECEL_MS2 = 15;
+      const distFromTdChosen = Math.max(0, chosen.distM - dTd);
+      const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
+      const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
+      const vAtChosen = rtRunway.vAtRet;
+      const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
+        ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
+        : 15;
+      f.arrRunwayIdUsed = arrRunwayId;
+      f.arrTdDistM = dTd;
+      f.arrRetDistM = chosen.distM;
+      f.arrVTdMs = v0;
+      f.arrVRetInMs = vAtChosen;
+      f.arrVRetOutMs = minExitVel;
+      f.arrDecelMs2 = aDecRot;
+    } else {
+      f.sampledArrRet = null;
+      f.arrRetFailed = true;
+      f.arrDecelMs2 = null;
+    }
+    f.__schedRetRotRev = rev;
+  }
+  function ensureArrRetRotSampled(flights, forceResampleRet) {
+    const retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : [];
+    if (!Array.isArray(flights) || !flights.length) return retStatsAll;
+    if (!forceResampleRet) return retStatsAll;
+    const configByType = {};
+    flights.forEach(f => { mutRotCfgEntryForType(configByType, f); });
+    flights.forEach(function(f) {
       sampleArrRetRotForFlightIfNeeded(f, retStatsAll, configByType, true);
     });
     return retStatsAll;
@@ -341,10 +400,10 @@
     if (schedFull) {
       retStatsAll = (typeof ensureArrRetRotSampled === 'function')
         ? ensureArrRetRotSampled(flightsSorted, !!forceResampleRet)
-        : (typeof getScheduleRetStatsAll === 'function' ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []));
+        : (typeof getScheduleRetStatsAll === 'function' ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []));
     } else {
       const dirtyFlights = flightsSorted.filter(function(f) { return dirtySet.has(f.id); });
-      retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []);
+      retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
     }
     const domOpt = (scheduleOpts && scheduleOpts.skipGanttRefresh) ? { skipGanttRefresh: true } : null;
     _renderFlightListDomAndSchedule(flightsSorted, schedFull, dirtySet, standSet, listEl, cfgEl, retStatsAll, domOpt);
@@ -369,7 +428,7 @@
       try {
         retStatsAll2 = (typeof getScheduleRetStatsAll === 'function')
           ? getScheduleRetStatsAll()
-          : ((typeof computeRunwayExitDistances === 'function') ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []);
+          : ((typeof computeRunwayExitDistances === 'function') ? computeRunwayExitDistances() : []);
         _renderFlightListDomAndSchedule(flightsSorted, false, new Set(), new Set(), listEl, cfgEl, retStatsAll2, { skipGanttRefresh: true });
       } finally {
         endScheduleRetStatsBatch();
@@ -574,8 +633,11 @@
     );
     const retStats = (typeof getScheduleRetStatsAll === 'function')
       ? getScheduleRetStatsAll()
-      : (typeof computeRunwayExitDistances === 'function' ? filterScheduleRetStatsForArrivalOperationalLayout(computeRunwayExitDistances()) : []);
-    if (retStats && retStats.length) {
+      : (typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : []);
+    const retBlocks = (typeof arrivalConfigRunwayExitTableBlocks === 'function')
+      ? arrivalConfigRunwayExitTableBlocks(retStats)
+      : [];
+    if (retBlocks.length) {
       rows.push(
         '<tr>' +
           '<td class="sticky-col" style="padding-top:10px;">Runway exits (distance from threshold)</td>' +
@@ -584,29 +646,14 @@
           unique.map(() => '<td></td>').join('') +
         '</tr>'
       );
-      const byRunway = new Map();
-      retStats.forEach(r => {
-        const rwId = r && r.runway && r.runway.id ? String(r.runway.id) : '';
-        const key = rwId || '__unknown__';
-        if (!byRunway.has(key)) byRunway.set(key, []);
-        byRunway.get(key).push(r);
-      });
-      function runwayGroupSortKey(rwKey) {
-        if (!rwKey || rwKey === '__unknown__') return 'zzzz__unknown__';
-        const disp = (typeof getRunwayDisplayLabelById === 'function') ? getRunwayDisplayLabelById(rwKey) : rwKey;
-        return String(disp || rwKey);
-      }
-      const runwayKeysSorted = Array.from(byRunway.keys()).sort((a, b) => runwayGroupSortKey(a).localeCompare(runwayGroupSortKey(b)));
-      runwayKeysSorted.forEach((rwKey, rwIdx) => {
-        const list = byRunway.get(rwKey) || [];
-        const rwLabel = (rwKey && rwKey !== '__unknown__')
-          ? escapeHtml(getRunwayDisplayLabelById(rwKey) || rwKey)
-          : '—';
+      retBlocks.forEach(function(blk, blkIdx) {
+        const rwLabelHtml = blk.displayLabelHtml || '—';
+        const list = blk.rows || [];
         list
           .slice()
           .sort((a, b) => (a && isFinite(a.distM) ? a.distM : 0) - (b && isFinite(b.distM) ? b.distM : 0))
-          .forEach((r, idxInRw) => {
-            void idxInRw;
+          .forEach((r, idxInBlk) => {
+            void idxInBlk;
             const counts = unique.map(info => {
               const typeKey = info.key;
               return (state.flights || []).filter(f =>
@@ -625,7 +672,7 @@
               '<tr>' +
                 '<td class="sticky-col">' +
                   '<span style="display:inline-flex;align-items:center;gap:4px;">' +
-                    '<span style="font-size:9px;color:#9ca3af;font-weight:700;">' + rwLabel + '</span>' +
+                    '<span style="font-size:9px;color:#9ca3af;font-weight:700;">' + rwLabelHtml + '</span>' +
                     '<span style="padding:2px 6px;border-radius:9999px;background:rgba(124,106,247,0.16);border:1px solid rgba(124,106,247,0.35);font-size:10px;color:#ede9fe;font-weight:600;">' +
                       escapeHtml(r.name) +
                     '</span>' +
@@ -650,8 +697,8 @@
               '</tr>'
             );
           });
-        const isLastGroup = rwIdx === runwayKeysSorted.length - 1;
-        if (!isLastGroup) {
+        const isLastBlk = blkIdx === retBlocks.length - 1;
+        if (!isLastBlk) {
           rows.push(
             '<tr>' +
               '<td class="sticky-col" style="padding:6px 0;border-bottom:1px solid rgba(107,114,128,0.35);"></td>' +
@@ -1620,50 +1667,3 @@
   }
 
   var _allocGanttPreviewTimer = null;
-  var _allocGanttPreviewLastKey = '';
-  function _allocGanttDragStandPreviewAllowed(f, standId) {
-    if (!standId) return true;
-    var allStands = allStandsForFlightAssignment();
-    var stand = allStands.find(function(s) { return s.id === standId; });
-    if (!stand) return false;
-    var ctx = state && state._allocGanttDrag;
-    var segs = typeof normalizeFlightApronStaySegments === 'function' ? normalizeFlightApronStaySegments(f) : [];
-    var segCount = Math.max(1, segs.length || 1);
-    var segIdx = ctx && ctx.flightId === f.id && ctx.segmentIdx != null ? ctx.segmentIdx : 0;
-    if (typeof flightCanUseStandForSegment === 'function' && !flightCanUseStandForSegment(f, stand, segIdx, segCount)) return false;
-    if (typeof flightWouldOverlapStandAssignment === 'function' && flightWouldOverlapStandAssignment(f, standId, segIdx)) return false;
-    return true;
-  }
-  /** Undo alloc Gantt drag preview (mutated stand/segments) when drop is rejected or cancelled. */
-  function _allocGanttRevertUncommittedDragPreview(st) {
-    var ctx = st._allocGanttDrag;
-    if (!ctx || !ctx.flightId) return;
-    var f = st.flights.find(function(x) { return x.id === ctx.flightId; });
-    var restoredFromSegSnap = false;
-    if (f && ctx.prevApronSegmentsJson) {
-      try {
-        var prevSegs = JSON.parse(ctx.prevApronSegmentsJson);
-        if (Array.isArray(prevSegs) && prevSegs.length > 0) {
-          f.apronStaySegments = prevSegs;
-          if (typeof syncFlightApronStayAggregate === 'function') syncFlightApronStayAggregate(f);
-          restoredFromSegSnap = true;
-        }
-      } catch (eRestore) {}
-    }
-    if (f && !restoredFromSegSnap) {
-      f.standId = ctx.prevStandId || null;
-      if (f.token) f.token.apronId = ctx.prevApron != null ? ctx.prevApron : (ctx.prevStandId || null);
-    }
-    var ctxFid = ctx.flightId;
-    var prevSt = ctx.prevStandId;
-    st._allocGanttDrag = null;
-    st._allocGanttDropHandled = false;
-    _allocGanttPreviewLastKey = '';
-    if (f && typeof renderFlightList === 'function') {
-      var touched = [];
-      if (prevSt) touched.push(prevSt);
-      if (f.standId) touched.push(f.standId);
-      renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ctxFid], touchedStandIds: touched, skipGanttRefresh: true });
-    }
-    if (typeof renderFlightGantt === 'function') renderFlightGantt({ skipPathPrep: true });
-  }

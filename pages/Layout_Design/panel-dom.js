@@ -968,7 +968,7 @@
     __schedRetExitDistSig = '';
     __schedRetExitDistMemo = null;
   }
-  /** Arrival 표/샘플 공통용: 활주로 CW·CCW(``both``는 CW 대용)만큼만 RET 행 유지(F2 가용 활주선 방향). */
+  /** 선택적 레이아웃 단일 방향용 F2 슬라이스(예: 폴백). 표·샘플 기본 경로는 raw + 방향 블록. */
   function filterScheduleRetStatsForArrivalOperationalLayout(raw) {
     if (!Array.isArray(raw)) return [];
     return raw.filter(function(r) {
@@ -992,8 +992,7 @@
   function getScheduleRetStatsAll() {
     if (__schedRetStatsBatchActive) {
       if (__schedRetStatsCached === null) {
-        const raw = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-        __schedRetStatsCached = filterScheduleRetStatsForArrivalOperationalLayout(raw);
+        __schedRetStatsCached = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
       }
       return __schedRetStatsCached;
     }
@@ -1002,10 +1001,71 @@
       return __schedRetExitDistMemo;
     }
     const res = typeof computeRunwayExitDistances === 'function' ? computeRunwayExitDistances() : [];
-    const filtered = filterScheduleRetStatsForArrivalOperationalLayout(res);
     __schedRetExitDistSig = sig;
-    __schedRetExitDistMemo = filtered;
-    return filtered;
+    __schedRetExitDistMemo = res;
+    return res;
+  }
+
+  /** Arrival 설정 표: 활주선 ``both`` → CW/CCW 블록, 고정 방향은 단일 블록. 행마다 ``opDir`` 기준 F2. */
+  function arrivalConfigRunwayExitTableBlocks(retStatsRaw) {
+    const raw = Array.isArray(retStatsRaw) ? retStatsRaw : [];
+    const rwIdsInData = new Set();
+    raw.forEach(function(r) {
+      if (r && r.runway && r.runway.id != null && r.runway.id !== '') rwIdsInData.add(String(r.runway.id));
+    });
+    const tws = state.taxiways || [];
+    const runwayTw = tws.filter(function(t) {
+      return t && t.pathType === 'runway' && t.id != null && rwIdsInData.has(String(t.id));
+    });
+    runwayTw.sort(function(a, b) {
+      const ra = typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById(a.id) : null;
+      const rb = typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById(b.id) : null;
+      return String(ra || a.id || '').localeCompare(String(rb || b.id || ''));
+    });
+    function baseLabelHtml(rw) {
+      return escapeHtml(String((typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById(rw.id) : null) || rw.id || ''));
+    }
+    const blocks = [];
+    const seenRw = new Set();
+    runwayTw.forEach(function(rw) {
+      seenRw.add(String(rw.id));
+      const d = normalizeRwDirectionValue(typeof getTaxiwayDirection === 'function' ? getTaxiwayDirection(rw) : 'both');
+      const base = baseLabelHtml(rw);
+      /** @type {Array<{ opDir: 'clockwise'|'counter_clockwise', suffixHtml: string }>} */
+      const dirSpecs = [];
+      if (d === 'both') {
+        dirSpecs.push({ opDir: 'clockwise', suffixHtml: ' \u2011CW' });
+        dirSpecs.push({ opDir: 'counter_clockwise', suffixHtml: ' \u2011CCW' });
+      } else if (d === 'clockwise' || d === 'counter_clockwise') {
+        dirSpecs.push({ opDir: d, suffixHtml: '' });
+      } else {
+        dirSpecs.push({ opDir: 'clockwise', suffixHtml: '' });
+      }
+      dirSpecs.forEach(function(spec) {
+        const list = raw.filter(function(r) {
+          if (!r || !r.runway || String(r.runway.id) !== String(rw.id) || !r.exit) return false;
+          return arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit, spec.opDir);
+        });
+        if (!list.length) return;
+        blocks.push({ rwId: String(rw.id), opDir: spec.opDir, displayLabelHtml: base + spec.suffixHtml, rows: list });
+      });
+    });
+    rwIdsInData.forEach(function(rid) {
+      if (seenRw.has(rid)) return;
+      const orphan = raw.filter(function(r) {
+        return r && r.runway && String(r.runway.id) === rid && r.exit;
+      });
+      const list = filterScheduleRetStatsForArrivalOperationalLayout(orphan);
+      if (!list.length) return;
+      const disp = typeof getRunwayDisplayLabelById === 'function' ? getRunwayDisplayLabelById(rid) : null;
+      blocks.push({
+        rwId: rid,
+        opDir: 'clockwise',
+        displayLabelHtml: escapeHtml(String(disp || rid)),
+        rows: list,
+      });
+    });
+    return blocks;
   }
 
   function warmFlightPathsForSchedule(flights) {
@@ -1090,7 +1150,6 @@
       f.__schedRetRotRev = rev;
       return;
     }
-    const rdLayout = getRunwayOperationalDirForArrivalRetFilter2(rwObj);
     const minArrVelRwy = getMinArrVelocityMpsForRunwayId(arrRunwayId);
     const tdSample = sampleNormal(cfg.tdMu, cfg.tdSigma);
     const tdMin = cfg.tdMu * 0.85;
@@ -1099,62 +1158,3 @@
     const vSample = sampleNormal(cfg.vMu, cfg.vSigma);
     const vMin = cfg.vMu * 0.85;
     const vMax = cfg.vMu * 1.15;
-    const v0 = clamp(vSample, Math.max(0, vMin), Math.max(0, vMax));
-    const aSample = sampleNormal(cfg.aMu, cfg.aSigma);
-    const aMin = Math.max(0.1, cfg.aMu * 0.85);
-    const aMax = Math.min(6, cfg.aMu * 1.15);
-    const aDec = clamp(aSample, aMin, aMax);
-    const candidates = retStatsAll.filter(function(r) {
-      if (!(r && r.runway && r.runway.id === arrRunwayId && r.exit)) return false;
-      if (!arrivalRetPassesFilter2RunwayAvailableDir(r.runway, r.exit, rdLayout)) return false;
-      const ex = r.exit;
-      if (pathOpsBlockedOpenOrIcaoAtSlot(ex, slotIdx, icaoLetter)) return false;
-      if (!pathOpsRetCwCcwBranchOpenAtSlot(ex, slotIdx, effDir)) return false;
-      return true;
-    });
-    if (!candidates.length) {
-      f.sampledArrRet = null;
-      f.arrRetFailed = true;
-      f.arrDecelMs2 = null;
-      f.__schedRetRotRev = rev;
-      return;
-    }
-    let chosen = null;
-    candidates.forEach(r => {
-      if (chosen) return;
-      const distFromTd = Math.max(0, r.distM - dTd);
-      const vAt = runwayArrSpeedAndTimeToRet(v0, aDec, distFromTd, minArrVelRwy).vAtRet;
-      if (vAt <= r.maxExitVelocity) { chosen = r; }
-    });
-    if (chosen) {
-      f.sampledArrRet = chosen.exit && chosen.exit.id || null;
-      f.arrRetFailed = false;
-      const MAX_DECEL_MS2 = 15;
-      const distFromTdChosen = Math.max(0, chosen.distM - dTd);
-      const aDecRot = Math.min(aDec, MAX_DECEL_MS2);
-      const rtRunway = runwayArrSpeedAndTimeToRet(v0, aDecRot, distFromTdChosen, minArrVelRwy);
-      const vAtChosen = rtRunway.vAtRet;
-      const minExitVel = (typeof chosen.minExitVelocity === 'number' && isFinite(chosen.minExitVelocity) && chosen.minExitVelocity > 0)
-        ? Math.min(chosen.minExitVelocity, chosen.maxExitVelocity || chosen.minExitVelocity)
-        : 15;
-      f.arrRunwayIdUsed = arrRunwayId;
-      f.arrTdDistM = dTd;
-      f.arrRetDistM = chosen.distM;
-      f.arrVTdMs = v0;
-      f.arrVRetInMs = vAtChosen;
-      f.arrVRetOutMs = minExitVel;
-      f.arrDecelMs2 = aDecRot;
-    } else {
-      f.sampledArrRet = null;
-      f.arrRetFailed = true;
-      f.arrDecelMs2 = null;
-    }
-    f.__schedRetRotRev = rev;
-  }
-  function ensureArrRetRotSampled(flights, forceResampleRet) {
-    const retStatsAll = (typeof getScheduleRetStatsAll === 'function') ? getScheduleRetStatsAll() : [];
-    if (!Array.isArray(flights) || !flights.length) return retStatsAll;
-    if (!forceResampleRet) return retStatsAll;
-    const configByType = {};
-    flights.forEach(f => { mutRotCfgEntryForType(configByType, f); });
-    flights.forEach(function(f) {
