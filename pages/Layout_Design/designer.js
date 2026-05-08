@@ -3759,15 +3759,21 @@
     });
     let bodyLines = '';
     if (events.length) {
-      bodyLines = events
-        .map(function(ev) {
-          const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
-          const reg0 =
-            ev.labels && ev.labels.length ? String(ev.labels[0]).trim() : '';
-          const reg = reg0 || '—';
-          return timeStr + '  ' + reg;
-        })
-        .join('\n');
+      const chunks = [];
+      for (let ei = 0; ei < events.length; ei++) {
+        const ev = events[ei];
+        const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
+        const lbls = (ev.labels && ev.labels.length) ? ev.labels : [];
+        let pushedAny = false;
+        for (let li = 0; li < lbls.length; li++) {
+          const reg = String(lbls[li] || '').trim();
+          if (!reg) continue;
+          chunks.push(timeStr + '  ' + reg);
+          pushedAny = true;
+        }
+        if (!pushedAny) chunks.push(timeStr + '  —');
+      }
+      bodyLines = chunks.join('\n');
     } else if (rc > 0) {
       bodyLines =
         'Resolves: ' + rc + '  (no ghost ticks in positions)';
@@ -3796,7 +3802,17 @@
       const dot = document.createElement('span');
       dot.className = 'sim-slider-deadlock-dot';
       dot.style.left = Math.max(0, Math.min(100, pct)) + '%';
-      dot.setAttribute('title', 'Deadlock @ ' + formatTotalSecondsToHHMMSS(t) + ' — click to jump');
+      dot.setAttribute(
+        'title',
+        'Deadlock @ ' +
+          formatTotalSecondsToHHMMSS(t) +
+          (ev.labels && ev.labels.length
+            ? ' — ' + ev.labels.map(function(u) {
+              return String(u || '').trim();
+            }).filter(Boolean).join(', ')
+            : '') +
+          ' — click to jump'
+      );
       dot.setAttribute('role', 'button');
       dot.setAttribute('tabindex', '0');
       dot.addEventListener('click', function(e) {

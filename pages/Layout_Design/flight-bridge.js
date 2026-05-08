@@ -448,3 +448,40 @@
     });
     const entries = Array.from(byT.entries()).sort(function(a, b) { return a[0] - b[0]; });
     const events = entries.map(function(e) {
+      const tR = e[0];
+      const bx = e[1];
+      const ev = { t_abs: tR, labels: bx.labels.slice() };
+      const fw = deadlockFocusWorldMeanAtRoundedTime(positions, flights, tR);
+      if (fw && isFinite(fw.x) && isFinite(fw.y)) {
+        ev.focusWorldX = fw.x;
+        ev.focusWorldY = fw.y;
+      }
+      return ev;
+    });
+    let bodyLines = '';
+    if (events.length) {
+      const chunks = [];
+      for (let ei = 0; ei < events.length; ei++) {
+        const ev = events[ei];
+        const timeStr = formatTotalSecondsToHHMMSS(ev.t_abs);
+        const lbls = (ev.labels && ev.labels.length) ? ev.labels : [];
+        let pushedAny = false;
+        for (let li = 0; li < lbls.length; li++) {
+          const reg = String(lbls[li] || '').trim();
+          if (!reg) continue;
+          chunks.push(timeStr + '  ' + reg);
+          pushedAny = true;
+        }
+        if (!pushedAny) chunks.push(timeStr + '  —');
+      }
+      bodyLines = chunks.join('\n');
+    } else if (rc > 0) {
+      bodyLines =
+        'Resolves: ' + rc + '  (no ghost ticks in positions)';
+    }
+    return {
+      events: events,
+      bodyLines: bodyLines,
+      resolveCount: rc,
+    };
+  }

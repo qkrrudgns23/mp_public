@@ -211073,8 +211073,8 @@
     "designerPageUpdateFresh": true,
     "hasSimulationPlayback": true,
     "simPlaybackEndCapSec": null,
-    "simWindowStartSec": 34024,
-    "simWindowEndSec": 39358,
+    "simWindowStartSec": 24600,
+    "simWindowEndSec": 47820,
     "mapTypeMode": "normal",
     "heatmapTrafficPhases": {
       "rotArr": true,
@@ -212041,12 +212041,6 @@
           "start": 28760,
           "end": 28845
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 28760,
-          "end": 28845
-        }
       ]
     },
     "id_pksmkid0o": {
@@ -212748,12 +212742,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 29075,
-          "end": 29130
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 29075,
           "end": 29130
@@ -214431,12 +214419,6 @@
           "start": 29280,
           "end": 29390
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 29280,
-          "end": 29390
-        }
       ]
     },
     "id_jq12uf5il": {
@@ -215529,12 +215511,6 @@
           "start": 29490,
           "end": 29575
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 29490,
-          "end": 29575
-        }
       ]
     },
     "id_hin3ygb2c": {
@@ -216368,12 +216344,6 @@
           "start": 29610,
           "end": 29775
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 29610,
-          "end": 29775
-        }
       ]
     },
     "id_hlxuagg8h": {
@@ -217175,12 +217145,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 29755,
-          "end": 29795
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 29755,
           "end": 29795
@@ -218144,12 +218108,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 29960,
-          "end": 30080
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 29960,
           "end": 30080
@@ -219329,12 +219287,6 @@
           "start": 30245,
           "end": 30360
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 30245,
-          "end": 30360
-        }
       ]
     },
     "id_iqnveq2f5": {
@@ -220244,12 +220196,6 @@
           "start": 30545,
           "end": 30605
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 30545,
-          "end": 30605
-        }
       ]
     },
     "id_f8uzkh31d": {
@@ -221045,12 +220991,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 30535,
-          "end": 30620
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 30535,
           "end": 30620
@@ -223116,12 +223056,6 @@
           "start": 30970,
           "end": 31045
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 30970,
-          "end": 31045
-        }
       ]
     },
     "id_sqj1r4d4v": {
@@ -223900,12 +223834,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 31175,
-          "end": 31200
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 31175,
           "end": 31200
@@ -224727,12 +224655,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 31380,
-          "end": 31465
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 31380,
           "end": 31465
@@ -225891,12 +225813,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 31745,
-          "end": 31830
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 31745,
           "end": 31830
@@ -228396,12 +228312,6 @@
           "start": 32270,
           "end": 32370
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 32270,
-          "end": 32370
-        }
       ]
     },
     "id_1q9omj25r": {
@@ -229878,12 +229788,6 @@
           "start": 32475,
           "end": 32565
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 32475,
-          "end": 32565
-        }
       ]
     },
     "id_8hswavqap": {
@@ -231242,12 +231146,6 @@
           "start": 32850,
           "end": 32910
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 32850,
-          "end": 32910
-        }
       ]
     },
     "id_1t738s1p6": {
@@ -232218,12 +232116,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 32930,
-          "end": 33030
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 32930,
           "end": 33030
@@ -233743,16 +233635,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 29275,
-          "end": 29420
-        },
-        {
-          "start": 33690,
-          "end": 33775
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 29275,
           "end": 29420
@@ -235377,12 +235259,6 @@
           "start": 33490,
           "end": 33575
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 33490,
-          "end": 33575
-        }
       ]
     },
     "id_8lxnnhcf8": {
@@ -236184,12 +236060,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 33390,
-          "end": 33520
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 33390,
           "end": 33520
@@ -237629,16 +237499,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 29875,
-          "end": 29950
-        },
-        {
-          "start": 34170,
-          "end": 34210
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 29875,
           "end": 29950
@@ -239092,12 +238952,6 @@
           "start": 33825,
           "end": 33910
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 33825,
-          "end": 33910
-        }
       ]
     },
     "id_lxtyjeej3": {
@@ -240124,12 +239978,6 @@
           "start": 34040,
           "end": 34090
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 34040,
-          "end": 34090
-        }
       ]
     },
     "id_plkgi4hfr": {
@@ -240921,12 +240769,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 34245,
-          "end": 34370
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 34245,
           "end": 34370
@@ -242127,12 +241969,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 34410,
-          "end": 34505
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 34410,
           "end": 34505
@@ -243621,12 +243457,6 @@
           "start": 34680,
           "end": 34770
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 34680,
-          "end": 34770
-        }
       ]
     },
     "id_feqtmy6ze": {
@@ -244620,12 +244450,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 34820,
-          "end": 34905
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 34820,
           "end": 34905
@@ -245632,12 +245456,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 35120,
-          "end": 35230
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 35120,
           "end": 35230
@@ -246894,12 +246712,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 35300,
-          "end": 35385
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 35300,
           "end": 35385
@@ -248172,12 +247984,6 @@
           "start": 35350,
           "end": 35430
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 35350,
-          "end": 35430
-        }
       ]
     },
     "id_fu6taa88p": {
@@ -248992,12 +248798,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 35550,
-          "end": 35610
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 35550,
           "end": 35610
@@ -250019,12 +249819,6 @@
           "start": 35675,
           "end": 35740
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 35675,
-          "end": 35740
-        }
       ]
     },
     "id_0gdt92c46": {
@@ -250862,12 +250656,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 35785,
-          "end": 35925
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 35785,
           "end": 35925
@@ -252043,12 +251831,6 @@
           "start": 36095,
           "end": 36195
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 36095,
-          "end": 36195
-        }
       ]
     },
     "id_ux5cyvjhl": {
@@ -252978,12 +252760,6 @@
           "start": 36060,
           "end": 36120
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 36060,
-          "end": 36120
-        }
       ]
     },
     "id_c9getes0h": {
@@ -253615,12 +253391,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 36165,
-          "end": 36240
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 36165,
           "end": 36240
@@ -254344,12 +254114,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 36530,
-          "end": 36665
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 36530,
           "end": 36665
@@ -255763,12 +255527,6 @@
           "start": 36895,
           "end": 36975
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 36895,
-          "end": 36975
-        }
       ]
     },
     "id_o4znd9ycj": {
@@ -256764,12 +256522,6 @@
           "start": 36850,
           "end": 36935
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 36850,
-          "end": 36935
-        }
       ]
     },
     "id_1p8m3z0of": {
@@ -257715,12 +257467,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 37030,
-          "end": 37095
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 37030,
           "end": 37095
@@ -259061,12 +258807,6 @@
           "start": 37465,
           "end": 37530
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 37465,
-          "end": 37530
-        }
       ]
     },
     "id_b6a17ye7z": {
@@ -260012,12 +259752,6 @@
           "start": 37420,
           "end": 37530
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 37420,
-          "end": 37530
-        }
       ]
     },
     "id_vyat7ue1s": {
@@ -260880,12 +260614,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 37470,
-          "end": 37490
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 37470,
           "end": 37490
@@ -262756,12 +262484,6 @@
           "start": 38345,
           "end": 38440
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 38345,
-          "end": 38440
-        }
       ]
     },
     "id_0l6rms5xz": {
@@ -264135,12 +263857,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 38115,
-          "end": 38225
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 38115,
           "end": 38225
@@ -265747,12 +265463,6 @@
           "start": 38370,
           "end": 38470
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 38370,
-          "end": 38470
-        }
       ]
     },
     "id_ryo5pvqck": {
@@ -266392,12 +266102,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 38190,
-          "end": 38290
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 38190,
           "end": 38290
@@ -267345,12 +267049,6 @@
           "start": 38680,
           "end": 38765
         }
-      ],
-      "__tugIntervals": [
-        {
-          "start": 38680,
-          "end": 38765
-        }
       ]
     },
     "id_8wz647fbf": {
@@ -268034,12 +267732,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 38645,
-          "end": 38710
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 38645,
           "end": 38710
@@ -268943,12 +268635,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 38900,
-          "end": 39010
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 38900,
           "end": 39010
@@ -270226,12 +269912,6 @@
         }
       ],
       "tug_intervals": [
-        {
-          "start": 39185,
-          "end": 39280
-        }
-      ],
-      "__tugIntervals": [
         {
           "start": 39185,
           "end": 39280
@@ -312774,7 +312454,7 @@
         "focusWorldY": 1688.583
       }
     ],
-    "bodyLines": "09:30:35  OLT18575\n10:45:20  HBZ28600",
+    "bodyLines": "09:30:35  OLT18575\n09:30:35  MNF10404\n10:45:20  HBZ28600",
     "resolveCount": 3
   },
   "simPathGraph": null
