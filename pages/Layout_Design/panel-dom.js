@@ -463,7 +463,8 @@
         '<th>Arr Building</th>' +
         '<th>Dep Building</th>' +
         apHeads.join('') +
-        '<th class="flight-th-mixed">Lookahead_taxi</th>' +
+        '<th class="flight-th-mixed">Lookahead_arr</th>' +
+        '<th class="flight-th-mixed">Lookahead_dep</th>' +
         '<th>Dep Rw</th>' +
         sHeads.join('') +
         '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
@@ -581,9 +582,14 @@
       const lab = seg ? flightScheduleStandLabelById(seg.standId) : '—';
       return '<td class="flight-td-readonly" data-empty="' + (seg ? '0' : '1') + '">' + escapeHtml(lab) + '</td>';
     }).join('');
-    let laTaxiVal = 9;
-    if (f.lookaheadTaxi != null && f.lookaheadTaxi !== '' && isFinite(Number(f.lookaheadTaxi))) {
-      laTaxiVal = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadTaxi))));
+    if (typeof window.ensureFlightLookaheadArrDepFlight === 'function') window.ensureFlightLookaheadArrDepFlight(f);
+    let laArrVal = 9;
+    if (f.lookaheadArr != null && f.lookaheadArr !== '' && isFinite(Number(f.lookaheadArr))) {
+      laArrVal = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadArr))));
+    }
+    let laDepVal = 9;
+    if (f.lookaheadDep != null && f.lookaheadDep !== '' && isFinite(Number(f.lookaheadDep))) {
+      laDepVal = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadDep))));
     }
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
@@ -603,7 +609,8 @@
         '<td class="flight-td-readonly">' + arrBuildingRead + '</td>' +
         '<td class="flight-td-readonly">' +         depBuildingRead + '</td>' +
         apCells +
-        '<td class="flight-td-readonly flight-td-lookahead-taxi">' + String(laTaxiVal) + '</td>' +
+        '<td class="flight-td-readonly flight-td-lookahead-arr">' + String(laArrVal) + '</td>' +
+        '<td class="flight-td-readonly flight-td-lookahead-dep">' + String(laDepVal) + '</td>' +
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
         sCells +
         '<td class="flight-td-time flight-col-e flight-col-e-start">' + escapeHtml(eldtStr) + '</td>' +

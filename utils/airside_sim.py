@@ -31,7 +31,8 @@ consecutive ``positions`` intervals inside each VTT window whose start sample ha
 (``sobtMin - sibtMin`` when both set, else ``dwellMin``), not ELDT+nominal taxi-in.
 Between heavy control ticks, a full reservation rebook runs every ``LIGHT_RESERVATION_RETRY_INTERVAL_SEC`` so agents
 re-check stand pipeline and departure-runway resources and regain ``PROCEED`` when slots free (same rules as ``can_reserve_path``).
-Per-flight lookahead edge count for Dep_taxi and Arr_taxi (JSON ``lookaheadTaxi``); billed reservation depth by regime (runway, Dep_taxi, Arr_taxi);
+Per-flight lookahead edge count: JSON ``lookaheadArr`` / ``lookaheadDep`` for Arr_taxi vs Dep_taxi
+(legacy single field ``lookaheadTaxi`` applies to both when the split keys are absent); billed reservation depth by regime (runway, Dep_taxi, Arr_taxi);
 ``apron_taxiway`` edges use billed depth where those edges
 add no slot; consecutive ``taxiway`` edges still share one slot. Physical edges remain reserved along the path.
 Each apron stand has configurable capacity (layout ``pbbStands[].capacity`` or ``defaultApronStandCapacity``);
@@ -148,7 +149,7 @@ STOT_POST_BUFFER_SEC = 3_600.0
 _LOG = logging.getLogger(__name__)
 
 TAXI_SPEED_MPS = 15.0
-# Apron link edges (PBB/terminal ↔ taxiway) default taxi speed; optional per-link ``avgMoveVelocity`` overrides.
+# Leadin Taxiway link edges (PBB/terminal ↔ taxiway) default taxi speed; optional per-link ``avgMoveVelocity`` overrides.
 APRON_LINK_SPEED_MPS = 1.5
 MIN_LANDING_VELOCITY_MS = 15.0
 MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS = 15.0
@@ -215,6 +216,9 @@ NODE_OCCUPANCY_RADIUS_M = 12.0
 # the runway polyline at the hold position is on the order of standard runway-holding offsets
 # (roughly 50 m for typical rapid-exit taxiway angles).
 DEP_RUNWAY_HOLD_BUFFER_M = 100.0
+# Upper bound (s) on each inner integration step inside ``move_agent``; smaller steps cost more CPU
+# but track per-segment v(s) more closely during acceleration/deceleration.
+MOVE_AGENT_MICRO_STEP_SEC = 0.2
 
 # Cleared at the start of each ``run_simulation``; keyed by layout object id + path-search params.
 _PATH_GRAPH_BUILD_CACHE: Dict[Tuple[int, str, float, float, float, float, bool, bool], PathGraph] = {}
@@ -684,7 +688,8 @@ class Flight:
     eldt_anchor_sec: Optional[float] = None
     eldt_raw_sec: Optional[float] = None
     dwell_sec: float = 0.0
-    lookahead_taxi_edges: int = DEFAULT_LOOKAHEAD_TAXI_EDGES
+    lookahead_arr_edges: int = DEFAULT_LOOKAHEAD_TAXI_EDGES
+    lookahead_dep_edges: int = DEFAULT_LOOKAHEAD_TAXI_EDGES
     # Apron in-blocks: Arr_taxi → Dep_taxi segment transition (arrival complete at stand).
     actual_apron_inblocks_abs_sec: Optional[float] = None
     # Apron off-blocks: first Dep_taxi motion (pushback / taxi-out start from stand).
@@ -2074,8 +2079,8 @@ def _pushback_apron_plus_one_taxi_route(
     leg_ey: float,
 ) -> Optional[Tuple[List[str], List[int], PathGraph]]:
     """
-    Force pushback to the apron-link prefix plus at most one taxiway edge instead of
-    letting shortest-path add extra taxiway edges or shortcut through another apron link.
+    Force pushback to the Leadin Taxiway-link prefix plus at most one taxiway edge instead of
+    letting shortest-path add extra taxiway edges or shortcut through another Leadin Taxiway link.
     """
     token = flight.get("token") if isinstance(flight.get("token"), dict) else {}
     dep_rwy = flight.get("depRunwayId") or token.get("depRunwayId")
@@ -2347,7 +2352,7 @@ def extract_point_to_paths(
 
 @dataclass
 class LayoutLinkVelocityCaches:
-    """Pre-layout dict: taxi/runway link speeds + apron link speeds (see ``layout_link_velocity_cache_for_layout``)."""
+    """Pre-layout dict: taxi/runway link speeds + Leadin Taxiway link speeds (see ``layout_link_velocity_cache_for_layout``)."""
 
     taxi_runway_velocity_mps: Dict[str, float]
     taxi_runway_velocity_invalid_ids: Set[str]
@@ -3452,7 +3457,7 @@ def move_agent(
         if agent.segment_path_types and str(agent.segment_path_types[0] or "") == "runway_taxiway":
             if ph == PHASE_LANDING or ph in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
                 v_now = max(v_now, MIN_ARR_RUNWAY_TAXIWAY_VELOCITY_MS)
-        dt_step = min(0.05, rem_t)
+        dt_step = min(float(MOVE_AGENT_MICRO_STEP_SEC), rem_t)
         ds = v_now * dt_step
         dt_used = dt_step
         if ds >= room_m:
@@ -6932,16 +6937,35 @@ def _destination_stand_history_snap(
     return (sid, cap, phys_others, booked, cd, allow)
 
 
-def _lookahead_taxi_edges_from_fobj(fobj: Dict[str, Any]) -> int:
-    raw = fobj.get("lookaheadTaxi", fobj.get("lookahead_taxi"))
+def _parse_lookahead_edge_count_raw(raw: object) -> Optional[int]:
     if raw is None:
-        return int(DEFAULT_LOOKAHEAD_TAXI_EDGES)
+        return None
     try:
         n = int(raw)
     except (TypeError, ValueError):
-        return int(DEFAULT_LOOKAHEAD_TAXI_EDGES)
+        return None
     cap = int(LOOKAHEAD_TAXI_EDGES_CAP)
     return max(0, min(n, cap))
+
+
+def _lookahead_arr_dep_edges_from_fobj(fobj: Dict[str, Any]) -> Tuple[int, int]:
+    """Arr_taxi vs Dep_taxi lookahead counts; legacy ``lookaheadTaxi`` fills both when split keys omit."""
+    def _pick(keys: Tuple[str, ...]) -> Optional[int]:
+        for k in keys:
+            v = _parse_lookahead_edge_count_raw(fobj.get(k))
+            if v is not None:
+                return v
+        return None
+
+    legacy = _pick(("lookaheadTaxi", "lookahead_taxi"))
+    arr_o = _pick(("lookaheadArr", "lookahead_arr"))
+    dep_o = _pick(("lookaheadDep", "lookahead_dep"))
+    defb = int(DEFAULT_LOOKAHEAD_TAXI_EDGES)
+    base = legacy if legacy is not None else defb
+    return (
+        arr_o if arr_o is not None else base,
+        dep_o if dep_o is not None else base,
+    )
 
 
 def _lookahead_and_reservation_depth_for_agent(
@@ -6952,9 +6976,10 @@ def _lookahead_and_reservation_depth_for_agent(
     stand_cooldown_index: Optional[StandCooldownIndex] = None,
 ) -> Tuple[int, int]:
     """(lookahead_edge_count, billed_reservation_depth) by runway / Dep_taxi / Arr_taxi."""
-    la_taxi = max(0, int(agent.lookahead_taxi_edges))
+    la_arr = max(0, int(agent.lookahead_arr_edges))
+    la_dep = max(0, int(agent.lookahead_dep_edges))
     if not agent.edge_phases:
-        return (la_taxi, RESERV_DEPTH_ARR_TAXI)
+        return (la_arr, RESERV_DEPTH_ARR_TAXI)
     ph0 = str(agent.edge_phases[0])
     pt0 = (
         agent.segment_path_types_norm[0]
@@ -6971,12 +6996,12 @@ def _lookahead_and_reservation_depth_for_agent(
     if ph0 in (PHASE_HOLDING_LINEUP, PHASE_LINEUP_DEPARTURE):
         if on_runway_seg:
             return (LOOKAHEAD_RUNWAY, RESERV_DEPTH_RUNWAY)
-        return (la_taxi, RESERV_DEPTH_DEP_TAXI)
+        return (la_dep, RESERV_DEPTH_DEP_TAXI)
     if ph0 in (PHASE_PUSHBACK, PHASE_DEP_TAXI):
-        return (la_taxi, RESERV_DEPTH_DEP_TAXI)
+        return (la_dep, RESERV_DEPTH_DEP_TAXI)
     if ph0 in (PHASE_ARR_TAXI, PHASE_ARR_TAXI_TEMP):
-        return (la_taxi, RESERV_DEPTH_ARR_TAXI)
-    return (la_taxi, RESERV_DEPTH_ARR_TAXI)
+        return (la_arr, RESERV_DEPTH_ARR_TAXI)
+    return (la_arr, RESERV_DEPTH_ARR_TAXI)
 
 
 def get_lookahead_edges(
@@ -9356,7 +9381,7 @@ def run_simulation(
             _arr_rid = str(arr_rwy_o).strip() if arr_rwy_o else ""
             dep_rwy_o = fobj.get("depRunwayId") or token_o.get("depRunwayId")
             _dep_rid = str(dep_rwy_o).strip() if dep_rwy_o else ""
-            _la_taxi = _lookahead_taxi_edges_from_fobj(_fobj_dict)
+            _la_arr_e, _la_dep_e = _lookahead_arr_dep_edges_from_fobj(_fobj_dict)
             ag_new = Flight(
                 id=fid,
                 registration=_flight_opt_str(_fobj_dict, "reg", "registration"),
@@ -9371,7 +9396,8 @@ def run_simulation(
                 eldt_anchor_sec=anchor_use,
                 eldt_raw_sec=float(anchor_raw) if anchor_raw is not None else None,
                 dwell_sec=float(dwell_s),
-                lookahead_taxi_edges=_la_taxi,
+                lookahead_arr_edges=_la_arr_e,
+                lookahead_dep_edges=_la_dep_e,
                 apron_stand_id=(
                     str(_apron_segments[0].get("standId")).strip()
                     if _apron_segments and _apron_segments[0].get("standId") is not None and str(_apron_segments[0].get("standId")).strip()

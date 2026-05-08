@@ -593,6 +593,7 @@
     simPlaybackDockVisible: false,
     /** Derived after Pro Sim: first deadlockGhost sample per flight; slider markers + left dock banner. */
     simDeadlockGhostPlayback: { events: [], bodyLines: '', resolveCount: 0 },
+    deadlockMitigateBannerRerunHint: false,
     /** flight_id keys with any deadlock ghost in last compact_v2 playback (survives timeline eviction). */
     deadlockFlightIdsFromLastSim: Object.create(null),
     showGrid: GRID_VISIBLE_DEFAULT,
@@ -629,7 +630,7 @@
     apronLinkTemp: null,
     apronLinkMidpoints: [],
     apronLinkPointerWorld: null,
-    /** Map apron link id -> true: draw taxiway×apron polyline junction overlay until path graph sync (no full graph rebuild). */
+    /** Map Leadin Taxiway link id -> true: draw taxiway junction overlay until path graph sync (no full graph rebuild). */
     apronLinkJunctionOverlayDirtyIds: null,
     layoutPathDrawPointer: null,
     hoverCell: null,

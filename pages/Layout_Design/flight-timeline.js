@@ -239,10 +239,10 @@
   function getApronLinkDefaultName(linkOrId) {
     const linkId = (typeof linkOrId === 'object' && linkOrId) ? linkOrId.id : linkOrId;
     const idx = (state.apronLinks || []).findIndex(function(lk) { return lk && lk.id === linkId; });
-    return 'Apron Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
+    return 'Leadin Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
   }
   function getApronLinkDisplayName(link) {
-    if (!link) return 'Apron Taxiway';
+    if (!link) return 'Leadin Taxiway';
     return (link.name && String(link.name).trim()) || getApronLinkDefaultName(link);
   }
   function ensureUniqueApronLinkName(rawName, currentId) {

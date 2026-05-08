@@ -657,8 +657,8 @@ def _build_layout_mode_tabs_html() -> tuple[str, str]:
             _layout_mode_button_html("runwayPath", "Runway", "layout_mode_runway.svg"),
             _layout_mode_button_html("runwayTaxiway", "Runway Taxiway", "layout_mode_runway_taxiway.svg"),
             _layout_mode_button_html("taxiway", "Taxiway", "layout_mode_taxiway.svg"),
+            _layout_mode_button_html("apronTaxiway", "Leadin Taxiway", "layout_mode_apron_taxiway.svg"),
             _layout_mode_button_html("holdingPoint", "Holding Point", "layout_mode_holding_point.svg"),
-            _layout_mode_button_html("edge", "Edge", "layout_mode_edge.svg"),
         ]
     )
     secondary_html = "".join(
@@ -667,7 +667,7 @@ def _build_layout_mode_tabs_html() -> tuple[str, str]:
             _layout_mode_button_html("pbb", "Contact Stand", "layout_mode_pbb.svg"),
             _layout_mode_button_html("remote", "Remote Stand", "layout_mode_remote.svg"),
             _layout_mode_button_html("tempStand", "Temp Stand", "layout_mode_temp_stand.svg"),
-            _layout_mode_button_html("apronTaxiway", "Apron Taxiway", "layout_mode_apron_taxiway.svg"),
+            _layout_mode_button_html("edge", "Edge", "layout_mode_edge.svg"),
             _layout_mode_button_html("marker", "Marker", "layout_mode_marker.svg"),
         ]
     )

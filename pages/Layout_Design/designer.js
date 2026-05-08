@@ -61,6 +61,21 @@
   }
   window.flightBlockedLikeNoWay = flightBlockedLikeNoWay;
 
+  function ensureFlightLookaheadArrDepFlight(f) {
+    if (!f || typeof f !== 'object') return;
+    function clampLA(v) {
+      if (v == null || v === '' || !isFinite(Number(v))) return null;
+      return Math.max(0, Math.min(200, Math.floor(Number(v))));
+    }
+    var leg = clampLA(f.lookaheadTaxi);
+    var a = clampLA(f.lookaheadArr);
+    var dep = clampLA(f.lookaheadDep);
+    var base = leg !== null ? leg : 9;
+    f.lookaheadArr = a !== null ? a : base;
+    f.lookaheadDep = dep !== null ? dep : base;
+  }
+  window.ensureFlightLookaheadArrDepFlight = ensureFlightLookaheadArrDepFlight;
+
   const _tiers = (typeof INFORMATION === 'object' && INFORMATION && INFORMATION.tiers) ? INFORMATION.tiers : {};
   const _layoutTier = _tiers.layout || {};
   const _pbbTier = _layoutTier.pbb || {};
@@ -390,7 +405,7 @@
   function c2dRoadWidthBandSurfaceColor() {
     return c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
   }
-  /** Taxiway / apron taxiway width band: one step darker than marker area (2 lighten steps vs runway stroke). */
+  /** Taxiway / lead-in taxiway width band: one step darker than marker area (2 lighten steps vs runway stroke). */
   function c2dRoadWidthBandTaxiwaySurfaceColor() {
     return c2dCssColorLightenSteps(c2dRunwayStroke(), 2);
   }
@@ -1213,6 +1228,8 @@
     simPlaybackDockVisible: false,
     /** Derived after Pro Sim: first deadlockGhost sample per flight; slider markers + left dock banner. */
     simDeadlockGhostPlayback: { events: [], bodyLines: '', resolveCount: 0 },
+    /** After Resolve lookahead bump: show rerun hint banner until next Pro Sim result. */
+    deadlockMitigateBannerRerunHint: false,
     /** flight_id keys with any deadlock ghost in last compact_v2 playback (survives timeline eviction). */
     deadlockFlightIdsFromLastSim: Object.create(null),
     showGrid: GRID_VISIBLE_DEFAULT,
@@ -1249,7 +1266,7 @@
     apronLinkTemp: null,
     apronLinkMidpoints: [],
     apronLinkPointerWorld: null,
-    /** Map apron link id -> true: draw taxiway×apron polyline junction overlay until path graph sync (no full graph rebuild). */
+    /** Map Leadin Taxiway link id -> true: draw taxiway junction overlay until path graph sync (no full graph rebuild). */
     apronLinkJunctionOverlayDirtyIds: null,
     layoutPathDrawPointer: null,
     hoverCell: null,
@@ -1859,17 +1876,34 @@
     }
     const dlBan = document.getElementById('deadlockGhostBanner');
     const dlBanT = document.getElementById('deadlockGhostBannerText');
+    const dlMitBtn = document.getElementById('deadlockMitigateResolveBtn');
     const dlp = state.simDeadlockGhostPlayback || { events: [], bodyLines: '', resolveCount: 0 };
-    const showDeadlock = !!state.hasSimulationResult && ((dlp.events && dlp.events.length > 0) || (dlp.resolveCount > 0));
+    const deadlockDetail =
+      !!state.hasSimulationResult && ((dlp.events && dlp.events.length > 0) || (dlp.resolveCount > 0));
+    const awaitingRerun = !!(state.deadlockMitigateBannerRerunHint && state.hasSimulationResult);
+    const showDeadlockBanner = !!(deadlockDetail || awaitingRerun);
     if (dlBan && dlBanT) {
-      if (showDeadlock) {
+      if (showDeadlockBanner) {
         dlBan.hidden = false;
         dlBan.setAttribute('aria-hidden', 'false');
-        dlBanT.textContent = dlp.bodyLines || (dlp.resolveCount > 0 ? ('Deadlock auto-resolve recorded ' + dlp.resolveCount + ' time(s).') : '');
+        if (awaitingRerun) dlBanT.textContent = 'Please rerun the simulation.';
+        else
+          dlBanT.textContent = dlp.bodyLines || (dlp.resolveCount > 0 ? ('Deadlock auto-resolve recorded ' + dlp.resolveCount + ' time(s).') : '');
       } else {
         dlBan.hidden = true;
         dlBan.setAttribute('aria-hidden', 'true');
         dlBanT.textContent = '';
+      }
+    }
+    if (dlMitBtn) {
+      if (deadlockDetail && !awaitingRerun) {
+        dlMitBtn.hidden = false;
+        dlMitBtn.setAttribute('aria-hidden', 'false');
+        dlMitBtn.disabled = false;
+      } else {
+        dlMitBtn.hidden = true;
+        dlMitBtn.setAttribute('aria-hidden', 'true');
+        dlMitBtn.disabled = true;
       }
     }
     const nhpBan = document.getElementById('noHoldingPointBanner');
@@ -3006,11 +3040,7 @@
         f.terminalId = f.terminalId || t.terminalId || null;
         f.arrTerminalId = f.arrTerminalId || t.arrTerminalId || f.terminalId || null;
         f.depTerminalId = f.depTerminalId || t.depTerminalId || f.terminalId || null;
-        if (f.lookaheadTaxi == null || f.lookaheadTaxi === '' || !isFinite(Number(f.lookaheadTaxi))) {
-          f.lookaheadTaxi = 9;
-        } else {
-          f.lookaheadTaxi = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadTaxi))));
-        }
+        ensureFlightLookaheadArrDepFlight(f);
         const apronId = f.depApronId != null ? f.depApronId : (t.apronId != null ? t.apronId : (f.standId != null ? f.standId : f.arrApronId || null));
         f.standId = apronId;
         f.token = {
@@ -3320,6 +3350,22 @@
     out.push([s0, e0]);
     return out;
   }
+  /** Starts of deadlock-ghost bursts: first tick of each contiguous group separated by gap > gapSec (deadlock banner uses 120). */
+  function ghostSessionStartTimestampsSec(arr, gapSec) {
+    const g = Math.max(30, Number(gapSec) || 120);
+    const nums = [];
+    for (let i = 0; i < arr.length; i++) {
+      const v = Math.round(Number(arr[i]));
+      if (isFinite(v)) nums.push(v);
+    }
+    if (!nums.length) return [];
+    nums.sort(function(a, b) { return a - b; });
+    const out = [nums[0]];
+    for (let j = 1; j < nums.length; j++) {
+      if (nums[j] - nums[j - 1] > g) out.push(nums[j]);
+    }
+    return out;
+  }
   function compactPlaybackDghostSet(track) {
     const s = new Set();
     function addArr(a) {
@@ -3431,6 +3477,54 @@
       if (mr.edgeId != null && String(mr.edgeId).trim()) out.edgeId = String(mr.edgeId).trim();
     }
     return out;
+  }
+  /**
+   * Maps compact_v2 playback ``phase`` (airside_sim: Dep_taxi, Arr_taxi, Arr_taxi_occupied) to lookahead bump slot.
+   * @returns {'dep'|'arr'|null}
+   */
+  function lookaheadMitigationBumpKindFromPlaybackPhase(phaseRaw) {
+    const s = String(phaseRaw || '').trim().toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
+    if (s === 'dep_taxi') return 'dep';
+    if (s === 'arr_taxi' || s === 'arr_taxi_occupied') return 'arr';
+    return null;
+  }
+  /**
+   * For each flight with dghost timestamps: per ghost-session start, +6 lookaheadDep if phase is Dep_taxi,
+   * +6 lookaheadArr if Arr_taxi or Arr_taxi_occupied. Clamped 0–200 after ensureFlightLookaheadArrDepFlight.
+   * @returns {number} number of flights with at least one field changed
+   */
+  function applyDeadlockMitigationLookaheadFromPlaybackTracks() {
+    const positions = state.simPlaybackPositionsByFlightId;
+    if (!positions || typeof positions !== 'object') return 0;
+    let nFlights = 0;
+    (state.flights || []).forEach(function(f) {
+      if (!f || f.id == null) return;
+      const raw = positions[String(f.id)];
+      if (!isCompactPlaybackTrack(raw) || !Array.isArray(raw.dghost_t) || !raw.dghost_t.length) return;
+      const starts = ghostSessionStartTimestampsSec(raw.dghost_t, 120);
+      let addA = 0;
+      let addD = 0;
+      for (let si = 0; si < starts.length; si++) {
+        const tr = starts[si];
+        const m = compactPlaybackMetaStateAt(raw, tr);
+        const kind = lookaheadMitigationBumpKindFromPlaybackPhase(m.phase);
+        if (kind === 'dep') addD += 6;
+        else if (kind === 'arr') addA += 6;
+      }
+      if (addA === 0 && addD === 0) return;
+      ensureFlightLookaheadArrDepFlight(f);
+      let touched = false;
+      if (addD > 0) {
+        f.lookaheadDep = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadDep) || 0) + addD));
+        touched = true;
+      }
+      if (addA > 0) {
+        f.lookaheadArr = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadArr) || 0) + addA));
+        touched = true;
+      }
+      if (touched) nFlights++;
+    });
+    return nFlights;
   }
   function compactPlaybackSampleAtIndex(track, idx) {
     if (!isCompactPlaybackTrack(track)) return null;
@@ -3600,6 +3694,7 @@
       }
     }
     state.hasSimulationResult = false;
+    state.deadlockMitigateBannerRerunHint = false;
     state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
   }
   function evictFlightPlaybackTimelinesWhenPlayBlocked() {
@@ -3629,23 +3724,6 @@
     const resolveCount = Number(payload.deadlock_resolve_event_count);
     const rc = isFinite(resolveCount) && resolveCount > 0 ? Math.floor(resolveCount) : 0;
     const byT = new Map();
-    function ghostSessionStartTimestampsSec(arr, gapSec) {
-      const g = Math.max(30, Number(gapSec) || 120);
-      const nums = [];
-      for (let i = 0; i < arr.length; i++) {
-        const v = Math.round(Number(arr[i]));
-        if (isFinite(v)) nums.push(v);
-      }
-      if (!nums.length) return [];
-      nums.sort(function(a, b) {
-        return a - b;
-      });
-      const out = [nums[0]];
-      for (let j = 1; j < nums.length; j++) {
-        if (nums[j] - nums[j - 1] > g) out.push(nums[j]);
-      }
-      return out;
-    }
     function ingestTrackArray(raw, f, arr) {
       if (!Array.isArray(arr) || !arr.length) return;
       const starts = ghostSessionStartTimestampsSec(arr, 120);
@@ -3738,6 +3816,7 @@
   }
   function applyAirsideSimulationResultPayload(payload) {
     if (!payload || typeof payload !== 'object') return;
+    state.deadlockMitigateBannerRerunHint = false;
     const truncCap = (payload.simulation_truncated_deadlock === true || payload.simulation_truncated_stot_horizon === true)
       ? (function() {
         const rawCap = payload.simulation_playback_end_abs_sec;
@@ -3910,10 +3989,10 @@
   function getApronLinkDefaultName(linkOrId) {
     const linkId = (typeof linkOrId === 'object' && linkOrId) ? linkOrId.id : linkOrId;
     const idx = (state.apronLinks || []).findIndex(function(lk) { return lk && lk.id === linkId; });
-    return 'Apron Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
+    return 'Leadin Taxiway ' + String(idx >= 0 ? idx + 1 : ((state.apronLinks || []).length + 1));
   }
   function getApronLinkDisplayName(link) {
-    if (!link) return 'Apron Taxiway';
+    if (!link) return 'Leadin Taxiway';
     return (link.name && String(link.name).trim()) || getApronLinkDefaultName(link);
   }
   function ensureUniqueApronLinkName(rawName, currentId) {
@@ -5774,10 +5853,9 @@
         if (state.hasSimulationResult && Array.isArray(f.proSimEdgeList) && f.proSimEdgeList.length) {
           copy.proSimEdgeList = f.proSimEdgeList.slice();
         }
-        let laEx = f.lookaheadTaxi;
-        if (laEx == null || laEx === '' || !isFinite(Number(laEx))) laEx = 9;
-        else laEx = Math.max(0, Math.min(200, Math.floor(Number(laEx))));
-        copy.lookaheadTaxi = laEx;
+        ensureFlightLookaheadArrDepFlight(f);
+        copy.lookaheadArr = f.lookaheadArr;
+        copy.lookaheadDep = f.lookaheadDep;
         return copy;
       }),
       layoutMarkers: (state.layoutMarkers || []).map(function(m) {
@@ -8459,6 +8537,10 @@
       });
     });
   }
+  if (layoutModeTabs) {
+    const leadinTabLabel = layoutModeTabs.querySelector('.layout-mode-tab[data-mode="apronTaxiway"] .layout-mode-label');
+    if (leadinTabLabel) leadinTabLabel.textContent = 'Leadin Taxiway';
+  }
   syncSettingsPaneToMode();
 
   let activeTab = 'settings';
@@ -10792,7 +10874,8 @@
     const depTermEl = document.getElementById('flightAssignStripDepTerm');
     const depEl = document.getElementById('flightAssignStripDep');
     const intDomEl = document.getElementById('flightAssignStripIntDom');
-    const laInp = document.getElementById('flightLookaheadTaxiInput');
+    const laArrInp = document.getElementById('flightLookaheadArrInput');
+    const laDepInp = document.getElementById('flightLookaheadDepInput');
     if (f) ensureFlightSplitTerminalDefaults(f);
     if (arrEl) {
       const sid = f ? (resolveArrivalRunwayIdForFlight(f) || '') : '';
@@ -10817,14 +10900,25 @@
       depEl.innerHTML = buildRunwayOptionsHtml(did);
       depEl.value = did;
     }
-    if (laInp) {
+    if (f) ensureFlightLookaheadArrDepFlight(f);
+    if (laArrInp) {
       if (!f) {
-        laInp.value = '9';
+        laArrInp.value = '9';
       } else {
-        let v = f.lookaheadTaxi;
-        if (v == null || v === '' || !isFinite(Number(v))) v = 9;
-        else v = Math.max(0, Math.min(200, Math.floor(Number(v))));
-        laInp.value = String(v);
+        let va = f.lookaheadArr;
+        if (va == null || va === '' || !isFinite(Number(va))) va = 9;
+        else va = Math.max(0, Math.min(200, Math.floor(Number(va))));
+        laArrInp.value = String(va);
+      }
+    }
+    if (laDepInp) {
+      if (!f) {
+        laDepInp.value = '9';
+      } else {
+        let vd = f.lookaheadDep;
+        if (vd == null || vd === '' || !isFinite(Number(vd))) vd = 9;
+        else vd = Math.max(0, Math.min(200, Math.floor(Number(vd))));
+        laDepInp.value = String(vd);
       }
     }
   }
@@ -10834,12 +10928,13 @@
     const depTermEl = document.getElementById('flightAssignStripDepTerm');
     const depEl = document.getElementById('flightAssignStripDep');
     const intDomEl = document.getElementById('flightAssignStripIntDom');
-    const laInp = document.getElementById('flightLookaheadTaxiInput');
+    const laArrInp = document.getElementById('flightLookaheadArrInput');
+    const laDepInp = document.getElementById('flightLookaheadDepInput');
     const sel = state.selectedObject;
     const hasFlight = sel && sel.type === 'flight' && sel.id;
     const f = hasFlight ? state.flights.find(function(x) { return x.id === sel.id; }) : null;
     const dis = !f;
-    [arrEl, arrTermEl, depTermEl, depEl, intDomEl, laInp].forEach(function(el) {
+    [arrEl, arrTermEl, depTermEl, depEl, intDomEl, laArrInp, laDepInp].forEach(function(el) {
       if (el) el.disabled = dis;
     });
     if (!f) {
@@ -10936,7 +11031,7 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  /** Flight schedule dynamic AP columns: 10 fixed cells, AP cells, Lookahead_taxi, Dep Rw, then S/E groups. */
+  /** Flight schedule: 10 fixed, AP×k, Lookahead_arr, Lookahead_dep, Dep Rw, S/E blocks. */
   const FLIGHT_SCHED_FIXED_BEFORE_AP_COL_COUNT = 10;
   const FLIGHT_SCHED_TRAILING_METRIC_COL_COUNT = 7;
   function flightScheduleLogicalSegmentCount(f) {
@@ -10961,10 +11056,11 @@
   function flightSchedColIndex(field, k) {
     const n = Math.max(1, Number(k) || flightScheduleColumnK());
     const apStart = FLIGHT_SCHED_FIXED_BEFORE_AP_COL_COUNT;
-    const base = apStart + n + 2;
+    const base = apStart + n + 3;
     if (field === 'ap') return apStart;
-    if (field === 'lookaheadTaxi') return apStart + n;
-    if (field === 'depRunway') return apStart + n + 1;
+    if (field === 'lookaheadArr') return apStart + n;
+    if (field === 'lookaheadDep') return apStart + n + 1;
+    if (field === 'depRunway') return apStart + n + 2;
     if (field === 'sibt') return base;
     if (field === 'sobt') return base + 1;
     if (field === 'eldt') return base + n * 2;
@@ -10989,22 +11085,27 @@
         commitFlightAssignFromStrip(el, state, listEl);
       });
     });
-    const laInp0 = document.getElementById('flightLookaheadTaxiInput');
-    if (laInp0 && !laInp0._lookaheadTaxiWired) {
-      laInp0._lookaheadTaxiWired = true;
-      laInp0.addEventListener('change', function() {
+    function wireLookaheadInput(el, setter) {
+      if (!el || el._lookaheadArrDepWired) return;
+      el._lookaheadArrDepWired = true;
+      el.addEventListener('change', function() {
         if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
-        const f = state.selectedObject.obj;
+        const ff = state.selectedObject.obj;
         let v = parseInt(String(this.value != null ? this.value : '9'), 10);
         if (!isFinite(v)) v = 9;
         v = Math.max(0, Math.min(200, v));
-        f.lookaheadTaxi = v;
+        setter(ff, v);
         this.value = String(v);
+        ensureFlightLookaheadArrDepFlight(ff);
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         if (typeof renderFlightList === 'function')
-          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: f.standId ? [f.standId] : [] });
+          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ff.id], touchedStandIds: ff.standId ? [ff.standId] : [] });
       });
     }
+    const laArr0 = document.getElementById('flightLookaheadArrInput');
+    wireLookaheadInput(laArr0, function(ff, v) { ff.lookaheadArr = v; });
+    const laDep0 = document.getElementById('flightLookaheadDepInput');
+    wireLookaheadInput(laDep0, function(ff, v) { ff.lookaheadDep = v; });
   }
 
   function _flightListSortedFlightsCopy() {
@@ -11551,7 +11652,8 @@
         '<th>Arr Building</th>' +
         '<th>Dep Building</th>' +
         apHeads.join('') +
-        '<th class="flight-th-mixed">Lookahead_taxi</th>' +
+        '<th class="flight-th-mixed">Lookahead_arr</th>' +
+        '<th class="flight-th-mixed">Lookahead_dep</th>' +
         '<th>Dep Rw</th>' +
         sHeads.join('') +
         '<th class="flight-col-e flight-col-e-start">ELDT</th>' +
@@ -11669,9 +11771,14 @@
       const lab = seg ? flightScheduleStandLabelById(seg.standId) : '—';
       return '<td class="flight-td-readonly" data-empty="' + (seg ? '0' : '1') + '">' + escapeHtml(lab) + '</td>';
     }).join('');
-    let laTaxiVal = 9;
-    if (f.lookaheadTaxi != null && f.lookaheadTaxi !== '' && isFinite(Number(f.lookaheadTaxi))) {
-      laTaxiVal = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadTaxi))));
+    ensureFlightLookaheadArrDepFlight(f);
+    let laArrVal = 9;
+    if (f.lookaheadArr != null && f.lookaheadArr !== '' && isFinite(Number(f.lookaheadArr))) {
+      laArrVal = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadArr))));
+    }
+    let laDepVal = 9;
+    if (f.lookaheadDep != null && f.lookaheadDep !== '' && isFinite(Number(f.lookaheadDep))) {
+      laDepVal = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadDep))));
     }
     const aircraftTypeLabel = ac ? (ac.name || ac.id || '') : (f.aircraftType || '—');
     const codeIcao = (ac && ac.icao) ? ac.icao : (f.code || '—');
@@ -11691,7 +11798,8 @@
         '<td class="flight-td-readonly">' + arrBuildingRead + '</td>' +
         '<td class="flight-td-readonly">' +         depBuildingRead + '</td>' +
         apCells +
-        '<td class="flight-td-readonly flight-td-lookahead-taxi">' + String(laTaxiVal) + '</td>' +
+        '<td class="flight-td-readonly flight-td-lookahead-arr">' + String(laArrVal) + '</td>' +
+        '<td class="flight-td-readonly flight-td-lookahead-dep">' + String(laDepVal) + '</td>' +
         '<td class="flight-td-readonly">' + depRwRead + '</td>' +
         sCells +
         '<td class="flight-td-time flight-col-e flight-col-e-start">' + escapeHtml(eldtStr) + '</td>' +
@@ -13219,7 +13327,7 @@
         if (!track) return;
         if (track.getAttribute('data-runway-legend') === '1') return;
         if (track.getAttribute('data-apron-link-ok') === '0') {
-          showAllocationConstraintModal("This stand has no apron taxiway link, so it cannot accept a flight.");
+          showAllocationConstraintModal("This stand has no Leadin Taxiway link, so it cannot accept a flight.");
           _allocGanttRevertUncommittedDragPreview(st);
           return;
         }
@@ -13380,7 +13488,7 @@
         ev.preventDefault();
         if (this.getAttribute('data-runway-legend') === '1') return;
         if (this.getAttribute('data-apron-link-ok') === '0') {
-          showAllocationConstraintModal("This stand has no apron taxiway link, so it cannot accept a flight.");
+          showAllocationConstraintModal("This stand has no Leadin Taxiway link, so it cannot accept a flight.");
           _allocGanttRevertUncommittedDragPreview(st);
           return;
         }
@@ -16878,7 +16986,7 @@
     return mergeNearbyPathPointsForDraw(raw, PATH_JUNCTION_MERGE_RADIUS_PX);
   }
 
-  /** World-space polyline for apron link in progress (matches drawApronTaxiwayLinks draft). */
+  /** World-space polyline for Leadin Taxiway link in progress (matches drawApronTaxiwayLinks draft). */
   function getApronLinkDrawingDraftWorldPts() {
     if (!state.apronLinkDrawing || !state.apronLinkTemp) return null;
     const t = state.apronLinkTemp;
@@ -18470,7 +18578,7 @@
 
   /**
    * Red X at taxiway / runway-taxiway (taxiway, runway_exit, runway_taxiway) polyline ends that meet no
-   * other path vertex (within merge radius) and no apron-link vertex. Size ~ green junction dot.
+   * other path vertex (within merge radius) and no Leadin Taxiway-link vertex. Size ~ green junction dot.
    */
   function drawTaxiwayDanglingEndpointMarks() {
     if (!state.layers.junction) return;
@@ -20023,6 +20131,24 @@
         if (typeof applySimPlaybackBarDomVisibility === 'function') applySimPlaybackBarDomVisibility();
       });
     }
+    const deadlockMitigateResolveBtnEl = document.getElementById('deadlockMitigateResolveBtn');
+    if (deadlockMitigateResolveBtnEl) {
+      deadlockMitigateResolveBtnEl.addEventListener('click', function(ev) {
+        ev.preventDefault();
+        applyDeadlockMitigationLookaheadFromPlaybackTracks();
+        state.deadlockMitigateBannerRerunHint = true;
+        state.simDeadlockGhostPlayback = { events: [], bodyLines: '', resolveCount: 0 };
+        state.deadlockFlightIdsFromLastSim = Object.create(null);
+        if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
+        if (typeof markDesignerPageUpdateStale === 'function') markDesignerPageUpdateStale();
+        if (typeof syncPanelFromState === 'function') syncPanelFromState();
+        if (typeof renderFlightList === 'function') renderFlightList(false, false);
+        if (typeof renderFlightSimSliderDeadlockMarkers === 'function') renderFlightSimSliderDeadlockMarkers();
+        if (typeof draw === 'function') draw();
+        if (typeof update3DSceneWhenVisible === 'function') update3DSceneWhenVisible();
+        if (typeof syncProSimButtonFromDesignerPageState === 'function') syncProSimButtonFromDesignerPageState();
+      });
+    }
     function applyTokenNodesFromCheckboxes() {
       const nodes = [];
       TOKEN_NODE_ORDER.forEach((node, i) => {
@@ -20142,7 +20268,8 @@
           intDom: intDomNew,
           dwellMin,
           minDwellMin,
-          lookaheadTaxi: 9,
+          lookaheadArr: 9,
+          lookaheadDep: 9,
           arrRunwayId: defaultRunwayId,
           depRunwayId: defaultRunwayId,
           timeline: null,
@@ -21518,7 +21645,7 @@
         const serTw = serializeTaxiwayWithEndpoints(tw);
         const startStr = serTw.start_point != null ? '(' + serTw.start_point.col + ',' + serTw.start_point.row + ')' : '—';
         const endStr = serTw.end_point != null ? '(' + serTw.end_point.col + ',' + serTw.end_point.row + ')' : '—';
-        const heading = tw.pathType === 'runway' ? 'Runway' : (tw.pathType === 'runway_exit' ? 'Runway Taxiway' : (tw.pathType === 'apron_taxiway' ? 'Apron taxiway' : (tw.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
+        const heading = tw.pathType === 'runway' ? 'Runway' : (tw.pathType === 'runway_exit' ? 'Runway Taxiway' : (tw.pathType === 'apron_taxiway' ? 'Leadin taxiway' : (tw.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
         const avgVel = (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) ? tw.avgMoveVelocity : 10;
         const maxExit = (tw.pathType === 'runway_exit' && typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0) ? tw.maxExitVelocity : null;
         const minExit = (tw.pathType === 'runway_exit' && typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
@@ -21585,8 +21712,8 @@
         items.push({
           type: 'apronLink',
           id: lk.id,
-          title: uniqueTitle('Apron–Taxiway | ' + title),
-          tag: 'Apron–Taxiway',
+          title: uniqueTitle('Leadin Taxiway | ' + title),
+          tag: 'Leadin Taxiway',
           details
         });
       });
@@ -21963,7 +22090,7 @@
           '<br>Cell: (' + tcell[0].toFixed(1) + ',' + tcell[1].toFixed(1) + ')' +
           '<br>Taxiway junction (px): (' + junc[0].toFixed(1) + ', ' + junc[1].toFixed(1) + ') → sim_input junctionX/Y' +
           '<br>available buildings: ' + allowedLabelT +
-          '<br>Placement: taxiway centerline (no apron link)';
+          '<br>Placement: taxiway centerline (no Leadin Taxiway link)';
       } else if (state.selectedObject.type === 'holdingPoint') {
         const hx = Number(o.x), hy = Number(o.y);
         const hCol = hx / CELL_SIZE, hRow = hy / CELL_SIZE;
@@ -21977,7 +22104,7 @@
       else if (state.selectedObject.type === 'taxiway') {
         const dirVal = getTaxiwayDirection(o);
         const dirLabel = dirVal === 'clockwise' ? 'Clockwise' : (dirVal === 'counter_clockwise' ? 'Counter Clockwise' : 'Both');
-        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : (o.pathType === 'apron_taxiway' ? 'Apron taxiway' : (o.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
+        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : (o.pathType === 'apron_taxiway' ? 'Leadin taxiway' : (o.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
         const ser = serializeTaxiwayWithEndpoints(o);
         const startStr = ser.start_point != null ? '(' + ser.start_point.col + ', ' + ser.start_point.row + ')' : '—';
         const endStr = ser.end_point != null ? '(' + ser.end_point.col + ', ' + ser.end_point.row + ')' : '—';
@@ -22009,7 +22136,7 @@
         const stand = findStandById(lk.pbbId);
         const tw = state.taxiways.find(function(t) { return t.id === lk.taxiwayId; });
         objectInfoEl.innerHTML =
-          '<strong>Apron Taxiway</strong><br>' +
+          '<strong>Leadin Taxiway</strong><br>' +
           'Name: ' + getApronLinkDisplayName(lk) +
           '<br>Stand: ' + (stand && stand.name ? stand.name : lk.pbbId) +
           '<br>Taxiway: ' + (tw && tw.name ? tw.name : lk.taxiwayId) +
@@ -25345,7 +25472,7 @@
       if (!tipDone) {
         const hit = hitTest(wxx, wyy);
         if (hit && hit.obj) {
-          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'tempStand' ? 'Temp Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type === 'layoutMarker' ? 'Marker' : hit.type);
+          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'tempStand' ? 'Temp Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Leadin Taxiway') : hit.type === 'layoutMarker' ? 'Marker' : hit.type);
           flightTooltip.style.display = 'block';
           flightTooltip.textContent = name;
           flightTooltip.style.left = (ev2.clientX + 12) + 'px';

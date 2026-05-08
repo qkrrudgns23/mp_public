@@ -110,6 +110,10 @@
       });
     });
   }
+  if (layoutModeTabs) {
+    const leadinTabLabel = layoutModeTabs.querySelector('.layout-mode-tab[data-mode="apronTaxiway"] .layout-mode-label');
+    if (leadinTabLabel) leadinTabLabel.textContent = 'Leadin Taxiway';
+  }
   syncSettingsPaneToMode();
 
   let activeTab = 'settings';
@@ -2443,7 +2447,8 @@
     const depTermEl = document.getElementById('flightAssignStripDepTerm');
     const depEl = document.getElementById('flightAssignStripDep');
     const intDomEl = document.getElementById('flightAssignStripIntDom');
-    const laInp = document.getElementById('flightLookaheadTaxiInput');
+    const laArrInp = document.getElementById('flightLookaheadArrInput');
+    const laDepInp = document.getElementById('flightLookaheadDepInput');
     if (f) ensureFlightSplitTerminalDefaults(f);
     if (arrEl) {
       const sid = f ? (resolveArrivalRunwayIdForFlight(f) || '') : '';
@@ -2468,14 +2473,25 @@
       depEl.innerHTML = buildRunwayOptionsHtml(did);
       depEl.value = did;
     }
-    if (laInp) {
+    if (f && typeof window.ensureFlightLookaheadArrDepFlight === 'function') window.ensureFlightLookaheadArrDepFlight(f);
+    if (laArrInp) {
       if (!f) {
-        laInp.value = '9';
+        laArrInp.value = '9';
       } else {
-        let v = f.lookaheadTaxi;
-        if (v == null || v === '' || !isFinite(Number(v))) v = 9;
-        else v = Math.max(0, Math.min(200, Math.floor(Number(v))));
-        laInp.value = String(v);
+        let va = f.lookaheadArr;
+        if (va == null || va === '' || !isFinite(Number(va))) va = 9;
+        else va = Math.max(0, Math.min(200, Math.floor(Number(va))));
+        laArrInp.value = String(va);
+      }
+    }
+    if (laDepInp) {
+      if (!f) {
+        laDepInp.value = '9';
+      } else {
+        let vd = f.lookaheadDep;
+        if (vd == null || vd === '' || !isFinite(Number(vd))) vd = 9;
+        else vd = Math.max(0, Math.min(200, Math.floor(Number(vd))));
+        laDepInp.value = String(vd);
       }
     }
   }
@@ -2485,12 +2501,13 @@
     const depTermEl = document.getElementById('flightAssignStripDepTerm');
     const depEl = document.getElementById('flightAssignStripDep');
     const intDomEl = document.getElementById('flightAssignStripIntDom');
-    const laInp = document.getElementById('flightLookaheadTaxiInput');
+    const laArrInp = document.getElementById('flightLookaheadArrInput');
+    const laDepInp = document.getElementById('flightLookaheadDepInput');
     const sel = state.selectedObject;
     const hasFlight = sel && sel.type === 'flight' && sel.id;
     const f = hasFlight ? state.flights.find(function(x) { return x.id === sel.id; }) : null;
     const dis = !f;
-    [arrEl, arrTermEl, depTermEl, depEl, intDomEl, laInp].forEach(function(el) {
+    [arrEl, arrTermEl, depTermEl, depEl, intDomEl, laArrInp, laDepInp].forEach(function(el) {
       if (el) el.disabled = dis;
     });
     if (!f) {
@@ -2587,7 +2604,7 @@
     commitFlightAssign(role, sel.id, el.value, st, listEl);
   }
 
-  /** Flight schedule dynamic AP columns: 10 fixed cells, AP cells, Lookahead_taxi, Dep Rw, then S/E groups. */
+  /** Flight schedule: 10 fixed, AP×k, Lookahead_arr, Lookahead_dep, Dep Rw, S/E blocks. */
   const FLIGHT_SCHED_FIXED_BEFORE_AP_COL_COUNT = 10;
   const FLIGHT_SCHED_TRAILING_METRIC_COL_COUNT = 7;
   function flightScheduleLogicalSegmentCount(f) {
@@ -2612,10 +2629,11 @@
   function flightSchedColIndex(field, k) {
     const n = Math.max(1, Number(k) || flightScheduleColumnK());
     const apStart = FLIGHT_SCHED_FIXED_BEFORE_AP_COL_COUNT;
-    const base = apStart + n + 2;
+    const base = apStart + n + 3;
     if (field === 'ap') return apStart;
-    if (field === 'lookaheadTaxi') return apStart + n;
-    if (field === 'depRunway') return apStart + n + 1;
+    if (field === 'lookaheadArr') return apStart + n;
+    if (field === 'lookaheadDep') return apStart + n + 1;
+    if (field === 'depRunway') return apStart + n + 2;
     if (field === 'sibt') return base;
     if (field === 'sobt') return base + 1;
     if (field === 'eldt') return base + n * 2;
@@ -2640,22 +2658,27 @@
         commitFlightAssignFromStrip(el, state, listEl);
       });
     });
-    const laInp0 = document.getElementById('flightLookaheadTaxiInput');
-    if (laInp0 && !laInp0._lookaheadTaxiWired) {
-      laInp0._lookaheadTaxiWired = true;
-      laInp0.addEventListener('change', function() {
+    function wireLookaheadMid(el, setter) {
+      if (!el || el._lookaheadArrDepMidWired) return;
+      el._lookaheadArrDepMidWired = true;
+      el.addEventListener('change', function() {
         if (!state.selectedObject || state.selectedObject.type !== 'flight') return;
-        const f = state.selectedObject.obj;
+        const ff = state.selectedObject.obj;
         let v = parseInt(String(this.value != null ? this.value : '9'), 10);
         if (!isFinite(v)) v = 9;
         v = Math.max(0, Math.min(200, v));
-        f.lookaheadTaxi = v;
+        setter(ff, v);
         this.value = String(v);
+        if (typeof window.ensureFlightLookaheadArrDepFlight === 'function') window.ensureFlightLookaheadArrDepFlight(ff);
         if (typeof markGlobalUpdateStale === 'function') markGlobalUpdateStale();
         if (typeof renderFlightList === 'function')
-          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [f.id], touchedStandIds: f.standId ? [f.standId] : [] });
+          renderFlightList(false, false, { scheduleMode: 'incremental', dirtyFlightIds: [ff.id], touchedStandIds: ff.standId ? [ff.standId] : [] });
       });
     }
+    const laArrMid = document.getElementById('flightLookaheadArrInput');
+    wireLookaheadMid(laArrMid, function(ff, v) { ff.lookaheadArr = v; });
+    const laDepMid = document.getElementById('flightLookaheadDepInput');
+    wireLookaheadMid(laDepMid, function(ff, v) { ff.lookaheadDep = v; });
   }
 
   function _flightListSortedFlightsCopy() {

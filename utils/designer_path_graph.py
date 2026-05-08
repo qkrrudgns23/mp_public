@@ -24,7 +24,7 @@ def quantize_designer_world_geometry_inplace(
 ) -> None:
     """Round world-space XY on layout primitives in-place before path-graph use.
 
-    Touches runway/taxi vertices, apron link anchors/mid-polylines, stands, holding points,
+    Touches runway/taxi vertices, Leadin Taxiway link anchors/mid-polylines, stands, holding points,
     network junctions, and terminal footprints. Exported ``simPathGraph`` JSON is intentionally
     left unchanged — rounding its ``pts``/``nodes`` while keeping stale ``dist`` weights broke shortest-path
     resolution; the graph consumes these primitives where geometry is rebuilt/snapped anyway.
@@ -535,7 +535,7 @@ def path_dijkstra(
 
     When ``apron_transit_extra > 0`` and ``apron_allowed_link_ids`` is set, add that cost to
     every ``apron_link`` arc whose ``link_id`` is **not** in the allowed set (arrival taxi should
-    use the taxiway network and only the assigned stand's apron link for the final connect).
+    use the taxiway network and only the assigned stand's Leadin Taxiway link for the final connect).
     """
     n = len(g.nodes)
     if start_idx is None or end_idx is None or n == 0:
@@ -1092,7 +1092,7 @@ def path_indices_to_edge_segments(g: PathGraph, path_indices: List[int]) -> List
 
 
 def _stand_end_node_index(g: PathGraph, layout: dict, apron_id: str, cell_size: float) -> Optional[int]:
-    """Apron graph end: standIdToNodeIndex, or nearest node to stand connection px if no apron link."""
+    """Apron graph end: standIdToNodeIndex, or nearest node to stand connection px if no Leadin Taxiway link."""
     j = g.stand_id_to_node_index.get(str(apron_id))
     if j is not None:
         return j

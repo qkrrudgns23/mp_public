@@ -971,7 +971,7 @@
         if (!track) return;
         if (track.getAttribute('data-runway-legend') === '1') return;
         if (track.getAttribute('data-apron-link-ok') === '0') {
-          showAllocationConstraintModal("This stand has no apron taxiway link, so it cannot accept a flight.");
+          showAllocationConstraintModal("This stand has no Leadin Taxiway link, so it cannot accept a flight.");
           _allocGanttRevertUncommittedDragPreview(st);
           return;
         }
@@ -1132,7 +1132,7 @@
         ev.preventDefault();
         if (this.getAttribute('data-runway-legend') === '1') return;
         if (this.getAttribute('data-apron-link-ok') === '0') {
-          showAllocationConstraintModal("This stand has no apron taxiway link, so it cannot accept a flight.");
+          showAllocationConstraintModal("This stand has no Leadin Taxiway link, so it cannot accept a flight.");
           _allocGanttRevertUncommittedDragPreview(st);
           return;
         }

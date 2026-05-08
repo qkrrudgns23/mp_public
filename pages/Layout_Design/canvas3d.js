@@ -2918,7 +2918,7 @@
     return mergeNearbyPathPointsForDraw(raw, PATH_JUNCTION_MERGE_RADIUS_PX);
   }
 
-  /** World-space polyline for apron link in progress (matches drawApronTaxiwayLinks draft). */
+  /** World-space polyline for Leadin Taxiway link in progress (matches drawApronTaxiwayLinks draft). */
   function getApronLinkDrawingDraftWorldPts() {
     if (!state.apronLinkDrawing || !state.apronLinkTemp) return null;
     const t = state.apronLinkTemp;
@@ -4510,7 +4510,7 @@
 
   /**
    * Red X at taxiway / runway-taxiway (taxiway, runway_exit, runway_taxiway) polyline ends that meet no
-   * other path vertex (within merge radius) and no apron-link vertex. Size ~ green junction dot.
+   * other path vertex (within merge radius) and no Leadin Taxiway-link vertex. Size ~ green junction dot.
    */
   function drawTaxiwayDanglingEndpointMarks() {
     if (!state.layers.junction) return;
@@ -6176,7 +6176,8 @@
           intDom: intDomNew,
           dwellMin,
           minDwellMin,
-          lookaheadTaxi: 9,
+          lookaheadArr: 9,
+          lookaheadDep: 9,
           arrRunwayId: defaultRunwayId,
           depRunwayId: defaultRunwayId,
           timeline: null,
@@ -7552,7 +7553,7 @@
         const serTw = serializeTaxiwayWithEndpoints(tw);
         const startStr = serTw.start_point != null ? '(' + serTw.start_point.col + ',' + serTw.start_point.row + ')' : '—';
         const endStr = serTw.end_point != null ? '(' + serTw.end_point.col + ',' + serTw.end_point.row + ')' : '—';
-        const heading = tw.pathType === 'runway' ? 'Runway' : (tw.pathType === 'runway_exit' ? 'Runway Taxiway' : (tw.pathType === 'apron_taxiway' ? 'Apron taxiway' : (tw.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
+        const heading = tw.pathType === 'runway' ? 'Runway' : (tw.pathType === 'runway_exit' ? 'Runway Taxiway' : (tw.pathType === 'apron_taxiway' ? 'Leadin taxiway' : (tw.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
         const avgVel = (typeof tw.avgMoveVelocity === 'number' && isFinite(tw.avgMoveVelocity) && tw.avgMoveVelocity > 0) ? tw.avgMoveVelocity : 10;
         const maxExit = (tw.pathType === 'runway_exit' && typeof tw.maxExitVelocity === 'number' && isFinite(tw.maxExitVelocity) && tw.maxExitVelocity > 0) ? tw.maxExitVelocity : null;
         const minExit = (tw.pathType === 'runway_exit' && typeof tw.minExitVelocity === 'number' && isFinite(tw.minExitVelocity) && tw.minExitVelocity > 0)
@@ -7619,8 +7620,8 @@
         items.push({
           type: 'apronLink',
           id: lk.id,
-          title: uniqueTitle('Apron–Taxiway | ' + title),
-          tag: 'Apron–Taxiway',
+          title: uniqueTitle('Leadin Taxiway | ' + title),
+          tag: 'Leadin Taxiway',
           details
         });
       });
@@ -7997,7 +7998,7 @@
           '<br>Cell: (' + tcell[0].toFixed(1) + ',' + tcell[1].toFixed(1) + ')' +
           '<br>Taxiway junction (px): (' + junc[0].toFixed(1) + ', ' + junc[1].toFixed(1) + ') → sim_input junctionX/Y' +
           '<br>available buildings: ' + allowedLabelT +
-          '<br>Placement: taxiway centerline (no apron link)';
+          '<br>Placement: taxiway centerline (no Leadin Taxiway link)';
       } else if (state.selectedObject.type === 'holdingPoint') {
         const hx = Number(o.x), hy = Number(o.y);
         const hCol = hx / CELL_SIZE, hRow = hy / CELL_SIZE;
@@ -8011,7 +8012,7 @@
       else if (state.selectedObject.type === 'taxiway') {
         const dirVal = getTaxiwayDirection(o);
         const dirLabel = dirVal === 'clockwise' ? 'Clockwise' : (dirVal === 'counter_clockwise' ? 'Counter Clockwise' : 'Both');
-        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : (o.pathType === 'apron_taxiway' ? 'Apron taxiway' : (o.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
+        const heading = o.pathType === 'runway' ? 'Runway' : (o.pathType === 'runway_exit' ? 'Runway Taxiway' : (o.pathType === 'apron_taxiway' ? 'Leadin taxiway' : (o.pathType === 'general_queue_taxiway' ? 'Queue taxiway' : 'Taxiway')));
         const ser = serializeTaxiwayWithEndpoints(o);
         const startStr = ser.start_point != null ? '(' + ser.start_point.col + ', ' + ser.start_point.row + ')' : '—';
         const endStr = ser.end_point != null ? '(' + ser.end_point.col + ', ' + ser.end_point.row + ')' : '—';
@@ -8043,7 +8044,7 @@
         const stand = findStandById(lk.pbbId);
         const tw = state.taxiways.find(function(t) { return t.id === lk.taxiwayId; });
         objectInfoEl.innerHTML =
-          '<strong>Apron Taxiway</strong><br>' +
+          '<strong>Leadin Taxiway</strong><br>' +
           'Name: ' + getApronLinkDisplayName(lk) +
           '<br>Stand: ' + (stand && stand.name ? stand.name : lk.pbbId) +
           '<br>Taxiway: ' + (tw && tw.name ? tw.name : lk.taxiwayId) +
@@ -11379,7 +11380,7 @@
       if (!tipDone) {
         const hit = hitTest(wxx, wyy);
         if (hit && hit.obj) {
-          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'tempStand' ? 'Temp Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Apron Taxiway') : hit.type === 'layoutMarker' ? 'Marker' : hit.type);
+          const name = (hit.obj.name != null && String(hit.obj.name).trim()) ? String(hit.obj.name).trim() : (hit.type === 'terminal' ? 'Building' : hit.type === 'pbb' ? 'Contact Stand' : hit.type === 'remote' ? 'Remote Stand' : hit.type === 'tempStand' ? 'Temp Stand' : hit.type === 'holdingPoint' ? holdingPointKindDisplayLabel(hit.obj.hpKind) : hit.type === 'taxiway' ? (hit.obj.name || 'Path') : hit.type === 'apronLink' ? (hit.obj.name || 'Leadin Taxiway') : hit.type === 'layoutMarker' ? 'Marker' : hit.type);
           flightTooltip.style.display = 'block';
           flightTooltip.textContent = name;
           flightTooltip.style.left = (ev2.clientX + 12) + 'px';

@@ -460,10 +460,20 @@
         f.terminalId = f.terminalId || t.terminalId || null;
         f.arrTerminalId = f.arrTerminalId || t.arrTerminalId || f.terminalId || null;
         f.depTerminalId = f.depTerminalId || t.depTerminalId || f.terminalId || null;
-        if (f.lookaheadTaxi == null || f.lookaheadTaxi === '' || !isFinite(Number(f.lookaheadTaxi))) {
-          f.lookaheadTaxi = 9;
-        } else {
-          f.lookaheadTaxi = Math.max(0, Math.min(200, Math.floor(Number(f.lookaheadTaxi))));
+        if (typeof window.ensureFlightLookaheadArrDepFlight === 'function') window.ensureFlightLookaheadArrDepFlight(f);
+        else {
+          (function() {
+            function clampLA(v) {
+              if (v == null || v === '' || !isFinite(Number(v))) return null;
+              return Math.max(0, Math.min(200, Math.floor(Number(v))));
+            }
+            var leg = clampLA(f.lookaheadTaxi);
+            var a = clampLA(f.lookaheadArr);
+            var dep = clampLA(f.lookaheadDep);
+            var base = leg !== null ? leg : 9;
+            f.lookaheadArr = a !== null ? a : base;
+            f.lookaheadDep = dep !== null ? dep : base;
+          })();
         }
         const apronId = f.depApronId != null ? f.depApronId : (t.apronId != null ? t.apronId : (f.standId != null ? f.standId : f.arrApronId || null));
         f.standId = apronId;

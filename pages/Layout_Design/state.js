@@ -60,7 +60,7 @@
   function c2dRoadWidthBandSurfaceColor() {
     return c2dCssColorLightenSteps(c2dRunwayStroke(), 3);
   }
-  /** Taxiway / apron taxiway width band: one step darker than marker area (2 lighten steps vs runway stroke). */
+  /** Taxiway / lead-in taxiway width band: one step darker than marker area (2 lighten steps vs runway stroke). */
   function c2dRoadWidthBandTaxiwaySurfaceColor() {
     return c2dCssColorLightenSteps(c2dRunwayStroke(), 2);
   }

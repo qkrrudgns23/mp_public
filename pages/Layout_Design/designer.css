@@ -37,6 +37,13 @@
     .deadlock-ghost-banner__content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
     .deadlock-ghost-banner__title { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: #fff; }
     .deadlock-ghost-banner__text { white-space: pre-line; font-variant-numeric: tabular-nums; font-family: ui-monospace, 'Cascadia Mono', 'Consolas', monospace; font-size: 10px; }
+    .deadlock-ghost-banner__body-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; width: 100%; justify-content: space-between; }
+    .deadlock-ghost-banner__body-row .deadlock-ghost-banner__text { flex: 1 1 140px; min-width: 0; }
+    .deadlock-mitigate-resolve-btn[hidden] { display: none !important; }
+    .deadlock-mitigate-resolve-btn { appearance: none; flex-shrink: 0; cursor: pointer; border-radius: 5px; padding: 4px 10px; font-size: 10px; font-weight: 600; letter-spacing: 0.03em; font-family: inherit; color: #fff; background: #1cb454; border: none; box-shadow: none; transition: background-color 120ms ease; }
+    .deadlock-mitigate-resolve-btn:hover { background: #179548; color: #fff; }
+    .deadlock-mitigate-resolve-btn:active { background: #157f3f; color: #fff; }
+    .deadlock-mitigate-resolve-btn:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.9); outline-offset: 2px; }
     .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-arr-ret:disabled,
     .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-apron:disabled,
     .global-update-wrap .tool-btn#btnGlobalUpdate.global-update-blocked-stand-overlap:disabled { opacity: 1; cursor: not-allowed; pointer-events: none; color: #fecdd3; border-color: rgba(248, 113, 113, 0.5); background: rgba(127, 29, 29, 0.45); }
@@ -1060,6 +1067,7 @@
     .flight-assign-strip-wrap { display:grid; grid-template-columns:1fr; row-gap:var(--settings-row-gap, 6px); width:100%; min-width:0; align-items:end; }
     .flight-assign-strip-row { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); column-gap:8px; align-items:end; min-width:0; }
     #flightPaneSchedule .flight-assign-strip-row { grid-template-columns: minmax(0, 1fr); }
+    #flightPaneSchedule .flight-assign-strip-row.flight-assign-strip-row-lookahead { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     #flightPaneSchedule .flight-assign-strip-wrap .compact-field { margin:0; }
     .flight-assign-panel { flex: 1; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; font-size:11px; }
     .flight-assign-col { display:flex; flex-direction:column; align-items:flex-start; gap:4px; min-width:0; }

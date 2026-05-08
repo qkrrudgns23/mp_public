@@ -104,7 +104,7 @@
             </span>
             <span class="global-update-wrap">
               <span id="globalUpdateSyncDot" class="global-update-sync-dot stale" title="Pro Sim loads the latest sim JSON into the designer when it finishes" role="status" aria-label="Pro Sim sync status"></span>
-              <button class="tool-btn" id="btnGlobalUpdate" title="Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage">Pro Sim</button>
+              <button class="tool-btn" id="btnGlobalUpdate" title="Run airside_sim on the server; saves layoutName_sim_result.json under Result_storage">Simulation</button>
               <span id="playbackFreshSyncDot" class="global-update-sync-dot stale" title="Playback result freshness" role="status" aria-label="Playback result freshness"></span>
               <button type="button" class="tool-btn" id="btnShowPlayDock" disabled title="시뮬 타임라인이 있을 때 활성화 — 재생 바를 엽니다">Play</button>
             </span>
@@ -176,7 +176,12 @@
           <svg class="deadlock-ghost-banner__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.63-1.516 2.63H3.72c-1.347 0-2.189-1.463-1.515-2.63L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
           <div class="deadlock-ghost-banner__content">
             <div class="deadlock-ghost-banner__title">DeadLock</div>
-            <span class="deadlock-ghost-banner__text" id="deadlockGhostBannerText"></span>
+            <div class="deadlock-ghost-banner__body-row">
+              <span class="deadlock-ghost-banner__text" id="deadlockGhostBannerText"></span>
+              <button type="button" id="deadlockMitigateResolveBtn" class="deadlock-mitigate-resolve-btn" hidden aria-hidden="true" title="+6 Lookahead Arr or Dep taxi per deadlock session from last playback (max 200)">
+                Resolve
+              </button>
+            </div>
           </div>
         </div>
         <aside id="object-info-dock" class="object-info-dock" aria-label="Object details">
@@ -216,13 +221,13 @@
           <option value="runwayPath">Runway</option>
           <option value="runwayTaxiway">Runway Taxiway</option>
           <option value="taxiway">Taxiway</option>
+          <option value="apronTaxiway">Leadin Taxiway</option>
           <option value="holdingPoint">Holding Point</option>
-          <option value="edge">Edge</option>
           <option value="terminal">Building</option>
           <option value="pbb">Contact Stand</option>
           <option value="remote">Remote Stand</option>
           <option value="tempStand">Temp Stand</option>
-          <option value="apronTaxiway">Apron Taxiway</option>
+          <option value="edge">Edge</option>
           <option value="marker">Marker</option>
         </select>
 
@@ -499,11 +504,12 @@
           <button class="small draw-toggle-btn" id="btnTaxiwayDraw">Draw</button>
         </div>
         <div id="settings-apronTaxiway" class="settings-pane compact-form" style="display:none;">
+          <div class="section-title">Leadin Taxiway</div>
           <div class="compact-field wide">
             <label>Name</label>
-            <input type="text" id="apronLinkName" placeholder="Optional — auto Apron Taxiway # if empty" />
+            <input type="text" id="apronLinkName" placeholder="Optional — auto Leadin Taxiway # if empty" />
           </div>
-          <button class="small draw-toggle-btn" id="btnApronLinkDraw">Draw</button>
+          <button class="small draw-toggle-btn" id="btnApronLinkDraw" type="button" title="Draw a Leadin Taxiway polyline between stand access and taxiway" aria-label="Draw Leadin Taxiway">Draw</button>
         </div>
         <div id="settings-marker" class="settings-pane compact-form" style="display:none;">
           <div class="compact-field wide">
@@ -617,8 +623,12 @@
               </div>
               <div class="flight-assign-strip-row flight-assign-strip-row-lookahead">
                 <div class="compact-field">
-                  <label for="flightLookaheadTaxiInput">Lookahead_taxi</label>
-                  <input type="number" id="flightLookaheadTaxiInput" class="flight-assign-lookahead-input" min="0" max="200" step="1" value="9" disabled title="Select a flight row first" aria-label="Lookahead taxi edge count for simulation" />
+                  <label for="flightLookaheadArrInput">Lookahead_arr</label>
+                  <input type="number" id="flightLookaheadArrInput" class="flight-assign-lookahead-input" min="0" max="200" step="1" value="9" disabled title="Select a flight row first" aria-label="Arr taxi lookahead edge count for simulation" />
+                </div>
+                <div class="compact-field">
+                  <label for="flightLookaheadDepInput">Lookahead_dep</label>
+                  <input type="number" id="flightLookaheadDepInput" class="flight-assign-lookahead-input" min="0" max="200" step="1" value="9" disabled title="Select a flight row first" aria-label="Dep taxi lookahead edge count for simulation" />
                 </div>
               </div>
             </div>
@@ -646,7 +656,7 @@
 
         <div id="tab-allocation" class="tab-content">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <div style="font-size:11px;color:#9ca3af;">Stand allocation (Apron × Time)</div>
+            <div style="font-size:11px;color:#9ca3af;">Stand allocation (Leadin Taxiways × Time)</div>
             <div style="display:flex;align-items:center;gap:8px;">
               <label style="font-size:11px;color:#9ca3af;display:flex;align-items:center;gap:4px;margin:0;">
                 <input type="checkbox" id="chkShowSPoints" />

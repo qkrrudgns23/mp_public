@@ -1781,7 +1781,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
                 continue
             mids.append({"x": _quantize_m(float(v.get("x", 0.0)), pos_pl), "y": _quantize_m(float(v.get("y", 0.0)), pos_pl)})
         lk_i += 1
-        link_name = _dedupe_name_with_alpha_suffix(str(cand.get("name") or ""), f"Apron Taxiway {lk_i}", used_apron_link_names)
+        link_name = _dedupe_name_with_alpha_suffix(str(cand.get("name") or ""), f"Leadin Taxiway {lk_i}", used_apron_link_names)
         alk_row: Dict[str, Any] = {
             "id": _new_id("alk"),
             "name": link_name,
@@ -1822,7 +1822,7 @@ def build_layout_from_map_storage_document(doc: Dict[str, Any], icao: str) -> Di
             continue
         mids = _midvertices_along_parking(nearest_line, stand_pt, taxi_pt, pos_pl)
         lk_i += 1
-        link_name = _dedupe_name_with_alpha_suffix(f"Apron Taxiway {lk_i}", f"Apron Taxiway {lk_i}", used_apron_link_names)
+        link_name = _dedupe_name_with_alpha_suffix(f"Leadin Taxiway {lk_i}", f"Leadin Taxiway {lk_i}", used_apron_link_names)
         apron_links.append(
             {
                 "id": _new_id("alk"),

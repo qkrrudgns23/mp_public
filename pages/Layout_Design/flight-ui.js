@@ -709,10 +709,15 @@
         if (state.hasSimulationResult && Array.isArray(f.proSimEdgeList) && f.proSimEdgeList.length) {
           copy.proSimEdgeList = f.proSimEdgeList.slice();
         }
-        let laEx = f.lookaheadTaxi;
-        if (laEx == null || laEx === '' || !isFinite(Number(laEx))) laEx = 9;
-        else laEx = Math.max(0, Math.min(200, Math.floor(Number(laEx))));
-        copy.lookaheadTaxi = laEx;
+        if (typeof window.ensureFlightLookaheadArrDepFlight === 'function') window.ensureFlightLookaheadArrDepFlight(f);
+        let laExA = f.lookaheadArr;
+        let laExD = f.lookaheadDep;
+        if (laExA == null || laExA === '' || !isFinite(Number(laExA))) laExA = 9;
+        else laExA = Math.max(0, Math.min(200, Math.floor(Number(laExA))));
+        if (laExD == null || laExD === '' || !isFinite(Number(laExD))) laExD = 9;
+        else laExD = Math.max(0, Math.min(200, Math.floor(Number(laExD))));
+        copy.lookaheadArr = laExA;
+        copy.lookaheadDep = laExD;
         return copy;
       }),
       layoutMarkers: (state.layoutMarkers || []).map(function(m) {
